@@ -1,7 +1,9 @@
 // lib/repositories/course.repository.ts
+import type { courses } from "@prisma/client";
+
 import { prisma } from "@/lib/prisma";
 
-export async function getCourses() {
+export async function getCourses(): Promise<courses[]> {
   return prisma.courses.findMany({
     orderBy: {
       created_at: "desc",
