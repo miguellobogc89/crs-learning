@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model achievements {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code              String              @unique
+  title             String
+  description       String?
+  xp_reward         Int                 @default(0)
+  icon              String?
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  user_achievements user_achievements[]
+}
+
+model courses {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title                String
+  slug                 String                 @unique
+  description          String?
+  level                String                 @default("beginner")
+  is_published         Boolean                @default(false)
+  sort_order           Int                    @default(0)
+  required_course_id   String?                @db.Uuid
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  courses              courses?               @relation("coursesTocourses", fields: [required_course_id], references: [id], onUpdate: NoAction)
+  other_courses        courses[]              @relation("coursesTocourses")
+  sections             sections[]
+  user_course_progress user_course_progress[]
+}
+
+model lessons {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  module_id            String                 @db.Uuid
+  title                String
+  content              String
+  lesson_type          String                 @default("reading")
+  estimated_minutes    Int                    @default(5)
+  sort_order           Int                    @default(0)
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  sections             sections               @relation(fields: [module_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quizzes              quizzes[]
+  section_items        section_items?
+  user_lesson_progress user_lesson_progress[]
+
+  @@index([module_id], map: "idx_lessons_module_id")
+}
+
+model question_options {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  question_id String    @db.Uuid
+  option_text String
+  is_correct  Boolean   @default(false)
+  sort_order  Int       @default(0)
+  questions   questions @relation(fields: [question_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model questions {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quiz_id          String             @db.Uuid
+  question_text    String
+  question_type    String             @default("single_choice")
+  explanation      String?
+  sort_order       Int                @default(0)
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  question_options question_options[]
+  quizzes          quizzes            @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([quiz_id], map: "idx_questions_quiz_id")
+}
+
+model quiz_attempts {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String    @db.Uuid
+  quiz_id      String    @db.Uuid
+  score        Int       @default(0)
+  passed       Boolean   @default(false)
+  started_at   DateTime  @default(now()) @db.Timestamptz(6)
+  completed_at DateTime? @db.Timestamptz(6)
+  quizzes      quizzes   @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_quiz_attempts_user_id")
+}
+
+model quizzes {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lesson_id          String?         @db.Uuid
+  title              String
+  passing_score      Int             @default(70)
+  max_attempts       Int?
+  time_limit_seconds Int?
+  created_at         DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime        @default(now()) @db.Timestamptz(6)
+  section_id         String?         @db.Uuid
+  questions          questions[]
+  quiz_attempts      quiz_attempts[]
+  lessons            lessons?        @relation(fields: [lesson_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sections           sections?       @relation(fields: [section_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  section_items      section_items?
+
+  @@index([lesson_id], map: "idx_quizzes_lesson_id")
+}
+
+model user_achievements {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String       @db.Uuid
+  achievement_id String       @db.Uuid
+  unlocked_at    DateTime     @default(now()) @db.Timestamptz(6)
+  achievements   achievements @relation(fields: [achievement_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users          users        @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, achievement_id])
+}
+
+model user_course_progress {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String    @db.Uuid
+  course_id        String    @db.Uuid
+  status           String    @default("pending")
+  progress_percent Int       @default(0)
+  started_at       DateTime? @db.Timestamptz(6)
+  completed_at     DateTime? @db.Timestamptz(6)
+  suspended_at     DateTime? @db.Timestamptz(6)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @default(now()) @db.Timestamptz(6)
+  courses          courses   @relation(fields: [course_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users            users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, course_id])
+  @@index([user_id], map: "idx_user_course_progress_user_id")
+}
+
+model user_lesson_progress {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String    @db.Uuid
+  lesson_id    String    @db.Uuid
+  status       String    @default("pending")
+  completed_at DateTime? @db.Timestamptz(6)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @default(now()) @db.Timestamptz(6)
+  lessons      lessons   @relation(fields: [lesson_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, lesson_id])
+  @@index([user_id], map: "idx_user_lesson_progress_user_id")
+}
+
+model users {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                String                 @unique
+  name                 String?
+  image                String?
+  provider             String?                @default("credentials")
+  xp                   Int                    @default(0)
+  level                Int                    @default(1)
+  status               String                 @default("active")
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  quiz_attempts        quiz_attempts[]
+  user_achievements    user_achievements[]
+  user_course_progress user_course_progress[]
+  user_lesson_progress user_lesson_progress[]
+}
+
+model sections {
+  id                  String          @id(map: "modules_pkey") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  course_id           String          @db.Uuid
+  title               String
+  description         String?
+  sort_order          Int             @default(0)
+  required_section_id String?         @db.Uuid
+  created_at          DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime        @default(now()) @db.Timestamptz(6)
+  lessons             lessons[]
+  quizzes             quizzes[]
+  section_items       section_items[]
+  courses             courses         @relation(fields: [course_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "sections_course_id_fkey")
+  sections            sections?       @relation("sectionsTosections", fields: [required_section_id], references: [id], onUpdate: NoAction, map: "modules_required_module_id_fkey")
+  other_sections      sections[]      @relation("sectionsTosections")
+
+  @@index([course_id], map: "idx_sections_course_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model section_items {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  section_id String   @db.Uuid
+  item_type  String
+  lesson_id  String?  @unique @db.Uuid
+  quiz_id    String?  @unique @db.Uuid
+  sort_order Int      @default(0)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  lessons    lessons? @relation(fields: [lesson_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quizzes    quizzes? @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sections   sections @relation(fields: [section_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([section_id], map: "idx_section_items_section_id")
+  @@index([section_id, sort_order], map: "idx_section_items_sort_order")
+}
