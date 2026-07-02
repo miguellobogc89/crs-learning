@@ -1,6 +1,7 @@
 // app/(app)/layout.tsx
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
+
 import { AppSidebar } from "@/components/app/sidebar";
 import { AppTopbar } from "@/components/app/topbar";
 
@@ -16,13 +17,13 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="flex h-screen bg-[#0b0f14] text-slate-100">
+    <div className="flex h-screen bg-background text-foreground">
       <AppSidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <AppTopbar user={session.user} />
 
-        <main className="min-h-0 flex-1 overflow-auto bg-[#111827]">
+        <main className="min-h-0 flex-1 overflow-hidden bg-background">
           {children}
         </main>
       </div>

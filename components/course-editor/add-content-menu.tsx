@@ -10,10 +10,17 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FileText, FolderPlus, ListPlus, ClipboardCheck } from "lucide-react";
+import {
+  FileText,
+  FlaskConical,
+  Folder,
+  Plus,
+} from "lucide-react";
 import { useState } from "react";
+
 import type { Section } from "./types";
 
 type AddMode = "section" | "lesson" | "test" | null;
@@ -26,42 +33,74 @@ type Props = {
 export function AddContentMenu({ courseId, selectedSection }: Props) {
   const [addMode, setAddMode] = useState<AddMode>(null);
 
+  const canAddChild = Boolean(selectedSection);
+
   return (
-    <div className="border-b border-slate-800 p-4">
+    <div className="relative">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button className="w-full justify-start gap-2 bg-cyan-400 text-slate-950 hover:bg-cyan-300">
-            <ListPlus size={16} />
+          <Button
+            size="sm"
+            className="h-7 gap-1 rounded-md bg-lesson px-2 text-xs font-medium text-primary-foreground hover:bg-lesson/90"
+          >
+            <Plus className="h-3.5 w-3.5" />
             Añadir
           </Button>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="start" className="w-52">
-          <DropdownMenuItem onClick={() => setAddMode("section")}>
-            <FolderPlus size={15} />
-            Nueva sección
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Crear nuevo
+          </DropdownMenuLabel>
+
+          <DropdownMenuItem
+            onSelect={() => setAddMode("section")}
+            className="gap-2"
+          >
+            <Folder className="h-4 w-4 text-section" />
+            <span>Nueva sección</span>
           </DropdownMenuItem>
 
           <DropdownMenuItem
-            disabled={!selectedSection}
-            onClick={() => setAddMode("lesson")}
+            disabled={!canAddChild}
+            onSelect={() => setAddMode("lesson")}
+            className="gap-2"
           >
-            <FileText size={15} />
-            Nueva lección
+            <FileText className="h-4 w-4 text-lesson" />
+
+            <div className="flex flex-1 flex-col">
+              <span>Nueva lección</span>
+
+              {!canAddChild && (
+                <span className="text-[10px] text-muted-foreground">
+                  Selecciona una sección
+                </span>
+              )}
+            </div>
           </DropdownMenuItem>
 
           <DropdownMenuItem
-            disabled={!selectedSection}
-            onClick={() => setAddMode("test")}
+            disabled={!canAddChild}
+            onSelect={() => setAddMode("test")}
+            className="gap-2"
           >
-            <ClipboardCheck size={15} />
-            Nuevo test
+            <FlaskConical className="h-4 w-4 text-test" />
+
+            <div className="flex flex-1 flex-col">
+              <span>Nuevo test</span>
+
+              {!canAddChild && (
+                <span className="text-[10px] text-muted-foreground">
+                  Selecciona una sección
+                </span>
+              )}
+            </div>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
       {addMode && (
-        <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950 p-3">
+        <div className="absolute right-0 top-9 z-40 w-72 rounded-lg border border-border bg-popover p-3 shadow-lg">
           {addMode === "section" && (
             <form action={createSection} className="space-y-3">
               <input type="hidden" name="courseId" value={courseId} />
@@ -69,21 +108,11 @@ export function AddContentMenu({ courseId, selectedSection }: Props) {
               <Input
                 name="title"
                 placeholder="Nombre de la sección"
-                className="h-10 text-sm"
+                className="h-8 text-xs"
                 autoFocus
               />
 
-              <div className="flex gap-2">
-                <Button size="sm">Crear</Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setAddMode(null)}
-                >
-                  Cancelar
-                </Button>
-              </div>
+              <FormActions onCancel={() => setAddMode(null)} />
             </form>
           )}
 
@@ -99,21 +128,11 @@ export function AddContentMenu({ courseId, selectedSection }: Props) {
               <Input
                 name="title"
                 placeholder={`Lección en ${selectedSection?.title ?? ""}`}
-                className="h-10 text-sm"
+                className="h-8 text-xs"
                 autoFocus
               />
 
-              <div className="flex gap-2">
-                <Button size="sm">Crear</Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setAddMode(null)}
-                >
-                  Cancelar
-                </Button>
-              </div>
+              <FormActions onCancel={() => setAddMode(null)} />
             </form>
           )}
 
@@ -126,26 +145,45 @@ export function AddContentMenu({ courseId, selectedSection }: Props) {
                 value={selectedSection?.id ?? ""}
               />
 
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Se creará un test en{" "}
-                <span className="text-slate-300">{selectedSection?.title}</span>
+                <span className="text-foreground">{selectedSection?.title}</span>
               </p>
 
-              <div className="flex gap-2">
-                <Button size="sm">Crear test</Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setAddMode(null)}
-                >
-                  Cancelar
-                </Button>
-              </div>
+              <FormActions
+                submitLabel="Crear test"
+                onCancel={() => setAddMode(null)}
+              />
             </form>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function FormActions({
+  submitLabel = "Crear",
+  onCancel,
+}: {
+  submitLabel?: string;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex gap-2">
+      <Button size="sm" className="h-7 bg-lesson text-xs text-primary-foreground hover:bg-lesson/90">
+        {submitLabel}
+      </Button>
+
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        className="h-7 text-xs"
+        onClick={onCancel}
+      >
+        Cancelar
+      </Button>
     </div>
   );
 }

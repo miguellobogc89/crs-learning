@@ -12,68 +12,55 @@ import {
   User,
 } from "lucide-react";
 
+import { cn } from "@/lib/utils";
+
 const navItems = [
-  {
-    href: "/dashboard",
-    icon: Home,
-    label: "Dashboard",
-  },
-  {
-    href: "/courses",
-    icon: GraduationCap,
-    label: "Cursos",
-  },
-  {
-    href: "/achievements",
-    icon: Grid2X2,
-    label: "Logros",
-  },
-  {
-    href: "/profile",
-    icon: User,
-    label: "Perfil",
-  },
+  { href: "/dashboard", icon: Home, label: "Dashboard" },
+  { href: "/courses", icon: GraduationCap, label: "Cursos" },
+  { href: "/achievements", icon: Grid2X2, label: "Logros" },
+  { href: "/profile", icon: User, label: "Perfil" },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-screen w-20 flex-col items-center border-r border-slate-800 bg-[#070b10] py-5">
-      <Link
-        href="/dashboard"
-        className="mb-8 flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-400"
-      >
-        <BookOpen size={23} />
-      </Link>
+    <aside className="flex h-screen w-14 flex-col items-center justify-between border-r border-border bg-white py-3">
+      <div className="flex flex-col items-center gap-1">
+        <Link
+          href="/dashboard"
+          className="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-brand-soft text-brand"
+        >
+          <BookOpen className="h-[18px] w-[18px]" />
+        </Link>
 
-      <nav className="flex flex-1 flex-col items-center gap-3">
-        {navItems.map((item) => {
-          const active = pathname.startsWith(item.href);
+        <nav className="flex flex-col items-center gap-1">
+          {navItems.map((item) => {
+            const active = pathname.startsWith(item.href);
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={item.label}
-              className={`flex h-12 w-12 items-center justify-center rounded-xl transition ${
-                active
-                  ? "bg-slate-800 text-white"
-                  : "text-slate-500 hover:bg-slate-900 hover:text-slate-200"
-              }`}
-            >
-              <item.icon size={22} />
-            </Link>
-          );
-        })}
-      </nav>
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                title={item.label}
+                className={cn(
+                  "flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
+                  active && "bg-surface text-foreground"
+                )}
+              >
+                <item.icon className="h-[18px] w-[18px]" />
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
 
       <Link
         href="/settings"
         title="Configuración"
-        className="flex h-12 w-12 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-900 hover:text-slate-200"
+        className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
       >
-        <Settings size={22} />
+        <Settings className="h-[18px] w-[18px]" />
       </Link>
     </aside>
   );

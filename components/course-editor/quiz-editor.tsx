@@ -1,9 +1,15 @@
 // components/course-editor/quiz-editor.tsx
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
+
+import {
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+
 import type { Quiz } from "./types";
 
 type Props = {
@@ -11,113 +17,152 @@ type Props = {
 };
 
 export function QuizEditor({ quiz }: Props) {
-  const [quizPage, setQuizPage] = useState(0);
+  const [page, setPage] = useState(0);
 
-  const quizPages = ["Resumen", "Pregunta 1", "Pregunta 2", "Pregunta 3"];
+  const pages = [
+    "Resumen",
+    "1",
+    "2",
+    "3",
+  ];
 
   return (
-    <div className="flex min-h-[460px] flex-col">
-      <div className="mb-8 flex items-start justify-between gap-6">
-        <div>
-          <p className="text-sm font-medium text-amber-300">Test de sección</p>
+    <div className="mx-auto flex max-w-5xl flex-col gap-8">
 
-          <h2 className="mt-2 text-3xl font-bold text-white">{quiz.title}</h2>
+      <div>
 
-          <p className="mt-2 text-slate-400">
-            Configura la evaluación y navega por sus preguntas.
-          </p>
-        </div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Test
+        </p>
 
-        <Button variant="secondary">Añadir pregunta</Button>
+        <h1 className="mt-2 text-4xl font-bold">
+          {quiz.title}
+        </h1>
+
       </div>
 
-      {quizPage === 0 && (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-sm text-slate-400">Preguntas totales</p>
-            <p className="mt-3 text-4xl font-bold text-white">12</p>
-          </div>
+      {page === 0 && (
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-sm text-slate-400">Tipo test</p>
-            <p className="mt-3 text-4xl font-bold text-cyan-400">8</p>
-          </div>
+        <div className="grid gap-4 md:grid-cols-4">
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-sm text-slate-400">Desarrollo escrito</p>
-            <p className="mt-3 text-4xl font-bold text-purple-400">3</p>
-          </div>
+          <Card title="Preguntas">
+            12
+          </Card>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-            <p className="text-sm text-slate-400">Orales</p>
-            <p className="mt-3 text-4xl font-bold text-amber-400">1</p>
-          </div>
+          <Card title="Tipo test">
+            8
+          </Card>
+
+          <Card title="Desarrollo">
+            3
+          </Card>
+
+          <Card title="Orales">
+            1
+          </Card>
+
         </div>
+
       )}
 
-      {quizPage > 0 && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-8">
-          <p className="text-sm text-slate-400">Pregunta {quizPage} de 3</p>
+      {page > 0 && (
 
-          <h3 className="mt-4 text-2xl font-bold text-white">
+        <div className="rounded-xl border border-border bg-card p-8">
+
+          <p className="text-sm text-muted-foreground">
+            Pregunta {page}
+          </p>
+
+          <h2 className="mt-4 text-2xl font-bold">
             ¿Cuál es la diferencia entre Merge y Append?
-          </h3>
+          </h2>
 
           <div className="mt-8 space-y-3">
+
             {[
-              "Merge une columnas a partir de una clave común.",
-              "Append elimina duplicados automáticamente.",
-              "Merge solo sirve para CSV.",
-              "Append crea relaciones entre tablas.",
+              "Merge une tablas.",
+              "Append concatena registros.",
+              "Merge crea relaciones.",
+              "Append elimina duplicados.",
             ].map((option) => (
+
               <div
                 key={option}
-                className="rounded-xl border border-slate-700 bg-slate-950 p-4 text-slate-300"
+                className="rounded-lg border border-border bg-surface p-4"
               >
                 {option}
               </div>
+
             ))}
+
           </div>
+
         </div>
+
       )}
 
-      <div className="mt-auto flex items-center justify-between border-t border-slate-800 pt-6">
+      <div className="flex items-center justify-between">
+
         <Button
-          type="button"
           variant="secondary"
-          disabled={quizPage === 0}
-          onClick={() => setQuizPage(quizPage - 1)}
+          disabled={page === 0}
+          onClick={() => setPage(page - 1)}
         >
-          <ChevronLeft size={16} />
+          <ChevronLeft className="mr-1 h-4 w-4" />
           Anterior
         </Button>
 
         <div className="flex gap-2">
-          {quizPages.map((page, index) => (
+
+          {pages.map((label, index) => (
+
             <button
-              key={page}
-              onClick={() => setQuizPage(index)}
-              className={`h-9 rounded-full px-4 text-sm ${
-                quizPage === index
-                  ? "bg-amber-400 text-slate-950"
-                  : "bg-slate-900 text-slate-400 hover:text-white"
-              }`}
+              key={label}
+              onClick={() => setPage(index)}
+              className={
+                page === index
+                  ? "rounded-full bg-brand px-4 py-2 text-sm text-white"
+                  : "rounded-full bg-surface px-4 py-2 text-sm"
+              }
             >
-              {index === 0 ? "Resumen" : index}
+              {label}
             </button>
+
           ))}
+
         </div>
 
         <Button
-          type="button"
           variant="secondary"
-          disabled={quizPage === quizPages.length - 1}
-          onClick={() => setQuizPage(quizPage + 1)}
+          disabled={page === pages.length - 1}
+          onClick={() => setPage(page + 1)}
         >
           Siguiente
-          <ChevronRight size={16} />
+          <ChevronRight className="ml-1 h-4 w-4" />
         </Button>
+
       </div>
+
+    </div>
+  );
+}
+
+function Card({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <p className="text-sm text-muted-foreground">
+        {title}
+      </p>
+
+      <p className="mt-3 text-4xl font-bold">
+        {children}
+      </p>
     </div>
   );
 }

@@ -1,11 +1,14 @@
 // components/course-editor/lesson-editor.tsx
 "use client";
 
+import { useState } from "react";
+
 import { updateLesson } from "@/app/actions/lesson";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
+
 import type { Lesson } from "./types";
 
 type Props = {
@@ -14,52 +17,74 @@ type Props = {
 };
 
 export function LessonEditor({ courseId, lesson }: Props) {
-  const [draftTitle, setDraftTitle] = useState(lesson.title);
-  const [draftContent, setDraftContent] = useState(lesson.content ?? "");
-
-  function discardChanges() {
-    setDraftTitle(lesson.title);
-    setDraftContent(lesson.content ?? "");
-  }
+  const [title, setTitle] = useState(lesson.title);
+  const [content, setContent] = useState(lesson.content ?? "");
 
   return (
-    <form action={updateLesson} className="space-y-6">
+    <form action={updateLesson} className="mx-auto max-w-5xl space-y-8">
+
       <input type="hidden" name="lessonId" value={lesson.id} />
       <input type="hidden" name="courseId" value={courseId} />
 
-      <div>
-        <label className="mb-2 block text-sm text-slate-400">
-          Título de la lección
-        </label>
+      <div className="space-y-2">
+
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Lección
+        </p>
 
         <Input
           name="title"
-          value={draftTitle}
-          onChange={(event) => setDraftTitle(event.target.value)}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="h-12 border-0 bg-transparent px-0 text-4xl font-bold shadow-none focus-visible:ring-0"
         />
+
       </div>
 
-      <div>
-        <label className="mb-2 block text-sm text-slate-400">
+      <div className="rounded-xl border border-border bg-card p-6">
+
+        <p className="mb-4 text-sm font-medium text-muted-foreground">
           Contenido
-        </label>
+        </p>
 
         <Textarea
           name="content"
-          value={draftContent}
-          onChange={(event) => setDraftContent(event.target.value)}
-          className="min-h-[320px]"
-          placeholder="Escribe aquí el contenido de la lección..."
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Empieza a escribir..."
+          className="
+            min-h-[500px]
+            resize-none
+            border-0
+            bg-transparent
+            text-base
+            leading-7
+            shadow-none
+            focus-visible:ring-0
+          "
         />
+
       </div>
 
-      <div className="flex gap-3">
-        <Button type="submit">Guardar</Button>
+      <div className="flex justify-end gap-3">
 
-        <Button type="button" variant="secondary" onClick={discardChanges}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            setTitle(lesson.title);
+            setContent(lesson.content ?? "");
+          }}
+        >
           Descartar
         </Button>
+
+        <Button>
+          Guardar cambios
+        </Button>
+
       </div>
+
     </form>
   );
 }
