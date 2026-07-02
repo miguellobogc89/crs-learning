@@ -28,10 +28,14 @@ model courses {
   required_course_id   String?                @db.Uuid
   created_at           DateTime               @default(now()) @db.Timestamptz(6)
   updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  knowledge_source_id  String?                @db.Uuid
+  knowledge_sources    knowledge_sources?     @relation(fields: [knowledge_source_id], references: [id], onUpdate: NoAction)
   courses              courses?               @relation("coursesTocourses", fields: [required_course_id], references: [id], onUpdate: NoAction)
   other_courses        courses[]              @relation("coursesTocourses")
   sections             sections[]
   user_course_progress user_course_progress[]
+
+  @@index([knowledge_source_id], map: "idx_courses_knowledge_source_id")
 }
 
 model lessons {
@@ -204,4 +208,57 @@ model section_items {
 
   @@index([section_id], map: "idx_section_items_section_id")
   @@index([section_id, sort_order], map: "idx_section_items_sort_order")
+}
+
+model knowledge_sources {
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id      String              @db.Uuid
+  title              String
+  description        String?
+  visibility         String              @default("private")
+  content            String              @default("")
+  status             String              @default("draft")
+  created_at         DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime            @default(now()) @db.Timestamptz(6)
+  knowledge_type     String              @default("unknown")
+  courses            courses[]
+  knowledge_analysis knowledge_analysis?
+  knowledge_files    knowledge_files[]
+
+  @@index([owner_user_id], map: "idx_knowledge_sources_owner_user_id")
+  @@index([visibility], map: "idx_knowledge_sources_visibility")
+}
+
+model knowledge_files {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  knowledge_source_id String            @db.Uuid
+  file_name           String
+  file_type           String?
+  file_size           Int?
+  storage_path        String?
+  extracted_text      String            @default("")
+  status              String            @default("uploaded")
+  created_at          DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime          @default(now()) @db.Timestamptz(6)
+  knowledge_sources   knowledge_sources @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([knowledge_source_id], map: "idx_knowledge_files_knowledge_source_id")
+}
+
+model knowledge_analysis {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  knowledge_source_id String            @unique @db.Uuid
+  status              String            @default("pending")
+  analysis_json       Json?
+  model               String?
+  prompt_version      String            @default("knowledge-analysis-v1")
+  tokens_input        Int?
+  tokens_output       Int?
+  processing_ms       Int?
+  error_message       String?
+  created_at          DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime          @default(now()) @db.Timestamptz(6)
+  knowledge_sources   knowledge_sources @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([status], map: "idx_knowledge_analysis_status")
 }
