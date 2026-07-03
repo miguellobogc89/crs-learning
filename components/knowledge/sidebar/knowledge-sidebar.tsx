@@ -19,6 +19,7 @@ import {
 import { SearchInput } from "@/components/ui/search-input";
 import { createKnowledgeLibrary } from "@/lib/actions/knowledge-library.actions";
 import type { LibraryItem, SidebarItem } from "./types";
+import { KnowledgeLibraryTree } from "./knowledge-library-tree";
 
 type Props = {
   sidebarItems: SidebarItem[];
@@ -292,132 +293,7 @@ async function handleCreateChildLibrary(parentId: string) {
   }, 0);
 }
 
-  function renderLibrary(library: LibraryItem, level = 0) {
-  const hasChildren = Boolean(library.children?.length);
 
-return (
-  <div key={library.id}>
-    <div
-      className="group/library relative flex w-full min-w-0 items-center gap-2 rounded-lg py-2 pr-10 text-left text-sm text-panel-foreground/70 transition-colors hover:bg-surface-hover hover:text-foreground"
-      style={{ paddingLeft: `${12 + level * 16}px` }}
-      onMouseDown={(event) => {
-        if (library.isEditing) {
-          event.stopPropagation();
-        }
-      }}
-    >
-        <button
-          className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground"
-          type="button"
-          onClick={() => handleToggleExpanded(library.id)}
-        >
-          {hasChildren ? (
-            <ChevronRight
-              className={[
-                "h-3.5 w-3.5 transition-transform",
-                library.isExpanded ? "rotate-90" : "",
-              ].join(" ")}
-            />
-          ) : (
-            <span className="h-3.5 w-3.5" />
-          )}
-        </button>
-
-        {library.isExpanded ? (
-          <FolderOpen className="h-4 w-4 shrink-0" />
-        ) : (
-          <Folder className="h-4 w-4 shrink-0" />
-        )}
-
-        {library.isEditing ? (
-<input
-  ref={(element) => {
-    inputRefs.current[library.id] = element;
-  }}
-  className="min-w-0 flex-1 rounded-md border border-cyan-200 bg-background px-2 py-1 text-sm text-foreground outline-none ring-2 ring-cyan-100"
-  value={library.name}
-  onChange={(event) =>
-    handleRenameLibrary(library.id, event.target.value)
-  }
-  onBlur={(event) => {
-  event.currentTarget.blur();
-  handleSaveLibrary(library.id);
-}}
-  onKeyDown={(event) => {
-    if (event.key === "Enter" || event.key === "Escape") {
-      handleSaveLibrary(library.id);
-    }
-  }}
-/>
-        ) : (
-          <button
-            className="min-w-0 flex-1 truncate text-left"
-            type="button"
-          >
-            {library.name}
-          </button>
-        )}
-
-        {!library.isEditing ? (
-          <button
-  className="absolute right-2 flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-background hover:text-foreground group-hover/library:opacity-100"
-  type="button"
-  onMouseDown={(event) => event.preventDefault()}
-  onClick={() =>
-    setOpenMenuId((currentId) =>
-      currentId === library.id ? null : library.id,
-    )
-  }
-  aria-label="Opciones de biblioteca"
->
-  <MoreHorizontal className="h-4 w-4" />
-</button>
-        ) : null}
-
-        {openMenuId === library.id ? (
-          <div className="absolute right-2 top-9 z-20 w-40 rounded-lg border border-border bg-background p-1 shadow-sm">
-
-            <button
-              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-surface"
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => handleCreateChildLibrary(library.id)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Añadir carpeta
-            </button>
-
-            <button
-              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-surface"
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => handleStartRename(library.id)}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              Renombrar
-            </button>
-
-            <button
-              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => handleDeleteLibrary(library.id)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Eliminar
-            </button>
-          </div>
-        ) : null}
-      </div>
-
-      {hasChildren && library.isExpanded ? (
-        <div className="mt-1 space-y-1">
-          {library.children!.map((child) => renderLibrary(child, level + 1))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
   return (
     <aside
@@ -492,7 +368,22 @@ return (
           </div>
 
           <div className="space-y-1">
-            {filteredLibraries.map((library) => renderLibrary(library))}
+            <KnowledgeLibraryTree
+  libraries={filteredLibraries}
+  openMenuId={openMenuId}
+  inputRefs={inputRefs}
+  onRename={handleRenameLibrary}
+  onSave={handleSaveLibrary}
+  onToggleExpanded={handleToggleExpanded}
+  onToggleMenu={(id) =>
+    setOpenMenuId((current) =>
+      current === id ? null : id,
+    )
+  }
+  onCreateChild={handleCreateChildLibrary}
+  onStartRename={handleStartRename}
+  onDelete={handleDeleteLibrary}
+/>
 
             {filteredLibraries.length === 0 ? (
               <p className="px-3 py-2 text-xs text-muted-foreground">
