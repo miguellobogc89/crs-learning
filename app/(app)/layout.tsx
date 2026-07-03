@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { AppSidebar } from "@/components/app/sidebar";
 import { AppTopbar } from "@/components/app/topbar";
+import { AutoBreadcrumb } from "@/components/app/auto-breadcrumb";
 
 export default async function AppLayout({
   children,
@@ -22,6 +23,10 @@ export default async function AppLayout({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <AppTopbar user={session.user} />
+
+        <div className="border-b border-border bg-background px-8 py-3">
+          <AutoBreadcrumb />
+        </div>
 
         <main className="min-h-0 flex-1 overflow-hidden bg-background">
           {children}

@@ -167,6 +167,7 @@ model users {
   status               String                 @default("active")
   created_at           DateTime               @default(now()) @db.Timestamptz(6)
   updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  knowledge_libraries  knowledge_libraries[]
   quiz_attempts        quiz_attempts[]
   user_achievements    user_achievements[]
   user_course_progress user_course_progress[]
@@ -261,4 +262,21 @@ model knowledge_analysis {
   knowledge_sources   knowledge_sources @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([status], map: "idx_knowledge_analysis_status")
+}
+
+model knowledge_libraries {
+  id                        String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id             String                @db.Uuid
+  parent_id                 String?               @db.Uuid
+  name                      String
+  position                  Int                   @default(0)
+  created_at                DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime              @default(now()) @db.Timestamptz(6)
+  users                     users                 @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_libraries       knowledge_libraries?  @relation("knowledge_librariesToknowledge_libraries", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_knowledge_libraries knowledge_libraries[] @relation("knowledge_librariesToknowledge_libraries")
+
+  @@index([owner_user_id, parent_id], map: "idx_knowledge_libraries_owner_parent")
+  @@index([owner_user_id], map: "idx_knowledge_libraries_owner_user_id")
+  @@index([parent_id], map: "idx_knowledge_libraries_parent_id")
 }
