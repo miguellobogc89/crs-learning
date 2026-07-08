@@ -167,6 +167,10 @@ model users {
   status                                                            String                 @default("active")
   created_at                                                        DateTime               @default(now()) @db.Timestamptz(6)
   updated_at                                                        DateTime               @default(now()) @db.Timestamptz(6)
+  chat_conversations_chat_conversations_created_by_user_idTousers   chat_conversations[]   @relation("chat_conversations_created_by_user_idTousers")
+  chat_conversations_chat_conversations_owner_user_idTousers        chat_conversations[]   @relation("chat_conversations_owner_user_idTousers")
+  chat_conversations_chat_conversations_updated_by_user_idTousers   chat_conversations[]   @relation("chat_conversations_updated_by_user_idTousers")
+  chat_messages                                                     chat_messages[]
   knowledge_libraries_knowledge_libraries_created_by_user_idTousers knowledge_libraries[]  @relation("knowledge_libraries_created_by_user_idTousers")
   knowledge_libraries                                               knowledge_libraries[]
   knowledge_libraries_knowledge_libraries_updated_by_user_idTousers knowledge_libraries[]  @relation("knowledge_libraries_updated_by_user_idTousers")
@@ -285,6 +289,7 @@ model knowledge_libraries {
   updated_at                                          DateTime              @default(now()) @db.Timestamptz(6)
   created_by_user_id                                  String?               @db.Uuid
   updated_by_user_id                                  String?               @db.Uuid
+  chat_conversations                                  chat_conversations[]
   users_knowledge_libraries_created_by_user_idTousers users?                @relation("knowledge_libraries_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
   users                                               users                 @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   knowledge_libraries                                 knowledge_libraries?  @relation("knowledge_librariesToknowledge_libraries", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -295,4 +300,42 @@ model knowledge_libraries {
   @@index([owner_user_id, parent_id], map: "idx_knowledge_libraries_owner_parent")
   @@index([owner_user_id], map: "idx_knowledge_libraries_owner_user_id")
   @@index([parent_id], map: "idx_knowledge_libraries_parent_id")
+}
+
+model chat_conversations {
+  id                                                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id                                      String               @db.Uuid
+  title                                              String               @default("Nueva conversación")
+  scope_type                                         String               @default("all")
+  scope_library_id                                   String?              @db.Uuid
+  created_by_user_id                                 String?              @db.Uuid
+  updated_by_user_id                                 String?              @db.Uuid
+  created_at                                         DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                                         DateTime             @default(now()) @db.Timestamptz(6)
+  users_chat_conversations_created_by_user_idTousers users?               @relation("chat_conversations_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  users_chat_conversations_owner_user_idTousers      users                @relation("chat_conversations_owner_user_idTousers", fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_libraries                                knowledge_libraries? @relation(fields: [scope_library_id], references: [id], onUpdate: NoAction)
+  users_chat_conversations_updated_by_user_idTousers users?               @relation("chat_conversations_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+  chat_messages                                      chat_messages[]
+
+  @@index([owner_user_id], map: "idx_chat_conversations_owner_user_id")
+  @@index([scope_library_id], map: "idx_chat_conversations_scope_library_id")
+}
+
+model chat_messages {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversation_id    String             @db.Uuid
+  user_id            String?            @db.Uuid
+  role               String
+  content            String
+  sources_json       Json?
+  model              String?
+  tokens_input       Int?
+  tokens_output      Int?
+  created_at         DateTime           @default(now()) @db.Timestamptz(6)
+  chat_conversations chat_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users              users?             @relation(fields: [user_id], references: [id], onUpdate: NoAction)
+
+  @@index([conversation_id], map: "idx_chat_messages_conversation_id")
+  @@index([user_id], map: "idx_chat_messages_user_id")
 }
