@@ -128,3 +128,64 @@ export function deleteLibrary(
         : library.children,
     }));
 }
+
+export function findLibraryById(
+  items: LibraryItem[],
+  id: string,
+): LibraryItem | undefined {
+  for (const library of items) {
+    if (library.id === id) {
+      return library;
+    }
+
+    if (library.children?.length) {
+      const found = findLibraryById(
+        library.children,
+        id,
+      );
+
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+export function getLibraryPath(
+  libraries: LibraryItem[],
+  libraryId: string | null,
+): LibraryItem[] {
+  if (!libraryId) {
+    return [];
+  }
+
+  function search(
+    items: LibraryItem[],
+    parents: LibraryItem[],
+  ): LibraryItem[] | null {
+    for (const item of items) {
+      const currentPath = [...parents, item];
+
+      if (item.id === libraryId) {
+        return currentPath;
+      }
+
+      if (item.children?.length) {
+        const result = search(
+          item.children,
+          currentPath,
+        );
+
+        if (result) {
+          return result;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  return search(libraries, []) ?? [];
+}

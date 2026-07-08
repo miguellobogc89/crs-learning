@@ -5,21 +5,28 @@ import { useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { KnowledgeViewItem } from "./knowledge-view-item";
 import { SearchInput } from "@/components/ui/search-input";
-import { createKnowledgeLibrary } from "@/lib/actions/knowledge-library.actions";
+import {
+  createKnowledgeLibrary,
+  renameKnowledgeLibrary,
+  deleteKnowledgeLibrary,
+} from "@/lib/actions/knowledge-library.actions";
 import type { LibraryItem, SidebarItem } from "./types";
 import { KnowledgeLibraryTree } from "./knowledge-library-tree";
-import { buildLibraryTree } from "./tree-utils";
 import {
+  buildLibraryTree,
   renameLibrary,
   startRename,
   deleteLibrary,
   toggleLibrary,
   saveLibraries,
+  findLibraryById,
 } from "./tree-utils";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type Props = {
   sidebarItems: SidebarItem[];
   knowledgeLibraries: any[];
+  defaultLibraryId: string | null;
 };
 
 
@@ -27,12 +34,17 @@ type Props = {
 export function KnowledgeSidebar({
   sidebarItems,
   knowledgeLibraries,
+  defaultLibraryId,
 }: Props) {
   const [search, setSearch] = useState("");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [libraries, setLibraries] = useState<LibraryItem[]>(
   () => buildLibraryTree(knowledgeLibraries),
 );
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const selectedLibraryId = searchParams.get("library") ?? defaultLibraryId;
 
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -73,6 +85,20 @@ function handleRenameLibrary(id: string, name: string) {
   setLibraries((current) => renameLibrary(current, id, name));
 }
 
+function handleSelectLibrary(id: string) {
+  const params = new URLSearchParams(searchParams.toString());
+
+  if (selectedLibraryId === id) {
+    params.delete("library");
+  } else {
+    params.set("library", id);
+  }
+
+  const query = params.toString();
+
+  router.replace(query ? `${pathname}?${query}` : pathname);
+}
+
 function handleStartRename(id: string) {
   setOpenMenuId(null);
 
@@ -84,8 +110,10 @@ function handleStartRename(id: string) {
   }, 0);
 }
 
-function handleDeleteLibrary(id: string) {
+async function handleDeleteLibrary(id: string) {
   setOpenMenuId(null);
+
+  await deleteKnowledgeLibrary(id);
 
   setLibraries((current) => deleteLibrary(current, id));
 }
@@ -98,7 +126,13 @@ function saveEditingLibraries() {
   setLibraries((current) => saveLibraries(current));
 }
 
-function handleSaveLibrary(id: string) {
+async function handleSaveLibrary(id: string) {
+  const library = findLibraryById(libraries, id);
+
+  if (library) {
+    await renameKnowledgeLibrary(id, library.name.trim());
+  }
+
   setLibraries((current) => saveLibraries(current));
 }
 
@@ -203,21 +237,23 @@ async function handleCreateChildLibrary(parentId: string) {
 
           <div className="space-y-1">
             <KnowledgeLibraryTree
-  libraries={filteredLibraries}
-  openMenuId={openMenuId}
-  inputRefs={inputRefs}
-  onRename={handleRenameLibrary}
-  onSave={handleSaveLibrary}
-  onToggleExpanded={handleToggleExpanded}
-  onToggleMenu={(id) =>
-    setOpenMenuId((current) =>
-      current === id ? null : id,
-    )
-  }
-  onCreateChild={handleCreateChildLibrary}
-  onStartRename={handleStartRename}
-  onDelete={handleDeleteLibrary}
-/>
+              libraries={filteredLibraries}
+              openMenuId={openMenuId}
+              inputRefs={inputRefs}
+              onRename={handleRenameLibrary}
+              onSave={handleSaveLibrary}
+              onToggleExpanded={handleToggleExpanded}
+              onToggleMenu={(id) =>
+                setOpenMenuId((current) =>
+                  current === id ? null : id,
+                )
+              }
+              onCreateChild={handleCreateChildLibrary}
+              onStartRename={handleStartRename}
+              onDelete={handleDeleteLibrary}
+              selectedLibraryId={selectedLibraryId}
+              onSelect={handleSelectLibrary}
+            />
 
             {filteredLibraries.length === 0 ? (
               <p className="px-3 py-2 text-xs text-muted-foreground">

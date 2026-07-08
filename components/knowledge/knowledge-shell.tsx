@@ -6,6 +6,7 @@ import { KnowledgeSidebar } from "@/components/knowledge/sidebar/knowledge-sideb
 type Props = {
   knowledgeSources: any[];
   knowledgeLibraries: any[];
+  defaultLibraryId: string | null;
   children: ReactNode;
 };
 
@@ -19,6 +20,7 @@ type SidebarItem = {
 export function KnowledgeShell({
   knowledgeSources,
   knowledgeLibraries,
+  defaultLibraryId,
   children,
 }: Props) {
   const totalPublic = knowledgeSources.filter(
@@ -59,6 +61,7 @@ export function KnowledgeShell({
       <KnowledgeSidebar
         sidebarItems={sidebarItems}
         knowledgeLibraries={knowledgeLibraries}
+        defaultLibraryId={defaultLibraryId}
         />
 
       <section className="min-w-0 overflow-auto">{children}</section>

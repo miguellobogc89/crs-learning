@@ -1,8 +1,9 @@
 // lib/services/knowledge-library.service.ts
+
 import { prisma } from "@/lib/prisma";
 
 export async function listKnowledgeLibraries(ownerUserId: string) {
-  return prisma.knowledge_libraries.findMany({
+  let libraries = await prisma.knowledge_libraries.findMany({
     where: {
       owner_user_id: ownerUserId,
     },
@@ -18,4 +19,18 @@ export async function listKnowledgeLibraries(ownerUserId: string) {
       },
     ],
   });
+
+  if (libraries.length === 0) {
+    const library = await prisma.knowledge_libraries.create({
+      data: {
+        owner_user_id: ownerUserId,
+        name: "Mi biblioteca",
+        position: 0,
+      },
+    });
+
+    libraries = [library];
+  }
+
+  return libraries;
 }

@@ -36,3 +36,43 @@ export async function createKnowledgeLibrary(parentId?: string | null) {
 
   return library;
 }
+
+export async function renameKnowledgeLibrary(
+  id: string,
+  name: string,
+) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error("No autenticado");
+  }
+
+  await prisma.knowledge_libraries.updateMany({
+    where: {
+      id,
+      owner_user_id: session.user.id,
+    },
+    data: {
+      name,
+    },
+  });
+
+  revalidatePath("/knowledge");
+}
+
+export async function deleteKnowledgeLibrary(id: string) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error("No autenticado");
+  }
+
+  await prisma.knowledge_libraries.deleteMany({
+    where: {
+      id,
+      owner_user_id: session.user.id,
+    },
+  });
+
+  revalidatePath("/knowledge");
+}

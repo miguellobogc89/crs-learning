@@ -1,4 +1,5 @@
 // app/(app)/knowledge/layout.tsx
+
 import { ReactNode } from "react";
 
 import { auth } from "@/auth";
@@ -14,12 +15,14 @@ export default async function KnowledgeLayout({
   const session = await auth();
 
   const knowledgeSources = await listVisibleKnowledgeSources(session!.user.id);
+
   const knowledgeLibraries = await listKnowledgeLibraries(session!.user.id);
 
   return (
     <KnowledgeShell
       knowledgeSources={knowledgeSources}
       knowledgeLibraries={knowledgeLibraries}
+      defaultLibraryId={knowledgeLibraries[0]?.id ?? null}
     >
       {children}
     </KnowledgeShell>

@@ -1,11 +1,7 @@
 // components/knowledge/sidebar/knowledge-library-item.tsx
 "use client";
 
-import {
-  ChevronRight,
-  Folder,
-  FolderOpen,
-} from "lucide-react";
+import { ChevronRight, Folder, FolderOpen } from "lucide-react";
 
 import { KnowledgeLibraryMenu } from "./knowledge-library-menu";
 import type { LibraryItem } from "./types";
@@ -14,24 +10,25 @@ type Props = {
   library: LibraryItem;
   level: number;
   openMenuId: string | null;
+  selectedLibraryId: string | null;
 
   inputRef: (element: HTMLInputElement | null) => void;
 
   onRename: (value: string) => void;
   onSave: () => void;
-
   onToggleExpanded: () => void;
-
   onToggleMenu: () => void;
   onCreateChild: () => void;
   onStartRename: () => void;
   onDelete: () => void;
+  onSelect: () => void;
 };
 
 export function KnowledgeLibraryItem({
   library,
   level,
   openMenuId,
+  selectedLibraryId,
   inputRef,
   onRename,
   onSave,
@@ -40,12 +37,19 @@ export function KnowledgeLibraryItem({
   onCreateChild,
   onStartRename,
   onDelete,
+  onSelect,
 }: Props) {
   const hasChildren = Boolean(library.children?.length);
+  const isSelected = selectedLibraryId === library.id;
 
   return (
     <div
-      className="group/library relative flex w-full min-w-0 items-center gap-2 rounded-lg py-2 pr-10 text-left text-sm text-panel-foreground/70 transition-colors hover:bg-surface-hover hover:text-foreground"
+      className={[
+        "group/library relative flex w-full min-w-0 items-center gap-2 rounded-lg py-2 pr-10 text-left text-sm transition-colors",
+        isSelected
+          ? "bg-surface text-foreground"
+          : "text-panel-foreground/70 hover:bg-surface-hover hover:text-foreground",
+      ].join(" ")}
       style={{
         paddingLeft: `${12 + level * 16}px`,
       }}
@@ -85,10 +89,7 @@ export function KnowledgeLibraryItem({
           value={library.name}
           onChange={(event) => onRename(event.target.value)}
           onKeyDown={(event) => {
-            if (
-              event.key === "Enter" ||
-              event.key === "Escape"
-            ) {
+            if (event.key === "Enter" || event.key === "Escape") {
               onSave();
             }
           }}
@@ -97,6 +98,7 @@ export function KnowledgeLibraryItem({
         <button
           className="min-w-0 flex-1 truncate text-left"
           type="button"
+          onClick={onSelect}
         >
           {library.name}
         </button>
