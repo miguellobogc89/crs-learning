@@ -3,6 +3,7 @@ import mammoth from "mammoth";
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { XMLParser } from "fast-xml-parser";
+import { extractText } from "unpdf";
 
 export async function extractFileText(file: File): Promise<string> {
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -23,10 +24,22 @@ export async function extractFileText(file: File): Promise<string> {
 
     case "application/vnd.openxmlformats-officedocument.presentationml.presentation":
       return extractPowerPoint(buffer);
+    
+    case "application/pdf":
+      return extractPdf(buffer);
 
     default:
       throw new Error(`Formato no soportado: ${file.type}`);
   }
+}
+
+async function extractPdf(buffer: Buffer) {
+  const result = await extractText(new Uint8Array(buffer));
+
+  return result.text
+    .map((page) => page.trim())
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 async function extractDocx(buffer: Buffer) {

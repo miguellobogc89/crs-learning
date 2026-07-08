@@ -1,6 +1,8 @@
 // components/knowledge/content/knowledge-content.tsx
 "use client";
 
+import Link from "next/link";
+import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { KnowledgeToolbar } from "./knowledge-toolbar";
@@ -71,9 +73,21 @@ const libraryPath = useMemo(
 
 return (
   <>
-    <div className="mb-4">
-      <KnowledgeLibraryBreadcrumb path={libraryPath} />
-    </div>
+<div className="mb-4 flex items-center justify-between gap-4">
+  <KnowledgeLibraryBreadcrumb path={libraryPath} />
+
+  <Link
+    href={
+      selectedLibraryId
+        ? `/knowledge/new?library=${selectedLibraryId}`
+        : "/knowledge/new"
+    }
+    className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+  >
+    <Plus className="h-4 w-4" />
+    Nuevo
+  </Link>
+</div>
 
     <KnowledgeToolbar
       search={search}

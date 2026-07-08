@@ -64,7 +64,9 @@ export function KnowledgeShell({
         defaultLibraryId={defaultLibraryId}
         />
 
-      <section className="min-w-0 overflow-auto">{children}</section>
+      <section className="min-w-0 overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable]">
+        {children}
+      </section>
     </div>
   );
 }

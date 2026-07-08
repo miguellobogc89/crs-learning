@@ -50,11 +50,12 @@ export async function updateKnowledgeAction(formData: FormData) {
     return;
   }
 
-  const id = String(formData.get("id"));
-  const title = String(formData.get("title") ?? "").trim();
-  const description = String(formData.get("description") ?? "").trim();
-  const visibility = String(formData.get("visibility") ?? "private");
-  const content = String(formData.get("content") ?? "");
+const id = String(formData.get("id"));
+const title = String(formData.get("title") ?? "").trim();
+const description = String(formData.get("description") ?? "").trim();
+const visibility = String(formData.get("visibility") ?? "private");
+const knowledgeType = String(formData.get("knowledgeType") ?? "unknown");
+const content = String(formData.get("content") ?? "");
 
   if (!id || !title) {
     return;
@@ -66,6 +67,7 @@ export async function updateKnowledgeAction(formData: FormData) {
     title,
     description,
     visibility,
+    knowledgeType,
     content,
   });
 

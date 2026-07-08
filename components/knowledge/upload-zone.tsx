@@ -70,7 +70,7 @@ export function UploadZone({ accept }: UploadZoneProps) {
           </p>
 
           <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            DOCX · XLSX · PPTX · CSV · TXT
+            PDF · DOCX · XLSX · PPTX · CSV · TXT
           </p>
         </div>
       ) : (

@@ -1,5 +1,6 @@
 // lib/knowledge/file-types.ts
 export const KNOWLEDGE_ACCEPTED_FILE_EXTENSIONS = [
+  ".pdf",
   ".txt",
   ".md",
   ".csv",
@@ -9,6 +10,7 @@ export const KNOWLEDGE_ACCEPTED_FILE_EXTENSIONS = [
 ] as const;
 
 export const KNOWLEDGE_ACCEPTED_MIME_TYPES = [
+  "application/pdf",
   "text/plain",
   "text/markdown",
   "text/csv",

@@ -8,6 +8,7 @@ import { KnowledgeAnalysisPanel } from "@/components/knowledge/knowledge-analysi
 import { KnowledgeEditorHeader } from "@/components/knowledge/knowledge-editor-header";
 import { KnowledgeHeader } from "@/components/knowledge/knowledge-header";
 import { KnowledgeFileCard } from "@/components/knowledge/knowledge-item/knowledge-file-card";
+import { UploadKnowledgeForm } from "@/components/knowledge/upload-knowledge-form";
 import { UploadZone } from "@/components/knowledge/upload-zone";
 import { Button } from "@/components/ui/button";
 
@@ -151,13 +152,7 @@ export function KnowledgeDetailClient({ knowledge }: { knowledge: Knowledge }) {
           )}
 
           {showUpload && (
-            <form action={uploadKnowledgeFileAction}>
-              <input type="hidden" name="knowledgeId" value={knowledge.id} />
-              <UploadZone accept=".txt,.md,.csv,.docx,.xlsx,.pptx" />
-              <div className="mt-4 flex justify-end">
-                <Button type="submit">Subir documentos</Button>
-              </div>
-            </form>
+            <UploadKnowledgeForm knowledgeId={knowledge.id} />
           )}
         </section>
       )}
