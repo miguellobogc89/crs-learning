@@ -178,6 +178,9 @@ model users {
   knowledge_library_permissions                                     knowledge_library_permissions[]
   knowledge_sources_knowledge_sources_created_by_user_idTousers     knowledge_sources[]             @relation("knowledge_sources_created_by_user_idTousers")
   knowledge_sources_knowledge_sources_updated_by_user_idTousers     knowledge_sources[]             @relation("knowledge_sources_updated_by_user_idTousers")
+  knowledge_space_permissions                                       knowledge_space_permissions[]
+  knowledge_spaces_knowledge_spaces_created_by_user_idTousers       knowledge_spaces[]              @relation("knowledge_spaces_created_by_user_idTousers")
+  knowledge_spaces_knowledge_spaces_updated_by_user_idTousers       knowledge_spaces[]              @relation("knowledge_spaces_updated_by_user_idTousers")
   quiz_attempts                                                     quiz_attempts[]
   user_achievements                                                 user_achievements[]
   user_course_progress                                              user_course_progress[]
@@ -305,6 +308,7 @@ model knowledge_libraries {
   users_knowledge_libraries_updated_by_user_idTousers users?                          @relation("knowledge_libraries_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
   knowledge_library_permissions                       knowledge_library_permissions[]
   knowledge_sources                                   knowledge_sources[]
+  knowledge_space_libraries                           knowledge_space_libraries[]
 
   @@index([owner_user_id, parent_id], map: "idx_knowledge_libraries_owner_parent")
   @@index([owner_user_id], map: "idx_knowledge_libraries_owner_user_id")
@@ -323,14 +327,17 @@ model chat_conversations {
   updated_by_user_id                                 String?              @db.Uuid
   created_at                                         DateTime             @default(now()) @db.Timestamptz(6)
   updated_at                                         DateTime             @default(now()) @db.Timestamptz(6)
+  space_id                                           String?              @db.Uuid
   users_chat_conversations_created_by_user_idTousers users?               @relation("chat_conversations_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
   users_chat_conversations_owner_user_idTousers      users                @relation("chat_conversations_owner_user_idTousers", fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   knowledge_libraries                                knowledge_libraries? @relation(fields: [scope_library_id], references: [id], onUpdate: NoAction)
+  knowledge_spaces                                   knowledge_spaces?    @relation(fields: [space_id], references: [id], onUpdate: NoAction)
   users_chat_conversations_updated_by_user_idTousers users?               @relation("chat_conversations_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
   chat_messages                                      chat_messages[]
 
   @@index([owner_user_id], map: "idx_chat_conversations_owner_user_id")
   @@index([scope_library_id], map: "idx_chat_conversations_scope_library_id")
+  @@index([space_id], map: "idx_chat_conversations_space_id")
 }
 
 model chat_messages {
@@ -358,6 +365,7 @@ model companies {
   created_at          DateTime              @default(now()) @db.Timestamptz(6)
   updated_at          DateTime              @default(now()) @db.Timestamptz(6)
   knowledge_libraries knowledge_libraries[]
+  knowledge_spaces    knowledge_spaces[]
   users               users[]
 }
 
@@ -372,4 +380,53 @@ model knowledge_library_permissions {
   users               users               @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([library_id, user_id])
+}
+
+model knowledge_space_libraries {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  space_id            String              @db.Uuid
+  library_id          String              @db.Uuid
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  knowledge_libraries knowledge_libraries @relation(fields: [library_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_spaces    knowledge_spaces    @relation(fields: [space_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([space_id, library_id])
+  @@index([library_id], map: "idx_knowledge_space_libraries_library_id")
+  @@index([space_id], map: "idx_knowledge_space_libraries_space_id")
+}
+
+model knowledge_space_permissions {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  space_id         String           @db.Uuid
+  user_id          String           @db.Uuid
+  access_level     String           @default("read")
+  created_at       DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime         @default(now()) @db.Timestamptz(6)
+  knowledge_spaces knowledge_spaces @relation(fields: [space_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users            users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([space_id, user_id])
+  @@index([space_id], map: "idx_knowledge_space_permissions_space_id")
+  @@index([user_id], map: "idx_knowledge_space_permissions_user_id")
+}
+
+model knowledge_spaces {
+  id                                               String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id                                       String?                       @db.Uuid
+  name                                             String
+  description                                      String?
+  visibility                                       String                        @default("restricted")
+  created_by_user_id                               String?                       @db.Uuid
+  updated_by_user_id                               String?                       @db.Uuid
+  created_at                                       DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at                                       DateTime                      @default(now()) @db.Timestamptz(6)
+  chat_conversations                               chat_conversations[]
+  knowledge_space_libraries                        knowledge_space_libraries[]
+  knowledge_space_permissions                      knowledge_space_permissions[]
+  companies                                        companies?                    @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_knowledge_spaces_created_by_user_idTousers users?                        @relation("knowledge_spaces_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  users_knowledge_spaces_updated_by_user_idTousers users?                        @relation("knowledge_spaces_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+
+  @@index([company_id], map: "idx_knowledge_spaces_company_id")
+  @@index([visibility], map: "idx_knowledge_spaces_visibility")
 }

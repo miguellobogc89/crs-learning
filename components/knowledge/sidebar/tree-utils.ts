@@ -7,7 +7,7 @@ export function buildLibraryTree(libraries: any[]): LibraryItem[] {
     map.set(library.id, {
       id: library.id,
       name: library.name,
-      isExpanded: true,
+      isExpanded: false,
       children: [],
     });
   });

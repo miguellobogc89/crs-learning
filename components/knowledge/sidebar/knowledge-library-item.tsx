@@ -1,4 +1,5 @@
 // components/knowledge/sidebar/knowledge-library-item.tsx
+// components/knowledge/sidebar/knowledge-library-item.tsx
 "use client";
 
 import { ChevronRight, Folder, FolderOpen } from "lucide-react";
@@ -45,7 +46,7 @@ export function KnowledgeLibraryItem({
   return (
     <div
       className={[
-        "group/library relative flex w-full min-w-0 items-center gap-2 rounded-lg py-2 pr-10 text-left text-sm transition-colors",
+        "group/library relative flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg py-2 pr-10 text-left text-sm transition-colors",
         isSelected
           ? "bg-surface text-foreground"
           : "text-panel-foreground/70 hover:bg-surface-hover hover:text-foreground",
@@ -60,9 +61,12 @@ export function KnowledgeLibraryItem({
       }}
     >
       <button
-        className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground"
+        className="flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center text-muted-foreground"
         type="button"
-        onClick={onToggleExpanded}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleExpanded();
+        }}
       >
         {hasChildren ? (
           <ChevronRight
@@ -76,11 +80,11 @@ export function KnowledgeLibraryItem({
         )}
       </button>
 
-      {library.isExpanded ? (
-        <FolderOpen className="h-4 w-4 shrink-0" />
-      ) : (
-        <Folder className="h-4 w-4 shrink-0" />
-      )}
+{hasChildren && library.isExpanded ? (
+  <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
+) : (
+  <Folder className="h-4 w-4 shrink-0 text-primary" />
+)}
 
       {library.isEditing ? (
         <input
@@ -95,11 +99,17 @@ export function KnowledgeLibraryItem({
           }}
         />
       ) : (
-        <button
-          className="min-w-0 flex-1 truncate text-left"
-          type="button"
-          onClick={onSelect}
-        >
+<button
+  className="min-w-0 flex-1 cursor-pointer truncate text-left"
+  type="button"
+  onClick={() => {
+    onSelect();
+
+    if (hasChildren && !library.isExpanded) {
+      onToggleExpanded();
+    }
+  }}
+>
           {library.name}
         </button>
       )}

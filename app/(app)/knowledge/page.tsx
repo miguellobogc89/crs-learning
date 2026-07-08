@@ -10,7 +10,7 @@ import { listKnowledgeLibraries } from "@/lib/services/knowledge-library.service
 export default async function KnowledgePage({
   searchParams,
 }: {
-  searchParams: Promise<{ library?: string }>;
+  searchParams: Promise<{ library?: string; view?: string }>;
 }) {
   const session = await auth();
 
@@ -20,14 +20,25 @@ export default async function KnowledgePage({
 
   const params = await searchParams;
   const selectedLibraryId = params.library ?? null;
+  const selectedView = params.view ?? "all";
 
   const allKnowledgeSources = await listVisibleKnowledgeSources(session.user.id);
 
-  const knowledgeSources = selectedLibraryId
-    ? allKnowledgeSources.filter(
-        (knowledge) => knowledge.library_id === selectedLibraryId,
-      )
-    : allKnowledgeSources;
+const knowledgeSources = allKnowledgeSources.filter((knowledge) => {
+  if (selectedLibraryId && knowledge.library_id !== selectedLibraryId) {
+    return false;
+  }
+
+  if (selectedView === "public") {
+    return knowledge.visibility === "public";
+  }
+
+  if (selectedView === "private") {
+    return knowledge.visibility !== "public";
+  }
+
+  return true;
+});
 
   const knowledgeLibraries = await listKnowledgeLibraries(session.user.id);
 

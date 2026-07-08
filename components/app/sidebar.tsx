@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
-  { href: "/knowledge", icon: Library, label: "Biblioteca" },
+  { href: "/knowledge", icon: Library, label: "Knowledge Hub" },
   { href: "/courses", icon: GraduationCap, label: "Cursos" },
   { href: "/achievements", icon: Grid2X2, label: "Logros" },
   { href: "/profile", icon: User, label: "Perfil" },

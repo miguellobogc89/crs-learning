@@ -10,24 +10,9 @@ import {
   Send,
   Sparkles,
 } from "lucide-react";
-
-const conversations = [
-  {
-    title: "Onboarding comercial",
-    scope: "Biblioteca · Ventas",
-    active: true,
-  },
-  {
-    title: "Dudas sobre procedimientos",
-    scope: "Toda la empresa",
-    active: false,
-  },
-  {
-    title: "Resumen normativa interna",
-    scope: "Carpeta · RRHH",
-    active: false,
-  },
-];
+import { auth } from "@/auth";
+import { listChatConversations } from "@/lib/services/chat.service";
+import { ChatComposer } from "@/components/assistant/chat-composer";
 
 const suggestions = [
   "Resume los puntos clave de esta biblioteca",
@@ -41,16 +26,31 @@ const sources = [
   "Guía de uso del CRM.pdf",
 ];
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return null;
+  }
+
+  const conversations = await listChatConversations(session.user.id);
+
   return (
+
     <main className="grid h-full grid-cols-[280px_minmax(0,1fr)] overflow-hidden bg-background">
-      <ChatHistory />
+      <ChatHistory conversations={conversations} />
       <ChatPanel />
     </main>
   );
 }
 
-function ChatHistory() {
+type ChatConversation = Awaited<ReturnType<typeof listChatConversations>>[number];
+
+function ChatHistory({
+  conversations,
+}: {
+  conversations: ChatConversation[];
+}) {
   return (
     <aside className="flex min-h-0 flex-col border-r border-border bg-panel">
       <div className="border-b border-border p-4">
@@ -77,18 +77,18 @@ function ChatHistory() {
             let className =
               "w-full rounded-lg border border-transparent px-3 py-2 text-left transition hover:border-border hover:bg-surface/60";
 
-            if (conversation.active) {
+            if (false) {
               className =
                 "w-full rounded-lg border border-brand/30 bg-brand-soft px-3 py-2 text-left";
             }
 
             return (
-              <button key={conversation.title} className={className}>
+              <button key={conversation.id} className={className}>
                 <span className="block truncate text-sm font-medium text-foreground">
                   {conversation.title}
                 </span>
                 <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                  {conversation.scope}
+                  {getConversationScopeLabel(conversation)}
                 </span>
               </button>
             );
@@ -210,25 +210,16 @@ function AssistantAnswer() {
   );
 }
 
-function ChatComposer() {
-  return (
-    <div className="border-t border-border bg-background px-8 py-4">
-      <div className="mx-auto max-w-4xl rounded-2xl border border-border bg-panel p-3 shadow-sm">
-        <div className="min-h-20 px-2 py-1 text-sm text-muted-foreground">
-          Escribe una pregunta sobre el conocimiento de la empresa...
-        </div>
+<ChatComposer />
 
-        <div className="flex items-center justify-between border-t border-border pt-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <MessageSquare className="h-4 w-4" />
-            Responderá según el alcance seleccionado.
-          </div>
+function getConversationScopeLabel(conversation: ChatConversation) {
+  if (conversation.scope_type === "library" && conversation.knowledge_libraries) {
+    return `Biblioteca · ${conversation.knowledge_libraries.name}`;
+  }
 
-          <button className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-white transition hover:bg-brand-hover">
-            <Send className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  if (conversation.scope_type === "folder" && conversation.knowledge_libraries) {
+    return `Carpeta · ${conversation.knowledge_libraries.name}`;
+  }
+
+  return "Toda la empresa";
 }

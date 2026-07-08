@@ -30,7 +30,6 @@ type Props = {
 };
 
 
-
 export function KnowledgeSidebar({
   sidebarItems,
   knowledgeLibraries,
@@ -44,7 +43,7 @@ export function KnowledgeSidebar({
   () => buildLibraryTree(knowledgeLibraries),
 );
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const selectedLibraryId = searchParams.get("library") ?? defaultLibraryId;
+  const selectedLibraryId = searchParams.get("library");
 
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -210,10 +209,28 @@ async function handleCreateChildLibrary(parentId: string) {
           </p>
 
           <div className="space-y-1">
-            {sidebarItems.map((item) => (
+{sidebarItems.map((item) => (
   <KnowledgeViewItem
     key={item.label}
     item={item}
+    onSelect={() => {
+      const params = new URLSearchParams(searchParams.toString());
+      const label = item.label.toLowerCase();
+
+      params.delete("library");
+
+      if (label.includes("públic") || label.includes("public")) {
+        params.set("view", "public");
+      } else if (label.includes("privad") || label.includes("private")) {
+        params.set("view", "private");
+      } else {
+        params.delete("view");
+      }
+
+      const query = params.toString();
+
+      router.push(query ? `${pathname}?${query}` : pathname);
+    }}
   />
 ))}
           </div>
