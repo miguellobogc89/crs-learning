@@ -80,10 +80,10 @@ export function KnowledgeLibraryItem({
         )}
       </button>
 
-{hasChildren && library.isExpanded ? (
-  <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
+{isSelected || library.isExpanded ? (
+  <FolderOpen className="h-4 w-4 shrink-0 text-sky-400" />
 ) : (
-  <Folder className="h-4 w-4 shrink-0 text-primary" />
+  <Folder className="h-4 w-4 shrink-0 text-sky-400" />
 )}
 
       {library.isEditing ? (

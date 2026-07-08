@@ -87,15 +87,12 @@ function handleRenameLibrary(id: string, name: string) {
 function handleSelectLibrary(id: string) {
   const params = new URLSearchParams(searchParams.toString());
 
-  if (selectedLibraryId === id) {
-    params.delete("library");
-  } else {
-    params.set("library", id);
-  }
+  params.delete("view");
+  params.set("library", id);
 
   const query = params.toString();
 
-  router.replace(query ? `${pathname}?${query}` : pathname);
+  router.push(`${pathname}?${query}`);
 }
 
 function handleStartRename(id: string) {

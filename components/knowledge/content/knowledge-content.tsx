@@ -71,13 +71,14 @@ const libraryPath = useMemo(
 
 return (
   <>
+    <div className="mb-4">
+      <KnowledgeLibraryBreadcrumb path={libraryPath} />
+    </div>
+
     <KnowledgeToolbar
-        search={search}
-        onSearchChange={setSearch}
-        breadcrumb={
-            <KnowledgeLibraryBreadcrumb path={libraryPath} />
-        }
-        />
+      search={search}
+      onSearchChange={setSearch}
+    />
 
     <KnowledgeExplorer
       folders={childLibraries}
