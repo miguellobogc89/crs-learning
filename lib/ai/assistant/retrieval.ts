@@ -46,14 +46,23 @@ for (const space of spaces) {
     };
   }
 
-  const knowledgeSources = await prisma.knowledge_sources.findMany({
-    where: {
+const knowledgeSources = await prisma.knowledge_sources.findMany({
+ where: {
+  status: {
+    not: "deleted",
+  },
+  OR: [
+    {
       library_id: {
         in: Array.from(accessibleLibraryIds),
       },
-      status: {
-        not: "deleted",
-      },
+    },
+    {
+      owner_user_id: userId,
+    },
+  ],
+  AND: [
+    {
       OR: keywords.flatMap((keyword) => [
         {
           title: {
@@ -73,43 +82,87 @@ for (const space of spaces) {
             mode: "insensitive",
           },
         },
+        {
+          knowledge_files: {
+            some: {
+              extracted_text: {
+                contains: keyword,
+                mode: "insensitive",
+              },
+            },
+          },
+        },
       ]),
     },
-    take: 20,
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      content: true,
-      library_id: true,
-      knowledge_libraries: {
-        select: {
-          id: true,
-          name: true,
-        },
+  ],
+},
+  take: 20,
+  select: {
+    id: true,
+    title: true,
+    description: true,
+    content: true,
+    library_id: true,
+    knowledge_files: {
+      select: {
+        file_name: true,
+        extracted_text: true,
       },
     },
-  });
+    knowledge_analysis: {
+      select: {
+        analysis_json: true,
+      },
+    },
+    knowledge_libraries: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+  },
+});
 
   const rankedItems = knowledgeSources
-    .map((source) => {
-      const searchableText = [
-        source.title,
-        source.description ?? "",
-        source.content,
-        source.knowledge_libraries?.name ?? "",
-      ].join(" ");
-
-      return {
-        knowledgeSourceId: source.id,
-        title: source.title,
-        description: source.description,
-        content: truncateText(source.content, 2500),
-        libraryId: source.library_id,
-        libraryName: source.knowledge_libraries?.name ?? null,
-        score: scoreText(searchableText, keywords),
-      };
+.map((source) => {
+  const filesText = source.knowledge_files
+    .map((file) => {
+      return `${file.file_name}\n${file.extracted_text ?? ""}`;
     })
+    .join("\n\n");
+
+  const analysisText = source.knowledge_analysis?.analysis_json
+    ? JSON.stringify(source.knowledge_analysis.analysis_json, null, 2)
+    : "";
+
+  const searchableText = [
+    source.title,
+    source.description ?? "",
+    source.content,
+    analysisText,
+    filesText,
+    source.knowledge_libraries?.name ?? "",
+  ].join(" ");
+
+  const contextContent = [
+    "# Análisis IA",
+    analysisText,
+    "# Contenido manual",
+    source.content,
+    "# Texto extraído de documentos",
+    filesText,
+  ].join("\n\n");
+
+  return {
+    knowledgeSourceId: source.id,
+    title: source.title,
+    description: source.description,
+    content: truncateText(contextContent, 8000),
+    libraryId: source.library_id,
+    libraryName: source.knowledge_libraries?.name ?? null,
+    score: scoreText(searchableText, keywords),
+  };
+})
     .sort((a, b) => b.score - a.score)
     .slice(0, 6);
 

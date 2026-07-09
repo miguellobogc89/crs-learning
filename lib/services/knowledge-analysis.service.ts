@@ -15,6 +15,7 @@ function normalizeKnowledgeType(value: string | null | undefined): KnowledgeType
 }
 
 export async function analyzeKnowledgeSource(knowledgeSourceId: string) {
+  console.log("START ANALYSIS", knowledgeSourceId);
   await prisma.knowledge_analysis.upsert({
     where: {
       knowledge_source_id: knowledgeSourceId,
@@ -96,6 +97,7 @@ export async function analyzeKnowledgeSource(knowledgeSourceId: string) {
         },
       });
     }
+    console.log("ANALYSIS SAVED", knowledgeSourceId);
 
     return {
       status: "completed" as const,

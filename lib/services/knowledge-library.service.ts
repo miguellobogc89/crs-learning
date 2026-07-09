@@ -34,3 +34,25 @@ export async function listKnowledgeLibraries(ownerUserId: string) {
 
   return libraries;
 }
+
+export async function ensureRootKnowledgeLibrary(userId: string) {
+  const existing = await prisma.knowledge_libraries.findFirst({
+    where: {
+      owner_user_id: userId,
+      parent_id: null,
+      name: "Mi biblioteca",
+    },
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return prisma.knowledge_libraries.create({
+    data: {
+      owner_user_id: userId,
+      name: "Mi biblioteca",
+      parent_id: null,
+    },
+  });
+}
