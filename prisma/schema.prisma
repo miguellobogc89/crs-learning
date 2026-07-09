@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -310,6 +311,7 @@ model knowledge_libraries {
   knowledge_sources                                   knowledge_sources[]
   knowledge_space_libraries                           knowledge_space_libraries[]
 
+  @@unique([owner_user_id, name], map: "knowledge_libraries_root_unique", where: raw("(parent_id IS NULL)"))
   @@index([owner_user_id, parent_id], map: "idx_knowledge_libraries_owner_parent")
   @@index([owner_user_id], map: "idx_knowledge_libraries_owner_user_id")
   @@index([parent_id], map: "idx_knowledge_libraries_parent_id")

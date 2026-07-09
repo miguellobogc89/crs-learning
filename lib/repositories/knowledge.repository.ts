@@ -34,16 +34,18 @@ export async function createKnowledgeSource(data: {
   title: string;
   description: string;
   visibility: string;
+  libraryId: string;
 }) {
   return prisma.knowledge_sources.create({
-    data: {
-      owner_user_id: data.ownerUserId,
-      title: data.title,
-      description: data.description,
-      visibility: data.visibility,
-      content: "",
-      status: "draft",
-    },
+data: {
+  owner_user_id: data.ownerUserId,
+  library_id: data.libraryId,
+  title: data.title,
+  description: data.description,
+  visibility: data.visibility,
+  content: "",
+  status: "draft",
+},
   });
 }
 

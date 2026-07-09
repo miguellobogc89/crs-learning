@@ -17,9 +17,13 @@ type KnowledgeSource = {
 
 type Props = {
   knowledgeSources: KnowledgeSource[];
+  selectedLibraryId: string | null;
 };
 
-export function KnowledgeGrid({ knowledgeSources }: Props) {
+export function KnowledgeGrid({
+  knowledgeSources,
+  selectedLibraryId,
+}: Props) {
   if (knowledgeSources.length === 0) {
     return (
       <div className="flex min-h-[420px] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card text-center">
@@ -37,7 +41,13 @@ export function KnowledgeGrid({ knowledgeSources }: Props) {
         </p>
 
         <Button asChild className="mt-5">
-          <Link href="/knowledge/new">
+          <Link
+  href={
+    selectedLibraryId
+      ? `/knowledge/new?library=${selectedLibraryId}`
+      : "/knowledge/new"
+  }
+>
             <Plus className="mr-2 h-4 w-4" />
             Nuevo knowledge
           </Link>

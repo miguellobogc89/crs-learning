@@ -1,6 +1,6 @@
 // app/actions/knowledge.ts
 "use server";
-
+import { prisma } from "@/lib/prisma";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { analyzeKnowledgeSource } from "@/lib/services/knowledge-analysis.service";
@@ -17,6 +17,7 @@ import {
 import { extractFileText } from "@/lib/knowledge/extract-file-text";
 
 export async function createKnowledgeAction(formData: FormData) {
+  console.log("FORM LIBRARY:", formData.get("libraryId"));
   const session = await auth();
 
   if (!session?.user) {
@@ -26,17 +27,41 @@ export async function createKnowledgeAction(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const visibility = String(formData.get("visibility") ?? "private");
+  const libraryId = String(formData.get("libraryId") ?? "");
 
   if (!title) {
     return;
   }
 
-  const knowledge = await newKnowledgeSource({
-    ownerUserId: session.user.id,
-    title,
-    description,
-    visibility,
+
+let targetLibraryId = libraryId;
+
+if (!targetLibraryId) {
+  const rootLibrary = await prisma.knowledge_libraries.findFirst({
+    where: {
+      owner_user_id: session.user.id,
+      name: "Mi biblioteca",
+      parent_id: null,
+    },
+    select: {
+      id: true,
+    },
   });
+
+  if (!rootLibrary) {
+  throw new Error("No se encontró la biblioteca raíz.");
+}
+
+targetLibraryId = rootLibrary.id;
+}
+
+const knowledge = await newKnowledgeSource({
+  ownerUserId: session.user.id,
+  title,
+  description,
+  visibility,
+  libraryId: targetLibraryId,
+});
 
   revalidatePath("/knowledge");
 
@@ -130,6 +155,7 @@ export async function uploadKnowledgeFileAction(formData: FormData) {
   }
 
   await analyzeKnowledgeSource(knowledgeId);
+  console.log("ANALYSIS FINISHED", knowledgeId);
 
   revalidatePath("/knowledge");
   revalidatePath(`/knowledge/${knowledgeId}`);

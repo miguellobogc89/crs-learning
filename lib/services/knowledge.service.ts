@@ -20,6 +20,7 @@ export async function newKnowledgeSource(data: {
   title: string;
   description: string;
   visibility: string;
+  libraryId: string;
 }) {
   return createKnowledgeSource(data);
 }

@@ -17,7 +17,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return false;
       }
 
-      await prisma.users.upsert({
+      const dbUser = await prisma.users.upsert({
         where: {
           email: user.email,
         },
@@ -34,6 +34,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           provider: account?.provider ?? "google",
         },
       });
+
+      await prisma.knowledge_libraries.upsert({
+  where: {
+    owner_user_id_name: {
+      owner_user_id: dbUser.id,
+      name: "Mi biblioteca",
+    },
+  },
+  update: {},
+  create: {
+    owner_user_id: dbUser.id,
+    name: "Mi biblioteca",
+    parent_id: null,
+  },
+});
 
       return true;
     },
