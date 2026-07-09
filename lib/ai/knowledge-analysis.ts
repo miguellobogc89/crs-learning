@@ -194,6 +194,57 @@ export async function analyzeKnowledgeText(
               type: "array",
               items: { type: "string" },
             },
+            applications: {
+  type: "array",
+  items: {
+    type: "string",
+  },
+},
+
+products: {
+  type: "array",
+  items: {
+    type: "string",
+  },
+},
+
+regulations: {
+  type: "array",
+  items: {
+    type: "string",
+  },
+},
+
+dependencies: {
+  type: "array",
+  items: {
+    type: "string",
+  },
+},
+
+related_documents: {
+  type: "array",
+  items: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      title: {
+        type: "string",
+      },
+      relationship: {
+        type: "string",
+      },
+      reason: {
+        type: "string",
+      },
+    },
+    required: [
+      "title",
+      "relationship",
+      "reason",
+    ],
+  },
+},
           },
           required: [
             "detected_type",
@@ -218,6 +269,11 @@ export async function analyzeKnowledgeText(
             "glossary",
             "common_questions",
             "common_errors",
+            "applications",
+"products",
+"regulations",
+"dependencies",
+"related_documents",
           ],
         },
       },

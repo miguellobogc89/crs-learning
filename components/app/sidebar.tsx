@@ -10,7 +10,7 @@ import {
   Home,
   Library,
   Settings,
-  User,
+  UserRound,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ const navItems = [
   { href: "/knowledge", icon: Library, label: "Knowledge Hub" },
   { href: "/courses", icon: GraduationCap, label: "Cursos" },
   { href: "/achievements", icon: Grid2X2, label: "Logros" },
-  { href: "/profile", icon: User, label: "Perfil" },
+  { href: "/my-space", icon: UserRound, label: "Mi espacio" },
 ];
 
 export function AppSidebar() {
@@ -47,7 +47,7 @@ export function AppSidebar() {
                 title={item.label}
                 className={cn(
                   "flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
-                  active && "bg-surface text-foreground"
+                  active && "bg-surface text-foreground",
                 )}
               >
                 <item.icon className="h-[18px] w-[18px]" />

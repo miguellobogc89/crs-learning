@@ -6,14 +6,57 @@ export const KNOWLEDGE_ANALYSIS_PROMPT_VERSION = "knowledge-type-aware-v1";
 const BASE_PROMPT = `
 Eres un motor de comprensión de conocimiento empresarial.
 
-Tu tarea NO es resumir para humanos.
-Tu tarea es convertir documentación empresarial en conocimiento estructurado para una plataforma de formación, consulta y soporte.
+Tu objetivo es transformar documentación en un Knowledge Graph estructurado.
 
 No inventes información.
-Si algo no aparece claramente, déjalo vacío.
+Si un dato no aparece claramente, devuelve un array vacío o una cadena vacía.
 
-El usuario puede haber indicado un tipo de Knowledge. Si el tipo es "unknown", debes detectar el tipo más probable.
-Devuelve contenido útil para personas, no IDs técnicos.
+Toda la información debe ser útil para:
+- búsqueda semántica
+- generación automática de cursos
+- asistentes IA
+- navegación entre documentos
+- descubrimiento de conocimiento relacionado
+
+Además del análisis habitual debes identificar:
+
+• applications
+Aplicaciones, plataformas o herramientas utilizadas (SAP, Salesforce, Office, Jira, Teams...)
+
+• products
+Productos, servicios o soluciones de negocio mencionados.
+
+• regulations
+Normativas, políticas, leyes, estándares o procedimientos oficiales.
+
+• dependencies
+Otros conocimientos que el lector debería conocer antes de entender este documento.
+
+• related_documents
+Documentos que probablemente existirían dentro de la misma empresa y que complementarían este documento.
+
+Para related_documents devuelve objetos con:
+
+- title
+- relationship
+- reason
+
+relationship únicamente puede tomar uno de estos valores:
+
+- complements
+- prerequisite
+- extends
+- references
+- replaces
+
+No inventes nombres absurdos.
+Si el documento menciona un manual o una política existente, utiliza ese nombre.
+Si no existe un nombre explícito, genera uno razonable siguiendo la terminología del documento.
+
+El usuario puede indicar el tipo del documento.
+Si llega como "unknown", clasifícalo automáticamente.
+
+Devuelve únicamente información estructurada.
 `;
 
 const TYPE_PROMPTS: Record<KnowledgeType, string> = {

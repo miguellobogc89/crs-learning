@@ -115,13 +115,14 @@ export function KnowledgeLibraryItem({
       )}
 
       {!library.isEditing ? (
-        <KnowledgeLibraryMenu
-          isOpen={openMenuId === library.id}
-          onToggle={onToggleMenu}
-          onCreateChild={onCreateChild}
-          onRename={onStartRename}
-          onDelete={onDelete}
-        />
+<KnowledgeLibraryMenu
+  libraryId={library.id}
+  isOpen={openMenuId === library.id}
+  onToggle={onToggleMenu}
+  onCreateChild={onCreateChild}
+  onRename={onStartRename}
+  onDelete={onDelete}
+/>
       ) : null}
     </div>
   );

@@ -1,5 +1,4 @@
 // components/knowledge/sidebar/knowledge-view-item.tsx
-// components/knowledge/sidebar/knowledge-view-item.tsx
 import type { SidebarItem } from "./types";
 import { sidebarIcons } from "./sidebar-icons";
 

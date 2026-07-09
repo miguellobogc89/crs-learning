@@ -5,6 +5,7 @@ import {
   KnowledgeType,
   KNOWLEDGE_TYPES,
 } from "@/lib/knowledge/knowledge-types";
+import { updateKnowledgeRelationships } from "@/lib/services/knowledge-graph.service";
 
 function normalizeKnowledgeType(value: string | null | undefined): KnowledgeType {
   if (value && KNOWLEDGE_TYPES.includes(value as KnowledgeType)) {
@@ -108,7 +109,32 @@ export async function analyzeKnowledgeSource(knowledgeSourceId: string) {
       },
     });
 
-    console.log("ANALYSIS SAVED", knowledgeSourceId);
+await prisma.knowledge_graph.upsert({
+  where: {
+    knowledge_source_id: knowledgeSourceId,
+  },
+  create: {
+    knowledge_source_id: knowledgeSourceId,
+    applications: result.analysisJson.applications,
+    products: result.analysisJson.products,
+    regulations: result.analysisJson.regulations,
+    dependencies: result.analysisJson.dependencies,
+    related_documents: result.analysisJson.related_documents,
+  },
+  update: {
+    applications: result.analysisJson.applications,
+    products: result.analysisJson.products,
+    regulations: result.analysisJson.regulations,
+    dependencies: result.analysisJson.dependencies,
+    related_documents: result.analysisJson.related_documents,
+    updated_at: new Date(),
+  },
+});
+
+await updateKnowledgeRelationships(knowledgeSourceId);
+
+console.log("ANALYSIS SAVED", knowledgeSourceId);
+
 
     return {
       status: "completed" as const,

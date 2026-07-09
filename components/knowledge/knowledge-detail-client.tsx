@@ -34,7 +34,50 @@ type Knowledge = {
     model: string | null;
     analysis_json: unknown;
   } | null;
+  knowledge_graph: {
+    applications: unknown;
+    products: unknown;
+    regulations: unknown;
+    dependencies: unknown;
+    related_documents: unknown;
+  } | null;
 };
+function toArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (item): item is string => typeof item === "string",
+  );
+}
+
+function toDocuments(
+  value: unknown,
+): {
+  title: string;
+  relationship: string;
+  reason: string;
+}[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(
+    (
+      item,
+    ): item is {
+      title: string;
+      relationship: string;
+      reason: string;
+    } =>
+      typeof item === "object" &&
+      item !== null &&
+      "title" in item &&
+      "relationship" in item &&
+      "reason" in item,
+  );
+}
 
 export function KnowledgeDetailClient({ knowledge }: { knowledge: Knowledge }) {
   const [editing, setEditing] = useState(false);
@@ -55,6 +98,14 @@ export function KnowledgeDetailClient({ knowledge }: { knowledge: Knowledge }) {
     setKnowledgeType(knowledge.knowledge_type ?? "unknown");
     setEditing(false);
   }
+
+  const graph = knowledge.knowledge_graph;
+
+const applications = toArray(graph?.applications);
+const products = toArray(graph?.products);
+const regulations = toArray(graph?.regulations);
+const dependencies = toArray(graph?.dependencies);
+const relatedDocuments = toDocuments(graph?.related_documents);
 
   return (
     <div className="mx-auto max-w-5xl px-8 py-10">
@@ -117,10 +168,52 @@ export function KnowledgeDetailClient({ knowledge }: { knowledge: Knowledge }) {
       {activeTab === "knowledge" && (
         <section className="mt-8">
           <KnowledgeAnalysisPanel
-            analysisJson={knowledge.knowledge_analysis?.analysis_json}
-            status={knowledge.knowledge_analysis?.status}
-            model={knowledge.knowledge_analysis?.model}
-          />
+  analysisJson={knowledge.knowledge_analysis?.analysis_json}
+  status={knowledge.knowledge_analysis?.status}
+  model={knowledge.knowledge_analysis?.model}
+/>
+
+<section className="mt-8 rounded-xl border border-border bg-card p-6">
+  <h2 className="mb-6 text-lg font-semibold">
+    Knowledge Graph
+  </h2>
+
+  <div className="grid gap-6 md:grid-cols-2">
+    <GraphBlock title="Aplicaciones" values={applications} />
+    <GraphBlock title="Productos" values={products} />
+    <GraphBlock title="Normativas" values={regulations} />
+    <GraphBlock title="Dependencias" values={dependencies} />
+  </div>
+
+  {relatedDocuments.length > 0 && (
+    <div className="mt-8 border-t border-border pt-6">
+      <h3 className="mb-4 font-medium">
+        Documentos relacionados
+      </h3>
+
+      <div className="space-y-3">
+        {relatedDocuments.map((doc) => (
+          <div
+            key={doc.title}
+            className="rounded-lg border border-border p-3"
+          >
+            <div className="font-medium">
+              {doc.title}
+            </div>
+
+            <div className="text-xs uppercase tracking-wide text-lesson">
+              {doc.relationship}
+            </div>
+
+            <div className="mt-1 text-sm text-muted-foreground">
+              {doc.reason}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</section>
         </section>
       )}
 
@@ -184,5 +277,38 @@ function KnowledgeTabButton({
         <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-lesson" />
       )}
     </button>
+  );
+}
+
+function GraphBlock({
+  title,
+  values,
+}: {
+  title: string;
+  values: string[];
+}) {
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-medium">
+        {title}
+      </h3>
+
+      {values.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          —
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {values.map((value) => (
+            <span
+              key={value}
+              className="rounded-full border border-border bg-background px-2 py-1 text-xs"
+            >
+              {value}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

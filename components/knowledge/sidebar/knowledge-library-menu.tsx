@@ -1,12 +1,15 @@
 // components/knowledge/sidebar/knowledge-library-menu.tsx
+import Link from "next/link";
 import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Settings,
   Trash2,
 } from "lucide-react";
 
 type Props = {
+  libraryId: string;
   isOpen: boolean;
   onToggle: () => void;
   onCreateChild: () => void;
@@ -15,6 +18,7 @@ type Props = {
 };
 
 export function KnowledgeLibraryMenu({
+  libraryId,
   isOpen,
   onToggle,
   onCreateChild,
@@ -33,7 +37,7 @@ export function KnowledgeLibraryMenu({
       </button>
 
       {isOpen ? (
-        <div className="absolute right-2 top-9 z-20 w-40 rounded-lg border border-border bg-background p-1 shadow-sm">
+        <div className="absolute right-2 top-9 z-20 w-44 rounded-lg border border-border bg-background p-1 shadow-sm">
           <button
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-surface"
             type="button"
@@ -53,6 +57,15 @@ export function KnowledgeLibraryMenu({
             <Pencil className="h-3.5 w-3.5" />
             Renombrar
           </button>
+
+          <Link
+            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground hover:bg-surface"
+            href={`/knowledge/library/${libraryId}`}
+            onMouseDown={(event) => event.preventDefault()}
+          >
+            <Settings className="h-3.5 w-3.5" />
+            Administrar
+          </Link>
 
           <button
             className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-red-600 hover:bg-red-50"

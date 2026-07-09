@@ -25,6 +25,7 @@ export async function getKnowledgeSourceById(id: string) {
         },
       },
       knowledge_analysis: true,
+      knowledge_graph: true,
     },
   });
 }
