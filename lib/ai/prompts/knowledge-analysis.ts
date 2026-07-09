@@ -18,8 +18,38 @@ Devuelve contenido útil para personas, no IDs técnicos.
 
 const TYPE_PROMPTS: Record<KnowledgeType, string> = {
   unknown: `
-Detecta el tipo de conocimiento más probable y estructura el análisis de forma general.
-Prioriza: resumen, objetivo, alcance, temas, conceptos, sistemas, actores, requisitos, procedimientos, advertencias, errores y preguntas.
+Primero clasifica el documento en UNO de estos tipos:
+
+- procedure
+- process
+- manual
+- policy
+- reference
+- faq
+- technical
+- functional
+- catalog
+
+NO devuelvas "unknown" salvo que el documento sea demasiado corto, ilegible o no tenga suficiente información para clasificarlo.
+
+Reglas de clasificación:
+
+- procedure → instrucciones paso a paso para ejecutar una tarea.
+- process → flujo de negocio con actores, decisiones y fases.
+- manual → guía de uso o aprendizaje de una herramienta o producto.
+- policy → normas, obligaciones, cumplimiento o gobierno.
+- reference → documentación de consulta, estudios, whitepapers, documentación conceptual o material de apoyo.
+- faq → preguntas y respuestas.
+- technical → arquitectura, APIs, infraestructura, instalación o configuración técnica.
+- functional → requisitos funcionales, casos de uso, análisis funcional o especificaciones.
+- catalog → listados de productos, servicios o elementos comparables.
+
+Si existen dudas entre varios tipos, elige SIEMPRE el más útil para un empleado que vaya a aprender ese documento.
+
+Nunca respondas "unknown" por falta de confianza.
+
+Después genera el resto del análisis.
+
 `,
 
   procedure: `

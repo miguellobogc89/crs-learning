@@ -5,32 +5,43 @@ import { useRef, useState } from "react";
 
 type UploadZoneProps = {
   accept: string;
+  disabled?: boolean;
+  onFilesChange?: (files: File[]) => void;
 };
 
-export function UploadZone({ accept }: UploadZoneProps) {
+export function UploadZone({
+  accept,
+  disabled = false,
+  onFilesChange,
+}: UploadZoneProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
   function updateFiles(fileList: FileList | null) {
-    if (!fileList) {
-      setFiles([]);
-      return;
-    }
+    const nextFiles = fileList ? Array.from(fileList) : [];
 
-    setFiles(Array.from(fileList));
+    setFiles(nextFiles);
+    onFilesChange?.(nextFiles);
   }
 
   return (
     <div
       onDragOver={(event) => {
         event.preventDefault();
-        setIsDragging(true);
+
+        if (!disabled) {
+          setIsDragging(true);
+        }
       }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={(event) => {
         event.preventDefault();
         setIsDragging(false);
+
+        if (disabled) {
+          return;
+        }
 
         const droppedFiles = event.dataTransfer.files;
         updateFiles(droppedFiles);
@@ -39,9 +50,14 @@ export function UploadZone({ accept }: UploadZoneProps) {
           inputRef.current.files = droppedFiles;
         }
       }}
-      onClick={() => inputRef.current?.click()}
+      onClick={() => {
+        if (!disabled) {
+          inputRef.current?.click();
+        }
+      }}
       className={[
-        "cursor-pointer rounded-xl border-2 border-dashed p-5 text-center transition",
+        "rounded-xl border-2 border-dashed p-5 text-center transition",
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
         isDragging
           ? "border-primary bg-primary/10"
           : "border-border bg-surface/30 hover:border-primary hover:bg-surface/50",
@@ -54,6 +70,7 @@ export function UploadZone({ accept }: UploadZoneProps) {
         name="files"
         type="file"
         accept={accept}
+        disabled={disabled}
         onChange={(event) => updateFiles(event.target.files)}
       />
 
@@ -95,7 +112,7 @@ export function UploadZone({ accept }: UploadZoneProps) {
           </div>
 
           <p className="text-[11px] text-muted-foreground">
-            Pulsa “Subir archivos” para procesarlos.
+            Pulsa “Iniciar procesamiento” para analizarlos con IA.
           </p>
         </div>
       )}

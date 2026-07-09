@@ -1,4 +1,4 @@
-// components/knowledge/knowledge-sidebar.tsx
+// components/knowledge/sidebar/knowledge-sidebar.tsx
 "use client";
 
 import { useMemo, useRef, useState } from "react";
@@ -92,7 +92,7 @@ function handleSelectLibrary(id: string) {
 
   const query = params.toString();
 
-  router.push(`${pathname}?${query}`);
+  router.push(`/knowledge?${query}`);
 }
 
 function handleStartRename(id: string) {
@@ -226,7 +226,7 @@ async function handleCreateChildLibrary(parentId: string) {
 
       const query = params.toString();
 
-      router.push(query ? `${pathname}?${query}` : pathname);
+      router.push(query ? `/knowledge?${query}` : "/knowledge");
     }}
   />
 ))}

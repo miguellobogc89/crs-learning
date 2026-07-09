@@ -17,6 +17,8 @@ type Props = {
 export default async function NewKnowledgePage({ searchParams }: Props) {
   const { library } = await searchParams;
 
+  console.log("LIBRARY PARAM:", library);
+
   return (
     <div className="min-h-full bg-background px-6 py-6">
       <div className="mb-8 flex items-center justify-between gap-4">

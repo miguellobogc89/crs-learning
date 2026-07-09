@@ -242,6 +242,14 @@ model knowledge_sources {
   library_id                                        String?              @db.Uuid
   created_by_user_id                                String?              @db.Uuid
   updated_by_user_id                                String?              @db.Uuid
+  summary                                           String?
+  language                                          String?
+  domain                                            String?
+  level                                             String?
+  confidence                                        Float?
+  tags                                              Json?
+  keywords                                          Json?
+  entities                                          Json?
   courses                                           courses[]
   knowledge_analysis                                knowledge_analysis?
   knowledge_files                                   knowledge_files[]

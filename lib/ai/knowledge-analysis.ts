@@ -7,7 +7,10 @@ import {
 } from "./prompts/knowledge-analysis";
 import { KnowledgeType } from "@/lib/knowledge/knowledge-types";
 
-export async function analyzeKnowledgeText(text: string, knowledgeType: KnowledgeType) {
+export async function analyzeKnowledgeText(
+  text: string,
+  knowledgeType: KnowledgeType,
+) {
   const client = getOpenAI();
   const model = AI_MODELS.KNOWLEDGE_ANALYSIS;
   const startedAt = Date.now();
@@ -48,6 +51,26 @@ export async function analyzeKnowledgeText(text: string, knowledgeType: Knowledg
             summary: { type: "string" },
             objective: { type: "string" },
             scope: { type: "string" },
+            tags: {
+              type: "array",
+              items: { type: "string" },
+            },
+            keywords: {
+              type: "array",
+              items: { type: "string" },
+            },
+            entities: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  name: { type: "string" },
+                  type: { type: "string" },
+                },
+                required: ["name", "type"],
+              },
+            },
             important_dates: {
               type: "array",
               items: {
@@ -139,7 +162,7 @@ export async function analyzeKnowledgeText(text: string, knowledgeType: Knowledg
                         "order",
                         "title",
                         "instruction",
-                        "expected_result"
+                        "expected_result",
                       ],
                     },
                   },
@@ -178,6 +201,9 @@ export async function analyzeKnowledgeText(text: string, knowledgeType: Knowledg
             "summary",
             "objective",
             "scope",
+            "tags",
+            "keywords",
+            "entities",
             "important_dates",
             "systems",
             "actors",
@@ -191,7 +217,7 @@ export async function analyzeKnowledgeText(text: string, knowledgeType: Knowledg
             "outputs",
             "glossary",
             "common_questions",
-            "common_errors"
+            "common_errors",
           ],
         },
       },

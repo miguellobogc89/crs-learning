@@ -1,13 +1,11 @@
 // components/knowledge/content/knowledge-content.tsx
 "use client";
 
-import Link from "next/link";
-import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { KnowledgeToolbar } from "./knowledge-toolbar";
 import { KnowledgeExplorer } from "./knowledge-explorer";
 import { KnowledgeLibraryBreadcrumb } from "./knowledge-library-breadcrumb";
+import { KnowledgeToolbar } from "./knowledge-toolbar";
 import {
   buildLibraryTree,
   getLibraryPath,
@@ -17,10 +15,19 @@ type KnowledgeSource = {
   id: string;
   title: string;
   description?: string | null;
-  content?: string |null;
+  content?: string | null;
+  summary?: string | null;
+  language?: string | null;
+  domain?: string | null;
+  level?: string | null;
+  tags?: unknown;
+  keywords?: unknown;
+  entities?: unknown;
   status?: string | null;
   visibility?: string | null;
   updated_at?: Date | string | null;
+  knowledge_type?: string | null;
+confidence?: number | null;
 };
 
 type KnowledgeLibrary = {
@@ -29,75 +36,133 @@ type KnowledgeLibrary = {
   name: string;
 };
 
+type ExplorerState = {
+  search: string;
+  viewMode: "grid" | "list";
+  sort: "updated_desc" | "updated_asc" | "name_asc" | "name_desc" | "status";
+};
+
 type Props = {
   knowledgeSources: KnowledgeSource[];
   knowledgeLibraries: KnowledgeLibrary[];
   selectedLibraryId: string | null;
 };
 
+function normalizeSearchValue(value: unknown) {
+  if (!Array.isArray(value)) {
+    return "";
+  }
+
+  return value
+    .map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+
+      if (item && typeof item === "object" && "name" in item) {
+        return String(item.name);
+      }
+
+      return "";
+    })
+    .join(" ");
+}
+
 export function KnowledgeContent({
   knowledgeSources,
   knowledgeLibraries,
   selectedLibraryId,
 }: Props) {
-  const [search, setSearch] = useState("");
+  const [explorerState, setExplorerState] = useState<ExplorerState>({
+    search: "",
+    viewMode: "grid",
+    sort: "updated_desc",
+  });
 
-  const filteredKnowledge = useMemo(() => {
-    const value = search.trim().toLowerCase();
+  const childLibraries = useMemo(() => {
+    return knowledgeLibraries.filter(
+      (library) => library.parent_id === selectedLibraryId,
+    );
+  }, [knowledgeLibraries, selectedLibraryId]);
 
-    if (!value) {
-      return knowledgeSources;
-    }
+  const processedKnowledge = useMemo(() => {
+    const value = explorerState.search.trim().toLowerCase();
 
-    return knowledgeSources.filter((item) => {
-      return (
-        item.title.toLowerCase().includes(value) ||
-        item.description?.toLowerCase().includes(value) ||
-        item.content?.toLowerCase().includes(value)
-      );
+    const filtered = knowledgeSources.filter((item) => {
+      if (!value) {
+        return true;
+      }
+
+      const searchableText = [
+        item.title,
+        item.description,
+        item.content,
+        item.summary,
+        item.language,
+        item.domain,
+        item.level,
+        normalizeSearchValue(item.tags),
+        normalizeSearchValue(item.keywords),
+        normalizeSearchValue(item.entities),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(value);
     });
-  }, [knowledgeSources, search]);
 
-  const childLibraries = knowledgeLibraries.filter(
-  (library) => library.parent_id === selectedLibraryId,
-);
-const libraryTree = useMemo(
-  () => buildLibraryTree(knowledgeLibraries),
-  [knowledgeLibraries],
-);
+    return [...filtered].sort((a, b) => {
+      if (explorerState.sort === "name_asc") {
+        return a.title.localeCompare(b.title);
+      }
 
-const libraryPath = useMemo(
-  () => getLibraryPath(libraryTree, selectedLibraryId),
-  [libraryTree, selectedLibraryId],
-);
+      if (explorerState.sort === "name_desc") {
+        return b.title.localeCompare(a.title);
+      }
 
-return (
-  <>
-<div className="mb-4 flex items-center justify-between gap-4">
-  <KnowledgeLibraryBreadcrumb path={libraryPath} />
+      if (explorerState.sort === "status") {
+        return (a.status ?? "").localeCompare(b.status ?? "");
+      }
 
-  <Link
-    href={
-      selectedLibraryId
-        ? `/knowledge/new?library=${selectedLibraryId}`
-        : "/knowledge/new"
-    }
-    className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-  >
-    <Plus className="h-4 w-4" />
-    Nuevo
-  </Link>
-</div>
+      const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+      const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
 
-    <KnowledgeToolbar
-      search={search}
-      onSearchChange={setSearch}
-    />
+      if (explorerState.sort === "updated_asc") {
+        return dateA - dateB;
+      }
 
-    <KnowledgeExplorer
-      folders={childLibraries}
-      knowledgeSources={filteredKnowledge}
-    />
-  </>
-);
+      return dateB - dateA;
+    });
+  }, [knowledgeSources, explorerState.search, explorerState.sort]);
+
+  const libraryTree = useMemo(
+    () => buildLibraryTree(knowledgeLibraries),
+    [knowledgeLibraries],
+  );
+
+  const libraryPath = useMemo(
+    () => getLibraryPath(libraryTree, selectedLibraryId),
+    [libraryTree, selectedLibraryId],
+  );
+
+  return (
+    <>
+      <div className="mb-4">
+        <KnowledgeLibraryBreadcrumb path={libraryPath} />
+      </div>
+
+      <KnowledgeToolbar
+        explorerState={explorerState}
+        onExplorerStateChange={setExplorerState}
+        selectedLibraryId={selectedLibraryId}
+      />
+
+      <KnowledgeExplorer
+        folders={childLibraries}
+        knowledgeSources={processedKnowledge}
+        viewMode={explorerState.viewMode}
+      />
+    </>
+  );
 }

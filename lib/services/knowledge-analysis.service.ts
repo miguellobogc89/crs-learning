@@ -16,6 +16,7 @@ function normalizeKnowledgeType(value: string | null | undefined): KnowledgeType
 
 export async function analyzeKnowledgeSource(knowledgeSourceId: string) {
   console.log("START ANALYSIS", knowledgeSourceId);
+
   await prisma.knowledge_analysis.upsert({
     where: {
       knowledge_source_id: knowledgeSourceId,
@@ -57,7 +58,9 @@ export async function analyzeKnowledgeSource(knowledgeSourceId: string) {
       `KNOWLEDGE_TYPE:\n${knowledgeType}`,
       `MANUAL_CONTENT:\n${source.content ?? ""}`,
       ...source.knowledge_files.map((file) => {
-        return `FILE: ${file.file_name}\nTYPE: ${file.file_type ?? ""}\nTEXT:\n${file.extracted_text ?? ""}`;
+        return `FILE: ${file.file_name}\nTYPE: ${
+          file.file_type ?? ""
+        }\nTEXT:\n${file.extracted_text ?? ""}`;
       }),
     ].join("\n\n---\n\n");
 
@@ -83,20 +86,28 @@ export async function analyzeKnowledgeSource(knowledgeSourceId: string) {
     const detectedType = normalizeKnowledgeType(
       typeof result.analysisJson.detected_type === "string"
         ? result.analysisJson.detected_type
-        : null
+        : null,
     );
 
-    if (knowledgeType === "unknown" && detectedType !== "unknown") {
-      await prisma.knowledge_sources.update({
-        where: {
-          id: knowledgeSourceId,
-        },
-        data: {
-          knowledge_type: detectedType,
-          updated_at: new Date(),
-        },
-      });
-    }
+    await prisma.knowledge_sources.update({
+      where: {
+        id: knowledgeSourceId,
+      },
+      data: {
+        knowledge_type: detectedType,
+        summary: result.analysisJson.summary,
+        language: result.analysisJson.meta.language,
+        domain: result.analysisJson.meta.domain,
+        level: result.analysisJson.meta.level,
+        confidence: result.analysisJson.meta.confidence,
+        tags: result.analysisJson.tags,
+        keywords: result.analysisJson.keywords,
+        entities: result.analysisJson.entities,
+        status: "ready",
+        updated_at: new Date(),
+      },
+    });
+
     console.log("ANALYSIS SAVED", knowledgeSourceId);
 
     return {
@@ -110,6 +121,16 @@ export async function analyzeKnowledgeSource(knowledgeSourceId: string) {
       data: {
         status: "error",
         error_message: error instanceof Error ? error.message : "Unknown error",
+        updated_at: new Date(),
+      },
+    });
+
+    await prisma.knowledge_sources.update({
+      where: {
+        id: knowledgeSourceId,
+      },
+      data: {
+        status: "error",
         updated_at: new Date(),
       },
     });
