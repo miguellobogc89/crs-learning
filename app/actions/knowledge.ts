@@ -1,7 +1,7 @@
 // app/actions/knowledge.ts
 "use server";
 import { prisma } from "@/lib/prisma";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { analyzeKnowledgeSource } from "@/lib/services/knowledge-analysis.service";
 import { auth } from "@/auth";
@@ -185,11 +185,14 @@ const content = String(formData.get("content") ?? "");
 export async function uploadKnowledgeFileAction(formData: FormData) {
   const session = await auth();
 
-  if (!session?.user) {
-    return;
+  if (!session?.user?.id) {
+    throw new Error("No autenticado");
   }
 
-  const knowledgeId = String(formData.get("knowledgeId"));
+  const knowledgeId = String(
+    formData.get("knowledgeId") ?? "",
+  ).trim();
+
   const files = formData.getAll("files");
 
   if (!knowledgeId || files.length === 0) {
@@ -198,12 +201,25 @@ export async function uploadKnowledgeFileAction(formData: FormData) {
 
   const knowledge = await findKnowledgeSource(knowledgeId);
 
-  if (!knowledge || knowledge.owner_user_id !== session.user.id) {
-    return;
+  if (
+    !knowledge ||
+    knowledge.owner_user_id !== session.user.id
+  ) {
+    throw new Error("Artículo no encontrado");
   }
 
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "knowledge");
-  await mkdir(uploadDir, { recursive: true });
+  const uploadDir = path.join(
+    process.cwd(),
+    "public",
+    "uploads",
+    "knowledge",
+  );
+
+  await mkdir(uploadDir, {
+    recursive: true,
+  });
+
+  let uploadedFiles = 0;
 
   for (const file of files) {
     if (!(file instanceof File)) {
@@ -222,7 +238,10 @@ export async function uploadKnowledgeFileAction(formData: FormData) {
     const storedFileName = `${knowledgeId}-${Date.now()}-${safeFileName}`;
     const storagePath = `/uploads/knowledge/${storedFileName}`;
 
-    await writeFile(path.join(uploadDir, storedFileName), buffer);
+    await writeFile(
+      path.join(uploadDir, storedFileName),
+      buffer,
+    );
 
     await addKnowledgeFile({
       knowledgeSourceId: knowledgeId,
@@ -232,10 +251,149 @@ export async function uploadKnowledgeFileAction(formData: FormData) {
       storagePath,
       extractedText,
     });
+
+    uploadedFiles += 1;
+  }
+
+  if (uploadedFiles === 0) {
+    return;
+  }
+
+  await prisma.knowledge_sources.update({
+    where: {
+      id: knowledgeId,
+    },
+    data: {
+      status: "stale",
+      updated_at: new Date(),
+    },
+  });
+
+  await prisma.knowledge_analysis.updateMany({
+    where: {
+      knowledge_source_id: knowledgeId,
+    },
+    data: {
+      status: "stale",
+      updated_at: new Date(),
+    },
+  });
+
+  revalidatePath("/knowledge");
+  revalidatePath(`/knowledge/${knowledgeId}`);
+}
+
+export async function deleteKnowledgeFileAction(
+  knowledgeFileId: string,
+) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error("No autenticado");
+  }
+
+  const file = await prisma.knowledge_files.findFirst({
+    where: {
+      id: knowledgeFileId,
+      knowledge_sources: {
+        owner_user_id: session.user.id,
+      },
+    },
+    select: {
+      id: true,
+      storage_path: true,
+      knowledge_source_id: true,
+    },
+  });
+
+  if (!file) {
+    throw new Error("Documento no encontrado");
+  }
+
+  if (file.storage_path) {
+    const relativeStoragePath =
+      file.storage_path.startsWith("/")
+        ? file.storage_path.slice(1)
+        : file.storage_path;
+
+    const absoluteStoragePath = path.join(
+      process.cwd(),
+      "public",
+      relativeStoragePath,
+    );
+
+    try {
+      await unlink(absoluteStoragePath);
+    } catch (error) {
+      const errorCode =
+        error instanceof Error && "code" in error
+          ? String(error.code)
+          : "";
+
+      if (errorCode !== "ENOENT") {
+        throw error;
+      }
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.knowledge_files.delete({
+      where: {
+        id: file.id,
+      },
+    }),
+
+    prisma.knowledge_sources.update({
+      where: {
+        id: file.knowledge_source_id,
+      },
+      data: {
+        status: "stale",
+        updated_at: new Date(),
+      },
+    }),
+
+    prisma.knowledge_analysis.updateMany({
+      where: {
+        knowledge_source_id: file.knowledge_source_id,
+      },
+      data: {
+        status: "stale",
+        updated_at: new Date(),
+      },
+    }),
+  ]);
+
+  revalidatePath("/knowledge");
+  revalidatePath(
+    `/knowledge/${file.knowledge_source_id}`,
+  );
+}
+
+export async function rebuildKnowledgeAction(
+  knowledgeId: string,
+) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error("No autenticado");
+  }
+
+  const knowledge = await prisma.knowledge_sources.findFirst({
+    where: {
+      id: knowledgeId,
+      owner_user_id: session.user.id,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!knowledge) {
+    throw new Error("Artículo no encontrado");
   }
 
   await analyzeKnowledgeSource(knowledgeId);
-  console.log("ANALYSIS FINISHED", knowledgeId);
 
   revalidatePath("/knowledge");
   revalidatePath(`/knowledge/${knowledgeId}`);
@@ -263,4 +421,34 @@ export async function removeKnowledgeLibraryTeamShareAction(formData: FormData) 
 
   revalidatePath("/knowledge");
   revalidatePath(`/knowledge/library/${libraryId}`);
+}
+
+export async function deleteKnowledgeAction(id: string) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error("No autenticado");
+  }
+
+  const knowledge = await prisma.knowledge_sources.findFirst({
+    where: {
+      id,
+      owner_user_id: session.user.id,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!knowledge) {
+    throw new Error("Artículo no encontrado");
+  }
+
+  await prisma.knowledge_sources.delete({
+    where: {
+      id,
+    },
+  });
+
+  revalidatePath("/knowledge");
 }

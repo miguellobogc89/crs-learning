@@ -1,7 +1,6 @@
 // app/(app)/knowledge/page.tsx
 import { redirect } from "next/navigation";
 
-import { KnowledgeStats } from "@/components/knowledge/content/knowledge-stats";
 import { KnowledgeContent } from "@/components/knowledge/content/knowledge-content";
 import { auth } from "@/auth";
 import { listVisibleKnowledgeSources } from "@/lib/services/knowledge.service";
@@ -53,21 +52,9 @@ export default async function KnowledgePage({
     return true;
   });
 
-  const totalPublic = knowledgeSources.filter(
-    (knowledge) => knowledge.visibility === "public",
-  ).length;
-
-  const totalPrivate = knowledgeSources.length - totalPublic;
-
   return (
     <div className="min-h-full bg-background">
-      <div className="mx-auto max-w-7xl px-8 py-8">
-        <KnowledgeStats
-          total={knowledgeSources.length}
-          totalPrivate={totalPrivate}
-          totalPublic={totalPublic}
-        />
-
+      <div className="mx-auto max-w-7xl px-8 py-6">
         <KnowledgeContent
           knowledgeSources={knowledgeSources}
           knowledgeLibraries={knowledgeLibraries}

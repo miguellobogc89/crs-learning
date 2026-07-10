@@ -1,6 +1,30 @@
 // lib/services/knowledge-library.service.ts
 import { prisma } from "@/lib/prisma";
 
+const libraryInclude = {
+  knowledge_library_team_permissions: {
+    include: {
+      knowledge_teams: true,
+    },
+  },
+  knowledge_sources: {
+    select: {
+      id: true,
+      _count: {
+        select: {
+          knowledge_files: true,
+        },
+      },
+    },
+  },
+  _count: {
+    select: {
+      knowledge_sources: true,
+      other_knowledge_libraries: true,
+    },
+  },
+} as const;
+
 export async function listKnowledgeLibraries(userId: string) {
   let libraries = await prisma.knowledge_libraries.findMany({
     where: {
@@ -30,13 +54,7 @@ export async function listKnowledgeLibraries(userId: string) {
         },
       ],
     },
-    include: {
-      knowledge_library_team_permissions: {
-        include: {
-          knowledge_teams: true,
-        },
-      },
-    },
+    include: libraryInclude,
     orderBy: [
       {
         parent_id: "asc",
@@ -61,22 +79,26 @@ export async function listKnowledgeLibraries(userId: string) {
         name: "Mi biblioteca",
         position: 0,
       },
-      include: {
-        knowledge_library_team_permissions: {
-          include: {
-            knowledge_teams: true,
-          },
-        },
-      },
+      include: libraryInclude,
     });
 
     libraries = [library, ...libraries];
   }
 
-  return libraries.map((library) => ({
-    ...library,
-    is_shared: library.owner_user_id !== userId,
-  }));
+  return libraries.map((library) => {
+    const fileCount = library.knowledge_sources.reduce(
+      (total, source) => total + source._count.knowledge_files,
+      0,
+    );
+
+    return {
+      ...library,
+      is_shared: library.owner_user_id !== userId,
+      article_count: library._count.knowledge_sources,
+      folder_count: library._count.other_knowledge_libraries,
+      file_count: fileCount,
+    };
+  });
 }
 
 export async function ensureRootKnowledgeLibrary(userId: string) {

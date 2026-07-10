@@ -3,6 +3,7 @@
 
 import { useMemo, useState } from "react";
 
+import { CreateFolderDialog } from "./create-folder-dialog";
 import { KnowledgeExplorer } from "./knowledge-explorer";
 import { KnowledgeLibraryBreadcrumb } from "./knowledge-library-breadcrumb";
 import { KnowledgeToolbar } from "./knowledge-toolbar";
@@ -41,7 +42,12 @@ type KnowledgeLibrary = {
 type ExplorerState = {
   search: string;
   viewMode: "grid" | "list";
-  sort: "updated_desc" | "updated_asc" | "name_asc" | "name_desc" | "status";
+  sort:
+    | "updated_desc"
+    | "updated_asc"
+    | "name_asc"
+    | "name_desc"
+    | "status";
 };
 
 type Props = {
@@ -82,6 +88,8 @@ export function KnowledgeContent({
     viewMode: "grid",
     sort: "updated_desc",
   });
+
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
 
   const childLibraries = useMemo(() => {
     if (selectedView === "shared") {
@@ -148,38 +156,69 @@ export function KnowledgeContent({
     });
   }, [knowledgeSources, explorerState.search, explorerState.sort]);
 
-const libraryTree = useMemo(
-  () => buildLibraryTree(knowledgeLibraries),
-  [knowledgeLibraries],
-);
+  const libraryTree = useMemo(
+    () => buildLibraryTree(knowledgeLibraries),
+    [knowledgeLibraries],
+  );
 
   const libraryPath = useMemo(
     () => getLibraryPath(libraryTree, selectedLibraryId),
     [libraryTree, selectedLibraryId],
   );
 
+  const currentLibrary = libraryPath[libraryPath.length - 1];
+
+  let pageTitle = "Mi biblioteca";
+
+  if (selectedView === "shared") {
+    pageTitle = "Compartido conmigo";
+  } else if (selectedView === "public") {
+    pageTitle = "Conocimiento público";
+  } else if (selectedView === "private") {
+    pageTitle = "Documentos privados";
+  } else if (currentLibrary) {
+    pageTitle = currentLibrary.name;
+  }
+
   return (
     <>
-      <div className="mb-4">
-        {selectedView === "shared" ? (
-          <div className="text-sm text-muted-foreground">
-            Compartido conmigo
-          </div>
-        ) : (
-          <KnowledgeLibraryBreadcrumb path={libraryPath} />
-        )}
-      </div>
-
       <KnowledgeToolbar
         explorerState={explorerState}
         onExplorerStateChange={setExplorerState}
         selectedLibraryId={selectedLibraryId}
+        title={pageTitle}
+        breadcrumb={
+          selectedView === "shared" ? (
+            <div className="text-sm text-muted-foreground">
+              Mi biblioteca / Compartido conmigo
+            </div>
+          ) : selectedView === "public" ? (
+            <div className="text-sm text-muted-foreground">
+              Mi biblioteca / Conocimiento público
+            </div>
+          ) : selectedView === "private" ? (
+            <div className="text-sm text-muted-foreground">
+              Mi biblioteca / Documentos privados
+            </div>
+          ) : libraryPath.length > 0 ? (
+            <KnowledgeLibraryBreadcrumb path={libraryPath} />
+          ) : (
+            <div className="text-sm text-muted-foreground">Mi biblioteca</div>
+          )
+        }
+        onCreateFolder={() => setIsCreateFolderOpen(true)}
       />
 
       <KnowledgeExplorer
         folders={childLibraries}
         knowledgeSources={processedKnowledge}
         viewMode={explorerState.viewMode}
+      />
+
+      <CreateFolderDialog
+        open={isCreateFolderOpen}
+        parentLibraryId={selectedLibraryId}
+        onClose={() => setIsCreateFolderOpen(false)}
       />
     </>
   );
