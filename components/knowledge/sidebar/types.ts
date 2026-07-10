@@ -21,5 +21,6 @@ export type LibraryItem = {
   isEditing?: boolean;
   isExpanded?: boolean;
   is_shared?: boolean;
+  is_team_shared?: boolean;
   children?: LibraryItem[];
 };

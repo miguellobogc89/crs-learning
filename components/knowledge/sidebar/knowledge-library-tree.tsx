@@ -1,6 +1,8 @@
 // components/knowledge/sidebar/knowledge-library-tree.tsx
 "use client";
 
+import type { DragEvent } from "react";
+
 import type { LibraryItem } from "./types";
 import { KnowledgeLibraryItem } from "./knowledge-library-item";
 
@@ -10,6 +12,8 @@ type Props = {
   openMenuId: string | null;
   selectedLibraryId: string | null;
   readonly?: boolean;
+  draggedLibraryId?: string | null;
+  dropTargetLibraryId?: string | null;
 
   inputRefs: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
 
@@ -21,6 +25,16 @@ type Props = {
   onStartRename: (id: string) => void;
   onDelete: (id: string) => void;
   onSelect: (id: string) => void;
+  onDragStart?: (id: string, event: DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
+  onDragOverLibrary?: (
+    id: string,
+    event: DragEvent<HTMLDivElement>,
+  ) => void;
+  onDropLibrary?: (
+    id: string,
+    event: DragEvent<HTMLDivElement>,
+  ) => void;
 };
 
 export function KnowledgeLibraryTree({
@@ -29,6 +43,8 @@ export function KnowledgeLibraryTree({
   openMenuId,
   selectedLibraryId,
   readonly = false,
+  draggedLibraryId = null,
+  dropTargetLibraryId = null,
   inputRefs,
   onRename,
   onSave,
@@ -38,6 +54,10 @@ export function KnowledgeLibraryTree({
   onStartRename,
   onDelete,
   onSelect,
+  onDragStart,
+  onDragEnd,
+  onDragOverLibrary,
+  onDropLibrary,
 }: Props) {
   return (
     <>
@@ -49,6 +69,8 @@ export function KnowledgeLibraryTree({
             openMenuId={openMenuId}
             selectedLibraryId={selectedLibraryId}
             readonly={readonly}
+            isDragging={draggedLibraryId === library.id}
+            isDropTarget={dropTargetLibraryId === library.id}
             inputRef={(element) => {
               inputRefs.current[library.id] = element;
             }}
@@ -60,6 +82,16 @@ export function KnowledgeLibraryTree({
             onStartRename={() => onStartRename(library.id)}
             onDelete={() => onDelete(library.id)}
             onSelect={() => onSelect(library.id)}
+            onDragStart={(event) => {
+              onDragStart?.(library.id, event);
+            }}
+            onDragEnd={onDragEnd}
+            onDragOver={(event) => {
+              onDragOverLibrary?.(library.id, event);
+            }}
+            onDrop={(event) => {
+              onDropLibrary?.(library.id, event);
+            }}
           />
 
           {library.isExpanded && library.children?.length ? (
@@ -70,6 +102,8 @@ export function KnowledgeLibraryTree({
                 openMenuId={openMenuId}
                 selectedLibraryId={selectedLibraryId}
                 readonly={readonly}
+                draggedLibraryId={draggedLibraryId}
+                dropTargetLibraryId={dropTargetLibraryId}
                 inputRefs={inputRefs}
                 onRename={onRename}
                 onSave={onSave}
@@ -79,6 +113,10 @@ export function KnowledgeLibraryTree({
                 onStartRename={onStartRename}
                 onDelete={onDelete}
                 onSelect={onSelect}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                onDragOverLibrary={onDragOverLibrary}
+                onDropLibrary={onDropLibrary}
               />
             </div>
           ) : null}

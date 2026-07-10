@@ -1,3 +1,4 @@
+// components/knowledge/sidebar/tree-utils.ts
 import type { LibraryItem } from "./types";
 
 export function buildLibraryTree(libraries: any[]): LibraryItem[] {
@@ -8,6 +9,10 @@ export function buildLibraryTree(libraries: any[]): LibraryItem[] {
       id: library.id,
       name: library.name,
       isExpanded: false,
+      is_shared: Boolean(library.is_shared),
+      is_team_shared: Boolean(
+        library.knowledge_library_team_permissions?.length,
+      ),
       children: [],
     });
   });
@@ -15,13 +20,17 @@ export function buildLibraryTree(libraries: any[]): LibraryItem[] {
   const roots: LibraryItem[] = [];
 
   libraries.forEach((library) => {
-    const node = map.get(library.id)!;
+    const node = map.get(library.id);
+
+    if (!node) {
+      return;
+    }
 
     if (library.parent_id) {
       const parent = map.get(library.parent_id);
 
       if (parent) {
-        parent.children!.push(node);
+        parent.children?.push(node);
         return;
       }
     }
@@ -102,9 +111,7 @@ export function startRename(
   });
 }
 
-export function saveLibraries(
-  items: LibraryItem[],
-): LibraryItem[] {
+export function saveLibraries(items: LibraryItem[]): LibraryItem[] {
   return items.map((library) => ({
     ...library,
     name: library.name.trim() || "Nueva biblioteca",
@@ -139,10 +146,7 @@ export function findLibraryById(
     }
 
     if (library.children?.length) {
-      const found = findLibraryById(
-        library.children,
-        id,
-      );
+      const found = findLibraryById(library.children, id);
 
       if (found) {
         return found;
@@ -151,6 +155,124 @@ export function findLibraryById(
   }
 
   return undefined;
+}
+
+export function libraryContainsId(
+  library: LibraryItem,
+  id: string,
+): boolean {
+  if (library.id === id) {
+    return true;
+  }
+
+  for (const child of library.children ?? []) {
+    if (libraryContainsId(child, id)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function removeLibraryNode(
+  items: LibraryItem[],
+  id: string,
+): {
+  items: LibraryItem[];
+  removed: LibraryItem | null;
+} {
+  let removed: LibraryItem | null = null;
+  const nextItems: LibraryItem[] = [];
+
+  for (const item of items) {
+    if (item.id === id) {
+      removed = item;
+      continue;
+    }
+
+    if (item.children?.length) {
+      const childResult = removeLibraryNode(item.children, id);
+
+      if (childResult.removed) {
+        removed = childResult.removed;
+      }
+
+      nextItems.push({
+        ...item,
+        children: childResult.items,
+      });
+
+      continue;
+    }
+
+    nextItems.push(item);
+  }
+
+  return {
+    items: nextItems,
+    removed,
+  };
+}
+
+function insertLibraryNode(
+  items: LibraryItem[],
+  parentId: string | null,
+  library: LibraryItem,
+): LibraryItem[] {
+  if (!parentId) {
+    return [...items, library];
+  }
+
+  return items.map((item) => {
+    if (item.id === parentId) {
+      return {
+        ...item,
+        isExpanded: true,
+        children: [...(item.children ?? []), library],
+      };
+    }
+
+    if (item.children?.length) {
+      return {
+        ...item,
+        children: insertLibraryNode(
+          item.children,
+          parentId,
+          library,
+        ),
+      };
+    }
+
+    return item;
+  });
+}
+
+export function moveLibraryNode(
+  items: LibraryItem[],
+  libraryId: string,
+  parentId: string | null,
+): LibraryItem[] {
+  const library = findLibraryById(items, libraryId);
+
+  if (!library) {
+    return items;
+  }
+
+  if (parentId && libraryContainsId(library, parentId)) {
+    return items;
+  }
+
+  const result = removeLibraryNode(items, libraryId);
+
+  if (!result.removed) {
+    return items;
+  }
+
+  return insertLibraryNode(
+    result.items,
+    parentId,
+    result.removed,
+  );
 }
 
 export function getLibraryPath(
@@ -173,10 +295,7 @@ export function getLibraryPath(
       }
 
       if (item.children?.length) {
-        const result = search(
-          item.children,
-          currentPath,
-        );
+        const result = search(item.children, currentPath);
 
         if (result) {
           return result;

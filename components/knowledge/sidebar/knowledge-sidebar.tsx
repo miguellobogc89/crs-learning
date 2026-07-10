@@ -1,28 +1,45 @@
 // components/knowledge/sidebar/knowledge-sidebar.tsx
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, Plus, UsersRound } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
+import {
+  ChevronDown,
+  ChevronRight,
+  CornerDownLeft,
+  Plus,
+  UsersRound,
+} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import { KnowledgeViewItem } from "./knowledge-view-item";
 import { SearchInput } from "@/components/ui/search-input";
 import {
   createKnowledgeLibrary,
   deleteKnowledgeLibrary,
+  moveKnowledgeLibrary,
   renameKnowledgeLibrary,
 } from "@/lib/actions/knowledge-library.actions";
-import type { LibraryItem, SidebarItem } from "./types";
+
 import { KnowledgeLibraryTree } from "./knowledge-library-tree";
+import { KnowledgeViewItem } from "./knowledge-view-item";
+import type { LibraryItem, SidebarItem } from "./types";
 import {
   buildLibraryTree,
   deleteLibrary,
   findLibraryById,
+  libraryContainsId,
+  moveLibraryNode,
   renameLibrary,
   saveLibraries,
   startRename,
   toggleLibrary,
 } from "./tree-utils";
-import { useRouter, useSearchParams } from "next/navigation";
 
 type KnowledgeLibrary = {
   id: string;
@@ -57,14 +74,48 @@ type Props = {
   defaultLibraryId: string | null;
 };
 
-function toLibraryItems(libraries: KnowledgeLibrary[]): LibraryItem[] {
-  return libraries.map((library) => ({
-    id: library.id,
-    name: library.name,
-    isExpanded: true,
-    is_shared: library.is_shared,
-    children: [],
+function applyExpandedState(
+  items: LibraryItem[],
+  expandedIds: Set<string>,
+): LibraryItem[] {
+  return items.map((item) => ({
+    ...item,
+    isExpanded: expandedIds.has(item.id),
+    children: item.children?.length
+      ? applyExpandedState(item.children, expandedIds)
+      : item.children,
   }));
+}
+
+function filterLibraryTree(
+  libraries: LibraryItem[],
+  search: string,
+): LibraryItem[] {
+  const normalizedSearch = search.trim().toLowerCase();
+
+  if (!normalizedSearch) {
+    return libraries;
+  }
+
+  const result: LibraryItem[] = [];
+
+  for (const library of libraries) {
+    const filteredChildren = library.children?.length
+      ? filterLibraryTree(library.children, search)
+      : [];
+
+    const matches = library.name.toLowerCase().includes(normalizedSearch);
+
+    if (matches || filteredChildren.length > 0) {
+      result.push({
+        ...library,
+        isExpanded: filteredChildren.length > 0 || library.isExpanded,
+        children: filteredChildren,
+      });
+    }
+  }
+
+  return result;
 }
 
 export function KnowledgeSidebar({
@@ -77,12 +128,26 @@ export function KnowledgeSidebar({
   const [isMyLibraryOpen, setIsMyLibraryOpen] = useState(true);
   const [isSharedOpen, setIsSharedOpen] = useState(true);
   const [isTeamsOpen, setIsTeamsOpen] = useState(true);
+
   const [openTeamIds, setOpenTeamIds] = useState<Record<string, boolean>>({});
+  const [readonlyExpandedIds, setReadonlyExpandedIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [draggedLibraryId, setDraggedLibraryId] = useState<string | null>(null);
+  const [dropTargetLibraryId, setDropTargetLibraryId] = useState<string | null>(
+    null,
+  );
+  const [isRootDropTarget, setIsRootDropTarget] = useState(false);
 
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const selectedView = searchParams.get("view") ?? "all";
   const selectedLibraryId = searchParams.get("library");
+
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const ownedKnowledgeLibraries = useMemo(() => {
     return knowledgeLibraries.filter((library) => !library.is_shared);
@@ -105,7 +170,47 @@ export function KnowledgeSidebar({
 
   const [libraries, setLibraries] = useState<LibraryItem[]>(initialLibraries);
 
-  const teamGroups = useMemo(() => {
+useEffect(() => {
+  setLibraries((currentLibraries) => {
+    const expandedIds = new Set<string>();
+
+    function collectExpanded(items: LibraryItem[]) {
+      for (const item of items) {
+        if (item.isExpanded) {
+          expandedIds.add(item.id);
+        }
+
+        if (item.children?.length) {
+          collectExpanded(item.children);
+        }
+      }
+    }
+
+    collectExpanded(currentLibraries);
+
+    return applyExpandedState(initialLibraries, expandedIds);
+  });
+}, [initialLibraries]);
+
+  useEffect(() => {
+    function handleOutsideMouseDown(event: MouseEvent) {
+      const target = event.target as HTMLElement;
+
+      if (target.closest("[data-knowledge-library-menu]")) {
+        return;
+      }
+
+      setOpenMenuId(null);
+    }
+
+    document.addEventListener("mousedown", handleOutsideMouseDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideMouseDown);
+    };
+  }, []);
+
+  const teamGroups = useMemo<TeamGroup[]>(() => {
     return knowledgeTeams.map((team) => {
       const librariesForTeam = knowledgeLibraries.filter((library) =>
         library.knowledge_library_team_permissions?.some(
@@ -121,19 +226,8 @@ export function KnowledgeSidebar({
     });
   }, [knowledgeTeams, knowledgeLibraries]);
 
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-
   const filteredLibraries = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-
-    if (!normalizedSearch) {
-      return libraries;
-    }
-
-    return libraries.filter((library) =>
-      library.name.toLowerCase().includes(normalizedSearch),
-    );
+    return filterLibraryTree(libraries, search);
   }, [libraries, search]);
 
   const filteredSharedLibraries = useMemo(() => {
@@ -148,7 +242,167 @@ export function KnowledgeSidebar({
     );
   }, [sharedKnowledgeLibraries, search]);
 
+  function buildReadonlyLibraryTree(items: KnowledgeLibrary[]) {
+    const tree = buildLibraryTree(items);
+
+    return applyExpandedState(tree, readonlyExpandedIds);
+  }
+
+  function toggleReadonlyLibrary(id: string) {
+    setReadonlyExpandedIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+
+      return next;
+    });
+  }
+
+  function clearDragState() {
+    setDraggedLibraryId(null);
+    setDropTargetLibraryId(null);
+    setIsRootDropTarget(false);
+  }
+
+  function handleDragStart(
+    libraryId: string,
+    event: DragEvent<HTMLDivElement>,
+  ) {
+    setDraggedLibraryId(libraryId);
+    setDropTargetLibraryId(null);
+    setIsRootDropTarget(false);
+
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", libraryId);
+  }
+
+  function handleDragOverLibrary(
+    targetLibraryId: string,
+    event: DragEvent<HTMLDivElement>,
+  ) {
+    if (!draggedLibraryId) {
+      return;
+    }
+
+    if (draggedLibraryId === targetLibraryId) {
+      return;
+    }
+
+    const draggedLibrary = findLibraryById(libraries, draggedLibraryId);
+
+    if (!draggedLibrary) {
+      return;
+    }
+
+    if (libraryContainsId(draggedLibrary, targetLibraryId)) {
+      setDropTargetLibraryId(null);
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    event.dataTransfer.dropEffect = "move";
+
+    setDropTargetLibraryId(targetLibraryId);
+    setIsRootDropTarget(false);
+  }
+
+  async function handleMove(
+    libraryId: string,
+    parentId: string,
+  ) {
+    const previousLibraries = libraries;
+
+    setLibraries((current) =>
+      moveLibraryNode(current, libraryId, parentId),
+    );
+
+    clearDragState();
+
+    try {
+      await moveKnowledgeLibrary(libraryId, parentId);
+      router.refresh();
+    } catch (error) {
+      console.error("No se pudo mover la biblioteca", error);
+      setLibraries(previousLibraries);
+      router.refresh();
+    }
+  }
+
+  async function handleDropOnLibrary(
+    targetLibraryId: string,
+    event: DragEvent<HTMLDivElement>,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const libraryId =
+      draggedLibraryId || event.dataTransfer.getData("text/plain");
+
+    if (!libraryId || libraryId === targetLibraryId) {
+      clearDragState();
+      return;
+    }
+
+    const draggedLibrary = findLibraryById(libraries, libraryId);
+
+    if (!draggedLibrary) {
+      clearDragState();
+      return;
+    }
+
+    if (libraryContainsId(draggedLibrary, targetLibraryId)) {
+      clearDragState();
+      return;
+    }
+
+    await handleMove(libraryId, targetLibraryId);
+  }
+
+  function handleDragOverRoot(event: DragEvent<HTMLDivElement>) {
+    if (!draggedLibraryId || !defaultLibraryId) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    event.dataTransfer.dropEffect = "move";
+
+    setDropTargetLibraryId(null);
+    setIsRootDropTarget(true);
+  }
+
+  async function handleDropOnRoot(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!defaultLibraryId) {
+      clearDragState();
+      return;
+    }
+
+    const libraryId =
+      draggedLibraryId || event.dataTransfer.getData("text/plain");
+
+    if (!libraryId) {
+      clearDragState();
+      return;
+    }
+
+    await handleMove(libraryId, defaultLibraryId);
+  }
+
   async function handleCreateLibrary() {
+    if (!defaultLibraryId) {
+      return;
+    }
+
     const library = await createKnowledgeLibrary(defaultLibraryId);
 
     setLibraries((currentLibraries) => [
@@ -312,7 +566,7 @@ export function KnowledgeSidebar({
 
   return (
     <aside
-      className="min-h-0 border-r border-border bg-panel"
+      className="min-h-0 overflow-y-auto border-r border-border bg-panel"
       onMouseDown={(event) => {
         const target = event.target as HTMLElement;
 
@@ -375,24 +629,64 @@ export function KnowledgeSidebar({
                 libraries={filteredLibraries}
                 openMenuId={openMenuId}
                 inputRefs={inputRefs}
+                draggedLibraryId={draggedLibraryId}
+                dropTargetLibraryId={dropTargetLibraryId}
                 onRename={handleRenameLibrary}
                 onSave={handleSaveLibrary}
                 onToggleExpanded={handleToggleExpanded}
-                onToggleMenu={(id) =>
+                onToggleMenu={(id) => {
                   setOpenMenuId((current) => {
                     if (current === id) {
                       return null;
                     }
 
                     return id;
-                  })
-                }
+                  });
+                }}
                 onCreateChild={handleCreateChildLibrary}
                 onStartRename={handleStartRename}
                 onDelete={handleDeleteLibrary}
-                selectedLibraryId={selectedLibraryId}
                 onSelect={handleSelectLibrary}
+                onDragStart={handleDragStart}
+                onDragEnd={clearDragState}
+                onDragOverLibrary={handleDragOverLibrary}
+                onDropLibrary={handleDropOnLibrary}
+                selectedLibraryId={selectedLibraryId}
               />
+
+<div
+  className={[
+    "flex items-center justify-center overflow-hidden rounded-lg border border-dashed text-xs transition-all",
+    draggedLibraryId
+      ? "mt-2 min-h-12"
+      : "mt-0 h-0 min-h-0 border-transparent",
+    isRootDropTarget
+      ? "border-sky-400 bg-sky-50 text-sky-700"
+      : draggedLibraryId
+        ? "border-border text-muted-foreground"
+        : "text-transparent",
+  ].join(" ")}
+  onDragOver={handleDragOverRoot}
+  onDragEnter={handleDragOverRoot}
+  onDragLeave={(event) => {
+    const currentTarget = event.currentTarget;
+    const relatedTarget = event.relatedTarget as Node | null;
+
+    if (relatedTarget && currentTarget.contains(relatedTarget)) {
+      return;
+    }
+
+    setIsRootDropTarget(false);
+  }}
+  onDrop={handleDropOnRoot}
+>
+  {draggedLibraryId ? (
+    <span className="flex items-center gap-2">
+      <CornerDownLeft className="h-3.5 w-3.5" />
+      Mover a la raíz de Mi biblioteca
+    </span>
+  ) : null}
+</div>
 
               {filteredLibraries.length === 0 ? (
                 <p className="px-3 py-2 text-xs text-muted-foreground">
@@ -415,13 +709,15 @@ export function KnowledgeSidebar({
           {isSharedOpen ? (
             <div className="mt-2 space-y-1">
               <KnowledgeLibraryTree
-                libraries={toLibraryItems(filteredSharedLibraries)}
+                libraries={buildReadonlyLibraryTree(
+                  filteredSharedLibraries,
+                )}
                 readonly
                 openMenuId={null}
                 inputRefs={inputRefs}
                 onRename={noop}
                 onSave={noop}
-                onToggleExpanded={noop}
+                onToggleExpanded={toggleReadonlyLibrary}
                 onToggleMenu={noop}
                 onCreateChild={noop}
                 onStartRename={noop}
@@ -457,12 +753,12 @@ export function KnowledgeSidebar({
                     <button
                       className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-panel-foreground/70 transition hover:bg-surface-hover hover:text-foreground"
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
                         setOpenTeamIds((current) => ({
                           ...current,
                           [team.id]: !isTeamOpen,
-                        }))
-                      }
+                        }));
+                      }}
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         {isTeamOpen ? (
@@ -485,13 +781,15 @@ export function KnowledgeSidebar({
                       <div className="mt-1 space-y-1 pl-5">
                         {team.libraries.length > 0 ? (
                           <KnowledgeLibraryTree
-                            libraries={toLibraryItems(team.libraries)}
+                            libraries={buildReadonlyLibraryTree(
+                              team.libraries,
+                            )}
                             readonly
                             openMenuId={null}
                             inputRefs={inputRefs}
                             onRename={noop}
                             onSave={noop}
-                            onToggleExpanded={noop}
+                            onToggleExpanded={toggleReadonlyLibrary}
                             onToggleMenu={noop}
                             onCreateChild={noop}
                             onStartRename={noop}
@@ -540,30 +838,12 @@ function SectionToggle({
 }) {
   return (
     <div className="group flex items-center justify-between px-2">
-      <button
-        className="flex min-w-0 items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
-        type="button"
-        onClick={onSelect ?? onToggle}
-      >
-        {isOpen ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-        )}
-
-        <span className="truncate">{label}</span>
-
-        <span className="ml-1 text-[10px] font-normal">({count})</span>
-      </button>
-
-      <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
-        {action}
-
+      <div className="flex min-w-0 items-center">
         <button
-          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition hover:bg-surface hover:text-foreground"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-surface hover:text-foreground"
           type="button"
           onClick={onToggle}
-          aria-label="Expandir sección"
+          aria-label={isOpen ? "Contraer sección" : "Expandir sección"}
         >
           {isOpen ? (
             <ChevronDown className="h-3.5 w-3.5" />
@@ -571,7 +851,25 @@ function SectionToggle({
             <ChevronRight className="h-3.5 w-3.5" />
           )}
         </button>
+
+        <button
+          className="min-w-0 truncate text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+          type="button"
+          onClick={onSelect ?? onToggle}
+        >
+          {label}
+
+          <span className="ml-1 text-[10px] font-normal">
+            ({count})
+          </span>
+        </button>
       </div>
+
+      {action ? (
+        <div className="opacity-0 transition group-hover:opacity-100">
+          {action}
+        </div>
+      ) : null}
     </div>
   );
 }
