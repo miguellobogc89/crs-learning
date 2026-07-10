@@ -2,24 +2,20 @@
 import { ReactNode } from "react";
 
 import { KnowledgeSidebar } from "@/components/knowledge/sidebar/knowledge-sidebar";
+import type { SidebarItem } from "@/components/knowledge/sidebar/types";
 
 type Props = {
   knowledgeSources: any[];
   knowledgeLibraries: any[];
+  knowledgeTeams: any[];
   defaultLibraryId: string | null;
   children: ReactNode;
-};
-
-type SidebarItem = {
-  label: string;
-  count: number;
-  icon: "book" | "file" | "shield" | "globe";
-  active: boolean;
 };
 
 export function KnowledgeShell({
   knowledgeSources,
   knowledgeLibraries,
+  knowledgeTeams,
   defaultLibraryId,
   children,
 }: Props) {
@@ -54,6 +50,18 @@ export function KnowledgeShell({
       icon: "globe",
       active: false,
     },
+    {
+      label: "Favoritos",
+      count: 0,
+      icon: "star",
+      active: false,
+    },
+    {
+      label: "Recientes",
+      count: 0,
+      icon: "clock",
+      active: false,
+    },
   ];
 
   return (
@@ -61,8 +69,9 @@ export function KnowledgeShell({
       <KnowledgeSidebar
         sidebarItems={sidebarItems}
         knowledgeLibraries={knowledgeLibraries}
+        knowledgeTeams={knowledgeTeams}
         defaultLibraryId={defaultLibraryId}
-        />
+      />
 
       <section className="min-w-0 overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable]">
         {children}

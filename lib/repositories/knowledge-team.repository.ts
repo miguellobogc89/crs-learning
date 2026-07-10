@@ -97,38 +97,23 @@ export async function shareLibraryWithTeam(data: {
     throw new Error("Library not found or not owned by user");
   }
 
-  const members = await prisma.knowledge_team_members.findMany({
+  return prisma.knowledge_library_team_permissions.upsert({
     where: {
+      library_id_team_id: {
+        library_id: data.libraryId,
+        team_id: data.teamId,
+      },
+    },
+    create: {
+      library_id: data.libraryId,
       team_id: data.teamId,
+      access_level: data.accessLevel,
+    },
+    update: {
+      access_level: data.accessLevel,
+      updated_at: new Date(),
     },
   });
-
-  await Promise.all(
-    members.map((member) =>
-      prisma.knowledge_library_permissions.upsert({
-        where: {
-          library_id_user_id: {
-            library_id: data.libraryId,
-            user_id: member.user_id,
-          },
-        },
-        create: {
-          library_id: data.libraryId,
-          user_id: member.user_id,
-          access_level: data.accessLevel,
-        },
-        update: {
-          access_level: data.accessLevel,
-          updated_at: new Date(),
-        },
-      }),
-    ),
-  );
-
-  return {
-    ok: true,
-    sharedWith: members.length,
-  };
 }
 
 export async function listLibraryTeamShares(data: {
@@ -146,64 +131,21 @@ export async function listLibraryTeamShares(data: {
     throw new Error("Library not found or not owned by user");
   }
 
-const teams = await prisma.knowledge_teams.findMany({
-  where: {
-    OR: [
-      {
-        owner_user_id: data.ownerUserId,
-      },
-      {
-        knowledge_team_members: {
-          some: {
-            user_id: data.ownerUserId,
-          },
-        },
-      },
-    ],
-  },
-  include: {
-    knowledge_team_members: {
-      include: {
-        users: true,
-      },
-    },
-  },
-  orderBy: {
-    created_at: "desc",
-  },
-});
-
-  const permissions = await prisma.knowledge_library_permissions.findMany({
+  return prisma.knowledge_library_team_permissions.findMany({
     where: {
       library_id: data.libraryId,
     },
+    include: {
+      knowledge_teams: {
+        include: {
+          knowledge_team_members: true,
+        },
+      },
+    },
+    orderBy: {
+      created_at: "desc",
+    },
   });
-
-const shares = teams
-  .map((team) => {
-    const memberIds = team.knowledge_team_members.map(
-      (member) => member.user_id,
-    );
-
-    const teamPermissions = permissions.filter((permission) =>
-      memberIds.includes(permission.user_id),
-    );
-
-    if (teamPermissions.length === 0) {
-      return null;
-    }
-
-    return {
-      teamId: team.id,
-      teamName: team.name,
-      membersWithAccess: teamPermissions.length,
-      totalMembers: team.knowledge_team_members.length,
-      accessLevel: teamPermissions[0]?.access_level ?? "read",
-    };
-  })
-  .filter((share) => share !== null);
-
-return shares;
 }
 
 export async function removeLibraryTeamShare(data: {
@@ -222,23 +164,12 @@ export async function removeLibraryTeamShare(data: {
     throw new Error("Library not found or not owned by user");
   }
 
-  const members = await prisma.knowledge_team_members.findMany({
+  return prisma.knowledge_library_team_permissions.delete({
     where: {
-      team_id: data.teamId,
-    },
-  });
-
-  await prisma.knowledge_library_permissions.deleteMany({
-    where: {
-      library_id: data.libraryId,
-      user_id: {
-        in: members.map((member) => member.user_id),
+      library_id_team_id: {
+        library_id: data.libraryId,
+        team_id: data.teamId,
       },
     },
   });
-
-  return {
-    ok: true,
-    removedFrom: members.length,
-  };
 }

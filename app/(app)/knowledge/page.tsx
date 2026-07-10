@@ -23,24 +23,35 @@ export default async function KnowledgePage({
   const selectedView = params.view ?? "all";
 
   const allKnowledgeSources = await listVisibleKnowledgeSources(session.user.id);
-
-const knowledgeSources = allKnowledgeSources.filter((knowledge) => {
-  if (selectedLibraryId && knowledge.library_id !== selectedLibraryId) {
-    return false;
-  }
-
-  if (selectedView === "public") {
-    return knowledge.visibility === "public";
-  }
-
-  if (selectedView === "private") {
-    return knowledge.visibility !== "public";
-  }
-
-  return true;
-});
-
   const knowledgeLibraries = await listKnowledgeLibraries(session.user.id);
+
+  const sharedLibraryIds = knowledgeLibraries
+    .filter((library) => library.is_shared)
+    .map((library) => library.id);
+
+  const knowledgeSources = allKnowledgeSources.filter((knowledge) => {
+    if (selectedView === "shared") {
+      if (!knowledge.library_id) {
+        return false;
+      }
+
+      return sharedLibraryIds.includes(knowledge.library_id);
+    }
+
+    if (selectedLibraryId && knowledge.library_id !== selectedLibraryId) {
+      return false;
+    }
+
+    if (selectedView === "public") {
+      return knowledge.visibility === "public";
+    }
+
+    if (selectedView === "private") {
+      return knowledge.visibility !== "public";
+    }
+
+    return true;
+  });
 
   const totalPublic = knowledgeSources.filter(
     (knowledge) => knowledge.visibility === "public",
@@ -61,6 +72,7 @@ const knowledgeSources = allKnowledgeSources.filter((knowledge) => {
           knowledgeSources={knowledgeSources}
           knowledgeLibraries={knowledgeLibraries}
           selectedLibraryId={selectedLibraryId}
+          selectedView={selectedView}
         />
       </div>
     </div>

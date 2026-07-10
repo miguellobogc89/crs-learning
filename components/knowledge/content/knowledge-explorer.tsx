@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { FileText, Folder } from "lucide-react";
+import { FileText, Folder, UsersRound } from "lucide-react";
 
 import { KnowledgeCard } from "./knowledge-card";
 import { KnowledgeFolderCard } from "./knowledge-folder-card";
@@ -11,6 +11,7 @@ type KnowledgeLibrary = {
   id: string;
   parent_id: string | null;
   name: string;
+  is_shared?: boolean;
 };
 
 type KnowledgeSource = {
@@ -27,7 +28,7 @@ type KnowledgeSource = {
   visibility?: string | null;
   updated_at?: Date | string | null;
   knowledge_type?: string | null;
-confidence?: number | null;
+  confidence?: number | null;
 };
 
 type Props = {
@@ -51,6 +52,14 @@ function getSummary(knowledge: KnowledgeSource) {
     knowledge.content?.trim() ||
     ""
   );
+}
+
+function getFolderIcon(folder: KnowledgeLibrary) {
+  if (folder.is_shared) {
+    return <UsersRound className="h-5 w-5 text-brand" strokeWidth={2.25} />;
+  }
+
+  return <Folder className="h-5 w-5" strokeWidth={2.25} />;
 }
 
 export function KnowledgeExplorer({
@@ -82,16 +91,18 @@ export function KnowledgeExplorer({
           {folders.map((folder) => (
             <Link
               key={folder.id}
-              href={`/knowledge/library/${folder.id}`}
+              href={`/knowledge?library=${folder.id}`}
               className="grid grid-cols-[1fr_160px_140px_140px] items-center px-4 py-3 text-sm hover:bg-surface"
             >
               <div className="flex items-center gap-3 font-medium text-foreground">
-                <Folder className="h-5 w-5" strokeWidth={2.25} />
+                {getFolderIcon(folder)}
                 {folder.name}
               </div>
 
               <div className="text-muted-foreground">—</div>
-              <div className="text-muted-foreground">Carpeta</div>
+              <div className="text-muted-foreground">
+                {folder.is_shared ? "Compartida" : "Carpeta"}
+              </div>
               <div className="text-muted-foreground">—</div>
             </Link>
           ))}
@@ -139,9 +150,28 @@ export function KnowledgeExplorer({
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-      {folders.map((folder) => (
-        <KnowledgeFolderCard key={folder.id} folder={folder} />
-      ))}
+      {folders.map((folder) => {
+        if (folder.is_shared) {
+          return (
+            <Link
+              key={folder.id}
+              href={`/knowledge?library=${folder.id}`}
+              className="rounded-2xl border border-border bg-card p-5 transition hover:bg-surface"
+            >
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                <UsersRound className="h-5 w-5" />
+              </div>
+
+              <h3 className="font-semibold">{folder.name}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Biblioteca compartida contigo.
+              </p>
+            </Link>
+          );
+        }
+
+        return <KnowledgeFolderCard key={folder.id} folder={folder} />;
+      })}
 
       {knowledgeSources.map((knowledge) => (
         <KnowledgeCard key={knowledge.id} knowledge={knowledge} />

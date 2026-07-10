@@ -9,6 +9,7 @@ type Props = {
   level?: number;
   openMenuId: string | null;
   selectedLibraryId: string | null;
+  readonly?: boolean;
 
   inputRefs: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
 
@@ -27,6 +28,7 @@ export function KnowledgeLibraryTree({
   level = 0,
   openMenuId,
   selectedLibraryId,
+  readonly = false,
   inputRefs,
   onRename,
   onSave,
@@ -46,6 +48,7 @@ export function KnowledgeLibraryTree({
             level={level}
             openMenuId={openMenuId}
             selectedLibraryId={selectedLibraryId}
+            readonly={readonly}
             inputRef={(element) => {
               inputRefs.current[library.id] = element;
             }}
@@ -66,6 +69,7 @@ export function KnowledgeLibraryTree({
                 level={level + 1}
                 openMenuId={openMenuId}
                 selectedLibraryId={selectedLibraryId}
+                readonly={readonly}
                 inputRefs={inputRefs}
                 onRename={onRename}
                 onSave={onSave}

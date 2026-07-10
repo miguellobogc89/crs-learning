@@ -15,7 +15,27 @@ export async function listKnowledgeLibraries(userId: string) {
             },
           },
         },
+        {
+          knowledge_library_team_permissions: {
+            some: {
+              knowledge_teams: {
+                knowledge_team_members: {
+                  some: {
+                    user_id: userId,
+                  },
+                },
+              },
+            },
+          },
+        },
       ],
+    },
+    include: {
+      knowledge_library_team_permissions: {
+        include: {
+          knowledge_teams: true,
+        },
+      },
     },
     orderBy: [
       {
@@ -41,12 +61,22 @@ export async function listKnowledgeLibraries(userId: string) {
         name: "Mi biblioteca",
         position: 0,
       },
+      include: {
+        knowledge_library_team_permissions: {
+          include: {
+            knowledge_teams: true,
+          },
+        },
+      },
     });
 
     libraries = [library, ...libraries];
   }
 
-  return libraries;
+  return libraries.map((library) => ({
+    ...library,
+    is_shared: library.owner_user_id !== userId,
+  }));
 }
 
 export async function ensureRootKnowledgeLibrary(userId: string) {

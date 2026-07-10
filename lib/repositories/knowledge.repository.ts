@@ -5,9 +5,53 @@ export async function getVisibleKnowledgeSources(userId: string) {
   return prisma.knowledge_sources.findMany({
     where: {
       OR: [
-        { owner_user_id: userId },
-        { visibility: "public" },
+        {
+          owner_user_id: userId,
+        },
+        {
+          visibility: "public",
+        },
+        {
+          knowledge_libraries: {
+            owner_user_id: userId,
+          },
+        },
+        {
+          knowledge_libraries: {
+            knowledge_library_permissions: {
+              some: {
+                user_id: userId,
+              },
+            },
+          },
+        },
+        {
+          knowledge_libraries: {
+            knowledge_library_team_permissions: {
+              some: {
+                knowledge_teams: {
+                  knowledge_team_members: {
+                    some: {
+                      user_id: userId,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       ],
+    },
+    include: {
+      knowledge_libraries: {
+        include: {
+          knowledge_library_team_permissions: {
+            include: {
+              knowledge_teams: true,
+            },
+          },
+        },
+      },
     },
     orderBy: {
       updated_at: "desc",
@@ -26,6 +70,20 @@ export async function getKnowledgeSourceById(id: string) {
       },
       knowledge_analysis: true,
       knowledge_graph: true,
+      knowledge_libraries: {
+        include: {
+          knowledge_library_permissions: true,
+          knowledge_library_team_permissions: {
+            include: {
+              knowledge_teams: {
+                include: {
+                  knowledge_team_members: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
 }

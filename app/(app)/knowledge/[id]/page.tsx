@@ -23,10 +23,26 @@ export default async function KnowledgeDetailPage({
     notFound();
   }
 
-  if (
-    knowledge.owner_user_id !== session.user.id &&
-    knowledge.visibility !== "public"
-  ) {
+  const hasDirectPermission =
+    knowledge.knowledge_libraries?.knowledge_library_permissions?.some(
+      (permission) => permission.user_id === session.user.id,
+    ) ?? false;
+
+  const hasTeamPermission =
+    knowledge.knowledge_libraries?.knowledge_library_team_permissions?.some(
+      (permission) =>
+        permission.knowledge_teams.knowledge_team_members.some(
+          (member) => member.user_id === session.user.id,
+        ),
+    ) ?? false;
+
+  const canView =
+    knowledge.owner_user_id === session.user.id ||
+    knowledge.visibility === "public" ||
+    hasDirectPermission ||
+    hasTeamPermission;
+
+  if (!canView) {
     notFound();
   }
 

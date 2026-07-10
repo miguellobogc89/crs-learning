@@ -27,13 +27,15 @@ type KnowledgeSource = {
   visibility?: string | null;
   updated_at?: Date | string | null;
   knowledge_type?: string | null;
-confidence?: number | null;
+  confidence?: number | null;
+  library_id?: string | null;
 };
 
 type KnowledgeLibrary = {
   id: string;
   parent_id: string | null;
   name: string;
+  is_shared?: boolean;
 };
 
 type ExplorerState = {
@@ -46,6 +48,7 @@ type Props = {
   knowledgeSources: KnowledgeSource[];
   knowledgeLibraries: KnowledgeLibrary[];
   selectedLibraryId: string | null;
+  selectedView: string;
 };
 
 function normalizeSearchValue(value: unknown) {
@@ -72,6 +75,7 @@ export function KnowledgeContent({
   knowledgeSources,
   knowledgeLibraries,
   selectedLibraryId,
+  selectedView,
 }: Props) {
   const [explorerState, setExplorerState] = useState<ExplorerState>({
     search: "",
@@ -80,10 +84,18 @@ export function KnowledgeContent({
   });
 
   const childLibraries = useMemo(() => {
-    return knowledgeLibraries.filter(
-      (library) => library.parent_id === selectedLibraryId,
-    );
-  }, [knowledgeLibraries, selectedLibraryId]);
+    if (selectedView === "shared") {
+      return knowledgeLibraries.filter((library) => library.is_shared);
+    }
+
+    return knowledgeLibraries.filter((library) => {
+      if (library.is_shared) {
+        return false;
+      }
+
+      return library.parent_id === selectedLibraryId;
+    });
+  }, [knowledgeLibraries, selectedLibraryId, selectedView]);
 
   const processedKnowledge = useMemo(() => {
     const value = explorerState.search.trim().toLowerCase();
@@ -136,10 +148,10 @@ export function KnowledgeContent({
     });
   }, [knowledgeSources, explorerState.search, explorerState.sort]);
 
-  const libraryTree = useMemo(
-    () => buildLibraryTree(knowledgeLibraries),
-    [knowledgeLibraries],
-  );
+const libraryTree = useMemo(
+  () => buildLibraryTree(knowledgeLibraries),
+  [knowledgeLibraries],
+);
 
   const libraryPath = useMemo(
     () => getLibraryPath(libraryTree, selectedLibraryId),
@@ -149,7 +161,13 @@ export function KnowledgeContent({
   return (
     <>
       <div className="mb-4">
-        <KnowledgeLibraryBreadcrumb path={libraryPath} />
+        {selectedView === "shared" ? (
+          <div className="text-sm text-muted-foreground">
+            Compartido conmigo
+          </div>
+        ) : (
+          <KnowledgeLibraryBreadcrumb path={libraryPath} />
+        )}
       </div>
 
       <KnowledgeToolbar
