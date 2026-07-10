@@ -1,9 +1,19 @@
 // components/knowledge/knowledge-detail-client.tsx
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 
-import { updateKnowledgeAction } from "@/app/actions/knowledge";
+import {
+  rebuildKnowledgeAction,
+  updateKnowledgeAction,
+} from "@/app/actions/knowledge";
 import { KnowledgeAnalysisPanel } from "@/components/knowledge/knowledge-analysis-panel";
 import { KnowledgeEditorHeader } from "@/components/knowledge/knowledge-editor-header";
 import { KnowledgeHeader } from "@/components/knowledge/knowledge-header";
@@ -20,12 +30,18 @@ type KnowledgeFile = {
   status: string;
 };
 
+type SourceContribution = {
+  knowledgeFileId: string;
+  percentage: number;
+};
+
 type Knowledge = {
   id: string;
   title: string;
   description: string | null;
   visibility: string;
   knowledge_type: string;
+  status: string;
   content: string;
   knowledge_files: KnowledgeFile[];
   knowledge_analysis: {
@@ -42,15 +58,79 @@ type Knowledge = {
   } | null;
 };
 
+function isRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+function getSourceContributions(
+  analysisJson: unknown,
+): SourceContribution[] {
+  if (!isRecord(analysisJson)) {
+    return [];
+  }
+
+  const value = analysisJson.source_contributions;
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const contributions: SourceContribution[] = [];
+
+  for (const item of value) {
+    if (!isRecord(item)) {
+      continue;
+    }
+
+    let knowledgeFileId = "";
+
+    if (typeof item.knowledge_file_id === "string") {
+      knowledgeFileId = item.knowledge_file_id;
+    } else if (typeof item.file_id === "string") {
+      knowledgeFileId = item.file_id;
+    }
+
+    const percentage =
+      typeof item.percentage === "number"
+        ? item.percentage
+        : null;
+
+    if (!knowledgeFileId || percentage === null) {
+      continue;
+    }
+
+    contributions.push({
+      knowledgeFileId,
+      percentage,
+    });
+  }
+
+  return contributions;
+}
+
 export function KnowledgeDetailClient({
   knowledge,
 }: {
   knowledge: Knowledge;
 }) {
+  const router = useRouter();
+
   const [editing, setEditing] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [activeTab, setActiveTab] =
     useState<ActiveTab>("general");
+
+  const [rebuildError, setRebuildError] =
+    useState<string | null>(null);
+
+  const [isRebuilding, startRebuildTransition] =
+    useTransition();
 
   const [title, setTitle] = useState(knowledge.title);
   const [description, setDescription] = useState(
@@ -63,6 +143,25 @@ export function KnowledgeDetailClient({
     knowledge.knowledge_type ?? "unknown",
   );
 
+  const articleNeedsRebuild =
+    knowledge.status === "stale" ||
+    knowledge.knowledge_analysis?.status === "stale";
+
+  const sourceContributions = getSourceContributions(
+    knowledge.knowledge_analysis?.analysis_json,
+  );
+
+  function getContributionPercentage(
+    knowledgeFileId: string,
+  ) {
+    const contribution = sourceContributions.find(
+      (item) =>
+        item.knowledgeFileId === knowledgeFileId,
+    );
+
+    return contribution?.percentage ?? null;
+  }
+
   function cancelEditing() {
     setTitle(knowledge.title);
     setDescription(knowledge.description ?? "");
@@ -71,6 +170,30 @@ export function KnowledgeDetailClient({
       knowledge.knowledge_type ?? "unknown",
     );
     setEditing(false);
+  }
+
+  function handleRebuild() {
+    if (!articleNeedsRebuild || isRebuilding) {
+      return;
+    }
+
+    setRebuildError(null);
+
+    startRebuildTransition(async () => {
+      try {
+        await rebuildKnowledgeAction(knowledge.id);
+        router.refresh();
+      } catch (caughtError) {
+        if (caughtError instanceof Error) {
+          setRebuildError(caughtError.message);
+          return;
+        }
+
+        setRebuildError(
+          "No se ha podido actualizar el conocimiento",
+        );
+      }
+    });
   }
 
   return (
@@ -152,6 +275,7 @@ export function KnowledgeDetailClient({
               onClick={() => setActiveTab("details")}
             >
               Detalles
+
               <span className="ml-1.5 rounded bg-lesson-soft px-1.5 py-0.5 text-[9px] font-semibold uppercase text-lesson">
                 IA
               </span>
@@ -159,7 +283,9 @@ export function KnowledgeDetailClient({
 
             <KnowledgeTabButton
               active={activeTab === "documents"}
-              onClick={() => setActiveTab("documents")}
+              onClick={() =>
+                setActiveTab("documents")
+              }
             >
               Documentos
 
@@ -178,7 +304,8 @@ export function KnowledgeDetailClient({
               <KnowledgeAnalysisPanel
                 mode="general"
                 analysisJson={
-                  knowledge.knowledge_analysis?.analysis_json
+                  knowledge.knowledge_analysis
+                    ?.analysis_json
                 }
                 status={
                   knowledge.knowledge_analysis?.status
@@ -186,7 +313,9 @@ export function KnowledgeDetailClient({
                 model={
                   knowledge.knowledge_analysis?.model
                 }
-                knowledgeType={knowledge.knowledge_type}
+                knowledgeType={
+                  knowledge.knowledge_type
+                }
                 graph={knowledge.knowledge_graph}
                 files={knowledge.knowledge_files}
               />
@@ -200,7 +329,8 @@ export function KnowledgeDetailClient({
               <KnowledgeAnalysisPanel
                 mode="details"
                 analysisJson={
-                  knowledge.knowledge_analysis?.analysis_json
+                  knowledge.knowledge_analysis
+                    ?.analysis_json
                 }
                 status={
                   knowledge.knowledge_analysis?.status
@@ -208,7 +338,9 @@ export function KnowledgeDetailClient({
                 model={
                   knowledge.knowledge_analysis?.model
                 }
-                knowledgeType={knowledge.knowledge_type}
+                knowledgeType={
+                  knowledge.knowledge_type
+                }
                 graph={knowledge.knowledge_graph}
                 files={knowledge.knowledge_files}
               />
@@ -220,58 +352,129 @@ export function KnowledgeDetailClient({
           <div className="h-full overflow-y-auto">
             <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
               <section className="rounded-2xl border border-border bg-card p-6">
-                <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <h2 className="text-lg font-semibold text-foreground">
                       Documentos fuente
                     </h2>
 
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Evidencias utilizadas para construir y analizar
-                      este artículo.
+                      Evidencias utilizadas para construir
+                      y analizar este artículo.
                     </p>
                   </div>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() =>
-                      setShowUpload((value) => !value)
-                    }
-                  >
-                    {showUpload
-                      ? "Ocultar subida"
-                      : "Añadir documentos"}
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setShowUpload(
+                          (value) => !value,
+                        )
+                      }
+                      disabled={isRebuilding}
+                    >
+                      {showUpload
+                        ? "Ocultar subida"
+                        : "Añadir documentos"}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      onClick={handleRebuild}
+                      disabled={
+                        !articleNeedsRebuild ||
+                        isRebuilding
+                      }
+                    >
+                      {isRebuilding ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                      )}
+
+                      {isRebuilding
+                        ? "Actualizando..."
+                        : "Actualizar conocimiento"}
+                    </Button>
+                  </div>
                 </div>
 
-                {knowledge.knowledge_files.length > 0 ? (
-                  <div className="mb-6 grid gap-3 md:grid-cols-2">
-                    {knowledge.knowledge_files.map((file) => (
-                      <KnowledgeFileCard
-                        key={file.id}
-                        file={file}
-                      />
-                    ))}
+                {articleNeedsRebuild ? (
+                  <div className="mb-6 flex flex-col gap-4 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+
+                      <div>
+                        <p className="text-sm font-semibold text-amber-950">
+                          Los documentos han cambiado
+                        </p>
+
+                        <p className="mt-1 text-sm text-amber-800">
+                          El artículo todavía no representa
+                          la documentación actual. Pulsa
+                          “Actualizar conocimiento” cuando
+                          termines de añadir o eliminar
+                          archivos.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ) : (
-                  <div className="mb-6 rounded-xl border border-dashed border-border p-8 text-center">
+                  <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-700" />
+
+                    <p className="text-sm font-medium text-emerald-900">
+                      El artículo está sincronizado con sus
+                      documentos.
+                    </p>
+                  </div>
+                )}
+
+                {rebuildError ? (
+                  <p className="mb-6 text-sm text-red-600">
+                    {rebuildError}
+                  </p>
+                ) : null}
+
+                {showUpload ? (
+                  <div className="mb-6 rounded-xl border border-border bg-background p-5">
+                    <UploadKnowledgeForm
+                      knowledgeId={knowledge.id}
+                    />
+                  </div>
+                ) : null}
+
+                {knowledge.knowledge_files.length > 0 ? (
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {knowledge.knowledge_files.map(
+                      (file) => (
+                        <KnowledgeFileCard
+                          key={file.id}
+                          file={file}
+                          articleNeedsRebuild={
+                            articleNeedsRebuild
+                          }
+                          contributionPercentage={getContributionPercentage(
+                            file.id,
+                          )}
+                        />
+                      ),
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border p-10 text-center">
                     <p className="text-sm font-medium text-foreground">
                       No hay documentos vinculados.
                     </p>
 
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Añade documentos para ampliar o volver a
-                      generar el artículo.
+                      Añade al menos un documento antes de
+                      actualizar el conocimiento.
                     </p>
                   </div>
                 )}
-
-                {showUpload ? (
-                  <UploadKnowledgeForm
-                    knowledgeId={knowledge.id}
-                  />
-                ) : null}
               </section>
             </div>
           </div>

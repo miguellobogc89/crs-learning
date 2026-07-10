@@ -148,6 +148,151 @@ const knowledge = await newKnowledgeSource({
   redirect(`/knowledge/${knowledge.id}`);
 }
 
+// app/actions/knowledge.ts
+export async function createKnowledgeFromFolderUploadAction(
+  formData: FormData,
+) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error("No autenticado");
+  }
+
+  const libraryId = String(
+    formData.get("libraryId") ?? "",
+  ).trim();
+
+  const uploadedFiles = formData
+    .getAll("files")
+    .filter((value): value is File => value instanceof File);
+
+  if (!libraryId) {
+    throw new Error("No se ha indicado la carpeta de destino");
+  }
+
+  if (uploadedFiles.length === 0) {
+    throw new Error("Debes seleccionar al menos un documento");
+  }
+
+  const library = await prisma.knowledge_libraries.findFirst({
+    where: {
+      id: libraryId,
+      owner_user_id: session.user.id,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  if (!library) {
+    throw new Error("La carpeta de destino no existe");
+  }
+
+  const acceptedFiles = uploadedFiles.filter((file) =>
+    isAcceptedKnowledgeFileType(file),
+  );
+
+  if (acceptedFiles.length === 0) {
+    throw new Error(
+      "Ninguno de los documentos tiene un formato admitido",
+    );
+  }
+
+  let provisionalTitle = library.name;
+
+  if (acceptedFiles.length === 1) {
+    provisionalTitle = acceptedFiles[0].name.replace(
+      /\.[^/.]+$/,
+      "",
+    );
+  }
+
+  const knowledge = await prisma.knowledge_sources.create({
+    data: {
+      owner_user_id: session.user.id,
+      created_by_user_id: session.user.id,
+      updated_by_user_id: session.user.id,
+      library_id: library.id,
+      title: provisionalTitle,
+      description:
+        "Artículo generado automáticamente a partir de documentación subida.",
+      visibility: "private",
+      content: "",
+      status: "processing",
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  const uploadDirectory = path.join(
+    process.cwd(),
+    "public",
+    "uploads",
+    "knowledge",
+  );
+
+  await mkdir(uploadDirectory, {
+    recursive: true,
+  });
+
+  try {
+    for (const file of acceptedFiles) {
+      const extractedText = await extractFileText(file);
+      const bytes = await file.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+
+      const safeFileName = file.name
+        .replaceAll(" ", "_")
+        .replace(/[^a-zA-Z0-9._-]/g, "");
+
+      const storedFileName = [
+        knowledge.id,
+        Date.now(),
+        crypto.randomUUID(),
+        safeFileName,
+      ].join("-");
+
+      const storagePath =
+        `/uploads/knowledge/${storedFileName}`;
+
+      await writeFile(
+        path.join(uploadDirectory, storedFileName),
+        buffer,
+      );
+
+      await addKnowledgeFile({
+        knowledgeSourceId: knowledge.id,
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        storagePath,
+        extractedText,
+      });
+    }
+
+    await analyzeKnowledgeSource(knowledge.id);
+  } catch (error) {
+    await prisma.knowledge_sources.update({
+      where: {
+        id: knowledge.id,
+      },
+      data: {
+        status: "error",
+        updated_at: new Date(),
+      },
+    });
+
+    throw error;
+  }
+
+  revalidatePath("/knowledge");
+  revalidatePath(`/knowledge/${knowledge.id}`);
+
+  redirect(`/knowledge/${knowledge.id}`);
+}
+
 export async function updateKnowledgeAction(formData: FormData) {
   const session = await auth();
 
