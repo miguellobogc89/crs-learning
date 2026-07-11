@@ -8,6 +8,7 @@ import {
   FileText,
   Folder,
   FolderTree,
+  Plus,
   UsersRound,
 } from "lucide-react";
 
@@ -47,6 +48,10 @@ type Props = {
   folders: KnowledgeLibrary[];
   knowledgeSources: KnowledgeSource[];
   viewMode: "grid" | "list";
+  selectedLibraryId: string | null;
+  selectedView: string;
+  canCreateArticle: boolean;
+  onCreateArticle: () => void;
 };
 
 function getStatusLabel(status: string | null | undefined) {
@@ -80,6 +85,7 @@ function formatRelativeDate(date: Date | string | null | undefined) {
   }
 
   const timestamp = new Date(date).getTime();
+
   const diffMinutes = Math.max(
     1,
     Math.floor((Date.now() - timestamp) / 60000),
@@ -125,12 +131,61 @@ export function KnowledgeExplorer({
   folders,
   knowledgeSources,
   viewMode,
+  selectedLibraryId,
+  selectedView,
+  canCreateArticle,
+  onCreateArticle,
 }: Props) {
-  if (folders.length === 0 && knowledgeSources.length === 0) {
+  const isEmpty =
+    folders.length === 0 && knowledgeSources.length === 0;
+
+  if (isEmpty) {
+    if (selectedView === "shared") {
+      return (
+        <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 text-center">
+          <div className="max-w-md">
+            <p className="font-medium text-foreground">
+              No hay contenido compartido
+            </p>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              Las bibliotecas compartidas contigo aparecerán aquí.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (selectedLibraryId && canCreateArticle) {
+      return (
+        <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 text-center">
+          <div className="max-w-md">
+            <p className="font-medium text-foreground">
+              Esta carpeta está vacía
+            </p>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              Crea el primer artículo de conocimiento dentro de esta
+              carpeta.
+            </p>
+
+            <button
+              type="button"
+              onClick={onCreateArticle}
+              className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" />
+              Nuevo artículo
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-border bg-card text-center">
+      <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 text-center">
         <p className="text-sm text-muted-foreground">
-          Esta biblioteca está vacía.
+          No hay contenido disponible.
         </p>
       </div>
     );

@@ -3,6 +3,11 @@ import { notFound, redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { KnowledgeDetailClient } from "@/components/knowledge/knowledge-detail-client";
+import {
+  buildLibraryTree,
+  getLibraryPath,
+} from "@/components/knowledge/sidebar/tree-utils";
+import { listKnowledgeLibraries } from "@/lib/services/knowledge-library.service";
 import { findKnowledgeSource } from "@/lib/services/knowledge.service";
 
 export default async function KnowledgeDetailPage({
@@ -17,7 +22,11 @@ export default async function KnowledgeDetailPage({
   }
 
   const { id } = await params;
-  const knowledge = await findKnowledgeSource(id);
+
+  const [knowledge, libraries] = await Promise.all([
+    findKnowledgeSource(id),
+    listKnowledgeLibraries(session.user.id),
+  ]);
 
   if (!knowledge) {
     notFound();
@@ -46,9 +55,19 @@ export default async function KnowledgeDetailPage({
     notFound();
   }
 
+  const libraryTree = buildLibraryTree(libraries);
+
+  const libraryPath = getLibraryPath(
+    libraryTree,
+    knowledge.library_id,
+  );
+
   return (
-    <main className="h-full overflow-y-auto bg-background">
-      <KnowledgeDetailClient knowledge={knowledge} />
+    <main className="h-full overflow-hidden bg-background">
+      <KnowledgeDetailClient
+        knowledge={knowledge}
+        libraryPath={libraryPath}
+      />
     </main>
   );
 }

@@ -7,6 +7,7 @@ import { CreateFolderDialog } from "./create-folder-dialog";
 import { KnowledgeExplorer } from "./knowledge-explorer";
 import { KnowledgeLibraryBreadcrumb } from "./knowledge-library-breadcrumb";
 import { KnowledgeToolbar } from "./knowledge-toolbar";
+import { NewKnowledgeModal } from "./new-knowledge-modal";
 import {
   buildLibraryTree,
   getLibraryPath,
@@ -90,6 +91,20 @@ export function KnowledgeContent({
   });
 
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [isCreateArticleOpen, setIsCreateArticleOpen] = useState(false);
+
+  const selectedLibrary = useMemo(() => {
+    return knowledgeLibraries.find(
+      (library) => library.id === selectedLibraryId,
+    );
+  }, [knowledgeLibraries, selectedLibraryId]);
+
+  const canCreateArticle = Boolean(
+    selectedLibraryId &&
+      selectedLibrary &&
+      !selectedLibrary.is_shared &&
+      selectedView !== "shared",
+  );
 
   const childLibraries = useMemo(() => {
     if (selectedView === "shared") {
@@ -145,8 +160,13 @@ export function KnowledgeContent({
         return (a.status ?? "").localeCompare(b.status ?? "");
       }
 
-      const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-      const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+      const dateA = a.updated_at
+        ? new Date(a.updated_at).getTime()
+        : 0;
+
+      const dateB = b.updated_at
+        ? new Date(b.updated_at).getTime()
+        : 0;
 
       if (explorerState.sort === "updated_asc") {
         return dateA - dateB;
@@ -154,7 +174,11 @@ export function KnowledgeContent({
 
       return dateB - dateA;
     });
-  }, [knowledgeSources, explorerState.search, explorerState.sort]);
+  }, [
+    knowledgeSources,
+    explorerState.search,
+    explorerState.sort,
+  ]);
 
   const libraryTree = useMemo(
     () => buildLibraryTree(knowledgeLibraries),
@@ -180,6 +204,14 @@ export function KnowledgeContent({
     pageTitle = currentLibrary.name;
   }
 
+  function openCreateArticleModal() {
+    if (!canCreateArticle) {
+      return;
+    }
+
+    setIsCreateArticleOpen(true);
+  }
+
   return (
     <>
       <KnowledgeToolbar
@@ -203,7 +235,9 @@ export function KnowledgeContent({
           ) : libraryPath.length > 0 ? (
             <KnowledgeLibraryBreadcrumb path={libraryPath} />
           ) : (
-            <div className="text-sm text-muted-foreground">Mi biblioteca</div>
+            <div className="text-sm text-muted-foreground">
+              Mi biblioteca
+            </div>
           )
         }
         onCreateFolder={() => setIsCreateFolderOpen(true)}
@@ -213,6 +247,10 @@ export function KnowledgeContent({
         folders={childLibraries}
         knowledgeSources={processedKnowledge}
         viewMode={explorerState.viewMode}
+        selectedLibraryId={selectedLibraryId}
+        selectedView={selectedView}
+        canCreateArticle={canCreateArticle}
+        onCreateArticle={openCreateArticleModal}
       />
 
       <CreateFolderDialog
@@ -220,6 +258,14 @@ export function KnowledgeContent({
         parentLibraryId={selectedLibraryId}
         onClose={() => setIsCreateFolderOpen(false)}
       />
+
+      {selectedLibraryId ? (
+        <NewKnowledgeModal
+          isOpen={isCreateArticleOpen}
+          libraryId={selectedLibraryId}
+          onClose={() => setIsCreateArticleOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

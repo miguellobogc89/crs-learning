@@ -15,10 +15,13 @@ import {
   updateKnowledgeAction,
 } from "@/app/actions/knowledge";
 import { KnowledgeAnalysisPanel } from "@/components/knowledge/knowledge-analysis-panel";
+import { KnowledgeLibraryBreadcrumb } from "@/components/knowledge/content/knowledge-library-breadcrumb";
+import { KnowledgePageHeader } from "@/components/knowledge/content/knowledge-page-header";
 import { KnowledgeEditorHeader } from "@/components/knowledge/knowledge-editor-header";
 import { KnowledgeHeader } from "@/components/knowledge/knowledge-header";
 import { KnowledgeFileCard } from "@/components/knowledge/knowledge-item/knowledge-file-card";
 import { UploadKnowledgeForm } from "@/components/knowledge/upload-knowledge-form";
+import type { LibraryItem } from "@/components/knowledge/sidebar/types";
 import { Button } from "@/components/ui/button";
 
 type ActiveTab = "general" | "details" | "documents";
@@ -56,6 +59,11 @@ type Knowledge = {
     dependencies: unknown;
     related_documents: unknown;
   } | null;
+};
+
+type Props = {
+  knowledge: Knowledge;
+  libraryPath: LibraryItem[];
 };
 
 function isRecord(
@@ -116,9 +124,8 @@ function getSourceContributions(
 
 export function KnowledgeDetailClient({
   knowledge,
-}: {
-  knowledge: Knowledge;
-}) {
+  libraryPath,
+}: Props) {
   const router = useRouter();
 
   const [editing, setEditing] = useState(false);
@@ -133,12 +140,15 @@ export function KnowledgeDetailClient({
     useTransition();
 
   const [title, setTitle] = useState(knowledge.title);
+
   const [description, setDescription] = useState(
     knowledge.description ?? "",
   );
+
   const [visibility, setVisibility] = useState(
     knowledge.visibility,
   );
+
   const [knowledgeType, setKnowledgeType] = useState(
     knowledge.knowledge_type ?? "unknown",
   );
@@ -166,9 +176,11 @@ export function KnowledgeDetailClient({
     setTitle(knowledge.title);
     setDescription(knowledge.description ?? "");
     setVisibility(knowledge.visibility);
+
     setKnowledgeType(
       knowledge.knowledge_type ?? "unknown",
     );
+
     setEditing(false);
   }
 
@@ -196,106 +208,112 @@ export function KnowledgeDetailClient({
     });
   }
 
+  const tabs = (
+    <div className="flex items-center gap-1">
+      <KnowledgeTabButton
+        active={activeTab === "general"}
+        onClick={() => setActiveTab("general")}
+      >
+        General
+      </KnowledgeTabButton>
+
+      <KnowledgeTabButton
+        active={activeTab === "details"}
+        onClick={() => setActiveTab("details")}
+      >
+        Detalles
+
+        <span className="ml-1.5 rounded bg-lesson-soft px-1.5 py-0.5 text-[9px] font-semibold uppercase text-lesson">
+          IA
+        </span>
+      </KnowledgeTabButton>
+
+      <KnowledgeTabButton
+        active={activeTab === "documents"}
+        onClick={() => setActiveTab("documents")}
+      >
+        Documentos
+
+        <span className="ml-1.5 rounded-full bg-surface px-1.5 py-0.5 text-[10px] text-muted-foreground">
+          {knowledge.knowledge_files.length}
+        </span>
+      </KnowledgeTabButton>
+    </div>
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-      <div className="shrink-0 border-b border-border bg-background">
-        <div className="mx-auto max-w-7xl px-6 pt-8 lg:px-8">
-          {editing ? (
-            <form action={updateKnowledgeAction}>
-              <input
-                type="hidden"
-                name="id"
-                value={knowledge.id}
-              />
-
-              <input
-                type="hidden"
-                name="content"
-                value={knowledge.content ?? ""}
-              />
-
-              <input
-                type="hidden"
-                name="title"
-                value={title}
-              />
-
-              <input
-                type="hidden"
-                name="description"
-                value={description}
-              />
-
-              <input
-                type="hidden"
-                name="visibility"
-                value={visibility}
-              />
-
-              <input
-                type="hidden"
-                name="knowledgeType"
-                value={knowledgeType}
-              />
-
-              <KnowledgeEditorHeader
-                title={title}
-                description={description}
-                visibility={visibility}
-                knowledgeType={knowledgeType}
-                onTitleChange={setTitle}
-                onDescriptionChange={setDescription}
-                onVisibilityChange={setVisibility}
-                onKnowledgeTypeChange={setKnowledgeType}
-                onCancel={cancelEditing}
-              />
-            </form>
-          ) : (
-            <KnowledgeHeader
-              title={knowledge.title}
-              description={knowledge.description}
-              knowledgeType={
-                knowledge.knowledge_type ?? "unknown"
-              }
-              visibility={knowledge.visibility}
-              onEdit={() => setEditing(true)}
+      <KnowledgePageHeader
+        breadcrumb={
+          <KnowledgeLibraryBreadcrumb
+            path={libraryPath}
+            includeKnowledgeRoot
+          />
+        }
+        tabs={tabs}
+      >
+        {editing ? (
+          <form action={updateKnowledgeAction}>
+            <input
+              type="hidden"
+              name="id"
+              value={knowledge.id}
             />
-          )}
 
-          <div className="flex items-center gap-1">
-            <KnowledgeTabButton
-              active={activeTab === "general"}
-              onClick={() => setActiveTab("general")}
-            >
-              General
-            </KnowledgeTabButton>
+            <input
+              type="hidden"
+              name="content"
+              value={knowledge.content ?? ""}
+            />
 
-            <KnowledgeTabButton
-              active={activeTab === "details"}
-              onClick={() => setActiveTab("details")}
-            >
-              Detalles
+            <input
+              type="hidden"
+              name="title"
+              value={title}
+            />
 
-              <span className="ml-1.5 rounded bg-lesson-soft px-1.5 py-0.5 text-[9px] font-semibold uppercase text-lesson">
-                IA
-              </span>
-            </KnowledgeTabButton>
+            <input
+              type="hidden"
+              name="description"
+              value={description}
+            />
 
-            <KnowledgeTabButton
-              active={activeTab === "documents"}
-              onClick={() =>
-                setActiveTab("documents")
-              }
-            >
-              Documentos
+            <input
+              type="hidden"
+              name="visibility"
+              value={visibility}
+            />
 
-              <span className="ml-1.5 rounded-full bg-surface px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                {knowledge.knowledge_files.length}
-              </span>
-            </KnowledgeTabButton>
-          </div>
-        </div>
-      </div>
+            <input
+              type="hidden"
+              name="knowledgeType"
+              value={knowledgeType}
+            />
+
+            <KnowledgeEditorHeader
+              title={title}
+              description={description}
+              visibility={visibility}
+              knowledgeType={knowledgeType}
+              onTitleChange={setTitle}
+              onDescriptionChange={setDescription}
+              onVisibilityChange={setVisibility}
+              onKnowledgeTypeChange={setKnowledgeType}
+              onCancel={cancelEditing}
+            />
+          </form>
+        ) : (
+          <KnowledgeHeader
+            title={knowledge.title}
+            description={knowledge.description}
+            knowledgeType={
+              knowledge.knowledge_type ?? "unknown"
+            }
+            visibility={knowledge.visibility}
+            onEdit={() => setEditing(true)}
+          />
+        )}
+      </KnowledgePageHeader>
 
       <div className="min-h-0 flex-1 overflow-hidden">
         {activeTab === "general" ? (
@@ -359,8 +377,8 @@ export function KnowledgeDetailClient({
                     </h2>
 
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Evidencias utilizadas para construir
-                      y analizar este artículo.
+                      Evidencias utilizadas para construir y analizar
+                      este artículo.
                     </p>
                   </div>
 
@@ -369,9 +387,7 @@ export function KnowledgeDetailClient({
                       type="button"
                       variant="outline"
                       onClick={() =>
-                        setShowUpload(
-                          (value) => !value,
-                        )
+                        setShowUpload((value) => !value)
                       }
                       disabled={isRebuilding}
                     >
@@ -412,11 +428,10 @@ export function KnowledgeDetailClient({
                         </p>
 
                         <p className="mt-1 text-sm text-amber-800">
-                          El artículo todavía no representa
-                          la documentación actual. Pulsa
-                          “Actualizar conocimiento” cuando
-                          termines de añadir o eliminar
-                          archivos.
+                          El artículo todavía no representa la
+                          documentación actual. Pulsa “Actualizar
+                          conocimiento” cuando termines de añadir o
+                          eliminar archivos.
                         </p>
                       </div>
                     </div>
@@ -470,8 +485,8 @@ export function KnowledgeDetailClient({
                     </p>
 
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Añade al menos un documento antes de
-                      actualizar el conocimiento.
+                      Añade al menos un documento antes de actualizar
+                      el conocimiento.
                     </p>
                   </div>
                 )}

@@ -1,50 +1,62 @@
 // components/knowledge/content/knowledge-library-breadcrumb.tsx
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
 import type { LibraryItem } from "@/components/knowledge/sidebar/types";
 
 type Props = {
   path: LibraryItem[];
+  includeKnowledgeRoot?: boolean;
 };
 
-export function KnowledgeLibraryBreadcrumb({ path }: Props) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  if (path.length === 0) {
+export function KnowledgeLibraryBreadcrumb({
+  path,
+  includeKnowledgeRoot = false,
+}: Props) {
+  if (path.length === 0 && !includeKnowledgeRoot) {
     return null;
   }
 
-  function handleNavigate(libraryId: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("library", libraryId);
-
-    router.replace(`${pathname}?${params.toString()}`);
-  }
-
   return (
-    <nav className="mb-4 flex items-center gap-1 text-sm text-muted-foreground">
+    <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+      {includeKnowledgeRoot ? (
+        <>
+          <Link
+            href="/knowledge"
+            className="rounded-md px-2 py-1 transition hover:bg-surface hover:text-foreground"
+          >
+            Knowledge
+          </Link>
+
+          {path.length > 0 ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : null}
+        </>
+      ) : null}
+
       {path.map((library, index) => {
         const isLast = index === path.length - 1;
 
         return (
-          <div key={library.id} className="flex items-center gap-1">
-            <button
+          <div
+            key={library.id}
+            className="flex items-center gap-1"
+          >
+            <Link
+              href={`/knowledge?library=${library.id}`}
               className={[
                 "rounded-md px-2 py-1 transition hover:bg-surface hover:text-foreground",
                 isLast ? "font-medium text-foreground" : "",
               ].join(" ")}
-              type="button"
-              onClick={() => handleNavigate(library.id)}
             >
               {library.name}
-            </button>
+            </Link>
 
-            {!isLast ? <ChevronRight className="h-4 w-4" /> : null}
+            {!isLast ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : null}
           </div>
         );
       })}
