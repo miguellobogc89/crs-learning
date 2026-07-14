@@ -1,16 +1,25 @@
 // components/knowledge/content/knowledge-explorer.tsx
 "use client";
 
+import {
+  useState,
+  type DragEvent,
+} from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import {
   Clock,
   FileStack,
   FileText,
   Folder,
   FolderTree,
+  FileSearch,
   Plus,
   UsersRound,
 } from "lucide-react";
+import { KnowledgeEmptyState } from "./knowledge-empty-state";
+import { moveKnowledgeLibrary } from "@/lib/actions/knowledge-library.actions";
 
 import { KnowledgeCard } from "./knowledge-card";
 import { KnowledgeFolderCard } from "./knowledge-folder-card";
@@ -44,6 +53,16 @@ type KnowledgeSource = {
   confidence?: number | null;
 };
 
+type DraggedItem =
+  | {
+      type: "folder";
+      id: string;
+    }
+  | {
+      type: "article";
+      id: string;
+    };
+
 type Props = {
   folders: KnowledgeLibrary[];
   knowledgeSources: KnowledgeSource[];
@@ -51,6 +70,7 @@ type Props = {
   selectedLibraryId: string | null;
   selectedView: string;
   canCreateArticle: boolean;
+  search: string;
   onCreateArticle: () => void;
 };
 
@@ -134,61 +154,205 @@ export function KnowledgeExplorer({
   selectedLibraryId,
   selectedView,
   canCreateArticle,
+  search,
   onCreateArticle,
 }: Props) {
+  const router = useRouter();
+
+  const [draggedItem, setDraggedItem] =
+    useState<DraggedItem | null>(null);
+
+  const [dropTargetFolderId, setDropTargetFolderId] =
+    useState<string | null>(null);
+
+  const [isMoving, setIsMoving] = useState(false);
+
+  const isSearchEmpty =
+  search.trim().length > 0 &&
+  folders.length === 0 &&
+  knowledgeSources.length === 0;
+
   const isEmpty =
     folders.length === 0 && knowledgeSources.length === 0;
 
-  if (isEmpty) {
-    if (selectedView === "shared") {
-      return (
-        <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 text-center">
-          <div className="max-w-md">
-            <p className="font-medium text-foreground">
-              No hay contenido compartido
-            </p>
+  function clearDragState() {
+    setDraggedItem(null);
+    setDropTargetFolderId(null);
+  }
 
-            <p className="mt-1 text-sm text-muted-foreground">
-              Las bibliotecas compartidas contigo aparecerán aquí.
-            </p>
-          </div>
-        </div>
-      );
-    }
+  function handleDragStart(
+    item: DraggedItem,
+    event: DragEvent<HTMLElement>,
+  ) {
+    setDraggedItem(item);
+    setDropTargetFolderId(null);
 
-    if (selectedLibraryId && canCreateArticle) {
-      return (
-        <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 text-center">
-          <div className="max-w-md">
-            <p className="font-medium text-foreground">
-              Esta carpeta está vacía
-            </p>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              Crea el primer artículo de conocimiento dentro de esta
-              carpeta.
-            </p>
-
-            <button
-              type="button"
-              onClick={onCreateArticle}
-              className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-            >
-              <Plus className="h-4 w-4" />
-              Nuevo artículo
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6 text-center">
-        <p className="text-sm text-muted-foreground">
-          No hay contenido disponible.
-        </p>
-      </div>
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(
+      "application/x-knowledge-item",
+      JSON.stringify(item),
     );
+  }
+
+  function handleDragOverFolder(
+    folder: KnowledgeLibrary,
+    event: DragEvent<HTMLElement>,
+  ) {
+    if (!draggedItem || folder.is_shared || isMoving) {
+      return;
+    }
+
+    if (
+      draggedItem.type === "folder" &&
+      draggedItem.id === folder.id
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    event.dataTransfer.dropEffect = "move";
+    setDropTargetFolderId(folder.id);
+  }
+
+  function handleDragLeaveFolder(
+    folderId: string,
+    event: DragEvent<HTMLElement>,
+  ) {
+    const nextTarget = event.relatedTarget;
+
+    if (
+      nextTarget instanceof Node &&
+      event.currentTarget.contains(nextTarget)
+    ) {
+      return;
+    }
+
+    if (dropTargetFolderId === folderId) {
+      setDropTargetFolderId(null);
+    }
+  }
+
+  async function handleDropOnFolder(
+    folder: KnowledgeLibrary,
+    event: DragEvent<HTMLElement>,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (folder.is_shared || isMoving) {
+      clearDragState();
+      return;
+    }
+
+    let item = draggedItem;
+
+    if (!item) {
+      const rawItem = event.dataTransfer.getData(
+        "application/x-knowledge-item",
+      );
+
+      if (rawItem) {
+        item = JSON.parse(rawItem) as DraggedItem;
+      }
+    }
+
+    if (!item) {
+      clearDragState();
+      return;
+    }
+
+    if (item.type === "folder" && item.id === folder.id) {
+      clearDragState();
+      return;
+    }
+
+    setIsMoving(true);
+
+    try {
+if (item.type === "folder") {
+  await moveKnowledgeLibrary(item.id, folder.id);
+} else {
+  const response = await fetch("/api/knowledge/move", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      knowledgeId: item.id,
+      libraryId: folder.id,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("No se ha podido mover");
+  }
+}
+
+toast.success(
+  item.type === "folder"
+    ? "Carpeta movida"
+    : "Artículo movido",
+  {
+    description: `Movido a "${folder.name}".`,
+  },
+);
+
+router.refresh();
+    } catch (error) {
+      console.error(error);
+
+toast.error("No se ha podido mover", {
+  description: "Ha ocurrido un error al mover el elemento.",
+});
+    } finally {
+      setIsMoving(false);
+      clearDragState();
+    }
+  }
+
+  if (isSearchEmpty) {
+  return (
+    <KnowledgeEmptyState
+      icon={<FileSearch className="h-5 w-5" />}
+      title="No se han encontrado resultados"
+      description="Prueba con otro término de búsqueda o elimina los filtros para ver más contenido."
+    />
+  );
+}
+
+  if (isEmpty) {
+if (selectedView === "shared") {
+  return (
+    <KnowledgeEmptyState
+      icon={<UsersRound className="h-5 w-5" />}
+      title="Todavía no tienes contenido compartido"
+      description="Cuando otro equipo comparta una carpeta contigo aparecerá aquí."
+    />
+  );
+}
+
+if (selectedLibraryId && canCreateArticle) {
+  return (
+    <KnowledgeEmptyState
+      icon={<Folder className="h-5 w-5" />}
+      title="Esta carpeta está vacía"
+      description="Empieza creando el primer artículo de conocimiento dentro de esta carpeta."
+      actionLabel="Nuevo artículo"
+      actionIcon={<Plus className="mr-2 h-4 w-4" />}
+      onAction={onCreateArticle}
+    />
+  );
+}
+
+return (
+  <KnowledgeEmptyState
+    icon={<FolderTree className="h-5 w-5" />}
+    title="Tu biblioteca está vacía"
+    description="Crea una carpeta para empezar a organizar el conocimiento de tu empresa."
+  />
+);
   }
 
   if (viewMode === "list") {
@@ -203,83 +367,125 @@ export function KnowledgeExplorer({
 
         <div className="divide-y divide-border">
           {folders.map((folder) => (
-            <Link
+            <div
               key={folder.id}
-              href={`/knowledge?library=${folder.id}`}
-              className="grid grid-cols-[minmax(260px,1fr)_180px_140px_150px] items-center px-4 py-3 text-sm hover:bg-surface"
+              draggable={!folder.is_shared && !isMoving}
+              onDragStart={(event) =>
+                handleDragStart(
+                  {
+                    type: "folder",
+                    id: folder.id,
+                  },
+                  event,
+                )
+              }
+              onDragEnd={clearDragState}
+              onDragOver={(event) =>
+                handleDragOverFolder(folder, event)
+              }
+              onDragLeave={(event) =>
+                handleDragLeaveFolder(folder.id, event)
+              }
+              onDrop={(event) =>
+                handleDropOnFolder(folder, event)
+              }
+              className={[
+                "transition",
+                dropTargetFolderId === folder.id
+                  ? "bg-primary/10"
+                  : "",
+              ].join(" ")}
             >
-              <div className="flex min-w-0 items-center gap-3 font-medium text-foreground">
-                {getFolderIcon(folder)}
+              <Link
+                href={`/knowledge?library=${folder.id}`}
+                className="grid grid-cols-[minmax(260px,1fr)_180px_140px_150px] items-center px-4 py-3 text-sm hover:bg-surface"
+              >
+                <div className="flex min-w-0 items-center gap-3 font-medium text-foreground">
+                  {getFolderIcon(folder)}
+                  <span className="truncate">{folder.name}</span>
+                </div>
 
-                <span className="truncate">{folder.name}</span>
-              </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <FileText className="h-3.5 w-3.5" />
+                    {folder.article_count ?? 0}
+                  </span>
 
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <FileText className="h-3.5 w-3.5" />
-                  {folder.article_count ?? 0}
-                </span>
+                  <span className="flex items-center gap-1">
+                    <FileStack className="h-3.5 w-3.5" />
+                    {folder.file_count ?? 0}
+                  </span>
 
-                <span className="flex items-center gap-1">
-                  <FileStack className="h-3.5 w-3.5" />
-                  {folder.file_count ?? 0}
-                </span>
+                  <span className="flex items-center gap-1">
+                    <FolderTree className="h-3.5 w-3.5" />
+                    {folder.folder_count ?? 0}
+                  </span>
+                </div>
 
-                <span className="flex items-center gap-1">
-                  <FolderTree className="h-3.5 w-3.5" />
-                  {folder.folder_count ?? 0}
-                </span>
-              </div>
+                <div className="text-muted-foreground">
+                  {folder.is_shared ? "Compartida" : "Carpeta"}
+                </div>
 
-              <div className="text-muted-foreground">
-                {folder.is_shared ? "Compartida" : "Carpeta"}
-              </div>
-
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
-                {formatRelativeDate(folder.updated_at)}
-              </div>
-            </Link>
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  {formatRelativeDate(folder.updated_at)}
+                </div>
+              </Link>
+            </div>
           ))}
 
           {knowledgeSources.map((knowledge) => (
-            <Link
+            <div
               key={knowledge.id}
-              href={`/knowledge/${knowledge.id}`}
-              className="grid grid-cols-[minmax(260px,1fr)_180px_140px_150px] items-center px-4 py-3 text-sm hover:bg-surface"
+              draggable={!isMoving}
+              onDragStart={(event) =>
+                handleDragStart(
+                  {
+                    type: "article",
+                    id: knowledge.id,
+                  },
+                  event,
+                )
+              }
+              onDragEnd={clearDragState}
             >
-              <div className="flex min-w-0 items-center gap-3">
-                <FileText
-                  className="h-5 w-5 shrink-0 text-muted-foreground"
-                  strokeWidth={2.25}
-                />
+              <Link
+                href={`/knowledge/${knowledge.id}`}
+                className="grid grid-cols-[minmax(260px,1fr)_180px_140px_150px] items-center px-4 py-3 text-sm hover:bg-surface"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <FileText
+                    className="h-5 w-5 shrink-0 text-muted-foreground"
+                    strokeWidth={2.25}
+                  />
 
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-foreground">
-                    {knowledge.title}
-                  </p>
-
-                  {getSummary(knowledge) ? (
-                    <p className="truncate text-xs text-muted-foreground">
-                      {getSummary(knowledge)}
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-foreground">
+                      {knowledge.title}
                     </p>
-                  ) : null}
+
+                    {getSummary(knowledge) ? (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {getSummary(knowledge)}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
 
-              <div className="truncate text-muted-foreground">
-                {knowledge.domain ?? "—"}
-              </div>
+                <div className="truncate text-muted-foreground">
+                  {knowledge.domain ?? "—"}
+                </div>
 
-              <div className="text-muted-foreground">
-                {getStatusLabel(knowledge.status)}
-              </div>
+                <div className="text-muted-foreground">
+                  {getStatusLabel(knowledge.status)}
+                </div>
 
-              <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
-                {formatRelativeDate(knowledge.updated_at)}
-              </div>
-            </Link>
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  {formatRelativeDate(knowledge.updated_at)}
+                </div>
+              </Link>
+            </div>
           ))}
         </div>
       </div>
@@ -309,19 +515,52 @@ export function KnowledgeExplorer({
           );
         }
 
-        return (
-          <KnowledgeFolderCard
-            key={folder.id}
-            folder={folder}
-          />
-        );
+return (
+  <KnowledgeFolderCard
+    key={folder.id}
+    folder={folder}
+    draggable={!isMoving}
+    isDropTarget={dropTargetFolderId === folder.id}
+    onDragStart={(event) =>
+      handleDragStart(
+        {
+          type: "folder",
+          id: folder.id,
+        },
+        event,
+      )
+    }
+    onDragEnd={clearDragState}
+    onDragOver={(event) =>
+      handleDragOverFolder(folder, event)
+    }
+    onDragLeave={(event) =>
+      handleDragLeaveFolder(folder.id, event)
+    }
+    onDrop={(event) =>
+      handleDropOnFolder(folder, event)
+    }
+  />
+);
       })}
 
       {knowledgeSources.map((knowledge) => (
-        <KnowledgeCard
+        <div
           key={knowledge.id}
-          knowledge={knowledge}
-        />
+          draggable={!isMoving}
+          onDragStart={(event) =>
+            handleDragStart(
+              {
+                type: "article",
+                id: knowledge.id,
+              },
+              event,
+            )
+          }
+          onDragEnd={clearDragState}
+        >
+          <KnowledgeCard knowledge={knowledge} />
+        </div>
       ))}
     </div>
   );

@@ -1,16 +1,20 @@
 // components/knowledge/knowledge-item/knowledge-file-card.tsx
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Loader2, Trash2 } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  Trash2,
+} from "lucide-react";
 
 import { deleteKnowledgeFileAction } from "@/app/actions/knowledge";
 import {
   formatFileSize,
   getKnowledgeFileIcon,
   getKnowledgeFileType,
-  getKnowledgeStatus,
 } from "@/lib/knowledge/file-utils";
 
 type KnowledgeFile = {
@@ -23,13 +27,11 @@ type KnowledgeFile = {
 type Props = {
   file: KnowledgeFile;
   contributionPercentage?: number | null;
-  articleNeedsRebuild: boolean;
 };
 
 export function KnowledgeFileCard({
   file,
   contributionPercentage,
-  articleNeedsRebuild,
 }: Props) {
   const router = useRouter();
 
@@ -38,7 +40,6 @@ export function KnowledgeFileCard({
 
   const extension = getKnowledgeFileType(file.file_name);
   const icon = getKnowledgeFileIcon(file.file_name);
-  const status = getKnowledgeStatus(file.status);
 
   function handleDelete() {
     const confirmed = window.confirm(
@@ -66,11 +67,9 @@ export function KnowledgeFileCard({
     });
   }
 
-  let contributionLabel = "Aportación pendiente de calcular";
+  let contributionLabel = "Documento subido";
 
-  if (articleNeedsRebuild) {
-    contributionLabel = "Pendiente de actualización";
-  } else if (
+  if (
     typeof contributionPercentage === "number" &&
     Number.isFinite(contributionPercentage)
   ) {
@@ -96,8 +95,14 @@ export function KnowledgeFileCard({
       </button>
 
       <div className="flex items-start gap-3 pr-9">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface text-lg">
-          {icon}
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface">
+          <Image
+            src={icon}
+            alt={`${extension || "archivo"} icono`}
+            width={24}
+            height={24}
+            className="h-6 w-6 object-contain"
+          />
         </span>
 
         <div className="min-w-0 flex-1">
@@ -115,24 +120,9 @@ export function KnowledgeFileCard({
       </div>
 
       <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
-        <span
-          title={status}
-          className={[
-            "h-2 w-2 shrink-0 rounded-full",
-            articleNeedsRebuild
-              ? "bg-amber-500"
-              : "bg-emerald-500",
-          ].join(" ")}
-        />
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
 
-        <p
-          className={[
-            "text-xs font-medium",
-            articleNeedsRebuild
-              ? "text-amber-700"
-              : "text-muted-foreground",
-          ].join(" ")}
-        >
+        <p className="text-xs font-medium text-muted-foreground">
           {contributionLabel}
         </p>
       </div>

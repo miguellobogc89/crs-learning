@@ -1,4 +1,5 @@
 // lib/knowledge/file-types.ts
+
 export const KNOWLEDGE_ACCEPTED_FILE_EXTENSIONS = [
   ".pdf",
   ".txt",
@@ -21,16 +22,36 @@ export const KNOWLEDGE_ACCEPTED_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ] as const;
 
-export const KNOWLEDGE_FILE_ACCEPT = KNOWLEDGE_ACCEPTED_FILE_EXTENSIONS.join(",");
+export const KNOWLEDGE_FILE_ACCEPT =
+  KNOWLEDGE_ACCEPTED_FILE_EXTENSIONS.join(",");
 
-export function isAcceptedKnowledgeFileType(file: File) {
-  if (KNOWLEDGE_ACCEPTED_MIME_TYPES.includes(file.type as never)) {
+export function isAcceptedKnowledgeFileType(
+  file: File,
+) {
+  const mimeType = file.type
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+
+  const fileName = file.name
+    .trim()
+    .toLowerCase();
+
+  const hasAcceptedMimeType =
+    KNOWLEDGE_ACCEPTED_MIME_TYPES.some(
+      (acceptedMimeType) =>
+        acceptedMimeType === mimeType,
+    );
+
+  if (hasAcceptedMimeType) {
     return true;
   }
 
-  const lowerName = file.name.toLowerCase();
+  const hasAcceptedExtension =
+    KNOWLEDGE_ACCEPTED_FILE_EXTENSIONS.some(
+      (extension) =>
+        fileName.endsWith(extension),
+    );
 
-  return KNOWLEDGE_ACCEPTED_FILE_EXTENSIONS.some((extension) =>
-    lowerName.endsWith(extension)
-  );
+  return hasAcceptedExtension;
 }

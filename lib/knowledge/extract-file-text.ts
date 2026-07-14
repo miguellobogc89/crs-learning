@@ -3,10 +3,24 @@ import mammoth from "mammoth";
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { XMLParser } from "fast-xml-parser";
-import { extractText } from "unpdf";
+
+import { ingestDocument } from "@/lib/knowledge/document-ingestion.service";
 
 export async function extractFileText(file: File): Promise<string> {
   const buffer = Buffer.from(await file.arrayBuffer());
+
+  if (
+    file.type === "application/pdf" ||
+    file.type.startsWith("image/")
+  ) {
+    const result = await ingestDocument({
+      buffer,
+      fileName: file.name,
+      mimeType: file.type,
+    });
+
+    return result.text;
+  }
 
   switch (file.type) {
     case "text/plain":
@@ -24,22 +38,10 @@ export async function extractFileText(file: File): Promise<string> {
 
     case "application/vnd.openxmlformats-officedocument.presentationml.presentation":
       return extractPowerPoint(buffer);
-    
-    case "application/pdf":
-      return extractPdf(buffer);
 
     default:
       throw new Error(`Formato no soportado: ${file.type}`);
   }
-}
-
-async function extractPdf(buffer: Buffer) {
-  const result = await extractText(new Uint8Array(buffer));
-
-  return result.text
-    .map((page) => page.trim())
-    .filter(Boolean)
-    .join("\n\n");
 }
 
 async function extractDocx(buffer: Buffer) {
@@ -84,7 +86,9 @@ async function extractPowerPoint(buffer: Buffer) {
   const parser = new XMLParser();
 
   const slides = Object.keys(zip.files)
-    .filter((f) => f.startsWith("ppt/slides/slide"))
+    .filter((fileName) =>
+      fileName.startsWith("ppt/slides/slide"),
+    )
     .sort();
 
   const output: string[] = [];
@@ -111,7 +115,7 @@ async function extractPowerPoint(buffer: Buffer) {
   return output.join("\n");
 }
 
-function walk(value: unknown, callback: (v: string) => void) {
+function walk(value: unknown, callback: (value: string) => void) {
   if (typeof value === "string") {
     callback(value);
     return;

@@ -44,6 +44,51 @@ export type KnowledgeGlossaryItem = {
   definition: string;
 };
 
+export type KnowledgeDocumentRole =
+  | "procedure"
+  | "process"
+  | "manual"
+  | "policy"
+  | "checklist"
+  | "form"
+  | "faq"
+  | "technical"
+  | "functional"
+  | "catalog"
+  | "reference"
+  | "evidence"
+  | "other";
+
+export type KnowledgeContributionType =
+  | "primary"
+  | "complementary"
+  | "policy"
+  | "form"
+  | "checklist"
+  | "faq"
+  | "reference";
+
+export type KnowledgeContributionFocus =
+  | "procedure_steps"
+  | "validation"
+  | "governance"
+  | "data_capture"
+  | "answers"
+  | "technical_detail"
+  | "reference_context"
+  | "evidence"
+  | "mixed";
+
+export type KnowledgeDocumentContribution = {
+  sourceId: string;
+  fileName: string;
+  documentRole: KnowledgeDocumentRole | string;
+  contributionType: KnowledgeContributionType | string;
+  contributionFocus: KnowledgeContributionFocus | string;
+  summary: string;
+  supportedSections: string[];
+};
+
 export type KnowledgeViewModel = {
   detectedType: string;
   meta: KnowledgeMeta;

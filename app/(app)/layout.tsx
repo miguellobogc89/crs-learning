@@ -22,11 +22,10 @@ export default async function AppLayout({
       <AppSidebar />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <AppTopbar user={session.user} />
-
-        <div className="border-b border-border bg-background px-8 py-3">
-          <AutoBreadcrumb />
-        </div>
+        <AppTopbar
+          user={session.user}
+          breadcrumb={<AutoBreadcrumb />}
+        />
 
         <main className="min-h-0 flex-1 overflow-hidden bg-background">
           {children}

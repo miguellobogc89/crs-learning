@@ -7,24 +7,37 @@ import { useState, useTransition } from "react";
 import {
   Brain,
   Clock,
+  Copy,
+  Download,
+  Edit3,
+  ExternalLink,
+  FileInput,
   FileText,
   Globe2,
-  GraduationCap,
+  Link2,
   Loader2,
   Lock,
   MoreHorizontal,
-  Sparkles,
+  Share2,
+  ShieldCheck,
   Trash2,
+  UsersRound,
 } from "lucide-react";
 
-import { deleteKnowledgeAction } from "@/app/actions/knowledge";
-import { Button } from "@/components/ui/button";
+import {
+  deleteKnowledgeAction,
+  updateKnowledgeAction,
+} from "@/app/actions/knowledge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 
 import { KnowledgeTypeBadge } from "./knowledge-type-badge";
@@ -48,17 +61,21 @@ type KnowledgeSource = {
 
 type Props = {
   knowledge: KnowledgeSource;
+  onShare?: (knowledge: KnowledgeSource) => void;
 };
 
-function formatRelativeDate(date: Date | string | null | undefined) {
+function formatRelativeDate(
+  date: Date | string | null | undefined,
+) {
   if (!date) {
     return "Sin actualizar";
   }
 
-  const value = new Date(date).getTime();
+  const timestamp = new Date(date).getTime();
+
   const diffMinutes = Math.max(
     1,
-    Math.floor((Date.now() - value) / 60000),
+    Math.floor((Date.now() - timestamp) / 60000),
   );
 
   if (diffMinutes < 60) {
@@ -84,56 +101,63 @@ function formatRelativeDate(date: Date | string | null | undefined) {
   }).format(new Date(date));
 }
 
-function getContentSummary(knowledge: KnowledgeSource) {
-  const summary = knowledge.summary?.trim();
-
-  if (summary) {
-    return summary;
-  }
-
-  const description = knowledge.description?.trim();
-
-  if (description) {
-    return description;
-  }
-
-  const content = knowledge.content?.trim();
-
-  if (content) {
-    return content;
-  }
-
-  return "Fuente de conocimiento pendiente de completar.";
-}
-
-function getTags(tags: unknown) {
-  if (!Array.isArray(tags)) {
-    return [];
-  }
-
-  return tags
-    .filter((tag): tag is string => typeof tag === "string")
-    .slice(0, 3);
-}
-
-export function KnowledgeCard({ knowledge }: Props) {
+export function KnowledgeCard({ knowledge, onShare, }: Props) {
   const router = useRouter();
 
   const [processing, setProcessing] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [isDeleting, startDeleteTransition] = useTransition();
+  const [deleteError, setDeleteError] =
+    useState<string | null>(null);
 
-  const tags = getTags(knowledge.tags);
+  const [isDeleting, startDeleteTransition] =
+    useTransition();
+
+    const [visibility, setVisibility] = useState(
+  knowledge.visibility ?? "private",
+);
+
+const [isUpdatingVisibility, startVisibilityTransition] =
+  useTransition();
+
+  const articleUrl = `/knowledge/${knowledge.id}`;
+
+  function handleOpenArticle() {
+    if (isDeleting) {
+      return;
+    }
+
+    router.push(articleUrl);
+  }
 
   async function reprocess() {
+    if (processing || isDeleting) {
+      return;
+    }
+
     setProcessing(true);
 
     try {
-      await fetch(`/api/knowledge/${knowledge.id}/analyze`, {
-        method: "POST",
-      });
+      const response = await fetch(
+        `/api/knowledge/${knowledge.id}/analyze`,
+        {
+          method: "POST",
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          "No se ha podido reprocesar el artículo",
+        );
+      }
 
       router.refresh();
+    } catch (caughtError) {
+      if (caughtError instanceof Error) {
+        setDeleteError(caughtError.message);
+      } else {
+        setDeleteError(
+          "No se ha podido reprocesar el artículo",
+        );
+      }
     } finally {
       setProcessing(false);
     }
@@ -160,147 +184,275 @@ export function KnowledgeCard({ knowledge }: Props) {
           return;
         }
 
-        setDeleteError("No se ha podido eliminar el artículo");
+        setDeleteError(
+          "No se ha podido eliminar el artículo",
+        );
       }
     });
   }
 
+  function handleVisibilityChange(nextVisibility: string) {
+  if (
+    nextVisibility === visibility ||
+    isUpdatingVisibility
+  ) {
+    return;
+  }
+
+  const previousVisibility = visibility;
+
+  setVisibility(nextVisibility);
+
+  startVisibilityTransition(async () => {
+    try {
+      const formData = new FormData();
+
+      formData.set("id", knowledge.id);
+      formData.set("title", knowledge.title);
+      formData.set(
+        "description",
+        knowledge.description ?? "",
+      );
+      formData.set("visibility", nextVisibility);
+      formData.set(
+        "knowledgeType",
+        knowledge.knowledge_type ?? "unknown",
+      );
+      formData.set("content", knowledge.content ?? "");
+
+      await updateKnowledgeAction(formData);
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      setVisibility(previousVisibility);
+    }
+  });
+}
+
+function handleShare() {
+  onShare?.(knowledge);
+}
+
   return (
-    <Card className="group border-border bg-card transition hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-sm">
-      <CardContent className="flex h-full flex-col p-5">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-lesson-soft text-lesson">
-            <FileText className="h-5 w-5" strokeWidth={2.25} />
-          </span>
+    <Card
+      className={[
+        "group relative h-[300px] self-start overflow-hidden border-border bg-card transition",
+        "cursor-pointer hover:border-cyan-200 hover:shadow-md",
+      ].join(" ")}
+      onClick={handleOpenArticle}
+    >
+      <CardContent className="flex h-full flex-col p-0">
+        <div className="relative flex h-[190px] shrink-0 items-center justify-center bg-card px-6">
+          <div
+  className="absolute left-4 top-4 z-10 opacity-0 transition group-hover:opacity-100"
+  onClick={(event) => event.stopPropagation()}
+>
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <button
+        type="button"
+        disabled={isUpdatingVisibility}
+        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label={`Visibilidad de ${knowledge.title}`}
+      >
+        {isUpdatingVisibility ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : visibility === "public" ? (
+          <Globe2 className="h-4 w-4" />
+        ) : (
+          <Lock className="h-4 w-4" />
+        )}
+      </button>
+    </DropdownMenuTrigger>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                disabled={isDeleting}
-                className="rounded-lg p-1 text-muted-foreground opacity-70 transition hover:bg-surface hover:text-foreground group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label={`Opciones de ${knowledge.title}`}
-              >
-                {isDeleting ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <MoreHorizontal
-                    className="h-5 w-5"
-                    strokeWidth={2.25}
-                  />
-                )}
-              </button>
-            </DropdownMenuTrigger>
+    <DropdownMenuContent
+      align="start"
+      side="bottom"
+      sideOffset={6}
+      className="w-56"
+    >
+      <DropdownMenuLabel>
+        Visibilidad
+      </DropdownMenuLabel>
 
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem
-                disabled={processing || isDeleting}
-                onClick={reprocess}
+      <DropdownMenuSeparator />
+
+      <DropdownMenuRadioGroup
+        value={visibility}
+        onValueChange={handleVisibilityChange}
+      >
+        <DropdownMenuRadioItem value="private">
+          <Lock className="mr-2 h-4 w-4" />
+          Privado
+        </DropdownMenuRadioItem>
+
+        <DropdownMenuRadioItem value="public">
+          <Globe2 className="mr-2 h-4 w-4" />
+          Público
+        </DropdownMenuRadioItem>
+      </DropdownMenuRadioGroup>
+
+      <DropdownMenuSeparator />
+
+      <DropdownMenuItem
+        disabled={!onShare}
+        onClick={handleShare}
+      >
+        <UsersRound className="mr-2 h-4 w-4" />
+        Compartir…
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
+</div>
+          <div
+            className="absolute right-4 top-4 z-10 opacity-0 transition group-hover:opacity-100"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm transition hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label={`Opciones de ${knowledge.title}`}
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MoreHorizontal className="h-5 w-5" />
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent
+                align="start"
+                side="bottom"
+                sideOffset={6}
+                className="w-64"
               >
-                {processing ? (
-                  <>
+                <DropdownMenuLabel className="px-3 py-2.5">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {knowledge.title}
+                  </p>
+                </DropdownMenuLabel>
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem
+                  onClick={handleOpenArticle}
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Abrir
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem disabled>
+                  <Edit3 className="mr-2 h-4 w-4" />
+                  Renombrar
+                </DropdownMenuItem>
+
+                <DropdownMenuItem disabled>
+                  <FileInput className="mr-2 h-4 w-4" />
+                  Mover
+                </DropdownMenuItem>
+
+                <DropdownMenuItem disabled>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copiar
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem disabled>
+                  <Link2 className="mr-2 h-4 w-4" />
+                  Copiar enlace
+                </DropdownMenuItem>
+
+                <DropdownMenuItem disabled>
+                  <Share2 className="mr-2 h-4 w-4" />
+                  Compartir
+                </DropdownMenuItem>
+
+                <DropdownMenuItem disabled>
+                  <ShieldCheck className="mr-2 h-4 w-4" />
+                  Administrar permisos
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem
+                  disabled={processing || isDeleting}
+                  onClick={reprocess}
+                >
+                  {processing ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Reprocesando...
-                  </>
-                ) : (
-                  <>
+                  ) : (
                     <Brain className="mr-2 h-4 w-4" />
-                    Reprocesar IA
-                  </>
-                )}
-              </DropdownMenuItem>
+                  )}
 
-              <DropdownMenuItem
-                className="text-red-600 focus:text-red-600"
-                disabled={isDeleting}
-                onClick={handleDelete}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Eliminar
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+                  {processing
+                    ? "Reprocesando..."
+                    : "Reprocesar IA"}
+                </DropdownMenuItem>
 
-        <div className="min-h-[154px] flex-1">
-          <div className="mb-3 flex items-start justify-between gap-2">
-            <KnowledgeTypeBadge
-              type={knowledge.knowledge_type}
-              confidence={knowledge.confidence}
-            />
+                <DropdownMenuItem disabled>
+                  <Download className="mr-2 h-4 w-4" />
+                  Descargar
+                </DropdownMenuItem>
 
-            {knowledge.visibility === "private" ? (
-              <Lock className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <Globe2 className="h-4 w-4 text-muted-foreground" />
-            )}
+                <DropdownMenuSeparator />
+
+                <DropdownMenuItem
+                  className="text-red-600 focus:text-red-600"
+                  disabled={isDeleting}
+                  onClick={handleDelete}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Eliminar
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
-          <Link href={`/knowledge/${knowledge.id}`}>
-            <h2 className="line-clamp-2 text-base font-semibold leading-6 text-foreground hover:text-lesson">
+          <div className="flex h-[120px] w-[120px] items-center justify-center rounded-2xl bg-lesson-soft text-lesson transition-transform duration-200 group-hover:scale-[1.03]">
+            <FileText
+              className="h-16 w-16"
+              strokeWidth={1.5}
+            />
+          </div>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col border-t border-border bg-card px-4 py-3.5">
+          <Link
+            href={articleUrl}
+            onClick={(event) => event.stopPropagation()}
+            className="min-w-0"
+          >
+            <h2 className="truncate text-sm font-semibold text-foreground hover:text-lesson">
               {knowledge.title}
             </h2>
           </Link>
 
-          <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">
-            {getContentSummary(knowledge)}
-          </p>
+<div className="mt-2">
+  <KnowledgeTypeBadge
+    type={knowledge.knowledge_type}
+    confidence={knowledge.confidence}
+  />
+</div>
 
-          {tags.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          ) : null}
+          <div className="mt-auto flex items-center justify-end pt-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" />
+              {formatRelativeDate(knowledge.updated_at)}
+            </span>
+          </div>
 
           {deleteError ? (
-            <p className="mt-3 text-xs text-red-600">
+            <p className="mt-1 truncate text-xs text-red-600">
               {deleteError}
             </p>
           ) : null}
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-2 border-t border-border pt-4 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5" />
-            {formatRelativeDate(knowledge.updated_at)}
-          </div>
-
-          <div className="flex items-center justify-end gap-1.5 truncate">
-            <GraduationCap className="h-3.5 w-3.5 shrink-0" />
-
-            <span className="truncate">
-              {knowledge.domain ??
-                knowledge.level ??
-                "Sin dominio"}
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-4 flex gap-2">
-          <Button
-            asChild
-            className="h-9 flex-1 px-3 text-xs"
-          >
-            <Link href={`/knowledge/${knowledge.id}`}>
-              Abrir
-            </Link>
-          </Button>
-
-          <Button
-            className="h-9 flex-1 px-3 text-xs"
-            disabled
-            variant="secondary"
-          >
-            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-            IA
-          </Button>
         </div>
       </CardContent>
     </Card>

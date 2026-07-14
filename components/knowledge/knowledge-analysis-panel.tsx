@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   CircleHelp,
   ClipboardCheck,
-  FileStack,
   FileText,
   GitBranch,
   Info,
@@ -19,12 +18,12 @@ import {
   PlayCircle,
   ScrollText,
   ShieldAlert,
-  Sparkles,
   UserRound,
 } from "lucide-react";
 
 import type { KnowledgeViewModel } from "@/lib/knowledge/knowledge-analysis.types";
 import { parseKnowledgeAnalysis } from "@/lib/knowledge/parse-knowledge-analysis";
+import { KnowledgeQualitySummary } from "@/components/knowledge/detail/summary/knowledge-quality-summary";
 
 type PanelMode = "general" | "details";
 
@@ -120,67 +119,6 @@ function toRelatedDocuments(
     .filter((item) => item.title.trim().length > 0);
 }
 
-function getConfidencePercentage(confidence: number) {
-  if (confidence <= 0) {
-    return null;
-  }
-
-  if (confidence <= 1) {
-    return Math.round(confidence * 100);
-  }
-
-  return Math.round(confidence);
-}
-
-function getTypeLabel(
-  detectedType: string,
-  knowledgeType: string | null | undefined,
-) {
-  const value =
-    detectedType || knowledgeType || "unknown";
-
-  const labels: Record<string, string> = {
-    procedure: "Procedimiento",
-    procedimiento: "Procedimiento",
-    contract: "Contrato",
-    contrato: "Contrato",
-    technical: "Documentación técnica",
-    technical_documentation: "Documentación técnica",
-    training: "Formación",
-    formacion: "Formación",
-    policy: "Política",
-    politica: "Política",
-    best_practice: "Buenas prácticas",
-    best_practices: "Buenas prácticas",
-    regulation: "Normativa",
-    guide: "Guía",
-    unknown: "Artículo de conocimiento",
-  };
-
-  return labels[value.toLowerCase()] ?? value;
-}
-
-function getAnalysisStatusLabel(
-  status: string | null | undefined,
-) {
-  if (status === "processing") {
-    return "Procesando";
-  }
-
-  if (status === "error") {
-    return "Error";
-  }
-
-  if (
-    status === "completed" ||
-    status === "processed" ||
-    status === "ready"
-  ) {
-    return "Analizado";
-  }
-
-  return "Analizado";
-}
 
 function scrollToSection(id: string) {
   const element = document.getElementById(id);
@@ -323,8 +261,6 @@ export function KnowledgeAnalysisPanel({
   mode,
   analysisJson,
   status,
-  model,
-  knowledgeType,
   graph,
   files,
 }: Props) {
@@ -367,22 +303,14 @@ export function KnowledgeAnalysisPanel({
     dependencies.length +
     relatedDocuments.length;
 
-  if (mode === "general") {
-    return (
-      <GeneralView
-        analysis={analysis}
-        status={status}
-        model={model}
-        knowledgeType={knowledgeType}
-        files={files}
-        relationsCount={relationsCount}
-        applications={applications}
-        products={products}
-        regulations={regulations}
-        dependencies={dependencies}
-      />
-    );
-  }
+if (mode === "general") {
+  return (
+    <KnowledgeQualitySummary
+      analysisJson={analysisJson}
+      files={files}
+    />
+  );
+}
 
   return (
     <DetailsView
@@ -397,236 +325,7 @@ export function KnowledgeAnalysisPanel({
   );
 }
 
-function GeneralView({
-  analysis,
-  status,
-  model,
-  knowledgeType,
-  files,
-  relationsCount,
-  applications,
-  products,
-  regulations,
-  dependencies,
-}: {
-  analysis: KnowledgeViewModel;
-  status?: string | null;
-  model?: string | null;
-  knowledgeType?: string | null;
-  files: KnowledgeFile[];
-  relationsCount: number;
-  applications: string[];
-  products: string[];
-  regulations: string[];
-  dependencies: string[];
-}) {
-  const confidence = getConfidencePercentage(
-    analysis.meta.confidence,
-  );
 
-  const typeLabel = getTypeLabel(
-    analysis.detectedType,
-    knowledgeType,
-  );
-
-  const primaryRelations = [
-    ...applications,
-    ...products,
-    ...regulations,
-    ...dependencies,
-  ].slice(0, 8);
-
-  return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="border-b border-border bg-surface/40 px-6 py-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-lesson" />
-
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Qué debes saber
-            </p>
-          </div>
-        </div>
-
-        <div className="px-6 py-7 md:px-8 md:py-8">
-          <div className="max-w-4xl">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-lesson-soft px-3 py-1 text-xs font-semibold text-lesson">
-                {typeLabel}
-              </span>
-
-              {analysis.meta.domain ? (
-                <span className="rounded-full border border-border bg-background px-3 py-1 text-xs text-muted-foreground">
-                  {analysis.meta.domain}
-                </span>
-              ) : null}
-
-              {analysis.meta.level ? (
-                <span className="rounded-full border border-border bg-background px-3 py-1 text-xs text-muted-foreground">
-                  {analysis.meta.level}
-                </span>
-              ) : null}
-            </div>
-
-            <h2 className="mt-5 text-2xl font-semibold tracking-tight text-foreground">
-              {analysis.objective ||
-                "Propósito del artículo"}
-            </h2>
-
-            <p className="mt-3 text-base leading-8 text-muted-foreground">
-              {analysis.summary ||
-                "Este artículo reúne conocimiento estructurado a partir de sus documentos fuente."}
-            </p>
-
-            {analysis.scope ? (
-              <div className="mt-5 rounded-xl border border-border bg-background px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Alcance
-                </p>
-
-                <p className="mt-1 text-sm leading-6 text-foreground">
-                  {analysis.scope}
-                </p>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <GeneralMetric
-          label="Confianza IA"
-          value={
-            confidence !== null
-              ? `${confidence} %`
-              : "Sin calcular"
-          }
-          description="Fiabilidad del análisis"
-        />
-
-        <GeneralMetric
-          label="Documentos fuente"
-          value={String(files.length)}
-          description="Evidencias vinculadas"
-        />
-
-        <GeneralMetric
-          label="Relaciones"
-          value={String(relationsCount)}
-          description="Conexiones detectadas"
-        />
-
-        <GeneralMetric
-          label="Estado"
-          value={getAnalysisStatusLabel(status)}
-          description={model ?? "Análisis IA"}
-        />
-      </section>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <section className="rounded-2xl border border-border bg-card p-6">
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-foreground">
-              Aportación documental
-            </h2>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              Peso de cada documento en la construcción del
-              artículo.
-            </p>
-          </div>
-
-          {files.length > 0 ? (
-            <div className="space-y-3">
-              {files.map((file) => (
-                <div
-                  key={file.id}
-                  className="rounded-xl border border-border bg-background p-4"
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-muted-foreground">
-                      <FileText className="h-4 w-4" />
-                    </span>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="truncate text-sm font-semibold text-foreground">
-                          {file.file_name}
-                        </p>
-
-                        <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                          Pendiente de calcular
-                        </span>
-                      </div>
-
-                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface">
-                        <div className="h-full w-0 rounded-full bg-lesson" />
-                      </div>
-
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        La siguiente versión del análisis
-                        determinará qué secciones respalda este
-                        documento y su porcentaje de aportación.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-border p-8 text-center">
-              <FileStack className="mx-auto h-6 w-6 text-muted-foreground" />
-
-              <p className="mt-3 text-sm font-medium text-foreground">
-                No hay documentos vinculados.
-              </p>
-            </div>
-          )}
-        </section>
-
-        <section className="rounded-2xl border border-border bg-card p-6">
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-foreground">
-              Relaciones principales
-            </h2>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              Entornos y elementos conectados con este artículo.
-            </p>
-          </div>
-
-          {primaryRelations.length > 0 ? (
-            <div className="space-y-3">
-              {primaryRelations.map((relation) => (
-                <div
-                  key={relation}
-                  className="flex items-center gap-3 rounded-xl border border-border bg-background px-4 py-3"
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface text-muted-foreground">
-                    <GitBranch className="h-4 w-4" />
-                  </span>
-
-                  <span className="text-sm font-medium text-foreground">
-                    {relation}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-border p-8 text-center">
-              <GitBranch className="mx-auto h-6 w-6 text-muted-foreground" />
-
-              <p className="mt-3 text-sm font-medium text-foreground">
-                No se han detectado relaciones.
-              </p>
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  );
-}
 
 function DetailsView({
   analysis,
@@ -650,15 +349,17 @@ function DetailsView({
     relationsCount,
   );
 
+  const relatedConcepts = analysis.concepts.slice(0, 8);
+
   return (
-    <div className="grid h-full min-h-0 items-stretch gap-6 lg:grid-cols-[230px_minmax(0,1fr)]">
-      <aside className="hidden min-h-0 lg:block">
-        <div className="flex h-full flex-col rounded-xl border border-border bg-card p-3">
-          <p className="shrink-0 px-3 pb-3 pt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+    <div className="grid h-full min-h-0 lg:grid-cols-[240px_minmax(0,1fr)_280px]">
+      <aside className="hidden min-h-0 border-r border-border lg:block">
+        <div className="flex h-full flex-col px-5 py-6">
+          <p className="shrink-0 pb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             En este artículo
           </p>
 
-          <nav className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <nav className="min-h-0 flex-1 overflow-y-auto pr-2">
             <div className="space-y-1">
               {navigation.map((item, index) => {
                 const previousGroup =
@@ -672,11 +373,11 @@ function DetailsView({
                 return (
                   <div key={item.id}>
                     {showGroup && index > 0 ? (
-                      <div className="my-3 border-t border-border" />
+                      <div className="my-4 border-t border-border" />
                     ) : null}
 
                     {showGroup ? (
-                      <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                      <p className="pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                         {item.group}
                       </p>
                     ) : null}
@@ -686,7 +387,7 @@ function DetailsView({
                       onClick={() =>
                         scrollToSection(item.id)
                       }
-                      className="w-full rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-surface hover:text-foreground"
+                      className="w-full py-2 text-left text-sm text-muted-foreground transition hover:text-foreground"
                     >
                       {item.label}
                     </button>
@@ -698,11 +399,11 @@ function DetailsView({
         </div>
       </aside>
 
-      <div
+      <main
         id="knowledge-details-scroll"
-        className="min-h-0 overflow-y-auto pr-1"
+        className="min-h-0 overflow-y-auto"
       >
-        <div className="space-y-6 pb-8">
+        <article className="mx-auto max-w-3xl space-y-14 px-8 py-10 pb-20">
           {(hasText(analysis.summary) ||
             hasText(analysis.objective) ||
             hasText(analysis.scope)) && (
@@ -712,7 +413,7 @@ function DetailsView({
               title="Descripción"
               description="Visión general, finalidad y alcance del artículo."
             >
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {analysis.summary ? (
                   <TextBlock
                     title="Resumen"
@@ -746,7 +447,7 @@ function DetailsView({
               title="Información clave"
               description="Entornos, personas y fechas relevantes."
             >
-              <div className="space-y-8">
+              <div className="space-y-10">
                 {analysis.systems.length > 0 ? (
                   <CardGrid
                     title="Sistemas y entornos"
@@ -807,7 +508,7 @@ function DetailsView({
               title="Contexto y conceptos"
               description="Temas principales y vocabulario necesario para interpretar el contenido."
             >
-              <div className="space-y-8">
+              <div className="space-y-10">
                 {analysis.topics.length > 0 ? (
                   <TagGroup
                     title="Temas principales"
@@ -834,70 +535,29 @@ function DetailsView({
             <KnowledgeSection
               id="relations"
               icon={<GitBranch className="h-5 w-5" />}
-              title="Relaciones"
-              description="Sistemas, dependencias y documentos conectados con este artículo."
+              title="Referencias"
+              description="Normativas y conocimientos necesarios para interpretar el artículo."
             >
               <div className="space-y-8">
-                <div className="grid gap-6 md:grid-cols-2">
-                  <RelationGroup
-                    title="Aplicaciones"
-                    values={applications}
-                  />
+                <RelationGroup
+                  title="Normativas"
+                  values={regulations}
+                />
 
-                  <RelationGroup
-                    title="Productos"
-                    values={products}
-                  />
+                <RelationGroup
+                  title="Dependencias"
+                  values={dependencies}
+                />
 
-                  <RelationGroup
-                    title="Normativas"
-                    values={regulations}
-                  />
+                <RelationGroup
+                  title="Aplicaciones"
+                  values={applications}
+                />
 
-                  <RelationGroup
-                    title="Dependencias"
-                    values={dependencies}
-                  />
-                </div>
-
-                {relatedDocuments.length > 0 ? (
-                  <div>
-                    <h3 className="mb-3 text-sm font-semibold text-foreground">
-                      Documentos relacionados
-                    </h3>
-
-                    <div className="space-y-3">
-                      {relatedDocuments.map(
-                        (document) => (
-                          <div
-                            key={`${document.title}-${document.relationship}`}
-                            className="rounded-xl border border-border bg-background p-4"
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <p className="font-semibold text-foreground">
-                                {document.title}
-                              </p>
-
-                              {document.relationship ? (
-                                <span className="rounded-full bg-surface px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                                  {
-                                    document.relationship
-                                  }
-                                </span>
-                              ) : null}
-                            </div>
-
-                            {document.reason ? (
-                              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                                {document.reason}
-                              </p>
-                            ) : null}
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                ) : null}
+                <RelationGroup
+                  title="Productos"
+                  values={products}
+                />
               </div>
             </KnowledgeSection>
           ) : null}
@@ -905,24 +565,18 @@ function DetailsView({
           {analysis.prerequisites.length > 0 ? (
             <KnowledgeSection
               id="prerequisites"
-              icon={
-                <ClipboardCheck className="h-5 w-5" />
-              }
+              icon={<ClipboardCheck className="h-5 w-5" />}
               title="Requisitos previos"
               description="Condiciones necesarias antes de aplicar este conocimiento."
             >
-              <BulletList
-                values={analysis.prerequisites}
-              />
+              <BulletList values={analysis.prerequisites} />
             </KnowledgeSection>
           ) : null}
 
           {analysis.triggers.length > 0 ? (
             <KnowledgeSection
               id="triggers"
-              icon={
-                <PlayCircle className="h-5 w-5" />
-              }
+              icon={<PlayCircle className="h-5 w-5" />}
               title="Cuándo se aplica"
               description="Situaciones que activan o hacen necesario este contenido."
             >
@@ -933,70 +587,56 @@ function DetailsView({
           {analysis.procedures.length > 0 ? (
             <KnowledgeSection
               id="procedures"
-              icon={
-                <ListChecks className="h-5 w-5" />
-              }
+              icon={<ListChecks className="h-5 w-5" />}
               title="Procedimiento"
               description="Secuencia operativa extraída de la documentación."
             >
-              <div className="space-y-6">
+              <div className="space-y-10">
                 {analysis.procedures.map(
                   (procedure) => (
                     <div
                       key={`${procedure.name}-${procedure.goal}`}
-                      className="rounded-xl border border-border bg-background p-5"
                     >
-                      <h3 className="text-base font-semibold text-foreground">
-                        {procedure.name ||
-                          "Procedimiento"}
+                      <h3 className="text-lg font-semibold text-foreground">
+                        {procedure.name || "Procedimiento"}
                       </h3>
 
                       {procedure.goal ? (
-                        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        <p className="mt-2 text-sm leading-7 text-muted-foreground">
                           {procedure.goal}
                         </p>
                       ) : null}
 
                       {procedure.steps.length > 0 ? (
-                        <ol className="mt-6 space-y-5">
+                        <ol className="mt-7 space-y-7">
                           {procedure.steps.map(
                             (step, index) => (
                               <li
                                 key={`${step.order}-${step.title}-${index}`}
-                                className="grid gap-3 sm:grid-cols-[32px_minmax(0,1fr)]"
+                                className="grid gap-4 sm:grid-cols-[32px_minmax(0,1fr)]"
                               >
-                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-xs font-semibold text-background">
-                                  {step.order ||
-                                    index + 1}
+                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-600 text-xs font-semibold text-white">
+                                  {step.order || index + 1}
                                 </span>
 
-                                <div className="pt-1">
+                                <div>
                                   <p className="font-semibold text-foreground">
                                     {step.title}
                                   </p>
 
                                   {step.instruction ? (
-                                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                                      {
-                                        step.instruction
-                                      }
+                                    <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                                      {step.instruction}
                                     </p>
                                   ) : null}
 
                                   {step.expectedResult ? (
-                                    <div className="mt-2 flex items-start gap-2 rounded-lg bg-surface px-3 py-2 text-xs text-muted-foreground">
-                                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-
-                                      <span>
-                                        <strong className="font-semibold text-foreground">
-                                          Resultado
-                                          esperado:
-                                        </strong>{" "}
-                                        {
-                                          step.expectedResult
-                                        }
-                                      </span>
-                                    </div>
+                                    <p className="mt-2 text-xs leading-6 text-muted-foreground">
+                                      <strong className="font-semibold text-foreground">
+                                        Resultado esperado:
+                                      </strong>{" "}
+                                      {step.expectedResult}
+                                    </p>
                                   ) : null}
                                 </div>
                               </li>
@@ -1014,24 +654,18 @@ function DetailsView({
           {analysis.businessRules.length > 0 ? (
             <KnowledgeSection
               id="business-rules"
-              icon={
-                <ScrollText className="h-5 w-5" />
-              }
+              icon={<ScrollText className="h-5 w-5" />}
               title="Reglas de negocio"
               description="Restricciones y criterios que deben cumplirse."
             >
-              <BulletList
-                values={analysis.businessRules}
-              />
+              <BulletList values={analysis.businessRules} />
             </KnowledgeSection>
           ) : null}
 
           {analysis.warnings.length > 0 ? (
             <KnowledgeSection
               id="warnings"
-              icon={
-                <ShieldAlert className="h-5 w-5" />
-              }
+              icon={<ShieldAlert className="h-5 w-5" />}
               title="Advertencias"
               description="Riesgos, excepciones y puntos que requieren atención."
             >
@@ -1045,9 +679,7 @@ function DetailsView({
           {analysis.outputs.length > 0 ? (
             <KnowledgeSection
               id="results"
-              icon={
-                <CheckCircle2 className="h-5 w-5" />
-              }
+              icon={<CheckCircle2 className="h-5 w-5" />}
               title="Resultados esperados"
               description="Qué debe obtenerse al aplicar correctamente el contenido."
             >
@@ -1061,9 +693,7 @@ function DetailsView({
           {analysis.commonErrors.length > 0 ? (
             <KnowledgeSection
               id="common-errors"
-              icon={
-                <AlertTriangle className="h-5 w-5" />
-              }
+              icon={<AlertTriangle className="h-5 w-5" />}
               title="Errores frecuentes"
               description="Problemas habituales detectados en la documentación."
             >
@@ -1077,21 +707,19 @@ function DetailsView({
           {analysis.commonQuestions.length > 0 ? (
             <KnowledgeSection
               id="faq"
-              icon={
-                <CircleHelp className="h-5 w-5" />
-              }
+              icon={<CircleHelp className="h-5 w-5" />}
               title="Preguntas frecuentes"
               description="Dudas habituales relacionadas con el artículo."
             >
-              <div className="space-y-2">
+              <div className="space-y-4">
                 {analysis.commonQuestions.map(
                   (question) => (
-                    <div
+                    <p
                       key={question}
-                      className="rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground"
+                      className="text-sm leading-7 text-foreground"
                     >
                       {question}
-                    </div>
+                    </p>
                   ),
                 )}
               </div>
@@ -1105,19 +733,33 @@ function DetailsView({
               title="Glosario"
               description="Términos y definiciones relevantes."
             >
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-6">
                 {analysis.glossary.map((item) => (
-                  <InformationCard
+                  <TextBlock
                     key={`${item.term}-${item.definition}`}
                     title={item.term}
-                    description={item.definition}
+                    value={item.definition}
                   />
                 ))}
               </div>
             </KnowledgeSection>
           ) : null}
+        </article>
+      </main>
+
+      <aside className="hidden min-h-0 border-l border-border lg:block">
+        <div className="flex h-full flex-col px-5 py-6">
+          <p className="shrink-0 pb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Relacionados
+          </p>
+
+<nav className="min-h-0 flex-1 overflow-y-auto pl-1">
+  <p className="text-sm leading-6 text-muted-foreground">
+    Todavía no hay artículos relacionados.
+  </p>
+</nav>
         </div>
-      </div>
+      </aside>
     </div>
   );
 }
@@ -1171,31 +813,6 @@ function EmptyState() {
   );
 }
 
-function GeneralMetric({
-  label,
-  value,
-  description,
-}: {
-  label: string;
-  value: string;
-  description: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-border bg-card p-5">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </p>
-
-      <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
-        {value}
-      </p>
-
-      <p className="mt-1 truncate text-xs text-muted-foreground">
-        {description}
-      </p>
-    </div>
-  );
-}
 
 function KnowledgeSection({
   id,
@@ -1213,24 +830,24 @@ function KnowledgeSection({
   return (
     <section
       id={id}
-      className="scroll-mt-6 rounded-2xl border border-border bg-card p-6"
+      className="scroll-mt-8 border-b border-border pb-14 last:border-b-0"
     >
-      <div className="mb-6 flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-foreground">
-          {icon}
-        </span>
+      <div className="mb-8">
+        <div className="flex items-center gap-3">
+          <span className="text-cyan-600">
+            {icon}
+          </span>
 
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
             {title}
           </h2>
-
-          {description ? (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {description}
-            </p>
-          ) : null}
         </div>
+
+        {description ? (
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
       </div>
 
       {children}
@@ -1292,13 +909,13 @@ function InformationCard({
   description?: string;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-background p-4">
+    <div className="border-l-2 border-cyan-500 pl-4">
       <p className="font-semibold text-foreground">
         {title || "Sin título"}
       </p>
 
       {description ? (
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+        <p className="mt-1 text-sm leading-7 text-muted-foreground">
           {description}
         </p>
       ) : null}
@@ -1319,13 +936,13 @@ function TagGroup({
         {title}
       </h3>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
         {values.map((value) => (
           <span
             key={value}
-            className="rounded-full border border-border bg-background px-3 py-1.5 text-xs text-foreground"
+            className="text-sm text-muted-foreground"
           >
-            {value}
+            #{value}
           </span>
         ))}
       </div>
@@ -1345,29 +962,27 @@ function BulletList({
     | "success";
 }) {
   return (
-    <ul className="space-y-3">
+    <ul className="space-y-5">
       {values.map((value) => (
         <li
           key={value}
           className={[
-            "flex items-start gap-3 rounded-xl border px-4 py-3 text-sm leading-6",
+            "border-l-2 pl-4 text-sm leading-7",
             variant === "warning"
-              ? "border-amber-200 bg-amber-50 text-amber-950"
+              ? "border-amber-400 text-amber-900"
               : "",
             variant === "danger"
-              ? "border-red-200 bg-red-50 text-red-950"
+              ? "border-red-400 text-red-900"
               : "",
             variant === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+              ? "border-emerald-400 text-emerald-900"
               : "",
             variant === "default"
-              ? "border-border bg-background text-foreground"
+              ? "border-border text-muted-foreground"
               : "",
           ].join(" ")}
         >
-          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
-
-          <span>{value}</span>
+          {value}
         </li>
       ))}
     </ul>
@@ -1391,16 +1006,16 @@ function RelationGroup({
         {title}
       </h3>
 
-      <div className="flex flex-wrap gap-2">
+      <ul className="space-y-2">
         {values.map((value) => (
-          <span
+          <li
             key={value}
-            className="rounded-full border border-border bg-background px-3 py-1.5 text-xs text-foreground"
+            className="border-l-2 border-border pl-4 text-sm leading-7 text-muted-foreground"
           >
             {value}
-          </span>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }

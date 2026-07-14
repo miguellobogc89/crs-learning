@@ -70,6 +70,16 @@ export async function getKnowledgeSourceById(id: string) {
       },
       knowledge_analysis: true,
       knowledge_graph: true,
+
+      users_knowledge_sources_updated_by_user_idTousers: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+        },
+      },
+
       knowledge_libraries: {
         include: {
           knowledge_library_permissions: true,
@@ -111,6 +121,7 @@ data: {
 export async function updateKnowledgeSource(data: {
   id: string;
   ownerUserId: string;
+  updatedByUserId: string;
   title: string;
   description: string;
   visibility: string;
@@ -128,6 +139,7 @@ export async function updateKnowledgeSource(data: {
       visibility: data.visibility,
       knowledge_type: data.knowledgeType,
       content: data.content,
+      updated_by_user_id: data.updatedByUserId,
       updated_at: new Date(),
     },
   });

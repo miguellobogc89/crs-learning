@@ -256,12 +256,14 @@ model knowledge_sources {
   tags                                              Json?
   keywords                                          Json?
   entities                                          Json?
+  company_id                                        String?                         @db.Uuid
   courses                                           courses[]
   knowledge_analysis                                knowledge_analysis?
   knowledge_correction_requests                     knowledge_correction_requests[]
   knowledge_files                                   knowledge_files[]
   knowledge_graph                                   knowledge_graph?
   knowledge_share_links                             knowledge_share_links[]
+  companies                                         companies?                      @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users_knowledge_sources_created_by_user_idTousers users?                          @relation("knowledge_sources_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
   knowledge_libraries                               knowledge_libraries?            @relation(fields: [library_id], references: [id], onUpdate: NoAction)
   users_knowledge_sources_updated_by_user_idTousers users?                          @relation("knowledge_sources_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
@@ -269,6 +271,7 @@ model knowledge_sources {
   @@index([owner_user_id], map: "idx_knowledge_sources_owner_user_id")
   @@index([visibility], map: "idx_knowledge_sources_visibility")
   @@index([library_id], map: "idx_knowledge_sources_library_id")
+  @@index([company_id], map: "idx_knowledge_sources_company_id")
 }
 
 model knowledge_files {
@@ -350,6 +353,8 @@ model chat_conversations {
   created_at                                         DateTime             @default(now()) @db.Timestamptz(6)
   updated_at                                         DateTime             @default(now()) @db.Timestamptz(6)
   space_id                                           String?              @db.Uuid
+  company_id                                         String?              @db.Uuid
+  companies                                          companies?           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users_chat_conversations_created_by_user_idTousers users?               @relation("chat_conversations_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
   users_chat_conversations_owner_user_idTousers      users                @relation("chat_conversations_owner_user_idTousers", fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   knowledge_libraries                                knowledge_libraries? @relation(fields: [scope_library_id], references: [id], onUpdate: NoAction)
@@ -360,6 +365,7 @@ model chat_conversations {
   @@index([owner_user_id], map: "idx_chat_conversations_owner_user_id")
   @@index([scope_library_id], map: "idx_chat_conversations_scope_library_id")
   @@index([space_id], map: "idx_chat_conversations_space_id")
+  @@index([company_id], map: "idx_chat_conversations_company_id")
 }
 
 model chat_messages {
@@ -386,7 +392,9 @@ model companies {
   slug                String                @unique
   created_at          DateTime              @default(now()) @db.Timestamptz(6)
   updated_at          DateTime              @default(now()) @db.Timestamptz(6)
+  chat_conversations  chat_conversations[]
   knowledge_libraries knowledge_libraries[]
+  knowledge_sources   knowledge_sources[]
   knowledge_spaces    knowledge_spaces[]
   knowledge_teams     knowledge_teams[]
   users               users[]

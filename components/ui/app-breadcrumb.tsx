@@ -1,6 +1,9 @@
 // components/ui/app-breadcrumb.tsx
 import Link from "next/link";
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import {
+  ChevronRight,
+  type LucideIcon,
+} from "lucide-react";
 
 type BreadcrumbItem = {
   label: string;
@@ -14,28 +17,37 @@ type Props = {
 
 export function AppBreadcrumb({ items }: Props) {
   return (
-    <nav className="mb-6 flex items-center gap-1 text-sm text-muted-foreground">
+    <nav className="flex h-full min-w-0 items-center gap-1 text-sm text-muted-foreground">
       {items.map((item, index) => {
         const Icon = item.icon;
         const isLast = index === items.length - 1;
 
         return (
-          <div key={`${item.label}-${index}`} className="flex min-w-0 items-center gap-1">
-            {index > 0 && (
+          <div
+            key={`${item.label}-${index}`}
+            className="flex min-w-0 items-center gap-1"
+          >
+            {index > 0 ? (
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
-            )}
+            ) : null}
 
             {item.href && !isLast ? (
               <Link
                 href={item.href}
-                className="flex min-w-0 items-center gap-1.5 hover:text-foreground"
+                className="flex min-w-0 items-center gap-1.5 transition hover:text-foreground"
               >
-                {Icon && <Icon className="h-4 w-4 shrink-0" />}
+                {Icon ? (
+                  <Icon className="h-4 w-4 shrink-0" />
+                ) : null}
+
                 <span className="truncate">{item.label}</span>
               </Link>
             ) : (
               <span className="flex min-w-0 items-center gap-1.5 font-medium text-foreground">
-                {Icon && <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                {Icon ? (
+                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                ) : null}
+
                 <span className="truncate">{item.label}</span>
               </span>
             )}

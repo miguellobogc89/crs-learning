@@ -1,22 +1,23 @@
 // lib/navigation/app-sections.ts
 import {
-  BookOpen,
   GraduationCap,
   Grid2X2,
+  Home,
+  Library,
   Settings,
-  User,
+  UserRound,
 } from "lucide-react";
 
 export const APP_SECTIONS = {
   dashboard: {
-    label: "Dashboard",
+    label: "Inicio",
     href: "/dashboard",
-    icon: BookOpen,
+    icon: Home,
   },
   knowledge: {
     label: "Knowledge",
     href: "/knowledge",
-    icon: BookOpen,
+    icon: Library,
   },
   courses: {
     label: "Cursos",
@@ -28,10 +29,10 @@ export const APP_SECTIONS = {
     href: "/achievements",
     icon: Grid2X2,
   },
-  profile: {
-    label: "Perfil",
-    href: "/profile",
-    icon: User,
+  mySpace: {
+    label: "Mi espacio",
+    href: "/my-space",
+    icon: UserRound,
   },
   settings: {
     label: "Configuración",
@@ -40,4 +41,5 @@ export const APP_SECTIONS = {
   },
 } as const;
 
-export type AppSectionKey = keyof typeof APP_SECTIONS;
+export type AppSectionKey =
+  keyof typeof APP_SECTIONS;

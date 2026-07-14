@@ -9,6 +9,10 @@ import {
 } from "@/components/knowledge/sidebar/tree-utils";
 import { listKnowledgeLibraries } from "@/lib/services/knowledge-library.service";
 import { findKnowledgeSource } from "@/lib/services/knowledge.service";
+import {
+  listTeams,
+  listTeamSharesForLibrary,
+} from "@/lib/services/knowledge-team.service";
 
 export default async function KnowledgeDetailPage({
   params,
@@ -23,10 +27,11 @@ export default async function KnowledgeDetailPage({
 
   const { id } = await params;
 
-  const [knowledge, libraries] = await Promise.all([
-    findKnowledgeSource(id),
-    listKnowledgeLibraries(session.user.id),
-  ]);
+const [knowledge, libraries, teams] = await Promise.all([
+  findKnowledgeSource(id),
+  listKnowledgeLibraries(session.user.id),
+  listTeams(session.user.id),
+]);
 
   if (!knowledge) {
     notFound();
@@ -55,6 +60,13 @@ export default async function KnowledgeDetailPage({
     notFound();
   }
 
+const libraryShares = knowledge.library_id
+  ? await listTeamSharesForLibrary({
+      libraryId: knowledge.library_id,
+      ownerUserId: session.user.id,
+    })
+  : [];
+
   const libraryTree = buildLibraryTree(libraries);
 
   const libraryPath = getLibraryPath(
@@ -64,10 +76,12 @@ export default async function KnowledgeDetailPage({
 
   return (
     <main className="h-full overflow-hidden bg-background">
-      <KnowledgeDetailClient
-        knowledge={knowledge}
-        libraryPath={libraryPath}
-      />
+<KnowledgeDetailClient
+  knowledge={knowledge}
+  libraryPath={libraryPath}
+  teams={teams}
+  libraryShares={libraryShares}
+/>
     </main>
   );
 }

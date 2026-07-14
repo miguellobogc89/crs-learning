@@ -1,7 +1,10 @@
+// components/app/topbar.tsx
 "use client";
 
+import type { ReactNode } from "react";
 import Image from "next/image";
 import { Bell, UserCircle } from "lucide-react";
+
 import { logout } from "@/app/actions/auth";
 
 type Props = {
@@ -10,20 +13,35 @@ type Props = {
     email?: string | null;
     image?: string | null;
   };
+  breadcrumb: ReactNode;
 };
 
-export function AppTopbar({ user }: Props) {
+export function AppTopbar({
+  user,
+  breadcrumb,
+}: Props) {
   const userLabel = user.name ?? user.email ?? "Usuario";
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-end border-b border-border bg-white px-4">
-      <div className="flex items-center gap-2">
-        <button className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-surface hover:text-foreground">
+    <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-white px-4">
+      <div className="min-w-0 flex-1 overflow-hidden">
+        {breadcrumb}
+      </div>
+
+      <div className="ml-4 flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-surface hover:text-foreground"
+          aria-label="Notificaciones"
+        >
           <Bell className="h-4 w-4" />
         </button>
 
         <form action={logout}>
-          <button className="flex h-8 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:bg-surface hover:text-foreground">
+          <button
+            type="submit"
+            className="flex h-8 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
+          >
             {user.image ? (
               <Image
                 src={user.image}
@@ -36,7 +54,9 @@ export function AppTopbar({ user }: Props) {
               <UserCircle className="h-5 w-5" />
             )}
 
-            <span className="max-w-[180px] truncate">{userLabel}</span>
+            <span className="max-w-[180px] truncate">
+              {userLabel}
+            </span>
           </button>
         </form>
       </div>

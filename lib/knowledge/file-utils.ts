@@ -1,4 +1,5 @@
 // lib/knowledge/file-utils.ts
+
 export function formatFileSize(bytes: number) {
   if (bytes < 1024) {
     return `${bytes} B`;
@@ -21,30 +22,47 @@ export function getKnowledgeFileType(filename: string) {
 
 export function getKnowledgeFileIcon(filename: string) {
   switch (getKnowledgeFileType(filename)) {
-    case "docx":
-      return "📝";
+    case "pdf":
+      return "/icons/files/pdf.png";
 
+    case "doc":
+    case "docx":
+      return "/icons/files/docx.png";
+
+    case "xls":
     case "xlsx":
-      return "📊";
+      return "/icons/files/xlsx.png";
+
+    case "ppt":
+    case "pptx":
+      return "/icons/files/pptx.png";
 
     case "csv":
-      return "📊";
-
-    case "pptx":
-      return "📈";
-
-    case "pdf":
-      return "📕";
+      return "/icons/files/csv.png";
 
     case "txt":
-      return "📄";
+      return "/icons/files/txt.png";
 
     case "md":
-      return "📄";
+      return "/icons/files/md.png";
+
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "webp":
+      return "/icons/files/image.png";
 
     default:
-      return "📁";
+      return "/icons/files/file.png";
   }
+}
+
+export function isKnowledgeFileIconImage(
+  filename: string,
+) {
+  return getKnowledgeFileIcon(filename).startsWith(
+    "/icons/",
+  );
 }
 
 export function getKnowledgeStatus(status: string) {

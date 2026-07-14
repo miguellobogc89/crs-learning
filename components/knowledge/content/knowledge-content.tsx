@@ -250,6 +250,7 @@ export function KnowledgeContent({
         selectedLibraryId={selectedLibraryId}
         selectedView={selectedView}
         canCreateArticle={canCreateArticle}
+        search={explorerState.search}
         onCreateArticle={openCreateArticleModal}
       />
 

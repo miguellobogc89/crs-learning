@@ -28,6 +28,7 @@ export async function newKnowledgeSource(data: {
 export async function editKnowledgeSource(data: {
   id: string;
   ownerUserId: string;
+  updatedByUserId: string;
   title: string;
   description: string;
   visibility: string;
