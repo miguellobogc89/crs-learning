@@ -2,7 +2,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { auth } from "@/auth";
-import { KnowledgeDetailClient } from "@/components/knowledge/knowledge-detail-client";
+import { KnowledgeDetailClient } from "@/components/knowledge/detail/knowledge-detail-client";
 import {
   buildLibraryTree,
   getLibraryPath,

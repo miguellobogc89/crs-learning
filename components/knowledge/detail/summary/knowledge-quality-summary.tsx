@@ -3,11 +3,7 @@
 
 import {
   AlertTriangle,
-  CheckCircle2,
-  FileCheck2,
   FileText,
-  Link2,
-  ShieldCheck,
 } from "lucide-react";
 
 import type { KnowledgeDocumentContribution } from "@/lib/knowledge/knowledge-analysis.types";
@@ -389,59 +385,6 @@ export function KnowledgeQualitySummary({
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="border-b border-border bg-surface/40 px-6 py-4">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Estado del conocimiento
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-4 p-6 sm:grid-cols-2 xl:grid-cols-4">
-          <QualityMetric
-            icon={
-              <FileCheck2 className="h-4 w-4" />
-            }
-            label="Cobertura documental"
-            value={`${coverage} %`}
-            description="Información respaldada por fuentes"
-          />
-
-          <QualityMetric
-            icon={<FileText className="h-4 w-4" />}
-            label="Documentos fusionados"
-            value={String(documentCount)}
-            description="Archivos analizados conjuntamente"
-          />
-
-          <QualityMetric
-            icon={<Link2 className="h-4 w-4" />}
-            label="Referencias"
-            value={String(sourceReferences.length)}
-            description="Afirmaciones con trazabilidad"
-          />
-
-          <QualityMetric
-            icon={
-              contradictions.length > 0 ? (
-                <AlertTriangle className="h-4 w-4" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" />
-              )
-            }
-            label="Contradicciones"
-            value={String(contradictions.length)}
-            description={
-              contradictions.length > 0
-                ? "Requieren revisión humana"
-                : "No se han detectado conflictos"
-            }
-          />
-        </div>
-      </section>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <section className="rounded-2xl border border-border bg-card p-6">
@@ -695,37 +638,7 @@ function ContributionMeta({
   );
 }
 
-function QualityMetric({
-  icon,
-  label,
-  value,
-  description,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  description: string;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-background p-4">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        {icon}
 
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em]">
-          {label}
-        </p>
-      </div>
-
-      <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground">
-        {value}
-      </p>
-
-      <p className="mt-1 text-xs leading-5 text-muted-foreground">
-        {description}
-      </p>
-    </div>
-  );
-}
 
 function QualityRow({
   label,
