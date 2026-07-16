@@ -63,11 +63,20 @@ export async function getKnowledgeSourceById(id: string) {
   return prisma.knowledge_sources.findUnique({
     where: { id },
     include: {
-      knowledge_files: {
-        orderBy: {
-          created_at: "desc",
-        },
+knowledge_files: {
+  orderBy: {
+    created_at: "desc",
+  },
+  include: {
+    users: {
+      select: {
+        id: true,
+        name: true,
+        image: true,
       },
+    },
+  },
+},
       knowledge_analysis: true,
       knowledge_graph: true,
 

@@ -23,16 +23,11 @@ import {
 
 import type { KnowledgeViewModel } from "@/lib/knowledge/knowledge-analysis.types";
 import { parseKnowledgeAnalysis } from "@/lib/knowledge/parse-knowledge-analysis";
-import { KnowledgeQualitySummary } from "@/components/knowledge/detail/summary/knowledge-quality-summary";
+import { KnowledgeReviewPanel } from "@/components/knowledge/detail/summary/knowledge-review-panel";
+import type { KnowledgeFile } from "@/components/knowledge/detail/knowledge-detail.types";
 
 type PanelMode = "general" | "details";
 
-type KnowledgeFile = {
-  id: string;
-  file_name: string;
-  file_size: number | null;
-  status: string;
-};
 
 type RelatedDocument = {
   title: string;
@@ -305,7 +300,7 @@ export function KnowledgeAnalysisPanel({
 
 if (mode === "general") {
   return (
-    <KnowledgeQualitySummary
+    <KnowledgeReviewPanel
       analysisJson={analysisJson}
       files={files}
     />

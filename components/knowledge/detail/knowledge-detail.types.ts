@@ -30,8 +30,16 @@ export type LibraryShare = {
 export type KnowledgeFile = {
   id: string;
   file_name: string;
+  file_type: string | null;
   file_size: number | null;
   status: string;
+  created_at: Date | string;
+
+  users: {
+    id: string;
+    name: string | null;
+    image: string | null;
+  } | null;
 };
 
 export type SourceContribution = {

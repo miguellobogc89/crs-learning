@@ -175,6 +175,7 @@ model users {
   chat_messages                                                                           chat_messages[]
   knowledge_correction_requests_knowledge_correction_requests_assigned_to_user_idTousers  knowledge_correction_requests[] @relation("knowledge_correction_requests_assigned_to_user_idTousers")
   knowledge_correction_requests_knowledge_correction_requests_requested_by_user_idTousers knowledge_correction_requests[] @relation("knowledge_correction_requests_requested_by_user_idTousers")
+  knowledge_files                                                                         knowledge_files[]
   knowledge_libraries_knowledge_libraries_created_by_user_idTousers                       knowledge_libraries[]           @relation("knowledge_libraries_created_by_user_idTousers")
   knowledge_libraries                                                                     knowledge_libraries[]
   knowledge_libraries_knowledge_libraries_updated_by_user_idTousers                       knowledge_libraries[]           @relation("knowledge_libraries_updated_by_user_idTousers")
@@ -285,9 +286,12 @@ model knowledge_files {
   status              String            @default("uploaded")
   created_at          DateTime          @default(now()) @db.Timestamptz(6)
   updated_at          DateTime          @default(now()) @db.Timestamptz(6)
+  uploaded_by_user_id String?           @db.Uuid
   knowledge_sources   knowledge_sources @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users               users?            @relation(fields: [uploaded_by_user_id], references: [id], onUpdate: NoAction)
 
   @@index([knowledge_source_id], map: "idx_knowledge_files_knowledge_source_id")
+  @@index([uploaded_by_user_id], map: "idx_knowledge_files_uploaded_by_user_id")
 }
 
 model knowledge_analysis {
