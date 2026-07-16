@@ -25,3 +25,22 @@ export async function listChatConversations(userId: string) {
     },
   });
 }
+
+export async function getChatConversation(
+  userId: string,
+  conversationId: string,
+) {
+  return prisma.chat_conversations.findFirst({
+    where: {
+      id: conversationId,
+      owner_user_id: userId,
+    },
+    include: {
+      chat_messages: {
+        orderBy: {
+          created_at: "asc",
+        },
+      },
+    },
+  });
+}
