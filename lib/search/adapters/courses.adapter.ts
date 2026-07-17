@@ -1,15 +1,21 @@
+//lib/search/adapters/courses.adapter.ts
+
 /**
- * Adaptador de búsqueda para cursos/artículos
- * Módulo: Courses
+ * Proveedor de búsqueda para cursos.
+ *
+ * Dominio: Learning
  */
-
 import { prisma } from "@/lib/prisma";
-import type { SearchAdapter, SearchContext, SearchResult } from "../types";
+import type {
+  SearchContext,
+  SearchProvider,
+  SearchResult,
+} from "../types";
 
-export const coursesSearchAdapter: SearchAdapter = {
+export const coursesSearchProvider: SearchProvider = {
   id: "courses",
-  category: "articulos",
-  label: "💡 Artículos",
+  category: "cursos",
+  label: "🎓 Cursos",
 
   async search(context: SearchContext): Promise<SearchResult[]> {
     const { query, limit = 10 } = context;
@@ -19,8 +25,18 @@ export const coursesSearchAdapter: SearchAdapter = {
         where: {
           is_published: true,
           OR: [
-            { title: { contains: query, mode: "insensitive" } },
-            { description: { contains: query, mode: "insensitive" } },
+            {
+              title: {
+                contains: query,
+                mode: "insensitive",
+              },
+            },
+            {
+              description: {
+                contains: query,
+                mode: "insensitive",
+              },
+            },
           ],
         },
         select: {
@@ -35,14 +51,14 @@ export const coursesSearchAdapter: SearchAdapter = {
       return courses.map((course) => ({
         id: course.id,
         title: course.title,
-        category: "articulos" as const,
+        category: "cursos",
         description:
           course.description ||
           `Nivel: ${course.level || "No especificado"}`,
         url: `/courses/${course.id}`,
       }));
     } catch (error) {
-      console.error("[SearchAdapter:courses] Error:", error);
+      console.error("[CoursesSearchProvider] Error:", error);
       return [];
     }
   },

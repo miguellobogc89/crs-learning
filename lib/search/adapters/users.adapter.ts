@@ -1,4 +1,5 @@
 //lib/search/adapters/users.adapter.ts
+
 import { prisma } from "@/lib/prisma";
 import type {
   SearchContext,
@@ -8,9 +9,7 @@ import type {
 
 export const usersSearchProvider: SearchProvider = {
   id: "users",
-
   category: "usuarios",
-
   label: "👤 Usuarios",
 
   async search(context: SearchContext): Promise<SearchResult[]> {
@@ -45,7 +44,7 @@ export const usersSearchProvider: SearchProvider = {
         url: `/users/${user.id}`,
       }));
     } catch (error) {
-      console.error("[UsersSearchProvider]", error);
+      console.error("[UsersSearchProvider] Error:", error);
       return [];
     }
   },

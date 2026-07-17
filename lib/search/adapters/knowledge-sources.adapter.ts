@@ -1,15 +1,22 @@
+//lib/search/adapters/knowledge-sources.adapter.ts
+
 /**
- * Adaptador de búsqueda para documentos/knowledge sources
- * Módulo: Knowledge
+ * Proveedor de búsqueda para artículos de Knowledge.
+ *
+ * Una knowledge_source representa un artículo, no un documento adjunto.
+ * Los documentos físicos pertenecen a knowledge_files.
  */
-
 import { prisma } from "@/lib/prisma";
-import type { SearchAdapter, SearchContext, SearchResult } from "../types";
+import type {
+  SearchContext,
+  SearchProvider,
+  SearchResult,
+} from "../types";
 
-export const knowledgeSourcesSearchAdapter: SearchAdapter = {
+export const knowledgeSourcesSearchProvider: SearchProvider = {
   id: "knowledge-sources",
-  category: "documentos",
-  label: "📄 Documentos",
+  category: "articulos",
+  label: "💡 Artículos",
 
   async search(context: SearchContext): Promise<SearchResult[]> {
     const { query, limit = 10 } = context;
@@ -19,8 +26,18 @@ export const knowledgeSourcesSearchAdapter: SearchAdapter = {
         where: {
           visibility: "public",
           OR: [
-            { title: { contains: query, mode: "insensitive" } },
-            { description: { contains: query, mode: "insensitive" } },
+            {
+              title: {
+                contains: query,
+                mode: "insensitive",
+              },
+            },
+            {
+              description: {
+                contains: query,
+                mode: "insensitive",
+              },
+            },
           ],
         },
         select: {
@@ -35,14 +52,14 @@ export const knowledgeSourcesSearchAdapter: SearchAdapter = {
       return sources.map((source) => ({
         id: source.id,
         title: source.title,
-        category: "documentos" as const,
+        category: "articulos",
         description:
           source.description ||
-          `Tipo: ${source.knowledge_type || "Documento"}`,
+          `Tipo: ${source.knowledge_type || "Artículo"}`,
         url: `/knowledge/${source.id}`,
       }));
     } catch (error) {
-      console.error("[SearchAdapter:knowledge-sources] Error:", error);
+      console.error("[KnowledgeSourcesSearchProvider] Error:", error);
       return [];
     }
   },

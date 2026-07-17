@@ -1,20 +1,22 @@
+//app/actions/search.ts
+
 "use server";
 
 import { auth } from "@/auth";
 import { SearchOrchestrator } from "@/lib/search/search.orchestrator";
-import { initializeSearchAdapters } from "@/lib/search/search.init";
+import { initializeSearchProviders } from "@/lib/search/search.init";
 import type {
-  SearchResult,
-  SearchResponse,
   SearchContext,
+  SearchResponse,
 } from "@/lib/search/types";
 
-// Inicializar adaptadores una sola vez
-let adaptersInitialized = false;
-function ensureAdaptersInitialized(): void {
-  if (!adaptersInitialized) {
-    initializeSearchAdapters();
-    adaptersInitialized = true;
+// Inicializar providers una sola vez
+let providersInitialized = false;
+
+function ensureProvidersInitialized(): void {
+  if (!providersInitialized) {
+    initializeSearchProviders();
+    providersInitialized = true;
   }
 }
 
@@ -25,20 +27,20 @@ export interface SearchGlobalOptions {
 }
 
 /**
- * Server Action: Búsqueda global unificada
- * 
+ * Server Action: búsqueda global unificada.
+ *
  * Flujo:
- * 1. Obtiene la sesión del usuario del servidor (sin enviarla desde cliente)
- * 2. Valida que el usuario esté autenticado
- * 3. Ejecuta búsquedas en múltiples módulos usando adaptadores
- * 4. Los adaptadores aplican filtros de visibilidad por módulo
- * 5. Retorna solo los resultados a los que el usuario puede acceder
- * 
+ * 1. Obtiene la sesión del usuario en el servidor.
+ * 2. Valida que el usuario esté autenticado.
+ * 3. Construye un contexto seguro de búsqueda.
+ * 4. Ejecuta la búsqueda mediante los providers registrados.
+ * 5. Devuelve únicamente los resultados autorizados.
+ *
  * Ventajas:
- * - No requiere SessionProvider en el cliente
- * - La autorización es segura (validada en servidor)
- * - Escalable: agregar nuevos módulos es solo agregar un adaptador
- * - Desacoplado: cada módulo es independiente
+ * - No requiere SessionProvider en el cliente.
+ * - El userId nunca se recibe desde el cliente.
+ * - Cada provider encapsula la lógica de su dominio.
+ * - Añadir nuevos dominios no modifica el orquestador.
  */
 export async function searchGlobal(
   options: SearchGlobalOptions
@@ -46,11 +48,9 @@ export async function searchGlobal(
   const startTime = performance.now();
   const { query, filters, limit = 50 } = options;
 
-  // Obtener la sesión del usuario del servidor
-  // No viene del cliente, se obtiene directamente en el servidor
+  // La sesión se obtiene directamente en el servidor.
   const session = await auth();
 
-  // Validar que el usuario esté autenticado
   if (!session?.user?.id) {
     return {
       groups: [],
@@ -60,7 +60,6 @@ export async function searchGlobal(
     };
   }
 
-  // Validar que la búsqueda no esté vacía
   if (!query.trim()) {
     return {
       groups: [],
@@ -71,23 +70,18 @@ export async function searchGlobal(
   }
 
   try {
-    // Asegurar que los adaptadores estén inicializados
-    ensureAdaptersInitialized();
+    ensureProvidersInitialized();
 
-    // Contexto de búsqueda (userId viene del servidor, no del cliente)
     const context: SearchContext = {
       query,
       userId: session.user.id,
       limit,
     };
 
-    // Ejecutar búsqueda usando el orquestador
-    // El orquestador coordina todos los adaptadores registrados
-    const response = await SearchOrchestrator.search(context, filters);
-
-    return response;
+    return await SearchOrchestrator.search(context, filters);
   } catch (error) {
     console.error("[searchGlobal] Error:", error);
+
     return {
       groups: [],
       total: 0,

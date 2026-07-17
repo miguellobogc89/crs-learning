@@ -1,12 +1,16 @@
+//lib/search/adapters/knowledge-spaces.adapter.ts
+
 /**
- * Adaptador de búsqueda para espacios/carpetas
- * Módulo: Knowledge > Spaces
+ * Proveedor de búsqueda para espacios y carpetas de Knowledge.
  */
-
 import { prisma } from "@/lib/prisma";
-import type { SearchAdapter, SearchContext, SearchResult } from "../types";
+import type {
+  SearchContext,
+  SearchProvider,
+  SearchResult,
+} from "../types";
 
-export const spacesSearchAdapter: SearchAdapter = {
+export const spacesSearchProvider: SearchProvider = {
   id: "knowledge-spaces",
   category: "carpetas",
   label: "📁 Carpetas",
@@ -18,7 +22,10 @@ export const spacesSearchAdapter: SearchAdapter = {
       const spaces = await prisma.knowledge_spaces.findMany({
         where: {
           visibility: "restricted",
-          name: { contains: query, mode: "insensitive" },
+          name: {
+            contains: query,
+            mode: "insensitive",
+          },
         },
         select: {
           id: true,
@@ -31,12 +38,12 @@ export const spacesSearchAdapter: SearchAdapter = {
       return spaces.map((space) => ({
         id: space.id,
         title: space.name,
-        category: "carpetas" as const,
-        description: space.description || "Espacio",
+        category: "carpetas",
+        description: space.description || "Carpeta",
         url: `/knowledge/space/${space.id}`,
       }));
     } catch (error) {
-      console.error("[SearchAdapter:knowledge-spaces] Error:", error);
+      console.error("[SpacesSearchProvider] Error:", error);
       return [];
     }
   },

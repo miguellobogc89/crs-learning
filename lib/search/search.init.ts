@@ -1,4 +1,5 @@
-// lib/search/search.init.ts
+//lib/search/search.init.ts
+
 /**
  * Inicialización del sistema de búsqueda.
  *
@@ -6,15 +7,14 @@
  * el SearchOrchestrator pueda ejecutar búsquedas sobre los
  * distintos dominios funcionales de la plataforma.
  */
-
 import { SearchOrchestrator } from "./search.orchestrator";
 
-import { usersSearchAdapter } from "./adapters/users.adapter";
-import { coursesSearchAdapter } from "./adapters/courses.adapter";
-import { knowledgeSourcesSearchAdapter } from "./adapters/knowledge-sources.adapter";
-import { librariesSearchAdapter } from "./adapters/knowledge-libraries.adapter";
-import { spacesSearchAdapter } from "./adapters/knowledge-spaces.adapter";
-import { teamsSearchAdapter } from "./adapters/knowledge-teams.adapter";
+import { usersSearchProvider } from "./adapters/users.adapter";
+import { coursesSearchProvider } from "./adapters/courses.adapter";
+import { knowledgeSourcesSearchProvider } from "./adapters/knowledge-sources.adapter";
+import { librariesSearchProvider } from "./adapters/knowledge-libraries.adapter";
+import { spacesSearchProvider } from "./adapters/knowledge-spaces.adapter";
+import { teamsSearchProvider } from "./adapters/knowledge-teams.adapter";
 
 /**
  * Registra todos los dominios de búsqueda disponibles.
@@ -27,20 +27,14 @@ import { teamsSearchAdapter } from "./adapters/knowledge-teams.adapter";
  */
 export function initializeSearchProviders(): void {
   // Usuarios
-  SearchOrchestrator.registerProvider(usersSearchAdapter);
+  SearchOrchestrator.registerProvider(usersSearchProvider);
 
-  // Formación
-  SearchOrchestrator.registerProvider(coursesSearchAdapter);
+  // Learning
+  SearchOrchestrator.registerProvider(coursesSearchProvider);
 
   // Knowledge
-  SearchOrchestrator.registerProvider(knowledgeSourcesSearchAdapter);
-  SearchOrchestrator.registerProvider(librariesSearchAdapter);
-  SearchOrchestrator.registerProvider(spacesSearchAdapter);
-  SearchOrchestrator.registerProvider(teamsSearchAdapter);
-
-  // Futuros dominios:
-  //
-  // SearchOrchestrator.registerProvider(chatSearchProvider);
-  // SearchOrchestrator.registerProvider(automationSearchProvider);
-  // SearchOrchestrator.registerProvider(notificationsSearchProvider);
+  SearchOrchestrator.registerProvider(knowledgeSourcesSearchProvider);
+  SearchOrchestrator.registerProvider(librariesSearchProvider);
+  SearchOrchestrator.registerProvider(spacesSearchProvider);
+  SearchOrchestrator.registerProvider(teamsSearchProvider);
 }

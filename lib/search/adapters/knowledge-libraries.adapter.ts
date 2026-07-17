@@ -1,12 +1,16 @@
+//lib/search/adapters/knowledge-libraries.adapter.ts
+
 /**
- * Adaptador de búsqueda para bibliotecas
- * Módulo: Knowledge > Libraries
+ * Proveedor de búsqueda para bibliotecas de Knowledge.
  */
-
 import { prisma } from "@/lib/prisma";
-import type { SearchAdapter, SearchContext, SearchResult } from "../types";
+import type {
+  SearchContext,
+  SearchProvider,
+  SearchResult,
+} from "../types";
 
-export const librariesSearchAdapter: SearchAdapter = {
+export const librariesSearchProvider: SearchProvider = {
   id: "knowledge-libraries",
   category: "bibliotecas",
   label: "📚 Bibliotecas",
@@ -18,7 +22,10 @@ export const librariesSearchAdapter: SearchAdapter = {
       const libraries = await prisma.knowledge_libraries.findMany({
         where: {
           visibility: "restricted",
-          name: { contains: query, mode: "insensitive" },
+          name: {
+            contains: query,
+            mode: "insensitive",
+          },
         },
         select: {
           id: true,
@@ -32,12 +39,14 @@ export const librariesSearchAdapter: SearchAdapter = {
       return libraries.map((library) => ({
         id: library.id,
         title: library.name,
-        category: "bibliotecas" as const,
-        description: library.parent_id ? "Sublibrary" : "Biblioteca",
+        category: "bibliotecas",
+        description: library.parent_id
+          ? "Biblioteca secundaria"
+          : "Biblioteca",
         url: `/knowledge/library/${library.id}`,
       }));
     } catch (error) {
-      console.error("[SearchAdapter:knowledge-libraries] Error:", error);
+      console.error("[LibrariesSearchProvider] Error:", error);
       return [];
     }
   },
