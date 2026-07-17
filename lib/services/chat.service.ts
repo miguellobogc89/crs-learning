@@ -1,7 +1,10 @@
 // lib/services/chat.service.ts
+
 import { prisma } from "@/lib/prisma";
 
-export async function listChatConversations(userId: string) {
+export async function listChatConversations(
+  userId: string,
+) {
   return prisma.chat_conversations.findMany({
     where: {
       owner_user_id: userId,
@@ -9,6 +12,7 @@ export async function listChatConversations(userId: string) {
     orderBy: {
       updated_at: "desc",
     },
+    take: 50,
     select: {
       id: true,
       title: true,
@@ -35,10 +39,19 @@ export async function getChatConversation(
       id: conversationId,
       owner_user_id: userId,
     },
-    include: {
+    select: {
+      id: true,
+      title: true,
       chat_messages: {
         orderBy: {
           created_at: "asc",
+        },
+        select: {
+          id: true,
+          role: true,
+          content: true,
+          created_at: true,
+          sources_json: true,
         },
       },
     },

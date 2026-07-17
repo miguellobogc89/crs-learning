@@ -1,8 +1,6 @@
 // components/chat/floating-chat.tsx
 "use client";
 
-import { useState } from "react";
-import type { KeyboardEvent } from "react";
 import {
   Bot,
   ChevronDown,
@@ -12,18 +10,38 @@ import {
   Minimize2,
   MoreHorizontal,
   Paperclip,
+  Plus,
   Send,
   Sparkles,
   X,
-  User,
 } from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import type { KeyboardEvent } from "react";
 
 import { cn } from "@/lib/utils";
+import { ChatMessage } from "@/components/chat/chat-message";
 
-type ChatMessage = {
+type ChatSource = {
+  citationId: string;
+  knowledgeSourceId: string;
+  title: string;
+  description: string | null;
+  libraryId: string | null;
+  libraryName: string | null;
+  sourceType: "analysis" | "manual" | "file";
+  fileName: string | null;
+  score: number;
+};
+
+type ChatMessageData = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  sources: ChatSource[];
 };
 
 type ChatConversation = {
@@ -43,17 +61,87 @@ type FloatingChatProps = {
   conversations: ChatConversation[];
 };
 
+type ConversationResponse = {
+  conversation: {
+    id: string;
+    title: string;
+    messages: ChatMessageData[];
+  };
+};
+
+type SendMessageResponse = {
+  conversationId: string;
+  message: ChatMessageData;
+};
+
+const suggestions = [
+  "¿Cuál es el proceso de alta de proveedores?",
+  "Resume las políticas de teletrabajo",
+  "Busca contradicciones en Compras",
+];
+
 export function FloatingChat({
   conversations,
 }: FloatingChatProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] =
+    useState(false);
+
+  const [
+    showConversations,
+    setShowConversations,
+  ] = useState(false);
 
   const [message, setMessage] = useState("");
-const [isSending, setIsSending] = useState(false);
-const [conversationId, setConversationId] = useState<string>();
-const [messages, setMessages] = useState<ChatMessage[]>([]);
-const [showConversations, setShowConversations] = useState(false);
+const [messages, setMessages] = useState<
+  ChatMessageData[]
+>([]);
+
+  const [conversationId, setConversationId] =
+    useState<string>();
+
+  const [conversationList, setConversationList] =
+    useState<ChatConversation[]>(conversations);
+
+  const [isSending, setIsSending] =
+    useState(false);
+
+  const [
+    isLoadingConversation,
+    setIsLoadingConversation,
+  ] = useState(false);
+
+  const [errorMessage, setErrorMessage] =
+    useState<string>();
+
+  const messagesEndRef =
+    useRef<HTMLDivElement>(null);
+
+  const activeConversation =
+    conversationList.find(
+      (conversation) =>
+        conversation.id === conversationId,
+    );
+
+  useEffect(() => {
+    setConversationList(conversations);
+  }, [conversations]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
+  }, [
+    isOpen,
+    messages,
+    isSending,
+    isLoadingConversation,
+  ]);
 
   function openChat() {
     setIsOpen(true);
@@ -62,134 +150,231 @@ const [showConversations, setShowConversations] = useState(false);
   function closeChat() {
     setIsOpen(false);
     setIsExpanded(false);
+    setShowConversations(false);
   }
 
   function toggleExpanded() {
     setIsExpanded((current) => !current);
   }
 
-
-async function sendMessage() {
-  const content = message.trim();
-
-  if (!content || isSending) {
-    return;
+  function startNewConversation() {
+    setConversationId(undefined);
+    setMessages([]);
+    setMessage("");
+    setErrorMessage(undefined);
+    setShowConversations(false);
   }
 
-  const userMessage: ChatMessage = {
-    id: crypto.randomUUID(),
-    role: "user",
-    content,
-  };
-
-  setMessages((currentMessages) => [
-    ...currentMessages,
-    userMessage,
-  ]);
-
-  setMessage("");
-  setIsSending(true);
-
-  try {
-    const response = await fetch("/api/assistant", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        conversationId,
-        message: content,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-
-      console.error(
-        "Assistant API error:",
-        response.status,
-        errorBody,
-      );
-
-      throw new Error(
-        errorBody || "Error enviando el mensaje",
-      );
+  function handleKeyDown(
+    event: KeyboardEvent<HTMLTextAreaElement>,
+  ) {
+    if (event.key !== "Enter") {
+      return;
     }
 
-    const result: {
-      conversationId: string;
-      message: string;
-    } = await response.json();
+    if (event.shiftKey) {
+      return;
+    }
 
-    setConversationId(result.conversationId);
+    event.preventDefault();
 
-    const assistantMessage: ChatMessage = {
+    void sendMessage();
+  }
+
+  async function loadConversation(id: string) {
+    if (
+      isLoadingConversation ||
+      isSending
+    ) {
+      return;
+    }
+
+    setShowConversations(false);
+    setIsLoadingConversation(true);
+    setErrorMessage(undefined);
+
+    try {
+      const response = await fetch(
+        `/api/assistant/${id}`,
+      );
+
+      if (!response.ok) {
+        const errorBody =
+          await response.text();
+
+        throw new Error(
+          errorBody ||
+            "No se pudo cargar la conversación.",
+        );
+      }
+
+      const result =
+        (await response.json()) as ConversationResponse;
+
+      setConversationId(
+        result.conversation.id,
+      );
+
+      setMessages(
+        result.conversation.messages.map(
+          (chatMessage) => ({
+            ...chatMessage,
+            sources:
+              chatMessage.sources ?? [],
+          }),
+        ),
+      );
+
+      setMessage("");
+    } catch (error) {
+      console.error(error);
+
+      setErrorMessage(
+        "No se pudo cargar la conversación seleccionada.",
+      );
+    } finally {
+      setIsLoadingConversation(false);
+    }
+  }
+
+  async function sendMessage() {
+    const content = message.trim();
+
+    if (
+      !content ||
+      isSending ||
+      isLoadingConversation
+    ) {
+      return;
+    }
+
+    const previousConversationId =
+      conversationId;
+
+    const userMessage: ChatMessageData = {
       id: crypto.randomUUID(),
-      role: "assistant",
-      content: result.message,
+      role: "user",
+      content,
+      sources: [],
     };
 
     setMessages((currentMessages) => [
       ...currentMessages,
-      assistantMessage,
+      userMessage,
     ]);
-  } catch (error) {
-    console.error(error);
 
-    const errorMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content:
+    setMessage("");
+    setIsSending(true);
+    setErrorMessage(undefined);
+
+    try {
+      const response = await fetch(
+        "/api/assistant",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            conversationId:
+              previousConversationId,
+            message: content,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorBody =
+          await response.text();
+
+        throw new Error(
+          errorBody ||
+            "Error enviando el mensaje.",
+        );
+      }
+
+      const result =
+        (await response.json()) as SendMessageResponse;
+
+      setConversationId(
+        result.conversationId,
+      );
+
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          ...result.message,
+          sources:
+            result.message.sources ?? [],
+        },
+      ]);
+
+      if (!previousConversationId) {
+        const newConversation: ChatConversation =
+          {
+            id: result.conversationId,
+            title:
+              buildConversationTitle(
+                content,
+              ),
+            scope_type: "company",
+            scope_library_id: null,
+            created_at: new Date(),
+            updated_at: new Date(),
+            knowledge_libraries: null,
+          };
+
+        setConversationList(
+          (currentConversations) => [
+            newConversation,
+            ...currentConversations.filter(
+              (conversation) =>
+                conversation.id !==
+                result.conversationId,
+            ),
+          ],
+        );
+
+        return;
+      }
+
+      setConversationList(
+        (currentConversations) => {
+          const updatedConversation =
+            currentConversations.find(
+              (conversation) =>
+                conversation.id ===
+                previousConversationId,
+            );
+
+          if (!updatedConversation) {
+            return currentConversations;
+          }
+
+          return [
+            {
+              ...updatedConversation,
+              updated_at: new Date(),
+            },
+            ...currentConversations.filter(
+              (conversation) =>
+                conversation.id !==
+                previousConversationId,
+            ),
+          ];
+        },
+      );
+    } catch (error) {
+      console.error(error);
+
+      setErrorMessage(
         "No he podido responder en este momento. Inténtalo de nuevo.",
-    };
-
-    setMessages((currentMessages) => [
-      ...currentMessages,
-      errorMessage,
-    ]);
-  } finally {
-    setIsSending(false);
+      );
+    } finally {
+      setIsSending(false);
+    }
   }
-}
-
-function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-  if (event.key !== "Enter") {
-    return;
-  }
-
-  if (event.shiftKey) {
-    return;
-  }
-
-  event.preventDefault();
-  void sendMessage();
-}
-
-async function loadConversation(id: string) {
-  const response = await fetch(`/api/assistant/${id}`);
-
-  if (!response.ok) {
-    return;
-  }
-
-  const result = await response.json();
-
-  setConversationId(result.conversation.id);
-
-  setMessages(
-    result.conversation.messages.map(
-      (message: {
-        id: string;
-        role: "user" | "assistant";
-        content: string;
-      }) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-      }),
-    ),
-  );
-}
 
   return (
     <>
@@ -200,12 +385,14 @@ async function loadConversation(id: string) {
           aria-label="Abrir asistente"
           className="
             group fixed bottom-6 right-6 z-50
-            flex h-14 items-center gap-3 overflow-hidden
-            rounded-2xl border border-white/20
+            flex h-14 items-center gap-3
+            overflow-hidden rounded-2xl
+            border border-white/20
             bg-neutral-950 px-4 text-white
             shadow-[0_20px_60px_-15px_rgba(0,0,0,0.55)]
             transition-all duration-300
-            hover:-translate-y-1 hover:shadow-[0_24px_70px_-15px_rgba(0,0,0,0.65)]
+            hover:-translate-y-1
+            hover:shadow-[0_24px_70px_-15px_rgba(0,0,0,0.65)]
             active:translate-y-0
           "
         >
@@ -236,7 +423,8 @@ async function loadConversation(id: string) {
             bg-background/95
             shadow-[-24px_0_80px_-35px_rgba(0,0,0,0.35)]
             backdrop-blur-2xl
-            transition-[width,transform] duration-300 ease-out
+            transition-[width,transform]
+            duration-300 ease-out
           `,
           isOpen && "translate-x-0",
           isExpanded
@@ -264,7 +452,8 @@ async function loadConversation(id: string) {
               </div>
 
               <p className="truncate text-xs text-muted-foreground">
-                Conectado al conocimiento de tu empresa
+                Conectado al conocimiento de tu
+                empresa
               </p>
             </div>
           </div>
@@ -303,172 +492,190 @@ async function loadConversation(id: string) {
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="border-b border-border/50 px-5 py-3">
-<button
-  type="button"
-  onClick={() => setShowConversations((current) => !current)}
-  className="flex w-full items-center justify-between rounded-xl px-1 py-1 text-left"
->
-  <div>
-    <p className="text-xs font-medium">
-      Conversación actual
-    </p>
-
-    <p className="mt-0.5 text-[11px] text-muted-foreground">
-      {conversationId
-        ? conversations.find(
-            (conversation) => conversation.id === conversationId,
-          )?.title || "Conversación activa"
-        : "Nueva conversación"}
-    </p>
-  </div>
-
-  <ChevronDown
-    className={cn(
-      "h-4 w-4 text-muted-foreground transition-transform",
-      showConversations && "rotate-180",
-    )}
-  />
-</button>
-          </div>
-
-<div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
-  <div
-  className={cn(
-    "flex min-h-full w-full flex-col",
-    isExpanded ? "px-6 lg:px-10" : "",
-  )}
->
-    {messages.length === 0 ? (
-      <>
-        <div className="mb-8">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-950 text-white shadow-sm">
-            <Sparkles className="h-5 w-5" />
-          </div>
-
-          <h3 className="text-xl font-semibold tracking-tight">
-            ¿En qué puedo ayudarte?
-          </h3>
-
-          <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-            Pregunta sobre procesos, documentación, políticas o cualquier
-            conocimiento disponible en tu empresa.
-          </p>
-        </div>
-
-        <div className="grid gap-2">
-          {[
-            "¿Cuál es el proceso de alta de proveedores?",
-            "Resume las políticas de teletrabajo",
-            "Busca contradicciones en Compras",
-          ].map((suggestion) => (
+          <div className="relative border-b border-border/50 px-5 py-3">
             <button
-              key={suggestion}
               type="button"
-              onClick={() => setMessage(suggestion)}
-              className="
-                group flex items-center justify-between
-                rounded-2xl border border-border/70
-                bg-card px-4 py-3.5 text-left
-                text-sm transition-all
-                hover:-translate-y-0.5 hover:border-border
-                hover:bg-muted/50 hover:shadow-sm
-              "
+              onClick={() => {
+                setShowConversations(
+                  (current) => !current,
+                );
+              }}
+              className="flex w-full items-center justify-between rounded-xl px-1 py-1 text-left"
             >
-              <span>{suggestion}</span>
+              <div className="min-w-0">
+                <p className="text-xs font-medium">
+                  Conversación actual
+                </p>
 
-              <MessageCircle className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
-            </button>
-          ))}
-        </div>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {activeConversation?.title ??
+                    "Nueva conversación"}
+                </p>
+              </div>
 
-        <div className="mt-auto pt-8">
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Respuestas basadas únicamente en contenido autorizado
-          </div>
-        </div>
-      </>
-    ) : (
-      <div className="flex flex-col gap-5">
-        {messages.map((chatMessage) => (
-          <div
-            key={chatMessage.id}
-            className={
-              chatMessage.role === "user"
-                ? "flex justify-end"
-                : "flex justify-start"
-            }
-          >
-            <div
-              className={
-                chatMessage.role === "user"
-                  ? "flex max-w-[75%] gap-3 rounded-2xl rounded-br-md bg-neutral-950 px-4 py-3 text-white"
-                  : "flex max-w-[75%] gap-3 rounded-2xl rounded-bl-md border border-border bg-card px-4 py-3 text-foreground shadow-sm"
-              }
-            >
-              <div className="mt-0.5 shrink-0">
-                {chatMessage.role === "user" ? (
-                  <User className="h-4 w-4" />
-                ) : (
-                  <Bot className="h-4 w-4 text-brand" />
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                  showConversations &&
+                    "rotate-180",
                 )}
-              </div>
+              />
+            </button>
 
-              <p className="whitespace-pre-wrap text-sm leading-6">
-                {chatMessage.content}
-              </p>
+            {showConversations && (
+              <div className="absolute left-4 right-4 top-[calc(100%-4px)] z-30 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+                <div className="border-b border-border p-2">
+                  <button
+                    type="button"
+                    onClick={
+                      startNewConversation
+                    }
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted"
+                  >
+                    <Plus className="h-4 w-4 text-brand" />
+                    Nueva conversación
+                  </button>
+                </div>
+
+                <div className="max-h-80 overflow-y-auto p-2">
+                  {conversationList.length ===
+                  0 ? (
+                    <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                      Todavía no hay
+                      conversaciones.
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {conversationList.map(
+                        (conversation) => (
+                          <button
+                            key={
+                              conversation.id
+                            }
+                            type="button"
+                            disabled={
+                              isLoadingConversation ||
+                              isSending
+                            }
+                            onClick={() => {
+                              void loadConversation(
+                                conversation.id,
+                              );
+                            }}
+                            className={cn(
+                              "w-full rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50",
+                              conversation.id ===
+                                conversationId &&
+                                "bg-brand-soft",
+                            )}
+                          >
+                            <span className="block truncate text-sm font-medium text-foreground">
+                              {
+                                conversation.title
+                              }
+                            </span>
+
+                            <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                              {getConversationScopeLabel(
+                                conversation,
+                              )}
+                            </span>
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
+            <div
+              className={cn(
+                "flex min-h-full w-full flex-col",
+                isExpanded &&
+                  "px-6 lg:px-10",
+              )}
+            >
+              {isLoadingConversation ? (
+                <div className="flex flex-1 items-center justify-center">
+                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                    <LoaderCircle className="h-6 w-6 animate-spin" />
+
+                    <p className="text-xs">
+                      Cargando conversación...
+                    </p>
+                  </div>
+                </div>
+              ) : messages.length === 0 ? (
+                <EmptyChat
+                  onSuggestionClick={
+                    setMessage
+                  }
+                />
+              ) : (
+                <div className="flex flex-col gap-5">
+{messages.map((chatMessage) => (
+  <ChatMessage
+    key={chatMessage.id}
+    message={chatMessage}
+  />
+))}
+
+                  {isSending && (
+                    <TypingIndicator />
+                  )}
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
             </div>
           </div>
-        ))}
-
-        {isSending && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-3 rounded-2xl rounded-bl-md border border-border bg-card px-4 py-3 shadow-sm">
-              <Bot className="h-4 w-4 text-brand" />
-
-              <div className="flex items-center gap-1">
-                <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
-                <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    )}
-  </div>
-</div>
 
           <footer className="shrink-0 border-t border-border/70 bg-background/90 p-4 backdrop-blur-xl">
+            {errorMessage && (
+              <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {errorMessage}
+              </div>
+            )}
+
             <div
               className="
-                rounded-[22px] border border-border
-                bg-card p-2
+                rounded-[22px] border
+                border-border bg-card p-2
                 shadow-[0_10px_35px_-20px_rgba(0,0,0,0.3)]
                 transition-shadow
                 focus-within:shadow-[0_14px_40px_-20px_rgba(0,0,0,0.4)]
               "
             >
-<textarea
-  rows={1}
-  value={message}
-  disabled={isSending}
-  onChange={(event) => setMessage(event.target.value)}
-  onKeyDown={handleKeyDown}
-  placeholder={
-    isSending
-      ? "Consultando el conocimiento..."
-      : "Pregunta sobre el conocimiento de tu empresa..."
-  }
-  className="
-    max-h-32 min-h-12 w-full resize-none
-    bg-transparent px-3 py-3
-    text-sm outline-none
-    placeholder:text-muted-foreground
-    disabled:cursor-not-allowed disabled:opacity-60
-  "
-/>
+              <textarea
+                rows={1}
+                value={message}
+                disabled={
+                  isSending ||
+                  isLoadingConversation
+                }
+                onChange={(event) => {
+                  setMessage(
+                    event.target.value,
+                  );
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  isSending
+                    ? "Consultando el conocimiento..."
+                    : "Pregunta sobre el conocimiento de tu empresa..."
+                }
+                className="
+                  max-h-32 min-h-12 w-full
+                  resize-none bg-transparent
+                  px-3 py-3 text-sm outline-none
+                  placeholder:text-muted-foreground
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
+                "
+              />
 
               <div className="flex items-center justify-between px-1 pb-1">
                 <div className="flex items-center gap-1">
@@ -489,34 +696,158 @@ async function loadConversation(id: string) {
                   </button>
                 </div>
 
-<button
-  type="button"
-  onClick={() => void sendMessage()}
-  disabled={!message.trim() || isSending}
-  className="
-    flex h-9 w-9 items-center justify-center
-    rounded-xl bg-neutral-950 text-white
-    shadow-sm transition-all
-    hover:scale-[1.03] hover:bg-neutral-800
-    active:scale-95
-    disabled:cursor-not-allowed
-    disabled:opacity-40
-    disabled:hover:scale-100
-  "
-  aria-label={isSending ? "Enviando mensaje" : "Enviar mensaje"}
->
-  {isSending ? (
-    <LoaderCircle className="h-4 w-4 animate-spin" />
-  ) : (
-    <Send className="h-4 w-4" />
-  )}
-</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void sendMessage();
+                  }}
+                  disabled={
+                    !message.trim() ||
+                    isSending ||
+                    isLoadingConversation
+                  }
+                  className="
+                    flex h-9 w-9 items-center
+                    justify-center rounded-xl
+                    bg-neutral-950 text-white
+                    shadow-sm transition-all
+                    hover:scale-[1.03]
+                    hover:bg-neutral-800
+                    active:scale-95
+                    disabled:cursor-not-allowed
+                    disabled:opacity-40
+                    disabled:hover:scale-100
+                  "
+                  aria-label={
+                    isSending
+                      ? "Enviando mensaje"
+                      : "Enviar mensaje"
+                  }
+                >
+                  {isSending ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </button>
               </div>
             </div>
 
+            <p className="mt-2 text-center text-[10px] text-muted-foreground">
+              CRS puede cometer errores.
+              Comprueba la documentación
+              enlazada.
+            </p>
           </footer>
         </div>
       </aside>
     </>
   );
+}
+
+function EmptyChat({
+  onSuggestionClick,
+}: {
+  onSuggestionClick: (value: string) => void;
+}) {
+  return (
+    <>
+      <div className="mb-8">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-950 text-white shadow-sm">
+          <Sparkles className="h-5 w-5" />
+        </div>
+
+        <h3 className="text-xl font-semibold tracking-tight">
+          ¿En qué puedo ayudarte?
+        </h3>
+
+        <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+          Pregunta sobre procesos,
+          documentación, políticas o cualquier
+          conocimiento disponible en tu empresa.
+        </p>
+      </div>
+
+      <div className="grid gap-2">
+        {suggestions.map((suggestion) => (
+          <button
+            key={suggestion}
+            type="button"
+            onClick={() => {
+              onSuggestionClick(suggestion);
+            }}
+            className="
+              group flex items-center
+              justify-between rounded-2xl
+              border border-border/70 bg-card
+              px-4 py-3.5 text-left text-sm
+              transition-all
+              hover:-translate-y-0.5
+              hover:border-border
+              hover:bg-muted/50 hover:shadow-sm
+            "
+          >
+            <span>{suggestion}</span>
+
+            <MessageCircle className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-auto pt-8">
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          Respuestas basadas únicamente en
+          contenido autorizado
+        </div>
+      </div>
+    </>
+  );
+}
+
+
+function TypingIndicator() {
+  return (
+    <div className="flex justify-start">
+      <div className="flex items-center gap-3 rounded-2xl rounded-bl-md border border-border bg-card px-4 py-3 shadow-sm">
+        <Bot className="h-4 w-4 text-brand" />
+
+        <div className="flex items-center gap-1">
+          <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
+          <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
+          <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getConversationScopeLabel(
+  conversation: ChatConversation,
+) {
+  if (
+    conversation.scope_type === "library" &&
+    conversation.knowledge_libraries
+  ) {
+    return `Biblioteca · ${conversation.knowledge_libraries.name}`;
+  }
+
+  if (
+    conversation.scope_type === "folder" &&
+    conversation.knowledge_libraries
+  ) {
+    return `Carpeta · ${conversation.knowledge_libraries.name}`;
+  }
+
+  return "Toda la empresa";
+}
+
+function buildConversationTitle(
+  message: string,
+) {
+  if (message.length <= 60) {
+    return message;
+  }
+
+  return `${message.slice(0, 57)}...`;
 }

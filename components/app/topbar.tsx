@@ -6,6 +6,7 @@ import Image from "next/image";
 import { Bell, UserCircle } from "lucide-react";
 
 import { logout } from "@/app/actions/auth";
+import { GlobalSearch } from "@/components/search/global-search";
 
 type Props = {
   user: {
@@ -23,9 +24,15 @@ export function AppTopbar({
   const userLabel = user.name ?? user.email ?? "Usuario";
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-white px-4">
-      <div className="min-w-0 flex-1 overflow-hidden">
+    <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border bg-white px-4">
+      <div className="min-w-0 flex-shrink">
         {breadcrumb}
+      </div>
+
+      <div className="flex-1 min-w-0 flex justify-center px-4">
+        <div className="w-full max-w-2xl">
+          <GlobalSearch />
+        </div>
       </div>
 
       <div className="ml-4 flex shrink-0 items-center gap-2">
