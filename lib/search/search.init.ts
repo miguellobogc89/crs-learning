@@ -1,12 +1,14 @@
+// lib/search/search.init.ts
 /**
- * Inicialización del sistema de búsqueda modular
- * Registra todos los adaptadores disponibles
- * 
- * Este archivo se importa desde el server action para garantizar
- * que todos los adaptadores estén registrados antes de usar el orquestador
+ * Inicialización del sistema de búsqueda.
+ *
+ * Registra todos los Search Providers disponibles para que
+ * el SearchOrchestrator pueda ejecutar búsquedas sobre los
+ * distintos dominios funcionales de la plataforma.
  */
 
 import { SearchOrchestrator } from "./search.orchestrator";
+
 import { usersSearchAdapter } from "./adapters/users.adapter";
 import { coursesSearchAdapter } from "./adapters/courses.adapter";
 import { knowledgeSourcesSearchAdapter } from "./adapters/knowledge-sources.adapter";
@@ -15,42 +17,30 @@ import { spacesSearchAdapter } from "./adapters/knowledge-spaces.adapter";
 import { teamsSearchAdapter } from "./adapters/knowledge-teams.adapter";
 
 /**
- * Registra todos los adaptadores de búsqueda disponibles
- * 
- * Para agregar un nuevo módulo de búsqueda:
- * 1. Crear un nuevo archivo en lib/search/adapters/{module}.adapter.ts
- * 2. Exportar un objeto que implemente SearchAdapter
- * 3. Importarlo aquí
- * 4. Llamar SearchOrchestrator.registerAdapter(newAdapter)
- * 
- * Ejemplo:
- * ```
- * import { chatsSearchAdapter } from "./adapters/chats.adapter";
- * SearchOrchestrator.registerAdapter(chatsSearchAdapter);
- * ```
+ * Registra todos los dominios de búsqueda disponibles.
+ *
+ * Para añadir un nuevo dominio:
+ *
+ * 1. Crear un Search Provider.
+ * 2. Importarlo aquí.
+ * 3. Registrarlo mediante SearchOrchestrator.registerProvider().
  */
-export function initializeSearchAdapters(): void {
-  // Módulo: Users
-  SearchOrchestrator.registerAdapter(usersSearchAdapter);
+export function initializeSearchProviders(): void {
+  // Usuarios
+  SearchOrchestrator.registerProvider(usersSearchAdapter);
 
-  // Módulo: Courses
-  SearchOrchestrator.registerAdapter(coursesSearchAdapter);
+  // Formación
+  SearchOrchestrator.registerProvider(coursesSearchAdapter);
 
-  // Módulo: Knowledge > Sources (Documentos)
-  SearchOrchestrator.registerAdapter(knowledgeSourcesSearchAdapter);
+  // Knowledge
+  SearchOrchestrator.registerProvider(knowledgeSourcesSearchAdapter);
+  SearchOrchestrator.registerProvider(librariesSearchAdapter);
+  SearchOrchestrator.registerProvider(spacesSearchAdapter);
+  SearchOrchestrator.registerProvider(teamsSearchAdapter);
 
-  // Módulo: Knowledge > Libraries
-  SearchOrchestrator.registerAdapter(librariesSearchAdapter);
-
-  // Módulo: Knowledge > Spaces
-  SearchOrchestrator.registerAdapter(spacesSearchAdapter);
-
-  // Módulo: Knowledge > Teams
-  SearchOrchestrator.registerAdapter(teamsSearchAdapter);
-
-  // Próximos módulos a agregar:
-  // - Chats (cuando esté implementado)
-  // - Announcements (cuando esté implementado)
-  // - Proyectos (si se agrega)
-  // - etc.
+  // Futuros dominios:
+  //
+  // SearchOrchestrator.registerProvider(chatSearchProvider);
+  // SearchOrchestrator.registerProvider(automationSearchProvider);
+  // SearchOrchestrator.registerProvider(notificationsSearchProvider);
 }

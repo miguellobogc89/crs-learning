@@ -1,15 +1,17 @@
-/**
- * Adaptador de búsqueda para usuarios
- * Módulo: Users
- */
-
+//lib/search/adapters/users.adapter.ts
 import { prisma } from "@/lib/prisma";
-import type { SearchAdapter, SearchContext, SearchResult } from "../types";
+import type {
+  SearchContext,
+  SearchProvider,
+  SearchResult,
+} from "../types";
 
-export const usersSearchAdapter: SearchAdapter = {
+export const usersSearchProvider: SearchProvider = {
   id: "users",
+
   category: "usuarios",
-  label: "👥 Usuarios",
+
+  label: "👤 Usuarios",
 
   async search(context: SearchContext): Promise<SearchResult[]> {
     const { query, limit = 10 } = context;
@@ -18,29 +20,32 @@ export const usersSearchAdapter: SearchAdapter = {
       const users = await prisma.users.findMany({
         where: {
           OR: [
-            { name: { contains: query, mode: "insensitive" } },
-            { email: { contains: query, mode: "insensitive" } },
+            {
+              name: {
+                contains: query,
+                mode: "insensitive",
+              },
+            },
+            {
+              email: {
+                contains: query,
+                mode: "insensitive",
+              },
+            },
           ],
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          image: true,
         },
         take: limit,
       });
 
       return users.map((user) => ({
         id: user.id,
-        title: user.name || user.email || "Usuario sin nombre",
-        category: "usuarios" as const,
+        title: user.name || user.email,
+        category: "usuarios",
         description: user.email,
-        avatar: user.image || undefined,
         url: `/users/${user.id}`,
       }));
     } catch (error) {
-      console.error("[SearchAdapter:users] Error:", error);
+      console.error("[UsersSearchProvider]", error);
       return [];
     }
   },

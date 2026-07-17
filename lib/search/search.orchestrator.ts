@@ -1,69 +1,48 @@
+// lib/search/search.orchestrator.ts
 /**
  * Orquestador de búsqueda modular
- * Coordina múltiples adaptadores y aplica lógica central
- * 
- * Flujo:
- * 1. Registra todos los adaptadores disponibles
- * 2. Ejecuta búsquedas en paralelo en todos los módulos
- * 3. Aplica filtros y permisos
- * 4. Agrupa resultados por categoría
- * 5. Retorna respuesta formateada
+ *
+ * Coordina los distintos Search Providers registrados
+ * sin conocer cómo obtiene cada uno sus resultados.
  */
 
 import type {
-  SearchAdapter,
-  SearchAdapterRegistry,
   SearchContext,
   SearchGroup,
+  SearchProvider,
+  SearchProviderRegistry,
   SearchResponse,
-  SearchResult,
 } from "./types";
 
-class SearchAdapterRegistryImpl implements SearchAdapterRegistry {
-  private adapters: Map<string, SearchAdapter> = new Map();
+class SearchProviderRegistryImpl implements SearchProviderRegistry {
+  private providers = new Map<string, SearchProvider>();
 
-  register(adapter: SearchAdapter): void {
-    this.adapters.set(adapter.id, adapter);
+  register(provider: SearchProvider): void {
+    this.providers.set(provider.id, provider);
   }
 
-  getAdapter(id: string): SearchAdapter | undefined {
-    return this.adapters.get(id);
+  getProvider(id: string): SearchProvider | undefined {
+    return this.providers.get(id);
   }
 
-  getAllAdapters(): SearchAdapter[] {
-    return Array.from(this.adapters.values());
+  getAllProviders(): SearchProvider[] {
+    return Array.from(this.providers.values());
   }
 }
 
-// Instancia global del registro
-const adapterRegistry = new SearchAdapterRegistryImpl();
+// Registro global
+const providerRegistry = new SearchProviderRegistryImpl();
 
-/**
- * Orquestador de búsqueda
- * Punto central para coordinar búsquedas en múltiples módulos
- */
 export class SearchOrchestrator {
   /**
-   * Registra un nuevo adaptador de búsqueda
-   * @param adapter Adaptador que implementa la interfaz SearchAdapter
-   * 
-   * Ejemplo:
-   * ```
-   * SearchOrchestrator.registerAdapter(usersSearchAdapter);
-   * SearchOrchestrator.registerAdapter(coursesSearchAdapter);
-   * ```
+   * Registra un nuevo dominio de búsqueda.
    */
-  static registerAdapter(adapter: SearchAdapter): void {
-    adapterRegistry.register(adapter);
+  static registerProvider(provider: SearchProvider): void {
+    providerRegistry.register(provider);
   }
 
   /**
-   * Ejecuta búsqueda en todos los adaptadores registrados
-   * Aplica filtros y permisos en el servidor
-   * 
-   * @param context Contexto de búsqueda (query, userId, limit)
-   * @param filters Categorías específicas a buscar (si no se especifican, busca en todas)
-   * @returns Respuesta agrupada por categoría
+   * Ejecuta la búsqueda en todos los dominios registrados.
    */
   static async search(
     context: SearchContext,
@@ -82,60 +61,52 @@ export class SearchOrchestrator {
     }
 
     try {
-      // Obtener adaptadores a usar
-      let adaptersToUse = adapterRegistry.getAllAdapters();
+      let providers = providerRegistry.getAllProviders();
 
-      // Filtrar por categorías si se especifican
-      if (filters && filters.length > 0) {
-        adaptersToUse = adaptersToUse.filter((adapter) =>
-          filters.includes(adapter.category)
+      if (filters?.length) {
+        providers = providers.filter((provider) =>
+          filters.includes(provider.category)
         );
       }
 
-      // Ejecutar búsquedas en paralelo
-      const searchPromises = adaptersToUse.map((adapter) =>
-        adapter
-          .search(context)
-          .then((results) => ({
-            adapter,
-            results,
-          }))
-          .catch((error) => {
+      const searchResults = await Promise.all(
+        providers.map(async (provider) => {
+          try {
+            return {
+              provider,
+              results: await provider.search(context),
+            };
+          } catch (error) {
             console.error(
-              `[SearchOrchestrator] Error searching with adapter ${adapter.id}:`,
+              `[SearchOrchestrator] Error searching with provider "${provider.id}"`,
               error
             );
+
             return {
-              adapter,
+              provider,
               results: [],
             };
-          })
+          }
+        })
       );
 
-      const searchResults = await Promise.all(searchPromises);
-
-      // Agrupar resultados por categoría
       const groups: SearchGroup[] = searchResults
         .filter((r) => r.results.length > 0)
         .map((r) => ({
-          category: r.adapter.category,
-          label: r.adapter.label,
+          category: r.provider.category,
+          label: r.provider.label,
           results: r.results,
         }));
 
-      // Calcular total de resultados
-      const total = groups.reduce((sum, group) => sum + group.results.length, 0);
-
-      const executionTime = performance.now() - startTime;
-
       return {
         groups,
-        total,
+        total: groups.reduce((sum, g) => sum + g.results.length, 0),
         query,
-        executionTime,
+        executionTime: performance.now() - startTime,
       };
     } catch (error) {
-      console.error("[SearchOrchestrator] Unexpected error:", error);
+      console.error("[SearchOrchestrator]", error);
+
       return {
         groups: [],
         total: 0,
@@ -146,14 +117,18 @@ export class SearchOrchestrator {
   }
 
   /**
-   * Obtiene información sobre los adaptadores registrados
-   * Útil para debugging y UI
+   * Información de los providers registrados.
+   * Útil para debugging y herramientas internas.
    */
-  static getAdaptersInfo(): Array<{ id: string; category: string; label: string }> {
-    return adapterRegistry.getAllAdapters().map((adapter) => ({
-      id: adapter.id,
-      category: adapter.category,
-      label: adapter.label,
+  static getProvidersInfo(): Array<{
+    id: string;
+    category: string;
+    label: string;
+  }> {
+    return providerRegistry.getAllProviders().map((provider) => ({
+      id: provider.id,
+      category: provider.category,
+      label: provider.label,
     }));
   }
 }

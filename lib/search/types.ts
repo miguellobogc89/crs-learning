@@ -1,6 +1,9 @@
+// lib/search/types.ts
 /**
- * Tipos compartidos para el sistema de búsqueda modular
- * Define la interfaz que todos los adaptadores de búsqueda deben cumplir
+ * Tipos compartidos para el sistema modular de búsqueda.
+ *
+ * La arquitectura se organiza alrededor de dominios funcionales
+ * de la plataforma, no alrededor de tablas o modelos de Prisma.
  */
 
 export type SearchCategory =
@@ -10,8 +13,9 @@ export type SearchCategory =
   | "bibliotecas"
   | "carpetas"
   | "equipos"
+  | "cursos"
   | "chats"
-  | "cualquier-otro-modulo";
+  | "automatizaciones";
 
 export interface SearchResult {
   id: string;
@@ -21,7 +25,7 @@ export interface SearchResult {
   avatar?: string;
   icon?: string;
   url?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SearchGroup {
@@ -37,6 +41,13 @@ export interface SearchResponse {
   executionTime: number;
 }
 
+/**
+ * Contexto seguro construido en el servidor.
+ *
+ * userId nunca debe recibirse desde el cliente.
+ * En el futuro se podrán incorporar aquí companyId,
+ * equipos, roles, permisos y locale.
+ */
 export interface SearchContext {
   query: string;
   userId: string;
@@ -44,35 +55,46 @@ export interface SearchContext {
 }
 
 /**
- * Interfaz que todos los adaptadores de búsqueda deben implementar
- * Permite agregar nuevos módulos sin modificar la lógica central
+ * Contrato común de los proveedores de búsqueda.
+ *
+ * Cada dominio funcional implementa este contrato y se encarga
+ * internamente de consultar las tablas o servicios que necesite.
  */
-export interface SearchAdapter {
+export interface SearchProvider {
   /**
-   * ID único del adaptador (ej: "users", "courses", "knowledge")
+   * Identificador único del proveedor.
+   *
+   * Ejemplos:
+   * - users
+   * - knowledge
+   * - learning
+   * - teams
+   * - chats
    */
   readonly id: string;
 
   /**
-   * Categoría que maneja este adaptador
+   * Categoría de resultados proporcionada.
    */
   readonly category: SearchCategory;
 
   /**
-   * Etiqueta legible para mostrar en la UI
+   * Etiqueta legible utilizada en la interfaz.
    */
   readonly label: string;
 
   /**
-   * Realiza la búsqueda en este módulo respetando permisos del usuario
-   * @param context Contexto de búsqueda (query, userId, limit)
-   * @returns Resultados accesibles para el usuario
+   * Ejecuta la búsqueda dentro del dominio respetando
+   * el contexto y los permisos del usuario.
    */
   search(context: SearchContext): Promise<SearchResult[]>;
 }
 
-export interface SearchAdapterRegistry {
-  register(adapter: SearchAdapter): void;
-  getAdapter(id: string): SearchAdapter | undefined;
-  getAllAdapters(): SearchAdapter[];
+/**
+ * Registro central de proveedores disponibles.
+ */
+export interface SearchProviderRegistry {
+  register(provider: SearchProvider): void;
+  getProvider(id: string): SearchProvider | undefined;
+  getAllProviders(): SearchProvider[];
 }
