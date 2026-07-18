@@ -325,6 +325,15 @@ toast.error("No se ha podido mover", {
   );
 }
 
+console.log("KnowledgeExplorer debug", {
+  selectedLibraryId,
+  canCreateArticle,
+  selectedView,
+  isEmpty,
+  folders: folders.length,
+  knowledgeSources: knowledgeSources.length,
+});
+
   if (isEmpty) {
 if (selectedView === "shared") {
   return (
@@ -337,11 +346,13 @@ if (selectedView === "shared") {
 }
 
 if (selectedLibraryId && canCreateArticle) {
-<KnowledgeImportFlow
-  libraryId={selectedLibraryId}
-  libraryName="Carpeta"
-  onCreateArticle={onCreateArticle}
-/>
+  return (
+    <KnowledgeImportFlow
+      libraryId={selectedLibraryId}
+      libraryName="Carpeta"
+      onCreateArticle={onCreateArticle}
+    />
+  );
 }
 
 return (

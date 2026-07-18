@@ -87,6 +87,141 @@ function validateDocumentAnalyses(
   }
 }
 
+function validateGeneratedProposal(
+  proposal: Omit<
+    KnowledgeImportProposal,
+    "documentAnalyses"
+  >,
+  analyses: KnowledgeImportDocumentAnalysis[],
+) {
+  const validDocumentIds = new Set(
+    analyses.map(
+      (analysis) => analysis.documentId,
+    ),
+  );
+
+  const folderIds = new Set<string>();
+  const articleIds = new Set<string>();
+  const assignedDocumentIds = new Set<string>();
+
+  for (const folder of proposal.folders) {
+    if (folderIds.has(folder.id)) {
+      throw new Error(
+        `La propuesta contiene una carpeta duplicada: ${folder.id}`,
+      );
+    }
+
+    folderIds.add(folder.id);
+  }
+
+  for (const folder of proposal.folders) {
+    if (
+      folder.parentFolderId &&
+      !folderIds.has(folder.parentFolderId)
+    ) {
+      throw new Error(
+        `La carpeta ${folder.id} apunta a una carpeta padre inexistente`,
+      );
+    }
+
+    if (
+      folder.parentFolderId === folder.id
+    ) {
+      throw new Error(
+        `La carpeta ${folder.id} no puede ser su propia carpeta padre`,
+      );
+    }
+  }
+
+  for (const article of proposal.articles) {
+    if (articleIds.has(article.id)) {
+      throw new Error(
+        `La propuesta contiene un artículo duplicado: ${article.id}`,
+      );
+    }
+
+    articleIds.add(article.id);
+
+    if (
+      article.folderId &&
+      !folderIds.has(article.folderId)
+    ) {
+      throw new Error(
+        `El artículo ${article.id} apunta a una carpeta inexistente`,
+      );
+    }
+
+    if (
+      article.documentIds.length !==
+      article.documentNames.length
+    ) {
+      throw new Error(
+        `El artículo ${article.id} contiene un número distinto de IDs y nombres de documento`,
+      );
+    }
+
+    for (const documentId of article.documentIds) {
+      if (!validDocumentIds.has(documentId)) {
+        throw new Error(
+          `El artículo ${article.id} contiene un documento desconocido: ${documentId}`,
+        );
+      }
+
+      if (assignedDocumentIds.has(documentId)) {
+        throw new Error(
+          `El documento ${documentId} ha sido asignado a más de un artículo`,
+        );
+      }
+
+      assignedDocumentIds.add(documentId);
+    }
+  }
+
+  for (const documentId of validDocumentIds) {
+    if (!assignedDocumentIds.has(documentId)) {
+      throw new Error(
+        `El documento ${documentId} no ha sido asignado a ningún artículo`,
+      );
+    }
+  }
+
+  if (
+    proposal.summary.totalDocuments !==
+    validDocumentIds.size
+  ) {
+    throw new Error(
+      "El total de documentos de la propuesta no coincide con los documentos analizados",
+    );
+  }
+
+  if (
+    proposal.summary.totalFolders !==
+    proposal.folders.length
+  ) {
+    throw new Error(
+      "El total de carpetas de la propuesta no coincide con la estructura generada",
+    );
+  }
+
+  if (
+    proposal.summary.totalArticles !==
+    proposal.articles.length
+  ) {
+    throw new Error(
+      "El total de artículos de la propuesta no coincide con la estructura generada",
+    );
+  }
+
+  if (
+    proposal.summary.totalWarnings !==
+    proposal.warnings.length
+  ) {
+    throw new Error(
+      "El total de avisos de la propuesta no coincide con los avisos generados",
+    );
+  }
+}
+
 async function analyzeDocumentBatch(
   documents: KnowledgeImportDocumentInput[],
 ) {
@@ -172,15 +307,22 @@ async function generateGlobalProposal(
     },
   });
 
-  return parseJsonResponse<
-    Omit<
-      KnowledgeImportProposal,
-      "documentAnalyses"
-    >
-  >(
-    response.output_text,
-    "la generación de la propuesta",
-  );
+const proposal = parseJsonResponse<
+  Omit<
+    KnowledgeImportProposal,
+    "documentAnalyses"
+  >
+>(
+  response.output_text,
+  "la generación de la propuesta",
+);
+
+validateGeneratedProposal(
+  proposal,
+  analyses,
+);
+
+return proposal;
 }
 
 export async function generateKnowledgeImportProposal({

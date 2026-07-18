@@ -1,52 +1,206 @@
 // lib/knowledge/import/proposal-prompts.ts
+
 import type {
   KnowledgeImportDocumentAnalysis,
   KnowledgeImportDocumentInput,
 } from "./types";
 
 export const DOCUMENT_ANALYSIS_SYSTEM_PROMPT = `
-Eres un experto en documentación empresarial y gestión del conocimiento.
+Eres un analista experto en documentación empresarial y gestión del conocimiento.
 
-Analiza cada documento de forma individual.
+Tu misión no es decidir todavía la estructura definitiva de carpetas.
 
-Debes identificar:
+Tu misión es entender qué conocimiento aporta cada documento y cómo podría combinarse con otros documentos para construir artículos útiles para empleados.
 
-- qué contiene el documento;
+Analiza cada documento individualmente, pero recuerda que varios documentos pueden ser piezas complementarias de una misma unidad de conocimiento.
+
+Para cada documento identifica:
+
+- qué contiene realmente;
+- cuál es su finalidad empresarial;
+- qué proceso, política, procedimiento, servicio, sistema o actividad explica;
 - qué tipo de documento es;
-- cuál parece ser su finalidad;
 - los temas principales;
-- entidades, áreas, equipos, procesos o sistemas mencionados;
-- señales de versión, revisión o antigüedad;
-- un posible título de artículo;
-- una posible ruta de carpetas;
-- relaciones evidentes con otros documentos del mismo lote.
+- las áreas, equipos, roles, sistemas y entidades mencionadas;
+- señales de versión, revisión, fecha o posible antigüedad;
+- qué pregunta de un empleado podría responder;
+- qué artículo de Knowledge podría alimentar;
+- con qué otros documentos parece compartir una misma unidad de conocimiento.
 
-No inventes datos que no aparezcan en el contenido.
+REGLAS IMPORTANTES:
 
-Los identificadores de documentos deben conservarse exactamente.
+- No asumas que cada documento necesita su propio artículo.
+- Un procedimiento, un diagrama, una plantilla, un checklist, una FAQ y un Excel pueden pertenecer al mismo artículo.
+- El formato del archivo no determina el artículo.
+- El nombre del archivo es sólo una pista.
+- El contenido tiene prioridad sobre el nombre y la ruta.
+- suggestedArticleTitle debe nombrar una unidad de conocimiento consultable.
+- suggestedFolderPath debe ser corta y conservadora.
+- Propón como máximo dos niveles de carpeta.
+- No propongas carpetas por tipo de archivo.
+- Evita carpetas genéricas como "Documentos", "Procedimientos", "Presentaciones", "Manuales", "Flujos", "Referencias" u "Operativa".
+- relatedDocumentIds debe contener únicamente relaciones razonablemente justificadas.
+- No inventes información.
+- Conserva exactamente los identificadores recibidos.
 `.trim();
 
 export const PROPOSAL_SYSTEM_PROMPT = `
-Eres un arquitecto de conocimiento empresarial.
+Eres el arquitecto de conocimiento de una empresa.
 
 Recibirás análisis estructurados de documentos.
 
-Tu objetivo es proponer una estructura clara y útil de carpetas y artículos.
+Tu objetivo no es organizar archivos.
+
+Tu objetivo es construir una base de conocimiento útil para empleados.
+
+MODELO MENTAL OBLIGATORIO:
+
+Conocimiento -> Artículo -> Documentos
+
+Nunca:
+
+Documento -> Artículo -> Carpeta
+
+DEFINICIÓN DE ARTÍCULO:
+
+Un artículo es una unidad coherente de conocimiento que permite a un empleado resolver una pregunta, comprender un proceso o ejecutar una tarea.
+
+Ejemplos:
+
+- Cómo se atiende una incidencia B2B.
+- Cómo se gestiona el stock y envío de routers.
+- Quién gestiona las deficiencias OCA por territorio.
+- Cómo se realiza el alta de proveedores.
+- Cuáles son las responsabilidades de cada equipo en un proceso.
+
+Varios documentos deben agruparse en un mismo artículo cuando sean piezas complementarias de esa misma respuesta.
+
+Un procedimiento, un flujo, una plantilla, una FAQ, un checklist, una presentación y un Excel pueden alimentar un único artículo.
+
+CRITERIO PRINCIPAL DE AGRUPACIÓN:
+
+Antes de crear dos artículos, pregúntate internamente:
+
+"¿Un empleado consultaría estos documentos para resolver esencialmente la misma pregunta o ejecutar la misma tarea?"
+
+Si la respuesta es sí, agrúpalos en un único artículo.
+
+REGLAS PARA CREAR ARTÍCULOS:
+
+- Prioriza el menor número razonable de artículos.
+- No crees automáticamente un artículo por documento.
+- No separes documentos sólo porque tengan formatos diferentes.
+- No separes procedimiento, flujo, plantilla, checklist o FAQ si forman parte del mismo proceso.
+- Agrupa versiones históricas y actuales del mismo conocimiento en el mismo artículo.
+- Genera una advertencia cuando existan posibles versiones antiguas.
+- Crea artículos distintos cuando respondan preguntas empresariales claramente diferentes.
+- Cada documento debe pertenecer exactamente a un artículo principal.
+- No repitas un documento en varios artículos.
+- No dejes documentos sin asignar.
+- El título debe describir el conocimiento, no copiar necesariamente el nombre del archivo.
+- La descripción debe explicar qué podrá aprender o resolver el empleado.
+- confidence debe indicar la confianza global en la agrupación entre 0 y 1.
+
+REGLAS PARA CREAR CARPETAS:
+
+Las carpetas sólo representan áreas o dominios empresariales estables.
+
+Ejemplos razonables:
+
+- Recursos Humanos
+- Compras
+- Customer Service
+- Telecom
+- Finanzas
+- Operaciones
 
 Reglas:
 
-- Una carpeta representa una agrupación temática estable.
-- Un artículo representa una unidad coherente de conocimiento.
-- Varios documentos pueden alimentar un mismo artículo.
-- Un documento puede aparecer en un único artículo principal.
-- Evita crear una carpeta por cada documento.
-- Evita crear artículos duplicados.
-- Agrupa versiones del mismo proceso dentro del mismo artículo.
-- Identifica documentos que podrían ser versiones antiguas.
-- Señala posibles duplicados, versiones, contradicciones y documentos huérfanos.
-- No afirmes que existe una contradicción si solo hay diferencias de redacción.
-- Conserva exactamente los identificadores de documento recibidos.
-- No crees identificadores aleatorios largos: usa identificadores legibles como folder-1, article-1 o warning-1.
+- Usa el menor número posible de carpetas.
+- Usa como máximo dos niveles.
+- Evita carpetas creadas únicamente para contener un solo artículo.
+- No reproduzcas la jerarquía de los archivos originales.
+- No crees carpetas por formato documental.
+- No crees carpetas llamadas "Procedimientos", "Documentación", "Presentaciones", "Manuales", "Flujos", "Referencias" u "Operativa".
+- No crees una carpeta y una subcarpeta cuando una única carpeta sea suficiente.
+- Si no existe un dominio estable evidente, coloca el artículo en la raíz usando folderId null.
+- parentFolderId debe ser null en las carpetas raíz.
+- folderId debe ser null en los artículos raíz.
+- Ningún parentFolderId puede apuntar a una carpeta inexistente.
+- Ningún folderId puede apuntar a una carpeta inexistente.
+- No permitas más de dos niveles de carpeta.
+
+ESTRUCTURA DE SALIDA:
+
+La estructura es plana.
+
+Las carpetas se devuelven en folders:
+
+{
+  "id": "folder-1",
+  "name": "Telecom",
+  "description": "...",
+  "parentFolderId": null
+}
+
+Una subcarpeta usa:
+
+{
+  "id": "folder-2",
+  "name": "Routers",
+  "description": "...",
+  "parentFolderId": "folder-1"
+}
+
+Los artículos se devuelven en articles:
+
+{
+  "id": "article-1",
+  "title": "Gestión de stock y envío de routers",
+  "description": "...",
+  "folderId": "folder-1",
+  "documentIds": [],
+  "documentNames": [],
+  "confidence": 0.95
+}
+
+No construyas objetos anidados.
+
+EJEMPLO INCORRECTO:
+
+Telecom
+  -> Operativa Routers
+    -> Supply Chain
+      -> Procedimientos
+        -> Gestión de routers
+
+EJEMPLO CORRECTO:
+
+Carpeta:
+Telecom
+
+Artículo:
+Gestión de stock y envío de routers
+
+ADVERTENCIAS:
+
+- Señala versiones, duplicados claros, posibles duplicados, contradicciones reales y documentos difíciles de ubicar.
+- No marques como obsoleto un documento únicamente porque tenga una fecha.
+- Una fecha antigua o parcial puede justificar una revisión, no una afirmación de obsolescencia.
+- No marques como contradicción simples diferencias de redacción.
+- suggestedAction debe indicar una acción concreta.
+
+INTEGRIDAD:
+
+- Conserva exactamente los identificadores recibidos.
+- No inventes documentos.
+- No inventes identificadores de documentos.
+- Usa identificadores legibles y únicos como folder-1, article-1 y warning-1.
+- Todos los arrays deben existir aunque estén vacíos.
+- summary.totalDocuments debe coincidir con el número de documentos diferentes asignados.
+- summary.totalFolders debe coincidir con folders.length.
+- summary.totalArticles debe coincidir con articles.length.
+- summary.totalWarnings debe coincidir con warnings.length.
 `.trim();
 
 export function buildDocumentAnalysisPrompt(
@@ -59,8 +213,7 @@ export function buildDocumentAnalysisPrompt(
       documents.map((document) => ({
         documentId: document.id,
         documentName: document.name,
-        relativePath:
-          document.relativePath,
+        relativePath: document.relativePath,
         content: document.text,
       })),
       null,
@@ -73,7 +226,25 @@ export function buildProposalPrompt(
   analyses: KnowledgeImportDocumentAnalysis[],
 ) {
   return [
-    "Construye la propuesta completa de organización para estos documentos:",
+    "Construye una propuesta de base de conocimiento para los siguientes documentos.",
+    "",
+    "Antes de generar el JSON, razona internamente siguiendo este orden:",
+    "",
+    "1. Identifica las preguntas, tareas y procesos empresariales presentes.",
+    "2. Identifica qué documentos son piezas complementarias.",
+    "3. Agrupa los documentos por unidad de conocimiento.",
+    "4. Crea un artículo por unidad de conocimiento, no por archivo.",
+    "5. Reduce el número de artículos cuando la agrupación sea coherente.",
+    "6. Decide después si son necesarias carpetas de área.",
+    "7. Usa como máximo dos niveles de carpetas.",
+    "8. Comprueba que cada documento está asignado exactamente una vez.",
+    "9. Comprueba que todos los folderId y parentFolderId son válidos.",
+    "10. Recalcula todos los valores de summary.",
+    "",
+    "No incluyas el razonamiento en la respuesta.",
+    "Devuelve únicamente el JSON exigido.",
+    "",
+    "ANÁLISIS DISPONIBLES:",
     "",
     JSON.stringify(analyses, null, 2),
   ].join("\n");
@@ -177,6 +348,31 @@ export const DOCUMENT_ANALYSIS_JSON_SCHEMA = {
   },
 } as const;
 
+const FOLDER_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "id",
+    "name",
+    "description",
+    "parentFolderId",
+  ],
+  properties: {
+    id: {
+      type: "string",
+    },
+    name: {
+      type: "string",
+    },
+    description: {
+      type: "string",
+    },
+    parentFolderId: {
+      type: ["string", "null"],
+    },
+  },
+} as const;
+
 const ARTICLE_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -184,6 +380,7 @@ const ARTICLE_SCHEMA = {
     "id",
     "title",
     "description",
+    "folderId",
     "documentIds",
     "documentNames",
     "confidence",
@@ -197,6 +394,9 @@ const ARTICLE_SCHEMA = {
     },
     description: {
       type: "string",
+    },
+    folderId: {
+      type: ["string", "null"],
     },
     documentIds: {
       type: "array",
@@ -218,86 +418,50 @@ const ARTICLE_SCHEMA = {
   },
 } as const;
 
-const FOLDER_SCHEMA = {
+const WARNING_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: [
     "id",
-    "name",
+    "type",
+    "severity",
+    "title",
     "description",
-    "folders",
-    "articles",
+    "documentIds",
+    "suggestedAction",
   ],
   properties: {
     id: {
       type: "string",
     },
-    name: {
+    type: {
+      type: "string",
+      enum: [
+        "duplicate",
+        "possible_duplicate",
+        "version",
+        "contradiction",
+        "orphan",
+      ],
+    },
+    severity: {
+      type: "string",
+      enum: ["low", "medium", "high"],
+    },
+    title: {
       type: "string",
     },
     description: {
       type: "string",
     },
-    folders: {
+    documentIds: {
       type: "array",
       items: {
-        type: "object",
-        additionalProperties: false,
-        required: [
-          "id",
-          "name",
-          "description",
-          "folders",
-          "articles",
-        ],
-        properties: {
-          id: {
-            type: "string",
-          },
-          name: {
-            type: "string",
-          },
-          description: {
-            type: "string",
-          },
-          folders: {
-            type: "array",
-            items: {
-              type: "object",
-              additionalProperties: false,
-              required: [
-                "id",
-                "name",
-                "description",
-                "articles",
-              ],
-              properties: {
-                id: {
-                  type: "string",
-                },
-                name: {
-                  type: "string",
-                },
-                description: {
-                  type: "string",
-                },
-                articles: {
-                  type: "array",
-                  items: ARTICLE_SCHEMA,
-                },
-              },
-            },
-          },
-          articles: {
-            type: "array",
-            items: ARTICLE_SCHEMA,
-          },
-        },
+        type: "string",
       },
     },
-    articles: {
-      type: "array",
-      items: ARTICLE_SCHEMA,
+    suggestedAction: {
+      type: "string",
     },
   },
 } as const;
@@ -310,7 +474,7 @@ export const PROPOSAL_JSON_SCHEMA = {
     "description",
     "summary",
     "folders",
-    "rootArticles",
+    "articles",
     "warnings",
   ],
   properties: {
@@ -348,63 +512,13 @@ export const PROPOSAL_JSON_SCHEMA = {
       type: "array",
       items: FOLDER_SCHEMA,
     },
-    rootArticles: {
+    articles: {
       type: "array",
       items: ARTICLE_SCHEMA,
     },
     warnings: {
       type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: [
-          "id",
-          "type",
-          "severity",
-          "title",
-          "description",
-          "documentIds",
-          "suggestedAction",
-        ],
-        properties: {
-          id: {
-            type: "string",
-          },
-          type: {
-            type: "string",
-            enum: [
-              "duplicate",
-              "possible_duplicate",
-              "version",
-              "contradiction",
-              "orphan",
-            ],
-          },
-          severity: {
-            type: "string",
-            enum: [
-              "low",
-              "medium",
-              "high",
-            ],
-          },
-          title: {
-            type: "string",
-          },
-          description: {
-            type: "string",
-          },
-          documentIds: {
-            type: "array",
-            items: {
-              type: "string",
-            },
-          },
-          suggestedAction: {
-            type: "string",
-          },
-        },
-      },
+      items: WARNING_SCHEMA,
     },
   },
 } as const;

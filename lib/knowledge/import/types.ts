@@ -44,9 +44,19 @@ export type KnowledgeImportArticleProposal = {
   title: string;
   description: string;
 
+  /**
+   * null significa que el artículo se propone
+   * en la raíz de la biblioteca.
+   */
+  folderId: string | null;
+
   documentIds: string[];
   documentNames: string[];
 
+  /**
+   * Confianza global de la IA en que los documentos
+   * asociados forman una misma unidad de conocimiento.
+   */
   confidence: number;
 };
 
@@ -56,8 +66,13 @@ export type KnowledgeImportFolderProposal = {
   name: string;
   description: string;
 
-  folders: KnowledgeImportFolderProposal[];
-  articles: KnowledgeImportArticleProposal[];
+  /**
+   * null significa que es una carpeta raíz.
+   *
+   * La propuesta se almacena de forma plana.
+   * La UI reconstruye la jerarquía usando parentFolderId.
+   */
+  parentFolderId: string | null;
 };
 
 export type KnowledgeImportWarningType =
@@ -96,8 +111,18 @@ export type KnowledgeImportProposal = {
     totalWarnings: number;
   };
 
+  /**
+   * Estructura plana.
+   *
+   * Las relaciones entre carpetas se resuelven mediante:
+   * folder.parentFolderId
+   *
+   * La ubicación de los artículos se resuelve mediante:
+   * article.folderId
+   */
   folders: KnowledgeImportFolderProposal[];
-  rootArticles: KnowledgeImportArticleProposal[];
+  articles: KnowledgeImportArticleProposal[];
+
   warnings: KnowledgeImportWarning[];
 
   documentAnalyses: KnowledgeImportDocumentAnalysis[];
@@ -107,4 +132,74 @@ export type GenerateKnowledgeImportProposalResult = {
   importId: string;
   status: "proposal_ready";
   proposal: KnowledgeImportProposal;
+};
+
+export type KnowledgeImportCreatedFolderLog = {
+  proposalFolderId: string;
+  databaseFolderId: string;
+  name: string;
+  parentProposalFolderId: string | null;
+  parentDatabaseFolderId: string;
+};
+
+export type KnowledgeImportCreatedDocumentLog = {
+  importFileId: string;
+  knowledgeFileId: string;
+  fileName: string;
+  articleId: string;
+  articleTitle: string;
+  extractedCharacters: number;
+  storagePath: string | null;
+};
+
+export type KnowledgeImportCreatedArticleLog = {
+  proposalArticleId: string;
+  databaseArticleId: string;
+  title: string;
+  description: string;
+  proposalFolderId: string | null;
+  databaseFolderId: string;
+  confidence: number;
+  documentIds: string[];
+  knowledgeFileIds: string[];
+};
+
+export type KnowledgeImportExecutionLog = {
+  version: "knowledge-import-confirm-v1";
+
+  importId: string;
+  status: "completed";
+
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+
+  targetLibrary: {
+    id: string;
+    name: string;
+  };
+
+  userId: string;
+  companyId: string | null;
+
+  summary: {
+    foldersCreated: number;
+    articlesCreated: number;
+    documentsCreated: number;
+    extractedCharactersStored: number;
+    warningsAccepted: number;
+  };
+
+  folders: KnowledgeImportCreatedFolderLog[];
+  articles: KnowledgeImportCreatedArticleLog[];
+  documents: KnowledgeImportCreatedDocumentLog[];
+
+  proposalSnapshot: KnowledgeImportProposal;
+};
+
+export type ConfirmKnowledgeImportResult = {
+  success: true;
+  importId: string;
+  status: "completed";
+  log: KnowledgeImportExecutionLog;
 };

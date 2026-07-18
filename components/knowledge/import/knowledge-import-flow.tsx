@@ -3,8 +3,6 @@
 
 import { useState } from "react";
 
-import type { KnowledgeImportProposal } from "@/lib/knowledge/import/types";
-
 import {
   runKnowledgeImportPipeline,
   type KnowledgeImportPipelineResult,
@@ -23,6 +21,13 @@ type ImportStep =
   | "upload"
   | "proposal";
 
+type ConfirmImportResponse = {
+  success?: boolean;
+  importId?: string;
+  status?: "completed";
+  error?: string;
+};
+
 export function KnowledgeImportFlow({
   libraryId,
   libraryName,
@@ -35,10 +40,28 @@ export function KnowledgeImportFlow({
   const [importId, setImportId] =
     useState<string | null>(null);
 
-  const [pipelineResult, setPipelineResult] =
+  const [
+    pipelineResult,
+    setPipelineResult,
+  ] =
     useState<KnowledgeImportPipelineResult | null>(
       null,
     );
+
+  const [
+    isConfirming,
+    setIsConfirming,
+  ] = useState(false);
+
+  const [
+    confirmationError,
+    setConfirmationError,
+  ] = useState<string | null>(null);
+
+  const [
+    isCompleted,
+    setIsCompleted,
+  ] = useState(false);
 
   async function handleAnalyze({
     importId: nextImportId,
@@ -46,6 +69,8 @@ export function KnowledgeImportFlow({
     importId: string;
   }) {
     setImportId(nextImportId);
+    setConfirmationError(null);
+    setIsCompleted(false);
 
     const result =
       await runKnowledgeImportPipeline(
@@ -56,10 +81,71 @@ export function KnowledgeImportFlow({
     setStep("proposal");
   }
 
+  async function handleConfirmImport() {
+    if (!importId || isConfirming) {
+      return;
+    }
+
+    setIsConfirming(true);
+    setConfirmationError(null);
+
+    try {
+      const response = await fetch(
+        `/api/knowledge/import/${importId}/confirm`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+          },
+        },
+      );
+
+      const payload =
+        (await response.json()) as ConfirmImportResponse;
+
+      if (!response.ok) {
+        throw new Error(
+          payload.error ??
+            "No se ha podido crear la estructura",
+        );
+      }
+
+      if (
+        !payload.success ||
+        payload.status !== "completed"
+      ) {
+        throw new Error(
+          "La importación no ha terminado correctamente",
+        );
+      }
+
+      setIsCompleted(true);
+
+      console.log(
+        "Importación de Knowledge completada:",
+        payload,
+      );
+    } catch (error) {
+      setConfirmationError(
+        error instanceof Error
+          ? error.message
+          : "No se ha podido crear la estructura",
+      );
+    } finally {
+      setIsConfirming(false);
+    }
+  }
+
   function handleBack() {
+    if (isConfirming) {
+      return;
+    }
+
     setStep("upload");
     setImportId(null);
     setPipelineResult(null);
+    setConfirmationError(null);
+    setIsCompleted(false);
   }
 
   if (
@@ -67,12 +153,51 @@ export function KnowledgeImportFlow({
     pipelineResult
   ) {
     return (
-      <KnowledgeImportProposalView
-        proposal={
-          pipelineResult.proposal
-        }
-        onBack={handleBack}
-      />
+      <div className="space-y-4">
+        <KnowledgeImportProposalView
+          proposal={
+            pipelineResult.proposal
+          }
+          isConfirming={isConfirming}
+          onBack={handleBack}
+          onConfirm={
+            handleConfirmImport
+          }
+        />
+
+        {confirmationError ? (
+          <div
+            role="alert"
+            className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            {confirmationError}
+          </div>
+        ) : null}
+
+        {isCompleted && importId ? (
+          <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">
+                Estructura creada correctamente
+              </p>
+
+              <p className="text-xs text-muted-foreground">
+                Descarga el log para revisar
+                carpetas, artículos, documentos
+                y UUID generados.
+              </p>
+            </div>
+
+            <a
+              href={`/api/knowledge/import/${importId}/log`}
+              download
+              className="inline-flex h-9 shrink-0 items-center justify-center rounded-md border bg-background px-4 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              Descargar log
+            </a>
+          </div>
+        ) : null}
+      </div>
     );
   }
 

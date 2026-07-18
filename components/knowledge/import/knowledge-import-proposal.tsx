@@ -9,10 +9,12 @@ import {
   FileText,
   Folder,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type {
+  KnowledgeImportArticleProposal,
   KnowledgeImportFolderProposal,
   KnowledgeImportProposal,
   KnowledgeImportWarning,
@@ -24,6 +26,77 @@ type Props = {
   onBack: () => void;
   onConfirm?: () => void | Promise<void>;
 };
+
+type KnowledgeImportFolderNode = {
+  folder: KnowledgeImportFolderProposal;
+  articles: KnowledgeImportArticleProposal[];
+  children: KnowledgeImportFolderNode[];
+};
+
+function buildFolderTree(
+  folders: KnowledgeImportFolderProposal[],
+  articles: KnowledgeImportArticleProposal[],
+): KnowledgeImportFolderNode[] {
+  const nodeById = new Map<
+    string,
+    KnowledgeImportFolderNode
+  >();
+
+  for (const folder of folders) {
+    nodeById.set(folder.id, {
+      folder,
+      articles: [],
+      children: [],
+    });
+  }
+
+  for (const article of articles) {
+    if (!article.folderId) {
+      continue;
+    }
+
+    const folderNode = nodeById.get(
+      article.folderId,
+    );
+
+    if (folderNode) {
+      folderNode.articles.push(article);
+    }
+  }
+
+  const rootNodes: KnowledgeImportFolderNode[] =
+    [];
+
+  for (const folder of folders) {
+    const node = nodeById.get(folder.id);
+
+    if (!node) {
+      continue;
+    }
+
+    if (!folder.parentFolderId) {
+      rootNodes.push(node);
+      continue;
+    }
+
+    const parentNode = nodeById.get(
+      folder.parentFolderId,
+    );
+
+    if (!parentNode) {
+      /*
+       * Defensa ante una propuesta antigua o inconsistente.
+       * Si el padre no existe, mostramos la carpeta en raíz.
+       */
+      rootNodes.push(node);
+      continue;
+    }
+
+    parentNode.children.push(node);
+  }
+
+  return rootNodes;
+}
 
 function getWarningLabel(
   warning: KnowledgeImportWarning,
@@ -55,12 +128,14 @@ function getWarningLabel(
 }
 
 function FolderProposal({
-  folder,
+  node,
   depth = 0,
 }: {
-  folder: KnowledgeImportFolderProposal;
+  node: KnowledgeImportFolderNode;
   depth?: number;
 }) {
+  const { folder, articles, children } = node;
+
   return (
     <div
       className={[
@@ -88,69 +163,88 @@ function FolderProposal({
           </div>
 
           <div className="shrink-0 text-xs text-muted-foreground">
-            {folder.articles.length}{" "}
-            {folder.articles.length === 1
+            {articles.length}{" "}
+            {articles.length === 1
               ? "artículo"
               : "artículos"}
           </div>
         </div>
 
-        {folder.articles.length > 0 ? (
+        {articles.length > 0 ? (
           <div className="divide-y divide-border">
-            {folder.articles.map(
-              (article) => (
-                <div
-                  key={article.id}
-                  className="flex items-start gap-3 px-4 py-3"
-                >
-                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            {articles.map((article) => (
+              <div
+                key={article.id}
+                className="flex items-start gap-3 px-4 py-3"
+              >
+                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
 
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground">
-                      {article.title}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {article.title}
+                  </p>
+
+                  {article.description ? (
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      {article.description}
                     </p>
+                  ) : null}
 
-                    {article.description ? (
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        {
-                          article.description
-                        }
-                      </p>
-                    ) : null}
-
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {
-                        article
-                          .documentNames
-                          .length
-                      }{" "}
-                      {article
-                        .documentNames
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      {article.documentNames.length}{" "}
+                      {article.documentNames
                         .length === 1
                         ? "documento asociado"
                         : "documentos asociados"}
-                    </p>
+                    </span>
+
+                    <span aria-hidden="true">
+                      ·
+                    </span>
+
+                    <span>
+                      Confianza{" "}
+                      {Math.round(
+                        article.confidence * 100,
+                      )}
+                      %
+                    </span>
                   </div>
 
-                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                  {article.documentNames.length >
+                  0 ? (
+                    <div className="mt-2 space-y-1">
+                      {article.documentNames.map(
+                        (documentName) => (
+                          <p
+                            key={documentName}
+                            className="truncate text-xs text-muted-foreground"
+                          >
+                            {documentName}
+                          </p>
+                        ),
+                      )}
+                    </div>
+                  ) : null}
                 </div>
-              ),
-            )}
+
+                <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+              </div>
+            ))}
           </div>
         ) : null}
       </div>
 
-      {folder.folders.length > 0 ? (
+      {children.length > 0 ? (
         <div className="mt-3 space-y-3">
-          {folder.folders.map(
-            (childFolder) => (
-              <FolderProposal
-                key={childFolder.id}
-                folder={childFolder}
-                depth={depth + 1}
-              />
-            ),
-          )}
+          {children.map((childNode) => (
+            <FolderProposal
+              key={childNode.folder.id}
+              node={childNode}
+              depth={depth + 1}
+            />
+          ))}
         </div>
       ) : null}
     </div>
@@ -163,66 +257,81 @@ export function KnowledgeImportProposalView({
   onBack,
   onConfirm,
 }: Props) {
+
+    const folderTree = buildFolderTree(
+    proposal.folders,
+    proposal.articles,
+  );
+
+  const rootArticles =
+    proposal.articles.filter(
+      (article) => article.folderId === null,
+    );
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-background">
-      <div className="border-b border-border px-5 py-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600 dark:bg-cyan-950/40 dark:text-cyan-300">
-              <Sparkles className="h-5 w-5" />
-            </div>
+<div className="border-b border-border px-5 py-5">
+  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="flex min-w-0 items-start gap-3">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600 dark:bg-cyan-950/40 dark:text-cyan-300">
+        <Sparkles className="h-5 w-5" />
+      </div>
 
-            <div>
-              <p className="text-base font-semibold text-foreground">
-                {proposal.title ||
-                  "Propuesta de organización"}
-              </p>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-base font-semibold text-foreground">
+            {proposal.title ||
+              "Propuesta de organización"}
+          </p>
 
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                {proposal.description}
-              </p>
-            </div>
-          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
+              <span className="mr-1 font-semibold text-foreground">
+                {proposal.summary.totalDocuments}
+              </span>
+              Documentos
+            </span>
 
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <div className="rounded-lg border border-border px-3 py-2 text-center">
-              <p className="text-sm font-semibold text-foreground">
-                {
-                  proposal.summary
-                    .totalDocuments
-                }
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Documentos
-              </p>
-            </div>
+            <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
+              <span className="mr-1 font-semibold text-foreground">
+                {proposal.summary.totalFolders}
+              </span>
+              Carpetas
+            </span>
 
-            <div className="rounded-lg border border-border px-3 py-2 text-center">
-              <p className="text-sm font-semibold text-foreground">
-                {
-                  proposal.summary
-                    .totalFolders
-                }
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Carpetas
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-border px-3 py-2 text-center">
-              <p className="text-sm font-semibold text-foreground">
-                {
-                  proposal.summary
-                    .totalArticles
-                }
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Artículos
-              </p>
-            </div>
+            <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
+              <span className="mr-1 font-semibold text-foreground">
+                {proposal.summary.totalArticles}
+              </span>
+              Artículos
+            </span>
           </div>
         </div>
+
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+          {proposal.description}
+        </p>
       </div>
+    </div>
+
+    <Button
+      type="button"
+      className="shrink-0"
+      disabled={isConfirming || !onConfirm}
+      onClick={() => {
+        void onConfirm?.();
+      }}
+    >
+      {isConfirming ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Creando estructura...
+        </>
+      ) : (
+        "Confirmar estructura"
+      )}
+    </Button>
+  </div>
+</div>
 
       <div className="grid gap-6 p-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div>
@@ -238,16 +347,14 @@ export function KnowledgeImportProposalView({
           </div>
 
           <div className="space-y-3">
-            {proposal.folders.map(
-              (folder) => (
-                <FolderProposal
-                  key={folder.id}
-                  folder={folder}
-                />
-              ),
-            )}
+{folderTree.map((node) => (
+  <FolderProposal
+    key={node.folder.id}
+    node={node}
+  />
+))}
 
-            {proposal.rootArticles.length >
+            {rootArticles.length >
             0 ? (
               <div className="rounded-xl border border-border bg-background">
                 <div className="border-b border-border px-4 py-3">
@@ -257,7 +364,7 @@ export function KnowledgeImportProposalView({
                 </div>
 
                 <div className="divide-y divide-border">
-                  {proposal.rootArticles.map(
+                  {rootArticles.map(
                     (article) => (
                       <div
                         key={article.id}
@@ -369,38 +476,17 @@ export function KnowledgeImportProposalView({
         </aside>
       </div>
 
-      <div className="flex flex-col-reverse gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={isConfirming}
-          onClick={onBack}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Volver
-        </Button>
-
-        <div className="flex items-center gap-3">
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            Podrás editar la propuesta
-            antes de crearla.
-          </p>
-
-          <Button
-            type="button"
-            disabled={
-              isConfirming || !onConfirm
-            }
-            onClick={() => {
-              void onConfirm?.();
-            }}
-          >
-            {isConfirming
-              ? "Creando..."
-              : "Confirmar estructura"}
-          </Button>
-        </div>
-      </div>
+<div className="flex items-center border-t border-border px-5 py-4">
+  <Button
+    type="button"
+    variant="outline"
+    disabled={isConfirming}
+    onClick={onBack}
+  >
+    <ArrowLeft className="h-4 w-4" />
+    Volver
+  </Button>
+</div>
     </div>
   );
 }
