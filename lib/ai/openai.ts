@@ -1,20 +1,42 @@
 // lib/ai/openai.ts
 import OpenAI from "openai";
 
-let client: OpenAI | null = null;
+let openAIClient: OpenAI | null = null;
 
-export function getOpenAI() {
-  if (!client) {
-    const apiKey = process.env.OPENAI_API_KEY;
+export function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
 
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not configured.");
-    }
+  if (!apiKey) {
+    throw new Error(
+      "No se ha configurado la variable de entorno OPENAI_API_KEY",
+    );
+  }
 
-    client = new OpenAI({
+  if (!openAIClient) {
+    openAIClient = new OpenAI({
       apiKey,
     });
   }
 
-  return client;
+  return openAIClient;
+}
+
+/**
+ * Alias de compatibilidad para servicios anteriores.
+ */
+export function getOpenAI() {
+  return getOpenAIClient();
+}
+
+export function getKnowledgeImportModel() {
+  const model =
+    process.env.OPENAI_KNOWLEDGE_IMPORT_MODEL;
+
+  if (!model) {
+    throw new Error(
+      "No se ha configurado OPENAI_KNOWLEDGE_IMPORT_MODEL",
+    );
+  }
+
+  return model;
 }

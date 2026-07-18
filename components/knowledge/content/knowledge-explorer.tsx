@@ -23,11 +23,7 @@ import { moveKnowledgeLibrary } from "@/lib/actions/knowledge-library.actions";
 
 import { KnowledgeCard } from "./knowledge-card";
 import { KnowledgeFolderCard } from "./knowledge-folder-card";
-import { KnowledgeImportZone } from "@/components/knowledge/import/knowledge-import-zone";
-import {
-  KnowledgeImportFile,
-  KnowledgeImportMode,
-} from "@/components/knowledge/import/knowledge-import.types";
+import { KnowledgeImportFlow } from "@/components/knowledge/import/knowledge-import-flow";
 
 type KnowledgeLibrary = {
   id: string;
@@ -341,59 +337,11 @@ if (selectedView === "shared") {
 }
 
 if (selectedLibraryId && canCreateArticle) {
-  return (
-    <KnowledgeImportZone
-      libraryId={selectedLibraryId}
-      libraryName="Carpeta"
-      onCreateArticle={onCreateArticle}
-onAnalyze={async ({ importId }) => {
-  const extractionResponse =
-    await fetch(
-      `/api/knowledge/import/${importId}/analyze`,
-      {
-        method: "POST",
-      },
-    );
-
-  const extractionResult =
-    await extractionResponse
-      .json()
-      .catch(() => null);
-
-  if (!extractionResponse.ok) {
-    throw new Error(
-      extractionResult?.error ??
-        "No se ha podido extraer la documentación",
-    );
-  }
-
-  const textResponse =
-    await fetch(
-      `/api/knowledge/import/${importId}/extract-text`,
-      {
-        method: "POST",
-      },
-    );
-
-  const textResult =
-    await textResponse
-      .json()
-      .catch(() => null);
-
-  if (!textResponse.ok) {
-    throw new Error(
-      textResult?.error ??
-        "No se ha podido extraer el contenido de los documentos",
-    );
-  }
-
-  console.log(
-    "Texto extraído:",
-    textResult,
-  );
-}}
-    />
-  );
+<KnowledgeImportFlow
+  libraryId={selectedLibraryId}
+  libraryName="Carpeta"
+  onCreateArticle={onCreateArticle}
+/>
 }
 
 return (
