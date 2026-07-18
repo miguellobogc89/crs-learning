@@ -2,6 +2,7 @@
 
 import type { Prisma } from "@prisma/client";
 
+import { analyzeKnowledgeSource } from "@/lib/services/knowledge-analysis.service";
 import { prisma } from "@/lib/prisma";
 
 import type {
@@ -541,6 +542,12 @@ export async function confirmKnowledgeImport({
         timeout: 120_000,
       },
     );
+
+    for (const article of result.articles) {
+        await analyzeKnowledgeSource(
+            article.databaseArticleId,
+        );
+    }
 
     return {
       success: true,
