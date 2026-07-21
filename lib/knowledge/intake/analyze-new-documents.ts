@@ -5,8 +5,10 @@ import {
   getOpenAIClient,
 } from "@/lib/ai/openai";
 import { truncateDocument } from "@/lib/knowledge/import/truncate-document";
-import { prisma } from "@/lib/prisma";
 
+import {
+  resolveKnowledgeIntakeAnalysisContext,
+} from "./find-article-candidates";
 import {
   buildKnowledgeIntakePrompt,
   KNOWLEDGE_INTAKE_JSON_SCHEMA,
@@ -26,9 +28,6 @@ import type {
 } from "./types";
 
 const MAX_DOCUMENTS_PER_BATCH = 4;
-const MAX_CANDIDATES_PER_DOCUMENT = 8;
-const MAX_ARTICLE_COMPARISON_CHARACTERS =
-  12_000;
 
 const DECISION_TYPES =
   new Set<KnowledgeIntakeDecisionType>([
@@ -45,12 +44,6 @@ type GeneratedProposalPayload = {
   description: string;
   decisions: KnowledgeIntakeDocumentDecision[];
   warnings: string[];
-};
-
-type LibraryRow = {
-  id: string;
-  name: string;
-  parent_id: string | null;
 };
 
 function parseJsonResponse<T>(
@@ -71,70 +64,6 @@ function parseJsonResponse<T>(
   }
 }
 
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9áéíóúüñ]+/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function tokenize(value: string) {
-  const normalized = normalizeText(value);
-
-  if (!normalized) {
-    return new Set<string>();
-  }
-
-  return new Set(
-    normalized
-      .split(" ")
-      .filter((token) => token.length >= 3),
-  );
-}
-
-function calculateLexicalScore(
-  left: string,
-  right: string,
-) {
-  const leftTokens = tokenize(left);
-  const rightTokens = tokenize(right);
-
-  if (
-    leftTokens.size === 0 ||
-    rightTokens.size === 0
-  ) {
-    return 0;
-  }
-
-  let intersection = 0;
-
-  for (const token of leftTokens) {
-    if (rightTokens.has(token)) {
-      intersection += 1;
-    }
-  }
-
-  const containment =
-    intersection /
-    Math.min(
-      leftTokens.size,
-      rightTokens.size,
-    );
-
-  const union =
-    leftTokens.size +
-    rightTokens.size -
-    intersection;
-
-  const jaccard =
-    union > 0 ? intersection / union : 0;
-
-  return containment * 0.7 + jaccard * 0.3;
-}
-
 function splitIntoBatches<T>(
   values: T[],
   batchSize: number,
@@ -147,152 +76,14 @@ function splitIntoBatches<T>(
     index += batchSize
   ) {
     batches.push(
-      values.slice(index, index + batchSize),
+      values.slice(
+        index,
+        index + batchSize,
+      ),
     );
   }
 
   return batches;
-}
-
-function buildLibraryPath(
-  libraryId: string,
-  librariesById: Map<string, LibraryRow>,
-) {
-  const path: string[] = [];
-  const visitedIds = new Set<string>();
-
-  let currentId: string | null = libraryId;
-
-  while (currentId) {
-    if (visitedIds.has(currentId)) {
-      break;
-    }
-
-    visitedIds.add(currentId);
-
-    const library =
-      librariesById.get(currentId);
-
-    if (!library) {
-      break;
-    }
-
-    path.unshift(library.name);
-    currentId = library.parent_id;
-  }
-
-  return path;
-}
-
-function isLibraryInsideTarget(
-  libraryId: string,
-  targetLibraryId: string,
-  librariesById: Map<string, LibraryRow>,
-) {
-  const visitedIds = new Set<string>();
-
-  let currentId: string | null = libraryId;
-
-  while (currentId) {
-    if (currentId === targetLibraryId) {
-      return true;
-    }
-
-    if (visitedIds.has(currentId)) {
-      return false;
-    }
-
-    visitedIds.add(currentId);
-
-    const library =
-      librariesById.get(currentId);
-
-    if (!library) {
-      return false;
-    }
-
-    currentId = library.parent_id;
-  }
-
-  return false;
-}
-
-function buildArticleComparisonText(
-  article: KnowledgeIntakeExistingArticle,
-) {
-  const fileText = article.files
-    .map((file) => {
-      return [
-        `FILE_NAME: ${file.name}`,
-        file.extractedText,
-      ].join("\n");
-    })
-    .join("\n\n");
-
-  return truncateDocument(
-    [
-      `TITLE: ${article.title}`,
-      `DESCRIPTION: ${article.description ?? ""}`,
-      `SUMMARY: ${article.summary ?? ""}`,
-      "",
-      "CONTENT:",
-      article.content,
-      "",
-      "FILES:",
-      fileText,
-    ].join("\n"),
-    MAX_ARTICLE_COMPARISON_CHARACTERS,
-  );
-}
-
-function buildCandidatesForDocument(
-  document: KnowledgeIntakeDocumentInput,
-  existingArticles: KnowledgeIntakeExistingArticle[],
-) {
-  const documentComparisonText = [
-    document.name,
-    document.text,
-  ].join("\n");
-
-  return existingArticles
-    .map((article) => {
-      const comparisonText =
-        buildArticleComparisonText(article);
-
-      const lexicalScore =
-        calculateLexicalScore(
-          documentComparisonText,
-          comparisonText,
-        );
-
-      const candidate: KnowledgeIntakeCandidateArticle =
-        {
-          id: article.id,
-          title: article.title,
-          description:
-            article.description,
-          summary: article.summary,
-          libraryId: article.libraryId,
-          libraryPath:
-            article.libraryPath,
-          fileNames: article.files.map(
-            (file) => file.name,
-          ),
-          comparisonText,
-          lexicalScore,
-        };
-
-      return candidate;
-    })
-    .sort(
-      (left, right) =>
-        right.lexicalScore -
-        left.lexicalScore,
-    )
-    .slice(
-      0,
-      MAX_CANDIDATES_PER_DOCUMENT,
-    );
 }
 
 function validateGeneratedDecisions(
@@ -350,7 +141,9 @@ function validateGeneratedDecisions(
     );
 
     if (
-      !DECISION_TYPES.has(decision.decision)
+      !DECISION_TYPES.has(
+        decision.decision,
+      )
     ) {
       throw new Error(
         `La IA ha devuelto una decisión desconocida para ${decision.documentName}`,
@@ -369,10 +162,13 @@ function validateGeneratedDecisions(
     const needsExistingArticle =
       decision.decision ===
         "enrich_existing_article" ||
-      decision.decision === "new_version";
+      decision.decision ===
+        "new_version";
 
     if (needsExistingArticle) {
-      if (!decision.destination.articleId) {
+      if (
+        !decision.destination.articleId
+      ) {
         throw new Error(
           `La decisión ${decision.decision} necesita un artículo de destino`,
         );
@@ -392,10 +188,12 @@ function validateGeneratedDecisions(
     if (
       decision.decision ===
         "create_article_in_existing_folder" &&
-      (!decision.destination.folderId ||
+      (
+        !decision.destination.folderId ||
         !folderById.has(
           decision.destination.folderId,
-        ))
+        )
+      )
     ) {
       throw new Error(
         `La IA ha seleccionado una carpeta inexistente para ${decision.documentName}`,
@@ -405,9 +203,12 @@ function validateGeneratedDecisions(
     if (
       decision.decision ===
         "create_article_in_new_folder" &&
-      (!decision.destination.newFolderName ||
+      (
+        !decision.destination
+          .newFolderName ||
         decision.destination.folderId !==
-          null)
+          null
+      )
     ) {
       throw new Error(
         `La nueva carpeta propuesta para ${decision.documentName} no es válida`,
@@ -419,7 +220,8 @@ function validateGeneratedDecisions(
         "exact_duplicate" ||
       decision.decision ===
         "possible_duplicate" ||
-      decision.decision === "new_version";
+      decision.decision ===
+        "new_version";
 
     if (
       requiresDuplicateMatch &&
@@ -442,10 +244,10 @@ function validateGeneratedDecisions(
       }
 
       if (
-        decision.duplicateMatch.similarity <
-          0 ||
-        decision.duplicateMatch.similarity >
-          1
+        decision.duplicateMatch
+          .similarity < 0 ||
+        decision.duplicateMatch
+          .similarity > 1
       ) {
         throw new Error(
           `La similitud de ${decision.documentName} no es válida`,
@@ -456,7 +258,9 @@ function validateGeneratedDecisions(
 
   for (const document of documents) {
     if (
-      !receivedDocumentIds.has(document.id)
+      !receivedDocumentIds.has(
+        document.id,
+      )
     ) {
       throw new Error(
         `La IA no ha analizado el documento ${document.name}`,
@@ -498,12 +302,14 @@ function buildSummary(
         break;
 
       case "create_article_in_existing_folder":
-        summary.newArticlesInExistingFolders +=
+        summary
+          .newArticlesInExistingFolders +=
           1;
         break;
 
       case "create_article_in_new_folder":
-        summary.newArticlesInNewFolders += 1;
+        summary.newArticlesInNewFolders +=
+          1;
         break;
     }
   }
@@ -511,198 +317,32 @@ function buildSummary(
   return summary;
 }
 
-async function loadKnowledgeContext({
-  userId,
-  libraryId,
-}: {
-  userId: string;
-  libraryId: string;
-}) {
-  const libraries =
-    await prisma.knowledge_libraries.findMany({
-      where: {
-        owner_user_id: userId,
-      },
-      select: {
-        id: true,
-        name: true,
-        parent_id: true,
-      },
-    });
-
-  const librariesById = new Map(
-    libraries.map((library) => [
-      library.id,
-      library,
-    ]),
-  );
-
-  const targetLibrary =
-    librariesById.get(libraryId);
-
-  if (!targetLibrary) {
-    throw new Error(
-      "La biblioteca seleccionada no existe",
-    );
-  }
-
-  const availableLibraries =
-    libraries.filter((library) =>
-      isLibraryInsideTarget(
-        library.id,
-        libraryId,
-        librariesById,
-      ),
-    );
-
-  const availableLibraryIds =
-    availableLibraries.map(
-      (library) => library.id,
-    );
-
-  const sourceRows =
-    await prisma.knowledge_sources.findMany({
-      where: {
-        owner_user_id: userId,
-        library_id: {
-          in: availableLibraryIds,
-        },
-      },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        summary: true,
-        content: true,
-        status: true,
-        library_id: true,
-      },
-      orderBy: {
-        updated_at: "desc",
-      },
-    });
-
-  const sourceRowsWithLibrary =
-    sourceRows.filter(
-      (
-        source,
-      ): source is typeof source & {
-        library_id: string;
-      } => source.library_id !== null,
-    );
-
-  const sourceIds =
-    sourceRowsWithLibrary.map(
-      (source) => source.id,
-    );
-
-  const fileRows =
-    sourceIds.length > 0
-      ? await prisma.knowledge_files.findMany(
-          {
-            where: {
-              knowledge_source_id: {
-                in: sourceIds,
-              },
-            },
-            select: {
-              id: true,
-              knowledge_source_id: true,
-              file_name: true,
-              extracted_text: true,
-            },
-            orderBy: {
-              created_at: "asc",
-            },
-          },
-        )
-      : [];
-
-  const filesBySourceId = new Map<
-    string,
-    typeof fileRows
-  >();
-
-  for (const file of fileRows) {
-    const currentFiles =
-      filesBySourceId.get(
-        file.knowledge_source_id,
-      ) ?? [];
-
-    currentFiles.push(file);
-
-    filesBySourceId.set(
-      file.knowledge_source_id,
-      currentFiles,
-    );
-  }
-
-  const existingArticles: KnowledgeIntakeExistingArticle[] =
-    sourceRowsWithLibrary.map((source) => {
-      const sourceFiles =
-        filesBySourceId.get(source.id) ?? [];
-
-      return {
-        id: source.id,
-        title: source.title,
-        description: source.description,
-        summary: source.summary,
-        content: source.content,
-        status: source.status,
-        libraryId: source.library_id,
-        libraryPath: buildLibraryPath(
-          source.library_id,
-          librariesById,
-        ),
-        files: sourceFiles.map((file) => ({
-          id: file.id,
-          name: file.file_name,
-          extractedText:
-            file.extracted_text,
-        })),
-      };
-    });
-
-  const existingFolders: KnowledgeIntakeExistingFolder[] =
-    availableLibraries.map((library) => ({
-      id: library.id,
-      name: library.name,
-      parentId: library.parent_id,
-      path: buildLibraryPath(
-        library.id,
-        librariesById,
-      ),
-    }));
-
-  return {
-    targetLibrary,
-    existingArticles,
-    existingFolders,
-  };
-}
-
 async function analyzeDocumentBatch({
   documents,
   existingArticles,
   existingFolders,
+  candidateArticlesByDocumentId,
 }: {
   documents: KnowledgeIntakeDocumentInput[];
   existingArticles: KnowledgeIntakeExistingArticle[];
   existingFolders: KnowledgeIntakeExistingFolder[];
+  candidateArticlesByDocumentId: Map<
+    string,
+    KnowledgeIntakeCandidateArticle[]
+  >;
 }) {
-  const candidateArticlesByDocumentId =
+  const batchCandidateArticles =
     new Map<
       string,
       KnowledgeIntakeCandidateArticle[]
     >();
 
   for (const document of documents) {
-    candidateArticlesByDocumentId.set(
+    batchCandidateArticles.set(
       document.id,
-      buildCandidatesForDocument(
-        document,
-        existingArticles,
-      ),
+      candidateArticlesByDocumentId.get(
+        document.id,
+      ) ?? [],
     );
   }
 
@@ -716,13 +356,15 @@ async function analyzeDocumentBatch({
         KNOWLEDGE_INTAKE_SYSTEM_PROMPT,
       input: buildKnowledgeIntakePrompt({
         documents,
-        candidateArticlesByDocumentId,
+        candidateArticlesByDocumentId:
+          batchCandidateArticles,
         folders: existingFolders,
       }),
       text: {
         format: {
           type: "json_schema",
-          name: "knowledge_intake_proposal",
+          name:
+            "knowledge_intake_proposal",
           strict: true,
           schema:
             KNOWLEDGE_INTAKE_JSON_SCHEMA,
@@ -777,14 +419,18 @@ export async function analyzeNewKnowledgeDocuments({
     }
 
     if (
-      duplicatedDocumentIds.has(document.id)
+      duplicatedDocumentIds.has(
+        document.id,
+      )
     ) {
       throw new Error(
         `El documento ${document.name} aparece más de una vez`,
       );
     }
 
-    duplicatedDocumentIds.add(document.id);
+    duplicatedDocumentIds.add(
+      document.id,
+    );
 
     if (!document.name.trim()) {
       throw new Error(
@@ -792,28 +438,34 @@ export async function analyzeNewKnowledgeDocuments({
       );
     }
 
-    if (document.text.trim().length < 20) {
+    if (
+      document.text.trim().length < 20
+    ) {
       throw new Error(
         `No se ha podido extraer texto suficiente de ${document.name}`,
       );
     }
   }
 
+  const preparedDocuments =
+    documents.map((document) => ({
+      ...document,
+      text: truncateDocument(
+        document.text,
+      ),
+    }));
+
   const {
     targetLibrary,
     existingArticles,
     existingFolders,
-  } = await loadKnowledgeContext({
-    userId,
-    libraryId,
-  });
-
-  const preparedDocuments = documents.map(
-    (document) => ({
-      ...document,
-      text: truncateDocument(document.text),
-    }),
-  );
+    candidateArticlesByDocumentId,
+  } =
+    await resolveKnowledgeIntakeAnalysisContext({
+      userId,
+      libraryId,
+      documents: preparedDocuments,
+    });
 
   const batches = splitIntoBatches(
     preparedDocuments,
@@ -837,6 +489,7 @@ export async function analyzeNewKnowledgeDocuments({
         documents: batch,
         existingArticles,
         existingFolders,
+        candidateArticlesByDocumentId,
       });
 
     if (generated.title.trim()) {
@@ -844,13 +497,20 @@ export async function analyzeNewKnowledgeDocuments({
         generated.title.trim();
     }
 
-    if (generated.description.trim()) {
+    if (
+      generated.description.trim()
+    ) {
       generatedDescription =
         generated.description.trim();
     }
 
-    decisions.push(...generated.decisions);
-    warnings.push(...generated.warnings);
+    decisions.push(
+      ...generated.decisions,
+    );
+
+    warnings.push(
+      ...generated.warnings,
+    );
   }
 
   validateGeneratedDecisions(
@@ -860,21 +520,27 @@ export async function analyzeNewKnowledgeDocuments({
     existingFolders,
   );
 
-  const proposal: KnowledgeIntakeProposal = {
-    title: generatedTitle,
-    description: generatedDescription,
-    libraryId,
-    generatedAt: new Date().toISOString(),
-    summary: buildSummary(decisions),
-    decisions,
-    warnings: Array.from(
-      new Set(
-        warnings
-          .map((warning) => warning.trim())
-          .filter(Boolean),
+  const proposal: KnowledgeIntakeProposal =
+    {
+      title: generatedTitle,
+      description:
+        generatedDescription,
+      libraryId,
+      generatedAt:
+        new Date().toISOString(),
+      summary:
+        buildSummary(decisions),
+      decisions,
+      warnings: Array.from(
+        new Set(
+          warnings
+            .map((warning) =>
+              warning.trim(),
+            )
+            .filter(Boolean),
+        ),
       ),
-    ),
-  };
+    };
 
   return {
     status: "proposal_ready",

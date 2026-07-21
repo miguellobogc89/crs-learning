@@ -1,5 +1,6 @@
 // lib/knowledge/intake/find-article-candidates.ts
 
+import { truncateDocument } from "@/lib/knowledge/import/truncate-document";
 import { prisma } from "@/lib/prisma";
 
 import {
@@ -7,28 +8,17 @@ import {
   removeIntakeFileExtension,
   tokenizeIntakeText,
 } from "./normalize-intake-text";
-import type { KnowledgeIntakeDocumentInput } from "./types";
+import type {
+  KnowledgeIntakeCandidateArticle,
+  KnowledgeIntakeDocumentInput,
+  KnowledgeIntakeExistingArticle,
+  KnowledgeIntakeExistingFolder,
+} from "./types";
 
 const MAX_CANDIDATES_PER_DOCUMENT = 8;
-const ARTICLE_CONTENT_PREVIEW_LENGTH = 4_000;
-const FILE_TEXT_PREVIEW_LENGTH = 3_000;
-
-export type KnowledgeIntakeArticleCandidate = {
-  articleId: string;
-  articleTitle: string;
-  libraryId: string;
-  libraryName: string;
-  score: number;
-  reasons: string[];
-  summary: string | null;
-  fileNames: string[];
-};
-
-export type KnowledgeIntakeDocumentCandidates = {
-  documentId: string;
-  documentName: string;
-  candidates: KnowledgeIntakeArticleCandidate[];
-};
+const MAX_ARTICLE_COMPARISON_CHARACTERS =
+  12_000;
+const DOCUMENT_TEXT_PREVIEW_LENGTH = 6_000;
 
 type LibraryRecord = {
   id: string;
@@ -36,18 +26,28 @@ type LibraryRecord = {
   name: string;
 };
 
-type ArticleRecord = {
+type AccessibleLibraryRoot = {
   id: string;
-  title: string;
-  description: string | null;
-  summary: string | null;
-  content: string;
-  libraryId: string;
-  fileNames: string[];
-  extractedText: string;
+  parentId: string | null;
+  name: string;
+  ownerUserId: string;
+  companyId: string | null;
 };
 
-export async function findKnowledgeArticleCandidates({
+export type KnowledgeIntakeAnalysisContext = {
+  targetLibrary: {
+    id: string;
+    name: string;
+  };
+  existingFolders: KnowledgeIntakeExistingFolder[];
+  existingArticles: KnowledgeIntakeExistingArticle[];
+  candidateArticlesByDocumentId: Map<
+    string,
+    KnowledgeIntakeCandidateArticle[]
+  >;
+};
+
+export async function resolveKnowledgeIntakeAnalysisContext({
   userId,
   libraryId,
   documents,
@@ -55,66 +55,52 @@ export async function findKnowledgeArticleCandidates({
   userId: string;
   libraryId: string;
   documents: KnowledgeIntakeDocumentInput[];
-}): Promise<KnowledgeIntakeDocumentCandidates[]> {
-  const libraries = await loadAccessibleLibraryTree({
+}): Promise<KnowledgeIntakeAnalysisContext> {
+  const {
+    root,
+    libraries,
+  } = await loadAccessibleLibraryTree({
     userId,
     rootLibraryId: libraryId,
   });
 
-  if (libraries.length === 0) {
-    throw new Error(
-      "No se ha encontrado la biblioteca o no tienes acceso a ella.",
-    );
-  }
-
-  const libraryIds = libraries.map(
-    (library) => library.id,
-  );
-
-  const libraryNameById = new Map(
+  const librariesById = new Map(
     libraries.map((library) => [
       library.id,
-      library.name,
+      library,
     ]),
   );
 
-  const articles = await loadArticles({
-    userId,
-    libraryIds,
-  });
+  const existingFolders =
+    buildExistingFolders({
+      libraries,
+      librariesById,
+    });
 
-  return documents.map((document) => ({
-    documentId: document.id,
-    documentName: document.name,
-    candidates: articles
-      .map((article) =>
-        scoreArticleCandidate({
-          document,
-          article,
-          libraryName:
-            libraryNameById.get(
-              article.libraryId,
-            ) ?? "Sin carpeta",
-        }),
-      )
-      .filter(
-        (
-          candidate,
-        ): candidate is KnowledgeIntakeArticleCandidate =>
-          candidate !== null,
-      )
-      .sort((left, right) => {
-        if (right.score !== left.score) {
-          return right.score - left.score;
-        }
+  const existingArticles =
+    await loadExistingArticles({
+      userId,
+      libraryIds: libraries.map(
+        (library) => library.id,
+      ),
+      librariesById,
+    });
 
-        return left.articleTitle.localeCompare(
-          right.articleTitle,
-          "es",
-        );
-      })
-      .slice(0, MAX_CANDIDATES_PER_DOCUMENT),
-  }));
+  const candidateArticlesByDocumentId =
+    buildCandidateMap({
+      documents,
+      existingArticles,
+    });
+
+  return {
+    targetLibrary: {
+      id: root.id,
+      name: root.name,
+    },
+    existingFolders,
+    existingArticles,
+    candidateArticlesByDocumentId,
+  };
 }
 
 async function loadAccessibleLibraryTree({
@@ -123,7 +109,10 @@ async function loadAccessibleLibraryTree({
 }: {
   userId: string;
   rootLibraryId: string;
-}): Promise<LibraryRecord[]> {
+}): Promise<{
+  root: AccessibleLibraryRoot;
+  libraries: LibraryRecord[];
+}> {
   const root =
     await prisma.knowledge_libraries.findFirst({
       where: {
@@ -164,7 +153,9 @@ async function loadAccessibleLibraryTree({
     });
 
   if (!root) {
-    return [];
+    throw new Error(
+      "No se ha encontrado la biblioteca o no tienes acceso a ella.",
+    );
   }
 
   const possibleLibraries =
@@ -198,42 +189,47 @@ async function loadAccessibleLibraryTree({
       ],
     });
 
+  const libraryRecords: LibraryRecord[] =
+    possibleLibraries.map((library) => ({
+      id: library.id,
+      parentId: library.parent_id,
+      name: library.name,
+    }));
+
   const childrenByParentId = new Map<
     string,
     LibraryRecord[]
   >();
 
-  for (const library of possibleLibraries) {
-    if (!library.parent_id) {
+  for (const library of libraryRecords) {
+    if (!library.parentId) {
       continue;
     }
 
     const siblings =
       childrenByParentId.get(
-        library.parent_id,
+        library.parentId,
       ) ?? [];
 
-    siblings.push({
-      id: library.id,
-      parentId: library.parent_id,
-      name: library.name,
-    });
+    siblings.push(library);
 
     childrenByParentId.set(
-      library.parent_id,
+      library.parentId,
       siblings,
     );
   }
 
+  const rootRecord: LibraryRecord = {
+    id: root.id,
+    parentId: root.parent_id,
+    name: root.name,
+  };
+
   const result: LibraryRecord[] = [
-    {
-      id: root.id,
-      parentId: root.parent_id,
-      name: root.name,
-    },
+    rootRecord,
   ];
 
-  const visited = new Set<string>([
+  const visitedIds = new Set<string>([
     root.id,
   ]);
 
@@ -251,26 +247,63 @@ async function loadAccessibleLibraryTree({
       [];
 
     for (const child of children) {
-      if (visited.has(child.id)) {
+      if (visitedIds.has(child.id)) {
         continue;
       }
 
-      visited.add(child.id);
+      visitedIds.add(child.id);
       result.push(child);
       pendingIds.push(child.id);
     }
   }
 
-  return result;
+  return {
+    root: {
+      id: root.id,
+      parentId: root.parent_id,
+      name: root.name,
+      ownerUserId: root.owner_user_id,
+      companyId: root.company_id,
+    },
+    libraries: result,
+  };
 }
 
-async function loadArticles({
+function buildExistingFolders({
+  libraries,
+  librariesById,
+}: {
+  libraries: LibraryRecord[];
+  librariesById: Map<
+    string,
+    LibraryRecord
+  >;
+}): KnowledgeIntakeExistingFolder[] {
+  return libraries.map((library) => ({
+    id: library.id,
+    name: library.name,
+    parentId: library.parentId,
+    path: buildLibraryPath(
+      library.id,
+      librariesById,
+    ),
+  }));
+}
+
+async function loadExistingArticles({
   userId,
   libraryIds,
+  librariesById,
 }: {
   userId: string;
   libraryIds: string[];
-}): Promise<ArticleRecord[]> {
+  librariesById: Map<
+    string,
+    LibraryRecord
+  >;
+}): Promise<
+  KnowledgeIntakeExistingArticle[]
+> {
   const articles =
     await prisma.knowledge_sources.findMany({
       where: {
@@ -313,16 +346,17 @@ async function loadArticles({
         description: true,
         summary: true,
         content: true,
+        status: true,
         library_id: true,
         knowledge_files: {
           select: {
+            id: true,
             file_name: true,
             extracted_text: true,
           },
           orderBy: {
-            created_at: "desc",
+            created_at: "asc",
           },
-          take: 5,
         },
       },
       orderBy: {
@@ -339,40 +373,131 @@ async function loadArticles({
       {
         id: article.id,
         title: article.title,
-        description: article.description,
+        description:
+          article.description,
         summary: article.summary,
-        content: article.content.slice(
-          0,
-          ARTICLE_CONTENT_PREVIEW_LENGTH,
-        ),
+        content: article.content,
+        status: article.status,
         libraryId: article.library_id,
-        fileNames:
+        libraryPath: buildLibraryPath(
+          article.library_id,
+          librariesById,
+        ),
+        files:
           article.knowledge_files.map(
-            (file) => file.file_name,
+            (file) => ({
+              id: file.id,
+              name: file.file_name,
+              extractedText:
+                file.extracted_text,
+            }),
           ),
-        extractedText:
-          article.knowledge_files
-            .map((file) =>
-              file.extracted_text.slice(
-                0,
-                FILE_TEXT_PREVIEW_LENGTH,
-              ),
-            )
-            .join("\n"),
       },
     ];
   });
 }
 
-function scoreArticleCandidate({
+function buildCandidateMap({
+  documents,
+  existingArticles,
+}: {
+  documents: KnowledgeIntakeDocumentInput[];
+  existingArticles: KnowledgeIntakeExistingArticle[];
+}) {
+  const result = new Map<
+    string,
+    KnowledgeIntakeCandidateArticle[]
+  >();
+
+  for (const document of documents) {
+    result.set(
+      document.id,
+      buildCandidatesForDocument({
+        document,
+        existingArticles,
+      }),
+    );
+  }
+
+  return result;
+}
+
+function buildCandidatesForDocument({
   document,
-  article,
-  libraryName,
+  existingArticles,
 }: {
   document: KnowledgeIntakeDocumentInput;
-  article: ArticleRecord;
-  libraryName: string;
-}): KnowledgeIntakeArticleCandidate | null {
+  existingArticles: KnowledgeIntakeExistingArticle[];
+}): KnowledgeIntakeCandidateArticle[] {
+  return existingArticles
+    .map((article) =>
+      buildCandidate({
+        document,
+        article,
+      }),
+    )
+    .filter(
+      (
+        candidate,
+      ): candidate is KnowledgeIntakeCandidateArticle =>
+        candidate !== null,
+    )
+    .sort(
+      (left, right) =>
+        right.lexicalScore -
+        left.lexicalScore,
+    )
+    .slice(
+      0,
+      MAX_CANDIDATES_PER_DOCUMENT,
+    );
+}
+
+function buildCandidate({
+  document,
+  article,
+}: {
+  document: KnowledgeIntakeDocumentInput;
+  article: KnowledgeIntakeExistingArticle;
+}): KnowledgeIntakeCandidateArticle | null {
+  const comparisonText =
+    buildArticleComparisonText(article);
+
+  const lexicalScore =
+    calculateCandidateScore({
+      document,
+      article,
+      comparisonText,
+    });
+
+  if (lexicalScore <= 0) {
+    return null;
+  }
+
+  return {
+    id: article.id,
+    title: article.title,
+    description: article.description,
+    summary: article.summary,
+    libraryId: article.libraryId,
+    libraryPath: article.libraryPath,
+    fileNames: article.files.map(
+      (file) => file.name,
+    ),
+    comparisonText,
+    lexicalScore,
+  };
+}
+
+function calculateCandidateScore({
+  document,
+  article,
+  comparisonText,
+}: {
+  document: KnowledgeIntakeDocumentInput;
+  article: KnowledgeIntakeExistingArticle;
+  comparisonText: string;
+}) {
   const documentBaseName =
     removeIntakeFileExtension(document.name);
 
@@ -387,24 +512,18 @@ function scoreArticleCandidate({
 
   const documentTextTokens =
     tokenizeIntakeText(
-      document.text.slice(0, 6_000),
+      document.text.slice(
+        0,
+        DOCUMENT_TEXT_PREVIEW_LENGTH,
+      ),
     );
 
   const articleTitleTokens =
     tokenizeIntakeText(article.title);
 
   const articleBodyTokens =
-    tokenizeIntakeText(
-      [
-        article.description ?? "",
-        article.summary ?? "",
-        article.content,
-        article.extractedText,
-        article.fileNames.join(" "),
-      ].join("\n"),
-    );
+    tokenizeIntakeText(comparisonText);
 
-  const reasons: string[] = [];
   let score = 0;
 
   if (
@@ -412,10 +531,7 @@ function scoreArticleCandidate({
     normalizedDocumentName ===
       normalizedArticleTitle
   ) {
-    score += 70;
-    reasons.push(
-      "El nombre del documento coincide con el título del artículo.",
-    );
+    score += 0.45;
   } else if (
     normalizedDocumentName &&
     normalizedArticleTitle &&
@@ -428,55 +544,32 @@ function scoreArticleCandidate({
       )
     )
   ) {
-    score += 40;
-    reasons.push(
-      "El nombre del documento y el título del artículo son muy similares.",
-    );
+    score += 0.25;
   }
 
-  const titleOverlap = calculateTokenOverlap(
-    documentNameTokens,
-    articleTitleTokens,
-  );
+  const titleOverlap =
+    calculateTokenOverlap(
+      documentNameTokens,
+      articleTitleTokens,
+    );
 
-  if (titleOverlap >= 0.75) {
-    score += 35;
-    reasons.push(
-      "Comparten la mayoría de las palabras relevantes del título.",
-    );
-  } else if (titleOverlap >= 0.4) {
-    score += 20;
-    reasons.push(
-      "Comparten varias palabras relevantes del título.",
-    );
-  } else if (titleOverlap > 0) {
-    score += 8;
-  }
+  score += titleOverlap * 0.25;
 
-  const bodyOverlap = calculateTokenOverlap(
-    documentTextTokens,
-    articleBodyTokens,
-  );
+  const bodyOverlap =
+    calculateTokenOverlap(
+      documentTextTokens,
+      articleBodyTokens,
+    );
 
-  if (bodyOverlap >= 0.35) {
-    score += 25;
-    reasons.push(
-      "El contenido del documento coincide significativamente con el artículo.",
-    );
-  } else if (bodyOverlap >= 0.15) {
-    score += 12;
-    reasons.push(
-      "El documento y el artículo comparten conceptos relevantes.",
-    );
-  } else if (bodyOverlap >= 0.05) {
-    score += 4;
-  }
+  score += bodyOverlap * 0.2;
 
   const matchingFileName =
-    article.fileNames.some((fileName) => {
+    article.files.some((file) => {
       const normalizedExistingFileName =
         normalizeIntakeText(
-          removeIntakeFileExtension(fileName),
+          removeIntakeFileExtension(
+            file.name,
+          ),
         );
 
       return (
@@ -486,37 +579,78 @@ function scoreArticleCandidate({
     });
 
   if (matchingFileName) {
-    score += 45;
-    reasons.push(
-      "El artículo ya contiene un archivo con el mismo nombre.",
-    );
+    score += 0.3;
   }
 
-  const boundedScore = Math.min(
-    100,
-    Math.round(score),
+  return Math.min(1, score);
+}
+
+function buildArticleComparisonText(
+  article: KnowledgeIntakeExistingArticle,
+) {
+  const fileText = article.files
+    .map((file) =>
+      [
+        `FILE_NAME: ${file.name}`,
+        file.extractedText,
+      ].join("\n"),
+    )
+    .join("\n\n");
+
+  return truncateDocument(
+    [
+      `TITLE: ${article.title}`,
+      `DESCRIPTION: ${article.description ?? ""}`,
+      `SUMMARY: ${article.summary ?? ""}`,
+      "",
+      "CONTENT:",
+      article.content,
+      "",
+      "FILES:",
+      fileText,
+    ].join("\n"),
+    MAX_ARTICLE_COMPARISON_CHARACTERS,
   );
+}
 
-  if (boundedScore < 10) {
-    return null;
+function buildLibraryPath(
+  libraryId: string,
+  librariesById: Map<
+    string,
+    LibraryRecord
+  >,
+) {
+  const path: string[] = [];
+  const visitedIds = new Set<string>();
+
+  let currentId: string | null =
+    libraryId;
+
+  while (currentId) {
+    if (visitedIds.has(currentId)) {
+      break;
+    }
+
+    visitedIds.add(currentId);
+
+    const library =
+      librariesById.get(currentId);
+
+    if (!library) {
+      break;
+    }
+
+    path.unshift(library.name);
+    currentId = library.parentId;
   }
 
-  return {
-    articleId: article.id,
-    articleTitle: article.title,
-    libraryId: article.libraryId,
-    libraryName,
-    score: boundedScore,
-    reasons,
-    summary: article.summary,
-    fileNames: article.fileNames,
-  };
+  return path;
 }
 
 function calculateTokenOverlap(
   sourceTokens: string[],
   targetTokens: string[],
-): number {
+) {
   if (
     sourceTokens.length === 0 ||
     targetTokens.length === 0
@@ -524,13 +658,34 @@ function calculateTokenOverlap(
     return 0;
   }
 
-  const targetTokenSet = new Set(
-    targetTokens,
-  );
+  const sourceSet = new Set(sourceTokens);
+  const targetSet = new Set(targetTokens);
 
-  const matches = sourceTokens.filter(
-    (token) => targetTokenSet.has(token),
-  ).length;
+  let intersection = 0;
 
-  return matches / sourceTokens.length;
+  for (const token of sourceSet) {
+    if (targetSet.has(token)) {
+      intersection += 1;
+    }
+  }
+
+  const containment =
+    intersection /
+    Math.min(
+      sourceSet.size,
+      targetSet.size,
+    );
+
+  const union =
+    sourceSet.size +
+    targetSet.size -
+    intersection;
+
+  const jaccard =
+    union > 0
+      ? intersection / union
+      : 0;
+
+  return containment * 0.7 +
+    jaccard * 0.3;
 }
