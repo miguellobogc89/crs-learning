@@ -5,7 +5,7 @@ import {
   CheckCircle2,
   FileSearch,
   Loader2,
-  RefreshCw,
+  Sparkles,
   Upload,
 } from "lucide-react";
 
@@ -57,6 +57,13 @@ export function KnowledgeDocumentsView({
   onRebuild,
   onUploadableFileCountChange,
 }: Props) {
+  const hasDocumentsReadyToUpload =
+    uploadableFileCount > 0;
+
+  const canAnalyzePendingChanges =
+    articleNeedsRebuild &&
+    !hasDocumentsReadyToUpload;
+
   return (
     <section className="rounded-2xl border border-border bg-card p-6">
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -92,7 +99,7 @@ export function KnowledgeDocumentsView({
         <div className="flex flex-wrap items-center justify-end gap-3">
           {showUpload ? (
             <>
-              {uploadableFileCount > 0 ? (
+              {hasDocumentsReadyToUpload ? (
                 <div className="inline-flex h-11 items-center gap-2.5 rounded-xl border border-cyan-200 bg-cyan-50/60 px-3 dark:border-cyan-900 dark:bg-cyan-950/20">
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-cyan-100 text-cyan-700 dark:bg-cyan-900/50 dark:text-cyan-300">
                     <FileSearch className="h-3.5 w-3.5" />
@@ -122,14 +129,34 @@ export function KnowledgeDocumentsView({
                 Cancelar
               </Button>
 
-              {uploadableFileCount > 0 ? (
+              {hasDocumentsReadyToUpload ? (
                 <Button
                   type="submit"
                   form={uploadFormId}
+                  disabled={isRebuilding}
                   className="h-11 bg-black px-6 text-white hover:bg-black/85"
                 >
                   <Upload className="mr-2 h-4 w-4" />
                   Subir
+                </Button>
+              ) : null}
+
+              {canAnalyzePendingChanges ? (
+                <Button
+                  type="button"
+                  onClick={onRebuild}
+                  disabled={isRebuilding}
+                  className="h-11 bg-black px-6 text-white hover:bg-black/85"
+                >
+                  {isRebuilding ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+
+                  {isRebuilding
+                    ? "Analizando..."
+                    : "Analizar cambios"}
                 </Button>
               ) : null}
             </>
@@ -150,17 +177,17 @@ export function KnowledgeDocumentsView({
                   type="button"
                   onClick={onRebuild}
                   disabled={isRebuilding}
-                  className="h-11 bg-black px-5 text-white hover:bg-black/85"
+                  className="h-11 bg-black px-6 text-white hover:bg-black/85"
                 >
                   {isRebuilding ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <RefreshCw className="mr-2 h-4 w-4" />
+                    <Sparkles className="mr-2 h-4 w-4" />
                   )}
 
                   {isRebuilding
-                    ? "Actualizando..."
-                    : "Actualizar conocimiento"}
+                    ? "Analizando..."
+                    : "Analizar cambios"}
                 </Button>
               ) : null}
             </>
