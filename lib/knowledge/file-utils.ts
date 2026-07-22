@@ -27,33 +27,39 @@ export function getKnowledgeFileIcon(filename: string) {
 
     case "doc":
     case "docx":
-      return "/icons/files/docx.png";
+    case "odt":
+    case "rtf":
+      return "/icons/files/doc.png";
 
     case "xls":
     case "xlsx":
-      return "/icons/files/xlsx.png";
+    case "xlsm":
+    case "ods":
+    case "csv":
+      return "/icons/files/xls.png";
 
     case "ppt":
     case "pptx":
+    case "odp":
       return "/icons/files/pptx.png";
-
-    case "csv":
-      return "/icons/files/csv.png";
-
-    case "txt":
-      return "/icons/files/txt.png";
-
-    case "md":
-      return "/icons/files/md.png";
 
     case "png":
     case "jpg":
     case "jpeg":
     case "webp":
-      return "/icons/files/image.png";
+    case "gif":
+    case "svg":
+      return "/icons/files/jpg.png";
+
+    case "zip":
+    case "rar":
+    case "7z":
+    case "tar":
+    case "gz":
+      return "/icons/files/zip.png";
 
     default:
-      return "/icons/files/file.png";
+      return "/icons/files/clip.png";
   }
 }
 

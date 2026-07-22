@@ -15,12 +15,19 @@ const MAX_TOTAL_EXTRACTED_SIZE = 500 * 1024 * 1024;
 
 const ACCEPTED_EXTENSIONS = new Set([
   ".pdf",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".csv",
   ".txt",
   ".md",
-  ".csv",
-  ".docx",
-  ".xlsx",
-  ".pptx",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".zip",
 ]);
 
 type RouteContext = {

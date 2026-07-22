@@ -5,11 +5,9 @@
 import {
   AlertTriangle,
   ArrowRight,
-  Check,
   CopyCheck,
   FilePlus2,
   FolderPlus,
-  Loader2,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
@@ -22,8 +20,6 @@ import type {
 type KnowledgeIntakeProposalProps = {
   proposal: KnowledgeIntakeProposal;
   isConfirming?: boolean;
-  onBack: () => void;
-  onConfirm: () => void;
 };
 
 function getDecisionAppearance(
@@ -193,9 +189,6 @@ function ProposalDecisionCard({
 
 export function KnowledgeIntakeProposal({
   proposal,
-  isConfirming = false,
-  onBack,
-  onConfirm,
 }: KnowledgeIntakeProposalProps) {
   const summary = proposal.summary;
 
@@ -295,35 +288,6 @@ export function KnowledgeIntakeProposal({
         </div>
       </div>
 
-      <div className="mt-4 flex shrink-0 items-center justify-between gap-3 border-t border-border pt-4">
-        <button
-          type="button"
-          disabled={isConfirming}
-          onClick={onBack}
-          className="inline-flex h-10 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Volver
-        </button>
-
-        <button
-          type="button"
-          disabled={isConfirming}
-          onClick={onConfirm}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 text-sm font-semibold text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isConfirming ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Aplicando propuesta
-            </>
-          ) : (
-            <>
-              <Check className="h-4 w-4" />
-              Confirmar incorporación
-            </>
-          )}
-        </button>
-      </div>
     </div>
   );
 }

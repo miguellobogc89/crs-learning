@@ -11,11 +11,25 @@ type Props = {
   onConfirm: () => void;
 };
 
-export function KnowledgeIntakeProposalStep({ proposal, isConfirming, error, onBack, onConfirm }: Props) {
+export function KnowledgeIntakeProposalStep({
+  proposal,
+  isConfirming,
+  error,
+}: Props) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {error ? <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
-      <KnowledgeIntakeProposalView proposal={proposal} isConfirming={isConfirming} onBack={onBack} onConfirm={onConfirm} />
+    <div className="flex h-full min-h-0 flex-col">
+      {error ? (
+        <div className="mb-3 shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+
+      <div className="min-h-0 flex-1 overflow-y-auto pr-2">
+        <KnowledgeIntakeProposalView
+          proposal={proposal}
+          isConfirming={isConfirming}
+        />
+      </div>
     </div>
   );
 }

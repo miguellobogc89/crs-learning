@@ -8,10 +8,12 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import type {
   AnalyzeKnowledgeIntakeResult,
   ConfirmKnowledgeIntakeResult,
+  KnowledgeIntakeDocumentInput,
   KnowledgeIntakeProposal,
 } from "@/lib/knowledge/intake/types";
 
@@ -19,6 +21,11 @@ import type {
   KnowledgeIntakeContext,
   KnowledgeIntakeModalStep,
 } from "../modal/knowledge-intake-modal.types";
+import type {
+  KnowledgeIntakeFileProgress,
+  KnowledgeIntakeProcessingPhase,
+} from "../modal/knowledge-intake-processing.types";
+
 import { buildIntakeFormData } from "../../services/build-intake-form-data";
 import {
   createSelectedDocuments,
@@ -32,6 +39,44 @@ type UseKnowledgeIntakeParams = {
     result: ConfirmKnowledgeIntakeResult,
   ) => void;
 };
+
+type PrepareDocumentResult = {
+  document: KnowledgeIntakeDocumentInput;
+};
+
+function getFileIdentity(file: File) {
+  return [
+    file.name.toLowerCase(),
+    file.size,
+    file.lastModified,
+  ].join("::");
+}
+
+function removeDuplicateFiles(
+  files: File[],
+) {
+  const seenFiles = new Set<string>();
+  const uniqueFiles: File[] = [];
+  const duplicateFiles: File[] = [];
+
+  for (const file of files) {
+    const identity =
+      getFileIdentity(file);
+
+    if (seenFiles.has(identity)) {
+      duplicateFiles.push(file);
+      continue;
+    }
+
+    seenFiles.add(identity);
+    uniqueFiles.push(file);
+  }
+
+  return {
+    uniqueFiles,
+    duplicateFiles,
+  };
+}
 
 export function useKnowledgeIntake({
   context,
@@ -47,9 +92,9 @@ export function useKnowledgeIntake({
   const [
     selectedDocuments,
     setSelectedDocuments,
-  ] = useState<SelectedKnowledgeDocument[]>(
-    [],
-  );
+  ] = useState<
+    SelectedKnowledgeDocument[]
+  >([]);
 
   const [proposal, setProposal] =
     useState<KnowledgeIntakeProposal | null>(
@@ -73,6 +118,21 @@ export function useKnowledgeIntake({
   const [isConfirming, setIsConfirming] =
     useState(false);
 
+  const [
+    processingPhase,
+    setProcessingPhase,
+  ] =
+    useState<KnowledgeIntakeProcessingPhase>(
+      "uploading",
+    );
+
+  const [
+    fileProgress,
+    setFileProgress,
+  ] = useState<
+    KnowledgeIntakeFileProgress[]
+  >([]);
+
   const files = useMemo(
     () =>
       selectedDocuments.map(
@@ -90,10 +150,39 @@ export function useKnowledgeIntake({
     (nextFiles: File[]) => {
       setError(null);
 
+      const {
+        uniqueFiles,
+        duplicateFiles,
+      } =
+        removeDuplicateFiles(nextFiles);
+
+      if (duplicateFiles.length > 0) {
+        const duplicateNames =
+          Array.from(
+            new Set(
+              duplicateFiles.map(
+                (file) => file.name,
+              ),
+            ),
+          );
+
+        toast.warning(
+          duplicateFiles.length === 1
+            ? "Archivo duplicado"
+            : `${duplicateFiles.length} archivos duplicados`,
+          {
+            description:
+              duplicateNames.length === 1
+                ? `"${duplicateNames[0]}" ya estaba seleccionado y no se ha vuelto a añadir.`
+                : "Los archivos repetidos ya estaban seleccionados y no se han vuelto a añadir.",
+          },
+        );
+      }
+
       setSelectedDocuments(
         (currentDocuments) =>
           createSelectedDocuments(
-            nextFiles,
+            uniqueFiles,
             currentDocuments,
           ),
       );
@@ -115,31 +204,134 @@ export function useKnowledgeIntake({
       setIsAnalyzing(true);
       setError(null);
       setStep("analyzing");
+      setProcessingPhase("uploading");
+
+      setFileProgress(
+        selectedDocuments.map(
+          (document) => ({
+            id: document.id,
+            name: document.file.name,
+            status: "pending",
+          }),
+        ),
+      );
 
       try {
-        const response = await fetch(
-          "/api/knowledge/intake/analyze",
-          {
-            method: "POST",
-            body: buildIntakeFormData({
-              context,
-              documents:
-                selectedDocuments,
-            }),
-          },
-        );
+        const preparedDocuments: KnowledgeIntakeDocumentInput[] =
+          [];
 
-        if (!response.ok) {
+        for (const document of selectedDocuments) {
+          setFileProgress((current) =>
+            current.map((item) =>
+              item.id === document.id
+                ? {
+                    ...item,
+                    status:
+                      "uploading",
+                    error: undefined,
+                  }
+                : item,
+            ),
+          );
+
+          const formData =
+            new FormData();
+
+          formData.set(
+            "documentId",
+            document.id,
+          );
+
+          formData.set(
+            "file",
+            document.file,
+          );
+
+          const prepareResponse =
+            await fetch(
+              "/api/knowledge/intake/prepare",
+              {
+                method: "POST",
+                body: formData,
+              },
+            );
+
+          if (!prepareResponse.ok) {
+            const message =
+              await readErrorMessage(
+                prepareResponse,
+                `No se ha podido subir ${document.file.name}`,
+              );
+
+            setFileProgress(
+              (current) =>
+                current.map((item) =>
+                  item.id ===
+                  document.id
+                    ? {
+                        ...item,
+                        status:
+                          "error",
+                        error: message,
+                      }
+                    : item,
+                ),
+            );
+
+            throw new Error(message);
+          }
+
+          const preparedResult =
+            (await prepareResponse.json()) as PrepareDocumentResult;
+
+          preparedDocuments.push(
+            preparedResult.document,
+          );
+
+          setFileProgress((current) =>
+            current.map((item) =>
+              item.id === document.id
+                ? {
+                    ...item,
+                    status:
+                      "uploaded",
+                  }
+                : item,
+            ),
+          );
+        }
+
+        setProcessingPhase("analyzing");
+
+        const analyzeResponse =
+          await fetch(
+            "/api/knowledge/intake/analyze",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+              body: JSON.stringify({
+                libraryId:
+                  context.libraryId,
+                documents:
+                  preparedDocuments,
+              }),
+            },
+          );
+
+        if (!analyzeResponse.ok) {
           throw new Error(
             await readErrorMessage(
-              response,
+              analyzeResponse,
               "No se han podido analizar los documentos",
             ),
           );
         }
 
         const result =
-          (await response.json()) as AnalyzeKnowledgeIntakeResult;
+          (await analyzeResponse.json()) as AnalyzeKnowledgeIntakeResult;
 
         setProposal(result.proposal);
         setStep("proposal");
@@ -155,7 +347,7 @@ export function useKnowledgeIntake({
         setIsAnalyzing(false);
       }
     }, [
-      context,
+      context.libraryId,
       selectedDocuments,
     ]);
 
@@ -222,16 +414,17 @@ export function useKnowledgeIntake({
       setStep("upload");
     }, []);
 
-  const reset =
-    useCallback(() => {
-      setStep("upload");
-      setSelectedDocuments([]);
-      setProposal(null);
-      setCompletionResult(null);
-      setError(null);
-      setIsAnalyzing(false);
-      setIsConfirming(false);
-    }, []);
+  const reset = useCallback(() => {
+    setStep("upload");
+    setSelectedDocuments([]);
+    setProposal(null);
+    setCompletionResult(null);
+    setError(null);
+    setIsAnalyzing(false);
+    setIsConfirming(false);
+    setProcessingPhase("uploading");
+    setFileProgress([]);
+  }, []);
 
   return {
     step,
@@ -242,6 +435,8 @@ export function useKnowledgeIntake({
     isAnalyzing,
     isConfirming,
     hasUnsavedProgress,
+    processingPhase,
+    fileProgress,
     handleFilesChange,
     analyzeDocuments,
     confirmProposal,

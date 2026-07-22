@@ -3,42 +3,46 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
-import { extractFileText } from "@/lib/knowledge/extract-file-text";
-import { isAcceptedKnowledgeFileType } from "@/lib/knowledge/file-types";
 import { analyzeNewKnowledgeDocuments } from "@/lib/knowledge/intake/analyze-new-documents";
 import type { KnowledgeIntakeDocumentInput } from "@/lib/knowledge/intake/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-function parseDocumentIds(
-  value: FormDataEntryValue | null,
-) {
-  if (typeof value !== "string") {
-    return [];
+type AnalyzeRequestBody = {
+  libraryId?: unknown;
+  documents?: unknown;
+};
+
+function isKnowledgeDocument(
+  value: unknown,
+): value is KnowledgeIntakeDocumentInput {
+  if (
+    !value ||
+    typeof value !== "object"
+  ) {
+    return false;
   }
 
-  try {
-    const parsed = JSON.parse(value) as unknown;
+  const document =
+    value as Partial<KnowledgeIntakeDocumentInput>;
 
-    if (
-      !Array.isArray(parsed) ||
-      !parsed.every(
-        (item): item is string =>
-          typeof item === "string" &&
-          item.trim().length > 0,
-      )
-    ) {
-      return [];
-    }
-
-    return parsed;
-  } catch {
-    return [];
-  }
+  return (
+    typeof document.id === "string" &&
+    document.id.trim().length > 0 &&
+    typeof document.name === "string" &&
+    document.name.trim().length > 0 &&
+    typeof document.size === "number" &&
+    typeof document.text === "string" &&
+    (typeof document.mimeType ===
+      "string" ||
+      document.mimeType === null)
+  );
 }
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request,
+) {
   const session = await auth();
 
   if (!session?.user?.id) {
@@ -53,22 +57,21 @@ export async function POST(request: Request) {
   }
 
   try {
-    const formData = await request.formData();
+    const body =
+      (await request.json()) as AnalyzeRequestBody;
 
-    const libraryId = String(
-      formData.get("libraryId") ?? "",
-    ).trim();
+    const libraryId =
+      typeof body.libraryId === "string"
+        ? body.libraryId.trim()
+        : "";
 
-    const files = formData
-      .getAll("files")
-      .filter(
-        (value): value is File =>
-          value instanceof File,
-      );
-
-    const documentIds = parseDocumentIds(
-      formData.get("documentIds"),
-    );
+    const documents =
+      Array.isArray(body.documents) &&
+      body.documents.every(
+        isKnowledgeDocument,
+      )
+        ? body.documents
+        : [];
 
     if (!libraryId) {
       return NextResponse.json(
@@ -82,67 +85,16 @@ export async function POST(request: Request) {
       );
     }
 
-    if (files.length === 0) {
+    if (documents.length === 0) {
       return NextResponse.json(
         {
           error:
-            "Debes seleccionar al menos un documento",
+            "No se han recibido documentos para analizar",
         },
         {
           status: 400,
         },
       );
-    }
-
-    if (files.length !== documentIds.length) {
-      return NextResponse.json(
-        {
-          error:
-            "No se ha podido relacionar cada archivo con su identificador",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
-
-    const acceptedFiles = files.filter((file) =>
-      isAcceptedKnowledgeFileType(file),
-    );
-
-    if (acceptedFiles.length !== files.length) {
-      return NextResponse.json(
-        {
-          error:
-            "Uno o varios documentos tienen un formato no admitido",
-        },
-        {
-          status: 400,
-        },
-      );
-    }
-
-    const documents: KnowledgeIntakeDocumentInput[] =
-      [];
-
-    for (
-      let index = 0;
-      index < files.length;
-      index += 1
-    ) {
-      const file = files[index];
-      const documentId = documentIds[index];
-
-      const extractedText =
-        await extractFileText(file);
-
-      documents.push({
-        id: documentId,
-        name: file.name,
-        mimeType: file.type || null,
-        size: file.size,
-        text: extractedText,
-      });
     }
 
     const result =

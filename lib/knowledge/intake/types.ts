@@ -214,16 +214,20 @@ export type KnowledgeIntakeIgnoredDocument = {
     | "possible_duplicate";
 };
 
+// lib/knowledge/intake/types.ts
+
 export type KnowledgeIntakeCreatedArticle = {
   id: string;
   title: string;
   libraryId: string;
+  path: string[];
   documentIds: string[];
 };
 
 export type KnowledgeIntakeUpdatedArticle = {
   id: string;
   title: string;
+  path: string[];
   documentIds: string[];
 };
 
@@ -251,3 +255,4 @@ export type AnalyzeStoredKnowledgeIntakeResult = {
   importId: string;
   proposal: KnowledgeIntakeProposal;
 };
+

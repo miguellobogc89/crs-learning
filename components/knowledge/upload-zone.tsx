@@ -1,18 +1,14 @@
-// components/knowledge/upload-zone.tsx
 "use client";
 
 import Image from "next/image";
 import {
-  CheckCircle2,
-  Loader2,
-  X,
+  Plus,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
+import { KnowledgeUploadFileCard } from "@/components/knowledge/upload-file-card";
 import {
   formatFileSize,
-  getKnowledgeFileIcon,
-  getKnowledgeFileType,
 } from "@/lib/knowledge/file-utils";
 
 type UploadZoneProps = {
@@ -23,6 +19,18 @@ type UploadZoneProps = {
   files?: File[];
 };
 
+function isSameFile(
+  firstFile: File,
+  secondFile: File,
+) {
+  return (
+    firstFile.name === secondFile.name &&
+    firstFile.size === secondFile.size &&
+    firstFile.lastModified ===
+      secondFile.lastModified
+  );
+}
+
 export function UploadZone({
   accept,
   disabled = false,
@@ -30,12 +38,26 @@ export function UploadZone({
   uploadingFileNames = [],
   files: controlledFiles,
 }: UploadZoneProps) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef =
+    useRef<HTMLInputElement | null>(null);
 
-  const [internalFiles, setInternalFiles] = useState<File[]>([]);
+  const [internalFiles, setInternalFiles] =
+    useState<File[]>([]);
 
-const files = controlledFiles ?? internalFiles;
-  const [isDragging, setIsDragging] = useState(false);
+  const [isDragging, setIsDragging] =
+    useState(false);
+
+  const files =
+    controlledFiles ?? internalFiles;
+
+  const totalSize = useMemo(
+    () =>
+      files.reduce(
+        (total, file) => total + file.size,
+        0,
+      ),
+    [files],
+  );
 
   function syncInputFiles(nextFiles: File[]) {
     if (!inputRef.current) {
@@ -48,122 +70,128 @@ const files = controlledFiles ?? internalFiles;
       dataTransfer.items.add(file);
     }
 
-    inputRef.current.files = dataTransfer.files;
+    inputRef.current.files =
+      dataTransfer.files;
   }
 
-function addFiles(fileList: FileList | null) {
-  if (!fileList) {
-    return;
+  function updateFiles(nextFiles: File[]) {
+    setInternalFiles(nextFiles);
+    syncInputFiles(nextFiles);
+    onFilesChange?.(nextFiles);
   }
 
-  const incomingFiles = Array.from(fileList);
-
-  const nextFiles = [...files];
-
-  for (const incomingFile of incomingFiles) {
-    const alreadyExists = nextFiles.some(
-      (currentFile) =>
-        currentFile.name === incomingFile.name &&
-        currentFile.size === incomingFile.size &&
-        currentFile.lastModified === incomingFile.lastModified,
-    );
-
-    if (!alreadyExists) {
-      nextFiles.push(incomingFile);
+  function addFiles(
+    fileList: FileList | null,
+  ) {
+    if (!fileList) {
+      return;
     }
+
+    const nextFiles = [...files];
+
+    for (const incomingFile of Array.from(
+      fileList,
+    )) {
+      const alreadyExists = nextFiles.some(
+        (currentFile) =>
+          isSameFile(
+            currentFile,
+            incomingFile,
+          ),
+      );
+
+      if (!alreadyExists) {
+        nextFiles.push(incomingFile);
+      }
+    }
+
+    updateFiles(nextFiles);
   }
 
-  setInternalFiles(nextFiles);
-  syncInputFiles(nextFiles);
-  onFilesChange?.(nextFiles);
-}
+  function removeFile(fileToRemove: File) {
+    if (disabled) {
+      return;
+    }
 
-function removeFile(fileToRemove: File) {
-  if (disabled) {
-    return;
-  }
-
-  const nextFiles = files.filter(
-    (file) =>
-      !(
-        file.name === fileToRemove.name &&
-        file.size === fileToRemove.size &&
-        file.lastModified === fileToRemove.lastModified
+    updateFiles(
+      files.filter(
+        (file) =>
+          !isSameFile(file, fileToRemove),
       ),
-  );
-
-  setInternalFiles(nextFiles);
-  syncInputFiles(nextFiles);
-  onFilesChange?.(nextFiles);
-}
+    );
+  }
 
   return (
-    <div className="space-y-3">
-      {files.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {files.map((file) => {
-            const extension = getKnowledgeFileType(file.name);
-            const icon = getKnowledgeFileIcon(file.name);
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <input
+        ref={inputRef}
+        hidden
+        multiple
+        name="files"
+        type="file"
+        accept={accept}
+        disabled={disabled}
+        onChange={(event) => {
+          addFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
 
-            const isUploading = uploadingFileNames.includes(
-              file.name,
-            );
+      <section className="shrink-0">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Documentos seleccionados
+            </h3>
 
-            return (
-              <div
-                key={`${file.name}-${file.size}-${file.lastModified}`}
-                className="group relative flex w-[220px] items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-2 shadow-sm"
-              >
-                <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface">
-                  <Image
-                    src={icon}
-                    alt={`${extension || "archivo"} icono`}
-                    width={24}
-                    height={24}
-                    className="h-6 w-6 object-contain"
-                  />
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {files.length}{" "}
+              {files.length === 1
+                ? "archivo"
+                : "archivos"}
+              {totalSize > 0
+                ? ` · ${formatFileSize(totalSize)}`
+                : ""}
+            </p>
+          </div>
 
-                  {isUploading ? (
-                    <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/85">
-                      <Loader2 className="h-4 w-4 animate-spin text-cyan-600" />
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium text-foreground">
-                    {file.name}
-                  </p>
-
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {extension.toUpperCase()}
-                    {file.size > 0
-                      ? ` · ${formatFileSize(file.size)}`
-                      : ""}
-                  </p>
-                </div>
-
-                {isUploading ? (
-                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-cyan-600" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                )}
-
-                {!disabled && !isUploading ? (
-                  <button
-                    type="button"
-                    onClick={() => removeFile(file)}
-                    className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm hover:text-red-600 group-hover:flex"
-                    aria-label={`Quitar ${file.name}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                ) : null}
-              </div>
-            );
-          })}
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() =>
+              inputRef.current?.click()
+            }
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-cyan-200 bg-background px-3 text-sm font-medium text-cyan-700 transition hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-cyan-900 dark:text-cyan-300 dark:hover:bg-cyan-950/30"
+          >
+            <Plus className="h-4 w-4" />
+            Añadir más
+          </button>
         </div>
-      ) : null}
+
+<div className="mt-3 min-w-0 overflow-x-auto overscroll-x-contain pb-2">
+  {files.length > 0 ? (
+    <div className="flex min-w-max gap-2">
+      {files.map((file) => (
+        <div
+          key={`${file.name}-${file.size}-${file.lastModified}`}
+          className="w-[250px] shrink-0 xl:w-[270px] 2xl:w-[290px]"
+        >
+          <KnowledgeUploadFileCard
+            file={file}
+            disabled={disabled}
+            isUploading={uploadingFileNames.includes(file.name)}
+            onRemove={removeFile}
+          />
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div className="flex min-h-16 items-center justify-center rounded-xl bg-surface/30 px-4 text-sm text-muted-foreground">
+      No hay documentos seleccionados.
+    </div>
+  )}
+</div>
+      </section>
 
       <div
         onDragOver={(event) => {
@@ -173,7 +201,9 @@ function removeFile(fileToRemove: File) {
             setIsDragging(true);
           }
         }}
-        onDragLeave={() => setIsDragging(false)}
+        onDragLeave={() =>
+          setIsDragging(false)
+        }
         onDrop={(event) => {
           event.preventDefault();
           setIsDragging(false);
@@ -182,7 +212,9 @@ function removeFile(fileToRemove: File) {
             return;
           }
 
-          addFiles(event.dataTransfer.files);
+          addFiles(
+            event.dataTransfer.files,
+          );
         }}
         onClick={() => {
           if (!disabled) {
@@ -190,45 +222,33 @@ function removeFile(fileToRemove: File) {
           }
         }}
         className={[
-          "rounded-xl border border-dashed px-5 py-3 text-center transition",
+          "flex min-h-24 shrink-0 items-center justify-center rounded-xl border border-dashed px-5 py-4 transition",
           disabled
             ? "cursor-not-allowed opacity-60"
             : "cursor-pointer",
           isDragging
-            ? "border-cyan-500 bg-cyan-50/60"
-            : "border-border bg-surface/20 hover:border-cyan-400 hover:bg-surface/40",
+            ? "border-cyan-500 bg-cyan-50 dark:bg-cyan-950/30"
+            : "border-cyan-300 bg-cyan-50/30 hover:border-cyan-500 hover:bg-cyan-50/70 dark:border-cyan-900 dark:bg-cyan-950/10 dark:hover:bg-cyan-950/30",
         ].join(" ")}
       >
-        <input
-          ref={inputRef}
-          hidden
-          multiple
-          name="files"
-          type="file"
-          accept={accept}
-          disabled={disabled}
-          onChange={(event) => {
-            addFiles(event.target.files);
-            event.target.value = "";
-          }}
-        />
+        <div className="flex items-center gap-3 text-left">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-100 dark:bg-cyan-900/50">
+<Image
+  src="/icons/files/clip.png"
+  alt="Adjuntar archivos"
+  width={40}
+  height={40}
+  className="h-6 w-6 object-contain"
+/>
+          </div>
 
-        <div className="flex items-center justify-center gap-3">
-          <Image
-            src="/icons/files/clip.png"
-            alt="Adjuntar archivos"
-            width={26}
-            height={26}
-            className="h-5 w-5 object-contain"
-          />
-
-          <div className="text-left">
-            <p className="text-sm font-medium text-foreground">
-              Arrastra documentos o pulsa para seleccionarlos
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              Añadir más documentación
             </p>
 
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              PDF · DOCX · XLSX · PPTX · CSV · TXT
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Arrastra archivos aquí o pulsa para seleccionarlos
             </p>
           </div>
         </div>

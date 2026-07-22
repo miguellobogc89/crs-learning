@@ -1,7 +1,7 @@
 // components/knowledge/content/knowledge-content.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { CreateFolderDialog } from "./create-folder-dialog";
 import { KnowledgeExplorer } from "./knowledge-explorer";
@@ -91,7 +91,12 @@ export function KnowledgeContent({
   });
 
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
-  const [isCreateArticleOpen, setIsCreateArticleOpen] = useState(false);
+  const [isKnowledgeIntakeOpen, setIsKnowledgeIntakeOpen] =
+  useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const filesInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
 
   const selectedLibrary = useMemo(() => {
     return knowledgeLibraries.find(
@@ -209,8 +214,24 @@ export function KnowledgeContent({
       return;
     }
 
-    setIsCreateArticleOpen(true);
+    setIsKnowledgeIntakeOpen(true);
   }
+
+  function handleFilesSelected(
+  event: React.ChangeEvent<HTMLInputElement>,
+) {
+  const files = Array.from(event.target.files ?? []);
+
+  if (files.length === 0) {
+    return;
+  }
+
+  setSelectedFiles(files);
+  setIsKnowledgeIntakeOpen(true);
+
+  // Permite volver a seleccionar el mismo archivo más adelante.
+  event.target.value = "";
+}
 
   return (
     <>
@@ -241,6 +262,19 @@ export function KnowledgeContent({
           )
         }
         onCreateFolder={() => setIsCreateFolderOpen(true)}
+        onUpload={(type) => {
+  if (type === "files") {
+    filesInputRef.current?.click();
+    return;
+  }
+
+  if (type === "folder") {
+    folderInputRef.current?.click();
+    return;
+  }
+
+  zipInputRef.current?.click();
+}}
       />
 
       <KnowledgeExplorer
@@ -262,14 +296,41 @@ export function KnowledgeContent({
 
       {selectedLibraryId ? (
 <KnowledgeIntakeModal
-  open={isCreateArticleOpen}
+  open={isKnowledgeIntakeOpen}
   context={{
     origin: "folder",
     libraryId: selectedLibraryId,
   }}
-  onOpenChange={setIsCreateArticleOpen}
+  selectedFiles={selectedFiles}
+  onOpenChange={setIsKnowledgeIntakeOpen}
 />
       ) : null}
+
+<input
+  ref={filesInputRef}
+  type="file"
+  multiple
+  className="hidden"
+  onChange={handleFilesSelected}
+/>
+
+<input
+  ref={folderInputRef}
+  type="file"
+  // @ts-expect-error webkitdirectory
+  webkitdirectory=""
+  multiple
+  className="hidden"
+  onChange={handleFilesSelected}
+/>
+
+<input
+  ref={zipInputRef}
+  type="file"
+  accept=".zip"
+  className="hidden"
+  onChange={handleFilesSelected}
+/>
     </>
   );
 }

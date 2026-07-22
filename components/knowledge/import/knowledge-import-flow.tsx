@@ -148,6 +148,8 @@ export function KnowledgeImportFlow({
     setIsCompleted(false);
   }
 
+
+
   if (
     step === "proposal" &&
     pipelineResult

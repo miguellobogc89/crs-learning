@@ -5,21 +5,39 @@ export const KNOWLEDGE_ACCEPTED_FILE_EXTENSIONS = [
   ".txt",
   ".md",
   ".csv",
+  ".doc",
   ".docx",
+  ".xls",
   ".xlsx",
+  ".ppt",
   ".pptx",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".zip",
 ] as const;
 
 export const KNOWLEDGE_ACCEPTED_MIME_TYPES = [
   "application/pdf",
+
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+
+  "text/csv",
   "text/plain",
   "text/markdown",
-  "text/csv",
-  "application/csv",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+
+  "image/jpeg",
+  "image/png",
+
+  "application/zip",
+  "application/x-zip-compressed",
 ] as const;
 
 export const KNOWLEDGE_FILE_ACCEPT =
@@ -47,11 +65,8 @@ export function isAcceptedKnowledgeFileType(
     return true;
   }
 
-  const hasAcceptedExtension =
-    KNOWLEDGE_ACCEPTED_FILE_EXTENSIONS.some(
-      (extension) =>
-        fileName.endsWith(extension),
-    );
-
-  return hasAcceptedExtension;
+  return KNOWLEDGE_ACCEPTED_FILE_EXTENSIONS.some(
+    (extension) =>
+      fileName.endsWith(extension),
+  );
 }

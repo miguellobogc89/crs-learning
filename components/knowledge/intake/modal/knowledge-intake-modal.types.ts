@@ -20,4 +20,5 @@ export type KnowledgeIntakeModalProps = {
   context: KnowledgeIntakeContext | null;
   onOpenChange: (open: boolean) => void;
   onCompleted?: (result: ConfirmKnowledgeIntakeResult) => void;
+  selectedFiles?: File[];
 };
