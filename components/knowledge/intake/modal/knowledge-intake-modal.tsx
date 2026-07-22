@@ -14,7 +14,7 @@ export function KnowledgeIntakeModal({ open, context, onOpenChange, onCompleted 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton className="max-h-[92vh] w-[min(1100px,calc(100vw-2rem))] max-w-none gap-0 overflow-hidden p-0">
+      <DialogContent showCloseButton className="max-h-[92vh] w-[50vw] max-w-[50vw] gap-0 overflow-hidden p-0">
         <KnowledgeIntakeModalHeader context={context} />
         <div className="max-h-[calc(92vh-98px)] overflow-y-auto p-6">
           <KnowledgeIntakeFlow libraryId={context.libraryId} onCompleted={onCompleted} />

@@ -7,7 +7,7 @@ import { CreateFolderDialog } from "./create-folder-dialog";
 import { KnowledgeExplorer } from "./knowledge-explorer";
 import { KnowledgeLibraryBreadcrumb } from "./knowledge-library-breadcrumb";
 import { KnowledgeToolbar } from "./knowledge-toolbar";
-import { NewKnowledgeModal } from "./new-knowledge-modal";
+import { KnowledgeIntakeModal } from "@/components/knowledge/intake/modal";
 import {
   buildLibraryTree,
   getLibraryPath,
@@ -261,11 +261,14 @@ export function KnowledgeContent({
       />
 
       {selectedLibraryId ? (
-        <NewKnowledgeModal
-          isOpen={isCreateArticleOpen}
-          libraryId={selectedLibraryId}
-          onClose={() => setIsCreateArticleOpen(false)}
-        />
+<KnowledgeIntakeModal
+  open={isCreateArticleOpen}
+  context={{
+    origin: "folder",
+    libraryId: selectedLibraryId,
+  }}
+  onOpenChange={setIsCreateArticleOpen}
+/>
       ) : null}
     </>
   );
