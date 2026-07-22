@@ -37,6 +37,9 @@ export type KnowledgeIntakeDocumentInput = {
   mimeType: string | null;
   size: number;
   text: string;
+
+  sourceArchiveName?: string;
+  relativePath?: string;
 };
 
 export type KnowledgeIntakeDocument = {
@@ -213,8 +216,6 @@ export type KnowledgeIntakeIgnoredDocument = {
     | "exact_duplicate"
     | "possible_duplicate";
 };
-
-// lib/knowledge/intake/types.ts
 
 export type KnowledgeIntakeCreatedArticle = {
   id: string;

@@ -41,7 +41,7 @@ type UseKnowledgeIntakeParams = {
 };
 
 type PrepareDocumentResult = {
-  document: KnowledgeIntakeDocumentInput;
+  documents: KnowledgeIntakeDocumentInput[];
 };
 
 function getFileIdentity(file: File) {
@@ -284,9 +284,9 @@ export function useKnowledgeIntake({
           const preparedResult =
             (await prepareResponse.json()) as PrepareDocumentResult;
 
-          preparedDocuments.push(
-            preparedResult.document,
-          );
+preparedDocuments.push(
+  ...preparedResult.documents,
+);
 
           setFileProgress((current) =>
             current.map((item) =>
