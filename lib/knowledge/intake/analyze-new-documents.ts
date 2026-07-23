@@ -199,12 +199,14 @@ function findReferencedCandidateArticle({
 function normalizeGeneratedDecisions({
   decisions,
   candidateArticlesByDocumentId,
+  existingArticles,
 }: {
   decisions: KnowledgeIntakeDocumentDecision[];
   candidateArticlesByDocumentId: Map<
     string,
     KnowledgeIntakeCandidateArticle[]
   >;
+  existingArticles: KnowledgeIntakeExistingArticle[];
 }) {
   return decisions.map((decision) => {
     const isCreationDecision =
@@ -222,15 +224,64 @@ function normalizeGeneratedDecisions({
         decision.documentId,
       ) ?? [];
 
-    const referencedArticle =
-      findReferencedCandidateArticle({
-        decision,
-        candidates,
-      });
+const referencedCandidate =
+  findReferencedCandidateArticle({
+    decision,
+    candidates,
+  });
 
-    if (!referencedArticle) {
-      return decision;
-    }
+const destinationArticleId =
+  decision.destination.articleId;
+
+const referencedById =
+  destinationArticleId
+    ? existingArticles.find(
+        (article) =>
+          article.id === destinationArticleId,
+      ) ?? null
+    : null;
+
+const destinationTitle =
+  normalizeComparisonText(
+    decision.destination.articleTitle,
+  );
+
+const decisionText =
+  normalizeComparisonText(
+    [
+      decision.title,
+      decision.summary,
+      decision.reason,
+      decision.destination.articleTitle,
+      ...decision.warnings,
+    ].join(" "),
+  );
+
+const referencedByTitle =
+  existingArticles.find((article) => {
+    const articleTitle =
+      normalizeComparisonText(article.title);
+
+    return (
+      articleTitle.length > 0 &&
+      (
+        destinationTitle === articleTitle ||
+        (
+          articleTitle.length >= 20 &&
+          decisionText.includes(articleTitle)
+        )
+      )
+    );
+  }) ?? null;
+
+const referencedArticle =
+  referencedCandidate ??
+  referencedById ??
+  referencedByTitle;
+
+if (!referencedArticle) {
+  return decision;
+}
 
     /*
      * La propuesta narrativa ha identificado un artículo
@@ -559,6 +610,7 @@ const normalizedDecisions =
     decisions: parsed.decisions,
     candidateArticlesByDocumentId:
       batchCandidateArticles,
+    existingArticles,
   });
 
 validateGeneratedDecisions(
