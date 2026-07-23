@@ -158,6 +158,32 @@ function adaptImportProposal(
   proposal: KnowledgeImportProposal,
   libraryId: string,
 ): KnowledgeIntakeProposal {
+  const updatedArticles =
+    proposal.articles.filter(
+      (article) =>
+        article.action === "update",
+    );
+
+  const versionArticles =
+    updatedArticles.filter((article) =>
+      proposal.warnings.some(
+        (warning) =>
+          warning.type === "version" &&
+          warning.documentIds.some(
+            (documentId) =>
+              article.documentIds.includes(
+                documentId,
+              ),
+          ),
+      ),
+    );
+
+  const versionArticleIds = new Set(
+    versionArticles.map(
+      (article) => article.id,
+    ),
+  );
+
   const decisions: KnowledgeIntakeDocumentDecision[] =
     proposal.documentAnalyses.map((analysis) => {
       const article = proposal.articles.find(
@@ -166,36 +192,117 @@ function adaptImportProposal(
             analysis.documentId,
           ),
       );
+
       const folderPath = buildFolderPath(
         proposal,
         article?.folderId ?? null,
       );
+
       const relatedWarnings =
         proposal.warnings.filter((warning) =>
           warning.documentIds.includes(
             analysis.documentId,
           ),
         );
+
       const articleTitle =
         article?.title ||
         analysis.suggestedArticleTitle ||
         analysis.title;
+
       const confidence =
         article?.confidence ?? 0.75;
+
       const warnings = relatedWarnings.map(
         (warning) => warning.description,
       );
 
+if (article?.action === "update") {
+  if (!article.existingArticleId) {
+    throw new Error(
+      `El artículo "${article.title}" no tiene existingArticleId`,
+    );
+  }
+
+  const destination = {
+    articleId: article.existingArticleId,
+    articleTitle,
+    folderId: null,
+    folderPath: [],
+    newFolderName: null,
+  };
+
+  const isNewVersion =
+    versionArticleIds.has(article.id);
+
+if (isNewVersion) {
+  return {
+    documentId: analysis.documentId,
+    documentName: analysis.documentName,
+    decision: "new_version",
+    confidence,
+    title: analysis.title,
+    summary: analysis.summary,
+    reason:
+      article.description ||
+      analysis.summary ||
+      "La IA propone incorporar este documento como una nueva versión del artículo existente.",
+    duplicateMatch: {
+      articleId:
+        article.existingArticleId,
+      articleTitle,
+      fileId: null,
+      fileName: null,
+      similarity: confidence,
+      reason:
+        relatedWarnings.find(
+          (warning) =>
+            warning.type === "version",
+        )?.description ||
+        "La IA ha detectado que el documento corresponde a una nueva versión del artículo existente.",
+    },
+    destination,
+    detectedTopics: analysis.topics,
+    detectedEntities:
+      analysis.entities,
+    detectedKeywords:
+      analysis.keywords,
+    warnings,
+  };
+}
+
+  return {
+    documentId: analysis.documentId,
+    documentName: analysis.documentName,
+    decision: "enrich_existing_article",
+    confidence,
+    title: analysis.title,
+    summary: analysis.summary,
+    reason:
+      article.description ||
+      analysis.summary ||
+      "La IA propone incorporar este documento al artículo existente.",
+    duplicateMatch: null,
+    destination,
+    detectedTopics: analysis.topics,
+    detectedEntities: analysis.entities,
+    detectedKeywords: analysis.keywords,
+    warnings,
+  };
+}
+
       if (folderPath.length > 0) {
         return {
           documentId: analysis.documentId,
-          documentName: analysis.documentName,
+          documentName:
+            analysis.documentName,
           decision:
             "create_article_in_new_folder",
           confidence,
           title: analysis.title,
           summary: analysis.summary,
           reason:
+            article?.description ||
             analysis.summary ||
             "La IA propone crear un artículo nuevo para este documento.",
           duplicateMatch: null,
@@ -208,22 +315,27 @@ function adaptImportProposal(
               folderPath.at(-1) ??
               "Nueva carpeta",
           },
-          detectedTopics: analysis.topics,
-          detectedEntities: analysis.entities,
-          detectedKeywords: analysis.keywords,
+          detectedTopics:
+            analysis.topics,
+          detectedEntities:
+            analysis.entities,
+          detectedKeywords:
+            analysis.keywords,
           warnings,
         };
       }
 
       return {
         documentId: analysis.documentId,
-        documentName: analysis.documentName,
+        documentName:
+          analysis.documentName,
         decision:
           "create_article_in_existing_folder",
         confidence,
         title: analysis.title,
         summary: analysis.summary,
         reason:
+          article?.description ||
           analysis.summary ||
           "La IA propone crear un artículo nuevo en la biblioteca.",
         duplicateMatch: null,
@@ -234,9 +346,12 @@ function adaptImportProposal(
           folderPath: [],
           newFolderName: null,
         },
-        detectedTopics: analysis.topics,
-        detectedEntities: analysis.entities,
-        detectedKeywords: analysis.keywords,
+        detectedTopics:
+          analysis.topics,
+        detectedEntities:
+          analysis.entities,
+        detectedKeywords:
+          analysis.keywords,
         warnings,
       };
     });
@@ -249,25 +364,33 @@ function adaptImportProposal(
     summary: {
       totalDocuments:
         proposal.summary.totalDocuments,
-      exactDuplicates: 0,
+      exactDuplicates:
+        proposal.warnings.filter(
+          (warning) =>
+            warning.type === "duplicate",
+        ).length,
       possibleDuplicates:
         proposal.warnings.filter(
           (warning) =>
-            warning.type === "duplicate" ||
             warning.type ===
-              "possible_duplicate",
+            "possible_duplicate",
         ).length,
-      newVersions: proposal.warnings.filter(
-        (warning) => warning.type === "version",
-      ).length,
-      articleEnrichments: 0,
+      newVersions:
+        versionArticles.length,
+      articleEnrichments:
+        updatedArticles.length -
+        versionArticles.length,
       newArticlesInExistingFolders:
         proposal.articles.filter(
-          (article) => article.folderId === null,
+          (article) =>
+            article.action === "create" &&
+            article.folderId === null,
         ).length,
       newArticlesInNewFolders:
         proposal.articles.filter(
-          (article) => article.folderId !== null,
+          (article) =>
+            article.action === "create" &&
+            article.folderId !== null,
         ).length,
     },
     decisions,

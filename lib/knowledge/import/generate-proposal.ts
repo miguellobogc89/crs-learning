@@ -230,80 +230,32 @@ function normalizeGeneratedProposalSemantics(
 
   const existingArticlesById = new Map(
     existingArticles.map(
-      (article) => [
-        article.id,
-        article,
-      ] as const,
+      (article) =>
+        [article.id, article] as const,
     ),
   );
 
   const normalizedArticles =
     proposal.articles.map((article) => {
-      if (article.action === "update") {
-        if (!article.existingArticleId) {
-          return article;
-        }
-
-        const existingArticle =
-          existingArticlesById.get(
-            article.existingArticleId,
-          );
-
-        if (!existingArticle) {
-          return article;
-        }
-
-        return {
-          ...article,
-          title: existingArticle.title,
-          folderId: null,
-        };
-      }
-
-      const narrative = getArticleNarrative(
-        article,
-        proposal,
-      );
-
-      if (!containsUpdateIntent(narrative)) {
+      if (article.action !== "update") {
         return article;
       }
 
-      const referencedArticles =
-        findReferencedExistingArticles(
-          article,
-          narrative,
-          existingArticles,
-        );
-
-      if (referencedArticles.length === 0) {
-        throw new Error(
-          `La propuesta indica que "${article.title}" debe actualizar conocimiento existente, pero no identifica un artículo de destino`,
-        );
-      }
-
-      if (referencedArticles.length > 1) {
-        const referencedTitles =
-          referencedArticles
-            .map(
-              (existingArticle) =>
-                existingArticle.title,
-            )
-            .join(", ");
-
-        throw new Error(
-          `La propuesta de "${article.title}" menciona varios posibles artículos existentes: ${referencedTitles}`,
-        );
+      if (!article.existingArticleId) {
+        return article;
       }
 
       const existingArticle =
-        referencedArticles[0];
+        existingArticlesById.get(
+          article.existingArticleId,
+        );
+
+      if (!existingArticle) {
+        return article;
+      }
 
       return {
         ...article,
-        action: "update" as const,
-        existingArticleId:
-          existingArticle.id,
         title: existingArticle.title,
         folderId: null,
       };
@@ -340,24 +292,35 @@ function validateGeneratedProposal(
     ),
   );
 
-  const folderIds = new Set<string>();
+const existingFolderIds = new Set(
+  existingKnowledge.map(
+    (library) => library.id,
+  ),
+);
+
+const proposedFolderIds = new Set<string>();
+
+const validFolderIds = new Set(
+  existingFolderIds,
+);
   const articleIds = new Set<string>();
   const assignedDocumentIds = new Set<string>();
 
-  for (const folder of proposal.folders) {
-    if (folderIds.has(folder.id)) {
-      throw new Error(
-        `La propuesta contiene una carpeta duplicada: ${folder.id}`,
-      );
-    }
-
-    folderIds.add(folder.id);
+for (const folder of proposal.folders) {
+  if (proposedFolderIds.has(folder.id)) {
+    throw new Error(
+      `La propuesta contiene una carpeta duplicada: ${folder.id}`,
+    );
   }
+
+  proposedFolderIds.add(folder.id);
+  validFolderIds.add(folder.id);
+}
 
   for (const folder of proposal.folders) {
     if (
       folder.parentFolderId &&
-      !folderIds.has(folder.parentFolderId)
+      !validFolderIds.has(folder.parentFolderId)
     ) {
       throw new Error(
         `La carpeta ${folder.id} apunta a una carpeta padre inexistente`,
@@ -398,7 +361,7 @@ function validateGeneratedProposal(
 
       if (
         article.folderId &&
-        !folderIds.has(article.folderId)
+        !validFolderIds.has(article.folderId)
       ) {
         throw new Error(
           `El artículo ${article.id} apunta a una carpeta inexistente`,
