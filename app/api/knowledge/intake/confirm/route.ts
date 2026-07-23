@@ -514,16 +514,17 @@ const actionableDecisions =
               decision.documentId,
             );
           } else {
-            updatedArticlesMap.set(
-              article.id,
-              {
-                id: article.id,
-                title: article.title,
-                documentIds: [
-                  decision.documentId,
-                ],
-              },
-            );
+updatedArticlesMap.set(
+  article.id,
+  {
+    id: article.id,
+    title: article.title,
+    path: [],
+    documentIds: [
+      decision.documentId,
+    ],
+  },
+);
           }
 
           affectedArticleIds.add(article.id);
@@ -661,16 +662,17 @@ const actionableDecisions =
           },
         });
 
-        createdArticles.push({
-          id: createdArticle.id,
-          title: createdArticle.title,
-          libraryId:
-            createdArticle.library_id ??
-            destinationFolderId,
-          documentIds: [
-            decision.documentId,
-          ],
-        });
+createdArticles.push({
+  id: createdArticle.id,
+  title: createdArticle.title,
+  libraryId:
+    createdArticle.library_id ??
+    destinationFolderId,
+  path: [],
+  documentIds: [
+    decision.documentId,
+  ],
+});
 
         affectedArticleIds.add(
           createdArticle.id,

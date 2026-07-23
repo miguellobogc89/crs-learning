@@ -4,6 +4,7 @@ import {
   getOpenAIClient,
 } from "@/lib/ai/openai";
 import { prisma } from "@/lib/prisma";
+import { listKnowledgeStatus } from "@/lib/services/knowledge-library.service";
 
 import {
   DOCUMENT_ANALYSIS_JSON_SCHEMA,
@@ -93,10 +94,22 @@ function validateGeneratedProposal(
     "documentAnalyses"
   >,
   analyses: KnowledgeImportDocumentAnalysis[],
+  existingKnowledge: Awaited<
+    ReturnType<typeof listKnowledgeStatus>
+  >,
 ) {
   const validDocumentIds = new Set(
     analyses.map(
       (analysis) => analysis.documentId,
+    ),
+  );
+
+  const existingArticlesById = new Map(
+    existingKnowledge.flatMap((library) =>
+      library.knowledge_sources.map((article) => [
+        article.id,
+        article,
+      ] as const),
     ),
   );
 
@@ -124,9 +137,7 @@ function validateGeneratedProposal(
       );
     }
 
-    if (
-      folder.parentFolderId === folder.id
-    ) {
+    if (folder.parentFolderId === folder.id) {
       throw new Error(
         `La carpeta ${folder.id} no puede ser su propia carpeta padre`,
       );
@@ -143,12 +154,53 @@ function validateGeneratedProposal(
     articleIds.add(article.id);
 
     if (
-      article.folderId &&
-      !folderIds.has(article.folderId)
+      article.action !== "create" &&
+      article.action !== "update"
     ) {
       throw new Error(
-        `El artículo ${article.id} apunta a una carpeta inexistente`,
+        `El artículo ${article.id} contiene una acción inválida`,
       );
+    }
+
+    if (article.action === "create") {
+      if (article.existingArticleId !== null) {
+        throw new Error(
+          `El artículo nuevo ${article.id} no puede apuntar a un artículo existente`,
+        );
+      }
+
+      if (
+        article.folderId &&
+        !folderIds.has(article.folderId)
+      ) {
+        throw new Error(
+          `El artículo ${article.id} apunta a una carpeta inexistente`,
+        );
+      }
+    }
+
+    if (article.action === "update") {
+      if (!article.existingArticleId) {
+        throw new Error(
+          `El artículo ${article.id} debe indicar el artículo existente que actualizará`,
+        );
+      }
+
+      if (
+        !existingArticlesById.has(
+          article.existingArticleId,
+        )
+      ) {
+        throw new Error(
+          `El artículo ${article.id} intenta actualizar un artículo existente desconocido: ${article.existingArticleId}`,
+        );
+      }
+
+      if (article.folderId !== null) {
+        throw new Error(
+          `El artículo actualizado ${article.id} debe conservar su carpeta actual`,
+        );
+      }
     }
 
     if (
@@ -289,6 +341,9 @@ async function analyzeDocuments(
 
 async function generateGlobalProposal(
   analyses: KnowledgeImportDocumentAnalysis[],
+  existingKnowledge: Awaited<
+    ReturnType<typeof listKnowledgeStatus>
+  >,
 ) {
   const openai = getOpenAIClient();
   const model = getKnowledgeImportModel();
@@ -296,7 +351,10 @@ async function generateGlobalProposal(
   const response = await openai.responses.create({
     model,
     instructions: PROPOSAL_SYSTEM_PROMPT,
-    input: buildProposalPrompt(analyses),
+    input: buildProposalPrompt(
+      analyses,
+      existingKnowledge,
+    ),
     text: {
       format: {
         type: "json_schema",
@@ -307,22 +365,23 @@ async function generateGlobalProposal(
     },
   });
 
-const proposal = parseJsonResponse<
-  Omit<
-    KnowledgeImportProposal,
-    "documentAnalyses"
-  >
->(
-  response.output_text,
-  "la generación de la propuesta",
-);
+  const proposal = parseJsonResponse<
+    Omit<
+      KnowledgeImportProposal,
+      "documentAnalyses"
+    >
+  >(
+    response.output_text,
+    "la generación de la propuesta",
+  );
 
-validateGeneratedProposal(
-  proposal,
-  analyses,
-);
+  validateGeneratedProposal(
+    proposal,
+    analyses,
+    existingKnowledge,
+  );
 
-return proposal;
+  return proposal;
 }
 
 export async function generateKnowledgeImportProposal({
@@ -408,10 +467,14 @@ export async function generateKnowledgeImportProposal({
     const documentAnalyses =
       await analyzeDocuments(documents);
 
-    const generatedProposal =
-      await generateGlobalProposal(
-        documentAnalyses,
-      );
+const existingKnowledge =
+  await listKnowledgeStatus(userId);
+
+const generatedProposal =
+  await generateGlobalProposal(
+    documentAnalyses,
+    existingKnowledge,
+  );
 
     const proposal: KnowledgeImportProposal = {
       ...generatedProposal,

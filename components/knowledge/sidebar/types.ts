@@ -6,7 +6,8 @@ export type SidebarIcon =
   | "globe"
   | "star"
   | "clock"
-  | "users";
+  | "users"
+  | "activity";
 
 export type SidebarItem = {
   label: string;

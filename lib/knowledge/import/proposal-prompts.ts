@@ -85,6 +85,31 @@ Antes de crear dos artículos, pregúntate internamente:
 
 Si la respuesta es sí, agrúpalos en un único artículo.
 
+BASE DE CONOCIMIENTO EXISTENTE:
+
+También recibirás una representación de las carpetas, artículos y documentos que ya existen.
+
+Debes comparar los documentos nuevos con esa base antes de crear nada.
+
+Cada artículo de salida debe indicar:
+
+- action: "create" o "update";
+- existingArticleId: ID real del artículo existente cuando action sea "update", o null cuando sea "create".
+
+REGLAS DE DECISIÓN:
+
+- Usa "update" cuando el documento nuevo sea una revisión, nueva versión, ampliación, sustitución o material complementario de un artículo existente.
+- Usa "update" aunque el título sugerido por el análisis no coincida exactamente con el título existente.
+- Compara procesos, objetivos, preguntas respondidas, equipos, entidades, temas y documentos.
+- El nombre de archivo puede ser una señal fuerte de versión, pero nunca la única.
+- "V2", "nuevo", "actualizado", una fecha posterior o una revisión pueden indicar actualización.
+- "create" es la última opción.
+- No inventes existingArticleId.
+- Cuando action sea "update", conserva el título del artículo existente.
+- Cuando action sea "update", folderId debe ser null.
+- No propongas carpetas nuevas destinadas únicamente a artículos actualizados.
+
+
 REGLAS PARA CREAR ARTÍCULOS:
 
 - Prioriza el menor número razonable de artículos.
@@ -224,27 +249,55 @@ export function buildDocumentAnalysisPrompt(
 
 export function buildProposalPrompt(
   analyses: KnowledgeImportDocumentAnalysis[],
+  existingKnowledge: unknown,
 ) {
   return [
-    "Construye una propuesta de base de conocimiento para los siguientes documentos.",
+    "Analiza cómo deben incorporarse los documentos nuevos a la base de conocimiento existente.",
+    "",
+    "La base de conocimiento existente es autoritativa.",
+    "",
+    "Antes de crear un artículo nuevo, debes comprobar si alguno de los artículos existentes:",
+    "",
+    "- explica el mismo proceso;",
+    "- responde esencialmente la misma pregunta;",
+    "- contiene una versión anterior del documento;",
+    "- tiene un título o descripción semánticamente equivalente;",
+    "- contiene documentos con nombres, temas, entidades o procesos relacionados.",
+    "",
+    "REGLA PRIORITARIA:",
+    "",
+    "Actualizar un artículo existente tiene prioridad sobre crear uno nuevo.",
+    "Crear un artículo nuevo es la última opción y sólo está permitido cuando no exista un artículo compatible.",
+    "",
+    "Para cada artículo propuesto:",
+    "",
+    '- usa action "update" y existingArticleId cuando los documentos amplíen, sustituyan o actualicen conocimiento existente;',
+    '- usa action "create" y existingArticleId null únicamente cuando se trate de una unidad de conocimiento realmente nueva;',
+    '- cuando action sea "update", usa folderId null porque debe conservarse la carpeta actual;',
+    '- cuando action sea "update", conserva como title el título actual del artículo existente;',
+    '- no crees carpetas para artículos cuya action sea "update";',
     "",
     "Antes de generar el JSON, razona internamente siguiendo este orden:",
     "",
-    "1. Identifica las preguntas, tareas y procesos empresariales presentes.",
-    "2. Identifica qué documentos son piezas complementarias.",
-    "3. Agrupa los documentos por unidad de conocimiento.",
-    "4. Crea un artículo por unidad de conocimiento, no por archivo.",
-    "5. Reduce el número de artículos cuando la agrupación sea coherente.",
-    "6. Decide después si son necesarias carpetas de área.",
-    "7. Usa como máximo dos niveles de carpetas.",
-    "8. Comprueba que cada documento está asignado exactamente una vez.",
-    "9. Comprueba que todos los folderId y parentFolderId son válidos.",
+    "1. Identifica las preguntas, tareas y procesos de los documentos nuevos.",
+    "2. Compara cada unidad de conocimiento con todos los artículos existentes.",
+    "3. Busca coincidencias por significado, no sólo por nombre exacto.",
+    "4. Identifica versiones nuevas de documentos existentes.",
+    "5. Actualiza artículos existentes siempre que la compatibilidad sea razonable.",
+    "6. Agrupa entre sí los documentos nuevos que sean complementarios.",
+    "7. Crea artículos únicamente para conocimiento que no tenga cabida en los existentes.",
+    "8. Crea carpetas únicamente para artículos nuevos.",
+    "9. Comprueba que cada documento nuevo aparece exactamente una vez.",
     "10. Recalcula todos los valores de summary.",
     "",
     "No incluyas el razonamiento en la respuesta.",
     "Devuelve únicamente el JSON exigido.",
     "",
-    "ANÁLISIS DISPONIBLES:",
+    "BASE DE CONOCIMIENTO EXISTENTE:",
+    "",
+    JSON.stringify(existingKnowledge, null, 2),
+    "",
+    "ANÁLISIS DE LOS DOCUMENTOS NUEVOS:",
     "",
     JSON.stringify(analyses, null, 2),
   ].join("\n");
@@ -378,6 +431,8 @@ const ARTICLE_SCHEMA = {
   additionalProperties: false,
   required: [
     "id",
+    "action",
+    "existingArticleId",
     "title",
     "description",
     "folderId",
@@ -388,6 +443,13 @@ const ARTICLE_SCHEMA = {
   properties: {
     id: {
       type: "string",
+    },
+    action: {
+      type: "string",
+      enum: ["create", "update"],
+    },
+    existingArticleId: {
+      type: ["string", "null"],
     },
     title: {
       type: "string",

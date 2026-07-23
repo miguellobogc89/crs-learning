@@ -1,5 +1,6 @@
 // components/knowledge/sidebar/sidebar-icons.ts
 import {
+  Activity,
   BookOpen,
   Clock,
   FileText,
@@ -17,4 +18,5 @@ export const sidebarIcons = {
   star: Star,
   clock: Clock,
   users: UsersRound,
+  activity: Activity,
 };

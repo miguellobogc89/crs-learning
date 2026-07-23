@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 
 import { analyzeKnowledgeSource } from "@/lib/services/knowledge-analysis.service";
 import { prisma } from "@/lib/prisma";
+import { createKnowledgeStatusSnapshot } from "@/lib/services/knowledge-library.service";
 
 import type {
   ConfirmKnowledgeImportResult,
@@ -219,6 +220,8 @@ export async function confirmKnowledgeImport({
   try {
     const result = await prisma.$transaction(
       async (tx) => {
+        const beforeSnapshot =
+  await createKnowledgeStatusSnapshot(tx, userId);
         /*
          * Relaciona los IDs inventados por la IA
          * con los UUID reales creados en PostgreSQL.
@@ -446,26 +449,39 @@ export async function confirmKnowledgeImport({
             ...articleDocumentLogs,
           );
 
-          createdArticles.push({
-            proposalArticleId: article.id,
-            databaseArticleId:
-              createdArticle.id,
-            title: createdArticle.title,
-            description:
-              createdArticle.description ?? "",
-            proposalFolderId:
-              article.folderId,
-            databaseFolderId,
-            confidence:
-              article.confidence,
-            documentIds:
-              article.documentIds,
-            knowledgeFileIds:
-              articleDocumentLogs.map(
-                (document) =>
-                  document.knowledgeFileId,
-              ),
-          });
+createdArticles.push({
+  proposalArticleId: article.id,
+
+  action: article.action,
+  existingArticleId:
+    article.existingArticleId,
+
+  databaseArticleId:
+    createdArticle.id,
+
+  title:
+    createdArticle.title,
+
+  description:
+    createdArticle.description ?? "",
+
+  proposalFolderId:
+    article.folderId,
+
+  databaseFolderId,
+
+  confidence:
+    article.confidence,
+
+  documentIds:
+    article.documentIds,
+
+  knowledgeFileIds:
+    articleDocumentLogs.map(
+      (document) =>
+        document.knowledgeFileId,
+    ),
+});
         }
 
         const completedAt = new Date();
@@ -497,23 +513,36 @@ export async function confirmKnowledgeImport({
             companyId:
               knowledgeImport.company_id,
 
-            summary: {
-              foldersCreated:
-                createdFolders.length,
-              articlesCreated:
-                createdArticles.length,
-              documentsCreated:
-                createdDocuments.length,
-              extractedCharactersStored:
-                createdDocuments.reduce(
-                  (total, document) =>
-                    total +
-                    document.extractedCharacters,
-                  0,
-                ),
-              warningsAccepted:
-                proposal.warnings.length,
-            },
+summary: {
+  foldersCreated:
+    createdFolders.length,
+
+  articlesCreated:
+    createdArticles.filter(
+      (article) =>
+        article.action === "create",
+    ).length,
+
+  articlesUpdated:
+    createdArticles.filter(
+      (article) =>
+        article.action === "update",
+    ).length,
+
+  documentsCreated:
+    createdDocuments.length,
+
+  extractedCharactersStored:
+    createdDocuments.reduce(
+      (total, document) =>
+        total +
+        document.extractedCharacters,
+      0,
+    ),
+
+  warningsAccepted:
+    proposal.warnings.length,
+},
 
             folders: createdFolders,
             articles: createdArticles,
@@ -521,6 +550,9 @@ export async function confirmKnowledgeImport({
 
             proposalSnapshot: proposal,
           };
+
+          const afterSnapshot =
+  await createKnowledgeStatusSnapshot(tx, userId);
 
         await tx.knowledge_imports.update({
           where: {
@@ -534,6 +566,30 @@ export async function confirmKnowledgeImport({
             error_message: null,
           },
         });
+
+await tx.knowledge_events.create({
+  data: {
+    company_id: knowledgeImport.company_id,
+    user_id: userId,
+    library_id: knowledgeImport.library_id,
+
+    action: "knowledge.import.completed",
+
+    title: "Importación completada",
+
+    description: `${createdDocuments.length} documentos · ${createdArticles.length} artículos · ${createdFolders.length} carpetas`,
+
+    metadata: {
+      ...executionLog,
+
+      snapshots: {
+        capturedAt: completedAt.toISOString(),
+        before: beforeSnapshot,
+        after: afterSnapshot,
+      },
+    } as unknown as Prisma.InputJsonValue,
+  },
+});
 
         return executionLog;
       },

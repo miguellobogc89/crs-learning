@@ -1,5 +1,6 @@
 // lib/services/knowledge-library.service.ts
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 const libraryInclude = {
   knowledge_library_team_permissions: {
@@ -121,4 +122,101 @@ export async function ensureRootKnowledgeLibrary(userId: string) {
       parent_id: null,
     },
   });
+}
+
+type KnowledgeStatusClient = Pick<
+  Prisma.TransactionClient,
+  "knowledge_libraries"
+>;
+
+async function getKnowledgeStatus(
+  client: KnowledgeStatusClient,
+  userId: string,
+) {
+  return client.knowledge_libraries.findMany({
+    where: {
+      OR: [
+        {
+          owner_user_id: userId,
+        },
+        {
+          knowledge_library_permissions: {
+            some: {
+              user_id: userId,
+            },
+          },
+        },
+        {
+          knowledge_library_team_permissions: {
+            some: {
+              knowledge_teams: {
+                knowledge_team_members: {
+                  some: {
+                    user_id: userId,
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      name: true,
+      parent_id: true,
+      owner_user_id: true,
+      visibility: true,
+      position: true,
+
+      knowledge_sources: {
+        orderBy: {
+          title: "asc",
+        },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          status: true,
+          knowledge_type: true,
+          visibility: true,
+
+          knowledge_files: {
+            orderBy: {
+              file_name: "asc",
+            },
+            select: {
+              id: true,
+              file_name: true,
+              file_type: true,
+              file_size: true,
+              status: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: [
+      {
+        parent_id: "asc",
+      },
+      {
+        position: "asc",
+      },
+      {
+        name: "asc",
+      },
+    ],
+  });
+}
+
+export async function listKnowledgeStatus(userId: string) {
+  return getKnowledgeStatus(prisma, userId);
+}
+
+export async function createKnowledgeStatusSnapshot(
+  tx: Prisma.TransactionClient,
+  userId: string,
+) {
+  return getKnowledgeStatus(tx, userId);
 }

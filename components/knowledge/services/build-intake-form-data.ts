@@ -1,4 +1,4 @@
-// components/knowledge/intake/services/build-intake-form-data.ts
+// components/knowledge/services/build-intake-form-data.ts
 
 import type { KnowledgeIntakeProposal } from "@/lib/knowledge/intake/types";
 

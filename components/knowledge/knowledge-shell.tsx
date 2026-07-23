@@ -62,6 +62,12 @@ export function KnowledgeShell({
       icon: "clock",
       active: false,
     },
+    {
+      label: "Actividad",
+      count: 0,
+      icon: "activity",
+      active: false,
+    },
   ];
 
   return (

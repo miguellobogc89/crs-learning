@@ -11,9 +11,12 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import type {
-  AnalyzeKnowledgeIntakeResult,
+  ConfirmKnowledgeImportResult,
+  KnowledgeImportProposal,
+} from "@/lib/knowledge/import/types";
+import type {
   ConfirmKnowledgeIntakeResult,
-  KnowledgeIntakeDocumentInput,
+  KnowledgeIntakeDocumentDecision,
   KnowledgeIntakeProposal,
 } from "@/lib/knowledge/intake/types";
 
@@ -26,7 +29,7 @@ import type {
   KnowledgeIntakeProcessingPhase,
 } from "../modal/knowledge-intake-processing.types";
 
-import { buildIntakeFormData } from "../../services/build-intake-form-data";
+import { runKnowledgeImportPipeline } from "../../import/knowledge-import-api";
 import {
   createSelectedDocuments,
   type SelectedKnowledgeDocument,
@@ -40,8 +43,12 @@ type UseKnowledgeIntakeParams = {
   ) => void;
 };
 
-type PrepareDocumentResult = {
-  documents: KnowledgeIntakeDocumentInput[];
+type UploadKnowledgeImportResult = {
+  importId: string;
+  status: "uploaded";
+  mode: "files" | "folder" | "zip";
+  fileCount: number;
+  totalSize: number;
 };
 
 function getFileIdentity(file: File) {
@@ -50,6 +57,36 @@ function getFileIdentity(file: File) {
     file.size,
     file.lastModified,
   ].join("::");
+}
+
+function getRelativePath(file: File) {
+  const fileWithRelativePath = file as File & {
+    webkitRelativePath?: string;
+  };
+
+  return (
+    fileWithRelativePath.webkitRelativePath ||
+    file.name
+  );
+}
+
+function getImportMode(files: File[]) {
+  if (
+    files.length === 1 &&
+    files[0].name.toLowerCase().endsWith(".zip")
+  ) {
+    return "zip" as const;
+  }
+
+  if (
+    files.some((file) =>
+      getRelativePath(file).includes("/"),
+    )
+  ) {
+    return "folder" as const;
+  }
+
+  return "files" as const;
 }
 
 function removeDuplicateFiles(
@@ -78,6 +115,212 @@ function removeDuplicateFiles(
   };
 }
 
+function buildFolderPath(
+  proposal: KnowledgeImportProposal,
+  folderId: string | null,
+) {
+  if (!folderId) {
+    return [] as string[];
+  }
+
+  const foldersById = new Map(
+    proposal.folders.map((folder) => [
+      folder.id,
+      folder,
+    ]),
+  );
+  const path: string[] = [];
+  const visited = new Set<string>();
+  let currentFolderId: string | null = folderId;
+
+  while (
+    currentFolderId &&
+    !visited.has(currentFolderId)
+  ) {
+    visited.add(currentFolderId);
+    const folder = foldersById.get(
+      currentFolderId,
+    );
+
+    if (!folder) {
+      break;
+    }
+
+    path.unshift(folder.name);
+    currentFolderId =
+      folder.parentFolderId;
+  }
+
+  return path;
+}
+
+function adaptImportProposal(
+  proposal: KnowledgeImportProposal,
+  libraryId: string,
+): KnowledgeIntakeProposal {
+  const decisions: KnowledgeIntakeDocumentDecision[] =
+    proposal.documentAnalyses.map((analysis) => {
+      const article = proposal.articles.find(
+        (candidate) =>
+          candidate.documentIds.includes(
+            analysis.documentId,
+          ),
+      );
+      const folderPath = buildFolderPath(
+        proposal,
+        article?.folderId ?? null,
+      );
+      const relatedWarnings =
+        proposal.warnings.filter((warning) =>
+          warning.documentIds.includes(
+            analysis.documentId,
+          ),
+        );
+      const articleTitle =
+        article?.title ||
+        analysis.suggestedArticleTitle ||
+        analysis.title;
+      const confidence =
+        article?.confidence ?? 0.75;
+      const warnings = relatedWarnings.map(
+        (warning) => warning.description,
+      );
+
+      if (folderPath.length > 0) {
+        return {
+          documentId: analysis.documentId,
+          documentName: analysis.documentName,
+          decision:
+            "create_article_in_new_folder",
+          confidence,
+          title: analysis.title,
+          summary: analysis.summary,
+          reason:
+            analysis.summary ||
+            "La IA propone crear un artículo nuevo para este documento.",
+          duplicateMatch: null,
+          destination: {
+            articleId: null,
+            articleTitle,
+            folderId: null,
+            folderPath,
+            newFolderName:
+              folderPath.at(-1) ??
+              "Nueva carpeta",
+          },
+          detectedTopics: analysis.topics,
+          detectedEntities: analysis.entities,
+          detectedKeywords: analysis.keywords,
+          warnings,
+        };
+      }
+
+      return {
+        documentId: analysis.documentId,
+        documentName: analysis.documentName,
+        decision:
+          "create_article_in_existing_folder",
+        confidence,
+        title: analysis.title,
+        summary: analysis.summary,
+        reason:
+          analysis.summary ||
+          "La IA propone crear un artículo nuevo en la biblioteca.",
+        duplicateMatch: null,
+        destination: {
+          articleId: null,
+          articleTitle,
+          folderId: libraryId,
+          folderPath: [],
+          newFolderName: null,
+        },
+        detectedTopics: analysis.topics,
+        detectedEntities: analysis.entities,
+        detectedKeywords: analysis.keywords,
+        warnings,
+      };
+    });
+
+  return {
+    title: proposal.title,
+    description: proposal.description,
+    libraryId,
+    generatedAt: new Date().toISOString(),
+    summary: {
+      totalDocuments:
+        proposal.summary.totalDocuments,
+      exactDuplicates: 0,
+      possibleDuplicates:
+        proposal.warnings.filter(
+          (warning) =>
+            warning.type === "duplicate" ||
+            warning.type ===
+              "possible_duplicate",
+        ).length,
+      newVersions: proposal.warnings.filter(
+        (warning) => warning.type === "version",
+      ).length,
+      articleEnrichments: 0,
+      newArticlesInExistingFolders:
+        proposal.articles.filter(
+          (article) => article.folderId === null,
+        ).length,
+      newArticlesInNewFolders:
+        proposal.articles.filter(
+          (article) => article.folderId !== null,
+        ).length,
+    },
+    decisions,
+    warnings: proposal.warnings.map(
+      (warning) =>
+        `${warning.title}: ${warning.description}`,
+    ),
+  };
+}
+
+function adaptConfirmationResult(
+  result: ConfirmKnowledgeImportResult,
+  proposal: KnowledgeImportProposal,
+): ConfirmKnowledgeIntakeResult {
+  const createdArticles =
+    result.log.articles.map((article) => {
+      const proposalArticle =
+        proposal.articles.find(
+          (candidate) =>
+            candidate.id ===
+            article.proposalArticleId,
+        );
+
+      return {
+        id: article.databaseArticleId,
+        title: article.title,
+        libraryId:
+          result.log.targetLibrary.id,
+        path: buildFolderPath(
+          proposal,
+          proposalArticle?.folderId ?? null,
+        ),
+        documentIds: article.documentIds,
+      };
+    });
+
+  return {
+    success: true,
+    status: "completed",
+    summary: {
+      createdArticles:
+        createdArticles.length,
+      updatedArticles: 0,
+      ignoredDocuments: 0,
+      attachedDocuments:
+        result.log.documents.length,
+    },
+    createdArticles,
+    updatedArticles: [],
+    ignoredDocuments: [],
+  };
+}
+
 export function useKnowledgeIntake({
   context,
   onCompleted,
@@ -95,6 +338,14 @@ export function useKnowledgeIntake({
   ] = useState<
     SelectedKnowledgeDocument[]
   >([]);
+
+  const [importId, setImportId] =
+    useState<string | null>(null);
+
+  const [importProposal, setImportProposal] =
+    useState<KnowledgeImportProposal | null>(
+      null,
+    );
 
   const [proposal, setProposal] =
     useState<KnowledgeIntakeProposal | null>(
@@ -217,123 +468,82 @@ export function useKnowledgeIntake({
       );
 
       try {
-        const preparedDocuments: KnowledgeIntakeDocumentInput[] =
-          [];
-
-        for (const document of selectedDocuments) {
-          setFileProgress((current) =>
-            current.map((item) =>
-              item.id === document.id
-                ? {
-                    ...item,
-                    status:
-                      "uploading",
-                    error: undefined,
-                  }
-                : item,
-            ),
+        const selectedFiles =
+          selectedDocuments.map(
+            (document) => document.file,
           );
+        const formData = new FormData();
 
-          const formData =
-            new FormData();
+        formData.set(
+          "libraryId",
+          context.libraryId,
+        );
+        formData.set(
+          "mode",
+          getImportMode(selectedFiles),
+        );
+        formData.set(
+          "relativePaths",
+          JSON.stringify(
+            selectedFiles.map(getRelativePath),
+          ),
+        );
 
-          formData.set(
-            "documentId",
-            document.id,
-          );
-
-          formData.set(
-            "file",
-            document.file,
-          );
-
-          const prepareResponse =
-            await fetch(
-              "/api/knowledge/intake/prepare",
-              {
-                method: "POST",
-                body: formData,
-              },
-            );
-
-          if (!prepareResponse.ok) {
-            const message =
-              await readErrorMessage(
-                prepareResponse,
-                `No se ha podido subir ${document.file.name}`,
-              );
-
-            setFileProgress(
-              (current) =>
-                current.map((item) =>
-                  item.id ===
-                  document.id
-                    ? {
-                        ...item,
-                        status:
-                          "error",
-                        error: message,
-                      }
-                    : item,
-                ),
-            );
-
-            throw new Error(message);
-          }
-
-          const preparedResult =
-            (await prepareResponse.json()) as PrepareDocumentResult;
-
-preparedDocuments.push(
-  ...preparedResult.documents,
-);
-
-          setFileProgress((current) =>
-            current.map((item) =>
-              item.id === document.id
-                ? {
-                    ...item,
-                    status:
-                      "uploaded",
-                  }
-                : item,
-            ),
-          );
+        for (const file of selectedFiles) {
+          formData.append("files", file);
         }
 
-        setProcessingPhase("analyzing");
+        setFileProgress((current) =>
+          current.map((item) => ({
+            ...item,
+            status: "uploading",
+            error: undefined,
+          })),
+        );
 
-        const analyzeResponse =
-          await fetch(
-            "/api/knowledge/intake/analyze",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-              body: JSON.stringify({
-                libraryId:
-                  context.libraryId,
-                documents:
-                  preparedDocuments,
-              }),
-            },
-          );
+        const uploadResponse = await fetch(
+          "/api/knowledge/import/upload",
+          {
+            method: "POST",
+            body: formData,
+          },
+        );
 
-        if (!analyzeResponse.ok) {
+        if (!uploadResponse.ok) {
           throw new Error(
             await readErrorMessage(
-              analyzeResponse,
-              "No se han podido analizar los documentos",
+              uploadResponse,
+              "No se han podido subir los documentos",
             ),
           );
         }
 
-        const result =
-          (await analyzeResponse.json()) as AnalyzeKnowledgeIntakeResult;
+        const uploadResult =
+          (await uploadResponse.json()) as UploadKnowledgeImportResult;
 
-        setProposal(result.proposal);
+        setImportId(uploadResult.importId);
+        setFileProgress((current) =>
+          current.map((item) => ({
+            ...item,
+            status: "uploaded",
+          })),
+        );
+        setProcessingPhase("analyzing");
+
+        const pipelineResult =
+          await runKnowledgeImportPipeline(
+            uploadResult.importId,
+          );
+
+        setImportProposal(
+          pipelineResult.proposal,
+        );
+        setProposal(
+          adaptImportProposal(
+            pipelineResult.proposal,
+            context.libraryId,
+          ),
+        );
         setStep("proposal");
       } catch (caughtError) {
         setError(
@@ -353,7 +563,11 @@ preparedDocuments.push(
 
   const confirmProposal =
     useCallback(async () => {
-      if (!proposal) {
+      if (
+        !proposal ||
+        !importProposal ||
+        !importId
+      ) {
         return;
       }
 
@@ -362,15 +576,9 @@ preparedDocuments.push(
 
       try {
         const response = await fetch(
-          "/api/knowledge/intake/confirm",
+          `/api/knowledge/import/${importId}/confirm`,
           {
             method: "POST",
-            body: buildIntakeFormData({
-              context,
-              documents:
-                selectedDocuments,
-              proposal,
-            }),
           },
         );
 
@@ -383,8 +591,12 @@ preparedDocuments.push(
           );
         }
 
-        const result =
-          (await response.json()) as ConfirmKnowledgeIntakeResult;
+        const importResult =
+          (await response.json()) as ConfirmKnowledgeImportResult;
+        const result = adaptConfirmationResult(
+          importResult,
+          importProposal,
+        );
 
         setCompletionResult(result);
         setStep("completed");
@@ -401,11 +613,11 @@ preparedDocuments.push(
         setIsConfirming(false);
       }
     }, [
-      context,
+      importId,
+      importProposal,
       onCompleted,
       proposal,
       router,
-      selectedDocuments,
     ]);
 
   const goBackToUpload =
@@ -417,6 +629,8 @@ preparedDocuments.push(
   const reset = useCallback(() => {
     setStep("upload");
     setSelectedDocuments([]);
+    setImportId(null);
+    setImportProposal(null);
     setProposal(null);
     setCompletionResult(null);
     setError(null);

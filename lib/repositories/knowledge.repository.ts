@@ -174,3 +174,34 @@ export async function createKnowledgeFile(data: {
     },
   });
 }
+
+export async function getKnowledgeEvents(userId: string) {
+return prisma.knowledge_events.findMany({
+  where: {
+    OR: [
+      { user_id: userId },
+      {
+        company_id: (
+          await prisma.users.findUnique({
+            where: { id: userId },
+            select: { company_id: true },
+          })
+        )?.company_id ?? undefined,
+      },
+    ],
+  },
+  include: {
+    users: {
+      select: {
+        id: true,
+        name: true,
+        image: true,
+      },
+    },
+  },
+  orderBy: {
+    created_at: "desc",
+  },
+  take: 100,
+});
+}

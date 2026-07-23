@@ -5,6 +5,7 @@ import {
   getKnowledgeSourceById,
   getVisibleKnowledgeSources,
   updateKnowledgeSource,
+  getKnowledgeEvents,
 } from "@/lib/repositories/knowledge.repository";
 
 export async function listVisibleKnowledgeSources(userId: string) {
@@ -47,4 +48,8 @@ export async function addKnowledgeFile(data: {
   extractedText: string;
 }) {
   return createKnowledgeFile(data);
+}
+
+export async function listKnowledgeEvents(userId: string) {
+  return getKnowledgeEvents(userId);
 }

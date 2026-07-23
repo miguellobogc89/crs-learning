@@ -521,6 +521,11 @@ useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
     const label = item.label.toLowerCase();
 
+    if (label === "actividad") {
+  router.push("/knowledge/activity");
+  return;
+}
+
     params.delete("library");
 
     if (label.includes("favoritos")) {

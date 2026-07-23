@@ -1,4 +1,4 @@
-// components/knowledge/intake/services/create-selected-documents.ts
+// components/knowledge/services/create-selected-documents.ts
 
 export type SelectedKnowledgeDocument = {
   id: string;

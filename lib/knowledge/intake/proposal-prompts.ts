@@ -36,19 +36,49 @@ El documento representa una unidad de conocimiento nueva y debe crear un artícu
 El documento representa una unidad de conocimiento nueva y no existe ninguna carpeta razonablemente adecuada.
 Debe proponer una sola carpeta nueva y un artículo dentro de ella.
 
-REGLAS PRINCIPALES
+REGLAS DE PRIORIZACIÓN (OBLIGATORIAS)
 
-- Sé conservador al declarar duplicados exactos.
-- No declares exact_duplicate solo porque el título o el nombre del fichero se parezcan.
-- Compara el contenido, propósito, alcance, pasos, entidades, fechas y versión.
-- Una similitud semántica alta no siempre implica duplicado.
-- Dos documentos complementarios deben enriquecer el mismo artículo, no considerarse duplicados.
-- Una presentación y un procedimiento pueden pertenecer al mismo artículo si sirven para resolver la misma necesidad del empleado.
-- Una versión nueva debe clasificarse como new_version aunque gran parte del contenido coincida.
-- No crees una carpeta nueva cuando ya exista una ubicación razonable.
-- No crees un artículo nuevo cuando un artículo existente responda a la misma pregunta o necesidad.
-- La pregunta principal es:
-  "¿Consultaría un empleado este documento para resolver la misma necesidad que alguno de los artículos existentes?"
+Las decisiones deben evaluarse exactamente en este orden.
+
+1. exact_duplicate
+2. new_version
+3. enrich_existing_article
+4. possible_duplicate
+5. create_article_in_existing_folder
+6. create_article_in_new_folder
+
+En cuanto una decisión sea válida, NO puedes continuar evaluando las siguientes.
+
+Por tanto:
+
+- Si un documento es una versión nueva de otro existente, SIEMPRE debes devolver new_version.
+- Si un documento complementa un artículo existente, SIEMPRE debes devolver enrich_existing_article.
+- create_article_in_existing_folder solamente está permitido cuando ningún artículo existente pueda reutilizarse.
+- create_article_in_new_folder solamente está permitido cuando tampoco exista una carpeta adecuada.
+
+Está prohibido crear un artículo nuevo simplemente porque el documento aporte más información.
+
+La pregunta que debes responder es:
+
+"¿Puede un empleado encontrar este conocimiento consultando uno de los artículos existentes?"
+
+Si la respuesta es sí:
+
+- usa enrich_existing_article
+- o new_version
+
+Nunca create_article_in_existing_folder.
+
+IMPORTANTE
+
+Si existe un artículo candidato cuyo propósito sea el mismo:
+
+- NO debes crear un artículo nuevo.
+- Aunque el documento sea mucho más completo.
+- Aunque el título propuesto sea distinto.
+- Aunque el nombre del archivo sea diferente.
+
+El conocimiento debe consolidarse en un único artículo.
 
 SIMILITUD
 
@@ -390,16 +420,20 @@ export function buildKnowledgeIntakePrompt({
         )
       : ["No existen carpetas disponibles."];
 
-  return [
-    "Analiza todos los documentos nuevos.",
-    "",
-    "Devuelve exactamente una decisión para cada DOCUMENT_ID.",
-    "No omitas documentos y no añadas documentos desconocidos.",
-    "",
-    "================ EXISTING FOLDERS ================",
-    ...folderBlocks,
-    "================ END EXISTING FOLDERS ================",
-    "",
-    ...documentBlocks,
-  ].join("\n\n");
+return [
+  "Analiza todos los documentos nuevos.",
+  "",
+  "Devuelve exactamente una decisión para cada DOCUMENT_ID.",
+  "No omitas documentos y no añadas documentos desconocidos.",
+  "",
+  "Existe una fuerte preferencia por reutilizar artículos existentes.",
+  "Los artículos candidatos ya han sido seleccionados por similitud semántica.",
+  "Si alguno describe el mismo proceso o responde a la misma necesidad, debes reutilizarlo.",
+  "",
+  "================ EXISTING FOLDERS ================",
+  ...folderBlocks,
+  "================ END EXISTING FOLDERS ================",
+  "",
+  ...documentBlocks,
+].join("\n\n");
 }

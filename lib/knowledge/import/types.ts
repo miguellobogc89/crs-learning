@@ -41,6 +41,9 @@ export type KnowledgeImportDocumentAnalysis = {
 export type KnowledgeImportArticleProposal = {
   id: string;
 
+    action: "create" | "update";
+  existingArticleId: string | null;
+
   title: string;
   description: string;
 
@@ -154,6 +157,10 @@ export type KnowledgeImportCreatedDocumentLog = {
 
 export type KnowledgeImportCreatedArticleLog = {
   proposalArticleId: string;
+
+  action: "create" | "update";
+  existingArticleId: string | null;
+
   databaseArticleId: string;
   title: string;
   description: string;
@@ -165,7 +172,9 @@ export type KnowledgeImportCreatedArticleLog = {
 };
 
 export type KnowledgeImportExecutionLog = {
-  version: "knowledge-import-confirm-v1";
+  version:
+  | "knowledge-import-confirm-v1"
+  | "knowledge-import-confirm-v2";
 
   importId: string;
   status: "completed";
@@ -185,6 +194,7 @@ export type KnowledgeImportExecutionLog = {
   summary: {
     foldersCreated: number;
     articlesCreated: number;
+    articlesUpdated: number;
     documentsCreated: number;
     extractedCharactersStored: number;
     warningsAccepted: number;

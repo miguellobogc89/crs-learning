@@ -86,6 +86,183 @@ function splitIntoBatches<T>(
   return batches;
 }
 
+function normalizeComparisonText(
+  value: string,
+) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function findReferencedCandidateArticle({
+  decision,
+  candidates,
+}: {
+  decision: KnowledgeIntakeDocumentDecision;
+  candidates: KnowledgeIntakeCandidateArticle[];
+}) {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  /*
+   * Primer caso:
+   * La IA ha incluido directamente el ID del artículo,
+   * aunque haya escogido por error una decisión de creación.
+   */
+  if (decision.destination.articleId) {
+    const candidateById = candidates.find(
+      (candidate) =>
+        candidate.id ===
+        decision.destination.articleId,
+    );
+
+    if (candidateById) {
+      return candidateById;
+    }
+  }
+
+  const destinationTitle =
+    normalizeComparisonText(
+      decision.destination.articleTitle,
+    );
+
+  const decisionTitle =
+    normalizeComparisonText(
+      decision.title,
+    );
+
+  /*
+   * Segundo caso:
+   * El título de destino o el título de la decisión
+   * coincide con el de un artículo candidato.
+   */
+  const candidateByTitle = candidates.find(
+    (candidate) => {
+      const candidateTitle =
+        normalizeComparisonText(
+          candidate.title,
+        );
+
+      return (
+        candidateTitle.length > 0 &&
+        (
+          destinationTitle ===
+            candidateTitle ||
+          decisionTitle === candidateTitle
+        )
+      );
+    },
+  );
+
+  if (candidateByTitle) {
+    return candidateByTitle;
+  }
+
+  /*
+   * Tercer caso:
+   * La IA menciona literalmente el artículo existente
+   * dentro del motivo, resumen o título de destino.
+   */
+  const decisionText =
+    normalizeComparisonText(
+      [
+        decision.title,
+        decision.summary,
+        decision.reason,
+        decision.destination
+          .articleTitle,
+        ...decision.warnings,
+      ].join(" "),
+    );
+
+  return (
+    candidates.find((candidate) => {
+      const candidateTitle =
+        normalizeComparisonText(
+          candidate.title,
+        );
+
+      return (
+        candidateTitle.length >= 20 &&
+        decisionText.includes(
+          candidateTitle,
+        )
+      );
+    }) ?? null
+  );
+}
+
+function normalizeGeneratedDecisions({
+  decisions,
+  candidateArticlesByDocumentId,
+}: {
+  decisions: KnowledgeIntakeDocumentDecision[];
+  candidateArticlesByDocumentId: Map<
+    string,
+    KnowledgeIntakeCandidateArticle[]
+  >;
+}) {
+  return decisions.map((decision) => {
+    const isCreationDecision =
+      decision.decision ===
+        "create_article_in_existing_folder" ||
+      decision.decision ===
+        "create_article_in_new_folder";
+
+    if (!isCreationDecision) {
+      return decision;
+    }
+
+    const candidates =
+      candidateArticlesByDocumentId.get(
+        decision.documentId,
+      ) ?? [];
+
+    const referencedArticle =
+      findReferencedCandidateArticle({
+        decision,
+        candidates,
+      });
+
+    if (!referencedArticle) {
+      return decision;
+    }
+
+    /*
+     * La propuesta narrativa ha identificado un artículo
+     * existente, así que no permitimos que la operación
+     * estructurada cree otro artículo duplicado.
+     */
+    return {
+      ...decision,
+      decision:
+        "enrich_existing_article" as const,
+      destination: {
+        articleId:
+          referencedArticle.id,
+        articleTitle:
+          referencedArticle.title,
+        folderId:
+          referencedArticle.libraryId,
+        folderPath:
+          referencedArticle.libraryPath,
+        newFolderName: null,
+      },
+      duplicateMatch: null,
+      warnings: Array.from(
+        new Set([
+          ...decision.warnings,
+          "La decisión fue normalizada como actualización porque la propuesta identificó un artículo existente como destino.",
+        ]),
+      ),
+    };
+  });
+}
+
 function validateGeneratedDecisions(
   decisions: KnowledgeIntakeDocumentDecision[],
   documents: KnowledgeIntakeDocumentInput[],
@@ -372,19 +549,29 @@ async function analyzeDocumentBatch({
       },
     });
 
-  const parsed =
-    parseJsonResponse<GeneratedProposalPayload>(
-      response.output_text,
-    );
-
-  validateGeneratedDecisions(
-    parsed.decisions,
-    documents,
-    existingArticles,
-    existingFolders,
+const parsed =
+  parseJsonResponse<GeneratedProposalPayload>(
+    response.output_text,
   );
 
-  return parsed;
+const normalizedDecisions =
+  normalizeGeneratedDecisions({
+    decisions: parsed.decisions,
+    candidateArticlesByDocumentId:
+      batchCandidateArticles,
+  });
+
+validateGeneratedDecisions(
+  normalizedDecisions,
+  documents,
+  existingArticles,
+  existingFolders,
+);
+
+return {
+  ...parsed,
+  decisions: normalizedDecisions,
+};
 }
 
 export async function analyzeNewKnowledgeDocuments({
