@@ -98,16 +98,45 @@ Cada artículo de salida debe indicar:
 
 REGLAS DE DECISIÓN:
 
-- Usa "update" cuando el documento nuevo sea una revisión, nueva versión, ampliación, sustitución o material complementario de un artículo existente.
+- Usa "update" cuando el documento nuevo sea una revisión, nueva versión, ampliación, corrección, sustitución, complemento, anexo o material adicional de un artículo existente.
+- Usa "update" cuando el documento deba incorporarse, integrarse, unificarse o consolidarse dentro de un artículo existente.
 - Usa "update" aunque el título sugerido por el análisis no coincida exactamente con el título existente.
 - Compara procesos, objetivos, preguntas respondidas, equipos, entidades, temas y documentos.
 - El nombre de archivo puede ser una señal fuerte de versión, pero nunca la única.
 - "V2", "nuevo", "actualizado", una fecha posterior o una revisión pueden indicar actualización.
 - "create" es la última opción.
+- Sólo usa "create" cuando el conocimiento sea realmente independiente y no tenga cabida razonable en ningún artículo existente.
 - No inventes existingArticleId.
-- Cuando action sea "update", conserva el título del artículo existente.
-- Cuando action sea "update", folderId debe ser null.
+- Cuando action sea "update", conserva exactamente el título del artículo existente.
+- Cuando action sea "update", existingArticleId debe contener el ID real del artículo existente.
+- Cuando action sea "update", folderId debe ser null para conservar su ubicación actual.
 - No propongas carpetas nuevas destinadas únicamente a artículos actualizados.
+
+COHERENCIA SEMÁNTICA OBLIGATORIA:
+
+La explicación narrativa y la acción estructurada deben expresar exactamente la misma decisión.
+
+Es inválido:
+
+- mencionar un artículo existente como destino y devolver action "create";
+- afirmar que un documento debe actualizar, ampliar, completar, corregir, sustituir, incorporar, integrar, consolidar o unificar un artículo existente y devolver action "create";
+- incluir en description, warnings o suggestedAction que debe modificarse un artículo existente mientras existingArticleId sea null;
+- devolver action "update" sin el existingArticleId real;
+- devolver action "update" usando un título distinto al título actual del artículo existente;
+- asignar una carpeta nueva a un artículo actualizado.
+
+Si identificas un artículo existente como destino, debes devolver obligatoriamente:
+
+{
+  "action": "update",
+  "existingArticleId": "ID real del artículo existente",
+  "title": "Título exacto del artículo existente",
+  "folderId": null
+}
+
+Antes de devolver el JSON, revisa cada artículo junto con sus warnings relacionados.
+Si existe cualquier contradicción entre la explicación y los campos estructurados,
+corrige los campos estructurados antes de responder.
 
 
 REGLAS PARA CREAR ARTÍCULOS:
@@ -177,16 +206,32 @@ Una subcarpeta usa:
   "parentFolderId": "folder-1"
 }
 
-Los artículos se devuelven en articles:
+Los artículos nuevos se devuelven así:
 
 {
   "id": "article-1",
+  "action": "create",
+  "existingArticleId": null,
   "title": "Gestión de stock y envío de routers",
-  "description": "...",
+  "description": "Explica cómo se controla el stock y se gestionan los envíos de routers.",
   "folderId": "folder-1",
-  "documentIds": [],
-  "documentNames": [],
+  "documentIds": ["document-1"],
+  "documentNames": ["Gestion routers.pdf"],
   "confidence": 0.95
+}
+
+Los artículos existentes que deban ampliarse se devuelven así:
+
+{
+  "id": "article-2",
+  "action": "update",
+  "existingArticleId": "existing-article-id",
+  "title": "Traspaso de Comercial a Operación y Mantenimiento",
+  "description": "El documento nuevo amplía el flujo ya recogido en este artículo.",
+  "folderId": null,
+  "documentIds": ["document-2"],
+  "documentNames": ["Flujograma Traspasos MANTENIMIENTO V2.pptx"],
+  "confidence": 0.98
 }
 
 No construyas objetos anidados.
@@ -276,6 +321,13 @@ export function buildProposalPrompt(
     '- cuando action sea "update", usa folderId null porque debe conservarse la carpeta actual;',
     '- cuando action sea "update", conserva como title el título actual del artículo existente;',
     '- no crees carpetas para artículos cuya action sea "update";',
+    "",
+"REGLA DE COHERENCIA FINAL:",
+"",
+'- si title, description, un warning o suggestedAction menciona que debe actualizarse, ampliarse, completarse, incorporarse, integrarse, sustituirse o unificarse un artículo existente, action debe ser "update";',
+'- cuando se mencione un artículo existente como destino, existingArticleId debe contener su ID real;',
+'- nunca describas una actualización mientras devuelves action "create";',
+'- comprueba la coherencia conjunta de action, existingArticleId, title, description, folderId y warnings antes de responder;',
     "",
     "Antes de generar el JSON, razona internamente siguiendo este orden:",
     "",

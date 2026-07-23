@@ -36,6 +36,18 @@ type DocumentAnalysisResponse = {
   documents: KnowledgeImportDocumentAnalysis[];
 };
 
+type ExistingKnowledge = Awaited<
+  ReturnType<typeof listKnowledgeStatus>
+>;
+
+type ExistingArticle =
+  ExistingKnowledge[number]["knowledge_sources"][number];
+
+type GeneratedProposal = Omit<
+  KnowledgeImportProposal,
+  "documentAnalyses"
+>;
+
 function parseJsonResponse<T>(
   responseText: string,
   context: string,
@@ -86,6 +98,221 @@ function validateDocumentAnalyses(
       );
     }
   }
+}
+
+function normalizeComparableText(
+  value: string,
+) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function containsUpdateIntent(
+  value: string,
+) {
+  const normalizedValue =
+    normalizeComparableText(value);
+
+  const updateExpressions = [
+    "actualizar",
+    "actualizacion",
+    "ampliar",
+    "ampliacion",
+    "completar",
+    "corregir",
+    "correccion",
+    "sustituir",
+    "sustitucion",
+    "incorporar",
+    "incorporacion",
+    "integrar",
+    "integracion",
+    "unificar",
+    "unificacion",
+    "consolidar",
+    "consolidacion",
+    "nueva version",
+    "version actualizada",
+    "material complementario",
+    "complementar",
+  ];
+
+  return updateExpressions.some(
+    (expression) =>
+      normalizedValue.includes(expression),
+  );
+}
+
+function getExistingArticles(
+  existingKnowledge: ExistingKnowledge,
+) {
+  return existingKnowledge.flatMap(
+    (library) =>
+      library.knowledge_sources,
+  );
+}
+
+function getArticleNarrative(
+  article: GeneratedProposal["articles"][number],
+  proposal: GeneratedProposal,
+) {
+  const articleDocumentIds = new Set(
+    article.documentIds,
+  );
+
+  const relatedWarnings =
+    proposal.warnings.filter((warning) =>
+      warning.documentIds.some(
+        (documentId) =>
+          articleDocumentIds.has(documentId),
+      ),
+    );
+
+  return [
+    article.title,
+    article.description,
+    ...relatedWarnings.flatMap(
+      (warning) => [
+        warning.title,
+        warning.description,
+        warning.suggestedAction,
+      ],
+    ),
+  ].join("\n");
+}
+
+function findReferencedExistingArticles(
+  article: GeneratedProposal["articles"][number],
+  narrative: string,
+  existingArticles: ExistingArticle[],
+) {
+  const normalizedNarrative =
+    normalizeComparableText(narrative);
+
+  const normalizedProposedTitle =
+    normalizeComparableText(article.title);
+
+  return existingArticles.filter(
+    (existingArticle) => {
+      const normalizedExistingTitle =
+        normalizeComparableText(
+          existingArticle.title,
+        );
+
+      if (!normalizedExistingTitle) {
+        return false;
+      }
+
+      if (
+        normalizedProposedTitle ===
+        normalizedExistingTitle
+      ) {
+        return true;
+      }
+
+      return normalizedNarrative.includes(
+        normalizedExistingTitle,
+      );
+    },
+  );
+}
+
+function normalizeGeneratedProposalSemantics(
+  proposal: GeneratedProposal,
+  existingKnowledge: ExistingKnowledge,
+): GeneratedProposal {
+  const existingArticles =
+    getExistingArticles(existingKnowledge);
+
+  const existingArticlesById = new Map(
+    existingArticles.map(
+      (article) => [
+        article.id,
+        article,
+      ] as const,
+    ),
+  );
+
+  const normalizedArticles =
+    proposal.articles.map((article) => {
+      if (article.action === "update") {
+        if (!article.existingArticleId) {
+          return article;
+        }
+
+        const existingArticle =
+          existingArticlesById.get(
+            article.existingArticleId,
+          );
+
+        if (!existingArticle) {
+          return article;
+        }
+
+        return {
+          ...article,
+          title: existingArticle.title,
+          folderId: null,
+        };
+      }
+
+      const narrative = getArticleNarrative(
+        article,
+        proposal,
+      );
+
+      if (!containsUpdateIntent(narrative)) {
+        return article;
+      }
+
+      const referencedArticles =
+        findReferencedExistingArticles(
+          article,
+          narrative,
+          existingArticles,
+        );
+
+      if (referencedArticles.length === 0) {
+        throw new Error(
+          `La propuesta indica que "${article.title}" debe actualizar conocimiento existente, pero no identifica un artículo de destino`,
+        );
+      }
+
+      if (referencedArticles.length > 1) {
+        const referencedTitles =
+          referencedArticles
+            .map(
+              (existingArticle) =>
+                existingArticle.title,
+            )
+            .join(", ");
+
+        throw new Error(
+          `La propuesta de "${article.title}" menciona varios posibles artículos existentes: ${referencedTitles}`,
+        );
+      }
+
+      const existingArticle =
+        referencedArticles[0];
+
+      return {
+        ...article,
+        action: "update" as const,
+        existingArticleId:
+          existingArticle.id,
+        title: existingArticle.title,
+        folderId: null,
+      };
+    });
+
+  return {
+    ...proposal,
+    articles: normalizedArticles,
+  };
 }
 
 function validateGeneratedProposal(
@@ -365,23 +592,40 @@ async function generateGlobalProposal(
     },
   });
 
-  const proposal = parseJsonResponse<
-    Omit<
-      KnowledgeImportProposal,
-      "documentAnalyses"
-    >
-  >(
+const parsedProposal =
+  parseJsonResponse<GeneratedProposal>(
     response.output_text,
     "la generación de la propuesta",
   );
 
-  validateGeneratedProposal(
-    proposal,
-    analyses,
+const normalizedProposal =
+  normalizeGeneratedProposalSemantics(
+    parsedProposal,
     existingKnowledge,
   );
 
-  return proposal;
+  console.log(
+  "[knowledge-import] parsed proposal",
+  JSON.stringify(parsedProposal, null, 2),
+);
+
+console.log(
+  "[knowledge-import] normalized proposal",
+  JSON.stringify(
+    normalizedProposal,
+    null,
+    2,
+  ),
+);
+
+validateGeneratedProposal(
+  normalizedProposal,
+  analyses,
+  existingKnowledge,
+);
+
+return normalizedProposal;
+
 }
 
 export async function generateKnowledgeImportProposal({
