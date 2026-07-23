@@ -613,6 +613,16 @@ const normalizedDecisions =
     existingArticles,
   });
 
+  console.log(
+  "PARSED DECISIONS",
+  JSON.stringify(parsed.decisions, null, 2),
+);
+
+console.log(
+  "NORMALIZED DECISIONS",
+  JSON.stringify(normalizedDecisions, null, 2),
+);
+
 validateGeneratedDecisions(
   normalizedDecisions,
   documents,
@@ -631,6 +641,7 @@ export async function analyzeNewKnowledgeDocuments({
   libraryId,
   documents,
 }: AnalyzeKnowledgeIntakeInput): Promise<AnalyzeKnowledgeIntakeResult> {
+  console.log("ENTRANDO EN analyzeNewKnowledgeDocuments");
   if (!userId.trim()) {
     throw new Error("Usuario no válido");
   }
