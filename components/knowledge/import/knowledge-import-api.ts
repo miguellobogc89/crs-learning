@@ -1,4 +1,5 @@
 // components/knowledge/import/knowledge-import-api.ts
+
 import type {
   GenerateKnowledgeImportProposalResult,
   KnowledgeImportProposal,
@@ -11,7 +12,10 @@ type ApiErrorBody = {
 type AnalyzeImportResponse = {
   importId: string;
   status: "extracted";
+  processingStatus: string;
   fileCount: number;
+  completedFiles: number;
+  failedFiles: number;
   totalSize: number;
 };
 
@@ -20,10 +24,84 @@ type ExtractTextResponse = {
   status:
     | "text_ready"
     | "text_error";
+  processingStatus:
+    | "completed"
+    | "error";
   totalFiles: number;
   successfulFiles: number;
   failedFiles: number;
   totalCharacters: number;
+};
+
+export type KnowledgeImportProgressFile = {
+  id: string;
+  name: string;
+  relativePath: string;
+  size: number;
+  status: string;
+  processingOrder: number | null;
+  processingStatus: string | null;
+  processingStep: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  error: string | null;
+};
+
+export type KnowledgeImportProgress = {
+  importId: string;
+
+  status: string;
+  processingStatus: string;
+
+  totalFiles: number;
+  completedFiles: number;
+  failedFiles: number;
+  processedFiles: number;
+  pendingFiles: number;
+
+  totalSize: number;
+  progressPercentage: number;
+
+  isFinished: boolean;
+  proposalReady: boolean;
+
+  currentFile: {
+    id: string;
+    name: string;
+    relativePath: string;
+    size: number;
+    processingOrder: number | null;
+    processingStatus: string | null;
+    processingStep: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+    error: string | null;
+  } | null;
+
+  files: KnowledgeImportProgressFile[];
+
+  error: string | null;
+
+  processingStartedAt: string | null;
+  processingCompletedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type KnowledgeImportPipelineStage =
+  | "analyzing"
+  | "extracting_text"
+  | "generating_proposal";
+
+type RunKnowledgeImportPipelineOptions = {
+  onStageChange?: (
+    stage: KnowledgeImportPipelineStage,
+  ) => void;
+
+  onProgress?: (
+    progress: KnowledgeImportProgress,
+  ) => void;
 };
 
 export type KnowledgeImportPipelineResult = {
@@ -110,14 +188,120 @@ async function generateImportProposal(
   );
 }
 
+export async function getKnowledgeImportProgress(
+  importId: string,
+) {
+  const response = await fetch(
+    `/api/knowledge/import/${importId}/progress`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+  );
+
+  return readResponse<KnowledgeImportProgress>(
+    response,
+    "No se ha podido consultar el progreso de la importación",
+  );
+}
+
+function startProgressPolling(
+  importId: string,
+  onProgress:
+    | ((
+        progress: KnowledgeImportProgress,
+      ) => void)
+    | undefined,
+) {
+  if (!onProgress) {
+    return () => undefined;
+  }
+
+  const progressCallback = onProgress;
+
+  let stopped = false;
+  let timeoutId:
+    | ReturnType<typeof setTimeout>
+    | null = null;
+
+  async function poll() {
+    if (stopped) {
+      return;
+    }
+
+    try {
+      const progress =
+        await getKnowledgeImportProgress(
+          importId,
+        );
+
+      if (!stopped) {
+        progressCallback(progress);
+      }
+    } catch (error) {
+      console.error(
+        "Error polling knowledge import progress:",
+        error,
+      );
+    }
+
+    if (!stopped) {
+      timeoutId = setTimeout(
+        poll,
+        750,
+      );
+    }
+  }
+
+  void poll();
+
+  return () => {
+    stopped = true;
+
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  };
+}
+
 export async function runKnowledgeImportPipeline(
   importId: string,
+  options: RunKnowledgeImportPipelineOptions = {},
 ): Promise<KnowledgeImportPipelineResult> {
+  options.onStageChange?.("analyzing");
+
   const extraction =
     await analyzeImport(importId);
 
-  const textExtraction =
-    await extractImportText(importId);
+  options.onStageChange?.(
+    "extracting_text",
+  );
+
+  const stopPolling =
+    startProgressPolling(
+      importId,
+      options.onProgress,
+    );
+
+  let textExtraction: ExtractTextResponse;
+
+  try {
+    textExtraction =
+      await extractImportText(importId);
+
+    const finalProgress =
+      await getKnowledgeImportProgress(
+        importId,
+      ).catch(() => null);
+
+    if (finalProgress) {
+      options.onProgress?.(
+        finalProgress,
+      );
+    }
+  } finally {
+    stopPolling();
+  }
 
   if (
     textExtraction.successfulFiles === 0
@@ -126,6 +310,10 @@ export async function runKnowledgeImportPipeline(
       "No se ha podido obtener texto de ninguno de los documentos",
     );
   }
+
+  options.onStageChange?.(
+    "generating_proposal",
+  );
 
   const proposalResult =
     await generateImportProposal(

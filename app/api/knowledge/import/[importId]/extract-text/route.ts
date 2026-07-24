@@ -1,4 +1,5 @@
 // app/api/knowledge/import/[importId]/extract-text/route.ts
+
 import { readFile } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
@@ -9,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 const SUPPORTED_EXTENSIONS = new Set([
   ".pdf",
@@ -26,6 +28,16 @@ type RouteContext = {
   params: Promise<{
     importId: string;
   }>;
+};
+
+type FileResult = {
+  id: string;
+  name: string;
+  relativePath: string;
+  processingOrder: number | null;
+  status: "text_ready" | "text_error";
+  characters: number;
+  error?: string;
 };
 
 function resolveStoragePath(storagePath: string) {
@@ -116,7 +128,9 @@ async function extractTextFromFile(
     !SUPPORTED_EXTENSIONS.has(extension)
   ) {
     throw new Error(
-      `Formato no compatible: ${extension || "sin extensión"}`,
+      `Formato no compatible: ${
+        extension || "sin extensión"
+      }`,
     );
   }
 
@@ -152,14 +166,12 @@ export async function POST(
     );
   }
 
-  const { importId } =
-    await context.params;
+  const { importId } = await context.params;
 
   if (!importId) {
     return NextResponse.json(
       {
-        error:
-          "Importación no válida",
+        error: "Importación no válida",
       },
       {
         status: 400,
@@ -171,8 +183,7 @@ export async function POST(
     await prisma.knowledge_imports.findFirst({
       where: {
         id: importId,
-        owner_user_id:
-          session.user.id,
+        owner_user_id: session.user.id,
       },
       include: {
         knowledge_import_files: {
@@ -185,9 +196,14 @@ export async function POST(
               ],
             },
           },
-          orderBy: {
-            created_at: "asc",
-          },
+          orderBy: [
+            {
+              processing_order: "asc",
+            },
+            {
+              created_at: "asc",
+            },
+          ],
         },
       },
     });
@@ -205,8 +221,8 @@ export async function POST(
   }
 
   if (
-    knowledgeImport.status ===
-    "text_processing"
+    knowledgeImport.processing_status ===
+    "processing"
   ) {
     return NextResponse.json(
       {
@@ -238,11 +254,11 @@ export async function POST(
     );
   }
 
-  const files =
+  const allFiles =
     knowledgeImport
       .knowledge_import_files;
 
-  if (files.length === 0) {
+  if (allFiles.length === 0) {
     return NextResponse.json(
       {
         error:
@@ -254,48 +270,148 @@ export async function POST(
     );
   }
 
+  /*
+   * Los archivos ya completados no se vuelven a
+   * procesar. Esto permite reintentar una importación
+   * sin repetir los documentos que terminaron bien.
+   */
+  const filesToProcess = allFiles.filter(
+    (file) =>
+      file.processing_status !==
+        "completed" ||
+      file.status !== "text_ready",
+  );
+
+  const alreadyCompletedFiles =
+    allFiles.filter(
+      (file) =>
+        file.processing_status ===
+          "completed" &&
+        file.status === "text_ready",
+    ).length;
+
+  if (filesToProcess.length === 0) {
+    return NextResponse.json({
+      importId,
+      status: "text_ready",
+      processingStatus: "completed",
+      totalFiles: allFiles.length,
+      successfulFiles:
+        alreadyCompletedFiles,
+      failedFiles: 0,
+      totalCharacters:
+        allFiles.reduce(
+          (total, file) =>
+            total +
+            (file.extracted_text?.length ??
+              0),
+          0,
+        ),
+      files: allFiles.map(
+        (file): FileResult => ({
+          id: file.id,
+          name: file.file_name,
+          relativePath:
+            file.relative_path,
+          processingOrder:
+            file.processing_order,
+          status: "text_ready",
+          characters:
+            file.extracted_text?.length ??
+            0,
+        }),
+      ),
+    });
+  }
+
+  const processingStartedAt =
+    knowledgeImport
+      .processing_started_at ??
+    new Date();
+
   await prisma.knowledge_imports.update({
     where: {
       id: importId,
     },
     data: {
       status: "text_processing",
+      processing_status: "processing",
+      completed_files:
+        alreadyCompletedFiles,
+      failed_files: 0,
+      current_file_id: null,
+      processing_started_at:
+        processingStartedAt,
+      processing_completed_at: null,
       error_message: null,
       updated_at: new Date(),
     },
   });
 
-  const results: Array<{
-    id: string;
-    name: string;
-    relativePath: string;
-    status: "text_ready" | "text_error";
-    characters: number;
-    error?: string;
-  }> = [];
+  const results: FileResult[] = [];
 
-  let successfulFiles = 0;
+  let successfulFiles =
+    alreadyCompletedFiles;
+
   let failedFiles = 0;
-  let totalCharacters = 0;
+  let totalCharacters =
+    allFiles
+      .filter(
+        (file) =>
+          file.processing_status ===
+            "completed" &&
+          file.status === "text_ready",
+      )
+      .reduce(
+        (total, file) =>
+          total +
+          (file.extracted_text?.length ??
+            0),
+        0,
+      );
 
-  for (const file of files) {
+  for (const file of filesToProcess) {
+    const fileStartedAt = new Date();
+
     try {
+      await prisma.$transaction([
+        prisma.knowledge_imports.update({
+          where: {
+            id: importId,
+          },
+          data: {
+            current_file_id: file.id,
+            processing_status:
+              "processing",
+            updated_at: fileStartedAt,
+          },
+        }),
+
+        prisma.knowledge_import_files.update({
+          where: {
+            id: file.id,
+          },
+          data: {
+            status: "text_processing",
+            processing_status:
+              "processing",
+            processing_step:
+              "extracting_text",
+            started_at:
+              file.started_at ??
+              fileStartedAt,
+            completed_at: null,
+            error_message: null,
+            updated_at: fileStartedAt,
+          },
+        }),
+      ]);
+
       if (!file.storage_path) {
         throw new Error(
           "El archivo no tiene ruta de almacenamiento",
         );
       }
-
-      await prisma.knowledge_import_files.update({
-        where: {
-          id: file.id,
-        },
-        data: {
-          status: "text_processing",
-          error_message: null,
-          updated_at: new Date(),
-        },
-      });
 
       const absolutePath =
         resolveStoragePath(
@@ -307,6 +423,17 @@ export async function POST(
           absolutePath,
           file.file_name,
         );
+
+      await prisma.knowledge_import_files.update({
+        where: {
+          id: file.id,
+        },
+        data: {
+          processing_step:
+            "cleaning_text",
+          updated_at: new Date(),
+        },
+      });
 
       const extractedText =
         limitExtractedText(
@@ -321,18 +448,41 @@ export async function POST(
         );
       }
 
-      await prisma.knowledge_import_files.update({
-        where: {
-          id: file.id,
-        },
-        data: {
-          status: "text_ready",
-          extracted_text:
-            extractedText,
-          error_message: null,
-          updated_at: new Date(),
-        },
-      });
+      const completedAt = new Date();
+
+      await prisma.$transaction([
+        prisma.knowledge_import_files.update({
+          where: {
+            id: file.id,
+          },
+          data: {
+            status: "text_ready",
+            extracted_text:
+              extractedText,
+            processing_status:
+              "completed",
+            processing_step:
+              "completed",
+            completed_at:
+              completedAt,
+            error_message: null,
+            updated_at: completedAt,
+          },
+        }),
+
+        prisma.knowledge_imports.update({
+          where: {
+            id: importId,
+          },
+          data: {
+            completed_files: {
+              increment: 1,
+            },
+            current_file_id: null,
+            updated_at: completedAt,
+          },
+        }),
+      ]);
 
       successfulFiles += 1;
       totalCharacters +=
@@ -343,6 +493,8 @@ export async function POST(
         name: file.file_name,
         relativePath:
           file.relative_path,
+        processingOrder:
+          file.processing_order,
         status: "text_ready",
         characters:
           extractedText.length,
@@ -353,21 +505,43 @@ export async function POST(
           ? error.message
           : "No se ha podido extraer el texto";
 
+      const completedAt = new Date();
+
       failedFiles += 1;
 
-      await prisma.knowledge_import_files
-        .update({
-          where: {
-            id: file.id,
-          },
-          data: {
-            status: "text_error",
-            extracted_text: "",
-            error_message:
-              errorMessage,
-            updated_at: new Date(),
-          },
-        })
+      await prisma
+        .$transaction([
+          prisma.knowledge_import_files.update({
+            where: {
+              id: file.id,
+            },
+            data: {
+              status: "text_error",
+              extracted_text: "",
+              processing_status:
+                "error",
+              processing_step: "error",
+              completed_at:
+                completedAt,
+              error_message:
+                errorMessage,
+              updated_at: completedAt,
+            },
+          }),
+
+          prisma.knowledge_imports.update({
+            where: {
+              id: importId,
+            },
+            data: {
+              failed_files: {
+                increment: 1,
+              },
+              current_file_id: null,
+              updated_at: completedAt,
+            },
+          }),
+        ])
         .catch(() => undefined);
 
       results.push({
@@ -375,6 +549,8 @@ export async function POST(
         name: file.file_name,
         relativePath:
           file.relative_path,
+        processingOrder:
+          file.processing_order,
         status: "text_error",
         characters: 0,
         error: errorMessage,
@@ -387,10 +563,18 @@ export async function POST(
       ? "text_ready"
       : "text_error";
 
+  const finalProcessingStatus =
+    successfulFiles > 0
+      ? "completed"
+      : "error";
+
   const importErrorMessage =
     failedFiles > 0
-      ? `${failedFiles} de ${files.length} documentos no pudieron procesarse`
+      ? `${failedFiles} de ${allFiles.length} documentos no pudieron procesarse`
       : null;
+
+  const processingCompletedAt =
+    new Date();
 
   await prisma.knowledge_imports.update({
     where: {
@@ -398,16 +582,27 @@ export async function POST(
     },
     data: {
       status: finalStatus,
+      processing_status:
+        finalProcessingStatus,
+      completed_files:
+        successfulFiles,
+      failed_files: failedFiles,
+      current_file_id: null,
+      processing_completed_at:
+        processingCompletedAt,
       error_message:
         importErrorMessage,
-      updated_at: new Date(),
+      updated_at:
+        processingCompletedAt,
     },
   });
 
   return NextResponse.json({
     importId,
     status: finalStatus,
-    totalFiles: files.length,
+    processingStatus:
+      finalProcessingStatus,
+    totalFiles: allFiles.length,
     successfulFiles,
     failedFiles,
     totalCharacters,

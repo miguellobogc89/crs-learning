@@ -29,7 +29,10 @@ import type {
   KnowledgeIntakeProcessingPhase,
 } from "../modal/knowledge-intake-processing.types";
 
-import { runKnowledgeImportPipeline } from "../../import/knowledge-import-api";
+import {
+  runKnowledgeImportPipeline,
+  type KnowledgeImportProgress,
+} from "../../import/knowledge-import-api";
 import {
   createSelectedDocuments,
   type SelectedKnowledgeDocument,
@@ -507,6 +510,21 @@ export function useKnowledgeIntake({
     KnowledgeIntakeFileProgress[]
   >([]);
 
+  const [
+  progressSummary,
+  setProgressSummary,
+] = useState({
+  totalFiles: 0,
+  completedFiles: 0,
+  failedFiles: 0,
+  processedFiles: 0,
+  pendingFiles: 0,
+  progressPercentage: 0,
+  currentFileName: null as
+    | string
+    | null,
+});
+
   const files = useMemo(
     () =>
       selectedDocuments.map(
@@ -559,6 +577,74 @@ export function useKnowledgeIntake({
             uniqueFiles,
             currentDocuments,
           ),
+      );
+    },
+    [],
+  );
+
+  const applyServerProgress =
+  useCallback(
+    (
+      progress: KnowledgeImportProgress,
+    ) => {
+      setProgressSummary({
+        totalFiles: progress.totalFiles,
+        completedFiles:
+          progress.completedFiles,
+        failedFiles:
+          progress.failedFiles,
+        processedFiles:
+          progress.processedFiles,
+        pendingFiles:
+          progress.pendingFiles,
+        progressPercentage:
+          progress.progressPercentage,
+        currentFileName:
+          progress.currentFile?.name ??
+          null,
+      });
+
+      setFileProgress(
+        progress.files.map((file) => {
+          let status:
+            | "pending"
+            | "processing"
+            | "completed"
+            | "error" = "pending";
+
+          if (
+            file.processingStatus ===
+            "processing"
+          ) {
+            status = "processing";
+          } else if (
+            file.processingStatus ===
+              "completed" ||
+            file.status === "text_ready"
+          ) {
+            status = "completed";
+          } else if (
+            file.processingStatus ===
+              "error" ||
+            file.status === "text_error"
+          ) {
+            status = "error";
+          }
+
+          return {
+            id: file.id,
+            name: file.name,
+            relativePath:
+              file.relativePath,
+            processingOrder:
+              file.processingOrder,
+            processingStep:
+              file.processingStep,
+            status,
+            error:
+              file.error ?? undefined,
+          };
+        }),
       );
     },
     [],
@@ -651,12 +737,39 @@ export function useKnowledgeIntake({
             status: "uploaded",
           })),
         );
-        setProcessingPhase("analyzing");
+        setProcessingPhase("preparing");
 
-        const pipelineResult =
-          await runKnowledgeImportPipeline(
-            uploadResult.importId,
+const pipelineResult =
+  await runKnowledgeImportPipeline(
+    uploadResult.importId,
+    {
+      onStageChange: (stage) => {
+        if (stage === "analyzing") {
+          setProcessingPhase(
+            "preparing",
           );
+          return;
+        }
+
+        if (
+          stage ===
+          "extracting_text"
+        ) {
+          setProcessingPhase(
+            "extracting",
+          );
+          return;
+        }
+
+        setProcessingPhase(
+          "generating_proposal",
+        );
+      },
+
+      onProgress:
+        applyServerProgress,
+    },
+  );
 
         setImportProposal(
           pipelineResult.proposal,
@@ -680,6 +793,7 @@ export function useKnowledgeIntake({
         setIsAnalyzing(false);
       }
     }, [
+      applyServerProgress,
       context.libraryId,
       selectedDocuments,
     ]);
@@ -761,6 +875,15 @@ export function useKnowledgeIntake({
     setIsConfirming(false);
     setProcessingPhase("uploading");
     setFileProgress([]);
+    setProgressSummary({
+  totalFiles: 0,
+  completedFiles: 0,
+  failedFiles: 0,
+  processedFiles: 0,
+  pendingFiles: 0,
+  progressPercentage: 0,
+  currentFileName: null,
+});
   }, []);
 
   return {
@@ -774,6 +897,7 @@ export function useKnowledgeIntake({
     hasUnsavedProgress,
     processingPhase,
     fileProgress,
+    progressSummary,
     handleFilesChange,
     analyzeDocuments,
     confirmProposal,

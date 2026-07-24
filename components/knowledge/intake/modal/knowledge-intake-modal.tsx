@@ -112,10 +112,11 @@ function requestClose() {
             ) : null}
 
 {intake.step === "analyzing" ? (
-  <KnowledgeIntakeProcessingStep
-    phase={intake.processingPhase}
-    files={intake.fileProgress}
-  />
+<KnowledgeIntakeProcessingStep
+  phase={intake.processingPhase}
+  files={intake.fileProgress}
+  summary={intake.progressSummary}
+/>
 ) : null}
 
             {intake.step === "proposal" &&

@@ -1,4 +1,5 @@
 // app/api/knowledge/import/[importId]/analyze/route.ts
+
 import AdmZip from "adm-zip";
 import { mkdir, rm, writeFile } from "fs/promises";
 import path from "path";
@@ -9,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 const MAX_EXTRACTED_FILES = 5_000;
 const MAX_TOTAL_EXTRACTED_SIZE = 500 * 1024 * 1024;
@@ -34,6 +36,22 @@ type RouteContext = {
   params: Promise<{
     importId: string;
   }>;
+};
+
+type ExtractedFileInput = {
+  import_id: string;
+  file_name: string;
+  relative_path: string;
+  mime_type: string | null;
+  file_size: number;
+  storage_path: string;
+  status: string;
+  processing_order: number;
+  processing_status: string;
+  processing_step: string | null;
+  started_at: Date | null;
+  completed_at: Date | null;
+  error_message: string | null;
 };
 
 function normalizeRelativePath(value: string) {
@@ -68,12 +86,19 @@ function getMimeType(fileName: string) {
     ".txt": "text/plain",
     ".md": "text/markdown",
     ".csv": "text/csv",
+    ".doc": "application/msword",
     ".docx":
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
     ".xlsx":
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
     ".pptx":
       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".zip": "application/zip",
   };
 
   return (
@@ -87,11 +112,28 @@ function resolveStoragePath(storagePath: string) {
     .replaceAll("\\", "/")
     .replace(/^\/+/, "");
 
-  return path.join(
+  const publicRoot = path.resolve(
     process.cwd(),
     "public",
+  );
+
+  const absolutePath = path.resolve(
+    publicRoot,
     normalizedPath,
   );
+
+  if (
+    absolutePath !== publicRoot &&
+    !absolutePath.startsWith(
+      `${publicRoot}${path.sep}`,
+    )
+  ) {
+    throw new Error(
+      "La ruta del archivo no es válida",
+    );
+  }
+
+  return absolutePath;
 }
 
 export async function POST(
@@ -131,7 +173,11 @@ export async function POST(
         owner_user_id: session.user.id,
       },
       include: {
-        knowledge_import_files: true,
+        knowledge_import_files: {
+          orderBy: {
+            created_at: "asc",
+          },
+        },
       },
     });
 
@@ -147,7 +193,8 @@ export async function POST(
   }
 
   if (
-    knowledgeImport.status === "processing"
+    knowledgeImport.processing_status ===
+    "processing"
   ) {
     return NextResponse.json(
       {
@@ -177,8 +224,6 @@ export async function POST(
     );
   }
 
-
-
   const extractedRoot = path.join(
     process.cwd(),
     "public",
@@ -189,6 +234,23 @@ export async function POST(
   );
 
   try {
+    await prisma.knowledge_imports.update({
+      where: {
+        id: importId,
+      },
+      data: {
+        status: "processing",
+        processing_status: "analyzing",
+        completed_files: 0,
+        failed_files: 0,
+        current_file_id: null,
+        processing_started_at: null,
+        processing_completed_at: null,
+        error_message: null,
+        updated_at: new Date(),
+      },
+    });
+
     await rm(extractedRoot, {
       recursive: true,
       force: true,
@@ -199,27 +261,24 @@ export async function POST(
     });
 
     /*
-     * Permite repetir el análisis sin duplicar
-     * los documentos extraídos anteriormente.
+     * Al repetir el análisis, eliminamos todos los
+     * registros derivados. Los archivos originales
+     * con estado "uploaded" se conservan.
      */
     await prisma.knowledge_import_files.deleteMany({
       where: {
         import_id: importId,
-        status: "extracted",
+        status: {
+          not: "uploaded",
+        },
       },
     });
 
-    const extractedFiles: Array<{
-      import_id: string;
-      file_name: string;
-      relative_path: string;
-      mime_type: string;
-      file_size: number;
-      storage_path: string;
-      status: string;
-    }> = [];
+    const extractedFiles: ExtractedFileInput[] =
+      [];
 
     let totalExtractedSize = 0;
+    let processingOrder = 0;
 
     for (const uploadedFile of uploadedFiles) {
       if (!uploadedFile.storage_path) {
@@ -243,8 +302,9 @@ export async function POST(
           "application/x-zip-compressed";
 
       /*
-       * Si no es ZIP, lo dejamos registrado como
-       * documento listo para la siguiente fase.
+       * Los archivos que no son ZIP también se
+       * registran como elementos independientes
+       * de la cola.
        */
       if (!isZip) {
         const relativePath =
@@ -257,21 +317,42 @@ export async function POST(
           continue;
         }
 
+        const fileSize = Number(
+          uploadedFile.file_size ?? 0,
+        );
+
+        totalExtractedSize += fileSize;
+
+        if (
+          totalExtractedSize >
+          MAX_TOTAL_EXTRACTED_SIZE
+        ) {
+          throw new Error(
+            "El contenido total supera el límite permitido de 500 MB",
+          );
+        }
+
+        processingOrder += 1;
+
         extractedFiles.push({
           import_id: importId,
           file_name: uploadedFile.file_name,
           relative_path: relativePath,
           mime_type:
-            uploadedFile.mime_type ??
+            uploadedFile.mime_type ||
             getMimeType(
               uploadedFile.file_name,
             ),
-          file_size: Number(
-            uploadedFile.file_size ?? 0,
-          ),
+          file_size: fileSize,
           storage_path:
             uploadedFile.storage_path,
           status: "extracted",
+          processing_order: processingOrder,
+          processing_status: "pending",
+          processing_step: "waiting",
+          started_at: null,
+          completed_at: null,
+          error_message: null,
         });
 
         continue;
@@ -312,15 +393,13 @@ export async function POST(
           );
         }
 
-        const declaredSize =
-          Number(
-            entry.header.size ?? 0,
-          );
-
-        totalExtractedSize += declaredSize;
+        const declaredSize = Number(
+          entry.header.size ?? 0,
+        );
 
         if (
-          totalExtractedSize >
+          totalExtractedSize +
+            declaredSize >
           MAX_TOTAL_EXTRACTED_SIZE
         ) {
           throw new Error(
@@ -328,14 +407,13 @@ export async function POST(
           );
         }
 
-        const destinationPath =
-          path.join(
-            extractedRoot,
-            relativePath,
-          );
+        const destinationPath = path.join(
+          extractedRoot,
+          relativePath,
+        );
 
         /*
-         * Protección adicional frente a ZIP Slip.
+         * Protección frente a ZIP Slip.
          */
         const resolvedDestination =
           path.resolve(destinationPath);
@@ -355,11 +433,9 @@ export async function POST(
 
         const buffer = entry.getData();
 
-        totalExtractedSize +=
-          buffer.length - declaredSize;
-
         if (
-          totalExtractedSize >
+          totalExtractedSize +
+            buffer.length >
           MAX_TOTAL_EXTRACTED_SIZE
         ) {
           throw new Error(
@@ -378,6 +454,9 @@ export async function POST(
           destinationPath,
           buffer,
         );
+
+        totalExtractedSize += buffer.length;
+        processingOrder += 1;
 
         const publicStoragePath = [
           "",
@@ -399,6 +478,12 @@ export async function POST(
           storage_path:
             publicStoragePath,
           status: "extracted",
+          processing_order: processingOrder,
+          processing_status: "pending",
+          processing_step: "waiting",
+          started_at: null,
+          completed_at: null,
+          error_message: null,
         });
       }
     }
@@ -409,10 +494,6 @@ export async function POST(
       );
     }
 
-    /*
-     * createMany puede necesitar dividirse si
-     * el ZIP contiene miles de documentos.
-     */
     const batchSize = 250;
 
     for (
@@ -434,10 +515,16 @@ export async function POST(
       },
       data: {
         status: "extracted",
+        processing_status: "pending",
         total_files:
           extractedFiles.length,
         total_size:
           totalExtractedSize,
+        completed_files: 0,
+        failed_files: 0,
+        current_file_id: null,
+        processing_started_at: null,
+        processing_completed_at: null,
         error_message: null,
         updated_at: new Date(),
       },
@@ -446,7 +533,10 @@ export async function POST(
     return NextResponse.json({
       importId,
       status: "extracted",
+      processingStatus: "pending",
       fileCount: extractedFiles.length,
+      completedFiles: 0,
+      failedFiles: 0,
       totalSize: totalExtractedSize,
       files: extractedFiles.map(
         (file) => ({
@@ -455,6 +545,10 @@ export async function POST(
             file.relative_path,
           size: file.file_size,
           mimeType: file.mime_type,
+          processingOrder:
+            file.processing_order,
+          processingStatus:
+            file.processing_status,
         }),
       ),
     });
@@ -476,6 +570,10 @@ export async function POST(
         },
         data: {
           status: "error",
+          processing_status: "error",
+          current_file_id: null,
+          processing_completed_at:
+            new Date(),
           error_message: errorMessage,
           updated_at: new Date(),
         },
