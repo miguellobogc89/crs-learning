@@ -1,4 +1,5 @@
 // lib/knowledge/import/types.ts
+
 export type KnowledgeImportDocumentInput = {
   id: string;
   name: string;
@@ -41,7 +42,7 @@ export type KnowledgeImportDocumentAnalysis = {
 export type KnowledgeImportArticleProposal = {
   id: string;
 
-    action: "create" | "update";
+  action: "create" | "update";
   existingArticleId: string | null;
 
   title: string;
@@ -149,10 +150,24 @@ export type KnowledgeImportCreatedDocumentLog = {
   importFileId: string;
   knowledgeFileId: string;
   fileName: string;
+  fileSize: number | null;
   articleId: string;
   articleTitle: string;
   extractedCharacters: number;
   storagePath: string | null;
+};
+
+export type KnowledgeImportSkippedDocumentReason =
+  | "duplicate_name_and_size";
+
+export type KnowledgeImportSkippedDocumentLog = {
+  importFileId: string;
+  existingKnowledgeFileId: string;
+  fileName: string;
+  fileSize: number | null;
+  articleId: string;
+  articleTitle: string;
+  reason: KnowledgeImportSkippedDocumentReason;
 };
 
 export type KnowledgeImportCreatedArticleLog = {
@@ -167,14 +182,36 @@ export type KnowledgeImportCreatedArticleLog = {
   proposalFolderId: string | null;
   databaseFolderId: string;
   confidence: number;
+
+  /**
+   * Todos los documentos que la propuesta asignaba
+   * originalmente al artículo.
+   */
   documentIds: string[];
+
+  /**
+   * Documentos que se han incorporado realmente.
+   */
+  createdDocumentIds: string[];
+
+  /**
+   * Documentos omitidos por ser duplicados.
+   */
+  skippedDocumentIds: string[];
+
   knowledgeFileIds: string[];
+
+  /**
+   * Indica si se modificó realmente el contenido
+   * persistente del artículo.
+   */
+  contentChanged: boolean;
 };
 
 export type KnowledgeImportExecutionLog = {
   version:
-  | "knowledge-import-confirm-v1"
-  | "knowledge-import-confirm-v2";
+    | "knowledge-import-confirm-v1"
+    | "knowledge-import-confirm-v2";
 
   importId: string;
   status: "completed";
@@ -195,7 +232,9 @@ export type KnowledgeImportExecutionLog = {
     foldersCreated: number;
     articlesCreated: number;
     articlesUpdated: number;
+    articlesUnchanged: number;
     documentsCreated: number;
+    documentsSkippedAsDuplicates: number;
     extractedCharactersStored: number;
     warningsAccepted: number;
   };
@@ -203,6 +242,7 @@ export type KnowledgeImportExecutionLog = {
   folders: KnowledgeImportCreatedFolderLog[];
   articles: KnowledgeImportCreatedArticleLog[];
   documents: KnowledgeImportCreatedDocumentLog[];
+  skippedDocuments: KnowledgeImportSkippedDocumentLog[];
 
   proposalSnapshot: KnowledgeImportProposal;
 };
