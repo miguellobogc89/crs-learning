@@ -55,10 +55,16 @@ function parseStoredLog(
 function validateProposalReferences(
   proposal: KnowledgeImportProposal,
   importFileIds: Set<string>,
+  existingFolderIds: Set<string>,
 ) {
-  const folderIds = new Set(
+  const proposedFolderIds = new Set(
     proposal.folders.map((folder) => folder.id),
   );
+
+  const validFolderIds = new Set([
+    ...existingFolderIds,
+    ...proposedFolderIds,
+  ]);
 
   const assignedDocumentIds =
     new Set<string>();
@@ -66,7 +72,7 @@ function validateProposalReferences(
   for (const folder of proposal.folders) {
     if (
       folder.parentFolderId &&
-      !folderIds.has(folder.parentFolderId)
+      !validFolderIds.has(folder.parentFolderId)
     ) {
       throw new Error(
         `La carpeta propuesta ${folder.id} apunta a una carpeta inexistente`,
@@ -84,8 +90,17 @@ function validateProposalReferences(
 
   for (const article of proposal.articles) {
     if (
+      article.action === "update" &&
+      !article.existingArticleId
+    ) {
+      throw new Error(
+        `El artículo ${article.id} está marcado como actualización pero no indica el artículo existente`,
+      );
+    }
+
+    if (
       article.folderId &&
-      !folderIds.has(article.folderId)
+      !validFolderIds.has(article.folderId)
     ) {
       throw new Error(
         `El artículo ${article.id} apunta a una carpeta inexistente`,
@@ -202,10 +217,27 @@ export async function confirmKnowledgeImport({
     ),
   );
 
-  validateProposalReferences(
-    proposal,
-    new Set(importFilesById.keys()),
-  );
+const existingFolders =
+  await prisma.knowledge_libraries.findMany({
+    where: {
+      owner_user_id: userId,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+const existingFolderIds = new Set(
+  existingFolders.map(
+    (folder) => folder.id,
+  ),
+);
+
+validateProposalReferences(
+  proposal,
+  new Set(importFilesById.keys()),
+  existingFolderIds,
+);
 
   await prisma.knowledge_imports.update({
     where: {
@@ -298,6 +330,13 @@ export async function confirmKnowledgeImport({
           const parentDatabaseFolderId =
             databaseFolderIdByProposalId.get(
               parentProposalFolderId,
+            ) ??
+            (
+              existingFolderIds.has(
+                parentProposalFolderId,
+              )
+                ? parentProposalFolderId
+                : undefined
             );
 
           if (!parentDatabaseFolderId) {
@@ -344,19 +383,6 @@ export async function confirmKnowledgeImport({
           [];
 
         for (const article of proposal.articles) {
-          const databaseFolderId =
-            article.folderId === null
-              ? knowledgeImport.library_id
-              : databaseFolderIdByProposalId.get(
-                  article.folderId,
-                );
-
-          if (!databaseFolderId) {
-            throw new Error(
-              `No se ha podido resolver la carpeta del artículo ${article.title}`,
-            );
-          }
-
           const articleFiles =
             article.documentIds.map(
               (documentId) => {
@@ -373,7 +399,7 @@ export async function confirmKnowledgeImport({
               },
             );
 
-          const combinedContent = articleFiles
+          const importedContent = articleFiles
             .map((file) => {
               return [
                 `# ${file.file_name}`,
@@ -383,27 +409,131 @@ export async function confirmKnowledgeImport({
             })
             .join("\n\n---\n\n");
 
-          const createdArticle =
-            await tx.knowledge_sources.create({
-              data: {
-                owner_user_id:
-                  knowledgeImport.owner_user_id,
-                title: article.title,
-                description:
-                  article.description,
-                visibility: "private",
-                content: combinedContent,
-                status: "published",
-                knowledge_type: "article",
-                library_id: databaseFolderId,
-                created_by_user_id: userId,
-                updated_by_user_id: userId,
-                summary: article.description,
-                confidence: article.confidence,
-                company_id:
-                  knowledgeImport.company_id,
-              },
-            });
+          let persistedArticle: {
+            id: string;
+            title: string;
+            description: string | null;
+            library_id: string | null;
+          };
+
+          if (article.action === "update") {
+            if (!article.existingArticleId) {
+              throw new Error(
+                `El artículo ${article.id} está marcado como actualización pero no contiene existingArticleId`,
+              );
+            }
+
+            const existingArticle =
+              await tx.knowledge_sources.findFirst({
+                where: {
+                  id: article.existingArticleId,
+                  owner_user_id:
+                    knowledgeImport.owner_user_id,
+                },
+                select: {
+                  id: true,
+                  title: true,
+                  description: true,
+                  content: true,
+                  library_id: true,
+                },
+              });
+
+            if (!existingArticle) {
+              throw new Error(
+                `No se ha encontrado el artículo existente ${article.existingArticleId}`,
+              );
+            }
+
+            const combinedContent = [
+              existingArticle.content?.trim(),
+              importedContent.trim(),
+            ]
+              .filter(
+                (
+                  content,
+                ): content is string =>
+                  Boolean(content),
+              )
+              .join("\n\n---\n\n");
+
+            persistedArticle =
+              await tx.knowledge_sources.update({
+                where: {
+                  id: existingArticle.id,
+                },
+                data: {
+                  title:
+                    article.title ||
+                    existingArticle.title,
+                  description:
+                    article.description ||
+                    existingArticle.description,
+                  summary:
+                    article.description ||
+                    existingArticle.description,
+                  content: combinedContent,
+                  confidence:
+                    article.confidence,
+                  updated_by_user_id: userId,
+                },
+                select: {
+                  id: true,
+                  title: true,
+                  description: true,
+                  library_id: true,
+                },
+              });
+          } else {
+            const databaseFolderId =
+              article.folderId === null
+                ? knowledgeImport.library_id
+                : databaseFolderIdByProposalId.get(
+                    article.folderId,
+                  ) ??
+                  (
+                    existingFolderIds.has(
+                      article.folderId,
+                    )
+                      ? article.folderId
+                      : undefined
+                  );
+
+            if (!databaseFolderId) {
+              throw new Error(
+                `No se ha podido resolver la carpeta del artículo ${article.title}`,
+              );
+            }
+
+            persistedArticle =
+              await tx.knowledge_sources.create({
+                data: {
+                  owner_user_id:
+                    knowledgeImport.owner_user_id,
+                  title: article.title,
+                  description:
+                    article.description,
+                  visibility: "private",
+                  content: importedContent,
+                  status: "published",
+                  knowledge_type: "article",
+                  library_id: databaseFolderId,
+                  created_by_user_id: userId,
+                  updated_by_user_id: userId,
+                  summary: article.description,
+                  confidence:
+                    article.confidence,
+                  company_id:
+                    knowledgeImport.company_id,
+                },
+                select: {
+                  id: true,
+                  title: true,
+                  description: true,
+                  library_id: true,
+                },
+              });
+          }
 
           const articleDocumentLogs: KnowledgeImportExecutionLog["documents"] =
             [];
@@ -413,7 +543,7 @@ export async function confirmKnowledgeImport({
               await tx.knowledge_files.create({
                 data: {
                   knowledge_source_id:
-                    createdArticle.id,
+                    persistedArticle.id,
                   file_name:
                     importFile.file_name,
                   file_type:
@@ -435,9 +565,10 @@ export async function confirmKnowledgeImport({
                 createdKnowledgeFile.id,
               fileName:
                 createdKnowledgeFile.file_name,
-              articleId: createdArticle.id,
+              articleId:
+                persistedArticle.id,
               articleTitle:
-                createdArticle.title,
+                persistedArticle.title,
               extractedCharacters:
                 importFile.extracted_text.length,
               storagePath:
@@ -449,39 +580,32 @@ export async function confirmKnowledgeImport({
             ...articleDocumentLogs,
           );
 
-createdArticles.push({
-  proposalArticleId: article.id,
-
-  action: article.action,
-  existingArticleId:
-    article.existingArticleId,
-
-  databaseArticleId:
-    createdArticle.id,
-
-  title:
-    createdArticle.title,
-
-  description:
-    createdArticle.description ?? "",
-
-  proposalFolderId:
-    article.folderId,
-
-  databaseFolderId,
-
-  confidence:
-    article.confidence,
-
-  documentIds:
-    article.documentIds,
-
-  knowledgeFileIds:
-    articleDocumentLogs.map(
-      (document) =>
-        document.knowledgeFileId,
-    ),
-});
+          createdArticles.push({
+            proposalArticleId: article.id,
+            action: article.action,
+            existingArticleId:
+              article.existingArticleId,
+            databaseArticleId:
+              persistedArticle.id,
+            title:
+              persistedArticle.title,
+            description:
+              persistedArticle.description ?? "",
+            proposalFolderId:
+              article.folderId,
+            databaseFolderId:
+              persistedArticle.library_id ??
+              knowledgeImport.library_id,
+            confidence:
+              article.confidence,
+            documentIds:
+              article.documentIds,
+            knowledgeFileIds:
+              articleDocumentLogs.map(
+                (document) =>
+                  document.knowledgeFileId,
+              ),
+          });
         }
 
         const completedAt = new Date();
