@@ -4,8 +4,9 @@
 import { useState } from "react";
 
 import {
-  runKnowledgeImportPipeline,
-  type KnowledgeImportPipelineResult,
+  generateKnowledgeImportProposal,
+  runKnowledgeImportAnalysis,
+  type KnowledgeImportProposalResult,
 } from "./knowledge-import-api";
 import { KnowledgeImportProposalView } from "./knowledge-import-proposal";
 import { KnowledgeImportZone } from "./knowledge-import-zone";
@@ -40,13 +41,13 @@ export function KnowledgeImportFlow({
   const [importId, setImportId] =
     useState<string | null>(null);
 
-  const [
-    pipelineResult,
-    setPipelineResult,
-  ] =
-    useState<KnowledgeImportPipelineResult | null>(
-      null,
-    );
+const [
+  pipelineResult,
+  setPipelineResult,
+] =
+  useState<KnowledgeImportProposalResult | null>(
+    null,
+  );
 
   const [
     isConfirming,
@@ -72,13 +73,20 @@ export function KnowledgeImportFlow({
     setConfirmationError(null);
     setIsCompleted(false);
 
-    const result =
-      await runKnowledgeImportPipeline(
-        nextImportId,
-      );
+await runKnowledgeImportAnalysis(
+  nextImportId,
+);
 
-    setPipelineResult(result);
-    setStep("proposal");
+const proposalResult =
+  await generateKnowledgeImportProposal(
+    nextImportId,
+  );
+
+setPipelineResult(
+  proposalResult,
+);
+
+setStep("proposal");
   }
 
   async function handleConfirmImport() {

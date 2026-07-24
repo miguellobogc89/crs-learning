@@ -12,6 +12,7 @@ export type KnowledgeIntakeContext =
 export type KnowledgeIntakeModalStep =
   | "upload"
   | "analyzing"
+  | "analysis_result"
   | "proposal"
   | "completed";
 

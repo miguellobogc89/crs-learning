@@ -89,14 +89,13 @@ export type KnowledgeImportProgress = {
   updatedAt: string;
 };
 
-export type KnowledgeImportPipelineStage =
+export type KnowledgeImportAnalysisStage =
   | "analyzing"
-  | "extracting_text"
-  | "generating_proposal";
+  | "extracting_text";
 
-type RunKnowledgeImportPipelineOptions = {
+type RunKnowledgeImportAnalysisOptions = {
   onStageChange?: (
-    stage: KnowledgeImportPipelineStage,
+    stage: KnowledgeImportAnalysisStage,
   ) => void;
 
   onProgress?: (
@@ -104,13 +103,14 @@ type RunKnowledgeImportPipelineOptions = {
   ) => void;
 };
 
-export type KnowledgeImportPipelineResult = {
+export type KnowledgeImportAnalysisResult = {
   importId: string;
-
   extraction: AnalyzeImportResponse;
-
   textExtraction: ExtractTextResponse;
+};
 
+export type KnowledgeImportProposalResult = {
+  importId: string;
   proposal: KnowledgeImportProposal;
 };
 
@@ -264,10 +264,10 @@ function startProgressPolling(
   };
 }
 
-export async function runKnowledgeImportPipeline(
+export async function runKnowledgeImportAnalysis(
   importId: string,
-  options: RunKnowledgeImportPipelineOptions = {},
-): Promise<KnowledgeImportPipelineResult> {
+  options: RunKnowledgeImportAnalysisOptions = {},
+): Promise<KnowledgeImportAnalysisResult> {
   options.onStageChange?.("analyzing");
 
   const extraction =
@@ -303,18 +303,16 @@ export async function runKnowledgeImportPipeline(
     stopPolling();
   }
 
-  if (
-    textExtraction.successfulFiles === 0
-  ) {
-    throw new Error(
-      "No se ha podido obtener texto de ninguno de los documentos",
-    );
-  }
+  return {
+    importId,
+    extraction,
+    textExtraction,
+  };
+}
 
-  options.onStageChange?.(
-    "generating_proposal",
-  );
-
+export async function generateKnowledgeImportProposal(
+  importId: string,
+): Promise<KnowledgeImportProposalResult> {
   const proposalResult =
     await generateImportProposal(
       importId,
@@ -322,8 +320,6 @@ export async function runKnowledgeImportPipeline(
 
   return {
     importId,
-    extraction,
-    textExtraction,
     proposal:
       proposalResult.proposal,
   };

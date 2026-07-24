@@ -64,9 +64,12 @@ function normalizeStep(
     return "upload";
   }
 
-  if (step === "analyzing") {
-    return "analyzing";
-  }
+if (
+  step === "analyzing" ||
+  step === "analysis_result"
+) {
+  return "analyzing";
+}
 
   if (step === "proposal") {
     return "proposal";

@@ -15,6 +15,9 @@ import type { KnowledgeIntakeModalStep } from "./knowledge-intake-modal.types";
 type Props = {
   step: KnowledgeIntakeModalStep;
   fileCount: number;
+  validFileCount: number;
+failedFileCount: number;
+onContinueAnalysis: () => void;
   isAnalyzing: boolean;
   isConfirming: boolean;
   onCancel: () => void;
@@ -28,11 +31,14 @@ type Props = {
 export function KnowledgeIntakeModalFooter({
   step,
   fileCount,
+  validFileCount,
+  failedFileCount,
   isAnalyzing,
   isConfirming,
   onCancel,
   onBack,
   onAnalyze,
+  onContinueAnalysis,
   onConfirm,
   onReset,
   onClose,
@@ -54,6 +60,46 @@ export function KnowledgeIntakeModalFooter({
     );
   }
 
+if (
+  step === "analysis_result"
+) {
+  return (
+    <footer className="shrink-0 border-t border-border bg-background px-6 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onBack}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Volver y revisar
+        </Button>
+
+        <Button
+          type="button"
+          disabled={
+            validFileCount === 0
+          }
+          onClick={
+            onContinueAnalysis
+          }
+          className="h-11 bg-black px-5 text-white hover:bg-black/90 disabled:bg-black/40 disabled:text-white/70"
+        >
+          <Sparkles className="mr-2 h-4 w-4" />
+
+          {failedFileCount > 0
+            ? `Continuar con ${validFileCount} ${
+                validFileCount === 1
+                  ? "documento"
+                  : "documentos"
+              }`
+            : "Generar propuesta"}
+        </Button>
+      </div>
+    </footer>
+  );
+}
+  
   if (step === "proposal") {
     return (
       <footer className="shrink-0 border-t border-border bg-background px-6 py-4">

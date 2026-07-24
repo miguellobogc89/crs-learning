@@ -124,9 +124,12 @@ export async function GET(
 
 const files =
   await prisma.knowledge_import_files.findMany({
-    where: {
-      import_id: importId,
-    },
+where: {
+  import_id: importId,
+  status: {
+    not: "uploaded",
+  },
+},
     orderBy: [
       {
         processing_order: "asc",

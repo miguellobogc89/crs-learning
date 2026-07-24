@@ -14,6 +14,7 @@ import {
 import { useKnowledgeIntake } from "../hooks/use-knowledge-intake";
 import { KnowledgeIntakeModalHeader } from "./knowledge-intake-modal-header";
 import { KnowledgeIntakeModalProgress } from "./knowledge-intake-modal-progress";
+import { KnowledgeIntakeAnalysisResultStep } from "./knowledge-intake-analysis-result-step";
 import { KnowledgeIntakeModalFooter } from "./knowledge-intake-modal-footer";
 import { KnowledgeIntakeUploadStep } from "./knowledge-intake-upload-step";
 import { KnowledgeIntakeProcessingStep } from "./knowledge-intake-processing-step";
@@ -119,6 +120,17 @@ function requestClose() {
 />
 ) : null}
 
+{intake.step ===
+"analysis_result" ? (
+  <KnowledgeIntakeAnalysisResultStep
+    files={intake.fileProgress}
+    summary={
+      intake.progressSummary
+    }
+    error={intake.error}
+  />
+) : null}
+
             {intake.step === "proposal" &&
             intake.proposal ? (
               intake.isConfirming ? (
@@ -156,11 +168,20 @@ function requestClose() {
 <KnowledgeIntakeModalFooter
   step={intake.step}
   fileCount={intake.files.length}
+  validFileCount={
+    intake.progressSummary.completedFiles
+  }
+  failedFileCount={
+    intake.progressSummary.failedFiles
+  }
   isAnalyzing={intake.isAnalyzing}
   isConfirming={intake.isConfirming}
   onCancel={requestClose}
   onBack={intake.goBackToUpload}
   onAnalyze={intake.analyzeDocuments}
+  onContinueAnalysis={
+    intake.continueWithValidDocuments
+  }
   onConfirm={intake.confirmProposal}
   onReset={intake.reset}
   onClose={() => {
