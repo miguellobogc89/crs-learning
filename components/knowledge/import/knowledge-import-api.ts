@@ -9,14 +9,36 @@ type ApiErrorBody = {
   error?: string;
 };
 
+export type KnowledgeImportDuplicateFile = {
+  name: string;
+  relativePath: string;
+  size: number;
+  existingFileId: string;
+  existingArticleId: string;
+  existingArticleTitle: string;
+};
+
 type AnalyzeImportResponse = {
   importId: string;
-  status: "extracted";
-  processingStatus: string;
+
+  status:
+    | "extracted"
+    | "completed";
+
+  processingStatus:
+    | "pending"
+    | "completed";
+
   fileCount: number;
   completedFiles: number;
   failedFiles: number;
   totalSize: number;
+
+  duplicateCount: number;
+  allFilesDuplicate: boolean;
+
+  duplicateFiles:
+    KnowledgeImportDuplicateFile[];
 };
 
 type ExtractTextResponse = {
@@ -432,6 +454,27 @@ export async function runKnowledgeImportAnalysis(
 
   const extraction =
     await analyzeImport(importId);
+
+  /*
+   * Si todos los documentos ya existen, detenemos
+   * aquí el proceso. No extraemos texto ni llamamos
+   * posteriormente a la IA.
+   */
+  if (extraction.allFilesDuplicate) {
+    return {
+      importId,
+      extraction,
+      textExtraction: {
+        importId,
+        status: "text_ready",
+        processingStatus: "completed",
+        totalFiles: 0,
+        successfulFiles: 0,
+        failedFiles: 0,
+        totalCharacters: 0,
+      },
+    };
+  }
 
   options.onStageChange?.(
     "extracting_text",

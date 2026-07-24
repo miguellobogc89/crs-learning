@@ -920,6 +920,66 @@ setFileProgress(
           );
 
 if (
+  analysisResult.extraction
+    .duplicateCount > 0
+) {
+  const duplicateFiles =
+    analysisResult.extraction
+      .duplicateFiles;
+
+  const articleTitles =
+    Array.from(
+      new Set(
+        duplicateFiles.map(
+          (file) =>
+            file.existingArticleTitle,
+        ),
+      ),
+    );
+
+  if (
+    analysisResult.extraction
+      .allFilesDuplicate
+  ) {
+    const duplicateDescription =
+      articleTitles.length === 1
+        ? `El documento ya existe en "${articleTitles[0]}" y se ha descartado.`
+        : `${duplicateFiles.length} documentos ya existían en la biblioteca y se han descartado.`;
+
+    toast.warning(
+      duplicateFiles.length === 1
+        ? "El documento ya existe"
+        : "Los documentos ya existen",
+      {
+        description:
+          duplicateDescription,
+      },
+    );
+
+    setError(
+      duplicateDescription,
+    );
+
+    /*
+     * Volvemos al estado de subida. No queda habilitada
+     * la generación de propuesta.
+     */
+    setStep("upload");
+    return;
+  }
+
+  toast.warning(
+    duplicateFiles.length === 1
+      ? "Se ha descartado un duplicado"
+      : `Se han descartado ${duplicateFiles.length} duplicados`,
+    {
+      description:
+        "Los demás documentos continuarán analizándose.",
+    },
+  );
+}
+
+if (
   analysisResult
     .textExtraction
     .successfulFiles === 0
