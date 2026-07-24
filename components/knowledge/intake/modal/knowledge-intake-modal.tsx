@@ -222,6 +222,9 @@ export function KnowledgeIntakeModal({
                 summary={
                   intake.progressSummary
                 }
+                proposalProgress={
+                  intake.proposalProgress
+                }
               />
             ) : null}
 

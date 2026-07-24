@@ -1,8 +1,10 @@
 // app/api/knowledge/import/[importId]/generate-proposal/route.ts
-import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
-import { generateKnowledgeImportProposal } from "@/lib/knowledge/import/generate-proposal";
+import {
+  generateKnowledgeImportProposal,
+  type KnowledgeImportProposalProgress,
+} from "@/lib/knowledge/import/generate-proposal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,34 +16,28 @@ type RouteContext = {
   }>;
 };
 
-function getErrorStatus(errorMessage: string) {
-  if (
-    errorMessage ===
-      "Importación no encontrada"
-  ) {
-    return 404;
-  }
+type ProposalStreamEvent =
+  | {
+      type: "progress";
+      progress: KnowledgeImportProposalProgress;
+    }
+  | {
+      type: "completed";
+      result: Awaited<
+        ReturnType<
+          typeof generateKnowledgeImportProposal
+        >
+      >;
+    }
+  | {
+      type: "error";
+      error: string;
+    };
 
-  if (
-    errorMessage.includes(
-      "ya se está generando",
-    ) ||
-    errorMessage.includes(
-      "todavía no está preparada",
-    )
-  ) {
-    return 409;
-  }
-
-  if (
-    errorMessage.includes(
-      "No hay documentos",
-    )
-  ) {
-    return 400;
-  }
-
-  return 500;
+function serializeEvent(
+  event: ProposalStreamEvent,
+) {
+  return `${JSON.stringify(event)}\n`;
 }
 
 export async function POST(
@@ -51,7 +47,7 @@ export async function POST(
   const session = await auth();
 
   if (!session?.user?.id) {
-    return NextResponse.json(
+    return Response.json(
       {
         error: "No autorizado",
       },
@@ -65,7 +61,7 @@ export async function POST(
     await context.params;
 
   if (!importId) {
-    return NextResponse.json(
+    return Response.json(
       {
         error:
           "Importación no válida",
@@ -76,33 +72,83 @@ export async function POST(
     );
   }
 
-  try {
-    const result =
-      await generateKnowledgeImportProposal({
-        importId,
-        userId: session.user.id,
-      });
+  const userId =
+    session.user.id;
 
-    return NextResponse.json(result);
-  } catch (error) {
-    console.error(
-      "Error generating knowledge import proposal:",
-      error,
-    );
+  const encoder =
+    new TextEncoder();
 
-    const errorMessage =
-      error instanceof Error
-        ? error.message
-        : "No se ha podido generar la propuesta";
+  const stream =
+    new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let closed = false;
 
-    return NextResponse.json(
-      {
-        error: errorMessage,
+        function send(
+          event: ProposalStreamEvent,
+        ) {
+          if (closed) {
+            return;
+          }
+
+          controller.enqueue(
+            encoder.encode(
+              serializeEvent(event),
+            ),
+          );
+        }
+
+        try {
+          const result =
+            await generateKnowledgeImportProposal(
+              {
+                importId,
+                userId,
+                onProgress:
+                  async (
+                    progress,
+                  ) => {
+                    send({
+                      type: "progress",
+                      progress,
+                    });
+                  },
+              },
+            );
+
+          send({
+            type: "completed",
+            result,
+          });
+        } catch (error) {
+          console.error(
+            "Error generating knowledge import proposal:",
+            error,
+          );
+
+          send({
+            type: "error",
+            error:
+              error instanceof Error
+                ? error.message
+                : "No se ha podido generar la propuesta",
+          });
+        } finally {
+          closed = true;
+          controller.close();
+        }
       },
-      {
-        status:
-          getErrorStatus(errorMessage),
-      },
-    );
-  }
+    });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type":
+        "application/x-ndjson; charset=utf-8",
+      "Cache-Control":
+        "no-cache, no-transform",
+      Connection:
+        "keep-alive",
+      "X-Accel-Buffering":
+        "no",
+    },
+  });
 }

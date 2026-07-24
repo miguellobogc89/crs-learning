@@ -33,6 +33,7 @@ import {
   generateKnowledgeImportProposal,
   runKnowledgeImportAnalysis,
   type KnowledgeImportProgress,
+  type KnowledgeImportProposalProgress,
 } from "../../import/knowledge-import-api";
 import {
   createSelectedDocuments,
@@ -575,6 +576,14 @@ export function useKnowledgeIntake({
   >([]);
 
   const [
+    proposalProgress,
+    setProposalProgress,
+  ] =
+    useState<KnowledgeImportProposalProgress | null>(
+      null,
+    );
+
+  const [
     progressSummary,
     setProgressSummary,
   ] = useState({
@@ -964,12 +973,24 @@ if (
       setProcessingPhase(
         "generating_proposal",
       );
+
+      setProposalProgress({
+        step: "preparing",
+        progressPercentage: 0,
+        message:
+          "Preparando la generación de la propuesta",
+      });
+
       setStep("analyzing");
 
       try {
         const proposalResult =
           await generateKnowledgeImportProposal(
             importId,
+            {
+              onProgress:
+                setProposalProgress,
+            },
           );
 
         setImportProposal(
@@ -1091,6 +1112,7 @@ if (
     );
 
     setFileProgress([]);
+    setProposalProgress(null);
 
     setProgressSummary({
       totalFiles: 0,
@@ -1115,6 +1137,7 @@ if (
     processingPhase,
     fileProgress,
     progressSummary,
+    proposalProgress,
 
     handleFilesChange,
     analyzeDocuments,

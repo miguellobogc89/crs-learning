@@ -27,9 +27,29 @@ import type {
 
 const DOCUMENTS_PER_ANALYSIS_BATCH = 4;
 
+export type KnowledgeImportProposalProgressStep =
+  | "preparing"
+  | "analyzing_documents"
+  | "reading_knowledge"
+  | "designing_structure"
+  | "validating_structure"
+  | "saving_proposal"
+  | "completed";
+
+export type KnowledgeImportProposalProgress = {
+  step: KnowledgeImportProposalProgressStep;
+  progressPercentage: number;
+  message: string;
+};
+
+type ProposalProgressCallback = (
+  progress: KnowledgeImportProposalProgress,
+) => void | Promise<void>;
+
 type GenerateProposalInput = {
   importId: string;
   userId: string;
+  onProgress?: ProposalProgressCallback;
 };
 
 type DocumentAnalysisResponse = {
@@ -505,6 +525,7 @@ async function analyzeDocumentBatch(
 
 async function analyzeDocuments(
   documents: KnowledgeImportDocumentInput[],
+  onProgress?: ProposalProgressCallback,
 ) {
   const batches = splitIntoBatches(
     documents,
@@ -514,16 +535,47 @@ async function analyzeDocuments(
   const analyses: KnowledgeImportDocumentAnalysis[] =
     [];
 
-  /*
-   * Los lotes se procesan secuencialmente para no
-   * lanzar muchas llamadas simultáneas ni provocar
-   * límites de concurrencia innecesarios.
-   */
-  for (const batch of batches) {
+  for (
+    let batchIndex = 0;
+    batchIndex < batches.length;
+    batchIndex += 1
+  ) {
+    const batch =
+      batches[batchIndex];
+
+    await onProgress?.({
+      step: "analyzing_documents",
+      progressPercentage:
+        10 +
+        Math.round(
+          (batchIndex /
+            batches.length) *
+            55,
+        ),
+      message:
+        batches.length === 1
+          ? "Analizando el contenido de los documentos"
+          : `Analizando lote ${batchIndex + 1} de ${batches.length}`,
+    });
+
     const batchAnalyses =
-      await analyzeDocumentBatch(batch);
+      await analyzeDocumentBatch(
+        batch,
+      );
 
     analyses.push(...batchAnalyses);
+
+    await onProgress?.({
+      step: "analyzing_documents",
+      progressPercentage:
+        10 +
+        Math.round(
+          ((batchIndex + 1) /
+            batches.length) *
+            55,
+        ),
+      message: `${analyses.length} de ${documents.length} documentos comprendidos`,
+    });
   }
 
   return analyses;
@@ -594,7 +646,15 @@ return normalizedProposal;
 export async function generateKnowledgeImportProposal({
   importId,
   userId,
+  onProgress,
 }: GenerateProposalInput): Promise<GenerateKnowledgeImportProposalResult> {
+  await onProgress?.({
+    step: "preparing",
+    progressPercentage: 3,
+    message:
+      "Preparando los documentos válidos",
+  });
+
   const knowledgeImport =
     await prisma.knowledge_imports.findFirst({
       where: {
@@ -659,6 +719,12 @@ export async function generateKnowledgeImportProposal({
       ),
     }));
 
+  await onProgress?.({
+    step: "preparing",
+    progressPercentage: 8,
+    message: `${documents.length} documentos preparados`,
+  });
+
   await prisma.knowledge_imports.update({
     where: {
       id: importId,
@@ -672,21 +738,54 @@ export async function generateKnowledgeImportProposal({
 
   try {
     const documentAnalyses =
-      await analyzeDocuments(documents);
+      await analyzeDocuments(
+        documents,
+        onProgress,
+      );
 
-const existingKnowledge =
-  await listKnowledgeStatus(userId);
+    await onProgress?.({
+      step: "reading_knowledge",
+      progressPercentage: 70,
+      message:
+        "Revisando la estructura actual de Knowledge",
+    });
 
-const generatedProposal =
-  await generateGlobalProposal(
-    documentAnalyses,
-    existingKnowledge,
-  );
+    const existingKnowledge =
+      await listKnowledgeStatus(
+        userId,
+      );
+
+    await onProgress?.({
+      step: "designing_structure",
+      progressPercentage: 76,
+      message:
+        "Definiendo carpetas y artículos",
+    });
+
+    const generatedProposal =
+      await generateGlobalProposal(
+        documentAnalyses,
+        existingKnowledge,
+      );
+
+    await onProgress?.({
+      step: "validating_structure",
+      progressPercentage: 91,
+      message:
+        "Validando la estructura propuesta",
+    });
 
     const proposal: KnowledgeImportProposal = {
       ...generatedProposal,
       documentAnalyses,
     };
+
+    await onProgress?.({
+      step: "saving_proposal",
+      progressPercentage: 96,
+      message:
+        "Guardando la propuesta",
+    });
 
     await prisma.knowledge_imports.update({
       where: {
@@ -698,6 +797,13 @@ const generatedProposal =
         error_message: null,
         updated_at: new Date(),
       },
+    });
+
+    await onProgress?.({
+      step: "completed",
+      progressPercentage: 100,
+      message:
+        "Estructura definida correctamente",
     });
 
     return {

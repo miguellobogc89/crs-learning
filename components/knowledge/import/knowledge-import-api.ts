@@ -114,6 +114,41 @@ export type KnowledgeImportProposalResult = {
   proposal: KnowledgeImportProposal;
 };
 
+export type KnowledgeImportProposalProgressStep =
+  | "preparing"
+  | "analyzing_documents"
+  | "reading_knowledge"
+  | "designing_structure"
+  | "validating_structure"
+  | "saving_proposal"
+  | "completed";
+
+export type KnowledgeImportProposalProgress = {
+  step: KnowledgeImportProposalProgressStep;
+  progressPercentage: number;
+  message: string;
+};
+
+type GenerateProposalStreamEvent =
+  | {
+      type: "progress";
+      progress: KnowledgeImportProposalProgress;
+    }
+  | {
+      type: "completed";
+      result: GenerateKnowledgeImportProposalResult;
+    }
+  | {
+      type: "error";
+      error: string;
+    };
+
+type GenerateKnowledgeImportProposalOptions = {
+  onProgress?: (
+    progress: KnowledgeImportProposalProgress,
+  ) => void;
+};
+
 async function readResponse<T>(
   response: Response,
   fallbackError: string,
@@ -174,18 +209,143 @@ async function extractImportText(
 
 async function generateImportProposal(
   importId: string,
+  options: GenerateKnowledgeImportProposalOptions,
 ) {
   const response = await fetch(
     `/api/knowledge/import/${importId}/generate-proposal`,
     {
       method: "POST",
+      headers: {
+        Accept:
+          "application/x-ndjson",
+      },
     },
   );
 
-  return readResponse<GenerateKnowledgeImportProposalResult>(
-    response,
-    "No se ha podido generar la propuesta de organización",
-  );
+  if (!response.ok) {
+    const body = (await response
+      .json()
+      .catch(() => null)) as
+      | ApiErrorBody
+      | null;
+
+    throw new Error(
+      body?.error ??
+        "No se ha podido iniciar la generación de la propuesta",
+    );
+  }
+
+  if (!response.body) {
+    throw new Error(
+      "El servidor no ha iniciado el flujo de generación",
+    );
+  }
+
+  const reader =
+    response.body.getReader();
+
+  const decoder =
+    new TextDecoder();
+
+  let buffer = "";
+
+  let completedResult:
+    | GenerateKnowledgeImportProposalResult
+    | null = null;
+
+  while (true) {
+    const {
+      done,
+      value,
+    } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(
+      value,
+      {
+        stream: true,
+      },
+    );
+
+    const lines =
+      buffer.split("\n");
+
+    buffer =
+      lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.trim()) {
+        continue;
+      }
+
+      const event =
+        JSON.parse(
+          line,
+        ) as GenerateProposalStreamEvent;
+
+      if (
+        event.type ===
+        "progress"
+      ) {
+        options.onProgress?.(
+          event.progress,
+        );
+        continue;
+      }
+
+      if (
+        event.type ===
+        "error"
+      ) {
+        throw new Error(
+          event.error,
+        );
+      }
+
+      completedResult =
+        event.result;
+    }
+  }
+
+  const remainingLine =
+    buffer.trim();
+
+  if (remainingLine) {
+    const event =
+      JSON.parse(
+        remainingLine,
+      ) as GenerateProposalStreamEvent;
+
+    if (
+      event.type ===
+      "progress"
+    ) {
+      options.onProgress?.(
+        event.progress,
+      );
+    } else if (
+      event.type ===
+      "error"
+    ) {
+      throw new Error(
+        event.error,
+      );
+    } else {
+      completedResult =
+        event.result;
+    }
+  }
+
+  if (!completedResult) {
+    throw new Error(
+      "La generación terminó sin devolver una propuesta",
+    );
+  }
+
+  return completedResult;
 }
 
 export async function getKnowledgeImportProgress(
@@ -312,10 +472,12 @@ export async function runKnowledgeImportAnalysis(
 
 export async function generateKnowledgeImportProposal(
   importId: string,
+  options: GenerateKnowledgeImportProposalOptions = {},
 ): Promise<KnowledgeImportProposalResult> {
   const proposalResult =
     await generateImportProposal(
       importId,
+      options,
     );
 
   return {

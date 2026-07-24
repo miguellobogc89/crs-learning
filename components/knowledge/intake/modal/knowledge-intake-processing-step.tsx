@@ -12,6 +12,10 @@ import {
 import { cn } from "@/lib/utils";
 
 import type {
+  KnowledgeImportProposalProgress,
+} from "../../import/knowledge-import-api";
+
+import type {
   KnowledgeIntakeFileProgress,
   KnowledgeIntakeProcessingPhase,
   KnowledgeIntakeProgressSummary,
@@ -21,6 +25,7 @@ type Props = {
   phase: KnowledgeIntakeProcessingPhase;
   files: KnowledgeIntakeFileProgress[];
   summary: KnowledgeIntakeProgressSummary;
+  proposalProgress?: KnowledgeImportProposalProgress | null;
 };
 
 function getFileStatusLabel(
@@ -81,6 +86,7 @@ export function KnowledgeIntakeProcessingStep({
   phase,
   files,
   summary,
+  proposalProgress,
 }: Props) {
   const totalFiles =
     summary.totalFiles ||
@@ -99,12 +105,18 @@ export function KnowledgeIntakeProcessingStep({
     phase === "generating_proposal";
 
   const displayedPercentage =
-    analysisFinished
-      ? 100
-      : Math.min(
-          summary.progressPercentage,
-          99,
-        );
+    isGeneratingProposal
+      ? Math.min(
+          proposalProgress?.progressPercentage ??
+            0,
+          100,
+        )
+      : analysisFinished
+        ? 100
+        : Math.min(
+            summary.progressPercentage,
+            99,
+          );
 
   const headerTitle =
     isGeneratingProposal
@@ -115,7 +127,8 @@ export function KnowledgeIntakeProcessingStep({
 
   const headerDescription =
     isGeneratingProposal
-      ? "La IA está preparando la estructura sugerida."
+      ? proposalProgress?.message ??
+        "La IA está preparando la estructura sugerida."
       : analysisFinished
         ? `${summary.completedFiles} ${
             summary.completedFiles === 1
@@ -186,15 +199,18 @@ export function KnowledgeIntakeProcessingStep({
       <div className="mt-6 shrink-0">
         <div className="flex items-center justify-between gap-4">
           <p className="text-sm font-medium text-foreground">
-            {analysisFinished
-              ? "Documentos analizados"
-              : "Progreso del análisis"}
+            {isGeneratingProposal
+              ? "Progreso de la propuesta"
+              : analysisFinished
+                ? "Documentos analizados"
+                : "Progreso del análisis"}
           </p>
 
           <span
             className={cn(
               "text-sm font-semibold",
-              analysisFinished
+              analysisFinished &&
+                !isGeneratingProposal
                 ? "text-emerald-600 dark:text-emerald-400"
                 : "text-violet-600 dark:text-violet-400",
             )}
@@ -207,7 +223,8 @@ export function KnowledgeIntakeProcessingStep({
           <div
             className={cn(
               "h-full rounded-full transition-[width,background-color] duration-500 ease-out",
-              analysisFinished
+              analysisFinished &&
+                !isGeneratingProposal
                 ? "bg-emerald-500"
                 : "bg-violet-500",
             )}
@@ -217,36 +234,43 @@ export function KnowledgeIntakeProcessingStep({
           />
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
-          <span>
-            Preparados:{" "}
-            <strong className="text-emerald-700 dark:text-emerald-400">
-              {summary.completedFiles}
-            </strong>
-          </span>
-
-          <span>
-            Fallidos:{" "}
-            <strong
-              className={cn(
-                summary.failedFiles > 0
-                  ? "text-red-700 dark:text-red-400"
-                  : "text-foreground",
-              )}
-            >
-              {summary.failedFiles}
-            </strong>
-          </span>
-
-          {!analysisFinished ? (
+        {!isGeneratingProposal ? (
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
             <span>
-              Pendientes:{" "}
-              <strong className="text-foreground">
-                {summary.pendingFiles}
+              Preparados:{" "}
+              <strong className="text-emerald-700 dark:text-emerald-400">
+                {summary.completedFiles}
               </strong>
             </span>
-          ) : null}
-        </div>
+
+            <span>
+              Fallidos:{" "}
+              <strong
+                className={cn(
+                  summary.failedFiles > 0
+                    ? "text-red-700 dark:text-red-400"
+                    : "text-foreground",
+                )}
+              >
+                {summary.failedFiles}
+              </strong>
+            </span>
+
+            {!analysisFinished ? (
+              <span>
+                Pendientes:{" "}
+                <strong className="text-foreground">
+                  {summary.pendingFiles}
+                </strong>
+              </span>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">
+            {proposalProgress?.message ??
+              "Preparando la estructura sugerida"}
+          </p>
+        )}
       </div>
 
       <div className="mt-6 min-h-0 flex-1 overflow-y-auto pr-2">
