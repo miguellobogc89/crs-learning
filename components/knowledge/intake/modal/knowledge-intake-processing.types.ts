@@ -17,6 +17,8 @@ export type KnowledgeIntakeFileProgressStatus =
 export type KnowledgeIntakeFileProgress = {
   id: string;
   name: string;
+  size?: number;
+  fileType?: string;
   status: KnowledgeIntakeFileProgressStatus;
   relativePath?: string;
   processingOrder?: number | null;

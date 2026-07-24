@@ -1,4 +1,5 @@
 // components/knowledge/intake/modal/knowledge-intake-modal-footer.tsx
+
 "use client";
 
 import {
@@ -16,13 +17,13 @@ type Props = {
   step: KnowledgeIntakeModalStep;
   fileCount: number;
   validFileCount: number;
-failedFileCount: number;
-onContinueAnalysis: () => void;
+  failedFileCount: number;
   isAnalyzing: boolean;
   isConfirming: boolean;
   onCancel: () => void;
   onBack: () => void;
   onAnalyze: () => void;
+  onContinueAnalysis: () => void;
   onConfirm: () => void;
   onReset: () => void;
   onClose: () => void;
@@ -44,62 +45,58 @@ export function KnowledgeIntakeModalFooter({
   onClose,
 }: Props) {
   if (step === "analyzing") {
+    const analysisFinished =
+      !isAnalyzing &&
+      fileCount > 0 &&
+      validFileCount + failedFileCount ===
+        fileCount;
+
+    const canGenerateProposal =
+      analysisFinished &&
+      validFileCount > 0;
+
     return (
       <footer className="shrink-0 border-t border-border bg-background px-6 py-4">
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-between gap-3">
           <Button
             type="button"
-            disabled
-            className="h-11 bg-black px-5 text-white hover:bg-black/90"
+            variant="outline"
+            disabled={isAnalyzing}
+            onClick={onCancel}
+            className="h-11 px-5"
           >
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Subiendo archivos
+            Cancelar
+          </Button>
+
+          <Button
+            type="button"
+            disabled={!canGenerateProposal}
+            onClick={
+              onContinueAnalysis
+            }
+            className="h-11 bg-black px-5 text-white hover:bg-black/90 disabled:bg-black/40 disabled:text-white/70"
+          >
+            {isAnalyzing ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 h-4 w-4" />
+            )}
+
+            {isAnalyzing
+              ? "Analizando documentos"
+              : validFileCount === 0
+                ? "No hay documentos válidos"
+                : `Generar propuesta con ${validFileCount} ${
+                    validFileCount === 1
+                      ? "documento"
+                      : "documentos"
+                  }`}
           </Button>
         </div>
       </footer>
     );
   }
 
-if (
-  step === "analysis_result"
-) {
-  return (
-    <footer className="shrink-0 border-t border-border bg-background px-6 py-4">
-      <div className="flex items-center justify-between gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onBack}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Volver y revisar
-        </Button>
-
-        <Button
-          type="button"
-          disabled={
-            validFileCount === 0
-          }
-          onClick={
-            onContinueAnalysis
-          }
-          className="h-11 bg-black px-5 text-white hover:bg-black/90 disabled:bg-black/40 disabled:text-white/70"
-        >
-          <Sparkles className="mr-2 h-4 w-4" />
-
-          {failedFileCount > 0
-            ? `Continuar con ${validFileCount} ${
-                validFileCount === 1
-                  ? "documento"
-                  : "documentos"
-              }`
-            : "Generar propuesta"}
-        </Button>
-      </div>
-    </footer>
-  );
-}
-  
   if (step === "proposal") {
     return (
       <footer className="shrink-0 border-t border-border bg-background px-6 py-4">
@@ -162,15 +159,15 @@ if (
   return (
     <footer className="shrink-0 border-t border-border bg-background px-6 py-4">
       <div className="flex items-center justify-between gap-3">
-<Button
-  type="button"
-  variant="outline"
-  disabled={isAnalyzing}
-  onClick={onCancel}
-  className="h-11 px-5"
->
-  Cancelar
-</Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={isAnalyzing}
+          onClick={onCancel}
+          className="h-11 px-5"
+        >
+          Cancelar
+        </Button>
 
         <Button
           type="button"

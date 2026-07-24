@@ -675,56 +675,76 @@ export function useKnowledgeIntake({
             null,
         });
 
-        setFileProgress(
-          progress.files.map(
-            (file) => {
-              let status:
-                | "pending"
-                | "processing"
-                | "completed"
-                | "error" =
-                "pending";
+setFileProgress(
+  (currentFiles) => {
+    const currentByName =
+      new Map(
+        currentFiles.map(
+          (file) => [
+            file.name,
+            file,
+          ],
+        ),
+      );
 
-              if (
-                file.processingStatus ===
-                "processing"
-              ) {
-                status =
-                  "processing";
-              } else if (
-                file.processingStatus ===
-                  "completed" ||
-                file.status ===
-                  "text_ready"
-              ) {
-                status =
-                  "completed";
-              } else if (
-                file.processingStatus ===
-                  "error" ||
-                file.status ===
-                  "text_error"
-              ) {
-                status = "error";
-              }
+    return progress.files.map(
+      (file) => {
+        const localFile =
+          currentByName.get(
+            file.name,
+          );
 
-              return {
-                id: file.id,
-                name: file.name,
-                relativePath:
-                  file.relativePath,
-                processingOrder:
-                  file.processingOrder,
-                processingStep:
-                  file.processingStep,
-                status,
-                error:
-                  file.error ??
-                  undefined,
-              };
-            },
-          ),
-        );
+        let status:
+          | "pending"
+          | "processing"
+          | "completed"
+          | "error" =
+          "pending";
+
+        if (
+          file.processingStatus ===
+          "processing"
+        ) {
+          status = "processing";
+        } else if (
+          file.processingStatus ===
+            "completed" ||
+          file.status ===
+            "text_ready"
+        ) {
+          status = "completed";
+        } else if (
+          file.processingStatus ===
+            "error" ||
+          file.status ===
+            "text_error"
+        ) {
+          status = "error";
+        }
+
+        return {
+          id: file.id,
+          name: file.name,
+          size:
+            file.size ??
+            localFile?.size,
+          fileType:
+            localFile?.fileType,
+          relativePath:
+            file.relativePath,
+          processingOrder:
+            file.processingOrder,
+          processingStep:
+            file.processingStep,
+          status,
+          error:
+            file.error ??
+            undefined,
+        };
+      },
+    );
+  },
+);
       },
       [],
     );
@@ -759,16 +779,24 @@ export function useKnowledgeIntake({
         currentFileName: null,
       });
 
-      setFileProgress(
-        selectedDocuments.map(
-          (document) => ({
-            id: document.id,
-            name:
-              document.file.name,
-            status: "pending",
-          }),
+setFileProgress(
+  selectedDocuments.map(
+    (document) => ({
+      id: document.id,
+      name:
+        document.file.name,
+      size:
+        document.file.size,
+      fileType:
+        document.file.type,
+      relativePath:
+        getRelativePath(
+          document.file,
         ),
-      );
+      status: "pending",
+    }),
+  ),
+);
 
       try {
         const selectedFiles =
@@ -882,19 +910,19 @@ export function useKnowledgeIntake({
             },
           );
 
-        if (
-          analysisResult
-            .textExtraction
-            .successfulFiles === 0
-        ) {
-          setError(
-            "No se ha podido obtener texto de ninguno de los documentos",
-          );
-        }
+if (
+  analysisResult
+    .textExtraction
+    .successfulFiles === 0
+) {
+  setError(
+    "No se ha podido obtener texto de ninguno de los documentos",
+  );
+}
 
-        setStep(
-          "analysis_result",
-        );
+// Permanecemos en la pantalla de análisis.
+// El botón "Generar propuesta" se activará
+// automáticamente cuando termine el proceso.
       } catch (caughtError) {
         setError(
           caughtError instanceof Error
@@ -964,7 +992,7 @@ export function useKnowledgeIntake({
         );
 
         setStep(
-          "analysis_result",
+          "analyzing",
         );
       } finally {
         setIsAnalyzing(false);
