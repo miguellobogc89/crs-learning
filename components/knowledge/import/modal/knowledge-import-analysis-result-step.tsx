@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-intake-analysis-result-step.tsx
+// components/knowledge/intake/modal/knowledge-import-analysis-result-step.tsx
 
 "use client";
 
@@ -12,17 +12,17 @@ import {
 import { cn } from "@/lib/utils";
 
 import type {
-  KnowledgeIntakeFileProgress,
-  KnowledgeIntakeProgressSummary,
-} from "./knowledge-intake-processing.types";
+  KnowledgeImportFileProgress,
+  KnowledgeImportProgressSummary,
+} from "./knowledge-import-processing.types";
 
 type Props = {
-  files: KnowledgeIntakeFileProgress[];
-  summary: KnowledgeIntakeProgressSummary;
+  files: KnowledgeImportFileProgress[];
+  summary: KnowledgeImportProgressSummary;
   error: string | null;
 };
 
-export function KnowledgeIntakeAnalysisResultStep({
+export function KnowledgeImportAnalysisResultStep({
   files,
   summary,
   error,

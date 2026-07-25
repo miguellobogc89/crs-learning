@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-intake-summary.tsx
+// components/knowledge/intake/modal/knowledge-import-summary.tsx
 
 type Props = {
   documentCount: number;
@@ -8,7 +8,7 @@ type Props = {
   createdFolders?: number;
 };
 
-export function KnowledgeIntakeSummary({
+export function KnowledgeImportSummary({
   documentCount,
   createdArticles,
   updatedArticles,

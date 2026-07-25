@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-intake-loading-overlay.tsx
+// components/knowledge/intake/modal/knowledge-import-loading-overlay.tsx
 import { Loader2, Sparkles } from "lucide-react";
 
 type Props = {
@@ -6,7 +6,7 @@ type Props = {
   description?: string;
 };
 
-export function KnowledgeIntakeLoadingOverlay({
+export function KnowledgeImportLoadingOverlay({
   title = "Aplicando la propuesta",
   description = "Estamos creando y actualizando la estructura del repositorio.",
 }: Props) {

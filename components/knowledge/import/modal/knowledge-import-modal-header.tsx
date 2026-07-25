@@ -1,12 +1,12 @@
-// components/knowledge/intake/modal/knowledge-intake-modal-header.tsx
+// components/knowledge/intake/modal/knowledge-import-modal-header.tsx
 
 import { FolderOpen, Library, Sparkles } from "lucide-react";
 import { DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { KnowledgeIntakeContext } from "./knowledge-intake-modal.types";
+import type { KnowledgeImportContext } from "./knowledge-import-modal.types";
 
-type Props = { context: KnowledgeIntakeContext };
+type Props = { context: KnowledgeImportContext };
 
-function getContextCopy(context: KnowledgeIntakeContext) {
+function getContextCopy(context: KnowledgeImportContext) {
   switch (context.origin) {
     case "article":
       return {
@@ -32,7 +32,7 @@ function getContextCopy(context: KnowledgeIntakeContext) {
   }
 }
 
-export function KnowledgeIntakeModalHeader({ context }: Props) {
+export function KnowledgeImportModalHeader({ context }: Props) {
   const copy = getContextCopy(context);
   const Icon = copy.icon;
 

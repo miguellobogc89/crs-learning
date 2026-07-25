@@ -1,4 +1,4 @@
-    // components/knowledge/intake/modal/knowledge-intake-analysis-progress.tsx
+    // components/knowledge/intake/modal/knowledge-import-analysis-progress.tsx
 
 import {
   CheckCircle2,
@@ -19,7 +19,7 @@ const steps = [
   "Preparando la propuesta",
 ];
 
-export function KnowledgeIntakeAnalysisProgress({
+export function KnowledgeImportAnalysisProgress({
   activeStep,
 }: Props) {
   return (

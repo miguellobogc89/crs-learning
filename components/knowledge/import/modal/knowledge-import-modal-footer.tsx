@@ -10,10 +10,10 @@ import {
 
 import { Button } from "@/components/ui/button";
 
-import type { KnowledgeIntakeModalStep } from "./knowledge-intake-modal.types";
+import type { KnowledgeImportModalStep } from "./knowledge-import-modal.types";
 
 type Props = {
-  step: KnowledgeIntakeModalStep;
+  step: KnowledgeImportModalStep;
   fileCount: number;
   validFileCount: number;
   duplicateFileCount: number;
@@ -29,7 +29,7 @@ type Props = {
   onClose: () => void;
 };
 
-export function KnowledgeIntakeModalFooter({
+export function KnowledgeImportModalFooter({
   step,
   fileCount,
   validFileCount,

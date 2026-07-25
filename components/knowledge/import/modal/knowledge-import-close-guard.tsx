@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-intake-close-guard.tsx
+// components/knowledge/intake/modal/knowledge-import-close-guard.tsx
 
 import {
   AlertTriangle,
@@ -20,7 +20,7 @@ type Props = {
   onConfirmClose: () => void;
 };
 
-export function KnowledgeIntakeCloseGuard({
+export function KnowledgeImportCloseGuard({
   open,
   onOpenChange,
   onConfirmClose,

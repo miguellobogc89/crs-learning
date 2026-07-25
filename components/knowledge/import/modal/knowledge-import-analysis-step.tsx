@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-intake-analysis-step.tsx
+// components/knowledge/intake/modal/knowledge-import-analysis-step.tsx
 import { CheckCircle2, Circle, Loader2 } from "lucide-react";
 
 const analysisSteps = [
@@ -11,7 +11,7 @@ const analysisSteps = [
 
 type Props = { activeStep?: number };
 
-export function KnowledgeIntakeAnalysisStep({ activeStep = 2 }: Props) {
+export function KnowledgeImportAnalysisStep({ activeStep = 2 }: Props) {
   return (
     <div className="rounded-2xl border border-border bg-card p-5">
       <div className="space-y-3">

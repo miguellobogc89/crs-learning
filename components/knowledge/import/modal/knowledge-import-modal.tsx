@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-intake-modal.tsx
+// components/knowledge/intake/modal/knowledge-import-modal.tsx
 
 "use client";
 import {
@@ -13,17 +13,17 @@ import {
 } from "@/components/ui/dialog";
 
 import { useKnowledgeImport } from "../hooks/use-knowledge-import";
-import { KnowledgeIntakeModalHeader } from "./knowledge-intake-modal-header";
-import { KnowledgeIntakeModalProgress } from "./knowledge-intake-modal-progress";
-import { KnowledgeIntakeModalFooter } from "./knowledge-intake-modal-footer";
-import { KnowledgeIntakeUploadStep } from "./knowledge-intake-upload-step";
-import { KnowledgeIntakeProcessingStep } from "./knowledge-intake-processing-step";
-import { KnowledgeIntakeProposalStep } from "./knowledge-intake-proposal-step";
-import { KnowledgeIntakeCompletedStep } from "./knowledge-intake-completed-step";
-import { KnowledgeIntakeCloseGuard } from "./knowledge-intake-close-guard";
-import { KnowledgeIntakeLoadingOverlay } from "./knowledge-intake-loading-overlay";
+import { KnowledgeImportModalHeader } from "./knowledge-import-modal-header";
+import { KnowledgeImportModalProgress } from "./knowledge-import-modal-progress";
+import { KnowledgeImportModalFooter } from "./knowledge-import-modal-footer";
+import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
+import { KnowledgeImportProcessingStep } from "./knowledge-import-processing-step";
+import { KnowledgeImportProposalStep } from "./knowledge-import-proposal-step";
+import { KnowledgeImportCompletedStep } from "./knowledge-import-completed-step";
+import { KnowledgeImportCloseGuard } from "./knowledge-import-close-guard";
+import { KnowledgeImportLoadingOverlay } from "./knowledge-import-loading-overlay";
 
-import type { KnowledgeIntakeModalProps } from "./knowledge-intake-modal.types";
+import type { KnowledgeImportModalProps } from "./knowledge-import-modal.types";
 
 function getFilesSelectionKey(
   files: File[] | undefined,
@@ -43,13 +43,13 @@ function getFilesSelectionKey(
     .join("|");
 }
 
-export function KnowledgeIntakeModal({
+export function KnowledgeImportModal({
   open,
   context,
   onOpenChange,
   onCompleted,
   selectedFiles,
-}: KnowledgeIntakeModalProps) {
+}: KnowledgeImportModalProps) {
   const [
     closeGuardOpen,
     setCloseGuardOpen,
@@ -166,11 +166,11 @@ export function KnowledgeIntakeModal({
           }}
           className="flex flex-col gap-0 overflow-hidden p-0"
         >
-          <KnowledgeIntakeModalHeader
+          <KnowledgeImportModalHeader
             context={context}
           />
 
-          <KnowledgeIntakeModalProgress
+          <KnowledgeImportModalProgress
             currentStep={
               isWaitingToStart
                 ? "analyzing"
@@ -180,7 +180,7 @@ export function KnowledgeIntakeModal({
 
           <div className="min-h-0 flex-1 overflow-hidden px-6 py-5">
             {isWaitingToStart ? (
-              <KnowledgeIntakeProcessingStep
+              <KnowledgeImportProcessingStep
                 phase="uploading"
                 files={
                   intake.fileProgress
@@ -204,7 +204,7 @@ export function KnowledgeIntakeModal({
 
             {!isWaitingToStart &&
             intake.step === "upload" ? (
-              <KnowledgeIntakeUploadStep
+              <KnowledgeImportUploadStep
                 files={intake.files}
                 isAnalyzing={
                   intake.isAnalyzing
@@ -219,7 +219,7 @@ export function KnowledgeIntakeModal({
             {!isWaitingToStart &&
             intake.step ===
               "analyzing" ? (
-              <KnowledgeIntakeProcessingStep
+              <KnowledgeImportProcessingStep
                 phase={
                   intake.processingPhase
                 }
@@ -241,9 +241,9 @@ export function KnowledgeIntakeModal({
               "proposal" &&
             intake.proposal ? (
               intake.isConfirming ? (
-                <KnowledgeIntakeLoadingOverlay />
+                <KnowledgeImportLoadingOverlay />
               ) : (
-                <KnowledgeIntakeProposalStep
+                <KnowledgeImportProposalStep
                   proposal={
                     intake.proposal
                   }
@@ -264,7 +264,7 @@ export function KnowledgeIntakeModal({
             {intake.step ===
               "completed" &&
             intake.completionResult ? (
-              <KnowledgeIntakeCompletedStep
+              <KnowledgeImportCompletedStep
                 result={
                   intake.completionResult
                 }
@@ -282,7 +282,7 @@ export function KnowledgeIntakeModal({
           </div>
 
           {!isWaitingToStart ? (
-            <KnowledgeIntakeModalFooter
+            <KnowledgeImportModalFooter
               step={intake.step}
               fileCount={
                 intake.progressSummary
@@ -333,7 +333,7 @@ export function KnowledgeIntakeModal({
         </DialogContent>
       </Dialog>
 
-      <KnowledgeIntakeCloseGuard
+      <KnowledgeImportCloseGuard
         open={closeGuardOpen}
         onOpenChange={
           setCloseGuardOpen

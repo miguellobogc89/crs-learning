@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-intake-upload-step.tsx
+// components/knowledge/intake/modal/knowledge-import-upload-step.tsx
 "use client";
 
 import {
@@ -145,7 +145,7 @@ function getFileCategory(
   return "other";
 }
 
-export function KnowledgeIntakeUploadStep({
+export function KnowledgeImportUploadStep({
   files,
   isAnalyzing,
   error,

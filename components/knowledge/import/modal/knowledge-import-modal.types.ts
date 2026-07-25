@@ -1,13 +1,13 @@
-// components/knowledge/intake/modal/knowledge-intake-modal.types.ts
+// components/knowledge/intake/modal/knowledge-import-modal.types.ts
 
 import type { ConfirmKnowledgeImportResult } from "@/lib/knowledge/import/types";
 
-export type KnowledgeIntakeOrigin =
+export type KnowledgeImportOrigin =
   | "root"
   | "folder"
   | "article";
 
-export type KnowledgeIntakeContext =
+export type KnowledgeImportContext =
   | {
       origin: "root";
       libraryId: string;
@@ -24,16 +24,16 @@ export type KnowledgeIntakeContext =
       articleId: string;
     };
 
-export type KnowledgeIntakeModalStep =
+export type KnowledgeImportModalStep =
   | "upload"
   | "analyzing"
   | "analysis_result"
   | "proposal"
   | "completed";
 
-export type KnowledgeIntakeModalProps = {
+export type KnowledgeImportModalProps = {
   open: boolean;
-  context: KnowledgeIntakeContext | null;
+  context: KnowledgeImportContext | null;
   onOpenChange: (open: boolean) => void;
   onCompleted?: (
     result: ConfirmKnowledgeImportResult,

@@ -7,7 +7,7 @@ import { CreateFolderDialog } from "./create-folder-dialog";
 import { KnowledgeExplorer } from "./knowledge-explorer";
 import { KnowledgeLibraryBreadcrumb } from "./knowledge-library-breadcrumb";
 import { KnowledgeToolbar } from "./knowledge-toolbar";
-import { KnowledgeIntakeModal } from "@/components/knowledge/import/modal";
+import { KnowledgeImportModal } from "@/components/knowledge/import/modal";
 import {
   buildLibraryTree,
   getLibraryPath,
@@ -91,7 +91,7 @@ export function KnowledgeContent({
   });
 
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
-  const [isKnowledgeIntakeOpen, setIsKnowledgeIntakeOpen] =
+  const [isKnowledgeImportOpen, setIsKnowledgeImportOpen] =
   useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const filesInputRef = useRef<HTMLInputElement>(null);
@@ -214,7 +214,7 @@ export function KnowledgeContent({
       return;
     }
 
-    setIsKnowledgeIntakeOpen(true);
+    setIsKnowledgeImportOpen(true);
   }
 
   function handleFilesSelected(
@@ -227,7 +227,7 @@ export function KnowledgeContent({
   }
 
   setSelectedFiles(files);
-  setIsKnowledgeIntakeOpen(true);
+  setIsKnowledgeImportOpen(true);
 
   // Permite volver a seleccionar el mismo archivo más adelante.
   event.target.value = "";
@@ -295,14 +295,14 @@ export function KnowledgeContent({
       />
 
       {selectedLibraryId ? (
-<KnowledgeIntakeModal
-  open={isKnowledgeIntakeOpen}
+<KnowledgeImportModal
+  open={isKnowledgeImportOpen}
   context={{
     origin: "folder",
     libraryId: selectedLibraryId,
   }}
   selectedFiles={selectedFiles}
-  onOpenChange={setIsKnowledgeIntakeOpen}
+  onOpenChange={setIsKnowledgeImportOpen}
 />
       ) : null}
 

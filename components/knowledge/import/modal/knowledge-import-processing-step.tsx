@@ -21,20 +21,20 @@ import type {
 } from "../knowledge-import-api";
 
 import type {
-  KnowledgeIntakeFileProgress,
-  KnowledgeIntakeProcessingPhase,
-  KnowledgeIntakeProgressSummary,
-} from "./knowledge-intake-processing.types";
+  KnowledgeImportFileProgress,
+  KnowledgeImportProcessingPhase,
+  KnowledgeImportProgressSummary,
+} from "./knowledge-import-processing.types";
 
 type Props = {
-  phase: KnowledgeIntakeProcessingPhase;
-  files: KnowledgeIntakeFileProgress[];
-  summary: KnowledgeIntakeProgressSummary;
+  phase: KnowledgeImportProcessingPhase;
+  files: KnowledgeImportFileProgress[];
+  summary: KnowledgeImportProgressSummary;
   proposalProgress?: KnowledgeImportProposalProgress | null;
 };
 
 function getFileStatusLabel(
-  file: KnowledgeIntakeFileProgress,
+  file: KnowledgeImportFileProgress,
 ) {
   switch (file.status) {
     case "uploading":
@@ -68,7 +68,7 @@ function getFileStatusLabel(
   }
 }
 
-export function KnowledgeIntakeProcessingStep({
+export function KnowledgeImportProcessingStep({
   phase,
   files,
   summary,

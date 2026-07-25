@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-intake-completed-step.tsx
+// components/knowledge/intake/modal/knowledge-import-completed-step.tsx
 
 "use client";
 
@@ -20,7 +20,7 @@ type Props = {
   onClose: () => void;
 };
 
-export function KnowledgeIntakeCompletedStep({
+export function KnowledgeImportCompletedStep({
   result,
 }: Props) {
   const { log } = result;

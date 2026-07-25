@@ -1,15 +1,15 @@
 // components/knowledge/intake/modal/index.ts
 
-export { KnowledgeIntakeModal } from "./knowledge-intake-modal";
-export { KnowledgeIntakeModalHeader } from "./knowledge-intake-modal-header";
-export { KnowledgeIntakeModalProgress } from "./knowledge-intake-modal-progress";
-export { KnowledgeIntakeUploadStep } from "./knowledge-intake-upload-step";
-export { KnowledgeIntakeAnalysisStep } from "./knowledge-intake-analysis-step";
-export { KnowledgeIntakeProposalStep } from "./knowledge-intake-proposal-step";
-export { KnowledgeIntakeCompletedStep } from "./knowledge-intake-completed-step";
+export { KnowledgeImportModal } from "./knowledge-import-modal";
+export { KnowledgeImportModalHeader } from "./knowledge-import-modal-header";
+export { KnowledgeImportModalProgress } from "./knowledge-import-modal-progress";
+export { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
+export { KnowledgeImportAnalysisStep } from "./knowledge-import-analysis-step";
+export { KnowledgeImportProposalStep } from "./knowledge-import-proposal-step";
+export { KnowledgeImportCompletedStep } from "./knowledge-import-completed-step";
 export type {
-  KnowledgeIntakeContext,
-  KnowledgeIntakeModalProps,
-  KnowledgeIntakeModalStep,
-  KnowledgeIntakeOrigin,
-} from "./knowledge-intake-modal.types";
+  KnowledgeImportContext,
+  KnowledgeImportModalProps,
+  KnowledgeImportModalStep,
+  KnowledgeImportOrigin,
+} from "./knowledge-import-modal.types";

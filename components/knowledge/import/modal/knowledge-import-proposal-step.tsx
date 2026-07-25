@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-intake-proposal-step.tsx
+// components/knowledge/intake/modal/knowledge-import-proposal-step.tsx
 
 "use client";
 
@@ -63,7 +63,7 @@ function getFolderPath(
     : "Biblioteca principal";
 }
 
-export function KnowledgeIntakeProposalStep({
+export function KnowledgeImportProposalStep({
   proposal,
   error,
 }: Props) {

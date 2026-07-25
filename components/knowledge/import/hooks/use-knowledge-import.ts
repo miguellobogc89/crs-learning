@@ -1,4 +1,4 @@
-// components/knowledge/intake/hooks/use-knowledge-intake.ts
+// components/knowledge/intake/hooks/use-knowledge-import.ts
 
 "use client";
 
@@ -32,12 +32,12 @@ import {
 } from "@/lib/knowledge/import-flow";
 
 import type {
-  KnowledgeIntakeContext,
-  KnowledgeIntakeModalStep,
-} from "../modal/knowledge-intake-modal.types";
+  KnowledgeImportContext,
+  KnowledgeImportModalStep,
+} from "../modal/knowledge-import-modal.types";
 import type {
-  KnowledgeIntakeProcessingPhase,
-} from "../modal/knowledge-intake-processing.types";
+  KnowledgeImportProcessingPhase,
+} from "../modal/knowledge-import-processing.types";
 
 import {
   generateKnowledgeImportProposal,
@@ -51,8 +51,8 @@ import {
 } from "../../services/create-selected-documents";
 import { readErrorMessage } from "../../services/read-error-message";
 
-type UseKnowledgeIntakeParams = {
-  context: KnowledgeIntakeContext;
+type useKnowledgeImportParams = {
+  context: KnowledgeImportContext;
   onCompleted?: (
     result: ConfirmKnowledgeImportResult,
   ) => void;
@@ -69,11 +69,11 @@ type UploadKnowledgeImportResult = {
 export function useKnowledgeImport({
   context,
   onCompleted,
-}: UseKnowledgeIntakeParams) {
+}: useKnowledgeImportParams) {
   const router = useRouter();
 
   const [step, setStep] =
-    useState<KnowledgeIntakeModalStep>(
+    useState<KnowledgeImportModalStep>(
       "upload",
     );
 
@@ -117,7 +117,7 @@ export function useKnowledgeImport({
     processingPhase,
     setProcessingPhase,
   ] =
-    useState<KnowledgeIntakeProcessingPhase>(
+    useState<KnowledgeImportProcessingPhase>(
       "uploading",
     );
 

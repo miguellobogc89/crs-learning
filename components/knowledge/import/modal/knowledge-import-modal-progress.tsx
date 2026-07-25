@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-intake-modal-progress.tsx
+// components/knowledge/intake/modal/knowledge-import-modal-progress.tsx
 "use client";
 
 import {
@@ -11,10 +11,10 @@ import {
 
 import { cn } from "@/lib/utils";
 
-import type { KnowledgeIntakeModalStep } from "./knowledge-intake-modal.types";
+import type { KnowledgeImportModalStep } from "./knowledge-import-modal.types";
 
 type Props = {
-  currentStep: KnowledgeIntakeModalStep;
+  currentStep: KnowledgeImportModalStep;
 };
 
 type VisibleStep =
@@ -58,7 +58,7 @@ const STEPS: StepConfig[] = [
 ];
 
 function normalizeStep(
-  step: KnowledgeIntakeModalStep,
+  step: KnowledgeImportModalStep,
 ): VisibleStep {
   if (step === "upload") {
     return "upload";
@@ -75,7 +75,7 @@ function normalizeStep(
   return "completed";
 }
 
-export function KnowledgeIntakeModalProgress({
+export function KnowledgeImportModalProgress({
   currentStep,
 }: Props) {
   const normalizedStep =
