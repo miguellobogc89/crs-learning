@@ -12,7 +12,7 @@ import {
   DialogContent,
 } from "@/components/ui/dialog";
 
-import { useKnowledgeIntake } from "../hooks/use-knowledge-intake";
+import { useKnowledgeImport } from "../hooks/use-knowledge-import";
 import { KnowledgeIntakeModalHeader } from "./knowledge-intake-modal-header";
 import { KnowledgeIntakeModalProgress } from "./knowledge-intake-modal-progress";
 import { KnowledgeIntakeModalFooter } from "./knowledge-intake-modal-footer";
@@ -58,7 +58,7 @@ export function KnowledgeIntakeModal({
   const startedSelectionKeyRef =
     useRef<string | null>(null);
 
-  const intake = useKnowledgeIntake({
+  const intake = useKnowledgeImport({
     context: context!,
     onCompleted,
   });

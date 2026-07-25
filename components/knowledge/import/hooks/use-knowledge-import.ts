@@ -66,7 +66,7 @@ type UploadKnowledgeImportResult = {
   totalSize: number;
 };
 
-export function useKnowledgeIntake({
+export function useKnowledgeImport({
   context,
   onCompleted,
 }: UseKnowledgeIntakeParams) {
