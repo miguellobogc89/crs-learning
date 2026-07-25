@@ -3,6 +3,8 @@
 import { KnowledgeDetailsView } from "./details/knowledge-details-view";
 import { KnowledgeDocumentsView } from "./documents/knowledge-documents-view";
 import { KnowledgeGeneralView } from "./general/knowledge-general-view";
+import { KnowledgeContentEditorSection } from "./knowledge-content-editor-section";
+
 import type {
   ActiveTab,
   Knowledge,
@@ -59,25 +61,34 @@ export function KnowledgeDetailContent({
     case "general":
       return (
         <KnowledgeDetailViewContainer>
-          <KnowledgeGeneralView
-            hasDocuments={hasDocuments}
-            hasAnalysis={hasAnalysis}
-            isRebuilding={isRebuilding}
-            knowledgeType={knowledge.knowledge_type}
-            analysisJson={
-              knowledge.knowledge_analysis?.analysis_json
-            }
-            analysisStatus={
-              knowledge.knowledge_analysis?.status ?? null
-            }
-            analysisModel={
-              knowledge.knowledge_analysis?.model ?? null
-            }
-            graph={knowledge.knowledge_graph}
-            files={knowledge.knowledge_files}
-            onRebuild={onRebuild}
-            onUpload={onUpload}
-          />
+          <div className="space-y-10">
+            <KnowledgeContentEditorSection
+              knowledge={knowledge}
+            />
+
+            <KnowledgeGeneralView
+              hasDocuments={hasDocuments}
+              hasAnalysis={hasAnalysis}
+              isRebuilding={isRebuilding}
+              knowledgeType={knowledge.knowledge_type}
+              analysisJson={
+                knowledge.knowledge_analysis
+                  ?.analysis_json
+              }
+              analysisStatus={
+                knowledge.knowledge_analysis
+                  ?.status ?? null
+              }
+              analysisModel={
+                knowledge.knowledge_analysis
+                  ?.model ?? null
+              }
+              graph={knowledge.knowledge_graph}
+              files={knowledge.knowledge_files}
+              onRebuild={onRebuild}
+              onUpload={onUpload}
+            />
+          </div>
         </KnowledgeDetailViewContainer>
       );
 
@@ -91,13 +102,16 @@ export function KnowledgeDetailContent({
             rebuildError={rebuildError}
             knowledgeType={knowledge.knowledge_type}
             analysisJson={
-              knowledge.knowledge_analysis?.analysis_json
+              knowledge.knowledge_analysis
+                ?.analysis_json
             }
             analysisStatus={
-              knowledge.knowledge_analysis?.status ?? null
+              knowledge.knowledge_analysis
+                ?.status ?? null
             }
             analysisModel={
-              knowledge.knowledge_analysis?.model ?? null
+              knowledge.knowledge_analysis
+                ?.model ?? null
             }
             graph={knowledge.knowledge_graph}
             files={knowledge.knowledge_files}
@@ -115,8 +129,12 @@ export function KnowledgeDetailContent({
             uploadFormId={uploadFormId}
             files={knowledge.knowledge_files}
             showUpload={showUpload}
-            uploadableFileCount={uploadableFileCount}
-            articleNeedsRebuild={articleNeedsRebuild}
+            uploadableFileCount={
+              uploadableFileCount
+            }
+            articleNeedsRebuild={
+              articleNeedsRebuild
+            }
             isRebuilding={isRebuilding}
             rebuildError={rebuildError}
             getContributionPercentage={
@@ -131,6 +149,9 @@ export function KnowledgeDetailContent({
           />
         </KnowledgeDetailViewContainer>
       );
+
+    default:
+      return null;
   }
 }
 

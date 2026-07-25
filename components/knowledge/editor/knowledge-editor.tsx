@@ -1,9 +1,11 @@
 // components/knowledge/editor/knowledge-editor.tsx
+
 "use client";
 
 import { useEffect } from "react";
 import {
   Bold,
+  Braces,
   Heading2,
   Heading3,
   Italic,
@@ -13,11 +15,16 @@ import {
   Strikethrough,
   Undo2,
 } from "lucide-react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import {
+  EditorContent,
+  useEditor,
+} from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+import { MermaidExtension } from "./mermaid/mermaid-extension";
 
 type KnowledgeEditorProps = {
   value: string;
@@ -25,6 +32,11 @@ type KnowledgeEditorProps = {
   editable?: boolean;
   className?: string;
 };
+
+const DEFAULT_MERMAID_DIAGRAM = `flowchart LR
+    A[Inicio] --> B{Decisión}
+    B -->|Sí| C[Continuar]
+    B -->|No| D[Revisar]`;
 
 export function KnowledgeEditor({
   value,
@@ -41,6 +53,7 @@ export function KnowledgeEditor({
           levels: [2, 3],
         },
       }),
+      MermaidExtension,
     ],
 
     content: value || "",
@@ -54,17 +67,31 @@ export function KnowledgeEditor({
           "text-sm leading-7 text-foreground",
           "outline-none",
           "[&_p]:my-3",
-          "[&_h2]:mb-3 [&_h2]:mt-7 [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:tracking-tight",
-          "[&_h3]:mb-2 [&_h3]:mt-6 [&_h3]:text-xl [&_h3]:font-semibold",
-          "[&_ul]:my-4 [&_ul]:list-disc [&_ul]:pl-6",
-          "[&_ol]:my-4 [&_ol]:list-decimal [&_ol]:pl-6",
+          "[&_h2]:mb-3 [&_h2]:mt-7",
+          "[&_h2]:text-2xl [&_h2]:font-semibold",
+          "[&_h2]:tracking-tight",
+          "[&_h3]:mb-2 [&_h3]:mt-6",
+          "[&_h3]:text-xl [&_h3]:font-semibold",
+          "[&_ul]:my-4 [&_ul]:list-disc",
+          "[&_ul]:pl-6",
+          "[&_ol]:my-4 [&_ol]:list-decimal",
+          "[&_ol]:pl-6",
           "[&_li]:my-1",
-          "[&_blockquote]:my-5 [&_blockquote]:border-l-4 [&_blockquote]:border-border",
-          "[&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-muted-foreground",
+          "[&_blockquote]:my-5",
+          "[&_blockquote]:border-l-4",
+          "[&_blockquote]:border-border",
+          "[&_blockquote]:pl-4",
+          "[&_blockquote]:italic",
+          "[&_blockquote]:text-muted-foreground",
           "[&_hr]:my-8 [&_hr]:border-border",
-          "[&_pre]:my-5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg",
-          "[&_pre]:bg-muted [&_pre]:p-4 [&_pre]:font-mono [&_pre]:text-sm",
-          "[&_code]:rounded [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5",
+          "[&_pre]:my-5",
+          "[&_pre]:overflow-x-auto",
+          "[&_pre]:rounded-lg",
+          "[&_pre]:bg-muted [&_pre]:p-4",
+          "[&_pre]:font-mono [&_pre]:text-sm",
+          "[&_code]:rounded",
+          "[&_code]:bg-muted",
+          "[&_code]:px-1.5 [&_code]:py-0.5",
         ),
       },
     },
@@ -114,7 +141,9 @@ export function KnowledgeEditor({
     <div
       className={cn(
         "overflow-hidden rounded-xl border border-border bg-card",
-        "transition-shadow focus-within:ring-2 focus-within:ring-ring/20",
+        "transition-shadow",
+        "focus-within:ring-2",
+        "focus-within:ring-ring/20",
         className,
       )}
     >
@@ -123,8 +152,17 @@ export function KnowledgeEditor({
           <ToolbarButton
             label="Deshacer"
             active={false}
-            disabled={!editor.can().chain().focus().undo().run()}
-            onClick={() => editor.chain().focus().undo().run()}
+            disabled={
+              !editor
+                .can()
+                .chain()
+                .focus()
+                .undo()
+                .run()
+            }
+            onClick={() => {
+              editor.chain().focus().undo().run();
+            }}
           >
             <Undo2 className="h-4 w-4" />
           </ToolbarButton>
@@ -132,8 +170,17 @@ export function KnowledgeEditor({
           <ToolbarButton
             label="Rehacer"
             active={false}
-            disabled={!editor.can().chain().focus().redo().run()}
-            onClick={() => editor.chain().focus().redo().run()}
+            disabled={
+              !editor
+                .can()
+                .chain()
+                .focus()
+                .redo()
+                .run()
+            }
+            onClick={() => {
+              editor.chain().focus().redo().run();
+            }}
           >
             <Redo2 className="h-4 w-4" />
           </ToolbarButton>
@@ -143,7 +190,13 @@ export function KnowledgeEditor({
           <ToolbarButton
             label="Negrita"
             active={editor.isActive("bold")}
-            onClick={() => editor.chain().focus().toggleBold().run()}
+            onClick={() => {
+              editor
+                .chain()
+                .focus()
+                .toggleBold()
+                .run();
+            }}
           >
             <Bold className="h-4 w-4" />
           </ToolbarButton>
@@ -151,7 +204,13 @@ export function KnowledgeEditor({
           <ToolbarButton
             label="Cursiva"
             active={editor.isActive("italic")}
-            onClick={() => editor.chain().focus().toggleItalic().run()}
+            onClick={() => {
+              editor
+                .chain()
+                .focus()
+                .toggleItalic()
+                .run();
+            }}
           >
             <Italic className="h-4 w-4" />
           </ToolbarButton>
@@ -159,7 +218,13 @@ export function KnowledgeEditor({
           <ToolbarButton
             label="Tachado"
             active={editor.isActive("strike")}
-            onClick={() => editor.chain().focus().toggleStrike().run()}
+            onClick={() => {
+              editor
+                .chain()
+                .focus()
+                .toggleStrike()
+                .run();
+            }}
           >
             <Strikethrough className="h-4 w-4" />
           </ToolbarButton>
@@ -171,15 +236,15 @@ export function KnowledgeEditor({
             active={editor.isActive("heading", {
               level: 2,
             })}
-            onClick={() =>
+            onClick={() => {
               editor
                 .chain()
                 .focus()
                 .toggleHeading({
                   level: 2,
                 })
-                .run()
-            }
+                .run();
+            }}
           >
             <Heading2 className="h-4 w-4" />
           </ToolbarButton>
@@ -189,15 +254,15 @@ export function KnowledgeEditor({
             active={editor.isActive("heading", {
               level: 3,
             })}
-            onClick={() =>
+            onClick={() => {
               editor
                 .chain()
                 .focus()
                 .toggleHeading({
                   level: 3,
                 })
-                .run()
-            }
+                .run();
+            }}
           >
             <Heading3 className="h-4 w-4" />
           </ToolbarButton>
@@ -207,9 +272,13 @@ export function KnowledgeEditor({
           <ToolbarButton
             label="Lista"
             active={editor.isActive("bulletList")}
-            onClick={() =>
-              editor.chain().focus().toggleBulletList().run()
-            }
+            onClick={() => {
+              editor
+                .chain()
+                .focus()
+                .toggleBulletList()
+                .run();
+            }}
           >
             <List className="h-4 w-4" />
           </ToolbarButton>
@@ -217,11 +286,38 @@ export function KnowledgeEditor({
           <ToolbarButton
             label="Lista numerada"
             active={editor.isActive("orderedList")}
-            onClick={() =>
-              editor.chain().focus().toggleOrderedList().run()
-            }
+            onClick={() => {
+              editor
+                .chain()
+                .focus()
+                .toggleOrderedList()
+                .run();
+            }}
           >
             <ListOrdered className="h-4 w-4" />
+          </ToolbarButton>
+
+          <ToolbarSeparator />
+
+          <ToolbarButton
+            label="Insertar diagrama"
+            active={editor.isActive(
+              "mermaidDiagram",
+            )}
+            onClick={() => {
+              editor
+                .chain()
+                .focus()
+                .insertContent({
+                  type: "mermaidDiagram",
+                  attrs: {
+                    code: DEFAULT_MERMAID_DIAGRAM,
+                  },
+                })
+                .run();
+            }}
+          >
+            <Braces className="h-4 w-4" />
           </ToolbarButton>
         </div>
       ) : null}
@@ -266,5 +362,7 @@ function ToolbarButton({
 }
 
 function ToolbarSeparator() {
-  return <div className="mx-1 h-5 w-px bg-border" />;
+  return (
+    <div className="mx-1 h-5 w-px bg-border" />
+  );
 }
