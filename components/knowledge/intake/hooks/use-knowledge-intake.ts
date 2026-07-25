@@ -27,6 +27,7 @@ import {
   createInitialImportSummary,
   deduplicateBrowserFiles,
   finalizeImportAnalysis,
+  finalizeImportFiles,
   getBrowserFileRelativePath,
   getBrowserImportMode,
   markFilesUploaded,
@@ -397,9 +398,20 @@ const duplicateFiles =
                 duplicateFiles,
               );
 
+            const finalizedFiles =
+              finalizeImportFiles(
+                duplicated.files,
+                analysisResult
+                  .textExtraction
+                  .successfulFiles,
+                analysisResult
+                  .textExtraction
+                  .failedFiles,
+              );
+
             setProgressSummary(
               finalizeImportAnalysis(
-                duplicated.files,
+                finalizedFiles,
                 analysisResult
                   .textExtraction
                   .successfulFiles,
@@ -409,7 +421,7 @@ const duplicateFiles =
               ),
             );
 
-            return duplicated.files;
+            return finalizedFiles;
           },
         );
 

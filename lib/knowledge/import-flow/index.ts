@@ -16,6 +16,7 @@ export {
   createInitialImportFiles,
   createInitialImportSummary,
   finalizeImportAnalysis,
+  finalizeImportFiles,
   markFilesUploaded,
   markFilesUploading,
   mergeServerProgress,

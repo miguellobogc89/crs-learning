@@ -280,6 +280,76 @@ export function mergeServerProgress(
   };
 }
 
+
+export function finalizeImportFiles(
+  files: KnowledgeImportFlowFile[],
+  successfulFiles: number,
+  failedFiles: number,
+) {
+  const completedCount = files.filter(
+    (file) => file.status === "completed",
+  ).length;
+
+  const errorCount = files.filter(
+    (file) => file.status === "error",
+  ).length;
+
+  let remainingSuccessful = Math.max(
+    successfulFiles - completedCount,
+    0,
+  );
+
+  let remainingFailed = Math.max(
+    failedFiles - errorCount,
+    0,
+  );
+
+  return files.map((file) => {
+    if (
+      file.status === "duplicate" ||
+      file.status === "completed" ||
+      file.status === "error"
+    ) {
+      return file;
+    }
+
+    if (file.error && remainingFailed > 0) {
+      remainingFailed -= 1;
+
+      return {
+        ...file,
+        status: "error" as const,
+      };
+    }
+
+    if (remainingSuccessful > 0) {
+      remainingSuccessful -= 1;
+
+      return {
+        ...file,
+        status: "completed" as const,
+        processingStep: null,
+        error: undefined,
+      };
+    }
+
+    if (remainingFailed > 0) {
+      remainingFailed -= 1;
+
+      return {
+        ...file,
+        status: "error" as const,
+        processingStep: null,
+        error:
+          file.error ??
+          "No se ha podido procesar el documento",
+      };
+    }
+
+    return file;
+  });
+}
+
 export function finalizeImportAnalysis(
   files: KnowledgeImportFlowFile[],
   successfulFiles: number,
