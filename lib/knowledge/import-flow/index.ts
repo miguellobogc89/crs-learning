@@ -1,10 +1,4 @@
 export {
-  adaptConfirmationResult,
-  adaptImportProposal,
-} from "./proposal-adapter";
-
-
-export {
   deduplicateBrowserFiles,
   getBrowserFileRelativePath,
   getBrowserImportMode,

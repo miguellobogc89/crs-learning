@@ -14,13 +14,7 @@ import type {
   ConfirmKnowledgeImportResult,
   KnowledgeImportProposal,
 } from "@/lib/knowledge/import/types";
-import type {
-  ConfirmKnowledgeIntakeResult,
-  KnowledgeIntakeProposal,
-} from "@/lib/knowledge/intake/types";
 import {
-  adaptConfirmationResult,
-  adaptImportProposal,
   applyDuplicateSnapshot,
   createEmptyImportSummary,
   createInitialImportFiles,
@@ -60,7 +54,7 @@ import { readErrorMessage } from "../../services/read-error-message";
 type UseKnowledgeIntakeParams = {
   context: KnowledgeIntakeContext;
   onCompleted?: (
-    result: ConfirmKnowledgeIntakeResult,
+    result: ConfirmKnowledgeImportResult,
   ) => void;
 };
 
@@ -93,16 +87,8 @@ export function useKnowledgeIntake({
   const [importId, setImportId] =
     useState<string | null>(null);
 
-  const [
-    importProposal,
-    setImportProposal,
-  ] =
-    useState<KnowledgeImportProposal | null>(
-      null,
-    );
-
   const [proposal, setProposal] =
-    useState<KnowledgeIntakeProposal | null>(
+    useState<KnowledgeImportProposal | null>(
       null,
     );
 
@@ -110,7 +96,7 @@ export function useKnowledgeIntake({
     completionResult,
     setCompletionResult,
   ] =
-    useState<ConfirmKnowledgeIntakeResult | null>(
+    useState<ConfirmKnowledgeImportResult | null>(
       null,
     );
 
@@ -510,15 +496,8 @@ const duplicateFiles =
             },
           );
 
-        setImportProposal(
-          proposalResult.proposal,
-        );
-
         setProposal(
-          adaptImportProposal(
-            proposalResult.proposal,
-            context.libraryId,
-          ),
+          proposalResult.proposal,
         );
 
         setStep("proposal");
@@ -545,7 +524,6 @@ const duplicateFiles =
     useCallback(async () => {
       if (
         !proposal ||
-        !importProposal ||
         !importId
       ) {
         return;
@@ -572,14 +550,8 @@ const duplicateFiles =
           );
         }
 
-        const importResult =
-          (await response.json()) as ConfirmKnowledgeImportResult;
-
         const result =
-          adaptConfirmationResult(
-            importResult,
-            importProposal,
-          );
+          (await response.json()) as ConfirmKnowledgeImportResult;
 
         setCompletionResult(
           result,
@@ -601,7 +573,6 @@ const duplicateFiles =
       }
     }, [
       importId,
-      importProposal,
       onCompleted,
       proposal,
       router,
@@ -617,7 +588,6 @@ const duplicateFiles =
     setStep("upload");
     setSelectedDocuments([]);
     setImportId(null);
-    setImportProposal(null);
     setProposal(null);
     setCompletionResult(null);
     setError(null);

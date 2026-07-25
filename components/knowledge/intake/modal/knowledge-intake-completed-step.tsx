@@ -3,35 +3,27 @@
 "use client";
 
 import {
-  Ban,
   CheckCircle2,
   FilePlus2,
+  FolderPlus,
   RefreshCw,
+  SkipForward,
 } from "lucide-react";
 
-import type { ConfirmKnowledgeIntakeResult } from "@/lib/knowledge/intake/types";
+import type {
+  ConfirmKnowledgeImportResult,
+} from "@/lib/knowledge/import/types";
 
 type Props = {
-  result: ConfirmKnowledgeIntakeResult;
+  result: ConfirmKnowledgeImportResult;
   onReset: () => void;
   onClose: () => void;
 };
 
-function getArticlePath(path?: string[]) {
-  if (!path?.length) {
-    return "Biblioteca principal";
-  }
-
-  return path.join(" / ");
-}
-
 export function KnowledgeIntakeCompletedStep({
   result,
 }: Props) {
-  const hasResults =
-    result.createdArticles.length > 0 ||
-    result.updatedArticles.length > 0 ||
-    result.ignoredDocuments.length > 0;
+  const { log } = result;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -47,193 +39,142 @@ export function KnowledgeIntakeCompletedStep({
             </h3>
 
             <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              La documentación se ha incorporado
-              correctamente.
+              La documentación se ha incorporado a{" "}
+              <strong className="font-medium text-foreground">
+                {log.targetLibrary.name}
+              </strong>
+              .
             </p>
           </div>
         </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <SummaryCard
+            label="Carpetas"
+            value={log.summary.foldersCreated}
+            icon={FolderPlus}
+          />
+          <SummaryCard
+            label="Creados"
+            value={log.summary.articlesCreated}
+            icon={FilePlus2}
+          />
+          <SummaryCard
+            label="Actualizados"
+            value={log.summary.articlesUpdated}
+            icon={RefreshCw}
+          />
+          <SummaryCard
+            label="Duplicados omitidos"
+            value={
+              log.summary
+                .documentsSkippedAsDuplicates
+            }
+            icon={SkipForward}
+          />
+        </div>
       </div>
 
-      <div className="mt-6 min-h-0 flex-1 overflow-y-auto pr-2">
-        {hasResults ? (
-          <div className="space-y-7">
-            {result.createdArticles.length > 0 ? (
-              <section>
-                <div className="mb-2 flex items-center gap-2">
-                  <FilePlus2 className="h-4 w-4 text-emerald-600" />
+      <div className="mt-6 min-h-0 flex-1 space-y-7 overflow-y-auto pr-2">
+        {log.articles.length > 0 ? (
+          <section>
+            <h4 className="mb-2 text-sm font-semibold">
+              Artículos procesados
+            </h4>
 
-                  <h4 className="text-sm font-semibold text-foreground">
-                    Artículos creados
-                  </h4>
-
-                  <span className="text-xs text-muted-foreground">
-                    {result.createdArticles.length}
-                  </span>
-                </div>
-
-                <div>
-                  {result.createdArticles.map(
-                    (article, index) => (
-                      <div
-                        key={article.id}
-                        className={[
-                          "flex items-start gap-3 py-3",
-                          index !==
-                          result.createdArticles
-                            .length -
-                            1
-                            ? "border-b border-border/60"
-                            : "",
-                        ].join(" ")}
-                      >
-                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {article.title}
-                          </p>
-
-{article.path?.length ? (
-  <p className="mt-1 truncate text-xs text-muted-foreground">
-    {article.path.join(" / ")}
-  </p>
-) : (
-  <p className="mt-1 text-xs text-muted-foreground">
-    Biblioteca principal
-  </p>
-)}
-                        </div>
+            <div className="divide-y divide-border rounded-xl border border-border">
+              {log.articles.map(
+                (article) => (
+                  <div
+                    key={`${article.proposalArticleId}:${article.databaseArticleId}`}
+                    className="px-4 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {article.title}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {article.action ===
+                          "create"
+                            ? "Artículo creado"
+                            : article.contentChanged
+                              ? "Artículo actualizado"
+                              : "Artículo sin cambios"}
+                        </p>
                       </div>
-                    ),
-                  )}
-                </div>
-              </section>
-            ) : null}
 
-            {result.updatedArticles.length >
-            0 ? (
-              <section>
-                <div className="mb-2 flex items-center gap-2">
-                  <RefreshCw className="h-4 w-4 text-sky-600" />
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {
+                          article
+                            .createdDocumentIds
+                            .length
+                        }{" "}
+                        documentos
+                      </span>
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+          </section>
+        ) : null}
 
-                  <h4 className="text-sm font-semibold text-foreground">
-                    Artículos actualizados
-                  </h4>
+        {log.skippedDocuments.length >
+        0 ? (
+          <section>
+            <h4 className="mb-2 text-sm font-semibold">
+              Documentos duplicados omitidos
+            </h4>
 
-                  <span className="text-xs text-muted-foreground">
-                    {
-                      result.updatedArticles
-                        .length
-                    }
-                  </span>
-                </div>
-
-                <div>
-                  {result.updatedArticles.map(
-                    (article, index) => (
-                      <div
-                        key={article.id}
-                        className={[
-                          "flex items-start gap-3 py-3",
-                          index !==
-                          result.updatedArticles
-                            .length -
-                            1
-                            ? "border-b border-border/60"
-                            : "",
-                        ].join(" ")}
-                      >
-                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-sky-500" />
-
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {article.title}
-                          </p>
-
-{article.path?.length ? (
-  <p className="mt-1 truncate text-xs text-muted-foreground">
-    {article.path.join(" / ")}
-  </p>
-) : (
-  <p className="mt-1 text-xs text-muted-foreground">
-    Biblioteca principal
-  </p>
-)}
-                        </div>
-                      </div>
-                    ),
-                  )}
-                </div>
-              </section>
-            ) : null}
-
-            {result.ignoredDocuments.length >
-            0 ? (
-              <section>
-                <div className="mb-2 flex items-center gap-2">
-                  <Ban className="h-4 w-4 text-muted-foreground" />
-
-                  <h4 className="text-sm font-semibold text-foreground">
-                    Documentos omitidos
-                  </h4>
-
-                  <span className="text-xs text-muted-foreground">
-                    {
-                      result.ignoredDocuments
-                        .length
-                    }
-                  </span>
-                </div>
-
-                <div>
-                  {result.ignoredDocuments.map(
-                    (document, index) => (
-                      <div
-                        key={
-                          document.documentId
-                        }
-                        className={[
-                          "flex items-start gap-3 py-3",
-                          index !==
-                          result.ignoredDocuments
-                            .length -
-                            1
-                            ? "border-b border-border/60"
-                            : "",
-                        ].join(" ")}
-                      >
-                        <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-muted-foreground/50" />
-
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {
-                              document.documentName
-                            }
-                          </p>
-
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {document.reason ===
-                            "exact_duplicate"
-                              ? "Duplicado exacto. No se ha incorporado."
-                              : "Posible duplicado. No se ha incorporado."}
-                          </p>
-                        </div>
-                      </div>
-                    ),
-                  )}
-                </div>
-              </section>
-            ) : null}
-          </div>
-        ) : (
-          <div className="flex h-full min-h-40 items-center justify-center text-center">
-            <p className="text-sm text-muted-foreground">
-              No se han producido cambios en la
-              biblioteca.
-            </p>
-          </div>
-        )}
+            <div className="divide-y divide-amber-200 rounded-xl border border-amber-200 bg-amber-50/60">
+              {log.skippedDocuments.map(
+                (document) => (
+                  <div
+                    key={document.importFileId}
+                    className="px-4 py-3"
+                  >
+                    <p className="text-sm font-medium text-amber-900">
+                      {document.fileName}
+                    </p>
+                    <p className="mt-1 text-xs text-amber-800">
+                      Ya existía en “
+                      {document.articleTitle}”.
+                    </p>
+                  </div>
+                ),
+              )}
+            </div>
+          </section>
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+type SummaryCardProps = {
+  label: string;
+  value: number;
+  icon: typeof FolderPlus;
+};
+
+function SummaryCard({
+  label,
+  value,
+  icon: Icon,
+}: SummaryCardProps) {
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <strong className="text-lg">
+          {value}
+        </strong>
+      </div>
+
+      <p className="mt-2 text-xs text-muted-foreground">
+        {label}
+      </p>
     </div>
   );
 }
