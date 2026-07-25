@@ -3,6 +3,7 @@
 
 import Image from "next/image";
 import {
+  useEffect,
   useState,
   useTransition,
   type DragEventHandler,
@@ -125,6 +126,14 @@ export function KnowledgeFolderCard({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [relativeUpdatedAt, setRelativeUpdatedAt] =
+  useState("—");
+
+useEffect(() => {
+  setRelativeUpdatedAt(
+    formatRelativeDate(folder.updated_at),
+  );
+}, [folder.updated_at]);
 
   const [error, setError] = useState<string | null>(null);
   const [isDeleting, startDeleteTransition] =
@@ -400,10 +409,10 @@ const cardClassName = [
         : ""}
     </span>
 
-    <span className="flex shrink-0 items-center gap-1">
-      <Clock className="h-3.5 w-3.5" />
-      {formatRelativeDate(folder.updated_at)}
-    </span>
+<span className="flex shrink-0 items-center gap-1">
+  <Clock className="h-3.5 w-3.5" />
+  {relativeUpdatedAt}
+</span>
   </div>
 
   {error ? (
