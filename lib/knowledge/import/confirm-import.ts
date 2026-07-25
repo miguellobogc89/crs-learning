@@ -5,6 +5,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { analyzeKnowledgeSource } from "@/lib/services/knowledge-analysis.service";
 import { createKnowledgeStatusSnapshot } from "@/lib/services/knowledge-library.service";
+import { generateArticleContent } from "./generate-article-content";
 
 import type {
   ConfirmKnowledgeImportResult,
@@ -789,10 +790,18 @@ export async function confirmKnowledgeImport({
                 );
               }
 
-              const importedContent =
-                buildImportedContent(
-                  filesToCreate,
-                );
+const importedContent =
+  await generateArticleContent({
+    title: article.title,
+    description:
+      article.description ?? "",
+    files: filesToCreate.map((file) => ({
+      id: file.id,
+      fileName: file.file_name,
+      extractedText:
+        file.extracted_text,
+    })),
+  });
 
               persistedArticle =
                 await tx
