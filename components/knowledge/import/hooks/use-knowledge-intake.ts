@@ -44,7 +44,7 @@ import {
   runKnowledgeImportAnalysis,
   type KnowledgeImportProgress,
   type KnowledgeImportProposalProgress,
-} from "../../import/knowledge-import-api";
+} from "../knowledge-import-api";
 import {
   createSelectedDocuments,
   type SelectedKnowledgeDocument,

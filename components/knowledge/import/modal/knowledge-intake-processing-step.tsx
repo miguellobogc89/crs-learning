@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 
 import type {
   KnowledgeImportProposalProgress,
-} from "../../import/knowledge-import-api";
+} from "../knowledge-import-api";
 
 import type {
   KnowledgeIntakeFileProgress,

@@ -5,8 +5,8 @@ import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { KnowledgeIntakeModal } from "@/components/knowledge/intake/modal";
-import type { KnowledgeIntakeContext } from "@/components/knowledge/intake/modal/knowledge-intake-modal.types";
+import { KnowledgeIntakeModal } from "@/components/knowledge/import/modal";
+import type { KnowledgeIntakeContext } from "@/components/knowledge/import/modal/knowledge-intake-modal.types";
 
 const ACCEPTED_FILE_TYPES = [".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".txt"].join(",");
 

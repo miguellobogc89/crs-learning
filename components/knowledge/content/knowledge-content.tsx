@@ -7,7 +7,7 @@ import { CreateFolderDialog } from "./create-folder-dialog";
 import { KnowledgeExplorer } from "./knowledge-explorer";
 import { KnowledgeLibraryBreadcrumb } from "./knowledge-library-breadcrumb";
 import { KnowledgeToolbar } from "./knowledge-toolbar";
-import { KnowledgeIntakeModal } from "@/components/knowledge/intake/modal";
+import { KnowledgeIntakeModal } from "@/components/knowledge/import/modal";
 import {
   buildLibraryTree,
   getLibraryPath,
