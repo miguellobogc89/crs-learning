@@ -281,6 +281,19 @@ export async function POST(
     },
   });
 
+  console.log(
+  "Knowledge files existentes:",
+  existingKnowledgeFiles.length,
+);
+
+console.table(
+  existingKnowledgeFiles.map((file) => ({
+    file: file.file_name,
+    size: file.file_size,
+    article: file.knowledge_sources.title,
+  })),
+);
+
 const existingFilesByKey = new Map<
   string,
   ExistingKnowledgeFile
@@ -690,8 +703,7 @@ await prisma.knowledge_imports.update({
     total_size:
       totalExtractedSize,
 
-    completed_files:
-      allFilesDuplicate ? 0 : 0,
+    completed_files: 0,
 
     failed_files: 0,
     current_file_id: null,

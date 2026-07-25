@@ -72,7 +72,14 @@ export function KnowledgeIntakeModal({
   const isWaitingToStart =
     open &&
     Boolean(selectedFiles?.length) &&
-    intake.step === "upload";
+    intake.step === "upload" &&
+    intake.files.length === 0;
+
+  const duplicateFileCount =
+    intake.fileProgress.filter(
+      (file) =>
+        file.status === "duplicate",
+    ).length;
 
   useEffect(() => {
     if (!open) {
@@ -184,6 +191,7 @@ export function KnowledgeIntakeModal({
                     selectedFiles?.length ??
                     0,
                   completedFiles: 0,
+                  duplicateFiles: 0,
                   failedFiles: 0,
                   processedFiles: 0,
                   pendingFiles:
@@ -219,9 +227,11 @@ export function KnowledgeIntakeModal({
                 files={
                   intake.fileProgress
                 }
-                summary={
-                  intake.progressSummary
-                }
+                summary={{
+                  ...intake.progressSummary,
+                  duplicateFiles:
+                    duplicateFileCount,
+                }}
                 proposalProgress={
                   intake.proposalProgress
                 }
