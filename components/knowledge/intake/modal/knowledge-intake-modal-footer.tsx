@@ -86,7 +86,7 @@ export function KnowledgeIntakeModalFooter({
               ? "Analizando documentos"
               : validFileCount === 0
                 ? "No hay documentos válidos"
-                : `Generar propuesta con ${validFileCount} ${
+                : `Importar ${validFileCount} ${
                     validFileCount === 1
                       ? "documento"
                       : "documentos"
