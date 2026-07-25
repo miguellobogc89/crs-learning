@@ -1,7 +1,6 @@
 // components/knowledge/intake/modal/knowledge-intake-modal.tsx
 
 "use client";
-
 import {
   useEffect,
   useRef,
@@ -286,11 +285,16 @@ export function KnowledgeIntakeModal({
             <KnowledgeIntakeModalFooter
               step={intake.step}
               fileCount={
+                intake.progressSummary
+                  .totalFiles ||
                 intake.files.length
               }
               validFileCount={
                 intake.progressSummary
                   .completedFiles
+              }
+              duplicateFileCount={
+                duplicateFileCount
               }
               failedFileCount={
                 intake.progressSummary

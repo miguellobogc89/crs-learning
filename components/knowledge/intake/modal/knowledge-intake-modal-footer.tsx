@@ -1,4 +1,3 @@
-// components/knowledge/intake/modal/knowledge-intake-modal-footer.tsx
 
 "use client";
 
@@ -17,6 +16,7 @@ type Props = {
   step: KnowledgeIntakeModalStep;
   fileCount: number;
   validFileCount: number;
+  duplicateFileCount: number;
   failedFileCount: number;
   isAnalyzing: boolean;
   isConfirming: boolean;
@@ -33,6 +33,7 @@ export function KnowledgeIntakeModalFooter({
   step,
   fileCount,
   validFileCount,
+  duplicateFileCount,
   failedFileCount,
   isAnalyzing,
   isConfirming,
@@ -45,11 +46,15 @@ export function KnowledgeIntakeModalFooter({
   onClose,
 }: Props) {
   if (step === "analyzing") {
+    const analyzedFileCount =
+      validFileCount +
+      duplicateFileCount +
+      failedFileCount;
+
     const analysisFinished =
       !isAnalyzing &&
       fileCount > 0 &&
-      validFileCount + failedFileCount ===
-        fileCount;
+      analyzedFileCount >= fileCount;
 
     const canGenerateProposal =
       analysisFinished &&
@@ -86,7 +91,7 @@ export function KnowledgeIntakeModalFooter({
               ? "Analizando documentos"
               : validFileCount === 0
                 ? "No hay documentos válidos"
-                : `Importar ${validFileCount} ${
+                : `Generar propuesta con ${validFileCount} ${
                     validFileCount === 1
                       ? "documento"
                       : "documentos"
