@@ -3,7 +3,7 @@ import Link from "next/link";
 import { BookOpen, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { KnowledgeCard } from "./knowledge-card";
+import { KnowledgeItemCard } from "./cards/knowledge-item-card";
 
 type KnowledgeSource = {
   id: string;
@@ -42,12 +42,12 @@ export function KnowledgeGrid({
 
         <Button asChild className="mt-5">
           <Link
-  href={
-    selectedLibraryId
-      ? `/knowledge/new?library=${selectedLibraryId}`
-      : "/knowledge/new"
-  }
->
+            href={
+              selectedLibraryId
+                ? `/knowledge/new?library=${selectedLibraryId}`
+                : "/knowledge/new"
+            }
+          >
             <Plus className="mr-2 h-4 w-4" />
             Nuevo knowledge
           </Link>
@@ -59,7 +59,13 @@ export function KnowledgeGrid({
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {knowledgeSources.map((knowledge) => (
-        <KnowledgeCard key={knowledge.id} knowledge={knowledge} />
+        <KnowledgeItemCard
+          key={knowledge.id}
+          knowledge={knowledge}
+          itemType="article"
+          selected={false}
+          onSelectedChange={() => {}}
+        />
       ))}
     </div>
   );

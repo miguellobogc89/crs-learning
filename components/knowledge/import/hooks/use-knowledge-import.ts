@@ -1,4 +1,4 @@
-// components/knowledge/intake/hooks/use-knowledge-import.ts
+// components/knowledge/import/hooks/use-knowledge-import.ts
 
 "use client";
 
@@ -162,6 +162,15 @@ const [
     selectedDocuments.length > 0 ||
     proposal !== null ||
     step !== "upload";
+
+  const canContinueInBackground =
+    Boolean(importId) &&
+    step === "analyzing" &&
+    isAnalyzing &&
+    (
+      processingPhase === "preparing" ||
+      processingPhase === "extracting"
+    );
 
   const handleFilesChange =
     useCallback(
@@ -341,13 +350,9 @@ setProgressSummary(
         const uploadResult =
           (await uploadResponse.json()) as UploadKnowledgeImportResult;
 
-setImportId(
-  uploadResult.importId,
-);
-
-registerImport(
-  uploadResult.importId,
-);
+        setImportId(
+          uploadResult.importId,
+        );
 
         setFileProgress(
           markFilesUploaded,
@@ -589,6 +594,28 @@ const duplicateFiles =
       router,
     ]);
 
+  const continueInBackground =
+    useCallback(() => {
+      if (!importId) {
+        return false;
+      }
+
+      registerImport(importId);
+
+      toast.success(
+        "La importación continuará en segundo plano",
+        {
+          description:
+            "Puedes seguir trabajando mientras termina el análisis.",
+        },
+      );
+
+      return true;
+    }, [
+      importId,
+      registerImport,
+    ]);
+
   const goBackToUpload =
     useCallback(() => {
       setError(null);
@@ -626,6 +653,7 @@ setProgressSummary(
     isAnalyzing,
     isConfirming,
     hasUnsavedProgress,
+    canContinueInBackground,
     processingPhase,
     fileProgress,
     progressSummary,
@@ -635,6 +663,7 @@ setProgressSummary(
     analyzeDocuments,
     continueWithValidDocuments,
     confirmProposal,
+    continueInBackground,
     goBackToUpload,
     reset,
   };

@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-import-modal.tsx
+// components/knowledge/import/modal/knowledge-import-modal.tsx
 
 "use client";
 import {
@@ -306,6 +306,9 @@ export function KnowledgeImportModal({
               isConfirming={
                 intake.isConfirming
               }
+              canContinueInBackground={
+                intake.canContinueInBackground
+              }
               onCancel={
                 requestClose
               }
@@ -318,6 +321,18 @@ export function KnowledgeImportModal({
               onContinueAnalysis={
                 intake.continueWithValidDocuments
               }
+              onContinueInBackground={() => {
+                const started =
+                  intake.continueInBackground();
+
+                if (!started) {
+                  return;
+                }
+
+                startedSelectionKeyRef.current =
+                  null;
+                onOpenChange(false);
+              }}
               onConfirm={
                 intake.confirmProposal
               }

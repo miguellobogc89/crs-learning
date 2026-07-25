@@ -15,6 +15,12 @@ export function KnowledgeToolbar({
   parentHref,
   onCreateFolder,
   onUpload,
+
+  selectedCount = 0,
+  onClearSelection,
+  onDeleteSelection,
+  onMoveSelection,
+  onShareSelection,
 }: KnowledgeToolbarProps) {
   return (
     <header className="mb-6 border-b border-border">
@@ -34,13 +40,18 @@ export function KnowledgeToolbar({
         />
       </div>
 
-      <KnowledgeExplorerControls
-        title={title}
-        explorerState={explorerState}
-        onExplorerStateChange={
-          onExplorerStateChange
-        }
-      />
+<KnowledgeExplorerControls
+  title={title}
+  explorerState={explorerState}
+  onExplorerStateChange={
+    onExplorerStateChange
+  }
+  selectedCount={selectedCount}
+  onMoveSelection={onMoveSelection}
+  onShareSelection={onShareSelection}
+  onDeleteSelection={onDeleteSelection}
+  onClearSelection={onClearSelection}
+/>
     </header>
   );
 }

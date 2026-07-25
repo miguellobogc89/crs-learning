@@ -1,9 +1,11 @@
+// components/knowledge/import/modal/knowledge-import-modal-footer.tsx
 
 "use client";
 
 import {
   ArrowLeft,
   Loader2,
+  Minimize2,
   Sparkles,
   Upload,
 } from "lucide-react";
@@ -20,10 +22,12 @@ type Props = {
   failedFileCount: number;
   isAnalyzing: boolean;
   isConfirming: boolean;
+  canContinueInBackground: boolean;
   onCancel: () => void;
   onBack: () => void;
   onAnalyze: () => void;
   onContinueAnalysis: () => void;
+  onContinueInBackground: () => void;
   onConfirm: () => void;
   onReset: () => void;
   onClose: () => void;
@@ -37,10 +41,12 @@ export function KnowledgeImportModalFooter({
   failedFileCount,
   isAnalyzing,
   isConfirming,
+  canContinueInBackground,
   onCancel,
   onBack,
   onAnalyze,
   onContinueAnalysis,
+  onContinueInBackground,
   onConfirm,
   onReset,
   onClose,
@@ -73,14 +79,29 @@ export function KnowledgeImportModalFooter({
             Cancelar
           </Button>
 
-          <Button
-            type="button"
-            disabled={!canGenerateProposal}
-            onClick={
-              onContinueAnalysis
-            }
-            className="h-11 bg-black px-5 text-white hover:bg-black/90 disabled:bg-black/40 disabled:text-white/70"
-          >
+          <div className="flex items-center gap-3">
+            {canContinueInBackground ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={
+                  onContinueInBackground
+                }
+                className="h-11 px-5"
+              >
+                <Minimize2 className="mr-2 h-4 w-4" />
+                Continuar en segundo plano
+              </Button>
+            ) : null}
+
+            <Button
+              type="button"
+              disabled={!canGenerateProposal}
+              onClick={
+                onContinueAnalysis
+              }
+              className="h-11 bg-black px-5 text-white hover:bg-black/90 disabled:bg-black/40 disabled:text-white/70"
+            >
             {isAnalyzing ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
@@ -96,7 +117,8 @@ export function KnowledgeImportModalFooter({
                       ? "documento"
                       : "documentos"
                   }`}
-          </Button>
+            </Button>
+          </div>
         </div>
       </footer>
     );

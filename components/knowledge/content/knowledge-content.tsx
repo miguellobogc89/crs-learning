@@ -144,9 +144,54 @@ export function KnowledgeContent({
     File[]
   >([]);
 
+  const [selectedArticleIds, setSelectedArticleIds] =
+  useState<Set<string>>(new Set());
+
+const [selectedFolderIds, setSelectedFolderIds] =
+  useState<Set<string>>(new Set());
+
   const filesInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedCount =
+  selectedArticleIds.size +
+  selectedFolderIds.size;
+
+function toggleArticleSelection(
+  id: string,
+  selected: boolean,
+) {
+  setSelectedArticleIds((current) => {
+    const next = new Set(current);
+
+    selected
+      ? next.add(id)
+      : next.delete(id);
+
+    return next;
+  });
+}
+
+function toggleFolderSelection(
+  id: string,
+  selected: boolean,
+) {
+  setSelectedFolderIds((current) => {
+    const next = new Set(current);
+
+    selected
+      ? next.add(id)
+      : next.delete(id);
+
+    return next;
+  });
+}
+
+function clearSelection() {
+  setSelectedArticleIds(new Set());
+  setSelectedFolderIds(new Set());
+}
 
   const selectedLibrary = useMemo(() => {
     return knowledgeLibraries.find(
@@ -463,6 +508,8 @@ export function KnowledgeContent({
           setIsCreateFolderOpen(true);
         }}
         onUpload={handleUpload}
+          selectedCount={selectedCount}
+  onClearSelection={clearSelection}
       />
 
       <KnowledgeExplorer
@@ -474,6 +521,14 @@ export function KnowledgeContent({
         canCreateArticle={canCreateArticle}
         search={explorerState.search}
         onCreateArticle={openCreateArticleModal}
+        selectedArticleIds={selectedArticleIds}
+selectedFolderIds={selectedFolderIds}
+onArticleSelectedChange={
+  toggleArticleSelection
+}
+onFolderSelectedChange={
+  toggleFolderSelection
+}
       />
 
       <CreateFolderDialog

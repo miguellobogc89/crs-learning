@@ -33,12 +33,23 @@ export type UploadType = "files" | "folder" | "zip";
 
 export type KnowledgeToolbarProps = {
   explorerState: ExplorerState;
-  onExplorerStateChange: (state: ExplorerState) => void;
+  onExplorerStateChange: (
+    state: ExplorerState,
+  ) => void;
+
   title: string;
   breadcrumb: ReactNode;
   parentHref: string | null;
+
   onCreateFolder: () => void;
   onUpload: (type: UploadType) => void;
+
+  // NUEVO
+  selectedCount?: number;
+  onClearSelection?: () => void;
+  onDeleteSelection?: () => void;
+  onMoveSelection?: () => void;
+  onShareSelection?: () => void;
 };
 
 export type KnowledgeNavigationHistory = {

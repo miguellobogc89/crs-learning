@@ -16,6 +16,10 @@ import {
   ListFilter,
   LoaderCircle,
   Sparkles,
+  FolderInput,
+  Share2,
+  Trash2,
+  X,
 } from "lucide-react";
 
 import { SearchInput } from "@/components/ui/search-input";
@@ -41,6 +45,11 @@ type Props = {
   title: string;
   explorerState: ExplorerState;
   onExplorerStateChange: (state: ExplorerState) => void;
+  selectedCount?: number;
+  onMoveSelection?: () => void;
+  onShareSelection?: () => void;
+  onDeleteSelection?: () => void;
+  onClearSelection?: () => void;
 };
 
 const sortLabels: Record<ExplorerSort, string> = {
@@ -67,6 +76,11 @@ export function KnowledgeExplorerControls({
   title,
   explorerState,
   onExplorerStateChange,
+  selectedCount = 0,
+  onMoveSelection,
+  onShareSelection,
+  onDeleteSelection,
+  onClearSelection,
 }: Props) {
   function updateExplorerState(
     value: Partial<ExplorerState>,
@@ -319,6 +333,15 @@ export function KnowledgeExplorerControls({
             <List className="h-4 w-4" strokeWidth={2.25} />
           </button>
         </div>
+        {selectedCount > 0 && (
+          <>
+            <div className="mx-1 h-6 w-px bg-border" />
+            <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted" onClick={onMoveSelection}><FolderInput className="h-4 w-4" /></button>
+            <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted" onClick={onShareSelection}><Share2 className="h-4 w-4" /></button>
+            <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted" onClick={onDeleteSelection}><Trash2 className="h-4 w-4 text-destructive" /></button>
+            <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted" onClick={onClearSelection}><X className="h-4 w-4" /></button>
+          </>
+        )}
       </div>
     </div>
   );
