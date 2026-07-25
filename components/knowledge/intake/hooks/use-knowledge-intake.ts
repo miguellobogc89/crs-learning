@@ -583,20 +583,21 @@ export function useKnowledgeIntake({
       null,
     );
 
-  const [
-    progressSummary,
-    setProgressSummary,
-  ] = useState({
-    totalFiles: 0,
-    completedFiles: 0,
-    failedFiles: 0,
-    processedFiles: 0,
-    pendingFiles: 0,
-    progressPercentage: 0,
-    currentFileName: null as
-      | string
-      | null,
-  });
+const [
+  progressSummary,
+  setProgressSummary,
+] = useState({
+  totalFiles: 0,
+  completedFiles: 0,
+  duplicateFiles: 0,
+  failedFiles: 0,
+  processedFiles: 0,
+  pendingFiles: 0,
+  progressPercentage: 0,
+  currentFileName: null as
+    | string
+    | null,
+});
 
   const files = useMemo(
     () =>
@@ -661,20 +662,25 @@ export function useKnowledgeIntake({
       [],
     );
 
-  const applyServerProgress =
-    useCallback(
-      (
-        progress: KnowledgeImportProgress,
-      ) => {
-        setProgressSummary({
+const applyServerProgress =
+  useCallback(
+    (
+      progress: KnowledgeImportProgress,
+    ) => {
+      setProgressSummary(
+        (currentSummary) => ({
           totalFiles:
-            progress.totalFiles,
+            progress.totalFiles +
+            currentSummary.duplicateFiles,
           completedFiles:
             progress.completedFiles,
+          duplicateFiles:
+            currentSummary.duplicateFiles,
           failedFiles:
             progress.failedFiles,
           processedFiles:
-            progress.processedFiles,
+            progress.processedFiles +
+            currentSummary.duplicateFiles,
           pendingFiles:
             progress.pendingFiles,
           progressPercentage:
@@ -682,81 +688,95 @@ export function useKnowledgeIntake({
           currentFileName:
             progress.currentFile?.name ??
             null,
-        });
-
-setFileProgress(
-  (currentFiles) => {
-    const currentByName =
-      new Map(
-        currentFiles.map(
-          (file) => [
-            file.name,
-            file,
-          ],
-        ),
+        }),
       );
 
-    return progress.files.map(
-      (file) => {
-        const localFile =
-          currentByName.get(
-            file.name,
-          );
+      setFileProgress(
+        (currentFiles) => {
+          const duplicateFiles =
+            currentFiles.filter(
+              (file) =>
+                file.status ===
+                "duplicate",
+            );
 
-        let status:
-          | "pending"
-          | "processing"
-          | "completed"
-          | "error" =
-          "pending";
+          const currentByName =
+            new Map(
+              currentFiles.map(
+                (file) => [
+                  file.name,
+                  file,
+                ],
+              ),
+            );
 
-        if (
-          file.processingStatus ===
-          "processing"
-        ) {
-          status = "processing";
-        } else if (
-          file.processingStatus ===
-            "completed" ||
-          file.status ===
-            "text_ready"
-        ) {
-          status = "completed";
-        } else if (
-          file.processingStatus ===
-            "error" ||
-          file.status ===
-            "text_error"
-        ) {
-          status = "error";
-        }
+          const processedFiles =
+            progress.files.map(
+              (file) => {
+                const localFile =
+                  currentByName.get(
+                    file.name,
+                  );
 
-        return {
-          id: file.id,
-          name: file.name,
-          size:
-            file.size ??
-            localFile?.size,
-          fileType:
-            localFile?.fileType,
-          relativePath:
-            file.relativePath,
-          processingOrder:
-            file.processingOrder,
-          processingStep:
-            file.processingStep,
-          status,
-          error:
-            file.error ??
-            undefined,
-        };
-      },
-    );
-  },
-);
-      },
-      [],
-    );
+                let status:
+                  | "pending"
+                  | "processing"
+                  | "completed"
+                  | "error" =
+                  "pending";
+
+                if (
+                  file.processingStatus ===
+                  "processing"
+                ) {
+                  status = "processing";
+                } else if (
+                  file.processingStatus ===
+                    "completed" ||
+                  file.status ===
+                    "text_ready"
+                ) {
+                  status = "completed";
+                } else if (
+                  file.processingStatus ===
+                    "error" ||
+                  file.status ===
+                    "text_error"
+                ) {
+                  status = "error";
+                }
+
+                return {
+                  id: file.id,
+                  name: file.name,
+                  size:
+                    file.size ??
+                    localFile?.size,
+                  fileType:
+                    localFile?.fileType,
+                  relativePath:
+                    file.relativePath,
+                  processingOrder:
+                    file.processingOrder,
+                  processingStep:
+                    file.processingStep,
+                  status,
+                  error:
+                    file.error ??
+                    undefined,
+                };
+              },
+            );
+
+          return [
+            ...processedFiles,
+            ...duplicateFiles,
+          ];
+        },
+      );
+    },
+    [],
+  );
 
   const analyzeDocuments =
     useCallback(async () => {
@@ -776,17 +796,18 @@ setFileProgress(
         "uploading",
       );
 
-      setProgressSummary({
-        totalFiles:
-          selectedDocuments.length,
-        completedFiles: 0,
-        failedFiles: 0,
-        processedFiles: 0,
-        pendingFiles:
-          selectedDocuments.length,
-        progressPercentage: 0,
-        currentFileName: null,
-      });
+setProgressSummary({
+  totalFiles:
+    selectedDocuments.length,
+  completedFiles: 0,
+  duplicateFiles: 0,
+  failedFiles: 0,
+  processedFiles: 0,
+  pendingFiles:
+    selectedDocuments.length,
+  progressPercentage: 0,
+  currentFileName: null,
+});
 
 setFileProgress(
   selectedDocuments.map(
@@ -919,70 +940,97 @@ setFileProgress(
             },
           );
 
-if (
+const duplicateProgress =
   analysisResult.extraction
-    .duplicateCount > 0
-) {
-  const duplicateFiles =
-    analysisResult.extraction
-      .duplicateFiles;
-
-  const articleTitles =
-    Array.from(
-      new Set(
-        duplicateFiles.map(
-          (file) =>
+    .duplicateFiles.map(
+      (file, index) => ({
+        id: [
+          "duplicate",
+          file.existingFileId,
+          index,
+        ].join("-"),
+        name: file.name,
+        size: file.size,
+        relativePath:
+          file.relativePath,
+        status:
+          "duplicate" as const,
+        duplicateOf: {
+          fileId:
+            file.existingFileId,
+          articleId:
+            file.existingArticleId,
+          articleTitle:
             file.existingArticleTitle,
+        },
+      }),
+    );
+
+if (duplicateProgress.length > 0) {
+  setFileProgress(
+    (currentFiles) => {
+      const duplicateNames =
+        new Set(
+          duplicateProgress.map(
+            (file) => file.name,
+          ),
+        );
+
+      return [
+        ...currentFiles.filter(
+          (file) =>
+            !duplicateNames.has(
+              file.name,
+            ),
         ),
-      ),
-    );
+        ...duplicateProgress,
+      ];
+    },
+  );
 
-  if (
-    analysisResult.extraction
-      .allFilesDuplicate
-  ) {
-    const duplicateDescription =
-      articleTitles.length === 1
-        ? `El documento ya existe en "${articleTitles[0]}" y se ha descartado.`
-        : `${duplicateFiles.length} documentos ya existían en la biblioteca y se han descartado.`;
+  const completedFiles =
+    analysisResult.textExtraction
+      .successfulFiles;
 
-    toast.warning(
-      duplicateFiles.length === 1
-        ? "El documento ya existe"
-        : "Los documentos ya existen",
-      {
-        description:
-          duplicateDescription,
-      },
-    );
+  const failedFiles =
+    analysisResult.textExtraction
+      .failedFiles;
 
-    setError(
-      duplicateDescription,
-    );
+  const duplicateFiles =
+    duplicateProgress.length;
 
-    /*
-     * Volvemos al estado de subida. No queda habilitada
-     * la generación de propuesta.
-     */
-    setStep("upload");
-    return;
-  }
+  const totalFiles =
+    completedFiles +
+    failedFiles +
+    duplicateFiles;
+
+  setProgressSummary({
+    totalFiles,
+    completedFiles,
+    duplicateFiles,
+    failedFiles,
+    processedFiles: totalFiles,
+    pendingFiles: 0,
+    progressPercentage: 100,
+    currentFileName: null,
+  });
 
   toast.warning(
-    duplicateFiles.length === 1
-      ? "Se ha descartado un duplicado"
-      : `Se han descartado ${duplicateFiles.length} duplicados`,
+    duplicateFiles === 1
+      ? "Se ha detectado un documento duplicado"
+      : `Se han detectado ${duplicateFiles} documentos duplicados`,
     {
       description:
-        "Los demás documentos continuarán analizándose.",
+        "Los duplicados aparecen marcados en amarillo y no se incluirán en la propuesta.",
     },
   );
 }
 
 if (
-  analysisResult
-    .textExtraction
-    .successfulFiles === 0
+  analysisResult.textExtraction
+    .successfulFiles === 0 &&
+  analysisResult.extraction
+    .duplicateCount === 0
 ) {
   setError(
     "No se ha podido obtener texto de ninguno de los documentos",
@@ -1177,6 +1225,7 @@ if (
     setProgressSummary({
       totalFiles: 0,
       completedFiles: 0,
+      duplicateFiles: 0,
       failedFiles: 0,
       processedFiles: 0,
       pendingFiles: 0,
