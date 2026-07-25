@@ -1,12 +1,23 @@
 // components/knowledge/content/knowledge-content.tsx
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 
 import { CreateFolderDialog } from "./create-folder-dialog";
 import { KnowledgeExplorer } from "./knowledge-explorer";
 import { KnowledgeLibraryBreadcrumb } from "./knowledge-library-breadcrumb";
-import { KnowledgeToolbar } from "./knowledge-toolbar";
+import { KnowledgeToolbar } from "./toolbar/knowledge-toolbar";
+import type {
+  ExplorerState,
+  ExplorerStatus,
+  UploadType,
+} from "./toolbar/types";
+
 import { KnowledgeImportModal } from "@/components/knowledge/import/modal";
 import {
   buildLibraryTree,
@@ -38,17 +49,11 @@ type KnowledgeLibrary = {
   parent_id: string | null;
   name: string;
   is_shared?: boolean;
-};
-
-type ExplorerState = {
-  search: string;
-  viewMode: "grid" | "list";
-  sort:
-    | "updated_desc"
-    | "updated_asc"
-    | "name_asc"
-    | "name_desc"
-    | "status";
+  created_at?: Date | string | null;
+  updated_at?: Date | string | null;
+  article_count?: number;
+  folder_count?: number;
+  file_count?: number;
 };
 
 type Props = {
@@ -69,7 +74,11 @@ function normalizeSearchValue(value: unknown) {
         return item;
       }
 
-      if (item && typeof item === "object" && "name" in item) {
+      if (
+        item &&
+        typeof item === "object" &&
+        "name" in item
+      ) {
         return String(item.name);
       }
 
@@ -78,22 +87,63 @@ function normalizeSearchValue(value: unknown) {
     .join(" ");
 }
 
+function normalizeArticleStatus(
+  status: string | null | undefined,
+): ExplorerStatus {
+  if (status === "ready" || status === "processed") {
+    return "ready";
+  }
+
+  if (status === "processing") {
+    return "processing";
+  }
+
+  if (status === "error") {
+    return "error";
+  }
+
+  return "draft";
+}
+
+function getDateTimestamp(
+  value: Date | string | null | undefined,
+) {
+  if (!value) {
+    return 0;
+  }
+
+  const timestamp = new Date(value).getTime();
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
 export function KnowledgeContent({
   knowledgeSources,
   knowledgeLibraries,
   selectedLibraryId,
   selectedView,
 }: Props) {
-  const [explorerState, setExplorerState] = useState<ExplorerState>({
-    search: "",
-    viewMode: "grid",
-    sort: "updated_desc",
-  });
+  const [explorerState, setExplorerState] =
+    useState<ExplorerState>({
+      search: "",
+      viewMode: "grid",
+      sort: "updated_desc",
+      itemType: "all",
+      status: "all",
+    });
 
-  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
-  const [isKnowledgeImportOpen, setIsKnowledgeImportOpen] =
-  useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isCreateFolderOpen, setIsCreateFolderOpen] =
+    useState(false);
+
+  const [
+    isKnowledgeImportOpen,
+    setIsKnowledgeImportOpen,
+  ] = useState(false);
+
+  const [selectedFiles, setSelectedFiles] = useState<
+    File[]
+  >([]);
+
   const filesInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
@@ -111,9 +161,11 @@ export function KnowledgeContent({
       selectedView !== "shared",
   );
 
-  const childLibraries = useMemo(() => {
+  const baseChildLibraries = useMemo(() => {
     if (selectedView === "shared") {
-      return knowledgeLibraries.filter((library) => library.is_shared);
+      return knowledgeLibraries.filter(
+        (library) => library.is_shared,
+      );
     }
 
     return knowledgeLibraries.filter((library) => {
@@ -123,13 +175,105 @@ export function KnowledgeContent({
 
       return library.parent_id === selectedLibraryId;
     });
-  }, [knowledgeLibraries, selectedLibraryId, selectedView]);
+  }, [
+    knowledgeLibraries,
+    selectedLibraryId,
+    selectedView,
+  ]);
+
+  const processedLibraries = useMemo(() => {
+    /*
+     * Si se solicitan únicamente artículos, o se aplica
+     * un estado de artículo, no mostramos carpetas.
+     */
+    if (
+      explorerState.itemType === "articles" ||
+      explorerState.status !== "all"
+    ) {
+      return [];
+    }
+
+    const searchValue = explorerState.search
+      .trim()
+      .toLocaleLowerCase("es");
+
+    const filtered = baseChildLibraries.filter(
+      (library) => {
+        if (!searchValue) {
+          return true;
+        }
+
+        return library.name
+          .toLocaleLowerCase("es")
+          .includes(searchValue);
+      },
+    );
+
+    return [...filtered].sort((first, second) => {
+      if (explorerState.sort === "name_asc") {
+        return first.name.localeCompare(
+          second.name,
+          "es",
+          {
+            sensitivity: "base",
+          },
+        );
+      }
+
+      if (explorerState.sort === "name_desc") {
+        return second.name.localeCompare(
+          first.name,
+          "es",
+          {
+            sensitivity: "base",
+          },
+        );
+      }
+
+      const firstDate = getDateTimestamp(
+        first.updated_at,
+      );
+
+      const secondDate = getDateTimestamp(
+        second.updated_at,
+      );
+
+      if (explorerState.sort === "updated_asc") {
+        return firstDate - secondDate;
+      }
+
+      return secondDate - firstDate;
+    });
+  }, [
+    baseChildLibraries,
+    explorerState.itemType,
+    explorerState.search,
+    explorerState.sort,
+    explorerState.status,
+  ]);
 
   const processedKnowledge = useMemo(() => {
-    const value = explorerState.search.trim().toLowerCase();
+    if (explorerState.itemType === "folders") {
+      return [];
+    }
+
+    const searchValue = explorerState.search
+      .trim()
+      .toLocaleLowerCase("es");
 
     const filtered = knowledgeSources.filter((item) => {
-      if (!value) {
+      const normalizedStatus = normalizeArticleStatus(
+        item.status,
+      );
+
+      if (
+        explorerState.status !== "all" &&
+        normalizedStatus !== explorerState.status
+      ) {
+        return false;
+      }
+
+      if (!searchValue) {
         return true;
       }
 
@@ -141,61 +285,84 @@ export function KnowledgeContent({
         item.language,
         item.domain,
         item.level,
+        item.knowledge_type,
+        item.visibility,
         normalizeSearchValue(item.tags),
         normalizeSearchValue(item.keywords),
         normalizeSearchValue(item.entities),
       ]
         .filter(Boolean)
         .join(" ")
-        .toLowerCase();
+        .toLocaleLowerCase("es");
 
-      return searchableText.includes(value);
+      return searchableText.includes(searchValue);
     });
 
-    return [...filtered].sort((a, b) => {
+    return [...filtered].sort((first, second) => {
       if (explorerState.sort === "name_asc") {
-        return a.title.localeCompare(b.title);
+        return first.title.localeCompare(
+          second.title,
+          "es",
+          {
+            sensitivity: "base",
+          },
+        );
       }
 
       if (explorerState.sort === "name_desc") {
-        return b.title.localeCompare(a.title);
+        return second.title.localeCompare(
+          first.title,
+          "es",
+          {
+            sensitivity: "base",
+          },
+        );
       }
 
       if (explorerState.sort === "status") {
-        return (a.status ?? "").localeCompare(b.status ?? "");
+        return normalizeArticleStatus(
+          first.status,
+        ).localeCompare(
+          normalizeArticleStatus(second.status),
+          "es",
+        );
       }
 
-      const dateA = a.updated_at
-        ? new Date(a.updated_at).getTime()
-        : 0;
+      const firstDate = getDateTimestamp(
+        first.updated_at,
+      );
 
-      const dateB = b.updated_at
-        ? new Date(b.updated_at).getTime()
-        : 0;
+      const secondDate = getDateTimestamp(
+        second.updated_at,
+      );
 
       if (explorerState.sort === "updated_asc") {
-        return dateA - dateB;
+        return firstDate - secondDate;
       }
 
-      return dateB - dateA;
+      return secondDate - firstDate;
     });
   }, [
     knowledgeSources,
+    explorerState.itemType,
     explorerState.search,
     explorerState.sort,
+    explorerState.status,
   ]);
 
-  const libraryTree = useMemo(
-    () => buildLibraryTree(knowledgeLibraries),
-    [knowledgeLibraries],
-  );
+  const libraryTree = useMemo(() => {
+    return buildLibraryTree(knowledgeLibraries);
+  }, [knowledgeLibraries]);
 
-  const libraryPath = useMemo(
-    () => getLibraryPath(libraryTree, selectedLibraryId),
-    [libraryTree, selectedLibraryId],
-  );
+  const libraryPath = useMemo(() => {
+    return getLibraryPath(
+      libraryTree,
+      selectedLibraryId,
+    );
+  }, [libraryTree, selectedLibraryId]);
 
-  const currentLibrary = libraryPath[libraryPath.length - 1];
+  const currentLibrary =
+    libraryPath[libraryPath.length - 1];
 
   let pageTitle = "Mi biblioteca";
 
@@ -209,6 +376,20 @@ export function KnowledgeContent({
     pageTitle = currentLibrary.name;
   }
 
+  let parentHref: string | null = null;
+
+  if (selectedView !== "all") {
+    parentHref = "/knowledge";
+  } else if (selectedLibrary) {
+    if (selectedLibrary.parent_id) {
+      parentHref = `/knowledge?library=${encodeURIComponent(
+        selectedLibrary.parent_id,
+      )}`;
+    } else {
+      parentHref = "/knowledge";
+    }
+  }
+
   function openCreateArticleModal() {
     if (!canCreateArticle) {
       return;
@@ -218,67 +399,74 @@ export function KnowledgeContent({
   }
 
   function handleFilesSelected(
-  event: React.ChangeEvent<HTMLInputElement>,
-) {
-  const files = Array.from(event.target.files ?? []);
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const files = Array.from(
+      event.target.files ?? [],
+    );
 
-  if (files.length === 0) {
-    return;
+    if (files.length === 0) {
+      return;
+    }
+
+    setSelectedFiles(files);
+    setIsKnowledgeImportOpen(true);
+
+    event.target.value = "";
   }
 
-  setSelectedFiles(files);
-  setIsKnowledgeImportOpen(true);
+  function handleUpload(type: UploadType) {
+    if (type === "files") {
+      filesInputRef.current?.click();
+      return;
+    }
 
-  // Permite volver a seleccionar el mismo archivo más adelante.
-  event.target.value = "";
-}
+    if (type === "folder") {
+      folderInputRef.current?.click();
+      return;
+    }
+
+    zipInputRef.current?.click();
+  }
 
   return (
     <>
       <KnowledgeToolbar
         explorerState={explorerState}
         onExplorerStateChange={setExplorerState}
-        selectedLibraryId={selectedLibraryId}
         title={pageTitle}
+        parentHref={parentHref}
         breadcrumb={
           selectedView === "shared" ? (
-            <div className="text-sm text-muted-foreground">
+            <div className="truncate text-sm text-muted-foreground">
               Mi biblioteca / Compartido conmigo
             </div>
           ) : selectedView === "public" ? (
-            <div className="text-sm text-muted-foreground">
+            <div className="truncate text-sm text-muted-foreground">
               Mi biblioteca / Conocimiento público
             </div>
           ) : selectedView === "private" ? (
-            <div className="text-sm text-muted-foreground">
+            <div className="truncate text-sm text-muted-foreground">
               Mi biblioteca / Documentos privados
             </div>
           ) : libraryPath.length > 0 ? (
-            <KnowledgeLibraryBreadcrumb path={libraryPath} />
+            <KnowledgeLibraryBreadcrumb
+              path={libraryPath}
+            />
           ) : (
-            <div className="text-sm text-muted-foreground">
+            <div className="truncate text-sm text-muted-foreground">
               Mi biblioteca
             </div>
           )
         }
-        onCreateFolder={() => setIsCreateFolderOpen(true)}
-        onUpload={(type) => {
-  if (type === "files") {
-    filesInputRef.current?.click();
-    return;
-  }
-
-  if (type === "folder") {
-    folderInputRef.current?.click();
-    return;
-  }
-
-  zipInputRef.current?.click();
-}}
+        onCreateFolder={() => {
+          setIsCreateFolderOpen(true);
+        }}
+        onUpload={handleUpload}
       />
 
       <KnowledgeExplorer
-        folders={childLibraries}
+        folders={processedLibraries}
         knowledgeSources={processedKnowledge}
         viewMode={explorerState.viewMode}
         selectedLibraryId={selectedLibraryId}
@@ -291,46 +479,48 @@ export function KnowledgeContent({
       <CreateFolderDialog
         open={isCreateFolderOpen}
         parentLibraryId={selectedLibraryId}
-        onClose={() => setIsCreateFolderOpen(false)}
+        onClose={() => {
+          setIsCreateFolderOpen(false);
+        }}
       />
 
       {selectedLibraryId ? (
-<KnowledgeImportModal
-  open={isKnowledgeImportOpen}
-  context={{
-    origin: "folder",
-    libraryId: selectedLibraryId,
-  }}
-  selectedFiles={selectedFiles}
-  onOpenChange={setIsKnowledgeImportOpen}
-/>
+        <KnowledgeImportModal
+          open={isKnowledgeImportOpen}
+          context={{
+            origin: "folder",
+            libraryId: selectedLibraryId,
+          }}
+          selectedFiles={selectedFiles}
+          onOpenChange={setIsKnowledgeImportOpen}
+        />
       ) : null}
 
-<input
-  ref={filesInputRef}
-  type="file"
-  multiple
-  className="hidden"
-  onChange={handleFilesSelected}
-/>
+      <input
+        ref={filesInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFilesSelected}
+      />
 
-<input
-  ref={folderInputRef}
-  type="file"
-  // @ts-expect-error webkitdirectory
-  webkitdirectory=""
-  multiple
-  className="hidden"
-  onChange={handleFilesSelected}
-/>
+      <input
+        ref={folderInputRef}
+        type="file"
+        // @ts-expect-error webkitdirectory
+        webkitdirectory=""
+        multiple
+        className="hidden"
+        onChange={handleFilesSelected}
+      />
 
-<input
-  ref={zipInputRef}
-  type="file"
-  accept=".zip"
-  className="hidden"
-  onChange={handleFilesSelected}
-/>
+      <input
+        ref={zipInputRef}
+        type="file"
+        accept=".zip"
+        className="hidden"
+        onChange={handleFilesSelected}
+      />
     </>
   );
 }

@@ -9,6 +9,9 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import {
+  useBackgroundImports,
+} from "@/components/knowledge/import/background/use-background-imports";
 
 import type {
   ConfirmKnowledgeImportResult,
@@ -71,6 +74,10 @@ export function useKnowledgeImport({
   onCompleted,
 }: useKnowledgeImportParams) {
   const router = useRouter();
+
+  const {
+  registerImport,
+} = useBackgroundImports();
 
   const [step, setStep] =
     useState<KnowledgeImportModalStep>(
@@ -334,9 +341,13 @@ setProgressSummary(
         const uploadResult =
           (await uploadResponse.json()) as UploadKnowledgeImportResult;
 
-        setImportId(
-          uploadResult.importId,
-        );
+setImportId(
+  uploadResult.importId,
+);
+
+registerImport(
+  uploadResult.importId,
+);
 
         setFileProgress(
           markFilesUploaded,
