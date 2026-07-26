@@ -1,4 +1,4 @@
-﻿// lib/knowledge/import/types.ts
+// lib/knowledge/import/types.ts
 
 export type KnowledgeImportDocumentInput = {
   id: string;
@@ -51,7 +51,8 @@ export type KnowledgeImportDocumentAnalysis = {
   topics: string[];
   entities: string[];
   keywords: string[];
-
+
+
   organizationAreas: KnowledgeImportOrganizationArea[];
   versionLabel: string | null;
   likelyCurrentVersion: boolean;
@@ -181,11 +182,13 @@ export type KnowledgeImportCreatedDocumentLog = {
 };
 
 export type KnowledgeImportSkippedDocumentReason =
-  | "duplicate_name_and_size";
+  | "duplicate_name_and_size"
+  | "duplicate_in_import_batch";
 
 export type KnowledgeImportSkippedDocumentLog = {
   importFileId: string;
-  existingKnowledgeFileId: string;
+  existingKnowledgeFileId: string | null;
+  duplicateImportFileId?: string;
   fileName: string;
   fileSize: number | null;
   articleId: string;

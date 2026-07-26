@@ -1,4 +1,4 @@
-// lib/knowledge/import/types.ts
+// lib/knowledge/import/prompts/types.ts
 
 export type KnowledgeImportDocumentInput = {
   id: string;
