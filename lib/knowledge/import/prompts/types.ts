@@ -1,0 +1,283 @@
+// lib/knowledge/import/types.ts
+
+export type KnowledgeImportDocumentInput = {
+  id: string;
+  name: string;
+  relativePath: string;
+  text: string;
+};
+
+export type KnowledgeImportOrganizationAreaType =
+  | "direction"
+  | "division"
+  | "business_unit"
+  | "department"
+  | "area"
+  | "team"
+  | "office"
+  | "committee"
+  | "operational_center"
+  | "unknown";
+
+export type KnowledgeImportOrganizationAreaEvidence = {
+  text: string;
+  reason: string;
+};
+
+export type KnowledgeImportOrganizationArea = {
+  name: string;
+  areaType: KnowledgeImportOrganizationAreaType;
+  description: string;
+  aliases: string[];
+  parentAreaName: string | null;
+  confidence: number;
+  evidence: KnowledgeImportOrganizationAreaEvidence[];
+};
+
+export type KnowledgeImportDocumentAnalysis = {
+  documentId: string;
+  documentName: string;
+
+  title: string;
+  summary: string;
+
+  documentType:
+    | "procedure"
+    | "process"
+    | "manual"
+    | "template"
+    | "spreadsheet"
+    | "presentation"
+    | "policy"
+    | "reference"
+    | "report"
+    | "other";
+
+  topics: string[];
+  entities: string[];
+  keywords: string[];
+
+  organizationAreas: KnowledgeImportOrganizationArea[];
+
+  versionLabel: string | null;
+  likelyCurrentVersion: boolean;
+
+  suggestedArticleTitle: string;
+  suggestedFolderPath: string[];
+
+  relatedDocumentIds: string[];
+};
+
+export type KnowledgeImportArticleProposal = {
+  id: string;
+
+  action: "create" | "update";
+  existingArticleId: string | null;
+
+  title: string;
+  description: string;
+
+  /**
+   * null significa que el artículo se propone
+   * en la raíz de la biblioteca.
+   */
+  folderId: string | null;
+
+  documentIds: string[];
+  documentNames: string[];
+
+  /**
+   * Confianza global de la IA en que los documentos
+   * asociados forman una misma unidad de conocimiento.
+   */
+  confidence: number;
+};
+
+export type KnowledgeImportFolderProposal = {
+  id: string;
+
+  name: string;
+  description: string;
+
+  /**
+   * null significa que es una carpeta raíz.
+   *
+   * La propuesta se almacena de forma plana.
+   * La UI reconstruye la jerarquía usando parentFolderId.
+   */
+  parentFolderId: string | null;
+};
+
+export type KnowledgeImportWarningType =
+  | "duplicate"
+  | "possible_duplicate"
+  | "version"
+  | "contradiction"
+  | "orphan";
+
+export type KnowledgeImportWarningSeverity =
+  | "low"
+  | "medium"
+  | "high";
+
+export type KnowledgeImportWarning = {
+  id: string;
+
+  type: KnowledgeImportWarningType;
+  severity: KnowledgeImportWarningSeverity;
+
+  title: string;
+  description: string;
+
+  documentIds: string[];
+  suggestedAction: string;
+};
+
+export type KnowledgeImportProposal = {
+  title: string;
+  description: string;
+
+  summary: {
+    totalDocuments: number;
+    totalFolders: number;
+    totalArticles: number;
+    totalWarnings: number;
+  };
+
+  /**
+   * Estructura plana.
+   *
+   * Las relaciones entre carpetas se resuelven mediante:
+   * folder.parentFolderId
+   *
+   * La ubicación de los artículos se resuelve mediante:
+   * article.folderId
+   */
+  folders: KnowledgeImportFolderProposal[];
+  articles: KnowledgeImportArticleProposal[];
+
+  warnings: KnowledgeImportWarning[];
+  documentAnalyses: KnowledgeImportDocumentAnalysis[];
+};
+
+export type GenerateKnowledgeImportProposalResult = {
+  importId: string;
+  status: "proposal_ready";
+  proposal: KnowledgeImportProposal;
+};
+
+export type KnowledgeImportCreatedFolderLog = {
+  proposalFolderId: string;
+  databaseFolderId: string;
+  name: string;
+  parentProposalFolderId: string | null;
+  parentDatabaseFolderId: string;
+};
+
+export type KnowledgeImportCreatedDocumentLog = {
+  importFileId: string;
+  knowledgeFileId: string;
+  fileName: string;
+  fileSize: number | null;
+  articleId: string;
+  articleTitle: string;
+  extractedCharacters: number;
+  storagePath: string | null;
+};
+
+export type KnowledgeImportSkippedDocumentReason =
+  | "duplicate_name_and_size";
+
+export type KnowledgeImportSkippedDocumentLog = {
+  importFileId: string;
+  existingKnowledgeFileId: string;
+  fileName: string;
+  fileSize: number | null;
+  articleId: string;
+  articleTitle: string;
+  reason: KnowledgeImportSkippedDocumentReason;
+};
+
+export type KnowledgeImportCreatedArticleLog = {
+  proposalArticleId: string;
+
+  action: "create" | "update";
+  existingArticleId: string | null;
+
+  databaseArticleId: string;
+  title: string;
+  description: string;
+  proposalFolderId: string | null;
+  databaseFolderId: string;
+  confidence: number;
+
+  /**
+   * Todos los documentos que la propuesta asignaba
+   * originalmente al artículo.
+   */
+  documentIds: string[];
+
+  /**
+   * Documentos que se han incorporado realmente.
+   */
+  createdDocumentIds: string[];
+
+  /**
+   * Documentos omitidos por ser duplicados.
+   */
+  skippedDocumentIds: string[];
+
+  knowledgeFileIds: string[];
+
+  /**
+   * Indica si se modificó realmente el contenido
+   * persistente del artículo.
+   */
+  contentChanged: boolean;
+};
+
+export type KnowledgeImportExecutionLog = {
+  version:
+    | "knowledge-import-confirm-v1"
+    | "knowledge-import-confirm-v2";
+
+  importId: string;
+  status: "completed";
+
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+
+  targetLibrary: {
+    id: string;
+    name: string;
+  };
+
+  userId: string;
+  companyId: string | null;
+
+  summary: {
+    foldersCreated: number;
+    articlesCreated: number;
+    articlesUpdated: number;
+    articlesUnchanged: number;
+    documentsCreated: number;
+    documentsSkippedAsDuplicates: number;
+    extractedCharactersStored: number;
+    warningsAccepted: number;
+  };
+
+  folders: KnowledgeImportCreatedFolderLog[];
+  articles: KnowledgeImportCreatedArticleLog[];
+  documents: KnowledgeImportCreatedDocumentLog[];
+  skippedDocuments: KnowledgeImportSkippedDocumentLog[];
+
+  proposalSnapshot: KnowledgeImportProposal;
+};
+
+export type ConfirmKnowledgeImportResult = {
+  success: true;
+  importId: string;
+  status: "completed";
+  log: KnowledgeImportExecutionLog;
+};

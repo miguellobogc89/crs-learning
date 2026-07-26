@@ -1,5 +1,9 @@
 // lib/knowledge/import/proposal-prompts.ts
 
+import {
+  ORGANIZATION_AREAS_PROMPT,
+} from "./prompts/organization-areas";
+
 import type {
   KnowledgeImportDocumentAnalysis,
   KnowledgeImportDocumentInput,
@@ -42,6 +46,8 @@ REGLAS IMPORTANTES:
 - relatedDocumentIds debe contener únicamente relaciones razonablemente justificadas.
 - No inventes información.
 - Conserva exactamente los identificadores recibidos.
+
+${ORGANIZATION_AREAS_PROMPT}
 `.trim();
 
 export const PROPOSAL_SYSTEM_PROMPT = `
@@ -355,6 +361,78 @@ export function buildProposalPrompt(
   ].join("\n");
 }
 
+const ORGANIZATION_AREA_EVIDENCE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "text",
+    "reason",
+  ],
+  properties: {
+    text: {
+      type: "string",
+    },
+    reason: {
+      type: "string",
+    },
+  },
+} as const;
+
+const ORGANIZATION_AREA_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "name",
+    "areaType",
+    "description",
+    "aliases",
+    "parentAreaName",
+    "confidence",
+    "evidence",
+  ],
+  properties: {
+    name: {
+      type: "string",
+    },
+    areaType: {
+      type: "string",
+      enum: [
+        "direction",
+        "division",
+        "business_unit",
+        "department",
+        "area",
+        "team",
+        "office",
+        "committee",
+        "operational_center",
+        "unknown",
+      ],
+    },
+    description: {
+      type: "string",
+    },
+    aliases: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+    },
+    parentAreaName: {
+      type: ["string", "null"],
+    },
+    confidence: {
+      type: "number",
+      minimum: 0,
+      maximum: 1,
+    },
+    evidence: {
+      type: "array",
+      items: ORGANIZATION_AREA_EVIDENCE_SCHEMA,
+    },
+  },
+} as const;
+
 export const DOCUMENT_ANALYSIS_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -374,6 +452,7 @@ export const DOCUMENT_ANALYSIS_JSON_SCHEMA = {
           "topics",
           "entities",
           "keywords",
+          "organizationAreas",
           "versionLabel",
           "likelyCurrentVersion",
           "suggestedArticleTitle",
@@ -425,6 +504,10 @@ export const DOCUMENT_ANALYSIS_JSON_SCHEMA = {
             items: {
               type: "string",
             },
+          },
+          organizationAreas: {
+            type: "array",
+            items: ORGANIZATION_AREA_SCHEMA,
           },
           versionLabel: {
             type: ["string", "null"],
