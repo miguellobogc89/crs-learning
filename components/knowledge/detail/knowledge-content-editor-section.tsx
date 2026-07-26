@@ -7,8 +7,11 @@ import {
   Edit3,
   FileText,
   Loader2,
+  RefreshCw,
   X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { KnowledgeEditor } from "@/components/knowledge/editor/knowledge-editor";
 import { Button } from "@/components/ui/button";
@@ -24,6 +27,14 @@ type KnowledgeContentEditorSectionProps = {
 export function KnowledgeContentEditorSection({
   knowledge,
 }: KnowledgeContentEditorSectionProps) {
+  const router = useRouter();
+
+  const [isRebuilding, setIsRebuilding] =
+    useState(false);
+
+  const [rebuildError, setRebuildError] =
+    useState<string | null>(null);
+
   const {
     content,
     setContent,
@@ -39,6 +50,48 @@ export function KnowledgeContentEditorSection({
   });
 
   const hasContent = hasMeaningfulContent(content);
+
+  const hasDocuments =
+    knowledge.knowledge_files.length > 0;
+
+  async function rebuildArticle() {
+    if (isRebuilding || !hasDocuments) {
+      return;
+    }
+
+    setIsRebuilding(true);
+    setRebuildError(null);
+
+    try {
+      const response = await fetch(
+        `/api/knowledge/articles/${knowledge.id}/rebuild`,
+        {
+          method: "POST",
+        },
+      );
+
+      const result = (await response.json()) as {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(
+          result.error ??
+            "No se ha podido reconstruir el artículo",
+        );
+      }
+
+      router.refresh();
+    } catch (caughtError) {
+      setRebuildError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "No se ha podido reconstruir el artículo",
+      );
+    } finally {
+      setIsRebuilding(false);
+    }
+  }
 
   return (
     <section className="space-y-4">
@@ -83,14 +136,36 @@ export function KnowledgeContentEditorSection({
             </Button>
           </div>
         ) : (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={startEditing}
-          >
-            <Edit3 className="mr-2 h-4 w-4" />
-            Editar contenido
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={
+                isRebuilding || !hasDocuments
+              }
+              onClick={rebuildArticle}
+            >
+              {isRebuilding ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+
+              {isRebuilding
+                ? "Reconstruyendo..."
+                : "Reconstruir"}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isRebuilding}
+              onClick={startEditing}
+            >
+              <Edit3 className="mr-2 h-4 w-4" />
+              Editar contenido
+            </Button>
+          </div>
         )}
       </div>
 
@@ -100,6 +175,15 @@ export function KnowledgeContentEditorSection({
           className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
         >
           {saveError}
+        </div>
+      ) : null}
+
+      {rebuildError ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          {rebuildError}
         </div>
       ) : null}
 

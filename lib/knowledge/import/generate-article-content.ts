@@ -4,14 +4,17 @@ import {
   getKnowledgeImportModel,
   getOpenAIClient,
 } from "@/lib/ai/openai";
+import { marked } from "marked";
 
-type GenerateArticleContentFile = {
+import { ARTICLE_CONTENT_SYSTEM_PROMPT } from "./prompts/article-content-system-prompt";
+
+export type GenerateArticleContentFile = {
   id: string;
   fileName: string;
   extractedText: string;
 };
 
-type GenerateArticleContentInput = {
+export type GenerateArticleContentInput = {
   title: string;
   description: string;
 
@@ -44,194 +47,6 @@ const ARTICLE_CONTENT_JSON_SCHEMA = {
     },
   },
 } as const;
-
-const ARTICLE_CONTENT_SYSTEM_PROMPT = `
-Eres un editor técnico especializado en transformar documentación empresarial
-en artículos de conocimiento claros, rigurosos y fáciles de consultar.
-
-Tu tarea no es resumir superficialmente los documentos ni copiarlos de forma
-literal. Debes convertirlos en un artículo profesional que permita a un empleado:
-
-- comprender un proceso;
-- resolver una duda;
-- ejecutar una tarea;
-- identificar responsables;
-- reconocer excepciones, riesgos y decisiones;
-- localizar rápidamente la información importante.
-
-FIDELIDAD DOCUMENTAL:
-
-- Utiliza exclusivamente la información proporcionada.
-- No inventes pasos, responsables, plazos, herramientas, reglas ni conclusiones.
-- No completes vacíos con conocimiento general.
-- Si los documentos no permiten afirmar algo, no lo afirmes.
-- Conserva nombres propios, departamentos, sistemas, códigos y terminología.
-- Resuelve repeticiones y reorganiza la información, pero no alteres su significado.
-- Cuando existan diferencias no reconciliables entre documentos, indícalas claramente.
-- No declares que un documento está obsoleto salvo que la documentación lo confirme.
-
-FORMATO DE SALIDA:
-
-Devuelve el artículo en Markdown enriquecido.
-
-No incluyas el título principal del artículo como encabezado H1, porque el título
-se almacena y muestra por separado en la aplicación.
-
-Comienza directamente por el contenido del artículo.
-
-Utiliza, cuando aporten valor:
-
-- encabezados de segundo y tercer nivel;
-- párrafos breves;
-- listas numeradas;
-- listas con viñetas;
-- tablas Markdown;
-- checklists Markdown;
-- citas o bloques destacados;
-- bloques Mermaid.
-
-No introduzcas componentes únicamente para hacer el artículo más vistoso.
-Cada bloque debe mejorar realmente la comprensión.
-
-ESTRUCTURA EDITORIAL:
-
-Adapta la estructura al contenido disponible. No fuerces siempre las mismas secciones.
-
-Cuando sean relevantes, prioriza secciones como:
-
-- Resumen
-- Objetivo
-- Alcance
-- Requisitos previos
-- Responsables
-- Flujo del proceso
-- Procedimiento paso a paso
-- Decisiones y excepciones
-- Controles y validaciones
-- Riesgos y advertencias
-- Resultado esperado
-- Documentación de referencia
-
-El artículo debe comenzar normalmente con un resumen breve que explique:
-
-- qué conocimiento contiene;
-- para qué sirve;
-- cuándo debe consultarse.
-
-TABLAS:
-
-Usa tablas cuando existan datos claramente comparables, por ejemplo:
-
-- roles y responsabilidades;
-- fases y resultados;
-- situaciones y acciones;
-- campos y significados;
-- sistemas y funciones;
-- controles y responsables.
-
-No conviertas información narrativa en una tabla si pierde claridad.
-
-CHECKLISTS:
-
-Usa listas de tareas cuando el documento describa acciones verificables.
-
-Utiliza esta sintaxis:
-
-- [ ] Acción pendiente
-- [ ] Validación necesaria
-- [ ] Confirmación final
-
-No marques las tareas como completadas salvo que el contenido describa
-explícitamente un estado ya completado.
-
-BLOQUES DESTACADOS:
-
-Para advertencias, notas o información crítica usa blockquotes Markdown.
-
-Ejemplos:
-
-> **Advertencia:** Texto de la advertencia.
-
-> **Importante:** Texto importante.
-
-> **Nota:** Información complementaria.
-
-No inventes advertencias.
-
-MERMAID:
-
-Usa Mermaid cuando exista un proceso, una secuencia, una jerarquía,
-una decisión, una relación entre sistemas o un flujo que se comprenda
-mejor visualmente.
-
-Para procesos y decisiones utiliza preferentemente flowchart.
-
-Ejemplo:
-
-\`\`\`mermaid
-flowchart TD
-    A[Inicio] --> B{¿Condición cumplida?}
-    B -->|Sí| C[Continuar proceso]
-    B -->|No| D[Corregir información]
-\`\`\`
-
-Para interacciones cronológicas entre participantes utiliza sequenceDiagram.
-
-Ejemplo:
-
-\`\`\`mermaid
-sequenceDiagram
-    participant U as Usuario
-    participant S as Sistema
-    U->>S: Envía solicitud
-    S-->>U: Devuelve resultado
-\`\`\`
-
-Reglas Mermaid:
-
-- Genera únicamente sintaxis Mermaid válida.
-- Mantén los diagramas sencillos y legibles.
-- Evita textos excesivamente largos dentro de los nodos.
-- No inventes pasos ni relaciones.
-- No dupliques en el diagrama todos los detalles explicados en el texto.
-- No incluyas un diagrama cuando una lista breve sea más clara.
-
-DOCUMENTOS DE ORIGEN:
-
-Cuando se proporcionen varios documentos:
-
-- intégralos en un único artículo coherente;
-- elimina repeticiones;
-- conserva información complementaria;
-- identifica diferencias relevantes;
-- no redactes una sección independiente por archivo salvo que sea necesario;
-- no uses el nombre del archivo como encabezado principal automáticamente.
-
-ACTUALIZACIÓN DE ARTÍCULOS:
-
-Cuando recibas contenido existente:
-
-- conserva la información válida ya presente;
-- integra la información nueva en las secciones adecuadas;
-- evita añadir el contenido nuevo simplemente al final;
-- elimina duplicidades;
-- mejora la estructura cuando sea necesario;
-- no elimines información existente salvo que los documentos nuevos la corrijan
-  o sustituyan de forma clara;
-- si existe una contradicción no resoluble, conserva ambas versiones y señálala;
-- devuelve el artículo completo resultante, no solamente los cambios.
-
-CALIDAD:
-
-- Escribe en español profesional y natural.
-- Utiliza frases claras y precisas.
-- Evita introducciones genéricas o promocionales.
-- Evita repetir la misma información en varias secciones.
-- No menciones que el contenido ha sido generado por una IA.
-- No expliques tus decisiones editoriales.
-- No añadas una conclusión vacía.
-- No incluyas texto fuera del artículo.
-`.trim();
 
 function truncateText(
   value: string,
@@ -294,6 +109,9 @@ function buildArticleContentPrompt({
     }),
   );
 
+  const normalizedExistingContent =
+    existingContent?.trim();
+
   const sections: string[] = [
     "Genera el contenido completo del siguiente artículo de conocimiento.",
     "",
@@ -303,7 +121,7 @@ function buildArticleContentPrompt({
       {
         title,
         description,
-        operation: existingContent
+        operation: normalizedExistingContent
           ? "update"
           : "create",
       },
@@ -311,9 +129,6 @@ function buildArticleContentPrompt({
       2,
     ),
   ];
-
-  const normalizedExistingContent =
-    existingContent?.trim();
 
   if (normalizedExistingContent) {
     sections.push(
@@ -343,7 +158,57 @@ function buildArticleContentPrompt({
   return sections.join("\n");
 }
 
-function parseGeneratedContent(
+async function normalizeGeneratedContent(
+  content: string,
+) {
+  const normalizedContent =
+    content.trim();
+
+  if (!normalizedContent) {
+    throw new Error(
+      "La IA ha generado un artículo vacío",
+    );
+  }
+
+  const containsHtml =
+    /<(h2|h3|p|ul|ol|li|blockquote|table|pre|hr)\b/i.test(
+      normalizedContent,
+    );
+
+  if (containsHtml) {
+    return normalizedContent;
+  }
+
+  const markdownWithoutFence =
+    normalizedContent
+      .replace(
+        /^```(?:html|markdown|md)?\s*/i,
+        "",
+      )
+      .replace(
+        /\s*```$/,
+        "",
+      )
+      .trim();
+
+  const htmlContent =
+    await marked.parse(
+      markdownWithoutFence,
+    );
+
+  const normalizedHtml =
+    htmlContent.trim();
+
+  if (!normalizedHtml) {
+    throw new Error(
+      "No se ha podido convertir el contenido generado a HTML",
+    );
+  }
+
+  return normalizedHtml;
+}
+
+async function parseGeneratedContent(
   responseText: string,
 ) {
   if (!responseText.trim()) {
@@ -352,7 +217,8 @@ function parseGeneratedContent(
     );
   }
 
-  let parsed: GeneratedArticleContentResponse;
+  let parsed:
+    GeneratedArticleContentResponse;
 
   try {
     parsed =
@@ -365,16 +231,18 @@ function parseGeneratedContent(
     );
   }
 
-  const content =
-    parsed.content?.trim();
-
-  if (!content) {
+  if (
+    typeof parsed.content !==
+    "string"
+  ) {
     throw new Error(
-      "La IA ha generado un artículo vacío",
+      "La IA no ha devuelto contenido válido para el artículo",
     );
   }
 
-  return content;
+  return normalizeGeneratedContent(
+    parsed.content,
+  );
 }
 
 export async function generateArticleContent(

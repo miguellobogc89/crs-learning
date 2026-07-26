@@ -12,27 +12,19 @@ export const MermaidExtension = Node.create({
   name: "mermaidDiagram",
 
   group: "block",
-
   atom: true,
-
   draggable: true,
-
   selectable: true,
 
   addAttributes() {
     return {
       code: {
         default: "",
-        parseHTML: (element) => {
-          return (
-            element.getAttribute("data-code") ?? ""
-          );
-        },
-        renderHTML: (attributes) => {
-          return {
-            "data-code": attributes.code,
-          };
-        },
+        parseHTML: (element) =>
+          element.getAttribute("data-code") ?? "",
+        renderHTML: (attributes) => ({
+          "data-code": attributes.code,
+        }),
       },
     };
   },

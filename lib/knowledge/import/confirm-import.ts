@@ -792,15 +792,22 @@ export async function confirmKnowledgeImport({
 
 const importedContent =
   await generateArticleContent({
-    title: article.title,
+    title:
+      article.title,
     description:
-      article.description ?? "",
-    files: filesToCreate.map((file) => ({
-      id: file.id,
-      fileName: file.file_name,
-      extractedText:
-        file.extracted_text,
-    })),
+      article.description ??
+      "",
+    files:
+      filesToCreate.map(
+        (file) => ({
+          id:
+            file.id,
+          fileName:
+            file.file_name,
+          extractedText:
+            file.extracted_text,
+        }),
+      ),
   });
 
               persistedArticle =

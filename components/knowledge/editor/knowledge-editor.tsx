@@ -20,7 +20,8 @@ import {
   useEditor,
 } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +39,53 @@ const DEFAULT_MERMAID_DIAGRAM = `flowchart LR
     B -->|Sí| C[Continuar]
     B -->|No| D[Revisar]`;
 
+function normalizeKnowledgeContent(
+  html: string,
+) {
+  if (
+    !html ||
+    typeof window === "undefined"
+  ) {
+    return html;
+  }
+
+  const document = new DOMParser().parseFromString(
+    html,
+    "text/html",
+  );
+
+  const mermaidBlocks =
+    document.querySelectorAll(
+      "pre > code.language-mermaid",
+    );
+
+  mermaidBlocks.forEach((codeElement) => {
+    const preElement =
+      codeElement.parentElement;
+
+    if (!preElement) {
+      return;
+    }
+
+    const diagramElement =
+      document.createElement("div");
+
+    diagramElement.setAttribute(
+      "data-type",
+      "mermaid-diagram",
+    );
+
+    diagramElement.setAttribute(
+      "data-code",
+      codeElement.textContent?.trim() ?? "",
+    );
+
+    preElement.replaceWith(diagramElement);
+  });
+
+  return document.body.innerHTML;
+}
+
 export function KnowledgeEditor({
   value,
   onChange,
@@ -53,10 +101,17 @@ export function KnowledgeEditor({
           levels: [2, 3],
         },
       }),
-      MermaidExtension,
+      TaskList,
+
+TaskItem.configure({
+  nested: true,
+}),
+      MermaidExtension, 
     ],
 
-    content: value || "",
+    content: normalizeKnowledgeContent(
+      value || "",
+    ),
 
     editable,
 
@@ -115,14 +170,21 @@ export function KnowledgeEditor({
     }
 
     const currentContent = editor.getHTML();
-    const nextContent = value || "";
+    const nextContent =
+      normalizeKnowledgeContent(value || "");
 
     if (currentContent === nextContent) {
       return;
     }
 
-    editor.commands.setContent(nextContent, {
-      emitUpdate: false,
+    queueMicrotask(() => {
+      if (editor.isDestroyed) {
+        return;
+      }
+
+      editor.commands.setContent(nextContent, {
+        emitUpdate: false,
+      });
     });
   }, [editor, value]);
 
