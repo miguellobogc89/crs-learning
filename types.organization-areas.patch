@@ -1,0 +1,42 @@
+diff --git a/lib/knowledge/import/types.ts b/lib/knowledge/import/types.ts
+--- a/lib/knowledge/import/types.ts
++++ b/lib/knowledge/import/types.ts
+@@ -8,6 +8,32 @@ export type KnowledgeImportDocumentInput = {
+   relativePath: string;
+   text: string;
+ };
+
++export type KnowledgeImportOrganizationArea = {
++  name: string;
++  aliases: string[];
++  areaType:
++    | "direction"
++    | "division"
++    | "business_unit"
++    | "department"
++    | "area"
++    | "team"
++    | "office"
++    | "committee"
++    | "operational_center"
++    | "unknown";
++  description: string;
++  parentAreaName: string | null;
++  confidence: number;
++  evidence: {
++    text: string;
++    reason: string;
++  }[];
++};
++
+ export type KnowledgeImportDocumentAnalysis = {
+   documentId: string;
+   documentName: string;
+@@ -31,6 +57,7 @@ export type KnowledgeImportDocumentAnalysis = {
+   topics: string[];
+   entities: string[];
+   keywords: string[];
++  organizationAreas: KnowledgeImportOrganizationArea[];
+
+   versionLabel: string | null;
+   likelyCurrentVersion: boolean;

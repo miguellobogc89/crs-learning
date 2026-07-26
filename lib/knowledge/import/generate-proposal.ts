@@ -1,4 +1,4 @@
-// lib/knowledge/import/generate-proposal.ts
+﻿// lib/knowledge/import/generate-proposal.ts
 import {
   getKnowledgeImportModel,
   getOpenAIClient,
@@ -7,15 +7,14 @@ import { prisma } from "@/lib/prisma";
 import { listKnowledgeStatus } from "@/lib/services/knowledge-library.service";
 
 import {
-  DOCUMENT_ANALYSIS_JSON_SCHEMA,
-  DOCUMENT_ANALYSIS_SYSTEM_PROMPT,
+  analyzeKnowledgeDocuments,
+} from "./analyze-documents";
+import {
   PROPOSAL_JSON_SCHEMA,
   PROPOSAL_SYSTEM_PROMPT,
-  buildDocumentAnalysisPrompt,
   buildProposalPrompt,
 } from "./proposal-prompts";
 import {
-  splitIntoBatches,
   truncateDocument,
 } from "./truncate-document";
 import type {
@@ -24,8 +23,6 @@ import type {
   KnowledgeImportDocumentInput,
   KnowledgeImportProposal,
 } from "./types";
-
-const DOCUMENTS_PER_ANALYSIS_BATCH = 4;
 
 export type KnowledgeImportProposalProgressStep =
   | "preparing"
@@ -50,10 +47,6 @@ type GenerateProposalInput = {
   importId: string;
   userId: string;
   onProgress?: ProposalProgressCallback;
-};
-
-type DocumentAnalysisResponse = {
-  documents: KnowledgeImportDocumentAnalysis[];
 };
 
 type ExistingKnowledge = Awaited<
@@ -82,41 +75,8 @@ function parseJsonResponse<T>(
     return JSON.parse(responseText) as T;
   } catch {
     throw new Error(
-      `La IA ha devuelto una respuesta JSON no válida durante ${context}`,
+      `La IA ha devuelto una respuesta JSON no vÃ¡lida durante ${context}`,
     );
-  }
-}
-
-function validateDocumentAnalyses(
-  analyses: KnowledgeImportDocumentAnalysis[],
-  expectedDocuments: KnowledgeImportDocumentInput[],
-) {
-  const expectedIds = new Set(
-    expectedDocuments.map(
-      (document) => document.id,
-    ),
-  );
-
-  const receivedIds = new Set(
-    analyses.map(
-      (analysis) => analysis.documentId,
-    ),
-  );
-
-  for (const documentId of expectedIds) {
-    if (!receivedIds.has(documentId)) {
-      throw new Error(
-        `La IA no ha analizado el documento ${documentId}`,
-      );
-    }
-  }
-
-  for (const documentId of receivedIds) {
-    if (!expectedIds.has(documentId)) {
-      throw new Error(
-        `La IA ha devuelto un documento desconocido: ${documentId}`,
-      );
-    }
   }
 }
 
@@ -357,7 +317,7 @@ for (const folder of proposal.folders) {
   for (const article of proposal.articles) {
     if (articleIds.has(article.id)) {
       throw new Error(
-        `La propuesta contiene un artículo duplicado: ${article.id}`,
+        `La propuesta contiene un artÃ­culo duplicado: ${article.id}`,
       );
     }
 
@@ -368,14 +328,14 @@ for (const folder of proposal.folders) {
       article.action !== "update"
     ) {
       throw new Error(
-        `El artículo ${article.id} contiene una acción inválida`,
+        `El artÃ­culo ${article.id} contiene una acciÃ³n invÃ¡lida`,
       );
     }
 
     if (article.action === "create") {
       if (article.existingArticleId !== null) {
         throw new Error(
-          `El artículo nuevo ${article.id} no puede apuntar a un artículo existente`,
+          `El artÃ­culo nuevo ${article.id} no puede apuntar a un artÃ­culo existente`,
         );
       }
 
@@ -384,7 +344,7 @@ for (const folder of proposal.folders) {
         !validFolderIds.has(article.folderId)
       ) {
         throw new Error(
-          `El artículo ${article.id} apunta a una carpeta inexistente`,
+          `El artÃ­culo ${article.id} apunta a una carpeta inexistente`,
         );
       }
     }
@@ -392,7 +352,7 @@ for (const folder of proposal.folders) {
     if (article.action === "update") {
       if (!article.existingArticleId) {
         throw new Error(
-          `El artículo ${article.id} debe indicar el artículo existente que actualizará`,
+          `El artÃ­culo ${article.id} debe indicar el artÃ­culo existente que actualizarÃ¡`,
         );
       }
 
@@ -402,13 +362,13 @@ for (const folder of proposal.folders) {
         )
       ) {
         throw new Error(
-          `El artículo ${article.id} intenta actualizar un artículo existente desconocido: ${article.existingArticleId}`,
+          `El artÃ­culo ${article.id} intenta actualizar un artÃ­culo existente desconocido: ${article.existingArticleId}`,
         );
       }
 
       if (article.folderId !== null) {
         throw new Error(
-          `El artículo actualizado ${article.id} debe conservar su carpeta actual`,
+          `El artÃ­culo actualizado ${article.id} debe conservar su carpeta actual`,
         );
       }
     }
@@ -418,20 +378,20 @@ for (const folder of proposal.folders) {
       article.documentNames.length
     ) {
       throw new Error(
-        `El artículo ${article.id} contiene un número distinto de IDs y nombres de documento`,
+        `El artÃ­culo ${article.id} contiene un nÃºmero distinto de IDs y nombres de documento`,
       );
     }
 
     for (const documentId of article.documentIds) {
       if (!validDocumentIds.has(documentId)) {
         throw new Error(
-          `El artículo ${article.id} contiene un documento desconocido: ${documentId}`,
+          `El artÃ­culo ${article.id} contiene un documento desconocido: ${documentId}`,
         );
       }
 
       if (assignedDocumentIds.has(documentId)) {
         throw new Error(
-          `El documento ${documentId} ha sido asignado a más de un artículo`,
+          `El documento ${documentId} ha sido asignado a mÃ¡s de un artÃ­culo`,
         );
       }
 
@@ -442,7 +402,7 @@ for (const folder of proposal.folders) {
   for (const documentId of validDocumentIds) {
     if (!assignedDocumentIds.has(documentId)) {
       throw new Error(
-        `El documento ${documentId} no ha sido asignado a ningún artículo`,
+        `El documento ${documentId} no ha sido asignado a ningÃºn artÃ­culo`,
       );
     }
   }
@@ -470,7 +430,7 @@ for (const folder of proposal.folders) {
     proposal.articles.length
   ) {
     throw new Error(
-      "El total de artículos de la propuesta no coincide con la estructura generada",
+      "El total de artÃ­culos de la propuesta no coincide con la estructura generada",
     );
   }
 
@@ -482,103 +442,6 @@ for (const folder of proposal.folders) {
       "El total de avisos de la propuesta no coincide con los avisos generados",
     );
   }
-}
-
-async function analyzeDocumentBatch(
-  documents: KnowledgeImportDocumentInput[],
-) {
-  const openai = getOpenAIClient();
-  const model = getKnowledgeImportModel();
-
-  const response = await openai.responses.create({
-    model,
-    instructions:
-      DOCUMENT_ANALYSIS_SYSTEM_PROMPT,
-    input:
-      buildDocumentAnalysisPrompt(
-        documents,
-      ),
-    text: {
-      format: {
-        type: "json_schema",
-        name: "knowledge_document_analysis",
-        strict: true,
-        schema:
-          DOCUMENT_ANALYSIS_JSON_SCHEMA,
-      },
-    },
-  });
-
-  const parsed =
-    parseJsonResponse<DocumentAnalysisResponse>(
-      response.output_text,
-      "el análisis documental",
-    );
-
-  validateDocumentAnalyses(
-    parsed.documents,
-    documents,
-  );
-
-  return parsed.documents;
-}
-
-async function analyzeDocuments(
-  documents: KnowledgeImportDocumentInput[],
-  onProgress?: ProposalProgressCallback,
-) {
-  const batches = splitIntoBatches(
-    documents,
-    DOCUMENTS_PER_ANALYSIS_BATCH,
-  );
-
-  const analyses: KnowledgeImportDocumentAnalysis[] =
-    [];
-
-  for (
-    let batchIndex = 0;
-    batchIndex < batches.length;
-    batchIndex += 1
-  ) {
-    const batch =
-      batches[batchIndex];
-
-    await onProgress?.({
-      step: "analyzing_documents",
-      progressPercentage:
-        10 +
-        Math.round(
-          (batchIndex /
-            batches.length) *
-            55,
-        ),
-      message:
-        batches.length === 1
-          ? "Analizando el contenido de los documentos"
-          : `Analizando lote ${batchIndex + 1} de ${batches.length}`,
-    });
-
-    const batchAnalyses =
-      await analyzeDocumentBatch(
-        batch,
-      );
-
-    analyses.push(...batchAnalyses);
-
-    await onProgress?.({
-      step: "analyzing_documents",
-      progressPercentage:
-        10 +
-        Math.round(
-          ((batchIndex + 1) /
-            batches.length) *
-            55,
-        ),
-      message: `${analyses.length} de ${documents.length} documentos comprendidos`,
-    });
-  }
-
-  return analyses;
 }
 
 async function generateGlobalProposal(
@@ -610,7 +473,7 @@ async function generateGlobalProposal(
 const parsedProposal =
   parseJsonResponse<GeneratedProposal>(
     response.output_text,
-    "la generación de la propuesta",
+    "la generaciÃ³n de la propuesta",
   );
 
 const normalizedProposal =
@@ -652,7 +515,7 @@ export async function generateKnowledgeImportProposal({
     step: "preparing",
     progressPercentage: 3,
     message:
-      "Preparando los documentos válidos",
+      "Preparando los documentos vÃ¡lidos",
   });
 
   const knowledgeImport =
@@ -675,7 +538,7 @@ export async function generateKnowledgeImportProposal({
 
   if (!knowledgeImport) {
     throw new Error(
-      "Importación no encontrada",
+      "ImportaciÃ³n no encontrada",
     );
   }
 
@@ -684,7 +547,7 @@ export async function generateKnowledgeImportProposal({
     "proposal_generating"
   ) {
     throw new Error(
-      "La propuesta ya se está generando",
+      "La propuesta ya se estÃ¡ generando",
     );
   }
 
@@ -695,7 +558,7 @@ export async function generateKnowledgeImportProposal({
       "proposal_ready"
   ) {
     throw new Error(
-      "La importación todavía no está preparada para generar una propuesta",
+      "La importaciÃ³n todavÃ­a no estÃ¡ preparada para generar una propuesta",
     );
   }
 
@@ -738,9 +601,33 @@ export async function generateKnowledgeImportProposal({
 
   try {
     const documentAnalyses =
-      await analyzeDocuments(
+      await analyzeKnowledgeDocuments(
         documents,
-        onProgress,
+        {
+          onProgress: async ({
+            analyzedDocuments,
+            totalDocuments,
+            batchIndex,
+            totalBatches,
+          }) => {
+            await onProgress?.({
+              step:
+                "analyzing_documents",
+              progressPercentage:
+                10 +
+                Math.round(
+                  (
+                    analyzedDocuments /
+                    totalDocuments
+                  ) * 55,
+                ),
+              message:
+                totalBatches === 1
+                  ? `${analyzedDocuments} de ${totalDocuments} documentos comprendidos`
+                  : `Lote ${batchIndex} de ${totalBatches} Â· ${analyzedDocuments} de ${totalDocuments} documentos comprendidos`,
+            });
+          },
+        },
       );
 
     await onProgress?.({
@@ -759,7 +646,7 @@ export async function generateKnowledgeImportProposal({
       step: "designing_structure",
       progressPercentage: 76,
       message:
-        "Definiendo carpetas y artículos",
+        "Definiendo carpetas y artÃ­culos",
     });
 
     const generatedProposal =

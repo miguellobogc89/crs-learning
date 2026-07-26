@@ -1,4 +1,4 @@
-// lib/knowledge/import/types.ts
+﻿// lib/knowledge/import/types.ts
 
 export type KnowledgeImportDocumentInput = {
   id: string;
@@ -7,6 +7,28 @@ export type KnowledgeImportDocumentInput = {
   text: string;
 };
 
+export type KnowledgeImportOrganizationArea = {
+  name: string;
+  aliases: string[];
+  areaType:
+    | "direction"
+    | "division"
+    | "business_unit"
+    | "department"
+    | "area"
+    | "team"
+    | "office"
+    | "committee"
+    | "operational_center"
+    | "unknown";
+  description: string;
+  parentAreaName: string | null;
+  confidence: number;
+  evidence: {
+    text: string;
+    reason: string;
+  }[];
+};
 export type KnowledgeImportDocumentAnalysis = {
   documentId: string;
   documentName: string;
@@ -29,7 +51,8 @@ export type KnowledgeImportDocumentAnalysis = {
   topics: string[];
   entities: string[];
   keywords: string[];
-
+
+  organizationAreas: KnowledgeImportOrganizationArea[];
   versionLabel: string | null;
   likelyCurrentVersion: boolean;
 
@@ -49,8 +72,8 @@ export type KnowledgeImportArticleProposal = {
   description: string;
 
   /**
-   * null significa que el artículo se propone
-   * en la raíz de la biblioteca.
+   * null significa que el artÃ­culo se propone
+   * en la raÃ­z de la biblioteca.
    */
   folderId: string | null;
 
@@ -71,10 +94,10 @@ export type KnowledgeImportFolderProposal = {
   description: string;
 
   /**
-   * null significa que es una carpeta raíz.
+   * null significa que es una carpeta raÃ­z.
    *
    * La propuesta se almacena de forma plana.
-   * La UI reconstruye la jerarquía usando parentFolderId.
+   * La UI reconstruye la jerarquÃ­a usando parentFolderId.
    */
   parentFolderId: string | null;
 };
@@ -121,7 +144,7 @@ export type KnowledgeImportProposal = {
    * Las relaciones entre carpetas se resuelven mediante:
    * folder.parentFolderId
    *
-   * La ubicación de los artículos se resuelve mediante:
+   * La ubicaciÃ³n de los artÃ­culos se resuelve mediante:
    * article.folderId
    */
   folders: KnowledgeImportFolderProposal[];
@@ -185,7 +208,7 @@ export type KnowledgeImportCreatedArticleLog = {
 
   /**
    * Todos los documentos que la propuesta asignaba
-   * originalmente al artículo.
+   * originalmente al artÃ­culo.
    */
   documentIds: string[];
 
@@ -202,8 +225,8 @@ export type KnowledgeImportCreatedArticleLog = {
   knowledgeFileIds: string[];
 
   /**
-   * Indica si se modificó realmente el contenido
-   * persistente del artículo.
+   * Indica si se modificÃ³ realmente el contenido
+   * persistente del artÃ­culo.
    */
   contentChanged: boolean;
 };
