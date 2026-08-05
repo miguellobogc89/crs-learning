@@ -6,6 +6,11 @@ import path from "path";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import {
+  getKnowledgeImportMimeType,
+  isSupportedKnowledgeArchive,
+  isSupportedKnowledgeDocument,
+} from "@/lib/knowledge/import-flow";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -14,23 +19,6 @@ export const maxDuration = 300;
 
 const MAX_EXTRACTED_FILES = 5_000;
 const MAX_TOTAL_EXTRACTED_SIZE = 500 * 1024 * 1024;
-
-const ACCEPTED_EXTENSIONS = new Set([
-  ".pdf",
-  ".doc",
-  ".docx",
-  ".xls",
-  ".xlsx",
-  ".ppt",
-  ".pptx",
-  ".csv",
-  ".txt",
-  ".md",
-  ".jpg",
-  ".jpeg",
-  ".png",
-  ".zip",
-]);
 
 type RouteContext = {
   params: Promise<{
@@ -73,9 +61,50 @@ type DuplicateImportFile = {
   existingArticleTitle: string;
 };
 
+type InitialAnalysisFile =
+  | {
+      kind: "ready";
+      relativePath: string;
+    }
+  | {
+      kind: "duplicate";
+      id: string;
+      name: string;
+      relativePath: string;
+      size: number;
+      duplicateOf?: {
+        fileId: string;
+        articleId: string;
+        articleTitle: string;
+      };
+    }
+  | {
+      kind: "unsupported";
+      id: string;
+      name: string;
+      relativePath: string;
+      size: number;
+      fileType: string | null;
+      error: string;
+    };
+
+function createInitialFileId(
+  status: string,
+  relativePath: string,
+  size: number,
+) {
+  return [
+    status,
+    relativePath,
+    size,
+  ].join(":");
+}
+
 function normalizeFileName(fileName: string) {
   return path
     .basename(fileName)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLocaleLowerCase("es");
 }
@@ -102,45 +131,6 @@ function normalizeRelativePath(value: string) {
         part !== "..",
     )
     .join("/");
-}
-
-function isAcceptedDocument(relativePath: string) {
-  const extension = path
-    .extname(relativePath)
-    .toLowerCase();
-
-  return ACCEPTED_EXTENSIONS.has(extension);
-}
-
-function getMimeType(fileName: string) {
-  const extension = path
-    .extname(fileName)
-    .toLowerCase();
-
-  const mimeTypes: Record<string, string> = {
-    ".pdf": "application/pdf",
-    ".txt": "text/plain",
-    ".md": "text/markdown",
-    ".csv": "text/csv",
-    ".doc": "application/msword",
-    ".docx":
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ".xls": "application/vnd.ms-excel",
-    ".xlsx":
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ".ppt": "application/vnd.ms-powerpoint",
-    ".pptx":
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".zip": "application/zip",
-  };
-
-  return (
-    mimeTypes[extension] ??
-    "application/octet-stream"
-  );
 }
 
 function resolveStoragePath(storagePath: string) {
@@ -229,6 +219,23 @@ export async function POST(
   }
 
   if (
+    knowledgeImport.status ===
+      "cancelled" ||
+    knowledgeImport.processing_status ===
+      "cancelled"
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "La importacion ha sido cancelada",
+      },
+      {
+        status: 409,
+      },
+    );
+  }
+
+  if (
     knowledgeImport.processing_status ===
     "processing"
   ) {
@@ -264,8 +271,8 @@ export async function POST(
   await prisma.knowledge_files.findMany({
     where: {
       knowledge_sources: {
-        library_id:
-          knowledgeImport.library_id,
+        owner_user_id:
+          knowledgeImport.owner_user_id,
       },
     },
     select: {
@@ -280,19 +287,6 @@ export async function POST(
       },
     },
   });
-
-  console.log(
-  "Knowledge files existentes:",
-  existingKnowledgeFiles.length,
-);
-
-console.table(
-  existingKnowledgeFiles.map((file) => ({
-    file: file.file_name,
-    size: file.file_size,
-    article: file.knowledge_sources.title,
-  })),
-);
 
 const existingFilesByKey = new Map<
   string,
@@ -369,6 +363,9 @@ try {
   const duplicateFiles: DuplicateImportFile[] =
     [];
 
+  const initialAnalysisFiles:
+    InitialAnalysisFile[] = [];
+
   /*
    * También evita repetir un mismo documento dentro de
    * la propia selección o dentro de varios ZIP.
@@ -391,13 +388,10 @@ try {
       );
 
       const isZip =
-        uploadedFile.file_name
-          .toLowerCase()
-          .endsWith(".zip") ||
-        uploadedFile.mime_type ===
-          "application/zip" ||
-        uploadedFile.mime_type ===
-          "application/x-zip-compressed";
+        isSupportedKnowledgeArchive(
+          uploadedFile.file_name,
+          uploadedFile.mime_type,
+        );
 
       /*
        * Los archivos que no son ZIP también se
@@ -411,7 +405,31 @@ if (!isZip) {
         uploadedFile.file_name,
     );
 
-  if (!isAcceptedDocument(relativePath)) {
+  if (
+    !isSupportedKnowledgeDocument(
+      relativePath,
+    )
+  ) {
+    initialAnalysisFiles.push({
+      kind: "unsupported",
+      id: createInitialFileId(
+        "unsupported",
+        relativePath,
+        Number(
+          uploadedFile.file_size ?? 0,
+        ),
+      ),
+      name: uploadedFile.file_name,
+      relativePath,
+      size: Number(
+        uploadedFile.file_size ?? 0,
+      ),
+      fileType:
+        uploadedFile.mime_type,
+      error:
+        "Formato no soportado para la importación",
+    });
+
     continue;
   }
 
@@ -442,6 +460,25 @@ if (!isZip) {
         existingFile.knowledge_sources.title,
     });
 
+    initialAnalysisFiles.push({
+      kind: "duplicate",
+      id: createInitialFileId(
+        "duplicate",
+        relativePath,
+        fileSize,
+      ),
+      name: uploadedFile.file_name,
+      relativePath,
+      size: fileSize,
+      duplicateOf: {
+        fileId: existingFile.id,
+        articleId:
+          existingFile.knowledge_sources.id,
+        articleTitle:
+          existingFile.knowledge_sources.title,
+      },
+    });
+
     continue;
   }
 
@@ -449,6 +486,18 @@ if (!isZip) {
    * Evita duplicados dentro de esta misma carga.
    */
   if (acceptedFileKeys.has(duplicateKey)) {
+    initialAnalysisFiles.push({
+      kind: "duplicate",
+      id: createInitialFileId(
+        "duplicate",
+        relativePath,
+        fileSize,
+      ),
+      name: uploadedFile.file_name,
+      relativePath,
+      size: fileSize,
+    });
+
     continue;
   }
 
@@ -473,7 +522,7 @@ if (!isZip) {
     relative_path: relativePath,
     mime_type:
       uploadedFile.mime_type ||
-      getMimeType(
+      getKnowledgeImportMimeType(
         uploadedFile.file_name,
       ),
     file_size: fileSize,
@@ -486,6 +535,11 @@ if (!isZip) {
     started_at: null,
     completed_at: null,
     error_message: null,
+  });
+
+  initialAnalysisFiles.push({
+    kind: "ready",
+    relativePath,
   });
 
   continue;
@@ -512,8 +566,31 @@ if (!isZip) {
         }
 
         if (
-          !isAcceptedDocument(relativePath)
+          !isSupportedKnowledgeDocument(
+            relativePath,
+          )
         ) {
+          initialAnalysisFiles.push({
+            kind: "unsupported",
+            id: createInitialFileId(
+              "unsupported",
+              relativePath,
+              Number(
+                entry.header.size ?? 0,
+              ),
+            ),
+            name: path.basename(
+              relativePath,
+            ),
+            relativePath,
+            size: Number(
+              entry.header.size ?? 0,
+            ),
+            fileType: null,
+            error:
+              "Formato no soportado para la importación",
+          });
+
           continue;
         }
 
@@ -592,10 +669,41 @@ if (existingFile) {
       existingFile.knowledge_sources.title,
   });
 
+  initialAnalysisFiles.push({
+    kind: "duplicate",
+    id: createInitialFileId(
+      "duplicate",
+      relativePath,
+      buffer.length,
+    ),
+    name: extractedFileName,
+    relativePath,
+    size: buffer.length,
+    duplicateOf: {
+      fileId: existingFile.id,
+      articleId:
+        existingFile.knowledge_sources.id,
+      articleTitle:
+        existingFile.knowledge_sources.title,
+    },
+  });
+
   continue;
 }
 
 if (acceptedFileKeys.has(duplicateKey)) {
+  initialAnalysisFiles.push({
+    kind: "duplicate",
+    id: createInitialFileId(
+      "duplicate",
+      relativePath,
+      buffer.length,
+    ),
+    name: extractedFileName,
+    relativePath,
+    size: buffer.length,
+  });
+
   continue;
 }
 
@@ -640,7 +748,9 @@ if (
           file_name: extractedFileName,
           relative_path: relativePath,
           mime_type:
-            getMimeType(relativePath),
+            getKnowledgeImportMimeType(
+              relativePath,
+            ),
           file_size: buffer.length,
           storage_path:
             publicStoragePath,
@@ -652,12 +762,16 @@ if (
           completed_at: null,
           error_message: null,
         });
+
+        initialAnalysisFiles.push({
+          kind: "ready",
+          relativePath,
+        });
       }
     }
 
 if (
-  extractedFiles.length === 0 &&
-  duplicateFiles.length === 0
+  initialAnalysisFiles.length === 0
 ) {
   throw new Error(
     "No se han encontrado documentos compatibles para analizar",
@@ -679,9 +793,151 @@ if (
       });
     }
 
+const persistedReadyFiles =
+  await prisma.knowledge_import_files.findMany({
+    where: {
+      import_id: importId,
+      status: "extracted",
+    },
+    orderBy: [
+      {
+        processing_order: "asc",
+      },
+      {
+        created_at: "asc",
+      },
+    ],
+    select: {
+      id: true,
+      file_name: true,
+      relative_path: true,
+      mime_type: true,
+      file_size: true,
+      processing_order: true,
+      processing_status: true,
+      processing_step: true,
+      error_message: true,
+    },
+  });
+
+const readyFileByRelativePath = new Map(
+  persistedReadyFiles.map((file) => [
+    file.relative_path,
+    file,
+  ]),
+);
+
+const files = initialAnalysisFiles
+  .map((file) => {
+    if (file.kind === "ready") {
+      const readyFile =
+        readyFileByRelativePath.get(
+          file.relativePath,
+        );
+
+      if (!readyFile) {
+        return null;
+      }
+
+      return {
+        id: readyFile.id,
+        name: readyFile.file_name,
+        relativePath:
+          readyFile.relative_path,
+        size: readyFile.file_size,
+        fileType:
+          readyFile.mime_type,
+        status: "ready" as const,
+        processingOrder:
+          readyFile.processing_order,
+        processingStatus:
+          readyFile.processing_status,
+        processingStep:
+          readyFile.processing_step,
+        error:
+          readyFile.error_message,
+      };
+    }
+
+    if (file.kind === "duplicate") {
+      return {
+        id: file.id,
+        name: file.name,
+        relativePath:
+          file.relativePath,
+        size: file.size,
+        status: "duplicate" as const,
+        processingOrder: null,
+        processingStatus: "completed",
+        processingStep: null,
+        error: null,
+        duplicateOf:
+          file.duplicateOf,
+      };
+    }
+
+    return {
+      id: file.id,
+      name: file.name,
+      relativePath:
+        file.relativePath,
+      size: file.size,
+      fileType:
+        file.fileType,
+      status: "unsupported" as const,
+      processingOrder: null,
+      processingStatus: "completed",
+      processingStep: null,
+      error: file.error,
+    };
+  })
+  .filter(
+    (
+      file,
+    ): file is NonNullable<typeof file> =>
+      file !== null,
+  );
+
 const allFilesDuplicate =
   extractedFiles.length === 0 &&
   duplicateFiles.length > 0;
+
+const allFilesFinal =
+  extractedFiles.length === 0;
+
+const unsupportedCount =
+  files.filter(
+    (file) =>
+      file.status === "unsupported",
+  ).length;
+
+const currentImport =
+  await prisma.knowledge_imports.findUnique({
+    where: {
+      id: importId,
+    },
+    select: {
+      status: true,
+      processing_status: true,
+    },
+  });
+
+if (
+  currentImport?.status ===
+    "cancelled" ||
+  currentImport?.processing_status ===
+    "cancelled"
+) {
+  return NextResponse.json(
+    {
+      error:
+        "La importacion ha sido cancelada",
+    },
+    {
+      status: 409,
+    },
+  );
+}
 
 await prisma.knowledge_imports.update({
   where: {
@@ -690,10 +946,12 @@ await prisma.knowledge_imports.update({
   data: {
     status: allFilesDuplicate
       ? "completed"
-      : "extracted",
+      : allFilesFinal
+        ? "completed"
+        : "extracted",
 
     processing_status:
-      allFilesDuplicate
+      allFilesFinal
         ? "completed"
         : "pending",
 
@@ -709,17 +967,17 @@ await prisma.knowledge_imports.update({
     current_file_id: null,
 
     processing_started_at:
-      allFilesDuplicate
+      allFilesFinal
         ? new Date()
         : null,
 
     processing_completed_at:
-      allFilesDuplicate
+      allFilesFinal
         ? new Date()
         : null,
 
     completed_at:
-      allFilesDuplicate
+      allFilesFinal
         ? new Date()
         : null,
 
@@ -733,10 +991,12 @@ return NextResponse.json({
 
   status: allFilesDuplicate
     ? "completed"
-    : "extracted",
+    : allFilesFinal
+      ? "completed"
+      : "extracted",
 
   processingStatus:
-    allFilesDuplicate
+    allFilesFinal
       ? "completed"
       : "pending",
 
@@ -748,23 +1008,13 @@ return NextResponse.json({
   duplicateCount:
     duplicateFiles.length,
 
+  unsupportedCount,
+
   allFilesDuplicate,
 
   duplicateFiles,
 
-  files: extractedFiles.map(
-    (file) => ({
-      name: file.file_name,
-      relativePath:
-        file.relative_path,
-      size: file.file_size,
-      mimeType: file.mime_type,
-      processingOrder:
-        file.processing_order,
-      processingStatus:
-        file.processing_status,
-    }),
-  ),
+  files,
 });
 
 
@@ -780,9 +1030,15 @@ return NextResponse.json({
         : "No se ha podido extraer la documentación";
 
     await prisma.knowledge_imports
-      .update({
+      .updateMany({
         where: {
           id: importId,
+          status: {
+            not: "cancelled",
+          },
+          processing_status: {
+            not: "cancelled",
+          },
         },
         data: {
           status: "error",

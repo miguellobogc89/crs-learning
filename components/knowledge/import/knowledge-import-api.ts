@@ -1,9 +1,13 @@
 // components/knowledge/import/knowledge-import-api.ts
 
 import type {
+  ConfirmKnowledgeImportResult,
   GenerateKnowledgeImportProposalResult,
   KnowledgeImportProposal,
 } from "@/lib/knowledge/import/types";
+import type {
+  AnalyzeImportFlowFile,
+} from "@/lib/knowledge/import-flow";
 
 type ApiErrorBody = {
   error?: string;
@@ -39,6 +43,9 @@ type AnalyzeImportResponse = {
 
   duplicateFiles:
     KnowledgeImportDuplicateFile[];
+
+  unsupportedCount: number;
+  files: AnalyzeImportFlowFile[];
 };
 
 type ExtractTextResponse = {
@@ -55,17 +62,26 @@ type ExtractTextResponse = {
   totalCharacters: number;
 };
 
+type CancelKnowledgeImportResponse = {
+  importId: string;
+  status: "cancelled";
+  processingStatus: "cancelled";
+};
+
 export type KnowledgeImportProgressFile = {
   id: string;
   name: string;
   relativePath: string;
   size: number;
+  fileType: string | null;
   status: string;
   processingOrder: number | null;
   processingStatus: string | null;
   processingStep: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
   error: string | null;
 };
 
@@ -122,6 +138,10 @@ type RunKnowledgeImportAnalysisOptions = {
 
   onProgress?: (
     progress: KnowledgeImportProgress,
+  ) => void;
+
+  onAnalysisReady?: (
+    analysis: AnalyzeImportResponse,
   ) => void;
 };
 
@@ -387,6 +407,38 @@ export async function getKnowledgeImportProgress(
   );
 }
 
+export async function cancelKnowledgeImport(
+  importId: string,
+) {
+  const response = await fetch(
+    `/api/knowledge/import/${importId}/cancel`,
+    {
+      method: "POST",
+    },
+  );
+
+  return readResponse<CancelKnowledgeImportResponse>(
+    response,
+    "No se ha podido cancelar la importacion",
+  );
+}
+
+export async function confirmKnowledgeImport(
+  importId: string,
+) {
+  const response = await fetch(
+    `/api/knowledge/import/${importId}/confirm`,
+    {
+      method: "POST",
+    },
+  );
+
+  return readResponse<ConfirmKnowledgeImportResult>(
+    response,
+    "No se ha podido aplicar la propuesta",
+  );
+}
+
 function startProgressPolling(
   importId: string,
   onProgress:
@@ -455,12 +507,16 @@ export async function runKnowledgeImportAnalysis(
   const extraction =
     await analyzeImport(importId);
 
+  options.onAnalysisReady?.(
+    extraction,
+  );
+
   /*
    * Si todos los documentos ya existen, detenemos
    * aquí el proceso. No extraemos texto ni llamamos
    * posteriormente a la IA.
    */
-  if (extraction.allFilesDuplicate) {
+  if (extraction.fileCount === 0) {
     return {
       importId,
       extraction,

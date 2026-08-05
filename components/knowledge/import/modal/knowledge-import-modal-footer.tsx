@@ -22,6 +22,7 @@ type Props = {
   failedFileCount: number;
   isAnalyzing: boolean;
   isConfirming: boolean;
+  canContinue: boolean;
   canContinueInBackground: boolean;
   onCancel: () => void;
   onBack: () => void;
@@ -29,7 +30,6 @@ type Props = {
   onContinueAnalysis: () => void;
   onContinueInBackground: () => void;
   onConfirm: () => void;
-  onReset: () => void;
   onClose: () => void;
 };
 
@@ -41,6 +41,7 @@ export function KnowledgeImportModalFooter({
   failedFileCount,
   isAnalyzing,
   isConfirming,
+  canContinue,
   canContinueInBackground,
   onCancel,
   onBack,
@@ -48,24 +49,9 @@ export function KnowledgeImportModalFooter({
   onContinueAnalysis,
   onContinueInBackground,
   onConfirm,
-  onReset,
   onClose,
 }: Props) {
   if (step === "analyzing") {
-    const analyzedFileCount =
-      validFileCount +
-      duplicateFileCount +
-      failedFileCount;
-
-    const analysisFinished =
-      !isAnalyzing &&
-      fileCount > 0 &&
-      analyzedFileCount >= fileCount;
-
-    const canGenerateProposal =
-      analysisFinished &&
-      validFileCount > 0;
-
     return (
       <footer className="shrink-0 border-t border-border bg-background px-6 py-4">
         <div className="flex items-center justify-between gap-3">
@@ -96,7 +82,7 @@ export function KnowledgeImportModalFooter({
 
             <Button
               type="button"
-              disabled={!canGenerateProposal}
+              disabled={!canContinue}
               onClick={
                 onContinueAnalysis
               }
@@ -138,12 +124,30 @@ export function KnowledgeImportModalFooter({
             Volver
           </Button>
 
-          <Button
-            type="button"
-            disabled={isConfirming}
-            onClick={onConfirm}
-            className="h-11 bg-black px-5 text-white hover:bg-black/90"
-          >
+          <div className="flex items-center gap-3">
+            {canContinueInBackground ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  !canContinueInBackground
+                }
+                onClick={
+                  onContinueInBackground
+                }
+                className="h-11 px-5"
+              >
+                <Minimize2 className="mr-2 h-4 w-4" />
+                Continuar en segundo plano
+              </Button>
+            ) : null}
+
+            <Button
+              type="button"
+              disabled={isConfirming}
+              onClick={onConfirm}
+              className="h-11 bg-black px-5 text-white hover:bg-black/90"
+            >
             {isConfirming ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
@@ -153,7 +157,8 @@ export function KnowledgeImportModalFooter({
             {isConfirming
               ? "Aplicando propuesta"
               : "Confirmar incorporación"}
-          </Button>
+            </Button>
+          </div>
         </div>
       </footer>
     );
@@ -165,24 +170,15 @@ export function KnowledgeImportModalFooter({
         <div className="flex items-center justify-end gap-3">
           <Button
             type="button"
-            variant="ghost"
             onClick={onClose}
-          >
-            Cerrar
-          </Button>
-
-          <Button
-            type="button"
-            onClick={onReset}
             className="h-11 bg-black px-5 text-white hover:bg-black/90"
           >
-            Incorporar más documentos
+            Finalizar
           </Button>
         </div>
       </footer>
     );
   }
-
   return (
     <footer className="shrink-0 border-t border-border bg-background px-6 py-4">
       <div className="flex items-center justify-between gap-3">

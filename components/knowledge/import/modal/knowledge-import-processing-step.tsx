@@ -37,6 +37,9 @@ function getFileStatusLabel(
   file: KnowledgeImportFileProgress,
 ) {
   switch (file.status) {
+    case "ready":
+      return "Documento listo para extraer texto";
+
     case "uploading":
       return "Subiendo el documento";
 
@@ -56,6 +59,12 @@ function getFileStatusLabel(
       return file.duplicateOf?.articleTitle
         ? `Duplicado · ya existe en "${file.duplicateOf.articleTitle}"`
         : "Documento duplicado";
+
+    case "unsupported":
+      return (
+        file.error ??
+        "Formato no soportado"
+      );
 
     case "error":
       return (
@@ -121,7 +130,7 @@ export function KnowledgeImportProcessingStep({
               analysisFinished &&
                 !isGeneratingProposal
                 ? "text-emerald-600 dark:text-emerald-400"
-                : "text-violet-600 dark:text-violet-400",
+                : "text-emerald-600 dark:text-emerald-400",
             )}
           >
             {displayedPercentage}%
@@ -135,7 +144,7 @@ export function KnowledgeImportProcessingStep({
               analysisFinished &&
                 !isGeneratingProposal
                 ? "bg-emerald-500"
-                : "bg-violet-500",
+                : "bg-emerald-500",
             )}
             style={{
               width: `${displayedPercentage}%`,
@@ -203,14 +212,18 @@ export function KnowledgeImportProcessingStep({
             const isDuplicate =
               file.status === "duplicate";
             const isError =
-              file.status === "error";
+              file.status === "error" ||
+              file.status ===
+                "unsupported";
             const isProcessing =
               file.status ===
                 "processing" ||
               file.status ===
                 "uploading" ||
               file.status ===
-                "uploaded";
+                "uploaded" ||
+              file.status ===
+                "ready";
 
             return (
               <div

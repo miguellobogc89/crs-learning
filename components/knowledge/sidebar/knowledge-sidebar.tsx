@@ -570,8 +570,8 @@ useEffect(() => {
   const noop = () => undefined;
 
   return (
-    <aside
-      className="min-h-0 overflow-y-auto border-r border-border bg-panel"
+    <div
+      className="min-h-full bg-panel"
       onMouseDown={(event) => {
         const target = event.target as HTMLElement;
 
@@ -822,7 +822,7 @@ useEffect(() => {
           ) : null}
         </div>
       </div>
-    </aside>
+    </div>
   );
 }
 

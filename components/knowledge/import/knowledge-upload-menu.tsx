@@ -19,6 +19,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  KNOWLEDGE_IMPORT_ARCHIVE_ACCEPT,
+  KNOWLEDGE_IMPORT_DOCUMENT_ACCEPT,
+} from "@/lib/knowledge/import-flow";
 
 import type { KnowledgeImportMode } from "./knowledge-import.types";
 
@@ -149,7 +153,7 @@ export function KnowledgeUploadMenu({
         hidden
         multiple
         type="file"
-        accept=".pdf,.txt,.md,.csv,.docx,.xlsx,.pptx"
+        accept={KNOWLEDGE_IMPORT_DOCUMENT_ACCEPT}
         onChange={(event) => {
           emitFiles("files", event.target.files);
           event.target.value = "";
@@ -161,7 +165,7 @@ export function KnowledgeUploadMenu({
         hidden
         multiple
         type="file"
-        accept=".pdf,.txt,.md,.csv,.docx,.xlsx,.pptx"
+        accept={KNOWLEDGE_IMPORT_DOCUMENT_ACCEPT}
         {...({
           webkitdirectory: "",
           directory: "",
@@ -176,7 +180,7 @@ export function KnowledgeUploadMenu({
         ref={zipInputRef}
         hidden
         type="file"
-        accept=".zip,application/zip,application/x-zip-compressed"
+        accept={KNOWLEDGE_IMPORT_ARCHIVE_ACCEPT}
         onChange={(event) => {
           emitFiles("zip", event.target.files);
           event.target.value = "";

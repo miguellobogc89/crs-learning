@@ -59,6 +59,7 @@ type ChatConversation = {
 
 type FloatingChatProps = {
   conversations: ChatConversation[];
+  hideTrigger?: boolean;
 };
 
 type ConversationResponse = {
@@ -82,6 +83,7 @@ const suggestions = [
 
 export function FloatingChat({
   conversations,
+  hideTrigger = false,
 }: FloatingChatProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] =
@@ -146,6 +148,24 @@ const [messages, setMessages] = useState<
   function openChat() {
     setIsOpen(true);
   }
+
+  useEffect(() => {
+    function handleOpenAssistant() {
+      openChat();
+    }
+
+    window.addEventListener(
+      "crs:open-assistant",
+      handleOpenAssistant,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "crs:open-assistant",
+        handleOpenAssistant,
+      );
+    };
+  }, []);
 
   function closeChat() {
     setIsOpen(false);
@@ -378,13 +398,17 @@ const [messages, setMessages] = useState<
 
   return (
     <>
-      {!isOpen && (
+      {!hideTrigger && !isOpen && (
         <button
           type="button"
           onClick={openChat}
           aria-label="Abrir asistente"
+          style={{
+            bottom:
+              "var(--floating-chat-bottom)",
+          }}
           className="
-            group fixed bottom-6 right-6 z-50
+            group fixed right-6 z-50
             flex h-14 items-center gap-3
             overflow-hidden rounded-2xl
             border border-white/20
@@ -692,7 +716,7 @@ const [messages, setMessages] = useState<
                     className="flex h-9 items-center gap-2 rounded-xl px-3 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <Sparkles className="h-3.5 w-3.5" />
-                    Knowledge
+                    Conocimiento
                   </button>
                 </div>
 

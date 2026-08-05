@@ -263,7 +263,7 @@ export function KnowledgeActivityView({
             <p className="mt-1 text-sm text-muted-foreground">
               Historial de cambios,
               importaciones y acciones
-              realizadas en Knowledge.
+              realizadas en Conocimiento.
             </p>
           </div>
 

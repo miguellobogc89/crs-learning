@@ -11,6 +11,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import { auth } from "@/auth";
+import {
+  AppSectionShell,
+} from "@/components/app/section-sidebar";
 import { listChatConversations } from "@/lib/services/chat.service";
 import { ChatComposer } from "@/components/assistant/chat-composer";
 
@@ -37,10 +40,13 @@ export default async function DashboardPage() {
 
   return (
 
-    <main className="grid h-full grid-cols-[280px_minmax(0,1fr)] overflow-hidden bg-background">
-      <ChatHistory conversations={conversations} />
+    <AppSectionShell
+      sidebar={
+        <ChatHistory conversations={conversations} />
+      }
+    >
       <ChatPanel />
-    </main>
+    </AppSectionShell>
   );
 }
 
@@ -52,7 +58,7 @@ function ChatHistory({
   conversations: ChatConversation[];
 }) {
   return (
-    <aside className="flex min-h-0 flex-col border-r border-border bg-panel">
+    <div className="flex min-h-full flex-col bg-panel">
       <div className="border-b border-border p-4">
         <button className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand-hover">
           <Plus className="h-4 w-4" />
@@ -95,7 +101,7 @@ function ChatHistory({
           })}
         </div>
       </div>
-    </aside>
+    </div>
   );
 }
 
@@ -126,7 +132,7 @@ function ChatHeader() {
 
         <div>
           <h1 className="text-sm font-semibold text-foreground">
-            CRS Knowledge Chat
+            CRS Conocimiento Chat
           </h1>
           <p className="text-xs text-muted-foreground">
             Conversa con el conocimiento sintetizado de la empresa.

@@ -10,6 +10,9 @@ import { FloatingChat } from "@/components/chat/floating-chat";
 import {
   KnowledgeImportProvider,
 } from "@/components/knowledge/import/background/knowledge-import-provider";
+import {
+  KnowledgeImportBackgroundWidget,
+} from "@/components/knowledge/import/background/knowledge-import-background-widget";
 import { listChatConversations } from "@/lib/services/chat.service";
 
 export default async function AppLayout({
@@ -50,7 +53,10 @@ export default async function AppLayout({
           conversations={
             conversations
           }
+          hideTrigger
         />
+
+        <KnowledgeImportBackgroundWidget />
       </div>
     </KnowledgeImportProvider>
   );

@@ -12,6 +12,9 @@ import {
   Sparkles,
 } from "lucide-react";
 
+import {
+  AppSectionShell,
+} from "@/components/app/section-sidebar";
 import { Button } from "@/components/ui/button";
 import { listCourses } from "@/lib/services/course.service";
 import { cn } from "@/lib/utils";
@@ -20,6 +23,9 @@ export default async function CoursesPage() {
   const courses = await listCourses();
 
   return (
+    <AppSectionShell
+      sidebar={<CoursesSidebar />}
+    >
     <main className="h-full overflow-y-auto bg-background">
       <div className="mx-auto max-w-6xl px-8 py-10">
         <Header />
@@ -90,6 +96,53 @@ export default async function CoursesPage() {
         </section>
       </div>
     </main>
+    </AppSectionShell>
+  );
+}
+
+function CoursesSidebar() {
+  return (
+    <div className="space-y-6 p-4">
+      <div>
+        <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Cursos
+        </p>
+
+        <div className="space-y-1">
+          {[
+            "Todos",
+            "En curso",
+            "Pendientes",
+            "Completados",
+          ].map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-surface hover:text-foreground"
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Accesos
+        </p>
+
+        <Button
+          asChild
+          size="sm"
+          className="w-full justify-start gap-1.5 bg-brand text-primary-foreground hover:bg-brand-hover"
+        >
+          <Link href="/courses/new">
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo curso
+          </Link>
+        </Button>
+      </div>
+    </div>
   );
 }
 

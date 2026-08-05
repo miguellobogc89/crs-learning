@@ -16,7 +16,6 @@ import type {
 
 type Props = {
   result: ConfirmKnowledgeImportResult;
-  onReset: () => void;
   onClose: () => void;
 };
 

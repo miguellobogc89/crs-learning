@@ -15,7 +15,7 @@ export const APP_SECTIONS = {
     icon: Home,
   },
   knowledge: {
-    label: "Knowledge",
+    label: "Conocimiento",
     href: "/knowledge",
     icon: Library,
   },

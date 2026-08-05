@@ -1,6 +1,9 @@
 // components/knowledge/knowledge-shell.tsx
 import { ReactNode } from "react";
 
+import {
+  AppSectionShell,
+} from "@/components/app/section-sidebar";
 import { KnowledgeSidebar } from "@/components/knowledge/sidebar/knowledge-sidebar";
 import type { SidebarItem } from "@/components/knowledge/sidebar/types";
 
@@ -71,17 +74,19 @@ export function KnowledgeShell({
   ];
 
   return (
-    <div className="grid h-full grid-cols-[280px_1fr] bg-background">
-      <KnowledgeSidebar
-        sidebarItems={sidebarItems}
-        knowledgeLibraries={knowledgeLibraries}
-        knowledgeTeams={knowledgeTeams}
-        defaultLibraryId={defaultLibraryId}
-      />
-
-      <section className="min-w-0 overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable]">
+    <AppSectionShell
+      sidebar={
+        <KnowledgeSidebar
+          sidebarItems={sidebarItems}
+          knowledgeLibraries={knowledgeLibraries}
+          knowledgeTeams={knowledgeTeams}
+          defaultLibraryId={defaultLibraryId}
+        />
+      }
+    >
+      <section className="h-full min-w-0 overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable]">
         {children}
       </section>
-    </div>
+    </AppSectionShell>
   );
 }

@@ -33,12 +33,12 @@ type Props = {
 };
 
 const courses = [
-  { title: "Onboarding Knowledge Hub", progress: 68, status: "En curso" },
+  { title: "Onboarding Conocimiento", progress: 68, status: "En curso" },
   { title: "Buenas prácticas documentales", progress: 35, status: "Pendiente" },
 ];
 
 const activity = [
-  "Subiste un documento a Knowledge",
+  "Subiste un documento a Conocimiento",
   "Se actualizó un equipo",
   "Completaste una lección",
   "Se generó nuevo conocimiento por IA",
@@ -231,13 +231,13 @@ export function MySpaceDashboard({ teams }: Props) {
             <div className="rounded-2xl border border-border bg-card p-6">
               <SectionHeader
                 icon={FileText}
-                title="Mi aportación al Knowledge"
+                title="Mi aportación al Conocimiento"
                 description="Actividad relacionada con el repositorio de conocimiento."
               />
 
               <div className="grid gap-4 md:grid-cols-4">
                 <Metric label="Documentos subidos" value="6" />
-                <Metric label="Knowledge generado" value="9" />
+                <Metric label="Conocimiento generado" value="9" />
                 <Metric label="Revisiones" value="2" />
                 <Metric label="Sugerencias" value="3" />
               </div>

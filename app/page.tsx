@@ -1,10 +1,14 @@
 // app/page.tsx
 import { auth } from "@/auth";
-import { loginWithGoogle, logout } from "@/app/actions/auth";
-import Link from "next/link";
+import { loginWithGoogle } from "@/app/actions/auth";
+import { redirect } from "next/navigation";
 
 export default async function HomePage() {
   const session = await auth();
+
+  if (session?.user) {
+    redirect("/knowledge");
+  }
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -22,28 +26,11 @@ export default async function HomePage() {
         </p>
 
         <div className="mt-10 flex gap-4">
-          {session?.user ? (
-            <>
-              <Link
-                href="/dashboard"
-                className="rounded-xl bg-cyan-400 px-6 py-3 font-semibold text-slate-950"
-              >
-                Ir al dashboard
-              </Link>
-
-              <form action={logout}>
-                <button className="rounded-xl border border-slate-600 px-6 py-3 font-semibold">
-                  Salir
-                </button>
-              </form>
-            </>
-          ) : (
-            <form action={loginWithGoogle}>
-              <button className="rounded-xl bg-cyan-400 px-6 py-3 font-semibold text-slate-950">
-                Entrar con Google
-              </button>
-            </form>
-          )}
+          <form action={loginWithGoogle}>
+            <button className="rounded-xl bg-cyan-400 px-6 py-3 font-semibold text-slate-950">
+              Entrar con Google
+            </button>
+          </form>
         </div>
       </section>
     </main>

@@ -1,5 +1,3 @@
-// components/knowledge/import/background/knowledge-import-provider.tsx
-
 "use client";
 
 import {
@@ -7,29 +5,31 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import {
-  AlertCircle,
-  CheckCircle2,
-  FileSearch,
-  Loader2,
-  X,
-} from "lucide-react";
-
-import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
 
 import {
+  createEmptyImportSummary,
+  mergeServerProgress,
+} from "@/lib/knowledge/import-flow";
+
+import {
+  cancelKnowledgeImport,
+  confirmKnowledgeImport,
+  generateKnowledgeImportProposal,
   getKnowledgeImportProgress,
 } from "../knowledge-import-api";
 
 import type {
   BackgroundKnowledgeImportTask,
   KnowledgeImportBackgroundContextValue,
+  KnowledgeImportTaskPatch,
+  KnowledgeImportCurrentAction,
+  KnowledgeImportNextAction,
+  KnowledgeImportSharedState,
 } from "./knowledge-import-background.types";
-
-const STORAGE_KEY =
-  "knowledge-background-import-ids";
 
 const POLLING_INTERVAL_MS = 1000;
 
@@ -44,49 +44,161 @@ type KnowledgeImportProviderProps = {
 
 function createBackgroundTask(
   importId: string,
+  patch: KnowledgeImportTaskPatch = {},
 ): BackgroundKnowledgeImportTask {
   const now = new Date().toISOString();
 
   return {
     importId,
+    context: null,
+    displayMode: "modal",
+    detailHost: "local",
+    label: null,
+    step: "analyzing",
+    phase: "preparing",
+    status: "registered",
     progress: null,
+    summary: createEmptyImportSummary(),
+    files: [],
     error: null,
+    proposal: null,
+    proposalProgress: null,
+    completionResult: null,
+    isAnalyzing: true,
+    isConfirming: false,
+    isCancelling: false,
     registeredAt: now,
     updatedAt: now,
+    completedAt: null,
+    ...patch,
   };
 }
 
-function readStoredImportIds() {
-  try {
-    const storedValue =
-      window.localStorage.getItem(
-        STORAGE_KEY,
-      );
+function isTaskTerminal(
+  task: BackgroundKnowledgeImportTask,
+) {
+  return (
+    task.step === "completed" ||
+    task.status === "completed" ||
+    task.status === "cancelled" ||
+    task.progress?.processingStatus ===
+      "cancelled" ||
+    (task.progress?.isFinished === true &&
+      (task.progress.processingStatus ===
+        "error" ||
+        task.status === "error"))
+  );
+}
 
-    if (!storedValue) {
-      return [];
-    }
-
-    const parsedValue =
-      JSON.parse(storedValue);
-
-    if (!Array.isArray(parsedValue)) {
-      return [];
-    }
-
-    return parsedValue.filter(
-      (value): value is string =>
-        typeof value === "string" &&
-        value.length > 0,
-    );
-  } catch {
-    return [];
+function getCurrentAction(
+  task: BackgroundKnowledgeImportTask,
+): KnowledgeImportCurrentAction {
+  if (task.isCancelling) {
+    return "cancelling";
   }
+
+  if (task.isConfirming) {
+    return "confirming";
+  }
+
+  if (!task.isAnalyzing) {
+    return null;
+  }
+
+  if (task.phase === "generating_proposal") {
+    return "generating_proposal";
+  }
+
+  if (task.phase === "extracting") {
+    return "extracting";
+  }
+
+  if (task.phase === "uploading") {
+    return "uploading";
+  }
+
+  return "analyzing";
+}
+
+function getNextAction(
+  task: BackgroundKnowledgeImportTask,
+): KnowledgeImportNextAction {
+  if (isTaskTerminal(task)) {
+    return null;
+  }
+
+  if (task.proposal) {
+    return "confirm_proposal";
+  }
+
+  if (
+    !task.isAnalyzing &&
+    task.summary.completedFiles > 0
+  ) {
+    return "generate_proposal";
+  }
+
+  return null;
+}
+
+function deriveSharedState(
+  task: BackgroundKnowledgeImportTask,
+): KnowledgeImportSharedState {
+  const currentAction =
+    getCurrentAction(task);
+  const nextAction =
+    getNextAction(task);
+  const isBusy =
+    currentAction !== null;
+  const terminal =
+    isTaskTerminal(task);
+
+  return {
+    importId: task.importId,
+    currentStep: task.step,
+    processingPhase: task.phase,
+    status: task.status,
+    currentAction,
+    nextAction,
+    canContinue:
+      nextAction !== null &&
+      !isBusy,
+    canContinueInBackground:
+      !task.isCancelling &&
+      !terminal,
+    isBusy,
+    isWaitingUser:
+      nextAction !== null &&
+      !isBusy,
+    hasProposal:
+      task.proposal !== null,
+    hasCompletionResult:
+      task.completionResult !==
+      null,
+    progress: task.progress,
+    progressSummary: task.summary,
+    fileProgress: task.files,
+    error: task.error,
+  };
 }
 
 function isTaskActive(
   task: BackgroundKnowledgeImportTask,
 ) {
+  if (task.step !== "analyzing") {
+    return false;
+  }
+
+  if (
+    task.phase === "generating_proposal"
+  ) {
+    return false;
+  }
+
+  if (!task.isAnalyzing) {
+    return false;
+  }
+
   if (!task.progress) {
     return true;
   }
@@ -98,194 +210,10 @@ function isTaskActive(
   return !task.progress.isFinished;
 }
 
-function getTaskTitle(
-  task: BackgroundKnowledgeImportTask,
-) {
-  if (task.error) {
-    return "No se puede consultar la importación";
-  }
-
-  if (!task.progress) {
-    return "Preparando importación";
-  }
-
-  if (
-    task.progress.processingStatus ===
-      "error" ||
-    task.progress.status ===
-      "text_error"
-  ) {
-    return "Importación terminada con errores";
-  }
-
-  if (
-    task.progress.proposalReady ||
-    task.progress.isFinished
-  ) {
-    return "Análisis finalizado";
-  }
-
-  return "Analizando documentación";
-}
-
-function getTaskDescription(
-  task: BackgroundKnowledgeImportTask,
-) {
-  if (task.error) {
-    return task.error;
-  }
-
-  const progress = task.progress;
-
-  if (!progress) {
-    return "Conectando con el proceso…";
-  }
-
-  if (progress.currentFile?.name) {
-    return progress.currentFile.name;
-  }
-
-  if (
-    progress.proposalReady ||
-    progress.isFinished
-  ) {
-    const completed =
-      progress.completedFiles;
-
-    return `${completed} ${
-      completed === 1
-        ? "documento preparado"
-        : "documentos preparados"
-    }`;
-  }
-
-  return `${progress.processedFiles} de ${progress.totalFiles} documentos`;
-}
-
-function BackgroundImportWidget({
-  tasks,
-  onDismiss,
-}: {
-  tasks: BackgroundKnowledgeImportTask[];
-  onDismiss: (importId: string) => void;
-}) {
-  if (tasks.length === 0) {
-    return null;
-  }
-
-  return (
-    <aside className="fixed bottom-24 right-6 z-[80] flex w-[360px] max-w-[calc(100vw-3rem)] flex-col gap-3">
-      {tasks.map((task) => {
-        const progressPercentage =
-          task.progress?.progressPercentage ??
-          0;
-
-        const finished =
-          Boolean(
-            task.progress?.proposalReady ||
-              task.progress?.isFinished,
-          );
-
-        const hasError =
-          Boolean(
-            task.error ||
-              task.progress
-                ?.processingStatus ===
-                "error" ||
-              task.progress?.status ===
-                "text_error",
-          );
-
-        return (
-          <div
-            key={task.importId}
-            className="rounded-2xl border border-border bg-background p-4 shadow-xl"
-          >
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
-                {hasError ? (
-                  <AlertCircle className="h-5 w-5 text-destructive" />
-                ) : finished ? (
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                ) : task.progress ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                ) : (
-                  <FileSearch className="h-5 w-5 text-muted-foreground" />
-                )}
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">
-                      {getTaskTitle(task)}
-                    </p>
-
-                    <p
-                      className="mt-1 truncate text-xs text-muted-foreground"
-                      title={
-                        getTaskDescription(
-                          task,
-                        )
-                      }
-                    >
-                      {getTaskDescription(
-                        task,
-                      )}
-                    </p>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      onDismiss(
-                        task.importId,
-                      )
-                    }
-                    className="-mr-2 -mt-2 h-8 w-8 shrink-0"
-                    aria-label="Ocultar importación"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {!finished &&
-                !hasError ? (
-                  <div className="mt-3">
-                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary transition-[width] duration-300"
-                        style={{
-                          width: `${Math.max(
-                            2,
-                            Math.min(
-                              100,
-                              progressPercentage,
-                            ),
-                          )}%`,
-                        }}
-                      />
-                    </div>
-
-                    <p className="mt-1.5 text-right text-[11px] font-medium text-muted-foreground">
-                      {progressPercentage}%
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </aside>
-  );
-}
-
 export function KnowledgeImportProvider({
   children,
 }: KnowledgeImportProviderProps) {
+  const router = useRouter();
   const [
     tasks,
     setTasks,
@@ -293,33 +221,74 @@ export function KnowledgeImportProvider({
     BackgroundKnowledgeImportTask[]
   >([]);
 
-  const [
-    storageRestored,
-    setStorageRestored,
-  ] = useState(false);
+  const inFlightRefreshesRef = useRef(
+    new Set<string>(),
+  );
+  const inFlightActionsRef = useRef(
+    new Set<string>(),
+  );
 
   const registerImport =
     useCallback(
-      (importId: string) => {
+      (
+        importId: string,
+        patch: KnowledgeImportTaskPatch = {},
+      ) => {
         setTasks((currentTasks) => {
-          const alreadyRegistered =
-            currentTasks.some(
+          const now =
+            new Date().toISOString();
+
+          const existingTask =
+            currentTasks.find(
               (task) =>
                 task.importId ===
                 importId,
             );
 
-          if (alreadyRegistered) {
-            return currentTasks;
+          if (existingTask) {
+            return currentTasks.map(
+              (task) =>
+                task.importId ===
+                importId
+                  ? {
+                      ...task,
+                      ...patch,
+                      updatedAt: now,
+                    }
+                  : task,
+            );
           }
 
           return [
             ...currentTasks,
             createBackgroundTask(
               importId,
+              patch,
             ),
           ];
         });
+      },
+      [],
+    );
+
+  const updateImport =
+    useCallback(
+      (
+        importId: string,
+        patch: KnowledgeImportTaskPatch,
+      ) => {
+        setTasks((currentTasks) =>
+          currentTasks.map((task) =>
+            task.importId === importId
+              ? {
+                  ...task,
+                  ...patch,
+                  updatedAt:
+                    new Date().toISOString(),
+                }
+              : task,
+          ),
+        );
       },
       [],
     );
@@ -341,6 +310,17 @@ export function KnowledgeImportProvider({
   const refreshImport =
     useCallback(
       async (importId: string) => {
+        const inFlightRefreshes =
+          inFlightRefreshesRef.current;
+
+        if (
+          inFlightRefreshes.has(importId)
+        ) {
+          return;
+        }
+
+        inFlightRefreshes.add(importId);
+
         try {
           const progress =
             await getKnowledgeImportProgress(
@@ -356,10 +336,24 @@ export function KnowledgeImportProvider({
                 return task;
               }
 
+              const merged =
+                mergeServerProgress(
+                  task.files,
+                  task.summary,
+                  progress,
+                );
+
               return {
                 ...task,
                 progress,
+                files: merged.files,
+                summary:
+                  merged.summary,
+                status: progress.status,
                 error: null,
+                completedAt:
+                  progress.completedAt ??
+                  task.completedAt,
                 updatedAt:
                   new Date().toISOString(),
               };
@@ -369,7 +363,147 @@ export function KnowledgeImportProvider({
           const errorMessage =
             caughtError instanceof Error
               ? caughtError.message
-              : "No se ha podido consultar la importación";
+              : "No se ha podido consultar la importacion";
+
+          setTasks((currentTasks) =>
+            currentTasks.map((task) =>
+              task.importId === importId
+                ? {
+                    ...task,
+                    error: errorMessage,
+                    updatedAt:
+                      new Date().toISOString(),
+                  }
+                : task,
+            ),
+          );
+        } finally {
+          inFlightRefreshes.delete(
+            importId,
+          );
+        }
+      },
+      [],
+    );
+
+  const getImportState =
+    useCallback(
+      (importId: string) => {
+        const task = tasks.find(
+          (currentTask) =>
+            currentTask.importId ===
+            importId,
+        );
+
+        return task
+          ? deriveSharedState(task)
+          : null;
+      },
+      [tasks],
+    );
+
+  const continueWithValidDocuments =
+    useCallback(
+      async (importId: string) => {
+        const actionKey = `${importId}:generate_proposal`;
+
+        if (
+          inFlightActionsRef.current.has(
+            actionKey,
+          )
+        ) {
+          return;
+        }
+
+        inFlightActionsRef.current.add(
+          actionKey,
+        );
+
+        updateImport(importId, {
+          phase: "generating_proposal",
+          status: "generating_proposal",
+          isAnalyzing: true,
+          error: null,
+          proposalProgress: {
+            step: "preparing",
+            progressPercentage: 0,
+            message:
+              "Preparando la generacion de la propuesta",
+          },
+        });
+
+        try {
+          const proposalResult =
+            await generateKnowledgeImportProposal(
+              importId,
+              {
+                onProgress:
+                  (progress) => {
+                    updateImport(
+                      importId,
+                      {
+                        proposalProgress:
+                          progress,
+                      },
+                    );
+                  },
+              },
+            );
+
+          updateImport(importId, {
+            step: "proposal",
+            status: "proposal_ready",
+            proposal:
+              proposalResult.proposal,
+            proposalProgress: null,
+            isAnalyzing: false,
+            error: null,
+          });
+        } catch (caughtError) {
+          updateImport(importId, {
+            error:
+              caughtError instanceof Error
+                ? caughtError.message
+                : "No se ha podido generar la propuesta",
+            isAnalyzing: false,
+            step: "analyzing",
+          });
+        } finally {
+          inFlightActionsRef.current.delete(
+            actionKey,
+          );
+        }
+      },
+      [updateImport],
+    );
+
+  const confirmProposal =
+    useCallback(
+      async (importId: string) => {
+        const actionKey = `${importId}:confirm_proposal`;
+
+        if (
+          inFlightActionsRef.current.has(
+            actionKey,
+          )
+        ) {
+          return null;
+        }
+
+        inFlightActionsRef.current.add(
+          actionKey,
+        );
+
+        updateImport(importId, {
+          isConfirming: true,
+          error: null,
+        });
+
+        try {
+          const result =
+            await confirmKnowledgeImport(
+              importId,
+            );
 
           setTasks((currentTasks) =>
             currentTasks.map((task) => {
@@ -380,54 +514,185 @@ export function KnowledgeImportProvider({
                 return task;
               }
 
+              const completedAt =
+                new Date().toISOString();
+
               return {
                 ...task,
-                error: errorMessage,
-                updatedAt:
-                  new Date().toISOString(),
+                step: "completed",
+                status: "completed",
+                displayMode: "modal",
+                detailHost:
+                  task.displayMode ===
+                  "widget"
+                    ? "global"
+                    : task.detailHost,
+                completionResult:
+                  result,
+                isAnalyzing: false,
+                isConfirming: false,
+                proposalProgress: null,
+                completedAt,
+                updatedAt: completedAt,
+                error: null,
               };
             }),
           );
+
+          router.refresh();
+
+          return result;
+        } catch (caughtError) {
+          updateImport(importId, {
+            error:
+              caughtError instanceof Error
+                ? caughtError.message
+                : "No se ha podido aplicar la propuesta",
+            isConfirming: false,
+          });
+
+          return null;
+        } finally {
+          inFlightActionsRef.current.delete(
+            actionKey,
+          );
         }
       },
-      [],
+      [
+        router,
+        updateImport,
+      ],
     );
 
-  useEffect(() => {
-    const storedImportIds =
-      readStoredImportIds();
-
-    setTasks(
-      storedImportIds.map(
-        createBackgroundTask,
-      ),
+  const continueInBackground =
+    useCallback(
+      (importId: string) => {
+        updateImport(importId, {
+          displayMode: "widget",
+          detailHost: "global",
+        });
+      },
+      [updateImport],
     );
 
-    setStorageRestored(true);
-  }, []);
-
-  useEffect(() => {
-    if (!storageRestored) {
-      return;
-    }
-
-    const importIds = tasks.map(
-      (task) => task.importId,
+  const showImportDetail =
+    useCallback(
+      (importId: string) => {
+        updateImport(importId, {
+          displayMode: "modal",
+          detailHost: "global",
+        });
+      },
+      [updateImport],
     );
 
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(importIds),
+  const cancelImport =
+    useCallback(
+      async (importId: string) => {
+        updateImport(importId, {
+          isCancelling: true,
+          error: null,
+        });
+
+        try {
+          await cancelKnowledgeImport(
+            importId,
+          );
+          removeImport(importId);
+
+          return {
+            success: true,
+          };
+        } catch (caughtError) {
+          const errorMessage =
+            caughtError instanceof Error
+              ? caughtError.message
+              : "No se ha podido cancelar la importacion";
+
+          updateImport(importId, {
+            isCancelling: false,
+            error: errorMessage,
+          });
+
+          return {
+            success: false,
+            error: errorMessage,
+          };
+        }
+      },
+      [
+        removeImport,
+        updateImport,
+      ],
     );
-  }, [
-    storageRestored,
-    tasks,
-  ]);
+
+  const finishImport =
+    useCallback(
+      (importId: string) => {
+        removeImport(importId);
+      },
+      [removeImport],
+    );
 
   const activeTasks = useMemo(
     () => tasks.filter(isTaskActive),
     [tasks],
   );
+
+  useEffect(() => {
+    setTasks((currentTasks) => {
+      let changed = false;
+
+      const nextTasks =
+        currentTasks.map((task) => {
+          if (
+            task.step !== "completed" ||
+            task.displayMode !==
+              "widget"
+          ) {
+            return task;
+          }
+
+          changed = true;
+
+          return {
+            ...task,
+            displayMode: "modal" as const,
+            detailHost: "global" as const,
+            updatedAt:
+              new Date().toISOString(),
+          };
+        });
+
+      return changed
+        ? nextTasks
+        : currentTasks;
+    });
+  }, [tasks]);
+
+  const widgetTask = useMemo(
+    () =>
+      tasks.find(
+        (task) =>
+          task.displayMode ===
+            "widget" &&
+          task.step !== "completed",
+      ) ?? null,
+    [tasks],
+  );
+
+  useEffect(() => {
+    document.body.classList.toggle(
+      "knowledge-import-widget-visible",
+      widgetTask !== null,
+    );
+
+    return () => {
+      document.body.classList.remove(
+        "knowledge-import-widget-visible",
+      );
+    };
+  }, [widgetTask]);
 
   const activeImportIds = useMemo(
     () =>
@@ -437,6 +702,11 @@ export function KnowledgeImportProvider({
     [activeTasks],
   );
 
+  const activeImportIdsKey = useMemo(
+    () => activeImportIds.join("|"),
+    [activeImportIds],
+  );
+
   useEffect(() => {
     if (
       activeImportIds.length === 0
@@ -444,21 +714,17 @@ export function KnowledgeImportProvider({
       return;
     }
 
-    async function refreshActiveImports() {
-      await Promise.all(
-        activeImportIds.map(
-          refreshImport,
-        ),
-      );
+    function refreshActiveImports() {
+      for (const importId of activeImportIds) {
+        void refreshImport(importId);
+      }
     }
 
-    void refreshActiveImports();
+    refreshActiveImports();
 
     const intervalId =
       window.setInterval(
-        () => {
-          void refreshActiveImports();
-        },
+        refreshActiveImports,
         POLLING_INTERVAL_MS,
       );
 
@@ -468,24 +734,49 @@ export function KnowledgeImportProvider({
       );
     };
   }, [
-    activeImportIds,
+    activeImportIdsKey,
     refreshImport,
   ]);
+
+  const currentTask = useMemo(
+    () => tasks.at(-1) ?? null,
+    [tasks],
+  );
 
   const contextValue = useMemo(
     () => ({
       tasks,
       activeTasks,
+      currentTask,
+      widgetTask,
       registerImport,
+      updateImport,
       removeImport,
       refreshImport,
+      getImportState,
+      continueWithValidDocuments,
+      confirmProposal,
+      continueInBackground,
+      showImportDetail,
+      cancelImport,
+      finishImport,
     }),
     [
       tasks,
       activeTasks,
+      currentTask,
+      widgetTask,
       registerImport,
+      updateImport,
       removeImport,
       refreshImport,
+      getImportState,
+      continueWithValidDocuments,
+      confirmProposal,
+      continueInBackground,
+      showImportDetail,
+      cancelImport,
+      finishImport,
     ],
   );
 
@@ -494,11 +785,6 @@ export function KnowledgeImportProvider({
       value={contextValue}
     >
       {children}
-
-      <BackgroundImportWidget
-        tasks={tasks}
-        onDismiss={removeImport}
-      />
     </KnowledgeImportBackgroundContext.Provider>
   );
 }

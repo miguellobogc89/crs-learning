@@ -1,4 +1,8 @@
 
+import {
+  isSupportedKnowledgeArchive,
+} from "./supported-formats";
+
 export function getBrowserFileIdentity(
   file: File,
 ) {
@@ -27,9 +31,10 @@ export function getBrowserImportMode(
 ) {
   if (
     files.length === 1 &&
-    files[0].name
-      .toLowerCase()
-      .endsWith(".zip")
+    isSupportedKnowledgeArchive(
+      files[0].name,
+      files[0].type,
+    )
   ) {
     return "zip" as const;
   }

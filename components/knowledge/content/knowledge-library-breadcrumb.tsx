@@ -27,7 +27,7 @@ export function KnowledgeLibraryBreadcrumb({
             href="/knowledge"
             className="rounded-md px-2 py-1 transition hover:bg-surface hover:text-foreground"
           >
-            Knowledge
+            Conocimiento
           </Link>
 
           {path.length > 0 ? (

@@ -25,7 +25,7 @@ export function AutoBreadcrumb() {
             icon: APP_SECTIONS.knowledge.icon,
           },
           ...(pathname === "/knowledge/new"
-            ? [{ label: "Nuevo Knowledge" }]
+            ? [{ label: "Nuevo conocimiento" }]
             : isDetail
               ? [{ label: "Detalle" }]
               : []),

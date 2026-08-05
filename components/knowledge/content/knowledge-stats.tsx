@@ -24,7 +24,7 @@ export function KnowledgeStats({
 
           <div>
             <p className="text-2xl font-semibold text-foreground">{total}</p>
-            <p className="text-sm text-muted-foreground">Knowledge items</p>
+            <p className="text-sm text-muted-foreground">Elementos de conocimiento</p>
           </div>
         </CardContent>
       </Card>

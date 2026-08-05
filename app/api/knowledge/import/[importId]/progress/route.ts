@@ -112,11 +112,14 @@ export async function GET(
             file_name: true,
             relative_path: true,
             file_size: true,
+            mime_type: true,
             processing_order: true,
             processing_status: true,
             processing_step: true,
             started_at: true,
             completed_at: true,
+            created_at: true,
+            updated_at: true,
             error_message: true,
           },
         })
@@ -143,12 +146,15 @@ where: {
       file_name: true,
       relative_path: true,
       file_size: true,
+      mime_type: true,
       status: true,
       processing_order: true,
       processing_status: true,
       processing_step: true,
       started_at: true,
       completed_at: true,
+      created_at: true,
+      updated_at: true,
       error_message: true,
     },
   });
@@ -177,7 +183,9 @@ where: {
     knowledgeImport.processing_status ===
       "completed" ||
     knowledgeImport.processing_status ===
-      "error";
+      "error" ||
+    knowledgeImport.processing_status ===
+      "cancelled";
 
   const proposalReady =
     knowledgeImport.proposal_json !== null ||
@@ -215,6 +223,8 @@ where: {
           relativePath:
             currentFile.relative_path,
           size: currentFile.file_size,
+          fileType:
+            currentFile.mime_type,
           processingOrder:
             currentFile.processing_order,
           processingStatus:
@@ -225,6 +235,10 @@ where: {
             currentFile.started_at,
           completedAt:
             currentFile.completed_at,
+          createdAt:
+            currentFile.created_at,
+          updatedAt:
+            currentFile.updated_at,
           error:
             currentFile.error_message,
         }
@@ -236,6 +250,7 @@ where: {
       relativePath:
         file.relative_path,
       size: file.file_size,
+      fileType: file.mime_type,
       status: file.status,
       processingOrder:
         file.processing_order,
@@ -246,6 +261,8 @@ where: {
       startedAt: file.started_at,
       completedAt:
         file.completed_at,
+      createdAt: file.created_at,
+      updatedAt: file.updated_at,
       error: file.error_message,
     })),
 

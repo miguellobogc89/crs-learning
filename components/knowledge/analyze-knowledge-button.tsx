@@ -25,7 +25,7 @@ export function AnalyzeKnowledgeButton({
     setIsAnalyzing(false);
 
     if (!response.ok) {
-      alert("No se pudo analizar el Knowledge.");
+      alert("No se pudo analizar el conocimiento.");
       router.refresh();
       return;
     }
@@ -46,7 +46,7 @@ export function AnalyzeKnowledgeButton({
         ) : (
           <Sparkles className="h-4 w-4" />
         )}
-        {isAnalyzing ? "Analizando..." : "Analizar Knowledge"}
+        {isAnalyzing ? "Analizando..." : "Analizar conocimiento"}
       </Button>
 
       {isAnalyzing && (

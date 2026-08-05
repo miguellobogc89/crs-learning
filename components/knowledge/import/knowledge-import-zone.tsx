@@ -19,6 +19,10 @@ import {
 } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  isSupportedKnowledgeArchive,
+  KNOWLEDGE_IMPORT_UPLOAD_ACCEPT,
+} from "@/lib/knowledge/import-flow";
 import { formatFileSize } from "@/lib/knowledge/file-utils";
 
 import {
@@ -248,7 +252,10 @@ try {
 
     const containsZip = droppedFiles.some(
       (file) =>
-        file.name.toLowerCase().endsWith(".zip"),
+        isSupportedKnowledgeArchive(
+          file.name,
+          file.type,
+        ),
     );
 
     addFiles(
@@ -323,7 +330,7 @@ try {
           hidden
           multiple
           type="file"
-          accept=".pdf,.txt,.md,.csv,.docx,.xlsx,.pptx,.zip"
+          accept={KNOWLEDGE_IMPORT_UPLOAD_ACCEPT}
           onChange={(event) => {
             const selectedFiles = Array.from(
               event.target.files ?? [],
@@ -331,9 +338,10 @@ try {
 
             const containsZip =
               selectedFiles.some((file) =>
-                file.name
-                  .toLowerCase()
-                  .endsWith(".zip"),
+                isSupportedKnowledgeArchive(
+                  file.name,
+                  file.type,
+                ),
               );
 
             addFiles(
@@ -441,7 +449,7 @@ try {
 
           <p className="max-w-2xl text-xs leading-5 text-muted-foreground">
             La IA propondrá carpetas y artículos. No se
-            creará nada dentro de Knowledge hasta que
+            creará nada dentro de Conocimiento hasta que
             revises y confirmes la propuesta.
           </p>
         </div>

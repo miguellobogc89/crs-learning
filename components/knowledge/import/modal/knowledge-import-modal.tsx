@@ -55,6 +55,16 @@ export function KnowledgeImportModal({
     setCloseGuardOpen,
   ] = useState(false);
 
+  const [
+    isCancellingClose,
+    setIsCancellingClose,
+  ] = useState(false);
+
+  const [
+    closeGuardError,
+    setCloseGuardError,
+  ] = useState<string | null>(null);
+
   const startedSelectionKeyRef =
     useRef<string | null>(null);
 
@@ -133,14 +143,63 @@ export function KnowledgeImportModal({
   }
 
   function requestClose() {
+    if (intake.step === "completed") {
+      intake.finishActiveImport();
+      startedSelectionKeyRef.current =
+        null;
+      onOpenChange(false);
+      return;
+    }
+
     if (
       intake.hasUnsavedProgress
     ) {
+      setCloseGuardError(null);
       setCloseGuardOpen(true);
       return;
     }
 
     intake.reset();
+    startedSelectionKeyRef.current =
+      null;
+    onOpenChange(false);
+  }
+
+  function handleCloseGuardOpenChange(
+    nextOpen: boolean,
+  ) {
+    if (
+      isCancellingClose &&
+      !nextOpen
+    ) {
+      return;
+    }
+
+    if (!nextOpen) {
+      setCloseGuardError(null);
+    }
+
+    setCloseGuardOpen(nextOpen);
+  }
+
+  async function confirmCloseWithoutSaving() {
+    setIsCancellingClose(true);
+    setCloseGuardError(null);
+
+    const result =
+      await intake.cancelActiveImport();
+
+    if (!result.success) {
+      setCloseGuardError(
+        result.error ??
+          "No se ha podido cancelar la importacion",
+      );
+      setIsCancellingClose(false);
+      return;
+    }
+
+    setCloseGuardOpen(false);
+    setIsCancellingClose(false);
     startedSelectionKeyRef.current =
       null;
     onOpenChange(false);
@@ -268,11 +327,8 @@ export function KnowledgeImportModal({
                 result={
                   intake.completionResult
                 }
-                onReset={
-                  intake.reset
-                }
                 onClose={() => {
-                  intake.reset();
+                  intake.finishActiveImport();
                   startedSelectionKeyRef.current =
                     null;
                   onOpenChange(false);
@@ -306,6 +362,9 @@ export function KnowledgeImportModal({
               isConfirming={
                 intake.isConfirming
               }
+              canContinue={
+                intake.canContinue
+              }
               canContinueInBackground={
                 intake.canContinueInBackground
               }
@@ -336,9 +395,8 @@ export function KnowledgeImportModal({
               onConfirm={
                 intake.confirmProposal
               }
-              onReset={intake.reset}
               onClose={() => {
-                intake.reset();
+                intake.finishActiveImport();
                 startedSelectionKeyRef.current =
                   null;
                 onOpenChange(false);
@@ -351,15 +409,15 @@ export function KnowledgeImportModal({
       <KnowledgeImportCloseGuard
         open={closeGuardOpen}
         onOpenChange={
-          setCloseGuardOpen
+          handleCloseGuardOpenChange
         }
-        onConfirmClose={() => {
-          setCloseGuardOpen(false);
-          intake.reset();
-          startedSelectionKeyRef.current =
-            null;
-          onOpenChange(false);
-        }}
+        onConfirmClose={
+          confirmCloseWithoutSaving
+        }
+        isConfirming={
+          isCancellingClose
+        }
+        error={closeGuardError}
       />
     </>
   );

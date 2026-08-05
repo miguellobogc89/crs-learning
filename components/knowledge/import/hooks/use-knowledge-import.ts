@@ -4,10 +4,11 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   useBackgroundImports,
@@ -18,10 +19,11 @@ import type {
   KnowledgeImportProposal,
 } from "@/lib/knowledge/import/types";
 import {
-  applyDuplicateSnapshot,
   createEmptyImportSummary,
+  createFilesFromAnalysisSnapshot,
   createInitialImportFiles,
   createInitialImportSummary,
+  createSummaryFromAnalysisSnapshot,
   deduplicateBrowserFiles,
   finalizeImportAnalysis,
   finalizeImportFiles,
@@ -29,7 +31,6 @@ import {
   getBrowserImportMode,
   markFilesUploaded,
   markFilesUploading,
-  mergeServerProgress,
   type KnowledgeImportFlowFile,
   type KnowledgeImportFlowSummary,
 } from "@/lib/knowledge/import-flow";
@@ -43,9 +44,7 @@ import type {
 } from "../modal/knowledge-import-processing.types";
 
 import {
-  generateKnowledgeImportProposal,
   runKnowledgeImportAnalysis,
-  type KnowledgeImportProgress,
   type KnowledgeImportProposalProgress,
 } from "../knowledge-import-api";
 import {
@@ -73,10 +72,19 @@ export function useKnowledgeImport({
   context,
   onCompleted,
 }: useKnowledgeImportParams) {
-  const router = useRouter();
-
   const {
   registerImport,
+  updateImport,
+  currentTask,
+  getImportState,
+  continueWithValidDocuments:
+    continueSharedImport,
+  confirmProposal:
+    confirmSharedProposal,
+  continueInBackground:
+    continueSharedInBackground,
+  cancelImport,
+  finishImport,
 } = useBackgroundImports();
 
   const [step, setStep] =
@@ -150,6 +158,14 @@ const [
     createEmptyImportSummary(),
   );
 
+  const latestFileProgressRef =
+    useRef<KnowledgeImportFlowFile[]>(
+      [],
+    );
+
+  const activeOperationRef =
+    useRef(0);
+
   const files = useMemo(
     () =>
       selectedDocuments.map(
@@ -158,19 +174,118 @@ const [
     [selectedDocuments],
   );
 
-  const hasUnsavedProgress =
-    selectedDocuments.length > 0 ||
-    proposal !== null ||
-    step !== "upload";
+  const sharedTask =
+    importId &&
+    currentTask?.importId === importId
+      ? currentTask
+      : !importId &&
+          selectedDocuments.length === 0
+          && currentTask &&
+          (currentTask.step !==
+            "completed" ||
+            currentTask.detailHost ===
+              "global")
+        ? currentTask
+        : null;
+
+  const sharedState =
+    sharedTask
+      ? getImportState(
+          sharedTask.importId,
+        )
+      : null;
+
+  useEffect(() => {
+    if (
+      importId ||
+      selectedDocuments.length > 0 ||
+      !currentTask ||
+      (currentTask.step ===
+        "completed" &&
+        currentTask.detailHost !==
+          "global")
+    ) {
+      return;
+    }
+
+    setImportId(currentTask.importId);
+    setStep(currentTask.step);
+    setProcessingPhase(
+      currentTask.phase,
+    );
+    setFileProgress(
+      currentTask.files,
+    );
+    setProgressSummary(
+      currentTask.summary,
+    );
+    setError(currentTask.error);
+    setProposal(currentTask.proposal);
+    setProposalProgress(
+      currentTask.proposalProgress,
+    );
+    setCompletionResult(
+      currentTask.completionResult,
+    );
+    setIsAnalyzing(
+      currentTask.isAnalyzing,
+    );
+    setIsConfirming(
+      currentTask.isConfirming,
+    );
+  }, [
+    currentTask,
+    importId,
+    selectedDocuments.length,
+  ]);
+
+  const visibleStep =
+    sharedTask?.step ?? step;
+  const visiblePhase =
+    sharedTask?.phase ??
+    processingPhase;
+  const visibleFileProgress =
+    sharedTask?.files ??
+    fileProgress;
+  const visibleProgressSummary =
+    sharedTask?.summary ??
+    progressSummary;
+  const visibleProposal =
+    sharedTask?.proposal ??
+    proposal;
+  const visibleProposalProgress =
+    sharedTask?.proposalProgress ??
+    proposalProgress;
+  const visibleCompletionResult =
+    sharedTask?.completionResult ??
+    completionResult;
+  const visibleError =
+    sharedTask?.error ?? error;
+  const visibleIsAnalyzing =
+    sharedTask?.isAnalyzing ??
+    isAnalyzing;
+  const visibleIsConfirming =
+    sharedTask?.isConfirming ??
+    isConfirming;
+
+  useEffect(() => {
+    latestFileProgressRef.current =
+      visibleFileProgress;
+  }, [
+    visibleFileProgress,
+  ]);
 
   const canContinueInBackground =
-    Boolean(importId) &&
-    step === "analyzing" &&
-    isAnalyzing &&
-    (
-      processingPhase === "preparing" ||
-      processingPhase === "extracting"
+    sharedState?.canContinueInBackground ??
+    Boolean(
+      importId ??
+        sharedTask?.importId,
     );
+
+  const hasUnsavedProgress =
+    selectedDocuments.length > 0 ||
+    visibleProposal !== null ||
+    visibleStep !== "upload";
 
   const handleFilesChange =
     useCallback(
@@ -222,39 +337,6 @@ const [
       [],
     );
 
-const applyServerProgress =
-    useCallback(
-      (
-        progress: KnowledgeImportProgress,
-      ) => {
-        setFileProgress(
-          (currentFiles) => {
-            let nextFiles =
-              currentFiles;
-
-            setProgressSummary(
-              (currentSummary) => {
-                const merged =
-                  mergeServerProgress(
-                    currentFiles,
-                    currentSummary,
-                    progress,
-                  );
-
-                nextFiles =
-                  merged.files;
-
-                return merged.summary;
-              },
-            );
-
-            return nextFiles;
-          },
-        );
-      },
-      [],
-    );
-
   const analyzeDocuments =
     useCallback(async () => {
       if (
@@ -265,6 +347,16 @@ const applyServerProgress =
         );
         return;
       }
+
+      const operationId =
+        activeOperationRef.current + 1;
+
+      activeOperationRef.current =
+        operationId;
+
+      const isCurrentOperation = () =>
+        activeOperationRef.current ===
+        operationId;
 
       setIsAnalyzing(true);
       setError(null);
@@ -284,6 +376,10 @@ setProgressSummary(
           selectedDocuments,
         ),
       );
+
+      let activeImportId:
+        | string
+        | null = null;
 
       try {
         const selectedFiles =
@@ -325,9 +421,18 @@ setProgressSummary(
           );
         }
 
+        const uploadingFiles =
+          markFilesUploading(
+            createInitialImportFiles(
+              selectedDocuments,
+            ),
+          );
+
         setFileProgress(
-          markFilesUploading,
+          uploadingFiles,
         );
+        latestFileProgressRef.current =
+          uploadingFiles;
 
         const uploadResponse =
           await fetch(
@@ -337,6 +442,10 @@ setProgressSummary(
               body: formData,
             },
           );
+
+        if (!isCurrentOperation()) {
+          return;
+        }
 
         if (!uploadResponse.ok) {
           throw new Error(
@@ -350,12 +459,49 @@ setProgressSummary(
         const uploadResult =
           (await uploadResponse.json()) as UploadKnowledgeImportResult;
 
+        if (!isCurrentOperation()) {
+          return;
+        }
+
+        activeImportId =
+          uploadResult.importId;
+
         setImportId(
           uploadResult.importId,
         );
 
+        const uploadedFiles =
+          markFilesUploaded(
+            uploadingFiles,
+          );
+
         setFileProgress(
-          markFilesUploaded,
+          uploadedFiles,
+        );
+        latestFileProgressRef.current =
+          uploadedFiles;
+
+        registerImport(
+          uploadResult.importId,
+          {
+            context,
+            displayMode: "modal",
+            detailHost: "local",
+            label:
+              selectedDocuments[0]?.file
+                .name ?? null,
+            step: "analyzing",
+            phase: "preparing",
+            status: "uploaded",
+            files: uploadedFiles,
+            summary:
+              createInitialImportSummary(
+                selectedDocuments.length,
+              ),
+            error: null,
+            isAnalyzing: true,
+            isConfirming: false,
+          },
         );
 
         setProcessingPhase(
@@ -368,6 +514,10 @@ setProgressSummary(
             {
               onStageChange:
                 (stage) => {
+                  if (!isCurrentOperation()) {
+                    return;
+                  }
+
                   if (
                     stage ===
                     "analyzing"
@@ -375,55 +525,129 @@ setProgressSummary(
                     setProcessingPhase(
                       "preparing",
                     );
+                    updateImport(
+                      uploadResult.importId,
+                      {
+                        phase:
+                          "preparing",
+                        status:
+                          "analyzing",
+                        isAnalyzing:
+                          true,
+                      },
+                    );
                     return;
                   }
 
                   setProcessingPhase(
                     "extracting",
                   );
+                  updateImport(
+                    uploadResult.importId,
+                    {
+                      phase:
+                        "extracting",
+                      status:
+                        "extracting_text",
+                      isAnalyzing:
+                        true,
+                    },
+                  );
                 },
 
-              onProgress:
-                applyServerProgress,
+              onAnalysisReady:
+                (analysis) => {
+                  if (!isCurrentOperation()) {
+                    return;
+                  }
+
+                  const analyzedFiles =
+                    createFilesFromAnalysisSnapshot(
+                      analysis.files,
+                    );
+
+                  setFileProgress(
+                    analyzedFiles,
+                  );
+                  latestFileProgressRef.current =
+                    analyzedFiles;
+
+                  setProgressSummary(
+                    createSummaryFromAnalysisSnapshot(
+                      analyzedFiles,
+                    ),
+                  );
+
+                  updateImport(
+                    uploadResult.importId,
+                    {
+                      files:
+                        analyzedFiles,
+                      summary:
+                        createSummaryFromAnalysisSnapshot(
+                          analyzedFiles,
+                        ),
+                      status:
+                        analysis.status,
+                      error: null,
+                    },
+                  );
+                },
             },
           );
+
+        if (!isCurrentOperation()) {
+          return;
+        }
 
 const duplicateFiles =
           analysisResult.extraction
             .duplicateFiles;
 
+        const finalizedFiles =
+          finalizeImportFiles(
+            latestFileProgressRef.current,
+            analysisResult
+              .textExtraction
+              .successfulFiles,
+            analysisResult
+              .textExtraction
+              .failedFiles,
+          );
+
+        const finalizedSummary =
+          finalizeImportAnalysis(
+            finalizedFiles,
+            analysisResult
+              .textExtraction
+              .successfulFiles,
+            analysisResult
+              .textExtraction
+              .failedFiles,
+          );
+
+        latestFileProgressRef.current =
+          finalizedFiles;
+
         setFileProgress(
-          (currentFiles) => {
-            const duplicated =
-              applyDuplicateSnapshot(
-                currentFiles,
-                duplicateFiles,
-              );
+          finalizedFiles,
+        );
 
-            const finalizedFiles =
-              finalizeImportFiles(
-                duplicated.files,
-                analysisResult
-                  .textExtraction
-                  .successfulFiles,
-                analysisResult
-                  .textExtraction
-                  .failedFiles,
-              );
+        setProgressSummary(
+          finalizedSummary,
+        );
 
-            setProgressSummary(
-              finalizeImportAnalysis(
-                finalizedFiles,
-                analysisResult
-                  .textExtraction
-                  .successfulFiles,
-                analysisResult
-                  .textExtraction
-                  .failedFiles,
-              ),
-            );
-
-            return finalizedFiles;
+        updateImport(
+          uploadResult.importId,
+          {
+            files: finalizedFiles,
+            summary:
+              finalizedSummary,
+            status:
+              analysisResult
+                .textExtraction
+                .status,
+            isAnalyzing: false,
           },
         );
 
@@ -452,177 +676,128 @@ const duplicateFiles =
           );
         }
       } catch (caughtError) {
+        if (!isCurrentOperation()) {
+          return;
+        }
+
         setError(
           caughtError instanceof Error
             ? caughtError.message
             : "No se han podido analizar los documentos",
         );
 
+        if (activeImportId) {
+          updateImport(activeImportId, {
+            error:
+              caughtError instanceof Error
+                ? caughtError.message
+                : "No se han podido analizar los documentos",
+            isAnalyzing: false,
+          });
+        }
+
         setStep("upload");
       } finally {
-        setIsAnalyzing(false);
+        if (isCurrentOperation()) {
+          setIsAnalyzing(false);
+        }
       }
     }, [
-      applyServerProgress,
+      context,
       context.libraryId,
+      importId,
+      registerImport,
       selectedDocuments,
+      updateImport,
     ]);
 
   const continueWithValidDocuments =
     useCallback(async () => {
       if (!importId) {
         setError(
-          "No se ha encontrado la importación",
+          "No se ha encontrado la importacion",
         );
         return;
       }
 
-      if (
-        progressSummary.completedFiles ===
-        0
-      ) {
+      if (!sharedState?.canContinue) {
         setError(
-          "No hay documentos válidos con los que generar una propuesta",
+          "No hay documentos validos con los que generar una propuesta",
         );
         return;
       }
 
-      setIsAnalyzing(true);
-      setError(null);
-      setProcessingPhase(
-        "generating_proposal",
+      await continueSharedImport(
+        importId,
       );
-
-      setProposalProgress({
-        step: "preparing",
-        progressPercentage: 0,
-        message:
-          "Preparando la generación de la propuesta",
-      });
-
-      setStep("analyzing");
-
-      try {
-        const proposalResult =
-          await generateKnowledgeImportProposal(
-            importId,
-            {
-              onProgress:
-                setProposalProgress,
-            },
-          );
-
-        setProposal(
-          proposalResult.proposal,
-        );
-
-        setStep("proposal");
-      } catch (caughtError) {
-        setError(
-          caughtError instanceof Error
-            ? caughtError.message
-            : "No se ha podido generar la propuesta",
-        );
-
-        setStep(
-          "analyzing",
-        );
-      } finally {
-        setIsAnalyzing(false);
-      }
     }, [
-      context.libraryId,
+      continueSharedImport,
       importId,
-      progressSummary.completedFiles,
+      sharedState?.canContinue,
     ]);
-
   const confirmProposal =
     useCallback(async () => {
       if (
-        !proposal ||
+        !visibleProposal ||
         !importId
       ) {
         return;
       }
 
-      setIsConfirming(true);
-      setError(null);
-
-      try {
-        const response =
-          await fetch(
-            `/api/knowledge/import/${importId}/confirm`,
-            {
-              method: "POST",
-            },
-          );
-
-        if (!response.ok) {
-          throw new Error(
-            await readErrorMessage(
-              response,
-              "No se ha podido aplicar la propuesta",
-            ),
-          );
-        }
-
-        const result =
-          (await response.json()) as ConfirmKnowledgeImportResult;
-
-        setCompletionResult(
-          result,
+      const result =
+        await confirmSharedProposal(
+          importId,
         );
 
-        setStep("completed");
-
-        router.refresh();
-
+      if (result) {
         onCompleted?.(result);
-      } catch (caughtError) {
-        setError(
-          caughtError instanceof Error
-            ? caughtError.message
-            : "No se ha podido aplicar la propuesta",
-        );
-      } finally {
-        setIsConfirming(false);
       }
     }, [
+      confirmSharedProposal,
       importId,
       onCompleted,
-      proposal,
-      router,
+      visibleProposal,
     ]);
-
   const continueInBackground =
     useCallback(() => {
-      if (!importId) {
+      const activeImportId =
+        importId ??
+        sharedTask?.importId ??
+        null;
+
+      if (!activeImportId) {
         return false;
       }
 
-      registerImport(importId);
-
-      toast.success(
-        "La importación continuará en segundo plano",
-        {
-          description:
-            "Puedes seguir trabajando mientras termina el análisis.",
-        },
+      continueSharedInBackground(
+        activeImportId,
       );
 
       return true;
     }, [
+      continueSharedInBackground,
       importId,
-      registerImport,
+      sharedTask?.importId,
     ]);
-
   const goBackToUpload =
     useCallback(() => {
       setError(null);
       setStep("upload");
-    }, []);
+      if (importId) {
+        updateImport(importId, {
+          step: "upload",
+          error: null,
+        });
+      }
+    }, [
+      importId,
+      updateImport,
+    ]);
 
   const reset = useCallback(() => {
+    activeOperationRef.current += 1;
+    latestFileProgressRef.current =
+      [];
     setStep("upload");
     setSelectedDocuments([]);
     setImportId(null);
@@ -644,20 +819,107 @@ setProgressSummary(
     );
   }, []);
 
+  const cancelActiveImport =
+    useCallback(async () => {
+      const activeImportId =
+        importId ??
+        sharedTask?.importId ??
+        null;
+
+      if (!activeImportId) {
+        reset();
+        return {
+          success: true,
+        };
+      }
+
+      activeOperationRef.current += 1;
+      setError(null);
+
+      const result =
+        await cancelImport(activeImportId);
+
+      if (result.success) {
+        reset();
+        return result;
+      }
+
+      if (result.error) {
+        setError(result.error);
+      }
+
+      return result;
+    }, [
+      cancelImport,
+      importId,
+      reset,
+      sharedTask?.importId,
+    ]);
+
+  const finishActiveImport =
+    useCallback(() => {
+      const activeImportId =
+        importId ??
+        sharedTask?.importId ??
+        null;
+
+      if (activeImportId) {
+        finishImport(activeImportId);
+      }
+
+      reset();
+    }, [
+      finishImport,
+      importId,
+      reset,
+      sharedTask?.importId,
+    ]);
   return {
-    step,
+    step: visibleStep,
     files,
-    proposal,
-    completionResult,
-    error,
-    isAnalyzing,
-    isConfirming,
+    proposal: visibleProposal,
+    completionResult:
+      visibleCompletionResult,
+    error: visibleError,
+    isAnalyzing:
+      visibleIsAnalyzing,
+    isConfirming:
+      visibleIsConfirming,
+    currentStep:
+      sharedState?.currentStep ??
+      visibleStep,
+    currentAction:
+      sharedState?.currentAction ??
+      null,
+    nextAction:
+      sharedState?.nextAction ??
+      null,
+    canContinue:
+      sharedState?.canContinue ??
+      false,
+    isBusy:
+      sharedState?.isBusy ??
+      visibleIsAnalyzing ??
+      visibleIsConfirming,
+    isWaitingUser:
+      sharedState?.isWaitingUser ??
+      false,
+    hasProposal:
+      sharedState?.hasProposal ??
+      visibleProposal !== null,
+    hasCompletionResult:
+      sharedState?.hasCompletionResult ??
+      visibleCompletionResult !== null,
     hasUnsavedProgress,
     canContinueInBackground,
-    processingPhase,
-    fileProgress,
-    progressSummary,
-    proposalProgress,
+    processingPhase:
+      visiblePhase,
+    fileProgress:
+      visibleFileProgress,
+    progressSummary:
+      visibleProgressSummary,
+    proposalProgress:
+      visibleProposalProgress,
 
     handleFilesChange,
     analyzeDocuments,
@@ -665,6 +927,8 @@ setProgressSummary(
     confirmProposal,
     continueInBackground,
     goBackToUpload,
+    cancelActiveImport,
+    finishActiveImport,
     reset,
   };
 }

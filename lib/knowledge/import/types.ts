@@ -175,7 +175,7 @@ export type KnowledgeImportCreatedDocumentLog = {
   knowledgeFileId: string;
   fileName: string;
   fileSize: number | null;
-  articleId: string;
+  articleId: string | null;
   articleTitle: string;
   extractedCharacters: number;
   storagePath: string | null;
@@ -191,7 +191,7 @@ export type KnowledgeImportSkippedDocumentLog = {
   duplicateImportFileId?: string;
   fileName: string;
   fileSize: number | null;
-  articleId: string;
+  articleId: string | null;
   articleTitle: string;
   reason: KnowledgeImportSkippedDocumentReason;
 };

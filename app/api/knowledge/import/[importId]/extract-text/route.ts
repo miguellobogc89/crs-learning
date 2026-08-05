@@ -6,21 +6,15 @@ import { NextResponse } from "next/server";
 import { parseOffice } from "officeparser";
 
 import { auth } from "@/auth";
+import {
+  isPlainTextKnowledgeDocument,
+  isSupportedKnowledgeDocument,
+} from "@/lib/knowledge/import-flow";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
-
-const SUPPORTED_EXTENSIONS = new Set([
-  ".pdf",
-  ".txt",
-  ".md",
-  ".csv",
-  ".docx",
-  ".xlsx",
-  ".pptx",
-]);
 
 const MAX_TEXT_LENGTH_PER_FILE = 2_000_000;
 
@@ -125,7 +119,9 @@ async function extractTextFromFile(
     .toLowerCase();
 
   if (
-    !SUPPORTED_EXTENSIONS.has(extension)
+    !isSupportedKnowledgeDocument(
+      fileName,
+    )
   ) {
     throw new Error(
       `Formato no compatible: ${
@@ -134,11 +130,7 @@ async function extractTextFromFile(
     );
   }
 
-  if (
-    extension === ".txt" ||
-    extension === ".md" ||
-    extension === ".csv"
-  ) {
+  if (isPlainTextKnowledgeDocument(fileName)) {
     return extractPlainText(
       absolutePath,
     );
@@ -146,6 +138,28 @@ async function extractTextFromFile(
 
   return extractOfficeText(
     absolutePath,
+  );
+}
+
+async function isImportCancelled(
+  importId: string,
+) {
+  const knowledgeImport =
+    await prisma.knowledge_imports.findUnique({
+      where: {
+        id: importId,
+      },
+      select: {
+        status: true,
+        processing_status: true,
+      },
+    });
+
+  return (
+    knowledgeImport?.status ===
+      "cancelled" ||
+    knowledgeImport?.processing_status ===
+      "cancelled"
   );
 }
 
@@ -216,6 +230,23 @@ export async function POST(
       },
       {
         status: 404,
+      },
+    );
+  }
+
+  if (
+    knowledgeImport.status ===
+      "cancelled" ||
+    knowledgeImport.processing_status ===
+      "cancelled"
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "La importacion ha sido cancelada",
+      },
+      {
+        status: 409,
       },
     );
   }
@@ -329,9 +360,15 @@ export async function POST(
       .processing_started_at ??
     new Date();
 
-  await prisma.knowledge_imports.update({
+  await prisma.knowledge_imports.updateMany({
     where: {
       id: importId,
+      status: {
+        not: "cancelled",
+      },
+      processing_status: {
+        not: "cancelled",
+      },
     },
     data: {
       status: "text_processing",
@@ -374,6 +411,22 @@ export async function POST(
     const fileStartedAt = new Date();
 
     try {
+      if (
+        await isImportCancelled(
+          importId,
+        )
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "La importacion ha sido cancelada",
+          },
+          {
+            status: 409,
+          },
+        );
+      }
+
       await prisma.$transaction([
         prisma.knowledge_imports.update({
           where: {
@@ -423,6 +476,22 @@ export async function POST(
           absolutePath,
           file.file_name,
         );
+
+      if (
+        await isImportCancelled(
+          importId,
+        )
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "La importacion ha sido cancelada",
+          },
+          {
+            status: 409,
+          },
+        );
+      }
 
       await prisma.knowledge_import_files.update({
         where: {
@@ -576,9 +645,15 @@ export async function POST(
   const processingCompletedAt =
     new Date();
 
-  await prisma.knowledge_imports.update({
+  await prisma.knowledge_imports.updateMany({
     where: {
       id: importId,
+      status: {
+        not: "cancelled",
+      },
+      processing_status: {
+        not: "cancelled",
+      },
     },
     data: {
       status: finalStatus,

@@ -17,13 +17,17 @@ import {
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirmClose: () => void;
+  onConfirmClose: () => void | Promise<void>;
+  isConfirming?: boolean;
+  error?: string | null;
 };
 
 export function KnowledgeImportCloseGuard({
   open,
   onOpenChange,
   onConfirmClose,
+  isConfirming = false,
+  error = null,
 }: Props) {
   return (
     <Dialog
@@ -47,6 +51,12 @@ export function KnowledgeImportCloseGuard({
                 seleccionados y la propuesta que
                 todavía no haya sido confirmada.
               </DialogDescription>
+
+              {error ? (
+                <p className="mt-3 text-sm text-destructive">
+                  {error}
+                </p>
+              ) : null}
             </div>
           </div>
         </DialogHeader>
@@ -55,6 +65,7 @@ export function KnowledgeImportCloseGuard({
           <Button
             type="button"
             variant="outline"
+            disabled={isConfirming}
             onClick={() =>
               onOpenChange(false)
             }
@@ -65,9 +76,12 @@ export function KnowledgeImportCloseGuard({
           <Button
             type="button"
             variant="destructive"
+            disabled={isConfirming}
             onClick={onConfirmClose}
           >
-            Salir sin guardar
+            {isConfirming
+              ? "Saliendo..."
+              : "Salir sin guardar"}
           </Button>
         </DialogFooter>
       </DialogContent>

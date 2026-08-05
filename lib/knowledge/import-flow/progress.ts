@@ -4,8 +4,8 @@ import {
 } from "./file-selection";
 
 import type {
+  AnalyzeImportFlowFile,
   BrowserFileInput,
-  DuplicateFileSnapshot,
   KnowledgeImportFlowFile,
   KnowledgeImportFlowSummary,
   ServerProgressSnapshot,
@@ -81,63 +81,6 @@ export function markFilesUploaded(
   }));
 }
 
-export function applyDuplicateSnapshot(
-  currentFiles: KnowledgeImportFlowFile[],
-  duplicateFiles: DuplicateFileSnapshot[],
-) {
-  const duplicateByPath = new Map(
-    duplicateFiles.map((file) => [
-      (
-        file.relativePath ||
-        file.name
-      ).toLowerCase(),
-      file,
-    ]),
-  );
-
-  const files = currentFiles.map(
-    (currentFile) => {
-      const duplicate =
-        duplicateByPath.get(
-          getFileKey(currentFile),
-        );
-
-      if (!duplicate) {
-        return currentFile;
-      }
-
-      return {
-        ...currentFile,
-        id: `duplicate:${duplicate.existingFileId}:${getFileKey(
-          currentFile,
-        )}`,
-        name: duplicate.name,
-        size: duplicate.size,
-        relativePath:
-          duplicate.relativePath,
-        status: "duplicate" as const,
-        processingOrder: null,
-        processingStep: null,
-        error: undefined,
-        duplicateOf: {
-          fileId:
-            duplicate.existingFileId,
-          articleId:
-            duplicate.existingArticleId,
-          articleTitle:
-            duplicate.existingArticleTitle,
-        },
-      };
-    },
-  );
-
-  return {
-    files,
-    duplicateCount:
-      duplicateFiles.length,
-  };
-}
-
 function mapServerFileStatus(
   file: ServerProgressSnapshot["files"][number],
 ): KnowledgeImportFlowFile["status"] {
@@ -166,83 +109,213 @@ function mapServerFileStatus(
   return "pending";
 }
 
+function mapAnalyzeFileStatus(
+  status: AnalyzeImportFlowFile["status"],
+): KnowledgeImportFlowFile["status"] {
+  if (status === "ready") {
+    return "ready";
+  }
+
+  if (status === "duplicate") {
+    return "duplicate";
+  }
+
+  return "unsupported";
+}
+
+export function createFilesFromAnalysisSnapshot(
+  files: AnalyzeImportFlowFile[],
+) {
+  return files.map(
+    (file) =>
+      ({
+        id: file.id,
+        name: file.name,
+        size: file.size,
+        fileType:
+          file.fileType ?? undefined,
+        relativePath:
+          file.relativePath,
+        status:
+          mapAnalyzeFileStatus(
+            file.status,
+          ),
+        processingOrder:
+          file.processingOrder ?? null,
+        processingStatus:
+          file.processingStatus ?? null,
+        processingStep:
+          file.processingStep ?? null,
+        error:
+          file.error ?? undefined,
+        duplicateOf:
+          file.duplicateOf,
+      }) satisfies KnowledgeImportFlowFile,
+  );
+}
+
+export function createSummaryFromAnalysisSnapshot(
+  files: KnowledgeImportFlowFile[],
+) {
+  const duplicateFiles =
+    files.filter(
+      (file) =>
+        file.status === "duplicate",
+    ).length;
+
+  const failedFiles =
+    files.filter(
+      (file) =>
+        file.status === "unsupported" ||
+        file.status === "error",
+    ).length;
+
+  const completedFiles =
+    files.filter(
+      (file) =>
+        file.status === "completed",
+    ).length;
+
+  const processedFiles =
+    duplicateFiles +
+    failedFiles +
+    completedFiles;
+
+  const totalFiles =
+    files.length;
+
+  return {
+    totalFiles,
+    completedFiles,
+    duplicateFiles,
+    failedFiles,
+    processedFiles,
+    pendingFiles: Math.max(
+      totalFiles - processedFiles,
+      0,
+    ),
+    progressPercentage:
+      totalFiles === 0
+        ? 0
+        : Math.round(
+            (processedFiles /
+              totalFiles) *
+              100,
+          ),
+    currentFileName: null,
+  } satisfies KnowledgeImportFlowSummary;
+}
+
 export function mergeServerProgress(
   currentFiles: KnowledgeImportFlowFile[],
   currentSummary: KnowledgeImportFlowSummary,
   progress: ServerProgressSnapshot,
 ) {
-  const duplicateFiles =
-    currentFiles.filter(
-      (file) =>
-        file.status === "duplicate",
-    );
-
-  const duplicateKeys = new Set(
-    duplicateFiles.map(getFileKey),
-  );
-
-  const currentByKey = new Map(
-    currentFiles.map((file) => [
-      getFileKey(file),
+  const serverById = new Map(
+    progress.files.map((file) => [
+      file.id,
       file,
     ]),
   );
 
-  const serverFiles =
-    progress.files
-      .filter(
-        (file) =>
-          !duplicateKeys.has(
-            (
-              file.relativePath ||
-              file.name
-            ).toLowerCase(),
-          ),
-      )
-      .map((file) => {
-        const key = (
-          file.relativePath ||
-          file.name
-        ).toLowerCase();
-
-        const localFile =
-          currentByKey.get(key);
-
-        return {
-          id: file.id,
-          name: file.name,
-          size:
-            file.size ??
-            localFile?.size,
-          fileType:
-            localFile?.fileType,
-          relativePath:
-            file.relativePath,
-          processingOrder:
-            file.processingOrder,
-          processingStep:
-            file.processingStep,
-          status:
-            mapServerFileStatus(file),
-          error:
-            file.error ??
-            undefined,
-        } satisfies KnowledgeImportFlowFile;
-      });
+  const serverByKey = new Map(
+    progress.files.map((file) => [
+      (
+        file.relativePath ||
+        file.name
+      ).toLowerCase(),
+      file,
+    ]),
+  );
 
   const duplicateCount =
-    duplicateFiles.length;
+    currentFiles.filter(
+      (file) =>
+        file.status === "duplicate",
+    ).length;
+
+  const unsupportedCount =
+    currentFiles.filter(
+      (file) =>
+        file.status === "unsupported",
+    ).length;
+
+  const files = currentFiles.map(
+    (currentFile) => {
+      if (
+        currentFile.status ===
+          "duplicate" ||
+        currentFile.status ===
+          "unsupported"
+      ) {
+        return currentFile;
+      }
+
+      const serverFile =
+        serverById.get(
+          currentFile.id,
+        ) ??
+        serverByKey.get(
+          getFileKey(currentFile),
+        );
+
+      if (!serverFile) {
+        return currentFile;
+      }
+
+      return {
+        ...currentFile,
+        id: serverFile.id,
+        name: serverFile.name,
+        size:
+          serverFile.size ??
+          currentFile.size,
+        relativePath:
+          serverFile.relativePath,
+        processingOrder:
+          serverFile.processingOrder,
+        processingStatus:
+          serverFile.processingStatus,
+        processingStep:
+          serverFile.processingStep,
+        fileType:
+          serverFile.fileType ??
+          currentFile.fileType,
+        startedAt:
+          serverFile.startedAt ??
+          currentFile.startedAt,
+        completedAt:
+          serverFile.completedAt ??
+          currentFile.completedAt,
+        createdAt:
+          serverFile.createdAt ??
+          currentFile.createdAt,
+        updatedAt:
+          serverFile.updatedAt ??
+          currentFile.updatedAt,
+        status:
+          mapServerFileStatus(
+            serverFile,
+          ),
+        error:
+          serverFile.error ??
+          undefined,
+      } satisfies KnowledgeImportFlowFile;
+    },
+  );
 
   const totalFiles =
     Math.max(
       currentSummary.totalFiles,
       progress.totalFiles +
-        duplicateCount,
+        duplicateCount +
+        unsupportedCount,
     );
 
   const processedFiles =
     progress.processedFiles +
-    duplicateCount;
+    duplicateCount +
+    unsupportedCount;
 
   const pendingFiles =
     Math.max(
@@ -251,10 +324,7 @@ export function mergeServerProgress(
     );
 
   return {
-    files: [
-      ...serverFiles,
-      ...duplicateFiles,
-    ],
+    files,
     summary: {
       totalFiles,
       completedFiles:
@@ -262,7 +332,8 @@ export function mergeServerProgress(
       duplicateFiles:
         duplicateCount,
       failedFiles:
-        progress.failedFiles,
+        progress.failedFiles +
+        unsupportedCount,
       processedFiles,
       pendingFiles,
       progressPercentage:
@@ -307,6 +378,7 @@ export function finalizeImportFiles(
   return files.map((file) => {
     if (
       file.status === "duplicate" ||
+      file.status === "unsupported" ||
       file.status === "completed" ||
       file.status === "error"
     ) {
@@ -361,6 +433,12 @@ export function finalizeImportAnalysis(
         file.status === "duplicate",
     ).length;
 
+  const unsupportedFiles =
+    files.filter(
+      (file) =>
+        file.status === "unsupported",
+    ).length;
+
   const totalFiles =
     files.length;
 
@@ -369,10 +447,13 @@ export function finalizeImportAnalysis(
     completedFiles:
       successfulFiles,
     duplicateFiles,
-    failedFiles,
+    failedFiles:
+      failedFiles +
+      unsupportedFiles,
     processedFiles:
       successfulFiles +
       duplicateFiles +
+      unsupportedFiles +
       failedFiles,
     pendingFiles: 0,
     progressPercentage:

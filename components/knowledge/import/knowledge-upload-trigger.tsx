@@ -7,8 +7,9 @@ import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KnowledgeImportModal } from "@/components/knowledge/import/modal";
 import type { KnowledgeImportContext } from "@/components/knowledge/import/modal/knowledge-import-modal.types";
-
-const ACCEPTED_FILE_TYPES = [".pdf", ".docx", ".xlsx", ".pptx", ".csv", ".txt"].join(",");
+import {
+  KNOWLEDGE_IMPORT_DOCUMENT_ACCEPT,
+} from "@/lib/knowledge/import-flow";
 
 type Props = {
   context: KnowledgeImportContext;
@@ -41,7 +42,7 @@ export function KnowledgeUploadTrigger({ context, label = "Subir", variant = "de
         ref={inputRef}
         type="file"
         multiple
-        accept={ACCEPTED_FILE_TYPES}
+        accept={KNOWLEDGE_IMPORT_DOCUMENT_ACCEPT}
         className="hidden"
         onChange={handleFilesSelected}
       />

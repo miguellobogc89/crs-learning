@@ -49,6 +49,28 @@ type GenerateProposalInput = {
   onProgress?: ProposalProgressCallback;
 };
 
+async function isImportCancelled(
+  importId: string,
+) {
+  const knowledgeImport =
+    await prisma.knowledge_imports.findUnique({
+      where: {
+        id: importId,
+      },
+      select: {
+        status: true,
+        processing_status: true,
+      },
+    });
+
+  return (
+    knowledgeImport?.status ===
+      "cancelled" ||
+    knowledgeImport?.processing_status ===
+      "cancelled"
+  );
+}
+
 type ExistingKnowledge = Awaited<
   ReturnType<typeof listKnowledgeStatus>
 >;
@@ -544,6 +566,17 @@ export async function generateKnowledgeImportProposal({
 
   if (
     knowledgeImport.status ===
+      "cancelled" ||
+    knowledgeImport.processing_status ===
+      "cancelled"
+  ) {
+    throw new Error(
+      "La importacion ha sido cancelada",
+    );
+  }
+
+  if (
+    knowledgeImport.status ===
     "proposal_generating"
   ) {
     throw new Error(
@@ -588,9 +621,15 @@ export async function generateKnowledgeImportProposal({
     message: `${documents.length} documentos preparados`,
   });
 
-  await prisma.knowledge_imports.update({
+  await prisma.knowledge_imports.updateMany({
     where: {
       id: importId,
+      status: {
+        not: "cancelled",
+      },
+      processing_status: {
+        not: "cancelled",
+      },
     },
     data: {
       status: "proposal_generating",
@@ -674,9 +713,25 @@ export async function generateKnowledgeImportProposal({
         "Guardando la propuesta",
     });
 
-    await prisma.knowledge_imports.update({
+    if (
+      await isImportCancelled(
+        importId,
+      )
+    ) {
+      throw new Error(
+        "La importacion ha sido cancelada",
+      );
+    }
+
+    await prisma.knowledge_imports.updateMany({
       where: {
         id: importId,
+        status: {
+          not: "cancelled",
+        },
+        processing_status: {
+          not: "cancelled",
+        },
       },
       data: {
         status: "proposal_ready",
@@ -705,9 +760,15 @@ export async function generateKnowledgeImportProposal({
         : "No se ha podido generar la propuesta";
 
     await prisma.knowledge_imports
-      .update({
+      .updateMany({
         where: {
           id: importId,
+          status: {
+            not: "cancelled",
+          },
+          processing_status: {
+            not: "cancelled",
+          },
         },
         data: {
           status: "text_ready",

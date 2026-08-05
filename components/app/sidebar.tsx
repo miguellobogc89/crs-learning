@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
-  { href: "/knowledge", icon: Library, label: "Knowledge Hub" },
+  { href: "/knowledge", icon: Library, label: "Conocimiento" },
   { href: "/courses", icon: GraduationCap, label: "Cursos" },
   { href: "/achievements", icon: Grid2X2, label: "Logros" },
   { href: "/my-space", icon: UserRound, label: "Mi espacio" },
@@ -30,7 +30,7 @@ export function AppSidebar() {
     <aside className="flex h-screen w-14 flex-col items-center justify-between border-r border-border bg-white py-3">
       <div className="flex flex-col items-center gap-1">
         <Link
-          href="/dashboard"
+          href="/knowledge"
           className="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-brand-soft text-brand"
         >
           <BookOpen className="h-[18px] w-[18px]" />
