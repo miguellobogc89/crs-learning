@@ -3,6 +3,7 @@ import {
   GraduationCap,
   Grid2X2,
   Home,
+  Inbox,
   Library,
   Settings,
   UserRound,
@@ -28,6 +29,11 @@ export const APP_SECTIONS = {
     label: "Logros",
     href: "/achievements",
     icon: Grid2X2,
+  },
+  notifications: {
+    label: "Bandeja",
+    href: "/notifications",
+    icon: Inbox,
   },
   mySpace: {
     label: "Mi espacio",

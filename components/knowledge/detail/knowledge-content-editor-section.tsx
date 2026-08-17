@@ -4,6 +4,7 @@
 
 import {
   Check,
+  Download,
   Edit3,
   FileText,
   Loader2,
@@ -54,6 +55,63 @@ export function KnowledgeContentEditorSection({
   const hasDocuments =
     knowledge.knowledge_files.length > 0;
 
+  async function downloadPdf() {
+    const previousTitle = document.title;
+    const title = knowledge.title?.trim();
+    const printArea = document.querySelector(
+      "[data-knowledge-print-area]",
+    );
+
+    if (!printArea) {
+      return;
+    }
+
+    await waitForPrintableArticle(printArea);
+
+    const printRoot = buildPrintRoot(printArea);
+
+    document.title = title
+      ? `${title} - articulo`
+      : "articulo";
+    document.documentElement.dataset.pdfReady =
+      "false";
+    document.body
+      .querySelectorAll(
+        "[data-knowledge-print-root]",
+      )
+      .forEach((element) => element.remove());
+    document.body.append(printRoot);
+
+    document.body.classList.add(
+      "printing-knowledge-content",
+    );
+
+    const cleanup = () => {
+      printRoot.remove();
+      document.body.classList.remove(
+        "printing-knowledge-content",
+      );
+      delete document.documentElement.dataset
+        .pdfReady;
+      document.title = previousTitle;
+      window.removeEventListener(
+        "afterprint",
+        cleanup,
+      );
+    };
+
+    window.addEventListener(
+      "afterprint",
+      cleanup,
+    );
+
+    await waitForStableLayout();
+
+    document.documentElement.dataset.pdfReady =
+      "true";
+    window.print();
+  }
+
   async function rebuildArticle() {
     if (isRebuilding || !hasDocuments) {
       return;
@@ -94,7 +152,10 @@ export function KnowledgeContentEditorSection({
   }
 
   return (
-    <section className="space-y-4">
+    <section
+      className="space-y-4"
+      data-knowledge-print-area
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-foreground">
@@ -136,7 +197,10 @@ export function KnowledgeContentEditorSection({
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-2"
+            data-knowledge-print-hidden
+          >
             <Button
               type="button"
               variant="outline"
@@ -164,6 +228,16 @@ export function KnowledgeContentEditorSection({
             >
               <Edit3 className="mr-2 h-4 w-4" />
               Editar contenido
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!hasContent}
+              onClick={downloadPdf}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Descargar PDF
             </Button>
           </div>
         )}
@@ -251,4 +325,106 @@ function hasMeaningfulContent(content: string) {
     .trim();
 
   return normalizedContent.length > 0;
+}
+
+async function waitForPrintableArticle(
+  printArea: Element,
+) {
+  await document.fonts.ready;
+  await waitForImages(printArea);
+  await waitForMermaid(printArea);
+  await waitForStableLayout();
+}
+
+async function waitForImages(container: Element) {
+  const images = Array.from(
+    container.querySelectorAll("img"),
+  );
+
+  await Promise.all(
+    images.map((image) => {
+      if (image.complete) {
+        return Promise.resolve();
+      }
+
+      return new Promise<void>((resolve) => {
+        image.addEventListener("load", () => resolve(), {
+          once: true,
+        });
+        image.addEventListener(
+          "error",
+          () => resolve(),
+          {
+            once: true,
+          },
+        );
+      });
+    }),
+  );
+}
+
+async function waitForMermaid(container: Element) {
+  while (hasPendingMermaid(container)) {
+    await nextAnimationFrame();
+  }
+}
+
+function hasPendingMermaid(container: Element) {
+  const blocks = Array.from(
+    container.querySelectorAll(
+      "[data-knowledge-mermaid-block]",
+    ),
+  );
+
+  return blocks.some((block) => {
+    return (
+      block.getAttribute(
+        "data-knowledge-mermaid-ready",
+      ) !== "true"
+    );
+  });
+}
+
+async function waitForStableLayout() {
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+function nextAnimationFrame() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+function buildPrintRoot(printArea: Element) {
+  const printRoot = document.createElement("div");
+  const clonedArea = printArea.cloneNode(
+    true,
+  ) as HTMLElement;
+
+  printRoot.setAttribute(
+    "data-knowledge-print-root",
+    "true",
+  );
+
+  clonedArea
+    .querySelectorAll("[data-knowledge-print-hidden]")
+    .forEach((element) => element.remove());
+
+  clonedArea
+    .querySelectorAll(
+      "[data-knowledge-mermaid-svg] svg",
+    )
+    .forEach((svg) => {
+      svg.removeAttribute("height");
+      svg.setAttribute("width", "100%");
+      svg.setAttribute(
+        "preserveAspectRatio",
+        "xMidYMid meet",
+      );
+    });
+
+  printRoot.append(clonedArea);
+
+  return printRoot;
 }

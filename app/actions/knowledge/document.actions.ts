@@ -12,7 +12,6 @@ import { isAcceptedKnowledgeFileType } from "@/lib/knowledge/file-types";
 import { prisma } from "@/lib/prisma";
 import {
   addKnowledgeFile,
-  findKnowledgeSource,
 } from "@/lib/services/knowledge.service";
 
 export async function uploadKnowledgeFileAction(
@@ -34,12 +33,17 @@ export async function uploadKnowledgeFileAction(
     return;
   }
 
-  const knowledge = await findKnowledgeSource(knowledgeId);
+  const knowledge = await prisma.knowledge_sources.findFirst({
+    where: {
+      id: knowledgeId,
+      owner_user_id: session.user.id,
+    },
+    select: {
+      id: true,
+    },
+  });
 
-  if (
-    !knowledge ||
-    knowledge.owner_user_id !== session.user.id
-  ) {
+  if (!knowledge) {
     throw new Error("Artículo no encontrado");
   }
 

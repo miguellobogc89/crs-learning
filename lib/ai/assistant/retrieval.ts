@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { listAccessibleKnowledgeLibraries } from "@/lib/services/knowledge-access.service";
 import { listAccessibleKnowledgeSpaces } from "@/lib/services/knowledge-space.service";
 
@@ -66,17 +67,19 @@ export async function retrieveKnowledge(
   const knowledgeSources =
     await prisma.knowledge_sources.findMany({
       where: {
-        status: {
-          not: "deleted",
-        },
-        OR: [
+        AND: [
+          knowledgeSourceReadWhere(userId),
           {
-            owner_user_id: userId,
-          },
-          {
-            library_id: {
-              in: Array.from(accessibleLibraryIds),
-            },
+            OR: [
+              {
+                owner_user_id: userId,
+              },
+              {
+                library_id: {
+                  in: Array.from(accessibleLibraryIds),
+                },
+              },
+            ],
           },
         ],
       },

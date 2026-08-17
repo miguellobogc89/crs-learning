@@ -10,7 +10,11 @@ import {
 import {
   AlertTriangle,
   Braces,
+  Maximize2,
+  Minimize2,
   Trash2,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import {
   NodeViewWrapper,
@@ -31,6 +35,9 @@ export function MermaidNodeView({
   const [svg, setSvg] = useState("");
   const [renderError, setRenderError] =
     useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [expanded, setExpanded] =
+    useState(false);
 
   const code =
     typeof node.attrs.code === "string"
@@ -38,6 +45,22 @@ export function MermaidNodeView({
       : "";
 
   const editable = editor.isEditable;
+  const isReady =
+    !code.trim() ||
+    svg.length > 0 ||
+    renderError !== null;
+
+  function zoomIn() {
+    setZoom((current) =>
+      Math.min(1.8, Number((current + 0.15).toFixed(2))),
+    );
+  }
+
+  function zoomOut() {
+    setZoom((current) =>
+      Math.max(0.75, Number((current - 0.15).toFixed(2))),
+    );
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -105,10 +128,54 @@ export function MermaidNodeView({
     };
   }, [code, reactId]);
 
+  const diagramBody = (
+    <div
+      className="min-h-[460px] overflow-auto bg-background p-6"
+      data-knowledge-mermaid-body
+    >
+      {renderError ? (
+        <div className="flex min-h-[360px] flex-col items-center justify-center text-center">
+          <AlertTriangle className="h-6 w-6 text-destructive" />
+
+          <p className="mt-3 text-sm font-medium text-foreground">
+            No se puede mostrar el diagrama
+          </p>
+
+          <p className="mt-1 max-w-xl text-xs leading-5 text-muted-foreground">
+            {renderError}
+          </p>
+        </div>
+      ) : svg ? (
+        <div
+          className="flex min-h-[400px] min-w-[760px] items-start justify-center [&_svg]:h-auto [&_svg]:max-w-none"
+          data-knowledge-mermaid-svg
+          style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: "top center",
+          }}
+          dangerouslySetInnerHTML={{
+            __html: svg,
+          }}
+        />
+      ) : (
+        <div className="flex min-h-[360px] items-center justify-center text-sm text-muted-foreground">
+          <span data-knowledge-mermaid-loading>
+            Introduce codigo Mermaid para generar el
+            diagrama.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <NodeViewWrapper
       className="my-6"
       data-drag-handle
+      data-knowledge-mermaid-block
+      data-knowledge-mermaid-ready={
+        isReady ? "true" : "false"
+      }
     >
       <div
         className={[
@@ -118,31 +185,84 @@ export function MermaidNodeView({
             : "border-border",
         ].join(" ")}
       >
-        <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-2">
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-2"
+          data-knowledge-print-hidden
+        >
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Braces className="h-4 w-4 text-muted-foreground" />
             Diagrama Mermaid
           </div>
 
-          {editable ? (
+          <div className="flex items-center gap-1">
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              aria-label="Eliminar diagrama"
-              title="Eliminar diagrama"
-              onClick={deleteNode}
+              className="h-8 w-8 text-muted-foreground"
+              aria-label="Reducir diagrama"
+              title="Reducir diagrama"
+              onClick={zoomOut}
             >
-              <Trash2 className="h-4 w-4" />
+              <ZoomOut className="h-4 w-4" />
             </Button>
-          ) : null}
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              aria-label="Ajustar diagrama"
+              title="Ajustar diagrama"
+              onClick={() => setZoom(1)}
+            >
+              <Minimize2 className="h-4 w-4" />
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              aria-label="Ampliar diagrama"
+              title="Ampliar diagrama"
+              onClick={zoomIn}
+            >
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              aria-label="Pantalla completa"
+              title="Pantalla completa"
+              onClick={() => setExpanded(true)}
+            >
+              <Maximize2 className="h-4 w-4" />
+            </Button>
+
+            {editable ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                aria-label="Eliminar diagrama"
+                title="Eliminar diagrama"
+                onClick={deleteNode}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {editable ? (
           <div className="border-b border-border p-4">
             <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Código del diagrama
+              Codigo del diagrama
             </label>
 
             <textarea
@@ -162,34 +282,37 @@ export function MermaidNodeView({
           </div>
         ) : null}
 
-        <div className="min-h-[180px] overflow-x-auto bg-background p-6">
-          {renderError ? (
-            <div className="flex min-h-[130px] flex-col items-center justify-center text-center">
-              <AlertTriangle className="h-6 w-6 text-destructive" />
-
-              <p className="mt-3 text-sm font-medium text-foreground">
-                No se puede mostrar el diagrama
-              </p>
-
-              <p className="mt-1 max-w-xl text-xs leading-5 text-muted-foreground">
-                {renderError}
-              </p>
-            </div>
-          ) : svg ? (
-            <div
-              className="flex justify-center [&_svg]:h-auto [&_svg]:max-w-full"
-              dangerouslySetInnerHTML={{
-                __html: svg,
-              }}
-            />
-          ) : (
-            <div className="flex min-h-[130px] items-center justify-center text-sm text-muted-foreground">
-              Introduce código Mermaid para generar el
-              diagrama.
-            </div>
-          )}
-        </div>
+        {diagramBody}
       </div>
+
+      {expanded ? (
+        <div className="fixed inset-0 z-50 bg-background/95 p-6">
+          <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card">
+            <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Braces className="h-4 w-4 text-muted-foreground" />
+                Diagrama Mermaid
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground"
+                aria-label="Cerrar pantalla completa"
+                title="Cerrar pantalla completa"
+                onClick={() => setExpanded(false)}
+              >
+                <Minimize2 className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto">
+              {diagramBody}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </NodeViewWrapper>
   );
 }

@@ -14,6 +14,7 @@ import {
   KnowledgeImportBackgroundWidget,
 } from "@/components/knowledge/import/background/knowledge-import-background-widget";
 import { listChatConversations } from "@/lib/services/chat.service";
+import { getUserNotificationSummary } from "@/lib/services/notification.service";
 
 export default async function AppLayout({
   children,
@@ -26,10 +27,18 @@ export default async function AppLayout({
     redirect("/");
   }
 
-  const conversations =
-    await listChatConversations(
+  const [
+    conversations,
+    notificationSummary,
+  ] = await Promise.all([
+    listChatConversations(session.user.id),
+    getUserNotificationSummary(
       session.user.id,
-    );
+      {
+        take: 6,
+      },
+    ),
+  ]);
 
   return (
     <KnowledgeImportProvider>
@@ -39,6 +48,12 @@ export default async function AppLayout({
         <div className="flex min-w-0 flex-1 flex-col">
           <AppTopbar
             user={session.user}
+            notifications={
+              notificationSummary.notifications
+            }
+            unreadNotificationCount={
+              notificationSummary.unreadCount
+            }
             breadcrumb={
               <AutoBreadcrumb />
             }

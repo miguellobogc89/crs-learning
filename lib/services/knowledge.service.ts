@@ -2,6 +2,7 @@
 import {
   createKnowledgeFile,
   createKnowledgeSource,
+  getAccessibleKnowledgeSourceById,
   getKnowledgeSourceById,
   getVisibleKnowledgeSources,
   updateKnowledgeSource,
@@ -14,6 +15,16 @@ export async function listVisibleKnowledgeSources(userId: string) {
 
 export async function findKnowledgeSource(id: string) {
   return getKnowledgeSourceById(id);
+}
+
+export async function findAccessibleKnowledgeSource(
+  id: string,
+  userId: string,
+) {
+  return getAccessibleKnowledgeSourceById(
+    id,
+    userId,
+  );
 }
 
 export async function newKnowledgeSource(data: {

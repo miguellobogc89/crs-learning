@@ -3,12 +3,14 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import {
   Bot,
   FileText,
   User,
 } from "lucide-react";
-
 
 type ChatSource = {
   citationId: string;
@@ -116,7 +118,7 @@ function AssistantMessageContent({
   const parts = splitCitationGroups(text);
 
   return (
-    <div className="whitespace-pre-wrap text-sm leading-7">
+    <div className="min-w-0 text-sm leading-7">
       {parts.map((part, index) => {
         if (part.type === "citation") {
           const source = findFirstSource(
@@ -136,45 +138,197 @@ function AssistantMessageContent({
           );
         }
 
-        const nextPart = parts[index + 1];
-
-        if (nextPart?.type === "citation") {
-          return (
-            <HighlightedStatement
-              key={`text-${index}`}
-              text={part.value}
-            />
-          );
-        }
-
         return (
-          <span key={`text-${index}`}>
-            {part.value}
-          </span>
+          <MarkdownContent
+            key={`text-${index}`}
+            content={part.value}
+          />
         );
       })}
     </div>
   );
 }
 
-function HighlightedStatement({
-  text,
+function MarkdownContent({
+  content,
 }: {
-  text: string;
+  content: string;
 }) {
-  const {
-    prefix,
-    statement,
-  } = separateLastStatement(text);
-
   return (
-    <>
-      {prefix}
+    <ReactMarkdown
+      remarkPlugins={[remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      components={{
+        p({ children }) {
+          return (
+            <span className="whitespace-pre-wrap">
+              {children}
+            </span>
+          );
+        },
 
-      <strong className="font-semibold text-primary">
-        {statement}
-      </strong>
-    </>
+        h1({ children }) {
+          return (
+            <h1 className="mb-3 mt-4 text-xl font-semibold tracking-tight first:mt-0">
+              {children}
+            </h1>
+          );
+        },
+
+        h2({ children }) {
+          return (
+            <h2 className="mb-2 mt-4 text-lg font-semibold tracking-tight first:mt-0">
+              {children}
+            </h2>
+          );
+        },
+
+        h3({ children }) {
+          return (
+            <h3 className="mb-2 mt-3 text-base font-semibold first:mt-0">
+              {children}
+            </h3>
+          );
+        },
+
+        strong({ children }) {
+          return (
+            <strong className="font-semibold text-primary">
+              {children}
+            </strong>
+          );
+        },
+
+        em({ children }) {
+          return (
+            <em className="italic">
+              {children}
+            </em>
+          );
+        },
+
+        ul({ children }) {
+          return (
+            <ul className="my-2 list-disc space-y-1 pl-5">
+              {children}
+            </ul>
+          );
+        },
+
+        ol({ children }) {
+          return (
+            <ol className="my-2 list-decimal space-y-1 pl-5">
+              {children}
+            </ol>
+          );
+        },
+
+        li({ children }) {
+          return (
+            <li className="pl-1">
+              {children}
+            </li>
+          );
+        },
+
+        blockquote({ children }) {
+          return (
+            <blockquote className="my-3 border-l-2 border-primary/30 pl-4 text-muted-foreground">
+              {children}
+            </blockquote>
+          );
+        },
+
+        code({
+          className,
+          children,
+          ...props
+        }) {
+          const isBlockCode =
+            className?.startsWith("language-");
+
+          if (isBlockCode) {
+            return (
+              <code
+                className={`${className ?? ""} block overflow-x-auto rounded-lg bg-muted px-4 py-3 font-mono text-xs leading-6`}
+                {...props}
+              >
+                {children}
+              </code>
+            );
+          }
+
+          return (
+            <code
+              className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.9em]"
+              {...props}
+            >
+              {children}
+            </code>
+          );
+        },
+
+        pre({ children }) {
+          return (
+            <pre className="my-3 overflow-x-auto">
+              {children}
+            </pre>
+          );
+        },
+
+        table({ children }) {
+          return (
+            <div className="my-3 w-full overflow-x-auto">
+              <table className="w-full border-collapse text-xs">
+                {children}
+              </table>
+            </div>
+          );
+        },
+
+        thead({ children }) {
+          return (
+            <thead className="bg-muted/60">
+              {children}
+            </thead>
+          );
+        },
+
+        th({ children }) {
+          return (
+            <th className="border border-border px-3 py-2 text-left font-semibold">
+              {children}
+            </th>
+          );
+        },
+
+        td({ children }) {
+          return (
+            <td className="border border-border px-3 py-2 align-top">
+              {children}
+            </td>
+          );
+        },
+
+        a({
+          href,
+          children,
+        }) {
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              {children}
+            </a>
+          );
+        },
+      }}
+    >
+      {content}
+    </ReactMarkdown>
   );
 }
 
@@ -263,7 +417,9 @@ function InlineSourceReference({
           onMouseLeave={scheduleCloseTooltip}
         >
           <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            {hasDocument ? "Documento consultado" : "Artículo consultado"}
+            {hasDocument
+              ? "Documento consultado"
+              : "Artículo consultado"}
           </span>
 
           <span className="mt-1 block select-text font-medium leading-5">
@@ -422,64 +578,6 @@ function getUniqueConsultedArticles(
   return Array.from(
     uniqueArticles.values(),
   );
-}
-
-function getInlineSourceLabel(
-  source: ChatSource,
-) {
-  if (
-    source.sourceType === "file" &&
-    source.fileName
-  ) {
-    return source.fileName;
-  }
-
-  return source.title;
-}
-
-function separateLastStatement(
-  text: string,
-) {
-  const trailingWhitespace =
-    text.match(/\s*$/)?.[0] ?? "";
-
-  const content = text.slice(
-    0,
-    text.length - trailingWhitespace.length,
-  );
-
-  const boundaryPattern =
-    /(?:\n\n|\n|[.!?]\s+)/g;
-
-  let lastBoundaryEnd = 0;
-  let match =
-    boundaryPattern.exec(content);
-
-  while (match) {
-    lastBoundaryEnd =
-      match.index + match[0].length;
-
-    match =
-      boundaryPattern.exec(content);
-  }
-
-  if (lastBoundaryEnd === 0) {
-    return {
-      prefix: "",
-      statement:
-        content + trailingWhitespace,
-    };
-  }
-
-  return {
-    prefix: content.slice(
-      0,
-      lastBoundaryEnd,
-    ),
-    statement:
-      content.slice(lastBoundaryEnd) +
-      trailingWhitespace,
-  };
 }
 
 function extractCitationIds(

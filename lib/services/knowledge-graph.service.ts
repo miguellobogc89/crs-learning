@@ -50,17 +50,34 @@ function scoreSimilarity(a: GraphDocument, b: GraphDocument) {
 export async function updateKnowledgeRelationships(
   knowledgeSourceId: string,
 ) {
-  const documents = await prisma.knowledge_sources.findMany({
-    include: {
-      knowledge_graph: true,
-    },
-  });
-
-  const current = documents.find((d) => d.id === knowledgeSourceId);
+  const current =
+    await prisma.knowledge_sources.findUnique({
+      where: {
+        id: knowledgeSourceId,
+      },
+      select: {
+        id: true,
+        owner_user_id: true,
+        title: true,
+        knowledge_graph: true,
+      },
+    });
 
   if (!current || !current.knowledge_graph) {
     return;
   }
+
+  const documents = await prisma.knowledge_sources.findMany({
+    where: {
+      owner_user_id: current.owner_user_id,
+      status: {
+        not: "deleted",
+      },
+    },
+    include: {
+      knowledge_graph: true,
+    },
+  });
 
   const related = documents
     .filter(

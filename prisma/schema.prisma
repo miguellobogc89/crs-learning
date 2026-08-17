@@ -1,1128 +1,1154 @@
-  generator client {
-    provider        = "prisma-client-js"
-    previewFeatures = ["partialIndexes"]
-  }
-
-  datasource db {
-    provider = "postgresql"
-  }
-
-  model achievements {
-    id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    code              String              @unique
-    title             String
-    description       String?
-    xp_reward         Int                 @default(0)
-    icon              String?
-    created_at        DateTime            @default(now()) @db.Timestamptz(6)
-    user_achievements user_achievements[]
-  }
-
-  model courses {
-    id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    title                String
-    slug                 String                 @unique
-    description          String?
-    level                String                 @default("beginner")
-    is_published         Boolean                @default(false)
-    sort_order           Int                    @default(0)
-    required_course_id   String?                @db.Uuid
-    created_at           DateTime               @default(now()) @db.Timestamptz(6)
-    updated_at           DateTime               @default(now()) @db.Timestamptz(6)
-    knowledge_source_id  String?                @db.Uuid
-    knowledge_sources    knowledge_sources?     @relation(fields: [knowledge_source_id], references: [id], onUpdate: NoAction)
-    courses              courses?               @relation("coursesTocourses", fields: [required_course_id], references: [id], onUpdate: NoAction)
-    other_courses        courses[]              @relation("coursesTocourses")
-    sections             sections[]
-    user_course_progress user_course_progress[]
-
-    @@index([knowledge_source_id], map: "idx_courses_knowledge_source_id")
-  }
-
-  model lessons {
-    id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    module_id            String                 @db.Uuid
-    title                String
-    content              String
-    lesson_type          String                 @default("reading")
-    estimated_minutes    Int                    @default(5)
-    sort_order           Int                    @default(0)
-    created_at           DateTime               @default(now()) @db.Timestamptz(6)
-    updated_at           DateTime               @default(now()) @db.Timestamptz(6)
-    sections             sections               @relation(fields: [module_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    quizzes              quizzes[]
-    section_items        section_items?
-    user_lesson_progress user_lesson_progress[]
-
-    @@index([module_id], map: "idx_lessons_module_id")
-  }
-
-  model question_options {
-    id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    question_id String    @db.Uuid
-    option_text String
-    is_correct  Boolean   @default(false)
-    sort_order  Int       @default(0)
-    questions   questions @relation(fields: [question_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  }
-
-  model questions {
-    id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    quiz_id          String             @db.Uuid
-    question_text    String
-    question_type    String             @default("single_choice")
-    explanation      String?
-    sort_order       Int                @default(0)
-    created_at       DateTime           @default(now()) @db.Timestamptz(6)
-    question_options question_options[]
-    quizzes          quizzes            @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([quiz_id], map: "idx_questions_quiz_id")
-  }
-
-  model quiz_attempts {
-    id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    user_id      String    @db.Uuid
-    quiz_id      String    @db.Uuid
-    score        Int       @default(0)
-    passed       Boolean   @default(false)
-    started_at   DateTime  @default(now()) @db.Timestamptz(6)
-    completed_at DateTime? @db.Timestamptz(6)
-    quizzes      quizzes   @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([user_id], map: "idx_quiz_attempts_user_id")
-  }
-
-  model quizzes {
-    id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    lesson_id          String?         @db.Uuid
-    title              String
-    passing_score      Int             @default(70)
-    max_attempts       Int?
-    time_limit_seconds Int?
-    created_at         DateTime        @default(now()) @db.Timestamptz(6)
-    updated_at         DateTime        @default(now()) @db.Timestamptz(6)
-    section_id         String?         @db.Uuid
-    questions          questions[]
-    quiz_attempts      quiz_attempts[]
-    lessons            lessons?        @relation(fields: [lesson_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    sections           sections?       @relation(fields: [section_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    section_items      section_items?
-
-    @@index([lesson_id], map: "idx_quizzes_lesson_id")
-  }
-
-  model user_achievements {
-    id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    user_id        String       @db.Uuid
-    achievement_id String       @db.Uuid
-    unlocked_at    DateTime     @default(now()) @db.Timestamptz(6)
-    achievements   achievements @relation(fields: [achievement_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users          users        @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([user_id, achievement_id])
-  }
-
-  model user_course_progress {
-    id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    user_id          String    @db.Uuid
-    course_id        String    @db.Uuid
-    status           String    @default("pending")
-    progress_percent Int       @default(0)
-    started_at       DateTime? @db.Timestamptz(6)
-    completed_at     DateTime? @db.Timestamptz(6)
-    suspended_at     DateTime? @db.Timestamptz(6)
-    created_at       DateTime  @default(now()) @db.Timestamptz(6)
-    updated_at       DateTime  @default(now()) @db.Timestamptz(6)
-    courses          courses   @relation(fields: [course_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users            users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([user_id, course_id])
-    @@index([user_id], map: "idx_user_course_progress_user_id")
-  }
-
-  model user_lesson_progress {
-    id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    user_id      String    @db.Uuid
-    lesson_id    String    @db.Uuid
-    status       String    @default("pending")
-    completed_at DateTime? @db.Timestamptz(6)
-    created_at   DateTime  @default(now()) @db.Timestamptz(6)
-    updated_at   DateTime  @default(now()) @db.Timestamptz(6)
-    lessons      lessons   @relation(fields: [lesson_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([user_id, lesson_id])
-    @@index([user_id], map: "idx_user_lesson_progress_user_id")
-  }
-
-  model users {
-    id                                                                                           String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    email                                                                                        String                             @unique
-    name                                                                                         String?
-    image                                                                                        String?
-    provider                                                                                     String?                            @default("credentials")
-    xp                                                                                           Int                                @default(0)
-    level                                                                                        Int                                @default(1)
-    status                                                                                       String                             @default("active")
-    created_at                                                                                   DateTime                           @default(now()) @db.Timestamptz(6)
-    updated_at                                                                                   DateTime                           @default(now()) @db.Timestamptz(6)
-    company_id                                                                                   String?                            @db.Uuid
-    chat_conversations_chat_conversations_created_by_user_idTousers                              chat_conversations[]               @relation("chat_conversations_created_by_user_idTousers")
-    chat_conversations_chat_conversations_owner_user_idTousers                                   chat_conversations[]               @relation("chat_conversations_owner_user_idTousers")
-    chat_conversations_chat_conversations_updated_by_user_idTousers                              chat_conversations[]               @relation("chat_conversations_updated_by_user_idTousers")
-    chat_messages                                                                                chat_messages[]
-    knowledge_activity                                                                           knowledge_activity[]
-    knowledge_correction_requests_knowledge_correction_requests_assigned_to_user_idTousers       knowledge_correction_requests[]    @relation("knowledge_correction_requests_assigned_to_user_idTousers")
-    knowledge_correction_requests_knowledge_correction_requests_requested_by_user_idTousers      knowledge_correction_requests[]    @relation("knowledge_correction_requests_requested_by_user_idTousers")
-    knowledge_events                                                                             knowledge_events[]
-    knowledge_files                                                                              knowledge_files[]
-    knowledge_imports                                                                            knowledge_imports[]
-    knowledge_libraries_knowledge_libraries_created_by_user_idTousers                            knowledge_libraries[]              @relation("knowledge_libraries_created_by_user_idTousers")
-    knowledge_libraries                                                                          knowledge_libraries[]
-    knowledge_libraries_knowledge_libraries_updated_by_user_idTousers                            knowledge_libraries[]              @relation("knowledge_libraries_updated_by_user_idTousers")
-    knowledge_library_permissions                                                                knowledge_library_permissions[]
-    knowledge_notifications                                                                      knowledge_notifications[]
-    knowledge_share_links                                                                        knowledge_share_links[]
-    knowledge_sources_knowledge_sources_created_by_user_idTousers                                knowledge_sources[]                @relation("knowledge_sources_created_by_user_idTousers")
-    knowledge_sources_knowledge_sources_updated_by_user_idTousers                                knowledge_sources[]                @relation("knowledge_sources_updated_by_user_idTousers")
-    knowledge_space_permissions                                                                  knowledge_space_permissions[]
-    knowledge_spaces_knowledge_spaces_created_by_user_idTousers                                  knowledge_spaces[]                 @relation("knowledge_spaces_created_by_user_idTousers")
-    knowledge_spaces_knowledge_spaces_updated_by_user_idTousers                                  knowledge_spaces[]                 @relation("knowledge_spaces_updated_by_user_idTousers")
-    knowledge_team_members                                                                       knowledge_team_members[]
-    knowledge_teams                                                                              knowledge_teams[]
-    organization_entity_sources                                                                  organization_entity_sources[]
-    organization_entity_versions                                                                 organization_entity_versions[]
-    organization_knowledge_conflicts                                                             organization_knowledge_conflicts[]
-    organization_knowledge_proposals_organization_knowledge_proposals_created_by_user_idTousers  organization_knowledge_proposals[] @relation("organization_knowledge_proposals_created_by_user_idTousers")
-    organization_knowledge_proposals_organization_knowledge_proposals_reviewed_by_user_idTousers organization_knowledge_proposals[] @relation("organization_knowledge_proposals_reviewed_by_user_idTousers")
-    organization_knowledge_snapshots                                                             organization_knowledge_snapshots[]
-    organization_members                                                                         organization_members?
-    quiz_attempts                                                                                quiz_attempts[]
-    user_achievements                                                                            user_achievements[]
-    user_course_progress                                                                         user_course_progress[]
-    user_lesson_progress                                                                         user_lesson_progress[]
-    companies                                                                                    companies?                         @relation(fields: [company_id], references: [id], onUpdate: NoAction)
-
-    @@index([company_id], map: "idx_users_company_id")
-  }
-
-  model sections {
-    id                  String          @id(map: "modules_pkey") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    course_id           String          @db.Uuid
-    title               String
-    description         String?
-    sort_order          Int             @default(0)
-    required_section_id String?         @db.Uuid
-    created_at          DateTime        @default(now()) @db.Timestamptz(6)
-    updated_at          DateTime        @default(now()) @db.Timestamptz(6)
-    lessons             lessons[]
-    quizzes             quizzes[]
-    section_items       section_items[]
-    courses             courses         @relation(fields: [course_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "sections_course_id_fkey")
-    sections            sections?       @relation("sectionsTosections", fields: [required_section_id], references: [id], onUpdate: NoAction, map: "modules_required_module_id_fkey")
-    other_sections      sections[]      @relation("sectionsTosections")
-
-    @@index([course_id], map: "idx_sections_course_id")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model section_items {
-    id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    section_id String   @db.Uuid
-    item_type  String
-    lesson_id  String?  @unique @db.Uuid
-    quiz_id    String?  @unique @db.Uuid
-    sort_order Int      @default(0)
-    created_at DateTime @default(now()) @db.Timestamptz(6)
-    updated_at DateTime @default(now()) @db.Timestamptz(6)
-    lessons    lessons? @relation(fields: [lesson_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    quizzes    quizzes? @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    sections   sections @relation(fields: [section_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([section_id], map: "idx_section_items_section_id")
-    @@index([section_id, sort_order], map: "idx_section_items_sort_order")
-  }
-
-  model knowledge_sources {
-    id                                                String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    owner_user_id                                     String                             @db.Uuid
-    title                                             String
-    description                                       String?
-    visibility                                        String                             @default("private")
-    content                                           String                             @default("")
-    status                                            String                             @default("draft")
-    created_at                                        DateTime                           @default(now()) @db.Timestamptz(6)
-    updated_at                                        DateTime                           @default(now()) @db.Timestamptz(6)
-    knowledge_type                                    String                             @default("unknown")
-    library_id                                        String?                            @db.Uuid
-    created_by_user_id                                String?                            @db.Uuid
-    updated_by_user_id                                String?                            @db.Uuid
-    summary                                           String?
-    language                                          String?
-    domain                                            String?
-    level                                             String?
-    confidence                                        Float?
-    tags                                              Json?
-    keywords                                          Json?
-    entities                                          Json?
-    company_id                                        String?                            @db.Uuid
-    courses                                           courses[]
-    knowledge_analysis                                knowledge_analysis?
-    knowledge_correction_requests                     knowledge_correction_requests[]
-    knowledge_files                                   knowledge_files[]
-    knowledge_graph                                   knowledge_graph?
-    knowledge_share_links                             knowledge_share_links[]
-    companies                                         companies?                         @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users_knowledge_sources_created_by_user_idTousers users?                             @relation("knowledge_sources_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
-    knowledge_libraries                               knowledge_libraries?               @relation(fields: [library_id], references: [id], onUpdate: NoAction)
-    users_knowledge_sources_updated_by_user_idTousers users?                             @relation("knowledge_sources_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
-    organization_entity_sources                       organization_entity_sources[]
-    organization_knowledge_links                      organization_knowledge_links[]
-    organization_knowledge_proposals                  organization_knowledge_proposals[]
-
-    @@index([owner_user_id], map: "idx_knowledge_sources_owner_user_id")
-    @@index([visibility], map: "idx_knowledge_sources_visibility")
-    @@index([library_id], map: "idx_knowledge_sources_library_id")
-    @@index([company_id], map: "idx_knowledge_sources_company_id")
-  }
-
-  model knowledge_files {
-    id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    knowledge_source_id String            @db.Uuid
-    file_name           String
-    file_type           String?
-    file_size           Int?
-    storage_path        String?
-    extracted_text      String            @default("")
-    status              String            @default("uploaded")
-    created_at          DateTime          @default(now()) @db.Timestamptz(6)
-    updated_at          DateTime          @default(now()) @db.Timestamptz(6)
-    uploaded_by_user_id String?           @db.Uuid
-    knowledge_sources   knowledge_sources @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users               users?            @relation(fields: [uploaded_by_user_id], references: [id], onUpdate: NoAction)
-
-    @@index([knowledge_source_id], map: "idx_knowledge_files_knowledge_source_id")
-    @@index([uploaded_by_user_id], map: "idx_knowledge_files_uploaded_by_user_id")
-  }
-
-  model knowledge_analysis {
-    id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    knowledge_source_id String            @unique @db.Uuid
-    status              String            @default("pending")
-    analysis_json       Json?
-    model               String?
-    prompt_version      String            @default("knowledge-analysis-v1")
-    tokens_input        Int?
-    tokens_output       Int?
-    processing_ms       Int?
-    error_message       String?
-    created_at          DateTime          @default(now()) @db.Timestamptz(6)
-    updated_at          DateTime          @default(now()) @db.Timestamptz(6)
-    knowledge_sources   knowledge_sources @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([status], map: "idx_knowledge_analysis_status")
-  }
-
-  model knowledge_libraries {
-    id                                                  String                               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    owner_user_id                                       String                               @db.Uuid
-    parent_id                                           String?                              @db.Uuid
-    name                                                String
-    position                                            Int                                  @default(0)
-    created_at                                          DateTime                             @default(now()) @db.Timestamptz(6)
-    updated_at                                          DateTime                             @default(now()) @db.Timestamptz(6)
-    created_by_user_id                                  String?                              @db.Uuid
-    updated_by_user_id                                  String?                              @db.Uuid
-    company_id                                          String?                              @db.Uuid
-    visibility                                          String                               @default("restricted")
-    chat_conversations                                  chat_conversations[]
-    knowledge_activity                                  knowledge_activity[]
-    knowledge_correction_requests                       knowledge_correction_requests[]
-    knowledge_events                                    knowledge_events[]
-    knowledge_imports                                   knowledge_imports[]
-    companies                                           companies?                           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users_knowledge_libraries_created_by_user_idTousers users?                               @relation("knowledge_libraries_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
-    users                                               users                                @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_libraries                                 knowledge_libraries?                 @relation("knowledge_librariesToknowledge_libraries", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    other_knowledge_libraries                           knowledge_libraries[]                @relation("knowledge_librariesToknowledge_libraries")
-    users_knowledge_libraries_updated_by_user_idTousers users?                               @relation("knowledge_libraries_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
-    knowledge_library_permissions                       knowledge_library_permissions[]
-    knowledge_library_team_permissions                  knowledge_library_team_permissions[]
-    knowledge_share_links                               knowledge_share_links[]
-    knowledge_sources                                   knowledge_sources[]
-    knowledge_space_libraries                           knowledge_space_libraries[]
-
-    @@unique([owner_user_id, name], map: "knowledge_libraries_root_unique", where: raw("(parent_id IS NULL)"))
-    @@index([owner_user_id, parent_id], map: "idx_knowledge_libraries_owner_parent")
-    @@index([owner_user_id], map: "idx_knowledge_libraries_owner_user_id")
-    @@index([parent_id], map: "idx_knowledge_libraries_parent_id")
-    @@index([company_id], map: "idx_knowledge_libraries_company_id")
-    @@index([visibility], map: "idx_knowledge_libraries_visibility")
-  }
-
-  model chat_conversations {
-    id                                                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    owner_user_id                                      String               @db.Uuid
-    title                                              String               @default("Nueva conversación")
-    scope_type                                         String               @default("all")
-    scope_library_id                                   String?              @db.Uuid
-    created_by_user_id                                 String?              @db.Uuid
-    updated_by_user_id                                 String?              @db.Uuid
-    created_at                                         DateTime             @default(now()) @db.Timestamptz(6)
-    updated_at                                         DateTime             @default(now()) @db.Timestamptz(6)
-    space_id                                           String?              @db.Uuid
-    company_id                                         String?              @db.Uuid
-    companies                                          companies?           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users_chat_conversations_created_by_user_idTousers users?               @relation("chat_conversations_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
-    users_chat_conversations_owner_user_idTousers      users                @relation("chat_conversations_owner_user_idTousers", fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_libraries                                knowledge_libraries? @relation(fields: [scope_library_id], references: [id], onUpdate: NoAction)
-    knowledge_spaces                                   knowledge_spaces?    @relation(fields: [space_id], references: [id], onUpdate: NoAction)
-    users_chat_conversations_updated_by_user_idTousers users?               @relation("chat_conversations_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
-    chat_messages                                      chat_messages[]
-
-    @@index([owner_user_id], map: "idx_chat_conversations_owner_user_id")
-    @@index([scope_library_id], map: "idx_chat_conversations_scope_library_id")
-    @@index([space_id], map: "idx_chat_conversations_space_id")
-    @@index([company_id], map: "idx_chat_conversations_company_id")
-  }
-
-  model chat_messages {
-    id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    conversation_id    String             @db.Uuid
-    user_id            String?            @db.Uuid
-    role               String
-    content            String
-    sources_json       Json?
-    model              String?
-    tokens_input       Int?
-    tokens_output      Int?
-    created_at         DateTime           @default(now()) @db.Timestamptz(6)
-    chat_conversations chat_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users              users?             @relation(fields: [user_id], references: [id], onUpdate: NoAction)
-
-    @@index([conversation_id], map: "idx_chat_messages_conversation_id")
-    @@index([user_id], map: "idx_chat_messages_user_id")
-  }
-
-  model companies {
-    id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    name                String
-    slug                String                @unique
-    created_at          DateTime              @default(now()) @db.Timestamptz(6)
-    updated_at          DateTime              @default(now()) @db.Timestamptz(6)
-    chat_conversations  chat_conversations[]
-    knowledge_activity  knowledge_activity[]
-    knowledge_events    knowledge_events[]
-    knowledge_imports   knowledge_imports[]
-    knowledge_libraries knowledge_libraries[]
-    knowledge_sources   knowledge_sources[]
-    knowledge_spaces    knowledge_spaces[]
-    knowledge_teams     knowledge_teams[]
-    users               users[]
-  }
-
-  model knowledge_library_permissions {
-    id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    library_id          String              @db.Uuid
-    user_id             String              @db.Uuid
-    access_level        String              @default("read")
-    created_at          DateTime            @default(now()) @db.Timestamptz(6)
-    updated_at          DateTime            @default(now()) @db.Timestamptz(6)
-    knowledge_libraries knowledge_libraries @relation(fields: [library_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users               users               @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([library_id, user_id])
-  }
-
-  model knowledge_space_libraries {
-    id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    space_id            String              @db.Uuid
-    library_id          String              @db.Uuid
-    created_at          DateTime            @default(now()) @db.Timestamptz(6)
-    knowledge_libraries knowledge_libraries @relation(fields: [library_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_spaces    knowledge_spaces    @relation(fields: [space_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([space_id, library_id])
-    @@index([library_id], map: "idx_knowledge_space_libraries_library_id")
-    @@index([space_id], map: "idx_knowledge_space_libraries_space_id")
-  }
-
-  model knowledge_space_permissions {
-    id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    space_id         String           @db.Uuid
-    user_id          String           @db.Uuid
-    access_level     String           @default("read")
-    created_at       DateTime         @default(now()) @db.Timestamptz(6)
-    updated_at       DateTime         @default(now()) @db.Timestamptz(6)
-    knowledge_spaces knowledge_spaces @relation(fields: [space_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users            users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([space_id, user_id])
-    @@index([space_id], map: "idx_knowledge_space_permissions_space_id")
-    @@index([user_id], map: "idx_knowledge_space_permissions_user_id")
-  }
-
-  model knowledge_spaces {
-    id                                               String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    company_id                                       String?                       @db.Uuid
-    name                                             String
-    description                                      String?
-    visibility                                       String                        @default("restricted")
-    created_by_user_id                               String?                       @db.Uuid
-    updated_by_user_id                               String?                       @db.Uuid
-    created_at                                       DateTime                      @default(now()) @db.Timestamptz(6)
-    updated_at                                       DateTime                      @default(now()) @db.Timestamptz(6)
-    chat_conversations                               chat_conversations[]
-    knowledge_space_libraries                        knowledge_space_libraries[]
-    knowledge_space_permissions                      knowledge_space_permissions[]
-    companies                                        companies?                    @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users_knowledge_spaces_created_by_user_idTousers users?                        @relation("knowledge_spaces_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
-    users_knowledge_spaces_updated_by_user_idTousers users?                        @relation("knowledge_spaces_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
-
-    @@index([company_id], map: "idx_knowledge_spaces_company_id")
-    @@index([visibility], map: "idx_knowledge_spaces_visibility")
-  }
-
-  model knowledge_graph {
-    id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    knowledge_source_id String            @unique @db.Uuid
-    applications        Json?
-    products            Json?
-    regulations         Json?
-    dependencies        Json?
-    related_documents   Json?
-    created_at          DateTime          @default(now()) @db.Timestamptz(6)
-    updated_at          DateTime          @default(now()) @db.Timestamptz(6)
-    knowledge_sources   knowledge_sources @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([knowledge_source_id], map: "idx_knowledge_graph_source")
-  }
-
-  model knowledge_correction_requests {
-    id                                                              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    knowledge_source_id                                             String?              @db.Uuid
-    library_id                                                      String?              @db.Uuid
-    requested_by_user_id                                            String               @db.Uuid
-    assigned_to_user_id                                             String?              @db.Uuid
-    source_type                                                     String               @default("manual")
-    status                                                          String               @default("open")
-    priority                                                        String               @default("normal")
-    title                                                           String
-    description                                                     String
-    suggested_change                                                String?
-    resolution_note                                                 String?
-    created_at                                                      DateTime             @default(now()) @db.Timestamptz(6)
-    updated_at                                                      DateTime             @default(now()) @db.Timestamptz(6)
-    resolved_at                                                     DateTime?            @db.Timestamptz(6)
-    users_knowledge_correction_requests_assigned_to_user_idTousers  users?               @relation("knowledge_correction_requests_assigned_to_user_idTousers", fields: [assigned_to_user_id], references: [id], onUpdate: NoAction)
-    knowledge_sources                                               knowledge_sources?   @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_libraries                                             knowledge_libraries? @relation(fields: [library_id], references: [id], onUpdate: NoAction)
-    users_knowledge_correction_requests_requested_by_user_idTousers users                @relation("knowledge_correction_requests_requested_by_user_idTousers", fields: [requested_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([assigned_to_user_id], map: "idx_knowledge_correction_requests_assigned_to")
-    @@index([requested_by_user_id], map: "idx_knowledge_correction_requests_requested_by")
-    @@index([knowledge_source_id], map: "idx_knowledge_correction_requests_source")
-    @@index([status], map: "idx_knowledge_correction_requests_status")
-  }
-
-  model knowledge_notifications {
-    id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    user_id     String    @db.Uuid
-    type        String
-    title       String
-    body        String?
-    entity_type String?
-    entity_id   String?   @db.Uuid
-    read_at     DateTime? @db.Timestamptz(6)
-    created_at  DateTime  @default(now()) @db.Timestamptz(6)
-    users       users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([read_at], map: "idx_knowledge_notifications_read_at")
-    @@index([user_id], map: "idx_knowledge_notifications_user_id")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model knowledge_share_links {
-    id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    library_id          String?              @db.Uuid
-    knowledge_source_id String?              @db.Uuid
-    created_by_user_id  String               @db.Uuid
-    token               String               @unique
-    access_level        String               @default("read")
-    expires_at          DateTime?            @db.Timestamptz(6)
-    disabled_at         DateTime?            @db.Timestamptz(6)
-    created_at          DateTime             @default(now()) @db.Timestamptz(6)
-    updated_at          DateTime             @default(now()) @db.Timestamptz(6)
-    users               users                @relation(fields: [created_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_sources   knowledge_sources?   @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_libraries knowledge_libraries? @relation(fields: [library_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([knowledge_source_id], map: "idx_knowledge_share_links_knowledge_source_id")
-    @@index([library_id], map: "idx_knowledge_share_links_library_id")
-  }
-
-  model knowledge_team_members {
-    id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    team_id         String          @db.Uuid
-    user_id         String          @db.Uuid
-    role            String          @default("member")
-    created_at      DateTime        @default(now()) @db.Timestamptz(6)
-    updated_at      DateTime        @default(now()) @db.Timestamptz(6)
-    knowledge_teams knowledge_teams @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users           users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([team_id, user_id], map: "knowledge_team_members_unique")
-    @@index([team_id], map: "idx_knowledge_team_members_team_id")
-    @@index([user_id], map: "idx_knowledge_team_members_user_id")
-  }
-
-  model knowledge_teams {
-    id                                 String                               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    owner_user_id                      String                               @db.Uuid
-    company_id                         String?                              @db.Uuid
-    name                               String
-    description                        String?
-    visibility                         String                               @default("private")
-    created_at                         DateTime                             @default(now()) @db.Timestamptz(6)
-    updated_at                         DateTime                             @default(now()) @db.Timestamptz(6)
-    knowledge_library_team_permissions knowledge_library_team_permissions[]
-    knowledge_team_members             knowledge_team_members[]
-    companies                          companies?                           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users                              users                                @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([company_id], map: "idx_knowledge_teams_company_id")
-    @@index([owner_user_id], map: "idx_knowledge_teams_owner_user_id")
-  }
-
-  model knowledge_library_team_permissions {
-    id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    library_id          String              @db.Uuid
-    team_id             String              @db.Uuid
-    access_level        String              @default("read")
-    created_at          DateTime            @default(now()) @db.Timestamptz(6)
-    updated_at          DateTime            @default(now()) @db.Timestamptz(6)
-    knowledge_libraries knowledge_libraries @relation(fields: [library_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_teams     knowledge_teams     @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([library_id, team_id], map: "knowledge_library_team_permissions_unique")
-    @@index([library_id], map: "idx_knowledge_library_team_permissions_library_id")
-    @@index([team_id], map: "idx_knowledge_library_team_permissions_team_id")
-  }
-
-  model knowledge_import_files {
-    id                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    import_id                   String                        @db.Uuid
-    file_name                   String
-    relative_path               String
-    mime_type                   String?
-    file_size                   Int                           @default(0)
-    storage_path                String?
-    status                      String                        @default("uploaded")
-    extracted_text              String                        @default("")
-    error_message               String?
-    created_at                  DateTime                      @default(now()) @db.Timestamptz(6)
-    updated_at                  DateTime                      @default(now()) @db.Timestamptz(6)
-    processing_order            Int                           @default(0)
-    processing_status           String                        @default("pending")
-    processing_step             String?
-    started_at                  DateTime?                     @db.Timestamptz(6)
-    completed_at                DateTime?                     @db.Timestamptz(6)
-    knowledge_imports           knowledge_imports             @relation(fields: [import_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organization_entity_sources organization_entity_sources[]
-
-    @@index([import_id], map: "idx_knowledge_import_files_import_id")
-    @@index([status], map: "idx_knowledge_import_files_status")
-  }
-
-  model knowledge_imports {
-    id                               String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    library_id                       String                             @db.Uuid
-    owner_user_id                    String                             @db.Uuid
-    company_id                       String?                            @db.Uuid
-    status                           String                             @default("uploaded")
-    upload_type                      String
-    original_name                    String?
-    total_files                      Int                                @default(0)
-    total_size                       Int                                @default(0)
-    proposal_json                    Json?
-    error_message                    String?
-    created_at                       DateTime                           @default(now()) @db.Timestamptz(6)
-    updated_at                       DateTime                           @default(now()) @db.Timestamptz(6)
-    execution_log_json               Json?
-    completed_at                     DateTime?                          @db.Timestamptz(6)
-    processing_status                String                             @default("pending")
-    completed_files                  Int                                @default(0)
-    failed_files                     Int                                @default(0)
-    current_file_id                  String?                            @db.Uuid
-    processing_started_at            DateTime?                          @db.Timestamptz(6)
-    processing_completed_at          DateTime?                          @db.Timestamptz(6)
-    knowledge_import_files           knowledge_import_files[]
-    companies                        companies?                         @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_libraries              knowledge_libraries                @relation(fields: [library_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users                            users                              @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organization_knowledge_proposals organization_knowledge_proposals[]
-
-    @@index([company_id], map: "idx_knowledge_imports_company_id")
-    @@index([created_at(sort: Desc)], map: "idx_knowledge_imports_created_at")
-    @@index([library_id], map: "idx_knowledge_imports_library_id")
-    @@index([owner_user_id], map: "idx_knowledge_imports_owner_user_id")
-    @@index([status], map: "idx_knowledge_imports_status")
-  }
-
-  model knowledge_activity {
-    id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    company_id          String?              @db.Uuid
-    user_id             String               @db.Uuid
-    library_id          String?              @db.Uuid
-    action              String
-    entity_type         String?
-    entity_id           String?              @db.Uuid
-    title               String
-    description         String?
-    metadata            Json                 @default("{}")
-    created_at          DateTime             @default(now()) @db.Timestamptz(6)
-    companies           companies?           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_libraries knowledge_libraries? @relation(fields: [library_id], references: [id], onUpdate: NoAction)
-    users               users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([action], map: "idx_knowledge_activity_action")
-    @@index([company_id, created_at(sort: Desc)], map: "idx_knowledge_activity_company_created_at")
-    @@index([company_id], map: "idx_knowledge_activity_company_id")
-    @@index([created_at(sort: Desc)], map: "idx_knowledge_activity_created_at")
-    @@index([library_id, created_at(sort: Desc)], map: "idx_knowledge_activity_library_created_at")
-    @@index([library_id], map: "idx_knowledge_activity_library_id")
-    @@index([user_id], map: "idx_knowledge_activity_user_id")
-  }
-
-  model knowledge_events {
-    id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    company_id          String?              @db.Uuid
-    user_id             String               @db.Uuid
-    library_id          String?              @db.Uuid
-    action              String
-    title               String
-    description         String?
-    metadata            Json                 @default("{}")
-    created_at          DateTime             @default(now()) @db.Timestamptz(6)
-    companies           companies?           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_libraries knowledge_libraries? @relation(fields: [library_id], references: [id], onUpdate: NoAction)
-    users               users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([action], map: "idx_knowledge_events_action")
-    @@index([company_id, created_at(sort: Desc)], map: "idx_knowledge_events_company_created")
-    @@index([library_id, created_at(sort: Desc)], map: "idx_knowledge_events_library_created")
-    @@index([user_id, created_at(sort: Desc)], map: "idx_knowledge_events_user_created")
-  }
-
-  model organizations {
-    id                               String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    parent_id                        String?                            @db.Uuid
-    name                             String
-    slug                             String                             @unique
-    description                      String?
-    organization_type                String                             @default("company")
-    is_independent_tenant            Boolean                            @default(true)
-    status                           String                             @default("active")
-    metadata                         Json                               @default("{}")
-    settings                         Json                               @default("{}")
-    organization_profile             Json                               @default("{}")
-    internal_structure               Json                               @default("{}")
-    knowledge_profile                Json                               @default("{}")
-    public_context                   Json                               @default("{}")
-    knowledge_model_version          Int                                @default(1)
-    knowledge_model_status           String                             @default("empty")
-    last_knowledge_update_at         DateTime?                          @db.Timestamptz(6)
-    created_at                       DateTime                           @default(now()) @db.Timestamptz(6)
-    updated_at                       DateTime                           @default(now()) @db.Timestamptz(6)
-    organization_entities            organization_entities[]
-    organization_entity_relations    organization_entity_relations[]
-    organization_entity_sources      organization_entity_sources[]
-    organization_entity_versions     organization_entity_versions[]
-    organization_knowledge_conflicts organization_knowledge_conflicts[]
-    organization_knowledge_links     organization_knowledge_links[]
-    organization_knowledge_proposals organization_knowledge_proposals[]
-    organization_knowledge_snapshots organization_knowledge_snapshots[]
-    organization_members             organization_members[]
-    organization_positions           organization_positions[]
-    organization_public_sources      organization_public_sources[]
-    organizations                    organizations?                     @relation("organizationsToorganizations", fields: [parent_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
-    other_organizations              organizations[]                    @relation("organizationsToorganizations")
-
-    @@index([is_independent_tenant], map: "idx_organizations_independent_tenant")
-    @@index([parent_id], map: "idx_organizations_parent_id")
-    @@index([status], map: "idx_organizations_status")
-    @@index([organization_type], map: "idx_organizations_type")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model organization_entities {
-    id                                                                                                String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_id                                                                                   String                             @db.Uuid
-    canonical_name                                                                                    String
-    normalized_name                                                                                   String
-    entity_type                                                                                       String
-    description                                                                                       String?
-    status                                                                                            String                             @default("proposed")
-    confidence                                                                                        Float?
-    attributes                                                                                        Json                               @default("{}")
-    public_enrichment                                                                                 Json                               @default("{}")
-    origin                                                                                            String                             @default("internal_document")
-    created_at                                                                                        DateTime                           @default(now()) @db.Timestamptz(6)
-    updated_at                                                                                        DateTime                           @default(now()) @db.Timestamptz(6)
-    organizations                                                                                     organizations                      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organization_entity_aliases                                                                       organization_entity_aliases[]
-    organization_entity_relations_organization_entity_relations_from_entity_idToorganization_entities organization_entity_relations[]    @relation("organization_entity_relations_from_entity_idToorganization_entities")
-    organization_entity_relations_organization_entity_relations_to_entity_idToorganization_entities   organization_entity_relations[]    @relation("organization_entity_relations_to_entity_idToorganization_entities")
-    organization_entity_sources                                                                       organization_entity_sources[]
-    organization_entity_versions                                                                      organization_entity_versions[]
-    organization_knowledge_conflicts                                                                  organization_knowledge_conflicts[]
-    organization_knowledge_links                                                                      organization_knowledge_links[]
-    organization_member_assignments                                                                   organization_member_assignments[]
-    organization_positions                                                                            organization_positions[]
-    organization_public_sources                                                                       organization_public_sources[]
-
-    @@index([organization_id, normalized_name], map: "idx_organization_entities_normalized_name")
-    @@index([organization_id], map: "idx_organization_entities_organization_id")
-    @@index([origin], map: "idx_organization_entities_origin")
-    @@index([organization_id, status], map: "idx_organization_entities_status")
-    @@index([organization_id, entity_type], map: "idx_organization_entities_type")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model organization_entity_aliases {
-    id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    entity_id             String                @db.Uuid
-    alias                 String
-    normalized_alias      String
-    confidence            Float?
-    origin                String                @default("internal_document")
-    status                String                @default("proposed")
-    metadata              Json                  @default("{}")
-    created_at            DateTime              @default(now()) @db.Timestamptz(6)
-    updated_at            DateTime              @default(now()) @db.Timestamptz(6)
-    organization_entities organization_entities @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([entity_id, normalized_alias], map: "organization_entity_aliases_unique")
-    @@index([entity_id], map: "idx_organization_entity_aliases_entity_id")
-    @@index([normalized_alias], map: "idx_organization_entity_aliases_normalized")
-    @@index([status], map: "idx_organization_entity_aliases_status")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model organization_entity_relations {
-    id                                                                                        String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_id                                                                           String                             @db.Uuid
-    from_entity_id                                                                            String                             @db.Uuid
-    to_entity_id                                                                              String                             @db.Uuid
-    relation_type                                                                             String
-    description                                                                               String?
-    status                                                                                    String                             @default("proposed")
-    confidence                                                                                Float?
-    origin                                                                                    String                             @default("internal_document")
-    evidence                                                                                  Json                               @default("[]")
-    metadata                                                                                  Json                               @default("{}")
-    created_at                                                                                DateTime                           @default(now()) @db.Timestamptz(6)
-    updated_at                                                                                DateTime                           @default(now()) @db.Timestamptz(6)
-    organization_entities_organization_entity_relations_from_entity_idToorganization_entities organization_entities              @relation("organization_entity_relations_from_entity_idToorganization_entities", fields: [from_entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organizations                                                                             organizations                      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organization_entities_organization_entity_relations_to_entity_idToorganization_entities   organization_entities              @relation("organization_entity_relations_to_entity_idToorganization_entities", fields: [to_entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organization_knowledge_conflicts                                                          organization_knowledge_conflicts[]
-
-    @@unique([from_entity_id, to_entity_id, relation_type], map: "organization_entity_relations_unique")
-    @@index([from_entity_id], map: "idx_organization_entity_relations_from")
-    @@index([organization_id], map: "idx_organization_entity_relations_organization")
-    @@index([organization_id, status], map: "idx_organization_entity_relations_status")
-    @@index([to_entity_id], map: "idx_organization_entity_relations_to")
-    @@index([organization_id, relation_type], map: "idx_organization_entity_relations_type")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model organization_knowledge_links {
-    id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_id       String                @db.Uuid
-    entity_id             String                @db.Uuid
-    knowledge_source_id   String                @db.Uuid
-    relation_type         String                @default("mentioned_in")
-    confidence            Float?
-    evidence              Json                  @default("[]")
-    status                String                @default("proposed")
-    origin                String                @default("internal_document")
-    metadata              Json                  @default("{}")
-    created_at            DateTime              @default(now()) @db.Timestamptz(6)
-    updated_at            DateTime              @default(now()) @db.Timestamptz(6)
-    organization_entities organization_entities @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_sources     knowledge_sources     @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organizations         organizations         @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([entity_id, knowledge_source_id, relation_type], map: "organization_knowledge_links_unique")
-    @@index([entity_id], map: "idx_organization_knowledge_links_entity")
-    @@index([organization_id], map: "idx_organization_knowledge_links_organization")
-    @@index([organization_id, relation_type], map: "idx_organization_knowledge_links_relation")
-    @@index([knowledge_source_id], map: "idx_organization_knowledge_links_source")
-    @@index([organization_id, status], map: "idx_organization_knowledge_links_status")
-  }
-
-  model organization_knowledge_proposals {
-    id                                                                String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_id                                                   String                             @db.Uuid
-    proposal_type                                                     String
-    status                                                            String                             @default("pending")
-    source_knowledge_id                                               String?                            @db.Uuid
-    source_import_id                                                  String?                            @db.Uuid
-    proposal_json                                                     Json                               @default("{}")
-    model                                                             String?
-    prompt_version                                                    String?
-    created_by_user_id                                                String?                            @db.Uuid
-    reviewed_by_user_id                                               String?                            @db.Uuid
-    reviewed_at                                                       DateTime?                          @db.Timestamptz(6)
-    error_message                                                     String?
-    created_at                                                        DateTime                           @default(now()) @db.Timestamptz(6)
-    updated_at                                                        DateTime                           @default(now()) @db.Timestamptz(6)
-    organization_entity_sources                                       organization_entity_sources[]
-    organization_entity_versions                                      organization_entity_versions[]
-    organization_knowledge_conflicts                                  organization_knowledge_conflicts[]
-    users_organization_knowledge_proposals_created_by_user_idTousers  users?                             @relation("organization_knowledge_proposals_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
-    organizations                                                     organizations                      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users_organization_knowledge_proposals_reviewed_by_user_idTousers users?                             @relation("organization_knowledge_proposals_reviewed_by_user_idTousers", fields: [reviewed_by_user_id], references: [id], onUpdate: NoAction)
-    knowledge_imports                                                 knowledge_imports?                 @relation(fields: [source_import_id], references: [id], onUpdate: NoAction)
-    knowledge_sources                                                 knowledge_sources?                 @relation(fields: [source_knowledge_id], references: [id], onUpdate: NoAction)
-
-    @@index([organization_id, created_at(sort: Desc)], map: "idx_organization_knowledge_proposals_created_at")
-    @@index([source_import_id], map: "idx_organization_knowledge_proposals_import")
-    @@index([organization_id], map: "idx_organization_knowledge_proposals_organization")
-    @@index([source_knowledge_id], map: "idx_organization_knowledge_proposals_source")
-    @@index([organization_id, status], map: "idx_organization_knowledge_proposals_status")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model organization_knowledge_snapshots {
-    id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_id      String        @db.Uuid
-    version              Int
-    status               String        @default("generated")
-    organization_profile Json          @default("{}")
-    internal_structure   Json          @default("{}")
-    knowledge_profile    Json          @default("{}")
-    public_context       Json          @default("{}")
-    knowledge_model      Json          @default("{}")
-    model                String?
-    prompt_version       String?
-    generated_by_user_id String?       @db.Uuid
-    error_message        String?
-    created_at           DateTime      @default(now()) @db.Timestamptz(6)
-    users                users?        @relation(fields: [generated_by_user_id], references: [id], onUpdate: NoAction)
-    organizations        organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([organization_id, version], map: "organization_knowledge_snapshots_unique")
-    @@index([organization_id, created_at(sort: Desc)], map: "idx_organization_knowledge_snapshots_created_at")
-    @@index([organization_id], map: "idx_organization_knowledge_snapshots_organization")
-    @@index([organization_id, status], map: "idx_organization_knowledge_snapshots_status")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model organization_member_assignments {
-    id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_member_id String                  @db.Uuid
-    entity_id              String                  @db.Uuid
-    assignment_type        String                  @default("member")
-    is_primary             Boolean                 @default(false)
-    job_title              String?
-    status                 String                  @default("active")
-    confidence             Float?
-    origin                 String                  @default("manual")
-    metadata               Json                    @default("{}")
-    valid_from             DateTime?               @db.Timestamptz(6)
-    valid_until            DateTime?               @db.Timestamptz(6)
-    created_at             DateTime                @default(now()) @db.Timestamptz(6)
-    updated_at             DateTime                @default(now()) @db.Timestamptz(6)
-    position_id            String?                 @db.Uuid
-    organization_entities  organization_entities   @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organization_members   organization_members    @relation(fields: [organization_member_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "organization_member_assignments_member_id_fkey")
-    organization_positions organization_positions? @relation(fields: [position_id], references: [id], onUpdate: NoAction)
-
-    @@unique([organization_member_id, entity_id, assignment_type], map: "organization_member_assignments_unique")
-    @@index([entity_id], map: "idx_organization_member_assignments_entity")
-    @@index([organization_member_id], map: "idx_organization_member_assignments_member")
-    @@index([organization_member_id, is_primary], map: "idx_organization_member_assignments_primary")
-    @@index([status], map: "idx_organization_member_assignments_status")
-    @@index([position_id], map: "idx_organization_member_assignments_position")
-  }
-
-  model organization_members {
-    id                              String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_id                 String                            @db.Uuid
-    user_id                         String                            @unique(map: "organization_members_one_primary_per_user", where: raw("((is_primary = true) AND (status = 'active'::text))")) @db.Uuid
-    role                            String                            @default("member")
-    status                          String                            @default("active")
-    job_title                       String?
-    metadata                        Json                              @default("{}")
-    joined_at                       DateTime                          @default(now()) @db.Timestamptz(6)
-    created_at                      DateTime                          @default(now()) @db.Timestamptz(6)
-    updated_at                      DateTime                          @default(now()) @db.Timestamptz(6)
-    is_primary                      Boolean                           @default(false)
-    organization_member_assignments organization_member_assignments[]
-    organizations                   organizations                     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users                           users                             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([organization_id, user_id], map: "organization_members_unique")
-    @@index([organization_id, status], map: "idx_organization_members_org_status")
-    @@index([organization_id], map: "idx_organization_members_organization_id")
-    @@index([status], map: "idx_organization_members_status")
-    @@index([user_id], map: "idx_organization_members_user_id")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model organization_public_sources {
-    id                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_id             String                        @db.Uuid
-    entity_id                   String?                       @db.Uuid
-    source_url                  String
-    source_domain               String?
-    source_title                String?
-    extracted_context           String?
-    context_type                String?
-    confidence                  Float?
-    accessed_at                 DateTime                      @default(now()) @db.Timestamptz(6)
-    created_at                  DateTime                      @default(now()) @db.Timestamptz(6)
-    metadata                    Json                          @default("{}")
-    organization_entity_sources organization_entity_sources[]
-    organization_entities       organization_entities?        @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organizations               organizations                 @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@index([source_domain], map: "idx_organization_public_sources_domain")
-    @@index([entity_id], map: "idx_organization_public_sources_entity")
-    @@index([organization_id], map: "idx_organization_public_sources_organization")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model organization_entity_sources {
-    id                               String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_id                  String                            @db.Uuid
-    entity_id                        String                            @db.Uuid
-    source_type                      String
-    knowledge_source_id              String?                           @db.Uuid
-    knowledge_import_file_id         String?                           @db.Uuid
-    public_source_id                 String?                           @db.Uuid
-    source_user_id                   String?                           @db.Uuid
-    proposal_id                      String?                           @db.Uuid
-    external_reference               String?
-    evidence                         Json                              @default("[]")
-    confidence                       Float?
-    source_role                      String                            @default("mentioned")
-    metadata                         Json                              @default("{}")
-    first_seen_at                    DateTime                          @default(now()) @db.Timestamptz(6)
-    last_seen_at                     DateTime                          @default(now()) @db.Timestamptz(6)
-    created_at                       DateTime                          @default(now()) @db.Timestamptz(6)
-    updated_at                       DateTime                          @default(now()) @db.Timestamptz(6)
-    organization_entities            organization_entities             @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    knowledge_import_files           knowledge_import_files?           @relation(fields: [knowledge_import_file_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "organization_entity_sources_import_file_id_fkey")
-    knowledge_sources                knowledge_sources?                @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organizations                    organizations                     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organization_knowledge_proposals organization_knowledge_proposals? @relation(fields: [proposal_id], references: [id], onUpdate: NoAction)
-    organization_public_sources      organization_public_sources?      @relation(fields: [public_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users                            users?                            @relation(fields: [source_user_id], references: [id], onUpdate: NoAction)
-
-    @@unique([entity_id, knowledge_import_file_id, source_role], map: "organization_entity_sources_import_file_unique", where: raw("(knowledge_import_file_id IS NOT NULL)"))
-    @@unique([entity_id, knowledge_source_id, source_role], map: "organization_entity_sources_knowledge_unique", where: raw("(knowledge_source_id IS NOT NULL)"))
-    @@unique([entity_id, public_source_id, source_role], map: "organization_entity_sources_public_unique", where: raw("(public_source_id IS NOT NULL)"))
-    @@index([entity_id], map: "idx_organization_entity_sources_entity")
-    @@index([knowledge_import_file_id], map: "idx_organization_entity_sources_import_file")
-    @@index([knowledge_source_id], map: "idx_organization_entity_sources_knowledge")
-    @@index([organization_id], map: "idx_organization_entity_sources_organization")
-    @@index([proposal_id], map: "idx_organization_entity_sources_proposal")
-    @@index([public_source_id], map: "idx_organization_entity_sources_public")
-    @@index([organization_id, source_type], map: "idx_organization_entity_sources_type")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model organization_entity_versions {
-    id                               String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_id                  String                            @db.Uuid
-    entity_id                        String                            @db.Uuid
-    version                          Int
-    change_type                      String                            @default("updated")
-    entity_snapshot                  Json
-    changes                          Json                              @default("{}")
-    change_summary                   String?
-    proposal_id                      String?                           @db.Uuid
-    created_by_user_id               String?                           @db.Uuid
-    created_at                       DateTime                          @default(now()) @db.Timestamptz(6)
-    users                            users?                            @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
-    organization_entities            organization_entities             @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organizations                    organizations                     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organization_knowledge_proposals organization_knowledge_proposals? @relation(fields: [proposal_id], references: [id], onUpdate: NoAction)
-
-    @@unique([entity_id, version], map: "organization_entity_versions_unique")
-    @@index([organization_id, created_at(sort: Desc)], map: "idx_organization_entity_versions_created_at")
-    @@index([entity_id, version(sort: Desc)], map: "idx_organization_entity_versions_entity")
-    @@index([organization_id], map: "idx_organization_entity_versions_organization")
-    @@index([proposal_id], map: "idx_organization_entity_versions_proposal")
-  }
-
-  /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-  model organization_knowledge_conflicts {
-    id                               String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_id                  String                            @db.Uuid
-    entity_id                        String?                           @db.Uuid
-    relation_id                      String?                           @db.Uuid
-    conflict_type                    String
-    field_path                       String?
-    title                            String
-    description                      String?
-    left_value                       Json?
-    right_value                      Json?
-    left_evidence                    Json                              @default("[]")
-    right_evidence                   Json                              @default("[]")
-    severity                         String                            @default("medium")
-    confidence                       Float?
-    status                           String                            @default("open")
-    resolution_type                  String?
-    resolution_value                 Json?
-    resolution_note                  String?
-    detected_by                      String                            @default("ai")
-    proposal_id                      String?                           @db.Uuid
-    resolved_by_user_id              String?                           @db.Uuid
-    resolved_at                      DateTime?                         @db.Timestamptz(6)
-    metadata                         Json                              @default("{}")
-    created_at                       DateTime                          @default(now()) @db.Timestamptz(6)
-    updated_at                       DateTime                          @default(now()) @db.Timestamptz(6)
-    organization_entities            organization_entities?            @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organizations                    organizations                     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    organization_knowledge_proposals organization_knowledge_proposals? @relation(fields: [proposal_id], references: [id], onUpdate: NoAction)
-    organization_entity_relations    organization_entity_relations?    @relation(fields: [relation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-    users                            users?                            @relation(fields: [resolved_by_user_id], references: [id], onUpdate: NoAction)
-
-    @@index([organization_id, created_at(sort: Desc)], map: "idx_organization_knowledge_conflicts_created_at")
-    @@index([entity_id], map: "idx_organization_knowledge_conflicts_entity")
-    @@index([organization_id], map: "idx_organization_knowledge_conflicts_organization")
-    @@index([relation_id], map: "idx_organization_knowledge_conflicts_relation")
-    @@index([organization_id, severity], map: "idx_organization_knowledge_conflicts_severity")
-    @@index([organization_id, status], map: "idx_organization_knowledge_conflicts_status")
-    @@index([organization_id, conflict_type], map: "idx_organization_knowledge_conflicts_type")
-  }
-
-  model organization_positions {
-    id                              String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    organization_id                 String                            @db.Uuid
-    entity_id                       String?                           @db.Uuid
-    title                           String
-    normalized_title                String
-    description                     String?
-    position_type                   String?
-    status                          String                            @default("active")
-    metadata                        Json                              @default("{}")
-    created_at                      DateTime                          @default(now()) @db.Timestamptz(6)
-    updated_at                      DateTime                          @default(now()) @db.Timestamptz(6)
-    organization_member_assignments organization_member_assignments[]
-    organization_entities           organization_entities?            @relation(fields: [entity_id], references: [id], onUpdate: NoAction)
-    organizations                   organizations                     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-    @@unique([organization_id, entity_id, normalized_title], map: "organization_positions_entity_title_unique", where: raw("(entity_id IS NOT NULL)"))
-    @@unique([organization_id, normalized_title], map: "organization_positions_global_title_unique", where: raw("(entity_id IS NULL)"))
-    @@index([entity_id], map: "idx_organization_positions_entity")
-    @@index([organization_id], map: "idx_organization_positions_organization")
-    @@index([organization_id, status], map: "idx_organization_positions_status")
-    @@index([organization_id, normalized_title], map: "idx_organization_positions_title")
-  }
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model achievements {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code              String              @unique
+  title             String
+  description       String?
+  xp_reward         Int                 @default(0)
+  icon              String?
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  user_achievements user_achievements[]
+}
+
+model courses {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title                String
+  slug                 String                 @unique
+  description          String?
+  level                String                 @default("beginner")
+  is_published         Boolean                @default(false)
+  sort_order           Int                    @default(0)
+  required_course_id   String?                @db.Uuid
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  knowledge_source_id  String?                @db.Uuid
+  knowledge_sources    knowledge_sources?     @relation(fields: [knowledge_source_id], references: [id], onUpdate: NoAction)
+  courses              courses?               @relation("coursesTocourses", fields: [required_course_id], references: [id], onUpdate: NoAction)
+  other_courses        courses[]              @relation("coursesTocourses")
+  sections             sections[]
+  user_course_progress user_course_progress[]
+
+  @@index([knowledge_source_id], map: "idx_courses_knowledge_source_id")
+}
+
+model lessons {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  module_id            String                 @db.Uuid
+  title                String
+  content              String
+  lesson_type          String                 @default("reading")
+  estimated_minutes    Int                    @default(5)
+  sort_order           Int                    @default(0)
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  sections             sections               @relation(fields: [module_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quizzes              quizzes[]
+  section_items        section_items?
+  user_lesson_progress user_lesson_progress[]
+
+  @@index([module_id], map: "idx_lessons_module_id")
+}
+
+model question_options {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  question_id String    @db.Uuid
+  option_text String
+  is_correct  Boolean   @default(false)
+  sort_order  Int       @default(0)
+  questions   questions @relation(fields: [question_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model questions {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quiz_id          String             @db.Uuid
+  question_text    String
+  question_type    String             @default("single_choice")
+  explanation      String?
+  sort_order       Int                @default(0)
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  question_options question_options[]
+  quizzes          quizzes            @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([quiz_id], map: "idx_questions_quiz_id")
+}
+
+model quiz_attempts {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String    @db.Uuid
+  quiz_id      String    @db.Uuid
+  score        Int       @default(0)
+  passed       Boolean   @default(false)
+  started_at   DateTime  @default(now()) @db.Timestamptz(6)
+  completed_at DateTime? @db.Timestamptz(6)
+  quizzes      quizzes   @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "idx_quiz_attempts_user_id")
+}
+
+model quizzes {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lesson_id          String?         @db.Uuid
+  title              String
+  passing_score      Int             @default(70)
+  max_attempts       Int?
+  time_limit_seconds Int?
+  created_at         DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime        @default(now()) @db.Timestamptz(6)
+  section_id         String?         @db.Uuid
+  questions          questions[]
+  quiz_attempts      quiz_attempts[]
+  lessons            lessons?        @relation(fields: [lesson_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sections           sections?       @relation(fields: [section_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  section_items      section_items?
+
+  @@index([lesson_id], map: "idx_quizzes_lesson_id")
+}
+
+model user_achievements {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String       @db.Uuid
+  achievement_id String       @db.Uuid
+  unlocked_at    DateTime     @default(now()) @db.Timestamptz(6)
+  achievements   achievements @relation(fields: [achievement_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users          users        @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, achievement_id])
+}
+
+model user_course_progress {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String    @db.Uuid
+  course_id        String    @db.Uuid
+  status           String    @default("pending")
+  progress_percent Int       @default(0)
+  started_at       DateTime? @db.Timestamptz(6)
+  completed_at     DateTime? @db.Timestamptz(6)
+  suspended_at     DateTime? @db.Timestamptz(6)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @default(now()) @db.Timestamptz(6)
+  courses          courses   @relation(fields: [course_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users            users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, course_id])
+  @@index([user_id], map: "idx_user_course_progress_user_id")
+}
+
+model user_lesson_progress {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String    @db.Uuid
+  lesson_id    String    @db.Uuid
+  status       String    @default("pending")
+  completed_at DateTime? @db.Timestamptz(6)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @default(now()) @db.Timestamptz(6)
+  lessons      lessons   @relation(fields: [lesson_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, lesson_id])
+  @@index([user_id], map: "idx_user_lesson_progress_user_id")
+}
+
+model users {
+  id                                                                                           String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                                                                                        String                             @unique
+  name                                                                                         String?
+  image                                                                                        String?
+  provider                                                                                     String?                            @default("credentials")
+  xp                                                                                           Int                                @default(0)
+  level                                                                                        Int                                @default(1)
+  status                                                                                       String                             @default("active")
+  created_at                                                                                   DateTime                           @default(now()) @db.Timestamptz(6)
+  updated_at                                                                                   DateTime                           @default(now()) @db.Timestamptz(6)
+  company_id                                                                                   String?                            @db.Uuid
+  chat_conversations_chat_conversations_created_by_user_idTousers                              chat_conversations[]               @relation("chat_conversations_created_by_user_idTousers")
+  chat_conversations_chat_conversations_owner_user_idTousers                                   chat_conversations[]               @relation("chat_conversations_owner_user_idTousers")
+  chat_conversations_chat_conversations_updated_by_user_idTousers                              chat_conversations[]               @relation("chat_conversations_updated_by_user_idTousers")
+  chat_messages                                                                                chat_messages[]
+  knowledge_activity                                                                           knowledge_activity[]
+  knowledge_correction_requests_knowledge_correction_requests_assigned_to_user_idTousers       knowledge_correction_requests[]    @relation("knowledge_correction_requests_assigned_to_user_idTousers")
+  knowledge_correction_requests_knowledge_correction_requests_requested_by_user_idTousers      knowledge_correction_requests[]    @relation("knowledge_correction_requests_requested_by_user_idTousers")
+  knowledge_events                                                                             knowledge_events[]
+  knowledge_files                                                                              knowledge_files[]
+  knowledge_imports                                                                            knowledge_imports[]
+  knowledge_libraries_knowledge_libraries_created_by_user_idTousers                            knowledge_libraries[]              @relation("knowledge_libraries_created_by_user_idTousers")
+  knowledge_libraries                                                                          knowledge_libraries[]
+  knowledge_libraries_knowledge_libraries_updated_by_user_idTousers                            knowledge_libraries[]              @relation("knowledge_libraries_updated_by_user_idTousers")
+  knowledge_library_permissions                                                                knowledge_library_permissions[]
+  knowledge_share_links                                                                        knowledge_share_links[]
+  knowledge_sources_knowledge_sources_created_by_user_idTousers                                knowledge_sources[]                @relation("knowledge_sources_created_by_user_idTousers")
+  knowledge_sources_knowledge_sources_updated_by_user_idTousers                                knowledge_sources[]                @relation("knowledge_sources_updated_by_user_idTousers")
+  knowledge_space_permissions                                                                  knowledge_space_permissions[]
+  knowledge_spaces_knowledge_spaces_created_by_user_idTousers                                  knowledge_spaces[]                 @relation("knowledge_spaces_created_by_user_idTousers")
+  knowledge_spaces_knowledge_spaces_updated_by_user_idTousers                                  knowledge_spaces[]                 @relation("knowledge_spaces_updated_by_user_idTousers")
+  knowledge_team_members                                                                       knowledge_team_members[]
+  knowledge_teams                                                                              knowledge_teams[]
+  notifications                                                                                notifications[]
+  organization_entity_sources                                                                  organization_entity_sources[]
+  organization_entity_versions                                                                 organization_entity_versions[]
+  organization_knowledge_conflicts                                                             organization_knowledge_conflicts[]
+  organization_knowledge_proposals_organization_knowledge_proposals_created_by_user_idTousers  organization_knowledge_proposals[] @relation("organization_knowledge_proposals_created_by_user_idTousers")
+  organization_knowledge_proposals_organization_knowledge_proposals_reviewed_by_user_idTousers organization_knowledge_proposals[] @relation("organization_knowledge_proposals_reviewed_by_user_idTousers")
+  organization_knowledge_snapshots                                                             organization_knowledge_snapshots[]
+  organization_members                                                                         organization_members?
+  quiz_attempts                                                                                quiz_attempts[]
+  user_achievements                                                                            user_achievements[]
+  user_course_progress                                                                         user_course_progress[]
+  user_lesson_progress                                                                         user_lesson_progress[]
+  companies                                                                                    companies?                         @relation(fields: [company_id], references: [id], onUpdate: NoAction)
+
+  @@index([company_id], map: "idx_users_company_id")
+}
+
+model sections {
+  id                  String          @id(map: "modules_pkey") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  course_id           String          @db.Uuid
+  title               String
+  description         String?
+  sort_order          Int             @default(0)
+  required_section_id String?         @db.Uuid
+  created_at          DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime        @default(now()) @db.Timestamptz(6)
+  lessons             lessons[]
+  quizzes             quizzes[]
+  section_items       section_items[]
+  courses             courses         @relation(fields: [course_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "sections_course_id_fkey")
+  sections            sections?       @relation("sectionsTosections", fields: [required_section_id], references: [id], onUpdate: NoAction, map: "modules_required_module_id_fkey")
+  other_sections      sections[]      @relation("sectionsTosections")
+
+  @@index([course_id], map: "idx_sections_course_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model section_items {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  section_id String   @db.Uuid
+  item_type  String
+  lesson_id  String?  @unique @db.Uuid
+  quiz_id    String?  @unique @db.Uuid
+  sort_order Int      @default(0)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  lessons    lessons? @relation(fields: [lesson_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quizzes    quizzes? @relation(fields: [quiz_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sections   sections @relation(fields: [section_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([section_id], map: "idx_section_items_section_id")
+  @@index([section_id, sort_order], map: "idx_section_items_sort_order")
+}
+
+model knowledge_sources {
+  id                                                String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id                                     String                             @db.Uuid
+  title                                             String
+  description                                       String?
+  visibility                                        String                             @default("private")
+  content                                           String                             @default("")
+  status                                            String                             @default("draft")
+  created_at                                        DateTime                           @default(now()) @db.Timestamptz(6)
+  updated_at                                        DateTime                           @default(now()) @db.Timestamptz(6)
+  knowledge_type                                    String                             @default("unknown")
+  library_id                                        String?                            @db.Uuid
+  created_by_user_id                                String?                            @db.Uuid
+  updated_by_user_id                                String?                            @db.Uuid
+  summary                                           String?
+  language                                          String?
+  domain                                            String?
+  level                                             String?
+  confidence                                        Float?
+  tags                                              Json?
+  keywords                                          Json?
+  entities                                          Json?
+  company_id                                        String?                            @db.Uuid
+  courses                                           courses[]
+  knowledge_analysis                                knowledge_analysis?
+  knowledge_correction_requests                     knowledge_correction_requests[]
+  knowledge_files                                   knowledge_files[]
+  knowledge_graph                                   knowledge_graph?
+  knowledge_share_links                             knowledge_share_links[]
+  companies                                         companies?                         @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_knowledge_sources_created_by_user_idTousers users?                             @relation("knowledge_sources_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  knowledge_libraries                               knowledge_libraries?               @relation(fields: [library_id], references: [id], onUpdate: NoAction)
+  users_knowledge_sources_updated_by_user_idTousers users?                             @relation("knowledge_sources_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+  organization_entity_sources                       organization_entity_sources[]
+  organization_knowledge_links                      organization_knowledge_links[]
+  organization_knowledge_proposals                  organization_knowledge_proposals[]
+
+  @@index([owner_user_id], map: "idx_knowledge_sources_owner_user_id")
+  @@index([visibility], map: "idx_knowledge_sources_visibility")
+  @@index([library_id], map: "idx_knowledge_sources_library_id")
+  @@index([company_id], map: "idx_knowledge_sources_company_id")
+}
+
+model knowledge_files {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  knowledge_source_id     String                   @db.Uuid
+  file_name               String
+  file_type               String?
+  file_size               Int?
+  storage_path            String?
+  extracted_text          String                   @default("")
+  status                  String                   @default("uploaded")
+  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  uploaded_by_user_id     String?                  @db.Uuid
+  knowledge_file_analysis knowledge_file_analysis?
+  knowledge_sources       knowledge_sources        @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   users?                   @relation(fields: [uploaded_by_user_id], references: [id], onUpdate: NoAction)
+
+  @@index([knowledge_source_id], map: "idx_knowledge_files_knowledge_source_id")
+  @@index([uploaded_by_user_id], map: "idx_knowledge_files_uploaded_by_user_id")
+}
+
+model knowledge_analysis {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  knowledge_source_id String            @unique @db.Uuid
+  status              String            @default("pending")
+  analysis_json       Json?
+  model               String?
+  prompt_version      String            @default("knowledge-analysis-v1")
+  tokens_input        Int?
+  tokens_output       Int?
+  processing_ms       Int?
+  error_message       String?
+  created_at          DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime          @default(now()) @db.Timestamptz(6)
+  knowledge_sources   knowledge_sources @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([status], map: "idx_knowledge_analysis_status")
+}
+
+model knowledge_libraries {
+  id                                                  String                               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id                                       String                               @db.Uuid
+  parent_id                                           String?                              @db.Uuid
+  name                                                String
+  position                                            Int                                  @default(0)
+  created_at                                          DateTime                             @default(now()) @db.Timestamptz(6)
+  updated_at                                          DateTime                             @default(now()) @db.Timestamptz(6)
+  created_by_user_id                                  String?                              @db.Uuid
+  updated_by_user_id                                  String?                              @db.Uuid
+  company_id                                          String?                              @db.Uuid
+  visibility                                          String                               @default("restricted")
+  chat_conversations                                  chat_conversations[]
+  knowledge_activity                                  knowledge_activity[]
+  knowledge_correction_requests                       knowledge_correction_requests[]
+  knowledge_events                                    knowledge_events[]
+  knowledge_imports                                   knowledge_imports[]
+  companies                                           companies?                           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_knowledge_libraries_created_by_user_idTousers users?                               @relation("knowledge_libraries_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  users                                               users                                @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_libraries                                 knowledge_libraries?                 @relation("knowledge_librariesToknowledge_libraries", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  other_knowledge_libraries                           knowledge_libraries[]                @relation("knowledge_librariesToknowledge_libraries")
+  users_knowledge_libraries_updated_by_user_idTousers users?                               @relation("knowledge_libraries_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+  knowledge_library_permissions                       knowledge_library_permissions[]
+  knowledge_library_team_permissions                  knowledge_library_team_permissions[]
+  knowledge_share_links                               knowledge_share_links[]
+  knowledge_sources                                   knowledge_sources[]
+  knowledge_space_libraries                           knowledge_space_libraries[]
+
+  @@unique([owner_user_id, name], map: "knowledge_libraries_root_unique", where: raw("(parent_id IS NULL)"))
+  @@index([owner_user_id, parent_id], map: "idx_knowledge_libraries_owner_parent")
+  @@index([owner_user_id], map: "idx_knowledge_libraries_owner_user_id")
+  @@index([parent_id], map: "idx_knowledge_libraries_parent_id")
+  @@index([company_id], map: "idx_knowledge_libraries_company_id")
+  @@index([visibility], map: "idx_knowledge_libraries_visibility")
+}
+
+model chat_conversations {
+  id                                                 String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id                                      String               @db.Uuid
+  title                                              String               @default("Nueva conversación")
+  scope_type                                         String               @default("all")
+  scope_library_id                                   String?              @db.Uuid
+  created_by_user_id                                 String?              @db.Uuid
+  updated_by_user_id                                 String?              @db.Uuid
+  created_at                                         DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                                         DateTime             @default(now()) @db.Timestamptz(6)
+  space_id                                           String?              @db.Uuid
+  company_id                                         String?              @db.Uuid
+  companies                                          companies?           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_chat_conversations_created_by_user_idTousers users?               @relation("chat_conversations_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  users_chat_conversations_owner_user_idTousers      users                @relation("chat_conversations_owner_user_idTousers", fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_libraries                                knowledge_libraries? @relation(fields: [scope_library_id], references: [id], onUpdate: NoAction)
+  knowledge_spaces                                   knowledge_spaces?    @relation(fields: [space_id], references: [id], onUpdate: NoAction)
+  users_chat_conversations_updated_by_user_idTousers users?               @relation("chat_conversations_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+  chat_messages                                      chat_messages[]
+
+  @@index([owner_user_id], map: "idx_chat_conversations_owner_user_id")
+  @@index([scope_library_id], map: "idx_chat_conversations_scope_library_id")
+  @@index([space_id], map: "idx_chat_conversations_space_id")
+  @@index([company_id], map: "idx_chat_conversations_company_id")
+}
+
+model chat_messages {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversation_id    String             @db.Uuid
+  user_id            String?            @db.Uuid
+  role               String
+  content            String
+  sources_json       Json?
+  model              String?
+  tokens_input       Int?
+  tokens_output      Int?
+  created_at         DateTime           @default(now()) @db.Timestamptz(6)
+  chat_conversations chat_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users              users?             @relation(fields: [user_id], references: [id], onUpdate: NoAction)
+
+  @@index([conversation_id], map: "idx_chat_messages_conversation_id")
+  @@index([user_id], map: "idx_chat_messages_user_id")
+}
+
+model companies {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String
+  slug                String                @unique
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime              @default(now()) @db.Timestamptz(6)
+  chat_conversations  chat_conversations[]
+  knowledge_activity  knowledge_activity[]
+  knowledge_events    knowledge_events[]
+  knowledge_imports   knowledge_imports[]
+  knowledge_libraries knowledge_libraries[]
+  knowledge_sources   knowledge_sources[]
+  knowledge_spaces    knowledge_spaces[]
+  knowledge_teams     knowledge_teams[]
+  users               users[]
+}
+
+model knowledge_library_permissions {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  library_id          String              @db.Uuid
+  user_id             String              @db.Uuid
+  access_level        String              @default("read")
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime            @default(now()) @db.Timestamptz(6)
+  knowledge_libraries knowledge_libraries @relation(fields: [library_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users               users               @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([library_id, user_id])
+}
+
+model knowledge_space_libraries {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  space_id            String              @db.Uuid
+  library_id          String              @db.Uuid
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  knowledge_libraries knowledge_libraries @relation(fields: [library_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_spaces    knowledge_spaces    @relation(fields: [space_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([space_id, library_id])
+  @@index([library_id], map: "idx_knowledge_space_libraries_library_id")
+  @@index([space_id], map: "idx_knowledge_space_libraries_space_id")
+}
+
+model knowledge_space_permissions {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  space_id         String           @db.Uuid
+  user_id          String           @db.Uuid
+  access_level     String           @default("read")
+  created_at       DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime         @default(now()) @db.Timestamptz(6)
+  knowledge_spaces knowledge_spaces @relation(fields: [space_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users            users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([space_id, user_id])
+  @@index([space_id], map: "idx_knowledge_space_permissions_space_id")
+  @@index([user_id], map: "idx_knowledge_space_permissions_user_id")
+}
+
+model knowledge_spaces {
+  id                                               String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id                                       String?                       @db.Uuid
+  name                                             String
+  description                                      String?
+  visibility                                       String                        @default("restricted")
+  created_by_user_id                               String?                       @db.Uuid
+  updated_by_user_id                               String?                       @db.Uuid
+  created_at                                       DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at                                       DateTime                      @default(now()) @db.Timestamptz(6)
+  chat_conversations                               chat_conversations[]
+  knowledge_space_libraries                        knowledge_space_libraries[]
+  knowledge_space_permissions                      knowledge_space_permissions[]
+  companies                                        companies?                    @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_knowledge_spaces_created_by_user_idTousers users?                        @relation("knowledge_spaces_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  users_knowledge_spaces_updated_by_user_idTousers users?                        @relation("knowledge_spaces_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+
+  @@index([company_id], map: "idx_knowledge_spaces_company_id")
+  @@index([visibility], map: "idx_knowledge_spaces_visibility")
+}
+
+model knowledge_graph {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  knowledge_source_id String            @unique @db.Uuid
+  applications        Json?
+  products            Json?
+  regulations         Json?
+  dependencies        Json?
+  related_documents   Json?
+  created_at          DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime          @default(now()) @db.Timestamptz(6)
+  knowledge_sources   knowledge_sources @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([knowledge_source_id], map: "idx_knowledge_graph_source")
+}
+
+model knowledge_correction_requests {
+  id                                                              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  knowledge_source_id                                             String?              @db.Uuid
+  library_id                                                      String?              @db.Uuid
+  requested_by_user_id                                            String               @db.Uuid
+  assigned_to_user_id                                             String?              @db.Uuid
+  source_type                                                     String               @default("manual")
+  status                                                          String               @default("open")
+  priority                                                        String               @default("normal")
+  title                                                           String
+  description                                                     String
+  suggested_change                                                String?
+  resolution_note                                                 String?
+  created_at                                                      DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at                                                      DateTime             @default(now()) @db.Timestamptz(6)
+  resolved_at                                                     DateTime?            @db.Timestamptz(6)
+  users_knowledge_correction_requests_assigned_to_user_idTousers  users?               @relation("knowledge_correction_requests_assigned_to_user_idTousers", fields: [assigned_to_user_id], references: [id], onUpdate: NoAction)
+  knowledge_sources                                               knowledge_sources?   @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_libraries                                             knowledge_libraries? @relation(fields: [library_id], references: [id], onUpdate: NoAction)
+  users_knowledge_correction_requests_requested_by_user_idTousers users                @relation("knowledge_correction_requests_requested_by_user_idTousers", fields: [requested_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([assigned_to_user_id], map: "idx_knowledge_correction_requests_assigned_to")
+  @@index([requested_by_user_id], map: "idx_knowledge_correction_requests_requested_by")
+  @@index([knowledge_source_id], map: "idx_knowledge_correction_requests_source")
+  @@index([status], map: "idx_knowledge_correction_requests_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model knowledge_share_links {
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  library_id          String?              @db.Uuid
+  knowledge_source_id String?              @db.Uuid
+  created_by_user_id  String               @db.Uuid
+  token               String               @unique
+  access_level        String               @default("read")
+  expires_at          DateTime?            @db.Timestamptz(6)
+  disabled_at         DateTime?            @db.Timestamptz(6)
+  created_at          DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime             @default(now()) @db.Timestamptz(6)
+  users               users                @relation(fields: [created_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_sources   knowledge_sources?   @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_libraries knowledge_libraries? @relation(fields: [library_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([knowledge_source_id], map: "idx_knowledge_share_links_knowledge_source_id")
+  @@index([library_id], map: "idx_knowledge_share_links_library_id")
+}
+
+model knowledge_team_members {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  team_id         String          @db.Uuid
+  user_id         String          @db.Uuid
+  role            String          @default("member")
+  created_at      DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime        @default(now()) @db.Timestamptz(6)
+  knowledge_teams knowledge_teams @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([team_id, user_id], map: "knowledge_team_members_unique")
+  @@index([team_id], map: "idx_knowledge_team_members_team_id")
+  @@index([user_id], map: "idx_knowledge_team_members_user_id")
+}
+
+model knowledge_teams {
+  id                                 String                               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id                      String                               @db.Uuid
+  company_id                         String?                              @db.Uuid
+  name                               String
+  description                        String?
+  visibility                         String                               @default("private")
+  created_at                         DateTime                             @default(now()) @db.Timestamptz(6)
+  updated_at                         DateTime                             @default(now()) @db.Timestamptz(6)
+  knowledge_library_team_permissions knowledge_library_team_permissions[]
+  knowledge_team_members             knowledge_team_members[]
+  companies                          companies?                           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                              users                                @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([company_id], map: "idx_knowledge_teams_company_id")
+  @@index([owner_user_id], map: "idx_knowledge_teams_owner_user_id")
+}
+
+model knowledge_library_team_permissions {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  library_id          String              @db.Uuid
+  team_id             String              @db.Uuid
+  access_level        String              @default("read")
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime            @default(now()) @db.Timestamptz(6)
+  knowledge_libraries knowledge_libraries @relation(fields: [library_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_teams     knowledge_teams     @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([library_id, team_id], map: "knowledge_library_team_permissions_unique")
+  @@index([library_id], map: "idx_knowledge_library_team_permissions_library_id")
+  @@index([team_id], map: "idx_knowledge_library_team_permissions_team_id")
+}
+
+model knowledge_import_files {
+  id                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  import_id                   String                        @db.Uuid
+  file_name                   String
+  relative_path               String
+  mime_type                   String?
+  file_size                   Int                           @default(0)
+  storage_path                String?
+  status                      String                        @default("uploaded")
+  extracted_text              String                        @default("")
+  error_message               String?
+  created_at                  DateTime                      @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime                      @default(now()) @db.Timestamptz(6)
+  processing_order            Int                           @default(0)
+  processing_status           String                        @default("pending")
+  processing_step             String?
+  started_at                  DateTime?                     @db.Timestamptz(6)
+  completed_at                DateTime?                     @db.Timestamptz(6)
+  knowledge_imports           knowledge_imports             @relation(fields: [import_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organization_entity_sources organization_entity_sources[]
+
+  @@index([import_id], map: "idx_knowledge_import_files_import_id")
+  @@index([status], map: "idx_knowledge_import_files_status")
+}
+
+model knowledge_imports {
+  id                               String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  library_id                       String                             @db.Uuid
+  owner_user_id                    String                             @db.Uuid
+  company_id                       String?                            @db.Uuid
+  status                           String                             @default("uploaded")
+  upload_type                      String
+  original_name                    String?
+  total_files                      Int                                @default(0)
+  total_size                       Int                                @default(0)
+  proposal_json                    Json?
+  error_message                    String?
+  created_at                       DateTime                           @default(now()) @db.Timestamptz(6)
+  updated_at                       DateTime                           @default(now()) @db.Timestamptz(6)
+  execution_log_json               Json?
+  completed_at                     DateTime?                          @db.Timestamptz(6)
+  processing_status                String                             @default("pending")
+  completed_files                  Int                                @default(0)
+  failed_files                     Int                                @default(0)
+  current_file_id                  String?                            @db.Uuid
+  processing_started_at            DateTime?                          @db.Timestamptz(6)
+  processing_completed_at          DateTime?                          @db.Timestamptz(6)
+  knowledge_import_files           knowledge_import_files[]
+  companies                        companies?                         @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_libraries              knowledge_libraries                @relation(fields: [library_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                            users                              @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organization_knowledge_proposals organization_knowledge_proposals[]
+
+  @@index([company_id], map: "idx_knowledge_imports_company_id")
+  @@index([created_at(sort: Desc)], map: "idx_knowledge_imports_created_at")
+  @@index([library_id], map: "idx_knowledge_imports_library_id")
+  @@index([owner_user_id], map: "idx_knowledge_imports_owner_user_id")
+  @@index([status], map: "idx_knowledge_imports_status")
+}
+
+model knowledge_activity {
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id          String?              @db.Uuid
+  user_id             String               @db.Uuid
+  library_id          String?              @db.Uuid
+  action              String
+  entity_type         String?
+  entity_id           String?              @db.Uuid
+  title               String
+  description         String?
+  metadata            Json                 @default("{}")
+  created_at          DateTime             @default(now()) @db.Timestamptz(6)
+  companies           companies?           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_libraries knowledge_libraries? @relation(fields: [library_id], references: [id], onUpdate: NoAction)
+  users               users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([action], map: "idx_knowledge_activity_action")
+  @@index([company_id, created_at(sort: Desc)], map: "idx_knowledge_activity_company_created_at")
+  @@index([company_id], map: "idx_knowledge_activity_company_id")
+  @@index([created_at(sort: Desc)], map: "idx_knowledge_activity_created_at")
+  @@index([library_id, created_at(sort: Desc)], map: "idx_knowledge_activity_library_created_at")
+  @@index([library_id], map: "idx_knowledge_activity_library_id")
+  @@index([user_id], map: "idx_knowledge_activity_user_id")
+}
+
+model knowledge_events {
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id          String?              @db.Uuid
+  user_id             String               @db.Uuid
+  library_id          String?              @db.Uuid
+  action              String
+  title               String
+  description         String?
+  metadata            Json                 @default("{}")
+  created_at          DateTime             @default(now()) @db.Timestamptz(6)
+  companies           companies?           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_libraries knowledge_libraries? @relation(fields: [library_id], references: [id], onUpdate: NoAction)
+  users               users                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([action], map: "idx_knowledge_events_action")
+  @@index([company_id, created_at(sort: Desc)], map: "idx_knowledge_events_company_created")
+  @@index([library_id, created_at(sort: Desc)], map: "idx_knowledge_events_library_created")
+  @@index([user_id, created_at(sort: Desc)], map: "idx_knowledge_events_user_created")
+}
+
+model organizations {
+  id                               String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parent_id                        String?                            @db.Uuid
+  name                             String
+  slug                             String                             @unique
+  description                      String?
+  organization_type                String                             @default("company")
+  is_independent_tenant            Boolean                            @default(true)
+  status                           String                             @default("active")
+  metadata                         Json                               @default("{}")
+  settings                         Json                               @default("{}")
+  organization_profile             Json                               @default("{}")
+  internal_structure               Json                               @default("{}")
+  knowledge_profile                Json                               @default("{}")
+  public_context                   Json                               @default("{}")
+  knowledge_model_version          Int                                @default(1)
+  knowledge_model_status           String                             @default("empty")
+  last_knowledge_update_at         DateTime?                          @db.Timestamptz(6)
+  created_at                       DateTime                           @default(now()) @db.Timestamptz(6)
+  updated_at                       DateTime                           @default(now()) @db.Timestamptz(6)
+  organization_entities            organization_entities[]
+  organization_entity_relations    organization_entity_relations[]
+  organization_entity_sources      organization_entity_sources[]
+  organization_entity_versions     organization_entity_versions[]
+  organization_knowledge_conflicts organization_knowledge_conflicts[]
+  organization_knowledge_links     organization_knowledge_links[]
+  organization_knowledge_proposals organization_knowledge_proposals[]
+  organization_knowledge_snapshots organization_knowledge_snapshots[]
+  organization_members             organization_members[]
+  organization_positions           organization_positions[]
+  organization_public_sources      organization_public_sources[]
+  organizations                    organizations?                     @relation("organizationsToorganizations", fields: [parent_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  other_organizations              organizations[]                    @relation("organizationsToorganizations")
+
+  @@index([is_independent_tenant], map: "idx_organizations_independent_tenant")
+  @@index([parent_id], map: "idx_organizations_parent_id")
+  @@index([status], map: "idx_organizations_status")
+  @@index([organization_type], map: "idx_organizations_type")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_entities {
+  id                                                                                                String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                                                                   String                             @db.Uuid
+  canonical_name                                                                                    String
+  normalized_name                                                                                   String
+  entity_type                                                                                       String
+  description                                                                                       String?
+  status                                                                                            String                             @default("proposed")
+  confidence                                                                                        Float?
+  attributes                                                                                        Json                               @default("{}")
+  public_enrichment                                                                                 Json                               @default("{}")
+  origin                                                                                            String                             @default("internal_document")
+  created_at                                                                                        DateTime                           @default(now()) @db.Timestamptz(6)
+  updated_at                                                                                        DateTime                           @default(now()) @db.Timestamptz(6)
+  organizations                                                                                     organizations                      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organization_entity_aliases                                                                       organization_entity_aliases[]
+  organization_entity_relations_organization_entity_relations_from_entity_idToorganization_entities organization_entity_relations[]    @relation("organization_entity_relations_from_entity_idToorganization_entities")
+  organization_entity_relations_organization_entity_relations_to_entity_idToorganization_entities   organization_entity_relations[]    @relation("organization_entity_relations_to_entity_idToorganization_entities")
+  organization_entity_sources                                                                       organization_entity_sources[]
+  organization_entity_versions                                                                      organization_entity_versions[]
+  organization_knowledge_conflicts                                                                  organization_knowledge_conflicts[]
+  organization_knowledge_links                                                                      organization_knowledge_links[]
+  organization_member_assignments                                                                   organization_member_assignments[]
+  organization_positions                                                                            organization_positions[]
+  organization_public_sources                                                                       organization_public_sources[]
+
+  @@index([organization_id, normalized_name], map: "idx_organization_entities_normalized_name")
+  @@index([organization_id], map: "idx_organization_entities_organization_id")
+  @@index([origin], map: "idx_organization_entities_origin")
+  @@index([organization_id, status], map: "idx_organization_entities_status")
+  @@index([organization_id, entity_type], map: "idx_organization_entities_type")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_entity_aliases {
+  id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entity_id             String                @db.Uuid
+  alias                 String
+  normalized_alias      String
+  confidence            Float?
+  origin                String                @default("internal_document")
+  status                String                @default("proposed")
+  metadata              Json                  @default("{}")
+  created_at            DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime              @default(now()) @db.Timestamptz(6)
+  organization_entities organization_entities @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([entity_id, normalized_alias], map: "organization_entity_aliases_unique")
+  @@index([entity_id], map: "idx_organization_entity_aliases_entity_id")
+  @@index([normalized_alias], map: "idx_organization_entity_aliases_normalized")
+  @@index([status], map: "idx_organization_entity_aliases_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_entity_relations {
+  id                                                                                        String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                                                           String                             @db.Uuid
+  from_entity_id                                                                            String                             @db.Uuid
+  to_entity_id                                                                              String                             @db.Uuid
+  relation_type                                                                             String
+  description                                                                               String?
+  status                                                                                    String                             @default("proposed")
+  confidence                                                                                Float?
+  origin                                                                                    String                             @default("internal_document")
+  evidence                                                                                  Json                               @default("[]")
+  metadata                                                                                  Json                               @default("{}")
+  created_at                                                                                DateTime                           @default(now()) @db.Timestamptz(6)
+  updated_at                                                                                DateTime                           @default(now()) @db.Timestamptz(6)
+  organization_entities_organization_entity_relations_from_entity_idToorganization_entities organization_entities              @relation("organization_entity_relations_from_entity_idToorganization_entities", fields: [from_entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organizations                                                                             organizations                      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organization_entities_organization_entity_relations_to_entity_idToorganization_entities   organization_entities              @relation("organization_entity_relations_to_entity_idToorganization_entities", fields: [to_entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organization_knowledge_conflicts                                                          organization_knowledge_conflicts[]
+
+  @@unique([from_entity_id, to_entity_id, relation_type], map: "organization_entity_relations_unique")
+  @@index([from_entity_id], map: "idx_organization_entity_relations_from")
+  @@index([organization_id], map: "idx_organization_entity_relations_organization")
+  @@index([organization_id, status], map: "idx_organization_entity_relations_status")
+  @@index([to_entity_id], map: "idx_organization_entity_relations_to")
+  @@index([organization_id, relation_type], map: "idx_organization_entity_relations_type")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_knowledge_links {
+  id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id       String                @db.Uuid
+  entity_id             String                @db.Uuid
+  knowledge_source_id   String                @db.Uuid
+  relation_type         String                @default("mentioned_in")
+  confidence            Float?
+  evidence              Json                  @default("[]")
+  status                String                @default("proposed")
+  origin                String                @default("internal_document")
+  metadata              Json                  @default("{}")
+  created_at            DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime              @default(now()) @db.Timestamptz(6)
+  organization_entities organization_entities @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_sources     knowledge_sources     @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organizations         organizations         @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([entity_id, knowledge_source_id, relation_type], map: "organization_knowledge_links_unique")
+  @@index([entity_id], map: "idx_organization_knowledge_links_entity")
+  @@index([organization_id], map: "idx_organization_knowledge_links_organization")
+  @@index([organization_id, relation_type], map: "idx_organization_knowledge_links_relation")
+  @@index([knowledge_source_id], map: "idx_organization_knowledge_links_source")
+  @@index([organization_id, status], map: "idx_organization_knowledge_links_status")
+}
+
+model organization_knowledge_proposals {
+  id                                                                String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                                   String                             @db.Uuid
+  proposal_type                                                     String
+  status                                                            String                             @default("pending")
+  source_knowledge_id                                               String?                            @db.Uuid
+  source_import_id                                                  String?                            @db.Uuid
+  proposal_json                                                     Json                               @default("{}")
+  model                                                             String?
+  prompt_version                                                    String?
+  created_by_user_id                                                String?                            @db.Uuid
+  reviewed_by_user_id                                               String?                            @db.Uuid
+  reviewed_at                                                       DateTime?                          @db.Timestamptz(6)
+  error_message                                                     String?
+  created_at                                                        DateTime                           @default(now()) @db.Timestamptz(6)
+  updated_at                                                        DateTime                           @default(now()) @db.Timestamptz(6)
+  organization_entity_sources                                       organization_entity_sources[]
+  organization_entity_versions                                      organization_entity_versions[]
+  organization_knowledge_conflicts                                  organization_knowledge_conflicts[]
+  users_organization_knowledge_proposals_created_by_user_idTousers  users?                             @relation("organization_knowledge_proposals_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  organizations                                                     organizations                      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_organization_knowledge_proposals_reviewed_by_user_idTousers users?                             @relation("organization_knowledge_proposals_reviewed_by_user_idTousers", fields: [reviewed_by_user_id], references: [id], onUpdate: NoAction)
+  knowledge_imports                                                 knowledge_imports?                 @relation(fields: [source_import_id], references: [id], onUpdate: NoAction)
+  knowledge_sources                                                 knowledge_sources?                 @relation(fields: [source_knowledge_id], references: [id], onUpdate: NoAction)
+
+  @@index([organization_id, created_at(sort: Desc)], map: "idx_organization_knowledge_proposals_created_at")
+  @@index([source_import_id], map: "idx_organization_knowledge_proposals_import")
+  @@index([organization_id], map: "idx_organization_knowledge_proposals_organization")
+  @@index([source_knowledge_id], map: "idx_organization_knowledge_proposals_source")
+  @@index([organization_id, status], map: "idx_organization_knowledge_proposals_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_knowledge_snapshots {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id      String        @db.Uuid
+  version              Int
+  status               String        @default("generated")
+  organization_profile Json          @default("{}")
+  internal_structure   Json          @default("{}")
+  knowledge_profile    Json          @default("{}")
+  public_context       Json          @default("{}")
+  knowledge_model      Json          @default("{}")
+  model                String?
+  prompt_version       String?
+  generated_by_user_id String?       @db.Uuid
+  error_message        String?
+  created_at           DateTime      @default(now()) @db.Timestamptz(6)
+  users                users?        @relation(fields: [generated_by_user_id], references: [id], onUpdate: NoAction)
+  organizations        organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organization_id, version], map: "organization_knowledge_snapshots_unique")
+  @@index([organization_id, created_at(sort: Desc)], map: "idx_organization_knowledge_snapshots_created_at")
+  @@index([organization_id], map: "idx_organization_knowledge_snapshots_organization")
+  @@index([organization_id, status], map: "idx_organization_knowledge_snapshots_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_member_assignments {
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_member_id String                  @db.Uuid
+  entity_id              String                  @db.Uuid
+  assignment_type        String                  @default("member")
+  is_primary             Boolean                 @default(false)
+  job_title              String?
+  status                 String                  @default("active")
+  confidence             Float?
+  origin                 String                  @default("manual")
+  metadata               Json                    @default("{}")
+  valid_from             DateTime?               @db.Timestamptz(6)
+  valid_until            DateTime?               @db.Timestamptz(6)
+  created_at             DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime                @default(now()) @db.Timestamptz(6)
+  position_id            String?                 @db.Uuid
+  organization_entities  organization_entities   @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organization_members   organization_members    @relation(fields: [organization_member_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "organization_member_assignments_member_id_fkey")
+  organization_positions organization_positions? @relation(fields: [position_id], references: [id], onUpdate: NoAction)
+
+  @@unique([organization_member_id, entity_id, assignment_type], map: "organization_member_assignments_unique")
+  @@index([entity_id], map: "idx_organization_member_assignments_entity")
+  @@index([organization_member_id], map: "idx_organization_member_assignments_member")
+  @@index([organization_member_id, is_primary], map: "idx_organization_member_assignments_primary")
+  @@index([status], map: "idx_organization_member_assignments_status")
+  @@index([position_id], map: "idx_organization_member_assignments_position")
+}
+
+model organization_members {
+  id                              String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                 String                            @db.Uuid
+  user_id                         String                            @unique(map: "organization_members_one_primary_per_user", where: raw("((is_primary = true) AND (status = 'active'::text))")) @db.Uuid
+  role                            String                            @default("member")
+  status                          String                            @default("active")
+  job_title                       String?
+  metadata                        Json                              @default("{}")
+  joined_at                       DateTime                          @default(now()) @db.Timestamptz(6)
+  created_at                      DateTime                          @default(now()) @db.Timestamptz(6)
+  updated_at                      DateTime                          @default(now()) @db.Timestamptz(6)
+  is_primary                      Boolean                           @default(false)
+  organization_member_assignments organization_member_assignments[]
+  organizations                   organizations                     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                           users                             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organization_id, user_id], map: "organization_members_unique")
+  @@index([organization_id, status], map: "idx_organization_members_org_status")
+  @@index([organization_id], map: "idx_organization_members_organization_id")
+  @@index([status], map: "idx_organization_members_status")
+  @@index([user_id], map: "idx_organization_members_user_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_public_sources {
+  id                          String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id             String                        @db.Uuid
+  entity_id                   String?                       @db.Uuid
+  source_url                  String
+  source_domain               String?
+  source_title                String?
+  extracted_context           String?
+  context_type                String?
+  confidence                  Float?
+  accessed_at                 DateTime                      @default(now()) @db.Timestamptz(6)
+  created_at                  DateTime                      @default(now()) @db.Timestamptz(6)
+  metadata                    Json                          @default("{}")
+  organization_entity_sources organization_entity_sources[]
+  organization_entities       organization_entities?        @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organizations               organizations                 @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([source_domain], map: "idx_organization_public_sources_domain")
+  @@index([entity_id], map: "idx_organization_public_sources_entity")
+  @@index([organization_id], map: "idx_organization_public_sources_organization")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_entity_sources {
+  id                               String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                  String                            @db.Uuid
+  entity_id                        String                            @db.Uuid
+  source_type                      String
+  knowledge_source_id              String?                           @db.Uuid
+  knowledge_import_file_id         String?                           @db.Uuid
+  public_source_id                 String?                           @db.Uuid
+  source_user_id                   String?                           @db.Uuid
+  proposal_id                      String?                           @db.Uuid
+  external_reference               String?
+  evidence                         Json                              @default("[]")
+  confidence                       Float?
+  source_role                      String                            @default("mentioned")
+  metadata                         Json                              @default("{}")
+  first_seen_at                    DateTime                          @default(now()) @db.Timestamptz(6)
+  last_seen_at                     DateTime                          @default(now()) @db.Timestamptz(6)
+  created_at                       DateTime                          @default(now()) @db.Timestamptz(6)
+  updated_at                       DateTime                          @default(now()) @db.Timestamptz(6)
+  organization_entities            organization_entities             @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  knowledge_import_files           knowledge_import_files?           @relation(fields: [knowledge_import_file_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "organization_entity_sources_import_file_id_fkey")
+  knowledge_sources                knowledge_sources?                @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organizations                    organizations                     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organization_knowledge_proposals organization_knowledge_proposals? @relation(fields: [proposal_id], references: [id], onUpdate: NoAction)
+  organization_public_sources      organization_public_sources?      @relation(fields: [public_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                            users?                            @relation(fields: [source_user_id], references: [id], onUpdate: NoAction)
+
+  @@unique([entity_id, knowledge_import_file_id, source_role], map: "organization_entity_sources_import_file_unique", where: raw("(knowledge_import_file_id IS NOT NULL)"))
+  @@unique([entity_id, knowledge_source_id, source_role], map: "organization_entity_sources_knowledge_unique", where: raw("(knowledge_source_id IS NOT NULL)"))
+  @@unique([entity_id, public_source_id, source_role], map: "organization_entity_sources_public_unique", where: raw("(public_source_id IS NOT NULL)"))
+  @@index([entity_id], map: "idx_organization_entity_sources_entity")
+  @@index([knowledge_import_file_id], map: "idx_organization_entity_sources_import_file")
+  @@index([knowledge_source_id], map: "idx_organization_entity_sources_knowledge")
+  @@index([organization_id], map: "idx_organization_entity_sources_organization")
+  @@index([proposal_id], map: "idx_organization_entity_sources_proposal")
+  @@index([public_source_id], map: "idx_organization_entity_sources_public")
+  @@index([organization_id, source_type], map: "idx_organization_entity_sources_type")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_entity_versions {
+  id                               String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                  String                            @db.Uuid
+  entity_id                        String                            @db.Uuid
+  version                          Int
+  change_type                      String                            @default("updated")
+  entity_snapshot                  Json
+  changes                          Json                              @default("{}")
+  change_summary                   String?
+  proposal_id                      String?                           @db.Uuid
+  created_by_user_id               String?                           @db.Uuid
+  created_at                       DateTime                          @default(now()) @db.Timestamptz(6)
+  users                            users?                            @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  organization_entities            organization_entities             @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organizations                    organizations                     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organization_knowledge_proposals organization_knowledge_proposals? @relation(fields: [proposal_id], references: [id], onUpdate: NoAction)
+
+  @@unique([entity_id, version], map: "organization_entity_versions_unique")
+  @@index([organization_id, created_at(sort: Desc)], map: "idx_organization_entity_versions_created_at")
+  @@index([entity_id, version(sort: Desc)], map: "idx_organization_entity_versions_entity")
+  @@index([organization_id], map: "idx_organization_entity_versions_organization")
+  @@index([proposal_id], map: "idx_organization_entity_versions_proposal")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_knowledge_conflicts {
+  id                               String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                  String                            @db.Uuid
+  entity_id                        String?                           @db.Uuid
+  relation_id                      String?                           @db.Uuid
+  conflict_type                    String
+  field_path                       String?
+  title                            String
+  description                      String?
+  left_value                       Json?
+  right_value                      Json?
+  left_evidence                    Json                              @default("[]")
+  right_evidence                   Json                              @default("[]")
+  severity                         String                            @default("medium")
+  confidence                       Float?
+  status                           String                            @default("open")
+  resolution_type                  String?
+  resolution_value                 Json?
+  resolution_note                  String?
+  detected_by                      String                            @default("ai")
+  proposal_id                      String?                           @db.Uuid
+  resolved_by_user_id              String?                           @db.Uuid
+  resolved_at                      DateTime?                         @db.Timestamptz(6)
+  metadata                         Json                              @default("{}")
+  created_at                       DateTime                          @default(now()) @db.Timestamptz(6)
+  updated_at                       DateTime                          @default(now()) @db.Timestamptz(6)
+  organization_entities            organization_entities?            @relation(fields: [entity_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organizations                    organizations                     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  organization_knowledge_proposals organization_knowledge_proposals? @relation(fields: [proposal_id], references: [id], onUpdate: NoAction)
+  organization_entity_relations    organization_entity_relations?    @relation(fields: [relation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                            users?                            @relation(fields: [resolved_by_user_id], references: [id], onUpdate: NoAction)
+
+  @@index([organization_id, created_at(sort: Desc)], map: "idx_organization_knowledge_conflicts_created_at")
+  @@index([entity_id], map: "idx_organization_knowledge_conflicts_entity")
+  @@index([organization_id], map: "idx_organization_knowledge_conflicts_organization")
+  @@index([relation_id], map: "idx_organization_knowledge_conflicts_relation")
+  @@index([organization_id, severity], map: "idx_organization_knowledge_conflicts_severity")
+  @@index([organization_id, status], map: "idx_organization_knowledge_conflicts_status")
+  @@index([organization_id, conflict_type], map: "idx_organization_knowledge_conflicts_type")
+}
+
+model organization_positions {
+  id                              String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                 String                            @db.Uuid
+  entity_id                       String?                           @db.Uuid
+  title                           String
+  normalized_title                String
+  description                     String?
+  position_type                   String?
+  status                          String                            @default("active")
+  metadata                        Json                              @default("{}")
+  created_at                      DateTime                          @default(now()) @db.Timestamptz(6)
+  updated_at                      DateTime                          @default(now()) @db.Timestamptz(6)
+  organization_member_assignments organization_member_assignments[]
+  organization_entities           organization_entities?            @relation(fields: [entity_id], references: [id], onUpdate: NoAction)
+  organizations                   organizations                     @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organization_id, entity_id, normalized_title], map: "organization_positions_entity_title_unique", where: raw("(entity_id IS NOT NULL)"))
+  @@unique([organization_id, normalized_title], map: "organization_positions_global_title_unique", where: raw("(entity_id IS NULL)"))
+  @@index([entity_id], map: "idx_organization_positions_entity")
+  @@index([organization_id], map: "idx_organization_positions_organization")
+  @@index([organization_id, status], map: "idx_organization_positions_status")
+  @@index([organization_id, normalized_title], map: "idx_organization_positions_title")
+}
+
+model knowledge_file_analysis {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  knowledge_file_id String          @unique @db.Uuid
+  status            String          @default("pending")
+  analysis_json     Json?
+  schema_version    Int             @default(1)
+  extractor         String?
+  model             String?
+  prompt_version    String          @default("knowledge-file-analysis-v1")
+  file_hash         String?
+  tokens_input      Int?
+  tokens_output     Int?
+  processing_ms     Int?
+  error_message     String?
+  created_at        DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime        @default(now()) @db.Timestamptz(6)
+  knowledge_files   knowledge_files @relation(fields: [knowledge_file_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_knowledge_file_analysis_file")
+
+  @@index([status], map: "idx_knowledge_file_analysis_status")
+}
+
+model notifications {
+  id          String    @id(map: "knowledge_notifications_pkey") @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String    @db.Uuid
+  type        String
+  title       String
+  body        String?
+  entity_type String?
+  entity_id   String?   @db.Uuid
+  read_at     DateTime? @db.Timestamptz(6)
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  href        String?
+  metadata    Json      @default("{}")
+  users       users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "knowledge_notifications_user_id_fkey")
+
+  @@index([read_at], map: "idx_notifications_read_at")
+  @@index([user_id, created_at(sort: Desc)], map: "idx_notifications_user_created_at")
+  @@index([user_id], map: "idx_notifications_user_id")
+  @@index([user_id, read_at], map: "idx_notifications_user_read_at")
+}

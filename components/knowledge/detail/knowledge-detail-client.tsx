@@ -15,9 +15,6 @@ export function KnowledgeDetailClient({
   teams,
   libraryShares,
 }: KnowledgeDetailClientProps) {
-  const uploadFormId =
-    "knowledge-document-upload-form";
-
   const {
     activeTab,
     setActiveTab,
@@ -71,11 +68,6 @@ export function KnowledgeDetailClient({
             documents.hasDocuments
           }
           hasAnalysis={analysis.hasAnalysis}
-          showUpload={documents.showUpload}
-          uploadFormId={uploadFormId}
-          uploadableFileCount={
-            documents.uploadableFileCount
-          }
           articleNeedsRebuild={
             documents.articleNeedsRebuild
           }
@@ -85,21 +77,9 @@ export function KnowledgeDetailClient({
           rebuildError={
             documents.rebuildError
           }
-          getContributionPercentage={
-            analysis.getContributionPercentage
-          }
           onUpload={documents.openUpload}
-          onShowUpload={
-            documents.showUploadForm
-          }
-          onCloseUpload={
-            documents.closeUpload
-          }
           onRebuild={
             documents.handleRebuild
-          }
-          onUploadableFileCountChange={
-            documents.setUploadableFileCount
           }
         />
       </KnowledgeDetailLayout>

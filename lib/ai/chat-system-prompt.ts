@@ -1,4 +1,4 @@
-// lib/ai/assistant/assistant-personality.ts
+// lib/ai/chat-system-prompt.ts
 type KnowledgeSpaceForPrompt = {
   id: string;
   name: string;
@@ -45,6 +45,11 @@ Reglas principales:
 - Cuando uses conocimiento documental, cita las fuentes originales disponibles.
 - Si la pregunta es ambigua, pide una aclaración breve.
 - Prioriza respuestas útiles y directas.
+- Cuando una respuesta contenga expresiones matemáticas, utiliza notación LaTeX.
+- Para fórmulas matemáticas dentro de una frase, usa $...$.
+- Para ecuaciones importantes o fórmulas independientes, usa $$...$$.
+- Conserva fielmente símbolos, variables, subíndices, superíndices, fracciones, matrices, integrales, sumatorios y letras griegas.
+- No sustituyas una fórmula matemática por una descripción textual si puedes representarla correctamente en LaTeX.
 
 Knowledge Spaces accesibles para este usuario:
 ${availableSpaces || "No hay Knowledge Spaces accesibles."}

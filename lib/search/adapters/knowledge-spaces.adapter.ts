@@ -16,16 +16,33 @@ export const spacesSearchProvider: SearchProvider = {
   label: "📁 Carpetas",
 
   async search(context: SearchContext): Promise<SearchResult[]> {
-    const { query, limit = 10 } = context;
+    const { query, userId, limit = 10 } = context;
 
     try {
       const spaces = await prisma.knowledge_spaces.findMany({
         where: {
-          visibility: "restricted",
-          name: {
-            contains: query,
-            mode: "insensitive",
-          },
+          AND: [
+            {
+              OR: [
+                {
+                  created_by_user_id: userId,
+                },
+                {
+                  knowledge_space_permissions: {
+                    some: {
+                      user_id: userId,
+                    },
+                  },
+                },
+              ],
+            },
+            {
+              name: {
+                contains: query,
+                mode: "insensitive",
+              },
+            },
+          ],
         },
         select: {
           id: true,

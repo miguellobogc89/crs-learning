@@ -1,47 +1,54 @@
 // lib/repositories/knowledge.repository.ts
 import { prisma } from "@/lib/prisma";
+import {
+  knowledgeSourceReadWhere,
+} from "@/lib/knowledge/access-control";
+
+const knowledgeSourceDetailInclude = {
+  knowledge_files: {
+    orderBy: {
+      created_at: "desc",
+    },
+    include: {
+      users: {
+        select: {
+          id: true,
+          name: true,
+          image: true,
+        },
+      },
+      knowledge_file_analysis: true,
+    },
+  },
+  knowledge_analysis: true,
+  knowledge_graph: true,
+  users_knowledge_sources_updated_by_user_idTousers: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+    },
+  },
+  knowledge_libraries: {
+    include: {
+      knowledge_library_permissions: true,
+      knowledge_library_team_permissions: {
+        include: {
+          knowledge_teams: {
+            include: {
+              knowledge_team_members: true,
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
 
 export async function getVisibleKnowledgeSources(userId: string) {
   return prisma.knowledge_sources.findMany({
-    where: {
-      OR: [
-        {
-          owner_user_id: userId,
-        },
-        {
-          visibility: "public",
-        },
-        {
-          knowledge_libraries: {
-            owner_user_id: userId,
-          },
-        },
-        {
-          knowledge_libraries: {
-            knowledge_library_permissions: {
-              some: {
-                user_id: userId,
-              },
-            },
-          },
-        },
-        {
-          knowledge_libraries: {
-            knowledge_library_team_permissions: {
-              some: {
-                knowledge_teams: {
-                  knowledge_team_members: {
-                    some: {
-                      user_id: userId,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      ],
-    },
+    where: knowledgeSourceReadWhere(userId),
     include: {
       knowledge_libraries: {
         include: {
@@ -62,48 +69,20 @@ export async function getVisibleKnowledgeSources(userId: string) {
 export async function getKnowledgeSourceById(id: string) {
   return prisma.knowledge_sources.findUnique({
     where: { id },
-    include: {
-knowledge_files: {
-  orderBy: {
-    created_at: "desc",
-  },
-  include: {
-    users: {
-      select: {
-        id: true,
-        name: true,
-        image: true,
-      },
-    },
-  },
-},
-      knowledge_analysis: true,
-      knowledge_graph: true,
+    include: knowledgeSourceDetailInclude,
+  });
+}
 
-      users_knowledge_sources_updated_by_user_idTousers: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          image: true,
-        },
-      },
-
-      knowledge_libraries: {
-        include: {
-          knowledge_library_permissions: true,
-          knowledge_library_team_permissions: {
-            include: {
-              knowledge_teams: {
-                include: {
-                  knowledge_team_members: true,
-                },
-              },
-            },
-          },
-        },
-      },
+export async function getAccessibleKnowledgeSourceById(
+  id: string,
+  userId: string,
+) {
+  return prisma.knowledge_sources.findFirst({
+    where: {
+      id,
+      ...knowledgeSourceReadWhere(userId),
     },
+    include: knowledgeSourceDetailInclude,
   });
 }
 
@@ -176,32 +155,22 @@ export async function createKnowledgeFile(data: {
 }
 
 export async function getKnowledgeEvents(userId: string) {
-return prisma.knowledge_events.findMany({
-  where: {
-    OR: [
-      { user_id: userId },
-      {
-        company_id: (
-          await prisma.users.findUnique({
-            where: { id: userId },
-            select: { company_id: true },
-          })
-        )?.company_id ?? undefined,
-      },
-    ],
-  },
-  include: {
-    users: {
-      select: {
-        id: true,
-        name: true,
-        image: true,
+  return prisma.knowledge_events.findMany({
+    where: {
+      user_id: userId,
+    },
+    include: {
+      users: {
+        select: {
+          id: true,
+          name: true,
+          image: true,
+        },
       },
     },
-  },
-  orderBy: {
-    created_at: "desc",
-  },
-  take: 100,
-});
+    orderBy: {
+      created_at: "desc",
+    },
+    take: 100,
+  });
 }

@@ -8,7 +8,7 @@ import {
   getLibraryPath,
 } from "@/components/knowledge/sidebar/tree-utils";
 import { listKnowledgeLibraries } from "@/lib/services/knowledge-library.service";
-import { findKnowledgeSource } from "@/lib/services/knowledge.service";
+import { findAccessibleKnowledgeSource } from "@/lib/services/knowledge.service";
 import {
   listTeams,
   listTeamSharesForLibrary,
@@ -28,35 +28,12 @@ export default async function KnowledgeDetailPage({
   const { id } = await params;
 
 const [knowledge, libraries, teams] = await Promise.all([
-  findKnowledgeSource(id),
+  findAccessibleKnowledgeSource(id, session.user.id),
   listKnowledgeLibraries(session.user.id),
   listTeams(session.user.id),
 ]);
 
   if (!knowledge) {
-    notFound();
-  }
-
-  const hasDirectPermission =
-    knowledge.knowledge_libraries?.knowledge_library_permissions?.some(
-      (permission) => permission.user_id === session.user.id,
-    ) ?? false;
-
-  const hasTeamPermission =
-    knowledge.knowledge_libraries?.knowledge_library_team_permissions?.some(
-      (permission) =>
-        permission.knowledge_teams.knowledge_team_members.some(
-          (member) => member.user_id === session.user.id,
-        ),
-    ) ?? false;
-
-  const canView =
-    knowledge.owner_user_id === session.user.id ||
-    knowledge.visibility === "public" ||
-    hasDirectPermission ||
-    hasTeamPermission;
-
-  if (!canView) {
     notFound();
   }
 

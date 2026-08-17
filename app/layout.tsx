@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 
 import "./globals.css";
+import "katex/dist/katex.min.css";
 
 const inter = Inter({
   variable: "--font-sans",

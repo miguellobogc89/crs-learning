@@ -1,6 +1,7 @@
 // lib/services/knowledge-library.service.ts
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { knowledgeLibraryReadWhere } from "@/lib/knowledge/access-control";
 
 const libraryInclude = {
   knowledge_library_team_permissions: {
@@ -28,33 +29,7 @@ const libraryInclude = {
 
 export async function listKnowledgeLibraries(userId: string) {
   let libraries = await prisma.knowledge_libraries.findMany({
-    where: {
-      OR: [
-        {
-          owner_user_id: userId,
-        },
-        {
-          knowledge_library_permissions: {
-            some: {
-              user_id: userId,
-            },
-          },
-        },
-        {
-          knowledge_library_team_permissions: {
-            some: {
-              knowledge_teams: {
-                knowledge_team_members: {
-                  some: {
-                    user_id: userId,
-                  },
-                },
-              },
-            },
-          },
-        },
-      ],
-    },
+    where: knowledgeLibraryReadWhere(userId),
     include: libraryInclude,
     orderBy: [
       {
@@ -134,33 +109,7 @@ async function getKnowledgeStatus(
   userId: string,
 ) {
   return client.knowledge_libraries.findMany({
-    where: {
-      OR: [
-        {
-          owner_user_id: userId,
-        },
-        {
-          knowledge_library_permissions: {
-            some: {
-              user_id: userId,
-            },
-          },
-        },
-        {
-          knowledge_library_team_permissions: {
-            some: {
-              knowledge_teams: {
-                knowledge_team_members: {
-                  some: {
-                    user_id: userId,
-                  },
-                },
-              },
-            },
-          },
-        },
-      ],
-    },
+    where: knowledgeLibraryReadWhere(userId),
     select: {
       id: true,
       name: true,

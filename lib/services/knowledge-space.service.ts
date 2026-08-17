@@ -2,29 +2,9 @@
 import { prisma } from "@/lib/prisma";
 
 export async function listAccessibleKnowledgeSpaces(userId: string) {
-  const user = await prisma.users.findUnique({
-    where: {
-      id: userId,
-    },
-    select: {
-      company_id: true,
-    },
-  });
-
   return prisma.knowledge_spaces.findMany({
     where: {
       OR: [
-        {
-          visibility: "public_global",
-        },
-        ...(user?.company_id
-          ? [
-              {
-                visibility: "company_public",
-                company_id: user.company_id,
-              },
-            ]
-          : []),
         {
           knowledge_space_permissions: {
             some: {

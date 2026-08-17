@@ -7,6 +7,7 @@
  * Los documentos físicos pertenecen a knowledge_files.
  */
 import { prisma } from "@/lib/prisma";
+import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import type {
   SearchContext,
   SearchProvider,
@@ -19,24 +20,28 @@ export const knowledgeSourcesSearchProvider: SearchProvider = {
   label: "💡 Artículos",
 
   async search(context: SearchContext): Promise<SearchResult[]> {
-    const { query, limit = 10 } = context;
+    const { query, userId, limit = 10 } = context;
 
     try {
       const sources = await prisma.knowledge_sources.findMany({
         where: {
-          visibility: "public",
-          OR: [
+          AND: [
+            knowledgeSourceReadWhere(userId),
             {
-              title: {
-                contains: query,
-                mode: "insensitive",
-              },
-            },
-            {
-              description: {
-                contains: query,
-                mode: "insensitive",
-              },
+              OR: [
+                {
+                  title: {
+                    contains: query,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  description: {
+                    contains: query,
+                    mode: "insensitive",
+                  },
+                },
+              ],
             },
           ],
         },

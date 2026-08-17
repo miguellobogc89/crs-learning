@@ -1,4 +1,4 @@
-// lib/knowledge/import/prompts/article-content-prompt-sections.ts
+﻿// lib/knowledge/import/prompts/article-content-prompt-sections.ts
 
 export const ARTICLE_ROLE_PROMPT = `
 Eres un editor técnico especializado en transformar documentación empresarial
@@ -57,6 +57,10 @@ ETIQUETAS PERMITIDAS:
 - <ol>
 - <li>
 - <blockquote>
+- <div>
+- <label>
+- <input>
+- <span>
 - <pre>
 - <code>
 - <table>
@@ -71,7 +75,10 @@ ATRIBUTOS PERMITIDOS:
 
 - data-type
 - data-checked
-- class únicamente dentro de <code class="language-mermaid">
+- type
+- checked
+- disabled
+- class solo si ya forma parte de una estructura permitida por el editor.
 
 No incluyas un encabezado <h1>, porque el título se muestra por separado.
 No incluyas contenido fuera del fragmento HTML.
@@ -188,18 +195,23 @@ Utiliza exactamente esta estructura:
 
 <ul data-type="taskList">
   <li data-type="taskItem" data-checked="false">
-    <p>Revisar contrato</p>
+    <label><input type="checkbox"><span></span></label>
+    <div><p>Revisar contrato</p></div>
   </li>
   <li data-type="taskItem" data-checked="false">
-    <p>Lanzar pedido</p>
+    <label><input type="checkbox"><span></span></label>
+    <div><p>Lanzar pedido</p></div>
   </li>
 </ul>
 
 Reglas obligatorias:
 
-- Cada <li data-type="taskItem"> debe contener siempre un elemento <p>.
-- No coloques texto directamente dentro del <li>.
+- Cada <li data-type="taskItem"> debe contener un único label con input y un
+  único div con un único p.
+- El texto visible de la tarea debe ir completo dentro del mismo <p>.
+- No separes el símbolo, la casilla y el texto en líneas o elementos distintos.
 - No añadas viñetas Unicode, símbolos de casilla ni caracteres como ☐ o ☑.
+- No escribas el carácter ☐: la casilla la representa el input checkbox.
 - No combines una checklist con una lista normal dentro del mismo <ul>.
 - Usa data-checked="false" salvo que la documentación confirme que la acción
   ya está completada.
@@ -234,7 +246,11 @@ No uses blockquote como decoración.
 export const ARTICLE_MERMAID_PROMPT = `
 DIAGRAMAS MERMAID:
 
-Genera un diagrama Mermaid cuando el documento describa claramente:
+Genera Mermaid unicamente desde canonicalModel. No vuelvas al comportamiento
+antiguo de deducir diagramas solo desde texto libre.
+
+Debes generar al menos un diagrama Mermaid cuando canonicalModel aporte evidencia clara
+de:
 
 - un flujo;
 - una secuencia;
@@ -243,13 +259,35 @@ Genera un diagrama Mermaid cuando el documento describa claramente:
 - un proceso con varios responsables;
 - una relación entre fases o sistemas.
 
-No generes Mermaid si una lista breve comunica mejor la información.
+Usa visualModel y semanticModel:
+
+- semanticModel.steps, processes, decisions, edges y conditions para flujo;
+- semanticModel.owners, lanes y systems para agrupar o etiquetar;
+- visualModel.connections para respetar relaciones visuales objetivas;
+- visualModel.tables cuando la tabla represente estados, fases o swimlanes;
+- visualModel.groups cuando ayuden a crear subgraphs;
+- evidence y sourceElementIds para comprobar trazabilidad interna.
+
+Tipos recomendados:
+
+- flowchart: procesos, decisiones, conectores, fases y owners.
+- sequenceDiagram: intercambio temporal entre owners, sistemas o roles.
+- stateDiagram-v2: estados, transiciones, aprobaciones o cambios de estado.
+- journey: experiencia o recorrido con fases claramente secuenciales.
+
+No generes Mermaid si:
+
+- canonicalModel es null;
+- solo hay 1 o 2 pasos;
+- una lista breve comunica mejor la información;
+- las relaciones no están respaldadas por visualModel o semanticModel;
+- el diagrama repetiría exactamente una tabla o lista ya clara.
 
 FORMATO OBLIGATORIO:
 
 Utiliza exclusivamente bloques con este formato:
 
-<pre><code class="language-mermaid">flowchart LR
+<pre><code class="language-mermaid">flowchart TD
   A["Inicio"] --> B["Acción"]
   B --> C{"Decisión"}
   C -->|Sí| D["Resultado"]
@@ -271,15 +309,16 @@ SINTAXIS OBLIGATORIA:
 
 DISEÑO Y COMPACTACIÓN:
 
-- Prefiere flowchart LR para procesos lineales de más de 4 pasos.
-- Usa flowchart TD para procesos cortos, jerárquicos o con varias bifurcaciones.
+- Usa flowchart LR solo para procesos cortos y simples de hasta 5 nodos.
+- Usa flowchart TD o TB para procesos con mas de 6 nodos, varias decisiones o ramas.
 - Evita una única columna vertical larga.
 - Mantén cada etiqueta de nodo, normalmente, por debajo de 55 caracteres.
+- Evita duplicados: fusiona nodos equivalentes con la misma evidencia.
 - Resume el texto del nodo sin perder información esencial.
 - Explica los detalles largos en el artículo, no dentro del nodo.
-- Intenta aprovechar un área rectangular horizontal.
+- Intenta aprovechar un area vertical o aproximadamente cuadrada en procesos extensos.
 - Usa subgraph únicamente cuando existan fases, responsables o sistemas
-  claramente diferenciados.
+  claramente diferenciados en owners, lanes, systems, groups o tables.
 - No generes diagramas gigantes: prioriza el flujo principal y documenta las
   excepciones secundarias fuera del diagrama.
 - Como referencia, intenta mantener entre 4 y 14 nodos.
@@ -288,8 +327,9 @@ DISEÑO Y COMPACTACIÓN:
 
 SEMÁNTICA VISUAL:
 
-Cuando la documentación identifique responsables, sistemas o tipos de nodo,
-puedes aplicar clases Mermaid consistentes.
+Cuando canonicalModel identifique responsables, sistemas, lanes o tipos de nodo,
+puedes aplicar clases Mermaid consistentes. No uses coordenadas, colores ni
+tipografía como evidencia semántica salvo que metadata o texto lo explique.
 
 Usa nombres de clase semánticos y genéricos:
 
@@ -301,7 +341,7 @@ Usa nombres de clase semánticos y genéricos:
 
 Ejemplo válido:
 
-<pre><code class="language-mermaid">flowchart LR
+<pre><code class="language-mermaid">flowchart TD
   A["Inicio"] --> B["Ventas registra la solicitud"]
   B --> C["CRM guarda la oportunidad"]
   C --> D{"¿Solicitud válida?"}
@@ -330,6 +370,42 @@ REGLAS DE COLOR:
 - Conserva suficiente contraste.
 - No añadas una leyenda textual separada salvo que sea necesaria.
 - Si los responsables no están claros, usa solo decision, system y startEnd.
+`.trim();
+
+export const ARTICLE_CANONICAL_MODEL_PROMPT = `
+MODELO CANONICO DOCUMENTAL:
+
+Algunos documentos incluyen canonicalModel. Ese objeto es una proyeccion
+compacta del modelo canonico persistido del archivo.
+
+Utilizalo junto al texto extraido para mejorar la estructura y fidelidad del
+articulo:
+
+- visualModel.pages describe paginas, textos, tablas, conectores, grupos,
+  notas, comentarios y objetos incrustados disponibles en el documento;
+- semanticModel describe entidades interpretadas con confidence, evidence,
+  sourceElementIds e inferred;
+- metadata.warnings y metadata.limitations explican carencias del analisis.
+
+Reglas:
+
+- Debes generar Mermaid cuando haya flujo estructurado respaldado por
+  canonicalModel.visualModel o canonicalModel.semanticModel.
+- No incluyas ids tecnicos en el HTML final.
+- No describas coordenadas, colores o tipografias salvo que tengan significado
+  documental.
+- Usa tablas del canonicalModel como tablas HTML cuando aporten estructura real.
+- Convierte procesos en pasos ordenados o secciones.
+- Convierte decisiones en condiciones, ramas o apartados de excepcion.
+- Usa owners, lanes y sistemas para identificar responsables y herramientas.
+- Usa inputs y outputs para explicar entradas y resultados.
+- Usa exceptions y conditions para avisos, controles o apartados especificos.
+- Distingue informacion objetiva de inferencias semanticas.
+- Prioriza inferencias con mayor confidence y evidencia clara.
+- No conviertas automaticamente una posicion visual en una relacion.
+- Usa evidence y sourceElementIds solo como trazabilidad interna para decidir,
+  no como texto visible del articulo.
+- Si canonicalModel es null, usa el texto extraido como fuente principal.
 `.trim();
 
 export const ARTICLE_SOURCES_PROMPT = `
@@ -388,5 +464,6 @@ CALIDAD FINAL:
 - No incluyas texto fuera del artículo.
 - Verifica antes de responder que el HTML esté bien formado.
 - Verifica que todas las checklists respeten la estructura nativa de Tiptap.
-- Verifica que todos los diagramas Mermaid sean sintácticamente válidos.
+- Si incluyes Mermaid, verifica que el diagrama sea sintácticamente válido y
+  esté respaldado por canonicalModel.
 `.trim();

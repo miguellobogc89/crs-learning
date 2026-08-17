@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import { getKnowledgeImportModel } from "@/lib/ai/openai";
+import { getValidCanonicalAnalysis } from "@/lib/knowledge/file-analysis/article-content-projection";
 import { analyzeKnowledgeDocuments } from "@/lib/knowledge/import/analyze-documents";
 import { generateArticleContent } from "@/lib/knowledge/import/generate-article-content";
 import { truncateDocument } from "@/lib/knowledge/import/truncate-document";
@@ -161,7 +162,20 @@ export async function POST(
           select: {
             id: true,
             file_name: true,
+            file_type: true,
+            file_size: true,
             extracted_text: true,
+            knowledge_file_analysis: {
+              select: {
+                status: true,
+                schema_version: true,
+                analysis_json: true,
+                extractor: true,
+                model: true,
+                prompt_version: true,
+                updated_at: true,
+              },
+            },
           },
         },
       },
@@ -178,8 +192,26 @@ export async function POST(
     article.knowledge_files.filter(
       (file) => file.extracted_text.trim().length > 0,
     );
+  const filesForContent =
+    article.knowledge_files.filter((file) => {
+      if (file.extracted_text.trim().length > 0) {
+        return true;
+      }
 
-  if (filesWithText.length === 0) {
+      if (
+        file.knowledge_file_analysis?.status !== "ready"
+      ) {
+        return false;
+      }
+
+      return (
+        getValidCanonicalAnalysis(
+          file.knowledge_file_analysis.analysis_json,
+        ) !== null
+      );
+    });
+
+  if (filesForContent.length === 0) {
     return NextResponse.json(
       {
         error:
@@ -231,22 +263,42 @@ export async function POST(
           title: article.title,
           description: article.description ?? "",
           existingContent: article.content,
-          files: filesWithText.map((file) => ({
-            id: file.id,
-            fileName: file.file_name,
-            extractedText: file.extracted_text,
-          })),
+          files: filesForContent.map((file) => {
+            const fileAnalysis =
+              file.knowledge_file_analysis;
+            const canonicalAnalysis =
+              fileAnalysis?.status === "ready"
+                ? getValidCanonicalAnalysis(
+                    fileAnalysis.analysis_json,
+                  )
+                : null;
+
+            return {
+              id: file.id,
+              fileName: file.file_name,
+              fileType: file.file_type,
+              fileSize: file.file_size,
+              extractedText: file.extracted_text,
+              canonicalAnalysis,
+              analysisSchemaVersion:
+                fileAnalysis?.schema_version ?? null,
+              analysisStatus:
+                fileAnalysis?.status ?? null,
+            };
+          }),
         }),
-        analyzeKnowledgeDocuments(
-          filesWithText.map((file) => ({
-            id: file.id,
-            name: file.file_name,
-            relativePath: file.file_name,
-            text: truncateDocument(
-              file.extracted_text,
-            ),
-          })),
-        ),
+        filesWithText.length > 0
+          ? analyzeKnowledgeDocuments(
+              filesWithText.map((file) => ({
+                id: file.id,
+                name: file.file_name,
+                relativePath: file.file_name,
+                text: truncateDocument(
+                  file.extracted_text,
+                ),
+              })),
+            )
+          : Promise.resolve([]),
       ]);
 
     const organizationAreas =

@@ -5,6 +5,7 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import { knowledgeLibraryWriteWhere } from "@/lib/knowledge/access-control";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -173,18 +174,7 @@ export async function POST(request: Request) {
     const library = await prisma.knowledge_libraries.findFirst({
       where: {
         id: libraryId,
-        OR: [
-          {
-            owner_user_id: user.id,
-          },
-          ...(user.company_id
-            ? [
-                {
-                  company_id: user.company_id,
-                },
-              ]
-            : []),
-        ],
+        ...knowledgeLibraryWriteWhere(user.id),
       },
       select: {
         id: true,

@@ -34,6 +34,22 @@ export type KnowledgeFile = {
   file_size: number | null;
   status: string;
   created_at: Date | string;
+  knowledge_file_analysis: {
+    id: string;
+    status: string;
+    analysis_json: unknown;
+    schema_version: number;
+    extractor: string | null;
+    model: string | null;
+    prompt_version: string;
+    file_hash: string | null;
+    tokens_input: number | null;
+    tokens_output: number | null;
+    processing_ms: number | null;
+    error_message: string | null;
+    created_at: Date | string;
+    updated_at: Date | string;
+  } | null;
 
   users: {
     id: string;

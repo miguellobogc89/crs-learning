@@ -8,6 +8,7 @@ import {
   GraduationCap,
   Grid2X2,
   Home,
+  Inbox,
   Library,
   Settings,
   UserRound,
@@ -20,6 +21,7 @@ const navItems = [
   { href: "/knowledge", icon: Library, label: "Conocimiento" },
   { href: "/courses", icon: GraduationCap, label: "Cursos" },
   { href: "/achievements", icon: Grid2X2, label: "Logros" },
+  { href: "/notifications", icon: Inbox, label: "Bandeja" },
   { href: "/my-space", icon: UserRound, label: "Mi espacio" },
 ];
 

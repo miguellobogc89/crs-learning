@@ -3,10 +3,12 @@
 
 import type { ReactNode } from "react";
 import Image from "next/image";
-import { Bell, UserCircle } from "lucide-react";
+import { UserCircle } from "lucide-react";
 
 import { logout } from "@/app/actions/auth";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { GlobalSearch } from "@/components/search/global-search";
+import type { NotificationItem } from "@/lib/services/notification.service";
 
 type Props = {
   user: {
@@ -15,11 +17,15 @@ type Props = {
     image?: string | null;
   };
   breadcrumb: ReactNode;
+  notifications: NotificationItem[];
+  unreadNotificationCount: number;
 };
 
 export function AppTopbar({
   user,
   breadcrumb,
+  notifications,
+  unreadNotificationCount,
 }: Props) {
   const userLabel = user.name ?? user.email ?? "Usuario";
 
@@ -36,13 +42,10 @@ export function AppTopbar({
       </div>
 
       <div className="ml-4 flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-surface hover:text-foreground"
-          aria-label="Notificaciones"
-        >
-          <Bell className="h-4 w-4" />
-        </button>
+        <NotificationBell
+          initialNotifications={notifications}
+          initialUnreadCount={unreadNotificationCount}
+        />
 
         <form action={logout}>
           <button

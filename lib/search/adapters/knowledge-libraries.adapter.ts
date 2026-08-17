@@ -4,6 +4,7 @@
  * Proveedor de búsqueda para bibliotecas de Knowledge.
  */
 import { prisma } from "@/lib/prisma";
+import { knowledgeLibraryReadWhere } from "@/lib/knowledge/access-control";
 import type {
   SearchContext,
   SearchProvider,
@@ -16,16 +17,20 @@ export const librariesSearchProvider: SearchProvider = {
   label: "📚 Bibliotecas",
 
   async search(context: SearchContext): Promise<SearchResult[]> {
-    const { query, limit = 10 } = context;
+    const { query, userId, limit = 10 } = context;
 
     try {
       const libraries = await prisma.knowledge_libraries.findMany({
         where: {
-          visibility: "restricted",
-          name: {
-            contains: query,
-            mode: "insensitive",
-          },
+          AND: [
+            knowledgeLibraryReadWhere(userId),
+            {
+              name: {
+                contains: query,
+                mode: "insensitive",
+              },
+            },
+          ],
         },
         select: {
           id: true,

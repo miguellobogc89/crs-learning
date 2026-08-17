@@ -13,11 +13,12 @@ export const usersSearchProvider: SearchProvider = {
   label: "👤 Usuarios",
 
   async search(context: SearchContext): Promise<SearchResult[]> {
-    const { query, limit = 10 } = context;
+    const { query, userId, limit = 10 } = context;
 
     try {
       const users = await prisma.users.findMany({
         where: {
+          id: userId,
           OR: [
             {
               name: {

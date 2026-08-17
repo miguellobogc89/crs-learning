@@ -17,26 +17,12 @@ type KnowledgeDetailContentProps = {
   hasDocuments: boolean;
   hasAnalysis: boolean;
 
-  showUpload: boolean;
-  uploadFormId: string;
-  uploadableFileCount: number;
-
   articleNeedsRebuild: boolean;
   isRebuilding: boolean;
   rebuildError: string | null;
 
-  getContributionPercentage: (
-    knowledgeFileId: string,
-  ) => number | null;
-
   onUpload: () => void;
-  onShowUpload: () => void;
-  onCloseUpload: () => void;
   onRebuild: () => void;
-
-  onUploadableFileCountChange: (
-    count: number,
-  ) => void;
 };
 
 export function KnowledgeDetailContent({
@@ -44,18 +30,11 @@ export function KnowledgeDetailContent({
   knowledge,
   hasDocuments,
   hasAnalysis,
-  showUpload,
-  uploadFormId,
-  uploadableFileCount,
   articleNeedsRebuild,
   isRebuilding,
   rebuildError,
-  getContributionPercentage,
   onUpload,
-  onShowUpload,
-  onCloseUpload,
   onRebuild,
-  onUploadableFileCountChange,
 }: KnowledgeDetailContentProps) {
   switch (activeTab) {
     case "general":
@@ -125,27 +104,14 @@ export function KnowledgeDetailContent({
       return (
         <KnowledgeDetailViewContainer>
           <KnowledgeDocumentsView
-            knowledgeId={knowledge.id}
-            uploadFormId={uploadFormId}
             files={knowledge.knowledge_files}
-            showUpload={showUpload}
-            uploadableFileCount={
-              uploadableFileCount
-            }
+            analysis={knowledge.knowledge_analysis}
             articleNeedsRebuild={
               articleNeedsRebuild
             }
             isRebuilding={isRebuilding}
             rebuildError={rebuildError}
-            getContributionPercentage={
-              getContributionPercentage
-            }
-            onShowUpload={onShowUpload}
-            onCloseUpload={onCloseUpload}
             onRebuild={onRebuild}
-            onUploadableFileCountChange={
-              onUploadableFileCountChange
-            }
           />
         </KnowledgeDetailViewContainer>
       );
