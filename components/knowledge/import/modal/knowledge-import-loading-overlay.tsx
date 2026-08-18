@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-import-loading-overlay.tsx
+// components/knowledge/import/modal/knowledge-import-loading-overlay.tsx
 import { Loader2, Sparkles } from "lucide-react";
 
 type Props = {

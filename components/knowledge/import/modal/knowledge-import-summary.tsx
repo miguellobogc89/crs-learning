@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-import-summary.tsx
+// components/knowledge/import/modal/knowledge-import-summary.tsx
 
 type Props = {
   documentCount: number;

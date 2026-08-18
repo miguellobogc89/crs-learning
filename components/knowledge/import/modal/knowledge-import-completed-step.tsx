@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-import-completed-step.tsx
+// components/knowledge/import/modal/knowledge-import-completed-step.tsx
 
 "use client";
 

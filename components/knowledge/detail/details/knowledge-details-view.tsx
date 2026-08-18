@@ -2,9 +2,9 @@
 
 import {
   BrainCircuit,
+  FileSearch,
   Loader2,
   RefreshCw,
-  Upload,
 } from "lucide-react";
 
 import { KnowledgeAnalysisPanel } from "@/components/knowledge/knowledge-analysis-panel";
@@ -31,7 +31,6 @@ type Props = {
   files: KnowledgeFile[];
 
   onRebuild: () => void;
-  onUpload: () => void;
 };
 
 export function KnowledgeDetailsView({
@@ -46,28 +45,22 @@ export function KnowledgeDetailsView({
   graph,
   files,
   onRebuild,
-  onUpload,
 }: Props) {
   return (
     <>
       {!hasDocuments ? (
         <KnowledgeEmptyState
-          icon={<Upload className="h-5 w-5" />}
-          title="Añade documentación para generar el análisis"
-          description="La IA necesita al menos un documento fuente para identificar conceptos, relaciones, aplicaciones y dependencias."
-          actionLabel="Añadir documentación"
-          actionIcon={
-            <Upload className="mr-2 h-4 w-4" />
-          }
-          onAction={onUpload}
+          icon={<FileSearch className="h-5 w-5" />}
+          title="Anade documentacion para generar el analisis"
+          description="La incorporacion de nuevas evidencias se realiza desde el flujo de Importacion de Conocimiento de la carpeta."
         />
       ) : !hasAnalysis ? (
         <KnowledgeEmptyState
           icon={
             <BrainCircuit className="h-5 w-5" />
           }
-          title="Todavía no hay un análisis disponible"
-          description="Procesa la documentación del artículo para generar su análisis detallado y extraer la estructura de conocimiento."
+          title="Todavia no hay un analisis disponible"
+          description="Procesa la documentacion del articulo para generar su analisis detallado y extraer la estructura de conocimiento."
           actionLabel={
             isRebuilding
               ? "Actualizando..."

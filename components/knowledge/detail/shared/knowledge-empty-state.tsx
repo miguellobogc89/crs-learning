@@ -6,9 +6,9 @@ type KnowledgeEmptyStateProps = {
   icon: React.ReactNode;
   title: string;
   description: string;
-  actionLabel: string;
+  actionLabel?: string;
   actionIcon?: React.ReactNode;
-  onAction: () => void;
+  onAction?: () => void;
   disabled?: boolean;
 };
 
@@ -35,15 +35,17 @@ export function KnowledgeEmptyState({
         {description}
       </p>
 
-      <Button
-        type="button"
-        disabled={disabled}
-        onClick={onAction}
-        className="mt-6 h-10 bg-black px-5 text-white hover:bg-black/85"
-      >
-        {actionIcon}
-        {actionLabel}
-      </Button>
+      {actionLabel && onAction ? (
+        <Button
+          type="button"
+          disabled={disabled}
+          onClick={onAction}
+          className="mt-6 h-10 bg-black px-5 text-white hover:bg-black/85"
+        >
+          {actionIcon}
+          {actionLabel}
+        </Button>
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/index.ts
+// components/knowledge/import/modal/index.ts
 
 export { KnowledgeImportModal } from "./knowledge-import-modal";
 export { KnowledgeImportModalHeader } from "./knowledge-import-modal-header";

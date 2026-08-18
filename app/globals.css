@@ -492,20 +492,6 @@
   }
 }
 
-@keyframes intake-progress {
-  0% {
-    transform: translateX(-110%);
-  }
-
-  50% {
-    transform: translateX(100%);
-  }
-
-  100% {
-    transform: translateX(310%);
-  }
-}
-
 [data-knowledge-print-root] {
   display: none;
 }

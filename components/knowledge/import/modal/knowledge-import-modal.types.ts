@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-import-modal.types.ts
+// components/knowledge/import/modal/knowledge-import-modal.types.ts
 
 import type { ConfirmKnowledgeImportResult } from "@/lib/knowledge/import/types";
 

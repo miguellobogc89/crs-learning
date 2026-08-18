@@ -1,4 +1,4 @@
-    // components/knowledge/intake/modal/knowledge-import-analysis-progress.tsx
+    // components/knowledge/import/modal/knowledge-import-analysis-progress.tsx
 
 import {
   CheckCircle2,

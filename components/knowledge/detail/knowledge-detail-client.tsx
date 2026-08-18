@@ -77,7 +77,6 @@ export function KnowledgeDetailClient({
           rebuildError={
             documents.rebuildError
           }
-          onUpload={documents.openUpload}
           onRebuild={
             documents.handleRebuild
           }

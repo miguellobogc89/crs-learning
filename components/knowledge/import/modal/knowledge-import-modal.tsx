@@ -68,7 +68,7 @@ export function KnowledgeImportModal({
   const startedSelectionKeyRef =
     useRef<string | null>(null);
 
-  const intake = useKnowledgeImport({
+  const knowledgeImport = useKnowledgeImport({
     context: context!,
     onCompleted,
   });
@@ -81,11 +81,11 @@ export function KnowledgeImportModal({
   const isWaitingToStart =
     open &&
     Boolean(selectedFiles?.length) &&
-    intake.step === "upload" &&
-    intake.files.length === 0;
+    knowledgeImport.step === "upload" &&
+    knowledgeImport.files.length === 0;
 
   const duplicateFileCount =
-    intake.fileProgress.filter(
+    knowledgeImport.fileProgress.filter(
       (file) =>
         file.status === "duplicate",
     ).length;
@@ -99,27 +99,27 @@ export function KnowledgeImportModal({
 
     if (
       !selectedFiles?.length ||
-      intake.files.length > 0
+      knowledgeImport.files.length > 0
     ) {
       return;
     }
 
-    intake.handleFilesChange(
+    knowledgeImport.handleFilesChange(
       selectedFiles,
     );
   }, [
     open,
     selectedFiles,
-    intake.files.length,
-    intake.handleFilesChange,
+    knowledgeImport.files.length,
+    knowledgeImport.handleFilesChange,
   ]);
 
   useEffect(() => {
     if (
       !open ||
       !selectionKey ||
-      intake.step !== "upload" ||
-      intake.files.length === 0 ||
+      knowledgeImport.step !== "upload" ||
+      knowledgeImport.files.length === 0 ||
       startedSelectionKeyRef.current ===
         selectionKey
     ) {
@@ -129,13 +129,13 @@ export function KnowledgeImportModal({
     startedSelectionKeyRef.current =
       selectionKey;
 
-    void intake.analyzeDocuments();
+    void knowledgeImport.analyzeDocuments();
   }, [
     open,
     selectionKey,
-    intake.step,
-    intake.files.length,
-    intake.analyzeDocuments,
+    knowledgeImport.step,
+    knowledgeImport.files.length,
+    knowledgeImport.analyzeDocuments,
   ]);
 
   if (!context) {
@@ -143,8 +143,8 @@ export function KnowledgeImportModal({
   }
 
   function requestClose() {
-    if (intake.step === "completed") {
-      intake.finishActiveImport();
+    if (knowledgeImport.step === "completed") {
+      knowledgeImport.finishActiveImport();
       startedSelectionKeyRef.current =
         null;
       onOpenChange(false);
@@ -152,14 +152,14 @@ export function KnowledgeImportModal({
     }
 
     if (
-      intake.hasUnsavedProgress
+      knowledgeImport.hasUnsavedProgress
     ) {
       setCloseGuardError(null);
       setCloseGuardOpen(true);
       return;
     }
 
-    intake.reset();
+    knowledgeImport.reset();
     startedSelectionKeyRef.current =
       null;
     onOpenChange(false);
@@ -187,7 +187,7 @@ export function KnowledgeImportModal({
     setCloseGuardError(null);
 
     const result =
-      await intake.cancelActiveImport();
+      await knowledgeImport.cancelActiveImport();
 
     if (!result.success) {
       setCloseGuardError(
@@ -233,7 +233,7 @@ export function KnowledgeImportModal({
             currentStep={
               isWaitingToStart
                 ? "analyzing"
-                : intake.step
+                : knowledgeImport.step
             }
           />
 
@@ -242,7 +242,7 @@ export function KnowledgeImportModal({
               <KnowledgeImportProcessingStep
                 phase="uploading"
                 files={
-                  intake.fileProgress
+                  knowledgeImport.fileProgress
                 }
                 summary={{
                   totalFiles:
@@ -262,73 +262,73 @@ export function KnowledgeImportModal({
             ) : null}
 
             {!isWaitingToStart &&
-            intake.step === "upload" ? (
+            knowledgeImport.step === "upload" ? (
               <KnowledgeImportUploadStep
-                files={intake.files}
+                files={knowledgeImport.files}
                 isAnalyzing={
-                  intake.isAnalyzing
+                  knowledgeImport.isAnalyzing
                 }
-                error={intake.error}
+                error={knowledgeImport.error}
                 onFilesChange={
-                  intake.handleFilesChange
+                  knowledgeImport.handleFilesChange
                 }
               />
             ) : null}
 
             {!isWaitingToStart &&
-            intake.step ===
+            knowledgeImport.step ===
               "analyzing" ? (
               <KnowledgeImportProcessingStep
                 phase={
-                  intake.processingPhase
+                  knowledgeImport.processingPhase
                 }
                 files={
-                  intake.fileProgress
+                  knowledgeImport.fileProgress
                 }
                 summary={{
-                  ...intake.progressSummary,
+                  ...knowledgeImport.progressSummary,
                   duplicateFiles:
                     duplicateFileCount,
                 }}
                 proposalProgress={
-                  intake.proposalProgress
+                  knowledgeImport.proposalProgress
                 }
               />
             ) : null}
 
-            {intake.step ===
+            {knowledgeImport.step ===
               "proposal" &&
-            intake.proposal ? (
-              intake.isConfirming ? (
+            knowledgeImport.proposal ? (
+              knowledgeImport.isConfirming ? (
                 <KnowledgeImportLoadingOverlay />
               ) : (
                 <KnowledgeImportProposalStep
                   proposal={
-                    intake.proposal
+                    knowledgeImport.proposal
                   }
                   isConfirming={
-                    intake.isConfirming
+                    knowledgeImport.isConfirming
                   }
-                  error={intake.error}
+                  error={knowledgeImport.error}
                   onBack={
-                    intake.goBackToUpload
+                    knowledgeImport.goBackToUpload
                   }
                   onConfirm={
-                    intake.confirmProposal
+                    knowledgeImport.confirmProposal
                   }
                 />
               )
             ) : null}
 
-            {intake.step ===
+            {knowledgeImport.step ===
               "completed" &&
-            intake.completionResult ? (
+            knowledgeImport.completionResult ? (
               <KnowledgeImportCompletedStep
                 result={
-                  intake.completionResult
+                  knowledgeImport.completionResult
                 }
                 onClose={() => {
-                  intake.finishActiveImport();
+                  knowledgeImport.finishActiveImport();
                   startedSelectionKeyRef.current =
                     null;
                   onOpenChange(false);
@@ -339,50 +339,50 @@ export function KnowledgeImportModal({
 
           {!isWaitingToStart ? (
             <KnowledgeImportModalFooter
-              step={intake.step}
+              step={knowledgeImport.step}
               fileCount={
-                intake.progressSummary
+                knowledgeImport.progressSummary
                   .totalFiles ||
-                intake.files.length
+                knowledgeImport.files.length
               }
               validFileCount={
-                intake.progressSummary
+                knowledgeImport.progressSummary
                   .completedFiles
               }
               duplicateFileCount={
                 duplicateFileCount
               }
               failedFileCount={
-                intake.progressSummary
+                knowledgeImport.progressSummary
                   .failedFiles
               }
               isAnalyzing={
-                intake.isAnalyzing
+                knowledgeImport.isAnalyzing
               }
               isConfirming={
-                intake.isConfirming
+                knowledgeImport.isConfirming
               }
               canContinue={
-                intake.canContinue
+                knowledgeImport.canContinue
               }
               canContinueInBackground={
-                intake.canContinueInBackground
+                knowledgeImport.canContinueInBackground
               }
               onCancel={
                 requestClose
               }
               onBack={
-                intake.goBackToUpload
+                knowledgeImport.goBackToUpload
               }
               onAnalyze={
-                intake.analyzeDocuments
+                knowledgeImport.analyzeDocuments
               }
               onContinueAnalysis={
-                intake.continueWithValidDocuments
+                knowledgeImport.continueWithValidDocuments
               }
               onContinueInBackground={() => {
                 const started =
-                  intake.continueInBackground();
+                  knowledgeImport.continueInBackground();
 
                 if (!started) {
                   return;
@@ -393,10 +393,10 @@ export function KnowledgeImportModal({
                 onOpenChange(false);
               }}
               onConfirm={
-                intake.confirmProposal
+                knowledgeImport.confirmProposal
               }
               onClose={() => {
-                intake.finishActiveImport();
+                knowledgeImport.finishActiveImport();
                 startedSelectionKeyRef.current =
                   null;
                 onOpenChange(false);

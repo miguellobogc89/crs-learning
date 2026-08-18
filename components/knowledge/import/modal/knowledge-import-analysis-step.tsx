@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-import-analysis-step.tsx
+// components/knowledge/import/modal/knowledge-import-analysis-step.tsx
 import { CheckCircle2, Circle, Loader2 } from "lucide-react";
 
 const analysisSteps = [

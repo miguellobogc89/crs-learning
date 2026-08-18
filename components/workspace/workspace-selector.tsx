@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronsUpDown, Plus, SquareStack } from "lucide-react";
+import { Check, ChevronDown, Plus, SquareStack } from "lucide-react";
 
 import {
   createWorkspaceAction,
@@ -37,19 +37,56 @@ export function WorkspaceSelector({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex h-8 max-w-[220px] items-center gap-2 rounded-md border border-border bg-background px-2 text-sm text-foreground hover:bg-surface"
+          className="
+            group/workspace relative
+            flex h-9 max-w-[240px] items-center gap-2
+            rounded-md border border-border
+            bg-background px-3
+            text-sm text-foreground
+            transition-colors
+            hover:bg-surface
+            focus:outline-none
+            focus-visible:outline-none
+            focus-visible:ring-0
+            focus-visible:ring-offset-0
+            data-[state=open]:outline-none
+            data-[state=open]:ring-0
+          "
           aria-label="Cambiar workspace"
         >
-          <SquareStack className="h-4 w-4 text-brand" />
+          <SquareStack className="h-4 w-4 shrink-0 text-brand" />
+
           <span className="min-w-0 truncate font-medium">
             {activeWorkspace.name}
           </span>
-          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+
+          <span
+            className="
+              pointer-events-none absolute left-1/2 top-full z-50 mt-2
+              -translate-x-1/2 whitespace-nowrap rounded-md
+              bg-black px-2.5 py-1.5
+              text-xs font-medium text-white
+              opacity-0
+              transition-opacity duration-150
+              group-hover/workspace:opacity-100
+            "
+          >
+            Espacio de trabajo
+          </span>
         </button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-72">
-        <DropdownMenuLabel>Workspace</DropdownMenuLabel>
+<DropdownMenuContent
+  align="start"
+  sideOffset={8}
+  alignOffset={12}
+  className="w-80 p-2"
+>
+<DropdownMenuLabel className="px-3 py-2 text-xs text-muted-foreground">
+  Workspaces
+</DropdownMenuLabel>
 
         {workspaces.map((workspace) => (
           <DropdownMenuItem
@@ -67,7 +104,7 @@ export function WorkspaceSelector({
                 router.refresh();
               });
             }}
-            className="justify-between"
+            className="min-h-10 justify-between rounded-md px-3 py-1"
           >
             <span className="truncate">{workspace.name}</span>
             {workspace.id === activeWorkspace.id ? (

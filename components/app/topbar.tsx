@@ -3,6 +3,7 @@
 
 import type { ReactNode } from "react";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { UserCircle } from "lucide-react";
 
 import { logout } from "@/app/actions/auth";
@@ -18,41 +19,65 @@ type Props = {
     email?: string | null;
     image?: string | null;
   };
-  breadcrumb: ReactNode;
+  breadcrumb?: ReactNode;
   notifications: NotificationItem[];
   unreadNotificationCount: number;
   activeWorkspace: AccessibleWorkspace;
   workspaces: AccessibleWorkspace[];
 };
 
+const sectionLabels = [
+  { path: "/dashboard", label: "Inicio" },
+  { path: "/knowledge", label: "Conocimiento" },
+  { path: "/courses", label: "Cursos" },
+  { path: "/achievements", label: "Logros" },
+  { path: "/notifications", label: "Bandeja" },
+  { path: "/my-space", label: "Mi espacio" },
+  { path: "/settings", label: "Configuración" },
+];
+
 export function AppTopbar({
   user,
-  breadcrumb,
   notifications,
   unreadNotificationCount,
   activeWorkspace,
   workspaces,
 }: Props) {
+  const pathname = usePathname();
   const userLabel = user.name ?? user.email ?? "Usuario";
 
+  let sectionLabel = "Inicio";
+
+  const currentSection = sectionLabels.find((section) =>
+    pathname.startsWith(section.path),
+  );
+
+  if (currentSection) {
+    sectionLabel = currentSection.label;
+  }
+
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border bg-white px-4">
-      <div className="min-w-0 flex-shrink">
-        {breadcrumb}
-      </div>
-
-      <div className="flex-1 min-w-0 flex justify-center px-4">
-        <div className="w-full max-w-2xl">
-          <GlobalSearch />
-        </div>
-      </div>
-
-      <div className="ml-4 flex shrink-0 items-center gap-2">
+    <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-white px-5">
+      <div className="flex shrink-0 items-center gap-3">
         <WorkspaceSelector
           activeWorkspace={activeWorkspace}
           workspaces={workspaces}
         />
 
+        <div className="h-5 w-px bg-border" />
+
+        <span className="text-sm font-medium text-foreground">
+          {sectionLabel}
+        </span>
+      </div>
+
+      <div className="flex min-w-0 flex-1 justify-center px-6">
+        <div className="w-full max-w-2xl">
+          <GlobalSearch />
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2">
         <NotificationBell
           initialNotifications={notifications}
           initialUnreadCount={unreadNotificationCount}
@@ -61,23 +86,20 @@ export function AppTopbar({
         <form action={logout}>
           <button
             type="submit"
-            className="flex h-8 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
+            aria-label="Cerrar sesión"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
           >
             {user.image ? (
               <Image
                 src={user.image}
                 alt={userLabel}
-                width={24}
-                height={24}
-                className="rounded-full"
+                width={28}
+                height={28}
+                className="h-7 w-7 rounded-full object-cover"
               />
             ) : (
-              <UserCircle className="h-5 w-5" />
+              <UserCircle className="h-6 w-6" />
             )}
-
-            <span className="max-w-[180px] truncate">
-              {userLabel}
-            </span>
           </button>
         </form>
       </div>

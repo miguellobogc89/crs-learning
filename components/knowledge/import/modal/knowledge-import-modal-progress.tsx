@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-import-modal-progress.tsx
+// components/knowledge/import/modal/knowledge-import-modal-progress.tsx
 "use client";
 
 import {

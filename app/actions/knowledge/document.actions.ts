@@ -1,127 +1,15 @@
 // app/actions/knowledge/document.actions.ts
 "use server";
 
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import path from "node:path";
 
 import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
 import { knowledgeSourceOwnerWhere } from "@/lib/knowledge/access-control";
-import { extractFileText } from "@/lib/knowledge/extract-file-text";
-import { isAcceptedKnowledgeFileType } from "@/lib/knowledge/file-types";
 import { prisma } from "@/lib/prisma";
-import {
-  addKnowledgeFile,
-} from "@/lib/services/knowledge.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
-
-export async function uploadKnowledgeFileAction(
-  formData: FormData,
-) {
-  const session = await auth();
-
-  if (!session?.user?.id) {
-    throw new Error("No autenticado");
-  }
-
-  const { activeWorkspace } = await getActiveWorkspaceContext(
-    session.user.id,
-  );
-
-  const knowledgeId = String(
-    formData.get("knowledgeId") ?? "",
-  ).trim();
-
-  const files = formData.getAll("files");
-
-  if (!knowledgeId || files.length === 0) {
-    return;
-  }
-
-  const knowledge = await prisma.knowledge_sources.findFirst({
-    where: {
-      id: knowledgeId,
-      ...knowledgeSourceOwnerWhere(
-        session.user.id,
-        activeWorkspace.id,
-      ),
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  if (!knowledge) {
-    throw new Error("Artículo no encontrado");
-  }
-
-  const uploadDirectory = path.join(
-    process.cwd(),
-    "public",
-    "uploads",
-    "knowledge",
-  );
-
-  await mkdir(uploadDirectory, {
-    recursive: true,
-  });
-
-  let uploadedFiles = 0;
-
-  for (const file of files) {
-    if (!(file instanceof File)) {
-      continue;
-    }
-
-    if (!isAcceptedKnowledgeFileType(file)) {
-      continue;
-    }
-
-    const extractedText = await extractFileText(file);
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    const safeFileName = file.name
-      .replaceAll(" ", "_")
-      .replace(/[^a-zA-Z0-9._-]/g, "");
-
-    const storedFileName = [
-      knowledgeId,
-      Date.now(),
-      crypto.randomUUID(),
-      safeFileName,
-    ].join("-");
-
-    const storagePath =
-      `/uploads/knowledge/${storedFileName}`;
-
-    await writeFile(
-      path.join(uploadDirectory, storedFileName),
-      buffer,
-    );
-
-    await addKnowledgeFile({
-      knowledgeSourceId: knowledgeId,
-      fileName: file.name,
-      fileType: file.type,
-      fileSize: file.size,
-      storagePath,
-      extractedText,
-    });
-
-    uploadedFiles += 1;
-  }
-
-  if (uploadedFiles === 0) {
-    return;
-  }
-
-  await markKnowledgeAsStale(knowledgeId);
-
-  revalidatePath("/knowledge");
-  revalidatePath(`/knowledge/${knowledgeId}`);
-}
 
 export async function deleteKnowledgeFileAction(
   knowledgeFileId: string,

@@ -1,4 +1,4 @@
-// components/knowledge/intake/knowledge-upload-trigger.tsx
+// components/knowledge/import/knowledge-upload-trigger.tsx
 "use client";
 
 import { useRef, useState } from "react";

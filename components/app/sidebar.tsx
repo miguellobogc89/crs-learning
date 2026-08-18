@@ -96,9 +96,9 @@ export function AppSidebar({
           <Image
             src="/logo/logo.png"
             alt="CRS Learning"
-            width={22}
-            height={22}
-            className="h-[22px] w-[22px] object-contain"
+width={26}
+height={26}
+className="h-[26px] w-[26px] object-contain"
             priority
           />
         </Link>

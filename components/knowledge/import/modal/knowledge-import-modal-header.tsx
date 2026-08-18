@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-import-modal-header.tsx
+// components/knowledge/import/modal/knowledge-import-modal-header.tsx
 
 import { FolderOpen, Library, Sparkles } from "lucide-react";
 import { DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";

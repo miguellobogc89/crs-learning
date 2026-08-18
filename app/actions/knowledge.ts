@@ -9,13 +9,10 @@ export {
 
 export {
   deleteKnowledgeFileAction,
-  uploadKnowledgeFileAction,
 } from "./knowledge/document.actions";
 
 export {
   createKnowledgeAction,
-  createKnowledgeFromFolderUploadAction,
-  createKnowledgeWithDocumentsAction,
   deleteKnowledgeAction,
   rebuildKnowledgeAction,
   updateKnowledgeAction,

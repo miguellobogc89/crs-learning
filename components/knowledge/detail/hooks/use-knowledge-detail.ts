@@ -26,7 +26,6 @@ export function useKnowledgeDetail({
 
   const documents = useKnowledgeDocuments({
     knowledge,
-    setActiveTab,
   });
 
   const analysis = useKnowledgeAnalysis({

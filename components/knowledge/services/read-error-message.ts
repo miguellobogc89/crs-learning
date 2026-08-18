@@ -1,4 +1,4 @@
-// components/knowledge/intake/services/read-error-message.ts
+// components/knowledge/services/read-error-message.ts
 
 export async function readErrorMessage(
   response: Response,

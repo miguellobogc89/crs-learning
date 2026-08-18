@@ -21,7 +21,6 @@ type KnowledgeDetailContentProps = {
   isRebuilding: boolean;
   rebuildError: string | null;
 
-  onUpload: () => void;
   onRebuild: () => void;
 };
 
@@ -33,7 +32,6 @@ export function KnowledgeDetailContent({
   articleNeedsRebuild,
   isRebuilding,
   rebuildError,
-  onUpload,
   onRebuild,
 }: KnowledgeDetailContentProps) {
   switch (activeTab) {
@@ -65,7 +63,6 @@ export function KnowledgeDetailContent({
               graph={knowledge.knowledge_graph}
               files={knowledge.knowledge_files}
               onRebuild={onRebuild}
-              onUpload={onUpload}
             />
           </div>
         </KnowledgeDetailViewContainer>
@@ -95,7 +92,6 @@ export function KnowledgeDetailContent({
             graph={knowledge.knowledge_graph}
             files={knowledge.knowledge_files}
             onRebuild={onRebuild}
-            onUpload={onUpload}
           />
         </KnowledgeDetailViewContainer>
       );

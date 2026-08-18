@@ -1,4 +1,4 @@
-// components/knowledge/intake/modal/knowledge-import-close-guard.tsx
+// components/knowledge/import/modal/knowledge-import-close-guard.tsx
 
 import {
   AlertTriangle,

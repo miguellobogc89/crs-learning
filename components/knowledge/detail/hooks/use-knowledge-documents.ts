@@ -5,29 +5,16 @@ import { useState, useTransition } from "react";
 
 import { rebuildKnowledgeAction } from "@/app/actions/knowledge";
 
-import type {
-  ActiveTab,
-  Knowledge,
-} from "../knowledge-detail.types";
+import type { Knowledge } from "../knowledge-detail.types";
 
 type UseKnowledgeDocumentsParams = {
   knowledge: Knowledge;
-  setActiveTab: (tab: ActiveTab) => void;
 };
 
 export function useKnowledgeDocuments({
   knowledge,
-  setActiveTab,
 }: UseKnowledgeDocumentsParams) {
   const router = useRouter();
-
-  const [showUpload, setShowUpload] =
-    useState(false);
-
-  const [
-    uploadableFileCount,
-    setUploadableFileCount,
-  ] = useState(0);
 
   const [rebuildError, setRebuildError] =
     useState<string | null>(null);
@@ -41,20 +28,6 @@ export function useKnowledgeDocuments({
   const articleNeedsRebuild =
     knowledge.status === "stale" ||
     knowledge.knowledge_analysis?.status === "stale";
-
-  function openUpload() {
-    setActiveTab("documents");
-    setShowUpload(true);
-  }
-
-  function showUploadForm() {
-    setShowUpload(true);
-  }
-
-  function closeUpload() {
-    setShowUpload(false);
-    setUploadableFileCount(0);
-  }
 
   function handleRebuild() {
     if (!hasDocuments || isRebuilding) {
@@ -87,16 +60,10 @@ export function useKnowledgeDocuments({
   }
 
   return {
-    showUpload,
-    uploadableFileCount,
-    setUploadableFileCount,
     rebuildError,
     isRebuilding,
     hasDocuments,
     articleNeedsRebuild,
-    openUpload,
-    showUploadForm,
-    closeUpload,
     handleRebuild,
   };
 }
