@@ -43,6 +43,7 @@ export async function shareLibraryWithKnowledgeTeam(data: {
   libraryId: string;
   teamId: string;
   ownerUserId: string;
+  workspaceId: string;
   accessLevel: "read" | "edit" | "owner";
 }) {
   return shareLibraryWithTeam(data);
@@ -51,6 +52,7 @@ export async function shareLibraryWithKnowledgeTeam(data: {
 export async function listTeamSharesForLibrary(data: {
   libraryId: string;
   ownerUserId: string;
+  workspaceId: string;
 }) {
   return listLibraryTeamShares(data);
 }
@@ -59,6 +61,7 @@ export async function removeTeamShareFromLibrary(data: {
   libraryId: string;
   teamId: string;
   ownerUserId: string;
+  workspaceId: string;
 }) {
   return removeLibraryTeamShare(data);
 }

@@ -2,9 +2,12 @@
 import { prisma } from "@/lib/prisma";
 import { knowledgeLibraryReadWhere } from "@/lib/knowledge/access-control";
 
-export async function listAccessibleKnowledgeLibraries(userId: string) {
+export async function listAccessibleKnowledgeLibraries(
+  userId: string,
+  workspaceId: string,
+) {
   return prisma.knowledge_libraries.findMany({
-    where: knowledgeLibraryReadWhere(userId),
+    where: knowledgeLibraryReadWhere(userId, workspaceId),
     orderBy: {
       name: "asc",
     },

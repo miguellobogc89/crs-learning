@@ -3,7 +3,12 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
+import {
+  knowledgeLibraryWriteWhere,
+  knowledgeSourceOwnerWhere,
+} from "@/lib/knowledge/access-control";
 import { prisma } from "@/lib/prisma";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 type MoveKnowledgeBody = {
   knowledgeId?: string;
@@ -41,11 +46,18 @@ export async function PATCH(request: Request) {
     );
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const [knowledge, targetLibrary] = await Promise.all([
     prisma.knowledge_sources.findFirst({
       where: {
         id: knowledgeId,
-        owner_user_id: session.user.id,
+        ...knowledgeSourceOwnerWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
       },
       select: {
         id: true,
@@ -55,7 +67,10 @@ export async function PATCH(request: Request) {
     prisma.knowledge_libraries.findFirst({
       where: {
         id: libraryId,
-        owner_user_id: session.user.id,
+        ...knowledgeLibraryWriteWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
       },
       select: {
         id: true,

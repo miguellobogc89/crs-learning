@@ -8,6 +8,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
+import {
+  knowledgeLibraryWriteWhere,
+  knowledgeSourceOwnerWhere,
+} from "@/lib/knowledge/access-control";
 import { extractFileText } from "@/lib/knowledge/extract-file-text";
 import { isAcceptedKnowledgeFileType } from "@/lib/knowledge/file-types";
 import { prisma } from "@/lib/prisma";
@@ -16,6 +20,7 @@ import {
   addKnowledgeFile,
   editKnowledgeSource,
 } from "@/lib/services/knowledge.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export async function createKnowledgeWithDocumentsAction(
   formData: FormData,
@@ -25,6 +30,10 @@ export async function createKnowledgeWithDocumentsAction(
   if (!session?.user?.id) {
     throw new Error("No autenticado");
   }
+
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
 
   const title = String(
     formData.get("title") ?? "",
@@ -73,7 +82,10 @@ export async function createKnowledgeWithDocumentsAction(
     await prisma.knowledge_libraries.findFirst({
       where: {
         id: libraryId,
-        owner_user_id: session.user.id,
+        ...knowledgeLibraryWriteWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
       },
       select: {
         id: true,
@@ -201,6 +213,10 @@ export async function updateKnowledgeAction(
     return;
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const id = String(
     formData.get("id") ?? "",
   ).trim();
@@ -232,6 +248,7 @@ export async function updateKnowledgeAction(
   await editKnowledgeSource({
     id,
     ownerUserId: session.user.id,
+    workspaceId: activeWorkspace.id,
     updatedByUserId: session.user.id,
     title,
     description,
@@ -253,11 +270,18 @@ export async function rebuildKnowledgeAction(
     throw new Error("No autenticado");
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const knowledge =
     await prisma.knowledge_sources.findFirst({
       where: {
         id: knowledgeId,
-        owner_user_id: session.user.id,
+        ...knowledgeSourceOwnerWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
       },
       select: {
         id: true,
@@ -287,11 +311,18 @@ export async function deleteKnowledgeAction(
     throw new Error("No autenticado");
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const knowledge =
     await prisma.knowledge_sources.findFirst({
       where: {
         id,
-        owner_user_id: session.user.id,
+        ...knowledgeSourceOwnerWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
       },
       select: {
         id: true,
@@ -321,6 +352,10 @@ export async function createKnowledgeAction(
   if (!session?.user?.id) {
     throw new Error("No autenticado");
   }
+
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
 
   const title = String(
     formData.get("title") ?? "",
@@ -352,7 +387,10 @@ export async function createKnowledgeAction(
     await prisma.knowledge_libraries.findFirst({
       where: {
         id: libraryId,
-        owner_user_id: session.user.id,
+        ...knowledgeLibraryWriteWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
       },
       select: {
         id: true,
@@ -399,6 +437,10 @@ export async function createKnowledgeFromFolderUploadAction(
     throw new Error("No autenticado");
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const libraryId = String(
     formData.get("libraryId") ?? "",
   ).trim();
@@ -426,7 +468,10 @@ export async function createKnowledgeFromFolderUploadAction(
     await prisma.knowledge_libraries.findFirst({
       where: {
         id: libraryId,
-        owner_user_id: session.user.id,
+        ...knowledgeLibraryWriteWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
       },
       select: {
         id: true,

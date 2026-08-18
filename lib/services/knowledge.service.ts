@@ -9,8 +9,11 @@ import {
   getKnowledgeEvents,
 } from "@/lib/repositories/knowledge.repository";
 
-export async function listVisibleKnowledgeSources(userId: string) {
-  return getVisibleKnowledgeSources(userId);
+export async function listVisibleKnowledgeSources(
+  userId: string,
+  workspaceId: string,
+) {
+  return getVisibleKnowledgeSources(userId, workspaceId);
 }
 
 export async function findKnowledgeSource(id: string) {
@@ -20,10 +23,12 @@ export async function findKnowledgeSource(id: string) {
 export async function findAccessibleKnowledgeSource(
   id: string,
   userId: string,
+  workspaceId: string,
 ) {
   return getAccessibleKnowledgeSourceById(
     id,
     userId,
+    workspaceId,
   );
 }
 
@@ -40,6 +45,7 @@ export async function newKnowledgeSource(data: {
 export async function editKnowledgeSource(data: {
   id: string;
   ownerUserId: string;
+  workspaceId: string;
   updatedByUserId: string;
   title: string;
   description: string;
@@ -61,6 +67,9 @@ export async function addKnowledgeFile(data: {
   return createKnowledgeFile(data);
 }
 
-export async function listKnowledgeEvents(userId: string) {
-  return getKnowledgeEvents(userId);
+export async function listKnowledgeEvents(
+  userId: string,
+  workspaceId: string,
+) {
+  return getKnowledgeEvents(userId, workspaceId);
 }

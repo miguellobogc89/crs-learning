@@ -46,9 +46,12 @@ const knowledgeSourceDetailInclude = {
   },
 } as const;
 
-export async function getVisibleKnowledgeSources(userId: string) {
+export async function getVisibleKnowledgeSources(
+  userId: string,
+  workspaceId: string,
+) {
   return prisma.knowledge_sources.findMany({
-    where: knowledgeSourceReadWhere(userId),
+    where: knowledgeSourceReadWhere(userId, workspaceId),
     include: {
       knowledge_libraries: {
         include: {
@@ -76,11 +79,12 @@ export async function getKnowledgeSourceById(id: string) {
 export async function getAccessibleKnowledgeSourceById(
   id: string,
   userId: string,
+  workspaceId: string,
 ) {
   return prisma.knowledge_sources.findFirst({
     where: {
       id,
-      ...knowledgeSourceReadWhere(userId),
+      AND: [knowledgeSourceReadWhere(userId, workspaceId)],
     },
     include: knowledgeSourceDetailInclude,
   });
@@ -109,6 +113,7 @@ data: {
 export async function updateKnowledgeSource(data: {
   id: string;
   ownerUserId: string;
+  workspaceId: string;
   updatedByUserId: string;
   title: string;
   description: string;
@@ -118,8 +123,16 @@ export async function updateKnowledgeSource(data: {
 }) {
   return prisma.knowledge_sources.updateMany({
     where: {
-      id: data.id,
-      owner_user_id: data.ownerUserId,
+      AND: [
+        {
+          id: data.id,
+          owner_user_id: data.ownerUserId,
+        },
+        knowledgeSourceReadWhere(
+          data.ownerUserId,
+          data.workspaceId,
+        ),
+      ],
     },
     data: {
       title: data.title,
@@ -154,10 +167,23 @@ export async function createKnowledgeFile(data: {
   });
 }
 
-export async function getKnowledgeEvents(userId: string) {
+export async function getKnowledgeEvents(
+  userId: string,
+  workspaceId: string,
+) {
   return prisma.knowledge_events.findMany({
     where: {
       user_id: userId,
+      OR: [
+        {
+          library_id: null,
+        },
+        {
+          knowledge_libraries: {
+            workspace_id: workspaceId,
+          },
+        },
+      ],
     },
     include: {
       users: {

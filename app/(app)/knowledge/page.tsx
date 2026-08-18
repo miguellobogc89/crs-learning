@@ -5,6 +5,7 @@ import { KnowledgeContent } from "@/components/knowledge/content/knowledge-conte
 import { auth } from "@/auth";
 import { listVisibleKnowledgeSources } from "@/lib/services/knowledge.service";
 import { listKnowledgeLibraries } from "@/lib/services/knowledge-library.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export default async function KnowledgePage({
   searchParams,
@@ -20,9 +21,18 @@ export default async function KnowledgePage({
   const params = await searchParams;
   const selectedLibraryId = params.library ?? null;
   const selectedView = params.view ?? "all";
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
 
-  const allKnowledgeSources = await listVisibleKnowledgeSources(session.user.id);
-  const knowledgeLibraries = await listKnowledgeLibraries(session.user.id);
+  const allKnowledgeSources = await listVisibleKnowledgeSources(
+    session.user.id,
+    activeWorkspace.id,
+  );
+  const knowledgeLibraries = await listKnowledgeLibraries(
+    session.user.id,
+    activeWorkspace.id,
+  );
 
   const sharedLibraryIds = knowledgeLibraries
     .filter((library) => library.is_shared)

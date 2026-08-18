@@ -2,6 +2,7 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
+import { ensureWorkspaceBootstrap } from "@/lib/services/workspace.service";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -35,20 +36,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         },
       });
 
-      await prisma.knowledge_libraries.upsert({
-  where: {
-    owner_user_id_name: {
-      owner_user_id: dbUser.id,
-      name: "Mi biblioteca",
-    },
-  },
-  update: {},
-  create: {
-    owner_user_id: dbUser.id,
-    name: "Mi biblioteca",
-    parent_id: null,
-  },
-});
+      await ensureWorkspaceBootstrap(dbUser.id);
 
       return true;
     },

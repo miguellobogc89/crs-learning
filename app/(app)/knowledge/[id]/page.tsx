@@ -13,6 +13,7 @@ import {
   listTeams,
   listTeamSharesForLibrary,
 } from "@/lib/services/knowledge-team.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export default async function KnowledgeDetailPage({
   params,
@@ -26,10 +27,13 @@ export default async function KnowledgeDetailPage({
   }
 
   const { id } = await params;
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
 
 const [knowledge, libraries, teams] = await Promise.all([
-  findAccessibleKnowledgeSource(id, session.user.id),
-  listKnowledgeLibraries(session.user.id),
+  findAccessibleKnowledgeSource(id, session.user.id, activeWorkspace.id),
+  listKnowledgeLibraries(session.user.id, activeWorkspace.id),
   listTeams(session.user.id),
 ]);
 
@@ -41,6 +45,7 @@ const libraryShares = knowledge.library_id
   ? await listTeamSharesForLibrary({
       libraryId: knowledge.library_id,
       ownerUserId: session.user.id,
+      workspaceId: activeWorkspace.id,
     })
   : [];
 

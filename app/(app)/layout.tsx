@@ -15,6 +15,7 @@ import {
 } from "@/components/knowledge/import/background/knowledge-import-background-widget";
 import { listChatConversations } from "@/lib/services/chat.service";
 import { getUserNotificationSummary } from "@/lib/services/notification.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export default async function AppLayout({
   children,
@@ -27,11 +28,18 @@ export default async function AppLayout({
     redirect("/");
   }
 
+  const workspaceContext = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const [
     conversations,
     notificationSummary,
   ] = await Promise.all([
-    listChatConversations(session.user.id),
+    listChatConversations(
+      session.user.id,
+      workspaceContext.activeWorkspace.id,
+    ),
     getUserNotificationSummary(
       session.user.id,
       {
@@ -53,6 +61,12 @@ export default async function AppLayout({
             }
             unreadNotificationCount={
               notificationSummary.unreadCount
+            }
+            activeWorkspace={
+              workspaceContext.activeWorkspace
+            }
+            workspaces={
+              workspaceContext.workspaces
             }
             breadcrumb={
               <AutoBreadcrumb />

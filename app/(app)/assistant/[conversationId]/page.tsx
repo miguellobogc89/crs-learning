@@ -5,6 +5,7 @@ import { Bot, User } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { ChatComposer } from "@/components/assistant/chat-composer";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export default async function AssistantConversationPage({
   params,
@@ -18,11 +19,24 @@ export default async function AssistantConversationPage({
   }
 
   const { conversationId } = await params;
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
 
   const conversation = await prisma.chat_conversations.findFirst({
     where: {
       id: conversationId,
       owner_user_id: session.user.id,
+      OR: [
+        {
+          scope_library_id: null,
+        },
+        {
+          knowledge_libraries: {
+            workspace_id: activeWorkspace.id,
+          },
+        },
+      ],
     },
     include: {
       chat_messages: {

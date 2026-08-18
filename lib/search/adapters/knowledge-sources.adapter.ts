@@ -20,13 +20,13 @@ export const knowledgeSourcesSearchProvider: SearchProvider = {
   label: "💡 Artículos",
 
   async search(context: SearchContext): Promise<SearchResult[]> {
-    const { query, userId, limit = 10 } = context;
+    const { query, userId, workspaceId, limit = 10 } = context;
 
     try {
       const sources = await prisma.knowledge_sources.findMany({
         where: {
           AND: [
-            knowledgeSourceReadWhere(userId),
+            knowledgeSourceReadWhere(userId, workspaceId),
             {
               OR: [
                 {

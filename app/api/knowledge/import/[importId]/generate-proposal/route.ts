@@ -5,6 +5,7 @@ import {
   generateKnowledgeImportProposal,
   type KnowledgeImportProposalProgress,
 } from "@/lib/knowledge/import/generate-proposal";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,6 +75,8 @@ export async function POST(
 
   const userId =
     session.user.id;
+  const { activeWorkspace } =
+    await getActiveWorkspaceContext(userId);
 
   const encoder =
     new TextEncoder();
@@ -103,6 +106,8 @@ export async function POST(
               {
                 importId,
                 userId,
+                workspaceId:
+                  activeWorkspace.id,
                 onProgress:
                   async (
                     progress,

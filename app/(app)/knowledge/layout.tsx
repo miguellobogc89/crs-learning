@@ -6,6 +6,7 @@ import { KnowledgeShell } from "@/components/knowledge/knowledge-shell";
 import { listVisibleKnowledgeSources } from "@/lib/services/knowledge.service";
 import { listKnowledgeLibraries } from "@/lib/services/knowledge-library.service";
 import { listTeams } from "@/lib/services/knowledge-team.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export default async function KnowledgeLayout({
   children,
@@ -13,9 +14,18 @@ export default async function KnowledgeLayout({
   children: ReactNode;
 }) {
   const session = await auth();
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session!.user.id,
+  );
 
-  const knowledgeSources = await listVisibleKnowledgeSources(session!.user.id);
-  const knowledgeLibraries = await listKnowledgeLibraries(session!.user.id);
+  const knowledgeSources = await listVisibleKnowledgeSources(
+    session!.user.id,
+    activeWorkspace.id,
+  );
+  const knowledgeLibraries = await listKnowledgeLibraries(
+    session!.user.id,
+    activeWorkspace.id,
+  );
   const knowledgeTeams = await listTeams(session!.user.id);
 
   const rootLibrary = knowledgeLibraries.find(

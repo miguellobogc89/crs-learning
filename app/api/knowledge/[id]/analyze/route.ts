@@ -2,8 +2,10 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import { knowledgeSourceOwnerWhere } from "@/lib/knowledge/access-control";
 import { prisma } from "@/lib/prisma";
 import { analyzeKnowledgeSource } from "@/lib/services/knowledge-analysis.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export async function POST(
   _request: Request,
@@ -16,11 +18,17 @@ export async function POST(
   }
 
   const { id } = await context.params;
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
 
   const source = await prisma.knowledge_sources.findFirst({
     where: {
       id,
-      owner_user_id: session.user.id,
+      ...knowledgeSourceOwnerWhere(
+        session.user.id,
+        activeWorkspace.id,
+      ),
     },
     select: {
       id: true,

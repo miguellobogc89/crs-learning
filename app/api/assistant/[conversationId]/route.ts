@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import { getChatConversation } from "@/lib/services/chat.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 type StoredSource = {
   citationId: string;
@@ -39,10 +40,14 @@ export async function GET(
   }
 
   const { conversationId } = await context.params;
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
 
   const conversation = await getChatConversation(
     session.user.id,
     conversationId,
+    activeWorkspace.id,
   );
 
   if (!conversation) {

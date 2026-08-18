@@ -8,7 +8,9 @@ import { UserCircle } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { GlobalSearch } from "@/components/search/global-search";
+import { WorkspaceSelector } from "@/components/workspace/workspace-selector";
 import type { NotificationItem } from "@/lib/services/notification.service";
+import type { AccessibleWorkspace } from "@/lib/repositories/workspace.repository";
 
 type Props = {
   user: {
@@ -19,6 +21,8 @@ type Props = {
   breadcrumb: ReactNode;
   notifications: NotificationItem[];
   unreadNotificationCount: number;
+  activeWorkspace: AccessibleWorkspace;
+  workspaces: AccessibleWorkspace[];
 };
 
 export function AppTopbar({
@@ -26,6 +30,8 @@ export function AppTopbar({
   breadcrumb,
   notifications,
   unreadNotificationCount,
+  activeWorkspace,
+  workspaces,
 }: Props) {
   const userLabel = user.name ?? user.email ?? "Usuario";
 
@@ -42,6 +48,11 @@ export function AppTopbar({
       </div>
 
       <div className="ml-4 flex shrink-0 items-center gap-2">
+        <WorkspaceSelector
+          activeWorkspace={activeWorkspace}
+          workspaces={workspaces}
+        />
+
         <NotificationBell
           initialNotifications={notifications}
           initialUnreadCount={unreadNotificationCount}

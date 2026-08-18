@@ -12,6 +12,7 @@ import {
   isSupportedKnowledgeDocument,
 } from "@/lib/knowledge/import-flow";
 import { prisma } from "@/lib/prisma";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -192,11 +193,18 @@ export async function POST(
     );
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const knowledgeImport =
     await prisma.knowledge_imports.findFirst({
       where: {
         id: importId,
         owner_user_id: session.user.id,
+        knowledge_libraries: {
+          workspace_id: activeWorkspace.id,
+        },
       },
       include: {
         knowledge_import_files: {
@@ -273,6 +281,9 @@ export async function POST(
       knowledge_sources: {
         owner_user_id:
           knowledgeImport.owner_user_id,
+        knowledge_libraries: {
+          workspace_id: activeWorkspace.id,
+        },
       },
     },
     select: {

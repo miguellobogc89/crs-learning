@@ -11,6 +11,7 @@ import {
 } from "@/lib/ai/assistant/retrieval";
 import { prisma } from "@/lib/prisma";
 import { listAccessibleKnowledgeSpaces } from "@/lib/services/knowledge-space.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { resolveRetrievalQuery } from "@/lib/ai/assistant/resolve-retrieval-query";
 
 const openai = new OpenAI({
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
   }
 
   const userId = session.user.id;
+  const { activeWorkspace } = await getActiveWorkspaceContext(userId);
 
   let conversation;
 
@@ -62,6 +64,16 @@ export async function POST(request: Request) {
         where: {
           id: conversationId,
           owner_user_id: userId,
+          OR: [
+            {
+              scope_library_id: null,
+            },
+            {
+              knowledge_libraries: {
+                workspace_id: activeWorkspace.id,
+              },
+            },
+          ],
         },
       });
   } else {
@@ -130,6 +142,7 @@ export async function POST(request: Request) {
 const retrievedKnowledge =
   await retrieveKnowledge(
     userId,
+    activeWorkspace.id,
     retrievalQuery,
   );
 

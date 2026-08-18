@@ -14,6 +14,7 @@ import {
   removeKnowledgeLibraryTeamShareAction,
   shareKnowledgeLibraryWithTeamAction,
 } from "@/app/actions/knowledge";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export default async function KnowledgeLibraryAdminPage({
   params,
@@ -27,8 +28,14 @@ export default async function KnowledgeLibraryAdminPage({
   }
 
   const { libraryId } = await params;
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
 
-  const libraries = await listKnowledgeLibraries(session.user.id);
+  const libraries = await listKnowledgeLibraries(
+    session.user.id,
+    activeWorkspace.id,
+  );
   const library = libraries.find((item) => item.id === libraryId);
 
   if (!library) {
@@ -44,6 +51,7 @@ export default async function KnowledgeLibraryAdminPage({
         listTeamSharesForLibrary({
           libraryId,
           ownerUserId: session.user.id,
+          workspaceId: activeWorkspace.id,
         }),
       ]);
 

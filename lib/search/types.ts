@@ -51,6 +51,7 @@ export interface SearchResponse {
 export interface SearchContext {
   query: string;
   userId: string;
+  workspaceId: string;
   limit?: number;
 }
 

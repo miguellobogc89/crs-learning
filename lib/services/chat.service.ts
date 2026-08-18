@@ -4,10 +4,21 @@ import { prisma } from "@/lib/prisma";
 
 export async function listChatConversations(
   userId: string,
+  workspaceId: string,
 ) {
   return prisma.chat_conversations.findMany({
     where: {
       owner_user_id: userId,
+      OR: [
+        {
+          scope_library_id: null,
+        },
+        {
+          knowledge_libraries: {
+            workspace_id: workspaceId,
+          },
+        },
+      ],
     },
     orderBy: {
       updated_at: "desc",
@@ -33,11 +44,22 @@ export async function listChatConversations(
 export async function getChatConversation(
   userId: string,
   conversationId: string,
+  workspaceId: string,
 ) {
   return prisma.chat_conversations.findFirst({
     where: {
       id: conversationId,
       owner_user_id: userId,
+      OR: [
+        {
+          scope_library_id: null,
+        },
+        {
+          knowledge_libraries: {
+            workspace_id: workspaceId,
+          },
+        },
+      ],
     },
     select: {
       id: true,

@@ -1,5 +1,6 @@
 // app/(app)/my-space/page.tsx
 import { auth } from "@/auth";
+import Link from "next/link";
 import {
   AppSectionShell,
 } from "@/components/app/section-sidebar";
@@ -49,6 +50,13 @@ function MySpaceSidebar() {
         </p>
 
         <div className="space-y-1">
+          <Link
+            href="/my-space/workspaces"
+            className="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition hover:bg-surface hover:text-foreground"
+          >
+            Workspaces
+          </Link>
+
           {[
             "Actividad",
             "Equipos",

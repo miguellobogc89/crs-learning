@@ -16,6 +16,7 @@ import {
 } from "@/components/app/section-sidebar";
 import { listChatConversations } from "@/lib/services/chat.service";
 import { ChatComposer } from "@/components/assistant/chat-composer";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 const suggestions = [
   "Resume los puntos clave de esta biblioteca",
@@ -36,7 +37,13 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const conversations = await listChatConversations(session.user.id);
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+  const conversations = await listChatConversations(
+    session.user.id,
+    activeWorkspace.id,
+  );
 
   return (
 

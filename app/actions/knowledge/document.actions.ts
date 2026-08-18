@@ -7,12 +7,14 @@ import path from "node:path";
 import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
+import { knowledgeSourceOwnerWhere } from "@/lib/knowledge/access-control";
 import { extractFileText } from "@/lib/knowledge/extract-file-text";
 import { isAcceptedKnowledgeFileType } from "@/lib/knowledge/file-types";
 import { prisma } from "@/lib/prisma";
 import {
   addKnowledgeFile,
 } from "@/lib/services/knowledge.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export async function uploadKnowledgeFileAction(
   formData: FormData,
@@ -22,6 +24,10 @@ export async function uploadKnowledgeFileAction(
   if (!session?.user?.id) {
     throw new Error("No autenticado");
   }
+
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
 
   const knowledgeId = String(
     formData.get("knowledgeId") ?? "",
@@ -36,7 +42,10 @@ export async function uploadKnowledgeFileAction(
   const knowledge = await prisma.knowledge_sources.findFirst({
     where: {
       id: knowledgeId,
-      owner_user_id: session.user.id,
+      ...knowledgeSourceOwnerWhere(
+        session.user.id,
+        activeWorkspace.id,
+      ),
     },
     select: {
       id: true,
@@ -123,12 +132,17 @@ export async function deleteKnowledgeFileAction(
     throw new Error("No autenticado");
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const file = await prisma.knowledge_files.findFirst({
     where: {
       id: knowledgeFileId,
-      knowledge_sources: {
-        owner_user_id: session.user.id,
-      },
+      knowledge_sources: knowledgeSourceOwnerWhere(
+        session.user.id,
+        activeWorkspace.id,
+      ),
     },
     select: {
       id: true,

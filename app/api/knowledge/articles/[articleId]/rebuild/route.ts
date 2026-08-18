@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import { getKnowledgeImportModel } from "@/lib/ai/openai";
+import { knowledgeSourceOwnerWhere } from "@/lib/knowledge/access-control";
 import { getValidCanonicalAnalysis } from "@/lib/knowledge/file-analysis/article-content-projection";
 import { analyzeKnowledgeDocuments } from "@/lib/knowledge/import/analyze-documents";
 import { generateArticleContent } from "@/lib/knowledge/import/generate-article-content";
@@ -14,6 +15,7 @@ import type {
   KnowledgeImportOrganizationArea,
 } from "@/lib/knowledge/import/types";
 import { prisma } from "@/lib/prisma";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -139,11 +141,18 @@ export async function POST(
     );
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const article =
     await prisma.knowledge_sources.findFirst({
       where: {
         id: articleId,
-        owner_user_id: session.user.id,
+        ...knowledgeSourceOwnerWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
       },
       select: {
         id: true,

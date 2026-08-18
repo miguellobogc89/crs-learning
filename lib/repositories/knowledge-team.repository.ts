@@ -84,12 +84,14 @@ export async function shareLibraryWithTeam(data: {
   libraryId: string;
   teamId: string;
   ownerUserId: string;
+  workspaceId: string;
   accessLevel: "read" | "edit" | "owner";
 }) {
   const library = await prisma.knowledge_libraries.findFirst({
     where: {
       id: data.libraryId,
       owner_user_id: data.ownerUserId,
+      workspace_id: data.workspaceId,
     },
   });
 
@@ -119,11 +121,13 @@ export async function shareLibraryWithTeam(data: {
 export async function listLibraryTeamShares(data: {
   libraryId: string;
   ownerUserId: string;
+  workspaceId: string;
 }) {
   const library = await prisma.knowledge_libraries.findFirst({
     where: {
       id: data.libraryId,
       owner_user_id: data.ownerUserId,
+      workspace_id: data.workspaceId,
     },
   });
 
@@ -152,11 +156,13 @@ export async function removeLibraryTeamShare(data: {
   libraryId: string;
   teamId: string;
   ownerUserId: string;
+  workspaceId: string;
 }) {
   const library = await prisma.knowledge_libraries.findFirst({
     where: {
       id: data.libraryId,
       owner_user_id: data.ownerUserId,
+      workspace_id: data.workspaceId,
     },
   });
 

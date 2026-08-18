@@ -37,12 +37,13 @@ type KnowledgeChunk = {
 
 export async function retrieveKnowledge(
   userId: string,
+  workspaceId: string,
   question: string,
 ): Promise<RetrievedKnowledgeContext> {
   const spaces = await listAccessibleKnowledgeSpaces(userId);
 
   const accessibleLibraries =
-    await listAccessibleKnowledgeLibraries(userId);
+    await listAccessibleKnowledgeLibraries(userId, workspaceId);
 
   const accessibleLibraryIds = new Set<string>();
 
@@ -68,7 +69,7 @@ export async function retrieveKnowledge(
     await prisma.knowledge_sources.findMany({
       where: {
         AND: [
-          knowledgeSourceReadWhere(userId),
+          knowledgeSourceReadWhere(userId, workspaceId),
           {
             OR: [
               {

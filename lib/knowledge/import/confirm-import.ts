@@ -19,6 +19,7 @@ import type {
 type ConfirmKnowledgeImportInput = {
   importId: string;
   userId: string;
+  workspaceId: string;
 };
 
 type PersistedArticle = {
@@ -191,6 +192,7 @@ function validateProposalReferences(
 export async function confirmKnowledgeImport({
   importId,
   userId,
+  workspaceId,
 }: ConfirmKnowledgeImportInput): Promise<ConfirmKnowledgeImportResult> {
   const startedAt = new Date();
 
@@ -199,6 +201,9 @@ export async function confirmKnowledgeImport({
       where: {
         id: importId,
         owner_user_id: userId,
+        knowledge_libraries: {
+          workspace_id: workspaceId,
+        },
       },
       include: {
         knowledge_libraries: {
@@ -265,6 +270,7 @@ export async function confirmKnowledgeImport({
       prisma.knowledge_libraries.findMany({
         where: {
           owner_user_id: userId,
+          workspace_id: workspaceId,
         },
         select: {
           id: true,
@@ -275,6 +281,9 @@ export async function confirmKnowledgeImport({
           knowledge_sources: {
             owner_user_id:
               knowledgeImport.owner_user_id,
+            knowledge_libraries: {
+              workspace_id: workspaceId,
+            },
           },
         },
         select: {
@@ -443,6 +452,7 @@ export async function confirmKnowledgeImport({
       await createKnowledgeStatusSnapshot(
         prisma,
         userId,
+        workspaceId,
       );
 
     const result = await prisma.$transaction(
@@ -507,6 +517,7 @@ export async function confirmKnowledgeImport({
                 position: 0,
                 company_id:
                   knowledgeImport.company_id,
+                workspace_id: workspaceId,
                 visibility: "restricted",
                 created_by_user_id: userId,
                 updated_by_user_id: userId,
@@ -570,6 +581,7 @@ export async function confirmKnowledgeImport({
                 position: 0,
                 company_id:
                   knowledgeImport.company_id,
+                workspace_id: workspaceId,
                 visibility: "restricted",
                 created_by_user_id: userId,
                 updated_by_user_id: userId,
@@ -633,6 +645,9 @@ export async function confirmKnowledgeImport({
                   id: article.existingArticleId,
                   owner_user_id:
                     knowledgeImport.owner_user_id,
+                  knowledge_libraries: {
+                    workspace_id: workspaceId,
+                  },
                 },
                 select: {
                   id: true,
@@ -891,6 +906,7 @@ export async function confirmKnowledgeImport({
       await createKnowledgeStatusSnapshot(
         prisma,
         userId,
+        workspaceId,
       );
 
     await prisma.knowledge_events.create({

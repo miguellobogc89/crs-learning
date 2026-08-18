@@ -46,6 +46,7 @@ type ProposalProgressCallback = (
 type GenerateProposalInput = {
   importId: string;
   userId: string;
+  workspaceId: string;
   onProgress?: ProposalProgressCallback;
 };
 
@@ -531,6 +532,7 @@ return normalizedProposal;
 export async function generateKnowledgeImportProposal({
   importId,
   userId,
+  workspaceId,
   onProgress,
 }: GenerateProposalInput): Promise<GenerateKnowledgeImportProposalResult> {
   await onProgress?.({
@@ -545,6 +547,9 @@ export async function generateKnowledgeImportProposal({
       where: {
         id: importId,
         owner_user_id: userId,
+        knowledge_libraries: {
+          workspace_id: workspaceId,
+        },
       },
       include: {
         knowledge_import_files: {
@@ -679,13 +684,14 @@ export async function generateKnowledgeImportProposal({
     const existingKnowledge =
       await listKnowledgeStatus(
         userId,
+        workspaceId,
       );
 
     await onProgress?.({
       step: "designing_structure",
       progressPercentage: 76,
       message:
-        "Definiendo carpetas y artÃ­culos",
+        "Definiendo carpetas y artí­culos",
     });
 
     const generatedProposal =

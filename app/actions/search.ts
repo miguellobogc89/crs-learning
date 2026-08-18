@@ -5,6 +5,7 @@
 import { auth } from "@/auth";
 import { SearchOrchestrator } from "@/lib/search/search.orchestrator";
 import { initializeSearchProviders } from "@/lib/search/search.init";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import type {
   SearchContext,
   SearchResponse,
@@ -71,10 +72,14 @@ export async function searchGlobal(
 
   try {
     ensureProvidersInitialized();
+    const { activeWorkspace } = await getActiveWorkspaceContext(
+      session.user.id,
+    );
 
     const context: SearchContext = {
       query,
       userId: session.user.id,
+      workspaceId: activeWorkspace.id,
       limit,
     };
 

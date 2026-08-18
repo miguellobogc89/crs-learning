@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { knowledgeLibraryWriteWhere } from "@/lib/knowledge/access-control";
 import { prisma } from "@/lib/prisma";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -80,6 +81,8 @@ export async function POST(request: Request) {
         },
       );
     }
+
+    const { activeWorkspace } = await getActiveWorkspaceContext(userId);
 
     const formData = await request.formData();
 
@@ -174,7 +177,7 @@ export async function POST(request: Request) {
     const library = await prisma.knowledge_libraries.findFirst({
       where: {
         id: libraryId,
-        ...knowledgeLibraryWriteWhere(user.id),
+        ...knowledgeLibraryWriteWhere(user.id, activeWorkspace.id),
       },
       select: {
         id: true,

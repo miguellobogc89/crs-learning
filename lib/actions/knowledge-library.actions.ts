@@ -4,7 +4,12 @@
 import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
+import {
+  knowledgeLibraryReadWhere,
+  knowledgeLibraryWriteWhere,
+} from "@/lib/knowledge/access-control";
 import { prisma } from "@/lib/prisma";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export async function createKnowledgeLibrary(parentId?: string | null) {
   const session = await auth();
@@ -13,9 +18,33 @@ export async function createKnowledgeLibrary(parentId?: string | null) {
     throw new Error("No autenticado");
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
+  if (parentId) {
+    const parentLibrary = await prisma.knowledge_libraries.findFirst({
+      where: {
+        id: parentId,
+        ...knowledgeLibraryWriteWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!parentLibrary) {
+      throw new Error("La carpeta de destino no existe");
+    }
+  }
+
   const maxPosition = await prisma.knowledge_libraries.aggregate({
     where: {
       owner_user_id: session.user.id,
+      workspace_id: activeWorkspace.id,
       parent_id: parentId ?? null,
     },
     _max: {
@@ -26,6 +55,7 @@ export async function createKnowledgeLibrary(parentId?: string | null) {
   const library = await prisma.knowledge_libraries.create({
     data: {
       owner_user_id: session.user.id,
+      workspace_id: activeWorkspace.id,
       parent_id: parentId ?? null,
       name: "Nueva biblioteca",
       position: (maxPosition._max.position ?? -1) + 1,
@@ -47,6 +77,10 @@ export async function createNamedKnowledgeLibrary(
     throw new Error("No autenticado");
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const normalizedName = name.trim();
 
   if (!normalizedName) {
@@ -57,7 +91,10 @@ export async function createNamedKnowledgeLibrary(
     ? await prisma.knowledge_libraries.findFirst({
         where: {
           id: parentId,
-          owner_user_id: session.user.id,
+          ...knowledgeLibraryWriteWhere(
+            session.user.id,
+            activeWorkspace.id,
+          ),
         },
         select: {
           id: true,
@@ -72,6 +109,7 @@ export async function createNamedKnowledgeLibrary(
   const existingLibrary = await prisma.knowledge_libraries.findFirst({
     where: {
       owner_user_id: session.user.id,
+      workspace_id: activeWorkspace.id,
       parent_id: parentId ?? null,
       name: {
         equals: normalizedName,
@@ -92,6 +130,7 @@ export async function createNamedKnowledgeLibrary(
   const maxPosition = await prisma.knowledge_libraries.aggregate({
     where: {
       owner_user_id: session.user.id,
+      workspace_id: activeWorkspace.id,
       parent_id: parentId ?? null,
     },
     _max: {
@@ -102,6 +141,7 @@ export async function createNamedKnowledgeLibrary(
   const library = await prisma.knowledge_libraries.create({
     data: {
       owner_user_id: session.user.id,
+      workspace_id: activeWorkspace.id,
       parent_id: parentId ?? null,
       name: normalizedName,
       position: (maxPosition._max.position ?? -1) + 1,
@@ -126,6 +166,10 @@ export async function renameKnowledgeLibrary(
     throw new Error("No autenticado");
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const normalizedName = name.trim();
 
   if (!normalizedName) {
@@ -135,7 +179,10 @@ export async function renameKnowledgeLibrary(
   await prisma.knowledge_libraries.updateMany({
     where: {
       id,
-      owner_user_id: session.user.id,
+      ...knowledgeLibraryWriteWhere(
+        session.user.id,
+        activeWorkspace.id,
+      ),
     },
     data: {
       name: normalizedName,
@@ -154,10 +201,15 @@ export async function deleteKnowledgeLibrary(id: string) {
     throw new Error("No autenticado");
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const libraries = await prisma.knowledge_libraries.findMany({
-    where: {
-      owner_user_id: session.user.id,
-    },
+    where: knowledgeLibraryWriteWhere(
+      session.user.id,
+      activeWorkspace.id,
+    ),
     select: {
       id: true,
       parent_id: true,
@@ -200,6 +252,9 @@ export async function deleteKnowledgeLibrary(id: string) {
     await transaction.knowledge_sources.deleteMany({
       where: {
         owner_user_id: session.user.id,
+        knowledge_libraries: {
+          workspace_id: activeWorkspace.id,
+        },
         library_id: {
           in: descendantIds,
         },
@@ -209,7 +264,10 @@ export async function deleteKnowledgeLibrary(id: string) {
     await transaction.knowledge_libraries.deleteMany({
       where: {
         id,
-        owner_user_id: session.user.id,
+        ...knowledgeLibraryWriteWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
       },
     });
   });
@@ -227,6 +285,10 @@ export async function moveKnowledgeLibrary(
     throw new Error("No autenticado");
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   if (libraryId === parentId) {
     throw new Error("Una carpeta no puede contenerse a sí misma");
   }
@@ -235,7 +297,10 @@ export async function moveKnowledgeLibrary(
     prisma.knowledge_libraries.findFirst({
       where: {
         id: libraryId,
-        owner_user_id: session.user.id,
+        ...knowledgeLibraryWriteWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
       },
       select: {
         id: true,
@@ -245,7 +310,10 @@ export async function moveKnowledgeLibrary(
     prisma.knowledge_libraries.findFirst({
       where: {
         id: parentId,
-        owner_user_id: session.user.id,
+        ...knowledgeLibraryWriteWhere(
+          session.user.id,
+          activeWorkspace.id,
+        ),
       },
       select: {
         id: true,
@@ -271,7 +339,10 @@ export async function moveKnowledgeLibrary(
       await prisma.knowledge_libraries.findFirst({
         where: {
           id: currentParentId,
-          owner_user_id: session.user.id,
+          ...knowledgeLibraryReadWhere(
+            session.user.id,
+            activeWorkspace.id,
+          ),
         },
         select: {
           parent_id: true,
@@ -284,6 +355,7 @@ export async function moveKnowledgeLibrary(
   const maxPosition = await prisma.knowledge_libraries.aggregate({
     where: {
       owner_user_id: session.user.id,
+      workspace_id: activeWorkspace.id,
       parent_id: parentId,
       id: {
         not: libraryId,

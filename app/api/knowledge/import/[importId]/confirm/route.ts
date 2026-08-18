@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import { confirmKnowledgeImport } from "@/lib/knowledge/import/confirm-import";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,10 +90,15 @@ export async function POST(
   }
 
   try {
+    const { activeWorkspace } = await getActiveWorkspaceContext(
+      session.user.id,
+    );
+
     const result =
       await confirmKnowledgeImport({
         importId,
         userId: session.user.id,
+        workspaceId: activeWorkspace.id,
       });
 
     return NextResponse.json(result);

@@ -27,9 +27,12 @@ const libraryInclude = {
   },
 } as const;
 
-export async function listKnowledgeLibraries(userId: string) {
+export async function listKnowledgeLibraries(
+  userId: string,
+  workspaceId: string,
+) {
   let libraries = await prisma.knowledge_libraries.findMany({
-    where: knowledgeLibraryReadWhere(userId),
+    where: knowledgeLibraryReadWhere(userId, workspaceId),
     include: libraryInclude,
     orderBy: [
       {
@@ -52,6 +55,7 @@ export async function listKnowledgeLibraries(userId: string) {
     const library = await prisma.knowledge_libraries.create({
       data: {
         owner_user_id: userId,
+        workspace_id: workspaceId,
         name: "Mi biblioteca",
         position: 0,
       },
@@ -77,12 +81,15 @@ export async function listKnowledgeLibraries(userId: string) {
   });
 }
 
-export async function ensureRootKnowledgeLibrary(userId: string) {
+export async function ensureRootKnowledgeLibrary(
+  userId: string,
+  workspaceId: string,
+) {
   const existing = await prisma.knowledge_libraries.findFirst({
     where: {
       owner_user_id: userId,
+      workspace_id: workspaceId,
       parent_id: null,
-      name: "Mi biblioteca",
     },
   });
 
@@ -93,6 +100,7 @@ export async function ensureRootKnowledgeLibrary(userId: string) {
   return prisma.knowledge_libraries.create({
     data: {
       owner_user_id: userId,
+      workspace_id: workspaceId,
       name: "Mi biblioteca",
       parent_id: null,
     },
@@ -107,9 +115,10 @@ type KnowledgeStatusClient = Pick<
 async function getKnowledgeStatus(
   client: KnowledgeStatusClient,
   userId: string,
+  workspaceId: string,
 ) {
   return client.knowledge_libraries.findMany({
-    where: knowledgeLibraryReadWhere(userId),
+    where: knowledgeLibraryReadWhere(userId, workspaceId),
     select: {
       id: true,
       name: true,
@@ -159,13 +168,17 @@ async function getKnowledgeStatus(
   });
 }
 
-export async function listKnowledgeStatus(userId: string) {
-  return getKnowledgeStatus(prisma, userId);
+export async function listKnowledgeStatus(
+  userId: string,
+  workspaceId: string,
+) {
+  return getKnowledgeStatus(prisma, userId, workspaceId);
 }
 
 export async function createKnowledgeStatusSnapshot(
   tx: Prisma.TransactionClient,
   userId: string,
+  workspaceId: string,
 ) {
-  return getKnowledgeStatus(tx, userId);
+  return getKnowledgeStatus(tx, userId, workspaceId);
 }

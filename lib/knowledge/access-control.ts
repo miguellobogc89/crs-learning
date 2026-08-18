@@ -2,8 +2,9 @@ import type { Prisma } from "@prisma/client";
 
 export function knowledgeLibraryReadWhere(
   userId: string,
+  workspaceId?: string | null,
 ): Prisma.knowledge_librariesWhereInput {
-  return {
+  const permissionWhere: Prisma.knowledge_librariesWhereInput = {
     OR: [
       {
         owner_user_id: userId,
@@ -28,14 +29,42 @@ export function knowledgeLibraryReadWhere(
           },
         },
       },
+      ...(workspaceId
+        ? [
+            {
+              workspaces: {
+                workspace_members: {
+                  some: {
+                    user_id: userId,
+                    status: "active",
+                  },
+                },
+              },
+            },
+          ]
+        : []),
+    ],
+  };
+
+  if (!workspaceId) {
+    return permissionWhere;
+  }
+
+  return {
+    AND: [
+      {
+        workspace_id: workspaceId,
+      },
+      permissionWhere,
     ],
   };
 }
 
 export function knowledgeLibraryWriteWhere(
   userId: string,
+  workspaceId?: string | null,
 ): Prisma.knowledge_librariesWhereInput {
-  return {
+  const permissionWhere: Prisma.knowledge_librariesWhereInput = {
     OR: [
       {
         owner_user_id: userId,
@@ -68,12 +97,26 @@ export function knowledgeLibraryWriteWhere(
       },
     ],
   };
+
+  if (!workspaceId) {
+    return permissionWhere;
+  }
+
+  return {
+    AND: [
+      {
+        workspace_id: workspaceId,
+      },
+      permissionWhere,
+    ],
+  };
 }
 
 export function knowledgeSourceReadWhere(
   userId: string,
+  workspaceId?: string | null,
 ): Prisma.knowledge_sourcesWhereInput {
-  return {
+  const permissionWhere: Prisma.knowledge_sourcesWhereInput = {
     status: {
       not: "deleted",
     },
@@ -83,19 +126,50 @@ export function knowledgeSourceReadWhere(
       },
       {
         knowledge_libraries:
-          knowledgeLibraryReadWhere(userId),
+          knowledgeLibraryReadWhere(userId, workspaceId),
       },
+    ],
+  };
+
+  if (!workspaceId) {
+    return permissionWhere;
+  }
+
+  return {
+    AND: [
+      {
+        knowledge_libraries: {
+          workspace_id: workspaceId,
+        },
+      },
+      permissionWhere,
     ],
   };
 }
 
 export function knowledgeSourceOwnerWhere(
   userId: string,
+  workspaceId?: string | null,
 ): Prisma.knowledge_sourcesWhereInput {
-  return {
+  const ownerWhere: Prisma.knowledge_sourcesWhereInput = {
     status: {
       not: "deleted",
     },
     owner_user_id: userId,
+  };
+
+  if (!workspaceId) {
+    return ownerWhere;
+  }
+
+  return {
+    AND: [
+      ownerWhere,
+      {
+        knowledge_libraries: {
+          workspace_id: workspaceId,
+        },
+      },
+    ],
   };
 }

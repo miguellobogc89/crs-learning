@@ -13,6 +13,7 @@ import {
 } from "@/lib/knowledge/file-analysis/types";
 import { knowledgeSourceOwnerWhere } from "@/lib/knowledge/access-control";
 import { prisma } from "@/lib/prisma";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,11 +51,16 @@ export async function POST(
     );
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const file = await prisma.knowledge_files.findFirst({
     where: {
       id: fileId,
       knowledge_sources: knowledgeSourceOwnerWhere(
         session.user.id,
+        activeWorkspace.id,
       ),
     },
     select: {

@@ -10,6 +10,7 @@ import {
   removeTeamShareFromLibrary,
   shareLibraryWithKnowledgeTeam,
 } from "@/lib/services/knowledge-team.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export async function shareKnowledgeLibraryWithTeamAction(
   formData: FormData,
@@ -36,10 +37,15 @@ export async function shareKnowledgeLibraryWithTeamAction(
     return;
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   await shareLibraryWithKnowledgeTeam({
     libraryId,
     teamId,
     ownerUserId: session.user.id,
+    workspaceId: activeWorkspace.id,
     accessLevel,
   });
 
@@ -127,10 +133,15 @@ export async function removeKnowledgeLibraryTeamShareAction(
     return;
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   await removeTeamShareFromLibrary({
     libraryId,
     teamId,
     ownerUserId: session.user.id,
+    workspaceId: activeWorkspace.id,
   });
 
   revalidatePath("/knowledge");

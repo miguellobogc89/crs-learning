@@ -5,6 +5,7 @@ import { KnowledgeActivityView } from "@/components/knowledge/activity/knowledge
 import { KnowledgeMapView } from "@/components/knowledge/activity/knowledge-map-view";
 import { listKnowledgeStatus } from "@/lib/services/knowledge-library.service";
 import { listKnowledgeEvents } from "@/lib/services/knowledge.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 type KnowledgeActivityPageProps = {
   searchParams?: Promise<{
@@ -26,10 +27,13 @@ export default async function KnowledgeActivityPage({
     params?.view === "status"
       ? "status"
       : "activity";
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
 
   const [events, knowledgeStatus] = await Promise.all([
-    listKnowledgeEvents(session.user.id),
-    listKnowledgeStatus(session.user.id),
+    listKnowledgeEvents(session.user.id, activeWorkspace.id),
+    listKnowledgeStatus(session.user.id, activeWorkspace.id),
   ]);
 
   return (
