@@ -205,6 +205,8 @@ model users {
   user_course_progress                                                                         user_course_progress[]
   user_lesson_progress                                                                         user_lesson_progress[]
   companies                                                                                    companies?                         @relation(fields: [company_id], references: [id], onUpdate: NoAction)
+  workspace_members                                                                            workspace_members[]
+  workspaces                                                                                   workspaces[]
 
   @@index([company_id], map: "idx_users_company_id")
 }
@@ -340,6 +342,7 @@ model knowledge_libraries {
   company_id                                          String?                              @db.Uuid
   visibility                                          String                               @default("restricted")
   organization_id                                     String?                              @db.Uuid
+  workspace_id                                        String?                              @db.Uuid
   chat_conversations                                  chat_conversations[]
   knowledge_activity                                  knowledge_activity[]
   knowledge_correction_requests                       knowledge_correction_requests[]
@@ -352,6 +355,7 @@ model knowledge_libraries {
   knowledge_libraries                                 knowledge_libraries?                 @relation("knowledge_librariesToknowledge_libraries", fields: [parent_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   other_knowledge_libraries                           knowledge_libraries[]                @relation("knowledge_librariesToknowledge_libraries")
   users_knowledge_libraries_updated_by_user_idTousers users?                               @relation("knowledge_libraries_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+  workspaces                                          workspaces?                          @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   knowledge_library_permissions                       knowledge_library_permissions[]
   knowledge_library_team_permissions                  knowledge_library_team_permissions[]
   knowledge_share_links                               knowledge_share_links[]
@@ -365,6 +369,7 @@ model knowledge_libraries {
   @@index([company_id], map: "idx_knowledge_libraries_company_id")
   @@index([visibility], map: "idx_knowledge_libraries_visibility")
   @@index([organization_id], map: "idx_knowledge_libraries_organization_id")
+  @@index([workspace_id], map: "idx_knowledge_libraries_workspace_id")
 }
 
 model chat_conversations {
@@ -740,6 +745,7 @@ model organizations {
   organization_public_sources      organization_public_sources[]
   organizations                    organizations?                     @relation("organizationsToorganizations", fields: [parent_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
   other_organizations              organizations[]                    @relation("organizationsToorganizations")
+  workspaces                       workspaces[]
 
   @@index([is_independent_tenant], map: "idx_organizations_independent_tenant")
   @@index([parent_id], map: "idx_organizations_parent_id")
@@ -1179,4 +1185,46 @@ model organization_invites {
   @@index([email], map: "idx_organization_invites_email")
   @@index([organization_id], map: "idx_organization_invites_organization_id")
   @@index([status], map: "idx_organization_invites_status")
+}
+
+model workspace_members {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String     @db.Uuid
+  user_id      String     @db.Uuid
+  role         String     @default("member")
+  status       String     @default("active")
+  joined_at    DateTime   @default(now()) @db.Timestamptz(6)
+  created_at   DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime   @default(now()) @db.Timestamptz(6)
+  users        users      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces   workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([workspace_id, user_id], map: "workspace_members_unique")
+  @@index([status], map: "idx_workspace_members_status")
+  @@index([user_id], map: "idx_workspace_members_user_id")
+  @@index([workspace_id], map: "idx_workspace_members_workspace_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model workspaces {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id       String?               @db.Uuid
+  organization_id     String?               @db.Uuid
+  name                String
+  slug                String
+  description         String?
+  visibility          String                @default("private")
+  status              String                @default("active")
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime              @default(now()) @db.Timestamptz(6)
+  knowledge_libraries knowledge_libraries[]
+  workspace_members   workspace_members[]
+  organizations       organizations?        @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users               users?                @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([organization_id, slug], map: "workspaces_organization_slug_unique", where: raw("(organization_id IS NOT NULL)"))
+  @@unique([owner_user_id, slug], map: "workspaces_personal_slug_unique", where: raw("(owner_user_id IS NOT NULL)"))
+  @@index([organization_id], map: "idx_workspaces_organization_id")
+  @@index([owner_user_id], map: "idx_workspaces_owner_user_id")
+  @@index([status], map: "idx_workspaces_status")
 }
