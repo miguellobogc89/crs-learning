@@ -1,3 +1,5 @@
+//app/api/assistant/route.ts
+ 
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
@@ -9,6 +11,7 @@ import {
 } from "@/lib/ai/assistant/retrieval";
 import { prisma } from "@/lib/prisma";
 import { listAccessibleKnowledgeSpaces } from "@/lib/services/knowledge-space.service";
+import { resolveRetrievalQuery } from "@/lib/ai/assistant/resolve-retrieval-query";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -94,23 +97,6 @@ export async function POST(request: Request) {
       },
     });
 
-  const spaces =
-    await listAccessibleKnowledgeSpaces(userId);
-
-  const retrievedKnowledge = await retrieveKnowledge(
-    userId,
-    message,
-  );
-
-  const messageSources = buildMessageSources(
-    retrievedKnowledge.items,
-  );
-
-  const systemPrompt = buildSystemPrompt({
-    spaces,
-    contextText: retrievedKnowledge.contextText,
-  });
-
   const previousMessages =
     await prisma.chat_messages.findMany({
       where: {
@@ -131,6 +117,34 @@ export async function POST(request: Request) {
 
   const conversationHistory =
     previousMessages.reverse();
+
+  const spaces =
+    await listAccessibleKnowledgeSpaces(userId);
+
+  const retrievalQuery =
+    await resolveRetrievalQuery({
+      message,
+      history: conversationHistory,
+    });
+
+const retrievedKnowledge =
+  await retrieveKnowledge(
+    userId,
+    retrievalQuery,
+  );
+
+  const messageSources = buildMessageSources(
+    retrievedKnowledge.items,
+  );
+
+  const systemPrompt = buildSystemPrompt({
+    spaces,
+    contextText: retrievedKnowledge.contextText,
+  });
+
+
+
+
 
   const response = await openai.responses.create({
     model: "gpt-4.1-mini",
@@ -307,9 +321,15 @@ ${message}
 
 Responde únicamente a esta pregunta.
 
-Utiliza exclusivamente el conocimiento corporativo recuperado para esta petición.
+Usa el conocimiento corporativo recuperado como fuente de verdad para cualquier hecho específico de la organización.
 
-Cita cada afirmación relevante con el identificador correspondiente, por ejemplo [F1] o [F1][F2].
+Si el usuario pide explicar, interpretar, simplificar, desarrollar o ejemplificar un concepto presente en el conocimiento recuperado, puedes usar tu conocimiento general y capacidad de razonamiento para hacerlo.
+
+Distingue claramente los hechos obtenidos del Knowledge Hub de las explicaciones, razonamientos o ejemplos que generes para ayudar al usuario.
+
+No inventes hechos corporativos, políticas, procedimientos, herramientas, responsables, permisos ni plazos que no estén respaldados por el conocimiento recuperado.
+
+Cita con [F1], [F2], etc. únicamente las afirmaciones que procedan del conocimiento recuperado. No atribuyas una cita del Knowledge Hub a un ejemplo o explicación creada por ti.
 
 Conocimiento recuperado:
 
