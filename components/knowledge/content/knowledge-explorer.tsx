@@ -20,7 +20,6 @@ import {
 import { KnowledgeEmptyState } from "./knowledge-empty-state";
 import { moveKnowledgeLibrary } from "@/lib/actions/knowledge-library.actions";
 import { KnowledgeItemCard } from "./cards/knowledge-item-card";
-import { KnowledgeImportFlow } from "@/components/knowledge/import/knowledge-import-flow";
 
 type KnowledgeLibrary = {
   id: string;
@@ -67,9 +66,7 @@ type Props = {
   viewMode: "grid" | "list";
   selectedLibraryId: string | null;
   selectedView: string;
-  canCreateArticle: boolean;
   search: string;
-  onCreateArticle: () => void;
   selectedArticleIds: Set<string>;
 selectedFolderIds: Set<string>;
 
@@ -170,9 +167,7 @@ export function KnowledgeExplorer({
   viewMode,
   selectedLibraryId,
   selectedView,
-  canCreateArticle,
   search,
-  onCreateArticle,
   selectedArticleIds,
 selectedFolderIds,
 onArticleSelectedChange,
@@ -368,12 +363,12 @@ onFolderSelectedChange,
       );
     }
 
-    if (selectedLibraryId && canCreateArticle) {
+    if (selectedLibraryId) {
       return (
-        <KnowledgeImportFlow
-          libraryId={selectedLibraryId}
-          libraryName="Carpeta"
-          onCreateArticle={onCreateArticle}
+        <KnowledgeEmptyState
+          icon={<FolderTree className="h-5 w-5" />}
+          title="Aqui todavia no hay articulos"
+          description="Crea o importa contenido desde las acciones superiores."
         />
       );
     }

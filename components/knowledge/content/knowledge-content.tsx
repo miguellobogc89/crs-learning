@@ -199,13 +199,6 @@ function clearSelection() {
     );
   }, [knowledgeLibraries, selectedLibraryId]);
 
-  const canCreateArticle = Boolean(
-    selectedLibraryId &&
-      selectedLibrary &&
-      !selectedLibrary.is_shared &&
-      selectedView !== "shared",
-  );
-
   const baseChildLibraries = useMemo(() => {
     if (selectedView === "shared") {
       return knowledgeLibraries.filter(
@@ -435,14 +428,6 @@ function clearSelection() {
     }
   }
 
-  function openCreateArticleModal() {
-    if (!canCreateArticle) {
-      return;
-    }
-
-    setIsKnowledgeImportOpen(true);
-  }
-
   function handleFilesSelected(
     event: ChangeEvent<HTMLInputElement>,
   ) {
@@ -518,9 +503,7 @@ function clearSelection() {
         viewMode={explorerState.viewMode}
         selectedLibraryId={selectedLibraryId}
         selectedView={selectedView}
-        canCreateArticle={canCreateArticle}
         search={explorerState.search}
-        onCreateArticle={openCreateArticleModal}
         selectedArticleIds={selectedArticleIds}
 selectedFolderIds={selectedFolderIds}
 onArticleSelectedChange={
