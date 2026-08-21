@@ -569,61 +569,65 @@ useEffect(() => {
 
   const noop = () => undefined;
 
-  return (
-    <div
-      className="flex h-full min-h-0 flex-col bg-panel"
-      onMouseDown={(event) => {
-        const target = event.target as HTMLElement;
+return (
+  <div
+    className="flex h-full min-h-0 flex-col bg-panel"
+    onMouseDown={(event) => {
+      const target = event.target as HTMLElement;
 
-        if (target.closest("input")) {
-          return;
-        }
+      if (target.closest("input")) {
+        return;
+      }
 
-        saveEditingLibraries();
-      }}
-    >
+      saveEditingLibraries();
+    }}
+  >
+    {/* VISTAS FIJAS */}
+    <div className="shrink-0 border-b border-border p-4 pb-3">
+      <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Vistas
+      </p>
 
-      {/* VISTAS FIJAS */}
-      <div className="shrink-0 border-b border-border p-4 pb-3">
-        <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Vistas
-        </p>
-
-        <div className="space-y-1">
-          {sidebarItems.map((item) => (
-            <KnowledgeViewItem
-              key={item.label}
-              item={{
-                ...item,
-                active: isViewActive(item),
-              }}
-              onSelect={() => handleSelectView(item)}
-            />
-          ))}
-        </div>
+      <div className="space-y-1">
+        {sidebarItems.map((item) => (
+          <KnowledgeViewItem
+            key={item.label}
+            item={{
+              ...item,
+              active: isViewActive(item),
+            }}
+            onSelect={() => handleSelectView(item)}
+          />
+        ))}
       </div>
+    </div>
 
-{/* SEARCH FIJO */}
-<div className="shrink-0 px-4 py-4">
-  <SearchInput
-    placeholder="Buscar biblioteca..."
-    value={search}
-    onChange={setSearch}
-  />
-</div>
+    {/* SEARCH FIJO */}
+    <div className="shrink-0 px-4 py-4">
+      <SearchInput
+        placeholder="Buscar biblioteca..."
+        value={search}
+        onChange={setSearch}
+      />
+    </div>
 
-      {/* SOLO ESTA ZONA HACE SCROLL */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="space-y-6">
-          {/* MI BIBLIOTECA */}
-          <div>
+    {/* ZONA CON SCROLL */}
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-0">
+      <div className="space-y-6">
+
+        {/* MI BIBLIOTECA */}
+        <div>
+          <div className="-mx-1">
             <SectionToggle
               isOpen={isMyLibraryOpen}
               label="Mi biblioteca"
-              count={filteredLibraries.length}
-              onToggle={() =>
-                setIsMyLibraryOpen((value) => !value)
+              count={
+                filteredLibraries.length +
+                filteredSharedLibraries.length
               }
+              onToggle={() => {
+                setIsMyLibraryOpen((value) => !value);
+              }}
               action={
                 <button
                   className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition hover:bg-surface hover:text-foreground"
@@ -635,62 +639,203 @@ useEffect(() => {
                 </button>
               }
             />
+          </div>
 
-            {isMyLibraryOpen ? (
-              <div className="mt-2 space-y-1">
+          {isMyLibraryOpen ? (
+            <div className="mt-2 pl-3">
+              {/* BIBLIOTECAS PROPIAS */}
+              <KnowledgeLibraryTree
+                libraries={filteredLibraries}
+                openMenuId={openMenuId}
+                inputRefs={inputRefs}
+                draggedLibraryId={draggedLibraryId}
+                dropTargetLibraryId={dropTargetLibraryId}
+                onRename={handleRenameLibrary}
+                onSave={handleSaveLibrary}
+                onToggleExpanded={handleToggleExpanded}
+                onToggleMenu={(id) => {
+                  setOpenMenuId((current) => {
+                    if (current === id) {
+                      return null;
+                    }
+
+                    return id;
+                  });
+                }}
+                onCreateChild={handleCreateChildLibrary}
+                onStartRename={handleStartRename}
+                onDelete={handleDeleteLibrary}
+                onSelect={handleSelectLibrary}
+                onDragStart={handleDragStart}
+                onDragEnd={clearDragState}
+                onDragOverLibrary={handleDragOverLibrary}
+                onDropLibrary={handleDropOnLibrary}
+                selectedLibraryId={selectedLibraryId}
+              />
+
+              {/* BIBLIOTECAS COMPARTIDAS */}
+              {filteredSharedLibraries.length > 0 ? (
                 <KnowledgeLibraryTree
-                  libraries={filteredLibraries}
-                  openMenuId={openMenuId}
+                  libraries={buildReadonlyLibraryTree(
+                    filteredSharedLibraries,
+                  )}
+                  readonly
+                  openMenuId={null}
                   inputRefs={inputRefs}
-                  draggedLibraryId={draggedLibraryId}
-                  dropTargetLibraryId={dropTargetLibraryId}
-                  onRename={handleRenameLibrary}
-                  onSave={handleSaveLibrary}
-                  onToggleExpanded={handleToggleExpanded}
-                  onToggleMenu={(id) => {
-                    setOpenMenuId((current) => {
-                      if (current === id) {
-                        return null;
-                      }
-
-                      return id;
-                    });
-                  }}
-                  onCreateChild={handleCreateChildLibrary}
-                  onStartRename={handleStartRename}
-                  onDelete={handleDeleteLibrary}
-                  onSelect={handleSelectLibrary}
-                  onDragStart={handleDragStart}
-                  onDragEnd={clearDragState}
-                  onDragOverLibrary={handleDragOverLibrary}
-                  onDropLibrary={handleDropOnLibrary}
+                  onRename={noop}
+                  onSave={noop}
+                  onToggleExpanded={toggleReadonlyLibrary}
+                  onToggleMenu={noop}
+                  onCreateChild={noop}
+                  onStartRename={noop}
+                  onDelete={noop}
                   selectedLibraryId={selectedLibraryId}
+                  onSelect={handleSelectLibrary}
                 />
+              ) : null}
 
-                {/* aquí mantienes exactamente tu bloque de drop root */}
+              {/* DROP EN RAÍZ */}
+              <div
+                className={[
+                  "mt-2 flex h-8 items-center rounded-md border border-dashed px-3 text-xs transition",
+                  dropTargetLibraryId === null &&
+                  draggedLibraryId
+                    ? "border-brand bg-brand-soft text-brand"
+                    : "border-transparent text-muted-foreground",
+                ].join(" ")}
+                onDragOver={(event) => {
+                  if (!draggedLibraryId) {
+                    return;
+                  }
 
-                {filteredLibraries.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-muted-foreground">
-                    No hay bibliotecas que coincidan.
-                  </p>
-                ) : null}
+                  event.preventDefault();
+                  setDropTargetLibraryId(null);
+                }}
+                onDrop={(event) => {
+                  if (!draggedLibraryId) {
+                    return;
+                  }
+
+                  void handleDropOnLibrary(
+                    draggedLibraryId,
+                    event,
+                  );
+                }}
+              >
+                {draggedLibraryId
+                  ? "Mover a Mi biblioteca"
+                  : null}
               </div>
-            ) : null}
+
+              {filteredLibraries.length === 0 &&
+              filteredSharedLibraries.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-muted-foreground">
+                  No hay bibliotecas que coincidan.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        {/* MIS EQUIPOS */}
+        <div>
+          <div className="-mx-1">
+            <SectionToggle
+              isOpen={isTeamsOpen}
+              label="Mis equipos"
+              count={teamGroups.length}
+              onToggle={() => {
+                setIsTeamsOpen((value) => !value);
+              }}
+            />
           </div>
 
-          {/* COMPARTIDO CONMIGO */}
-          <div>
-            {/* deja aquí tu bloque actual sin cambios */}
-          </div>
+          {isTeamsOpen ? (
+            <div className="mt-2 space-y-2 pl-3">
+              {teamGroups.map((team) => {
+                const isTeamOpen =
+                  openTeamIds[team.id] ?? true;
 
-          {/* MIS EQUIPOS */}
-          <div>
-            {/* deja aquí tu bloque actual sin cambios */}
-          </div>
+                return (
+                  <div key={team.id}>
+                    <button
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-panel-foreground/70 transition hover:bg-surface-hover hover:text-foreground"
+                      type="button"
+                      onClick={() => {
+                        setOpenTeamIds((current) => ({
+                          ...current,
+                          [team.id]: !isTeamOpen,
+                        }));
+                      }}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        {isTeamOpen ? (
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                        )}
+
+                        <UsersRound className="h-4 w-4 shrink-0" />
+
+                        <span className="truncate">
+                          {team.name}
+                        </span>
+                      </span>
+
+                      <span className="text-xs text-muted-foreground">
+                        {team.libraries.length}
+                      </span>
+                    </button>
+
+                    {isTeamOpen ? (
+                      <div className="mt-1 pl-5">
+                        {team.libraries.length > 0 ? (
+                          <KnowledgeLibraryTree
+                            libraries={buildReadonlyLibraryTree(
+                              team.libraries,
+                            )}
+                            readonly
+                            openMenuId={null}
+                            inputRefs={inputRefs}
+                            onRename={noop}
+                            onSave={noop}
+                            onToggleExpanded={
+                              toggleReadonlyLibrary
+                            }
+                            onToggleMenu={noop}
+                            onCreateChild={noop}
+                            onStartRename={noop}
+                            onDelete={noop}
+                            selectedLibraryId={
+                              selectedLibraryId
+                            }
+                            onSelect={
+                              handleSelectLibrary
+                            }
+                          />
+                        ) : (
+                          <p className="px-3 py-2 text-xs text-muted-foreground">
+                            Sin bibliotecas compartidas.
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+
+              {teamGroups.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-muted-foreground">
+                  No perteneces a ningún equipo.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }
 
 function SectionToggle({

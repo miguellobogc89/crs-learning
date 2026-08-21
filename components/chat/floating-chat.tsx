@@ -125,47 +125,62 @@ const [messages, setMessages] = useState<
         conversation.id === conversationId,
     );
 
-  useEffect(() => {
-    setConversationList(conversations);
-  }, [conversations]);
+useEffect(() => {
+  setConversationList(conversations);
+}, [conversations]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
+useEffect(() => {
+  window.dispatchEvent(
+    new CustomEvent("crs:assistant-state", {
+      detail: { isOpen },
+    }),
+  );
+}, [isOpen]);
 
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "end",
-    });
-  }, [
-    isOpen,
-    messages,
-    isSending,
-    isLoadingConversation,
-  ]);
-
-  function openChat() {
-    setIsOpen(true);
+useEffect(() => {
+  if (!isOpen) {
+    return;
   }
 
-  useEffect(() => {
-    function handleOpenAssistant() {
-      openChat();
-    }
+  messagesEndRef.current?.scrollIntoView({
+    behavior: "smooth",
+    block: "end",
+  });
+}, [
+  isOpen,
+  messages,
+  isSending,
+  isLoadingConversation,
+]);
 
-    window.addEventListener(
-      "crs:open-assistant",
-      handleOpenAssistant,
+function openChat() {
+  setIsOpen(true);
+}
+
+useEffect(() => {
+  function handleToggleAssistant() {
+    setIsOpen((current) => {
+      if (current) {
+        setIsExpanded(false);
+        setShowConversations(false);
+      }
+
+      return !current;
+    });
+  }
+
+  window.addEventListener(
+    "crs:toggle-assistant",
+    handleToggleAssistant,
+  );
+
+  return () => {
+    window.removeEventListener(
+      "crs:toggle-assistant",
+      handleToggleAssistant,
     );
-
-    return () => {
-      window.removeEventListener(
-        "crs:open-assistant",
-        handleOpenAssistant,
-      );
-    };
-  }, []);
+  };
+}, []);
 
   function closeChat() {
     setIsOpen(false);
@@ -438,24 +453,30 @@ const [messages, setMessages] = useState<
         </button>
       )}
 
-      <aside
-        className={cn(
-          `
-            fixed bottom-0 right-0 top-0 z-50
-            flex translate-x-full flex-col
-            border-l border-border/70
-            bg-background/95
-            shadow-[-24px_0_80px_-35px_rgba(0,0,0,0.35)]
-            backdrop-blur-2xl
-            transition-[width,transform]
-            duration-300 ease-out
-          `,
-          isOpen && "translate-x-0",
-          isExpanded
-            ? "w-full md:w-[48vw]"
-            : "w-full sm:w-[430px] xl:w-[25vw] xl:min-w-[400px]",
-        )}
-      >
+<aside
+  className={cn(
+    `
+      fixed bottom-0 right-0 top-0 z-50
+      flex flex-col
+      border-l border-border/70
+      bg-background/95
+      shadow-[-24px_0_80px_-35px_rgba(0,0,0,0.35)]
+      backdrop-blur-2xl
+
+      transform-gpu
+      transition-transform
+      duration-500
+      ease-[cubic-bezier(0.22,1,0.36,1)]
+      will-change-transform
+    `,
+    isOpen
+      ? "translate-x-0"
+      : "translate-x-full",
+    isExpanded
+      ? "w-full md:w-[48vw]"
+      : "w-full sm:w-[430px] xl:w-[25vw] xl:min-w-[400px]",
+  )}
+>
         <header className="flex h-[72px] shrink-0 items-center justify-between border-b border-border/70 px-5">
           <div className="flex min-w-0 items-center gap-3">
             <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-neutral-950 text-white shadow-sm">
