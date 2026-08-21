@@ -1,3 +1,5 @@
+// components/knowledge/sidebar/knowledge-sidebar.tsx
+
 import type { ReactNode } from "react";
 
 import { AssistantSidebarTrigger } from "./assistant-sidebar-trigger";
@@ -11,7 +13,7 @@ export function AppSectionSidebar({
 }: AppSectionSidebarProps) {
   return (
     <aside className="flex min-h-0 flex-col border-r border-border bg-panel">
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1">
         {children}
       </div>
 

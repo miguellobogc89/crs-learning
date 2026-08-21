@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { AppSidebar } from "@/components/app/sidebar";
 import { AppTopbar } from "@/components/app/topbar";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { AutoBreadcrumb } from "@/components/app/auto-breadcrumb";
 import { FloatingChat } from "@/components/chat/floating-chat";
 import {
@@ -50,43 +55,53 @@ export default async function AppLayout({
 
   return (
     <KnowledgeImportProvider>
-      <div className="flex h-screen bg-background text-foreground">
-        <AppSidebar />
+      <Sheet>
+        <div className="flex h-screen bg-background text-foreground">
+          <AppSidebar />
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <AppTopbar
-            user={session.user}
-            notifications={
-              notificationSummary.notifications
+          <div className="flex min-w-0 flex-1 flex-col">
+            <AppTopbar
+              user={session.user}
+              notifications={
+                notificationSummary.notifications
+              }
+              unreadNotificationCount={
+                notificationSummary.unreadCount
+              }
+              activeWorkspace={
+                workspaceContext.activeWorkspace
+              }
+              workspaces={
+                workspaceContext.workspaces
+              }
+              breadcrumb={
+                <AutoBreadcrumb />
+              }
+            />
+
+            <main className="min-h-0 flex-1 overflow-hidden bg-background">
+              {children}
+            </main>
+          </div>
+
+          <FloatingChat
+            conversations={
+              conversations
             }
-            unreadNotificationCount={
-              notificationSummary.unreadCount
-            }
-            activeWorkspace={
-              workspaceContext.activeWorkspace
-            }
-            workspaces={
-              workspaceContext.workspaces
-            }
-            breadcrumb={
-              <AutoBreadcrumb />
-            }
+            hideTrigger
           />
 
-          <main className="min-h-0 flex-1 overflow-hidden bg-background">
-            {children}
-          </main>
+          <KnowledgeImportBackgroundWidget />
         </div>
 
-        <FloatingChat
-          conversations={
-            conversations
-          }
-          hideTrigger
-        />
-
-        <KnowledgeImportBackgroundWidget />
-      </div>
+        <SheetContent
+          side="left"
+          className="w-[min(20rem,86vw)] gap-0 p-0 lg:hidden"
+        >
+          <SheetTitle className="sr-only">Navegación principal</SheetTitle>
+          <AppSidebar mobile />
+        </SheetContent>
+      </Sheet>
     </KnowledgeImportProvider>
   );
 }

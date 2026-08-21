@@ -97,12 +97,7 @@ export function NotificationBell({
               latestNotification.body ??
               "Tienes una nueva notificacion.",
             className:
-              "border border-black bg-white text-black shadow-lg",
-            style: {
-              background: "white",
-              borderColor: "black",
-              color: "black",
-            },
+              "border border-border bg-background text-foreground shadow-lg",
           });
         }
       } catch {
@@ -185,7 +180,7 @@ export function NotificationBell({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="relative flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-surface hover:text-foreground"
+          className="relative flex h-full aspect-square items-center justify-center rounded-md text-muted-foreground hover:bg-surface hover:text-foreground"
           aria-label="Notificaciones"
         >
           <Bell className="h-4 w-4" />

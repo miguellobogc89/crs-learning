@@ -39,7 +39,7 @@ export function WorkspaceSelector({
           type="button"
           className="
             group/workspace relative
-            flex h-9 max-w-[240px] items-center gap-2
+            flex h-full max-w-[240px] items-center gap-2
             rounded-md border border-border
             bg-background px-3
             text-sm text-foreground
@@ -66,8 +66,8 @@ export function WorkspaceSelector({
             className="
               pointer-events-none absolute left-1/2 top-full z-50 mt-2
               -translate-x-1/2 whitespace-nowrap rounded-md
-              bg-black px-2.5 py-1.5
-              text-xs font-medium text-white
+              bg-foreground px-2.5 py-1.5
+              text-xs font-medium text-background
               opacity-0
               transition-opacity duration-150
               group-hover/workspace:opacity-100
@@ -135,7 +135,7 @@ export function WorkspaceSelector({
             />
             <button
               type="submit"
-              className="flex h-8 w-full items-center justify-center rounded-md bg-brand px-2 text-sm font-medium text-white hover:bg-brand/90"
+              className="flex h-8 w-full items-center justify-center rounded-md bg-brand px-2 text-sm font-medium text-brand-foreground hover:bg-brand/90"
             >
               Crear workspace
             </button>

@@ -4,12 +4,13 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { UserCircle } from "lucide-react";
+import { Menu, UserCircle } from "lucide-react";
 
 import { logout } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { GlobalSearch } from "@/components/search/global-search";
 import { WorkspaceSelector } from "@/components/workspace/workspace-selector";
+import { SheetTrigger } from "@/components/ui/sheet";
 import type { NotificationItem } from "@/lib/services/notification.service";
 import type { AccessibleWorkspace } from "@/lib/repositories/workspace.repository";
 
@@ -57,27 +58,52 @@ export function AppTopbar({
   }
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-white px-5">
-      <div className="flex shrink-0 items-center gap-3">
+    <header
+      className="
+        flex shrink-0 items-center gap-4
+        border-b border-border
+        bg-background px-3 py-2
+
+        h-12
+        sm:px-4 sm:py-2
+        md:h-14 md:px-5 md:py-2.5
+        lg:h-[58px] lg:px-6 lg:py-3
+        xl:h-16 xl:px-7 xl:py-3
+        2xl:h-[68px] 2xl:px-8 2xl:py-3.5
+        [&_[data-search-shortcut]]:hidden
+        lg:[&_[data-search-shortcut]]:inline-flex
+      "
+    >
+      <SheetTrigger asChild>
+        <button
+          type="button"
+          aria-label="Abrir navegación"
+          className="flex h-full aspect-square shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground lg:hidden"
+        >
+          <Menu className="size-5" />
+        </button>
+      </SheetTrigger>
+
+      <div className="hidden h-full shrink-0 items-center gap-3 lg:flex">
         <WorkspaceSelector
           activeWorkspace={activeWorkspace}
           workspaces={workspaces}
         />
 
-        <div className="h-5 w-px bg-border" />
+        <div className="my-3 w-px self-stretch bg-border" />
 
         <span className="text-sm font-medium text-foreground">
           {sectionLabel}
         </span>
       </div>
 
-      <div className="flex min-w-0 flex-1 justify-center px-6">
-        <div className="w-full max-w-2xl">
+      <div className="flex h-full min-w-0 flex-1 justify-center px-2 md:px-4 lg:px-6">
+        <div className="h-full w-full max-w-2xl">
           <GlobalSearch />
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex h-full shrink-0 items-center gap-1.5 sm:gap-2">
         <NotificationBell
           initialNotifications={notifications}
           initialUnreadCount={unreadNotificationCount}
@@ -87,7 +113,7 @@ export function AppTopbar({
           <button
             type="submit"
             aria-label="Cerrar sesión"
-            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+            className="flex h-full aspect-square items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
           >
             {user.image ? (
               <Image
@@ -95,10 +121,10 @@ export function AppTopbar({
                 alt={userLabel}
                 width={28}
                 height={28}
-                className="h-7 w-7 rounded-full object-cover"
+                className="h-full w-full rounded-full object-cover"
               />
             ) : (
-              <UserCircle className="h-6 w-6" />
+              <UserCircle className="h-full w-full" />
             )}
           </button>
         </form>

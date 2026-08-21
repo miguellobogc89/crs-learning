@@ -571,7 +571,7 @@ useEffect(() => {
 
   return (
     <div
-      className="min-h-full bg-panel"
+      className="flex h-full min-h-0 flex-col bg-panel"
       onMouseDown={(event) => {
         const target = event.target as HTMLElement;
 
@@ -582,244 +582,111 @@ useEffect(() => {
         saveEditingLibraries();
       }}
     >
-      <div className="border-b border-border p-4">
-        <SearchInput
-          placeholder="Buscar biblioteca..."
-          value={search}
-          onChange={setSearch}
-        />
+
+      {/* VISTAS FIJAS */}
+      <div className="shrink-0 border-b border-border p-4 pb-3">
+        <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Vistas
+        </p>
+
+        <div className="space-y-1">
+          {sidebarItems.map((item) => (
+            <KnowledgeViewItem
+              key={item.label}
+              item={{
+                ...item,
+                active: isViewActive(item),
+              }}
+              onSelect={() => handleSelectView(item)}
+            />
+          ))}
+        </div>
       </div>
 
-      <div className="space-y-6 p-4">
-        <div>
-          <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Vistas
-          </p>
-
-          <div className="space-y-1">
-            {sidebarItems.map((item) => (
-              <KnowledgeViewItem
-                key={item.label}
-                item={{
-                  ...item,
-                  active: isViewActive(item),
-                }}
-                onSelect={() => handleSelectView(item)}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <SectionToggle
-            isOpen={isMyLibraryOpen}
-            label="Mi biblioteca"
-            count={filteredLibraries.length}
-            onToggle={() => setIsMyLibraryOpen((value) => !value)}
-            action={
-              <button
-                className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition hover:bg-surface hover:text-foreground"
-                type="button"
-                onClick={handleCreateLibrary}
-                aria-label="Crear biblioteca"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            }
-          />
-
-          {isMyLibraryOpen ? (
-            <div className="mt-2 space-y-1">
-              <KnowledgeLibraryTree
-                libraries={filteredLibraries}
-                openMenuId={openMenuId}
-                inputRefs={inputRefs}
-                draggedLibraryId={draggedLibraryId}
-                dropTargetLibraryId={dropTargetLibraryId}
-                onRename={handleRenameLibrary}
-                onSave={handleSaveLibrary}
-                onToggleExpanded={handleToggleExpanded}
-                onToggleMenu={(id) => {
-                  setOpenMenuId((current) => {
-                    if (current === id) {
-                      return null;
-                    }
-
-                    return id;
-                  });
-                }}
-                onCreateChild={handleCreateChildLibrary}
-                onStartRename={handleStartRename}
-                onDelete={handleDeleteLibrary}
-                onSelect={handleSelectLibrary}
-                onDragStart={handleDragStart}
-                onDragEnd={clearDragState}
-                onDragOverLibrary={handleDragOverLibrary}
-                onDropLibrary={handleDropOnLibrary}
-                selectedLibraryId={selectedLibraryId}
-              />
-
-<div
-  className={[
-    "flex items-center justify-center overflow-hidden rounded-lg border border-dashed text-xs transition-all",
-    draggedLibraryId
-      ? "mt-2 min-h-12"
-      : "mt-0 h-0 min-h-0 border-transparent",
-    isRootDropTarget
-      ? "border-sky-400 bg-sky-50 text-sky-700"
-      : draggedLibraryId
-        ? "border-border text-muted-foreground"
-        : "text-transparent",
-  ].join(" ")}
-  onDragOver={handleDragOverRoot}
-  onDragEnter={handleDragOverRoot}
-  onDragLeave={(event) => {
-    const currentTarget = event.currentTarget;
-    const relatedTarget = event.relatedTarget as Node | null;
-
-    if (relatedTarget && currentTarget.contains(relatedTarget)) {
-      return;
-    }
-
-    setIsRootDropTarget(false);
-  }}
-  onDrop={handleDropOnRoot}
->
-  {draggedLibraryId ? (
-    <span className="flex items-center gap-2">
-      <CornerDownLeft className="h-3.5 w-3.5" />
-      Mover a la raíz de Mi biblioteca
-    </span>
-  ) : null}
+{/* SEARCH FIJO */}
+<div className="shrink-0 px-4 py-4">
+  <SearchInput
+    placeholder="Buscar biblioteca..."
+    value={search}
+    onChange={setSearch}
+  />
 </div>
 
-              {filteredLibraries.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-muted-foreground">
-                  No hay bibliotecas que coincidan.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+      {/* SOLO ESTA ZONA HACE SCROLL */}
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="space-y-6">
+          {/* MI BIBLIOTECA */}
+          <div>
+            <SectionToggle
+              isOpen={isMyLibraryOpen}
+              label="Mi biblioteca"
+              count={filteredLibraries.length}
+              onToggle={() =>
+                setIsMyLibraryOpen((value) => !value)
+              }
+              action={
+                <button
+                  className="flex h-6 w-6 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition hover:bg-surface hover:text-foreground"
+                  type="button"
+                  onClick={handleCreateLibrary}
+                  aria-label="Crear biblioteca"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              }
+            />
 
-        <div>
-          <SectionToggle
-            isOpen={isSharedOpen}
-            label="Compartido conmigo"
-            count={filteredSharedLibraries.length}
-            onToggle={() => setIsSharedOpen((value) => !value)}
-            onSelect={handleSelectSharedView}
-          />
+            {isMyLibraryOpen ? (
+              <div className="mt-2 space-y-1">
+                <KnowledgeLibraryTree
+                  libraries={filteredLibraries}
+                  openMenuId={openMenuId}
+                  inputRefs={inputRefs}
+                  draggedLibraryId={draggedLibraryId}
+                  dropTargetLibraryId={dropTargetLibraryId}
+                  onRename={handleRenameLibrary}
+                  onSave={handleSaveLibrary}
+                  onToggleExpanded={handleToggleExpanded}
+                  onToggleMenu={(id) => {
+                    setOpenMenuId((current) => {
+                      if (current === id) {
+                        return null;
+                      }
 
-          {isSharedOpen ? (
-            <div className="mt-2 space-y-1">
-              <KnowledgeLibraryTree
-                libraries={buildReadonlyLibraryTree(
-                  filteredSharedLibraries,
-                )}
-                readonly
-                openMenuId={null}
-                inputRefs={inputRefs}
-                onRename={noop}
-                onSave={noop}
-                onToggleExpanded={toggleReadonlyLibrary}
-                onToggleMenu={noop}
-                onCreateChild={noop}
-                onStartRename={noop}
-                onDelete={noop}
-                selectedLibraryId={selectedLibraryId}
-                onSelect={handleSelectLibrary}
-              />
+                      return id;
+                    });
+                  }}
+                  onCreateChild={handleCreateChildLibrary}
+                  onStartRename={handleStartRename}
+                  onDelete={handleDeleteLibrary}
+                  onSelect={handleSelectLibrary}
+                  onDragStart={handleDragStart}
+                  onDragEnd={clearDragState}
+                  onDragOverLibrary={handleDragOverLibrary}
+                  onDropLibrary={handleDropOnLibrary}
+                  selectedLibraryId={selectedLibraryId}
+                />
 
-              {filteredSharedLibraries.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-muted-foreground">
-                  No tienes bibliotecas compartidas.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+                {/* aquí mantienes exactamente tu bloque de drop root */}
 
-        <div>
-          <SectionToggle
-            isOpen={isTeamsOpen}
-            label="Mis equipos"
-            count={teamGroups.length}
-            onToggle={() => setIsTeamsOpen((value) => !value)}
-          />
+                {filteredLibraries.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-muted-foreground">
+                    No hay bibliotecas que coincidan.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
-          {isTeamsOpen ? (
-            <div className="mt-2 space-y-2">
-              {teamGroups.map((team) => {
-                const isTeamOpen = openTeamIds[team.id] ?? true;
+          {/* COMPARTIDO CONMIGO */}
+          <div>
+            {/* deja aquí tu bloque actual sin cambios */}
+          </div>
 
-                return (
-                  <div key={team.id}>
-                    <button
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-panel-foreground/70 transition hover:bg-surface-hover hover:text-foreground"
-                      type="button"
-                      onClick={() => {
-                        setOpenTeamIds((current) => ({
-                          ...current,
-                          [team.id]: !isTeamOpen,
-                        }));
-                      }}
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        {isTeamOpen ? (
-                          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                        ) : (
-                          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                        )}
-
-                        <UsersRound className="h-4 w-4 shrink-0" />
-
-                        <span className="truncate">{team.name}</span>
-                      </span>
-
-                      <span className="text-xs text-muted-foreground">
-                        {team.libraries.length}
-                      </span>
-                    </button>
-
-                    {isTeamOpen ? (
-                      <div className="mt-1 space-y-1 pl-5">
-                        {team.libraries.length > 0 ? (
-                          <KnowledgeLibraryTree
-                            libraries={buildReadonlyLibraryTree(
-                              team.libraries,
-                            )}
-                            readonly
-                            openMenuId={null}
-                            inputRefs={inputRefs}
-                            onRename={noop}
-                            onSave={noop}
-                            onToggleExpanded={toggleReadonlyLibrary}
-                            onToggleMenu={noop}
-                            onCreateChild={noop}
-                            onStartRename={noop}
-                            onDelete={noop}
-                            selectedLibraryId={selectedLibraryId}
-                            onSelect={handleSelectLibrary}
-                          />
-                        ) : (
-                          <p className="px-3 py-2 text-xs text-muted-foreground">
-                            Sin bibliotecas compartidas.
-                          </p>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-
-              {teamGroups.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-muted-foreground">
-                  No perteneces a ningún equipo.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
+          {/* MIS EQUIPOS */}
+          <div>
+            {/* deja aquí tu bloque actual sin cambios */}
+          </div>
         </div>
       </div>
     </div>

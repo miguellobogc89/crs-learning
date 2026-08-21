@@ -4,6 +4,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { SheetClose } from "@/components/ui/sheet";
 import {
   GraduationCap,
   Grid2X2,
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 type AppSidebarProps = {
   notificationCount?: number;
+  mobile?: boolean;
 };
 
 const navItems = [
@@ -35,7 +37,6 @@ const navItems = [
     href: "/courses",
     icon: GraduationCap,
     label: "Cursos",
-    premium: true,
   },
   {
     href: "/achievements",
@@ -82,90 +83,111 @@ function SidebarTooltip({
 
 export function AppSidebar({
   notificationCount = 0,
+  mobile = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-screen w-14 flex-col items-center justify-between border-r border-border bg-white py-3">
-      <div className="flex flex-col items-center gap-1">
+    <aside
+      className={cn(
+        "flex h-full flex-col justify-between border-border bg-background py-3",
+        mobile
+          ? "w-full items-stretch px-4"
+          : "hidden w-14 items-center border-r lg:flex",
+      )}
+    >
+      <div className={cn("flex flex-col gap-1", mobile ? "items-stretch" : "items-center")}>
         <Link
           href="/knowledge"
           aria-label="CRS Learning"
-          className="mb-3 flex h-9 w-9 items-center justify-center"
+          className={cn(
+            "mb-3 flex h-9 items-center justify-center",
+            mobile ? "w-full justify-start px-2" : "w-9",
+          )}
         >
           <Image
             src="/logo/logo.png"
             alt="CRS Learning"
-width={26}
-height={26}
-className="h-[26px] w-[26px] object-contain"
+            width={24}
+            height={24}
+            className="h-6 w-6 object-contain"
             priority
           />
+          {mobile ? (
+            <span className="ml-3 text-sm font-semibold tracking-tight text-foreground">
+              CRS Learning
+            </span>
+          ) : null}
         </Link>
 
-        <nav className="flex flex-col items-center gap-1">
+        <nav className={cn("flex flex-col gap-1", mobile ? "items-stretch" : "items-center")}>
           {navItems.map((item) => {
             const active = pathname.startsWith(item.href);
 
-            return (
+            const link = (
               <Link
                 key={item.href}
                 href={item.href}
                 aria-label={item.label}
                 className={cn(
-                  "group relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
+                  "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
+                  mobile ? "w-full justify-start gap-3 px-3" : "w-9 justify-center",
                   active && "bg-surface text-foreground",
                 )}
               >
                 <item.icon className="h-[18px] w-[18px]" />
+                {mobile ? <span>{item.label}</span> : null}
 
-                {item.notifications &&
-                  notificationCount > 0 && (
-                    <span
-                      className="
-                        absolute right-[3px] top-[3px]
-                        flex min-h-3.5 min-w-3.5
-                        items-center justify-center
-                        rounded-full bg-red-500
-                        px-1 text-[9px] font-semibold
-                        leading-none text-white
-                        ring-2 ring-white
-                      "
-                    >
-                      {notificationCount > 9
-                        ? "9+"
-                        : notificationCount}
-                    </span>
-                  )}
+                {item.notifications && notificationCount > 0 && (
+                  <span
+                    className="
+                      absolute right-[3px] top-[3px]
+                      flex min-h-3.5 min-w-3.5
+                      items-center justify-center
+                      rounded-full bg-red-500
+                      px-1 text-[9px] font-semibold
+                      leading-none text-white
+                      ring-2 ring-background
+                    "
+                  >
+                    {notificationCount > 9 ? "9+" : notificationCount}
+                  </span>
+                )}
 
-                  {item.premium && (
-                    <span className="absolute right-[1px] top-[1px] flex h-4 w-4 items-center justify-center">
-                      <Image
-                        src="/icons/subscription/diamond.png"
-                        alt=""
-                        width={16}
-                        height={16}
-                        className="h-4 w-4 object-contain"
-                      />
-                    </span>
-                  )}
+                
 
-                <SidebarTooltip label={item.label} />
+                {!mobile ? <SidebarTooltip label={item.label} /> : null}
               </Link>
+            );
+
+            return (
+              mobile ? <SheetClose asChild>{link}</SheetClose> : link
             );
           })}
         </nav>
       </div>
 
-      <Link
-        href="/settings"
-        aria-label="Configuración"
-        className="group relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
-      >
-        <Settings className="h-[18px] w-[18px]" />
-
-        <SidebarTooltip label="Configuración" />
-      </Link>
+      {mobile ? (
+        <SheetClose asChild>
+          <Link
+            href="/settings"
+            aria-label="Configuración"
+            className="group relative flex h-9 w-full items-center justify-start gap-3 rounded-md px-3 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+          >
+            <Settings className="h-[18px] w-[18px]" />
+            <span>Configuración</span>
+          </Link>
+        </SheetClose>
+      ) : (
+        <Link
+          href="/settings"
+          aria-label="Configuración"
+          className="group relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+        >
+          <Settings className="h-[18px] w-[18px]" />
+          <SidebarTooltip label="Configuración" />
+        </Link>
+      )}
     </aside>
   );
 }

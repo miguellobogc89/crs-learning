@@ -36,12 +36,6 @@ export function KnowledgeShell({
       active: true,
     },
     {
-      label: "Documentos",
-      count: knowledgeSources.length,
-      icon: "file",
-      active: false,
-    },
-    {
       label: "Privados",
       count: totalPrivate,
       icon: "shield",
@@ -63,12 +57,6 @@ export function KnowledgeShell({
       label: "Recientes",
       count: 0,
       icon: "clock",
-      active: false,
-    },
-    {
-      label: "Actividad",
-      count: 0,
-      icon: "activity",
       active: false,
     },
   ];

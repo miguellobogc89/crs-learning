@@ -91,7 +91,7 @@ export async function loginWithCredentials(
     throw error;
   }
 
-  redirect("/knowledge");
+  redirect("/dashboard");
 }
 
 export async function registerWithCredentials(

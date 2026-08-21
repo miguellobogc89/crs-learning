@@ -1,3 +1,4 @@
+// components/search/global-search.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -145,18 +146,21 @@ export function GlobalSearch() {
   const showEmptyState = isOpen && !query.trim();
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-md">
+    <div ref={containerRef} className="relative h-full w-full">
       {/* Trigger Button */}
       <button
         onClick={() => {
           setIsOpen(true);
           resetSelectedIndex();
         }}
-        className="group flex h-8 w-full items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground hover:border-foreground/20"
+        className="group flex h-full w-full items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground hover:border-foreground/20"
       >
         <Search className="h-4 w-4 shrink-0" />
-        <span className="hidden truncate text-left sm:inline">Buscar cualquier cosa...</span>
-        <kbd className="ml-auto hidden rounded border border-border/50 bg-background px-1.5 py-0.5 text-xs font-medium sm:inline-flex gap-0.5">
+        <span className="truncate text-left">Buscar cualquier cosa...</span>
+        <kbd
+          data-search-shortcut
+          className="ml-auto inline-flex gap-0.5 rounded border border-border/50 bg-background px-1.5 py-0.5 text-xs font-medium"
+        >
           <Command className="h-3 w-3" />K
         </kbd>
       </button>
@@ -311,7 +315,7 @@ export function GlobalSearch() {
                   No se encontraron resultados
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  para "{query}"
+                  para &quot;{query}&quot;
                 </p>
               </div>
             ) : isLoading ? (
