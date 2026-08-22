@@ -6,6 +6,7 @@ export interface UserAdminView {
   email: string;
   name: string | null;
   status: string;
+  system_role: string;
   provider: string | null;
   created_at: Date;
   last_login_at: Date | null;
@@ -63,6 +64,7 @@ export async function getAllUsers(
       email: true,
       name: true,
       status: true,
+      system_role: true,
       provider: true,
       created_at: true,
       last_login_at: true,
@@ -94,6 +96,7 @@ export async function getAllUsers(
     email: user.email,
     name: user.name,
     status: user.status,
+    system_role: user.system_role,
     provider: user.provider,
     created_at: user.created_at,
     last_login_at: user.last_login_at,

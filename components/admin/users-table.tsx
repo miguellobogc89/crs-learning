@@ -1,11 +1,9 @@
 // components/admin/users-table.tsx
 "use client";
 
-import Link from "next/link";
 import { useState, useMemo } from "react";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -28,6 +26,7 @@ export function UsersTable({
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const router = useRouter();
 
   const filteredAndSortedUsers = useMemo(() => {
     let filtered = initialUsers;
@@ -130,124 +129,396 @@ export function UsersTable({
         {search.trim() || statusFilter ? "s" : "s"}
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full text-sm">
-          <thead>
+        {/* Table */}
+        <div className="overflow-x-auto rounded-lg border border-border">
+        <table
+            className="
+            w-full
+            text-[10px]
+
+            sm:text-[11px]
+            md:text-xs
+            lg:text-[13px]
+            xl:text-sm
+            2xl:text-[15px]
+            "
+        >
+            <thead>
             <tr className="border-b border-border bg-surface">
-              <th className="px-4 py-3 text-left font-semibold">
-                <button
-                  className="flex items-center gap-2 hover:text-foreground"
-                  onClick={() => toggleSort("name")}
+                <th
+                className="
+                    px-2 py-2
+                    text-center font-semibold
+
+                    sm:px-2.5
+                    md:px-3 md:py-2.5
+                    lg:px-3.5
+                    xl:px-4 xl:py-3
+                    2xl:px-5
+                "
                 >
-                  Nombre
-                  <SortIcon field="name" />
+                <button
+                    type="button"
+                    className="flex w-full items-center justify-center gap-1.5 hover:text-foreground"
+                    onClick={() => toggleSort("name")}
+                >
+                    Nombre
+                    <SortIcon field="name" />
                 </button>
-              </th>
-              <th className="px-4 py-3 text-left font-semibold">Email</th>
-              <th className="px-4 py-3 text-left font-semibold">Estado</th>
-              <th className="px-4 py-3 text-center font-semibold">
+                </th>
+
+                <th
+                className="
+                    px-2 py-2
+                    text-center font-semibold
+
+                    sm:px-2.5
+                    md:px-3 md:py-2.5
+                    lg:px-3.5
+                    xl:px-4 xl:py-3
+                    2xl:px-5
+                "
+                >
+                Email
+                </th>
+
+                <th
+                className="
+                    px-2 py-2
+                    text-center font-semibold
+
+                    sm:px-2.5
+                    md:px-3 md:py-2.5
+                    lg:px-3.5
+                    xl:px-4 xl:py-3
+                    2xl:px-5
+                "
+                >
+                Estado
+                </th>
+
+                <th
+                className="
+                    px-2 py-2
+                    text-center font-semibold
+
+                    sm:px-2.5
+                    md:px-3 md:py-2.5
+                    lg:px-3.5
+                    xl:px-4 xl:py-3
+                    2xl:px-5
+                "
+                >
+                Rol
+                </th>
+
+                <th
+                className="
+                    px-2 py-2
+                    text-center font-semibold
+
+                    sm:px-2.5
+                    md:px-3 md:py-2.5
+                    lg:px-3.5
+                    xl:px-4 xl:py-3
+                    2xl:px-5
+                "
+                >
                 Workspaces
-              </th>
-              <th className="px-4 py-3 text-center font-semibold">Archivos</th>
-              <th className="px-4 py-3 text-center font-semibold">
+                </th>
+
+                <th
+                className="
+                    px-2 py-2
+                    text-center font-semibold
+
+                    sm:px-2.5
+                    md:px-3 md:py-2.5
+                    lg:px-3.5
+                    xl:px-4 xl:py-3
+                    2xl:px-5
+                "
+                >
+                Archivos
+                </th>
+
+                <th
+                className="
+                    px-2 py-2
+                    text-center font-semibold
+
+                    sm:px-2.5
+                    md:px-3 md:py-2.5
+                    lg:px-3.5
+                    xl:px-4 xl:py-3
+                    2xl:px-5
+                "
+                >
                 Conversaciones
-              </th>
-              <th className="px-4 py-3 text-left font-semibold">
-                <button
-                  className="flex items-center gap-2 hover:text-foreground"
-                  onClick={() => toggleSort("created_at")}
+                </th>
+
+                <th
+                className="
+                    px-2 py-2
+                    text-center font-semibold
+
+                    sm:px-2.5
+                    md:px-3 md:py-2.5
+                    lg:px-3.5
+                    xl:px-4 xl:py-3
+                    2xl:px-5
+                "
                 >
-                  Fecha de alta
-                  <SortIcon field="created_at" />
-                </button>
-              </th>
-              <th className="px-4 py-3 text-left font-semibold">
                 <button
-                  className="flex items-center gap-2 hover:text-foreground"
-                  onClick={() => toggleSort("last_login_at")}
+                    type="button"
+                    className="flex w-full items-center justify-center gap-1.5 hover:text-foreground"
+                    onClick={() => toggleSort("created_at")}
                 >
-                  Último login
-                  <SortIcon field="last_login_at" />
+                    Fecha de alta
+                    <SortIcon field="created_at" />
                 </button>
-              </th>
-              <th className="px-4 py-3 text-right font-semibold">Acciones</th>
+                </th>
+
+                <th
+                className="
+                    px-2 py-2
+                    text-center font-semibold
+
+                    sm:px-2.5
+                    md:px-3 md:py-2.5
+                    lg:px-3.5
+                    xl:px-4 xl:py-3
+                    2xl:px-5
+                "
+                >
+                <button
+                    type="button"
+                    className="flex w-full items-center justify-center gap-1.5 hover:text-foreground"
+                    onClick={() => toggleSort("last_login_at")}
+                >
+                    Último login
+                    <SortIcon field="last_login_at" />
+                </button>
+                </th>
             </tr>
-          </thead>
-          <tbody>
+            </thead>
+
+            <tbody>
             {filteredAndSortedUsers.length === 0 ? (
-              <tr>
+                <tr>
                 <td
-                  colSpan={9}
-                  className="px-4 py-8 text-center text-muted-foreground"
+                    colSpan={9}
+                    className="px-4 py-8 text-center text-muted-foreground"
                 >
-                  No se encontraron usuarios
+                    No se encontraron usuarios
                 </td>
-              </tr>
+                </tr>
             ) : (
-              filteredAndSortedUsers.map((user) => (
+                filteredAndSortedUsers.map((user) => (
                 <tr
-                  key={user.id}
-                  className="border-b border-border hover:bg-surface/50 transition-colors"
+                    key={user.id}
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => {
+                    router.push(`/admin/users/${user.id}`);
+                    }}
+                    onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                        router.push(`/admin/users/${user.id}`);
+                    }
+                    }}
+                    className="
+                    cursor-pointer
+                    border-b border-border
+                    transition-colors duration-150
+
+                    hover:bg-surface/60
+                    focus:bg-surface/60
+                    focus:outline-none
+                    "
                 >
-                  <td className="px-4 py-3 font-medium">
+                    <td
+                    className="
+                        px-2 py-2
+                        font-medium
+                        text-center
+
+                        sm:px-2.5
+                        md:px-3 md:py-2.5
+                        lg:px-3.5
+                        xl:px-4 xl:py-3
+                        2xl:px-5
+                    "
+                    >
                     {user.name || "Sin nombre"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    </td>
+
+                    <td
+                    className="
+                        px-2 py-2
+                        text-muted-foreground
+                        text-center
+
+                        sm:px-2.5
+                        md:px-3 md:py-2.5
+                        lg:px-3.5
+                        xl:px-4 xl:py-3
+                        2xl:px-5
+                    "
+                    >
                     {user.email}
-                  </td>
-                  <td className="px-4 py-3">
+                    </td>
+
+                    <td
+                    className="
+                        px-2 py-2
+                        text-center
+
+                        sm:px-2.5
+                        md:px-3 md:py-2.5
+                        lg:px-3.5
+                        xl:px-4 xl:py-3
+                        2xl:px-5
+                    "
+                    >
                     <span
-                      className={[
-                        "inline-flex rounded-full px-2 py-1 text-xs font-medium",
+                        className={[
+                        "inline-flex rounded-full px-2 py-1 text-[0.9em] font-medium",
                         user.status === "active"
-                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                          : user.status === "suspended"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                            : user.status === "suspended"
                             ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
                             : "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
-                      ].join(" ")}
+                        ].join(" ")}
                     >
-                      {user.status === "active"
+                        {user.status === "active"
                         ? "Activo"
                         : user.status === "suspended"
-                          ? "Suspendido"
-                          : "Inactivo"}
+                            ? "Suspendido"
+                            : "Inactivo"}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {user.workspaceCount}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {user.fileCount}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {user.conversationCount}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {new Date(user.created_at).toLocaleDateString("es-ES")}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {user.last_login_at
-                      ? new Date(user.last_login_at).toLocaleDateString("es-ES")
-                      : "Nunca"}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      asChild
+                    </td>
+
+                    <td
+                    className="
+                        px-2 py-2
+                        text-center
+
+                        sm:px-2.5
+                        md:px-3 md:py-2.5
+                        lg:px-3.5
+                        xl:px-4 xl:py-3
+                        2xl:px-5
+                    "
                     >
-                      <Link href={`/admin/users/${user.id}`}>
-                        Ver
-                      </Link>
-                    </Button>
-                  </td>
+                    <span
+                        className={[
+                        "inline-flex rounded-full px-2 py-1 text-[0.9em] font-medium",
+                        user.system_role === "system_super_admin"
+                            ? "bg-brand-soft text-brand"
+                            : user.system_role === "system_admin"
+                            ? "bg-surface text-foreground"
+                            : "bg-muted text-muted-foreground",
+                        ].join(" ")}
+                    >
+                        {user.system_role === "system_super_admin"
+                        ? "Super Admin"
+                        : user.system_role === "system_admin"
+                            ? "Admin"
+                            : "Usuario"}
+                    </span>
+                    </td>
+
+                    <td
+                    className="
+                        px-2 py-2
+                        text-center
+                        text-center
+
+                        sm:px-2.5
+                        md:px-3 md:py-2.5
+                        lg:px-3.5
+                        xl:px-4 xl:py-3
+                        2xl:px-5
+                    "
+                    >
+                    {user.workspaceCount}
+                    </td>
+
+                    <td
+                    className="
+                        px-2 py-2
+                        text-center
+                        text-center
+
+                        sm:px-2.5
+                        md:px-3 md:py-2.5
+                        lg:px-3.5
+                        xl:px-4 xl:py-3
+                        2xl:px-5
+                    "
+                    >
+                    {user.fileCount}
+                    </td>
+
+                    <td
+                    className="
+                        px-2 py-2
+                        text-center
+                        text-center
+
+                        sm:px-2.5
+                        md:px-3 md:py-2.5
+                        lg:px-3.5
+                        xl:px-4 xl:py-3
+                        2xl:px-5
+                    "
+                    >
+                    {user.conversationCount}
+                    </td>
+
+                    <td
+                    className="
+                        px-2 py-2
+                        text-muted-foreground
+                        text-center
+
+                        sm:px-2.5
+                        md:px-3 md:py-2.5
+                        lg:px-3.5
+                        xl:px-4 xl:py-3
+                        2xl:px-5
+                    "
+                    >
+                    {new Date(user.created_at).toLocaleDateString(
+                        "es-ES",
+                    )}
+                    </td>
+
+                    <td
+                    className="
+                        px-2 py-2
+                        text-muted-foreground
+
+                        sm:px-2.5
+                        md:px-3 md:py-2.5
+                        lg:px-3.5
+                        xl:px-4 xl:py-3
+                        2xl:px-5
+                    "
+                    >
+                    {user.last_login_at
+                        ? new Date(
+                            user.last_login_at,
+                        ).toLocaleDateString("es-ES")
+                        : "Nunca"}
+                    </td>
                 </tr>
-              ))
+                ))
             )}
-          </tbody>
+            </tbody>
         </table>
-      </div>
+        </div>
     </div>
   );
 }

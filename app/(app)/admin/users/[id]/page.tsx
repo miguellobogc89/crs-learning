@@ -62,14 +62,15 @@ export default async function UserDetailPage({
         <div className="lg:col-span-2">
           <div className="rounded-lg border border-border bg-card p-6">
             <h2 className="text-lg font-semibold mb-6">Información del usuario</h2>
-            <UserEditForm
-              user={{
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                status: user.status,
-              }}
-            />
+                <UserEditForm
+                user={{
+                    id: user.id,
+                    email: user.email,
+                    name: user.name,
+                    status: user.status,
+                    system_role: user.system_role,
+                }}
+                />
           </div>
         </div>
 
