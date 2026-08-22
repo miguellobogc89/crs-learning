@@ -2,7 +2,10 @@
 "use server";
 
 import { auth } from "@/auth";
-import { requireAdmin } from "@/lib/auth/admin";
+import {
+  getUserSystemRole,
+  requireAdmin,
+} from "@/lib/auth/admin";
 import {
   getAllUsers,
   getUserDetail,
@@ -60,6 +63,7 @@ export async function adminUpdateUser(
   data: {
     name?: string;
     status?: string;
+    system_role?: string;
   },
 ) {
   const session = await auth();
@@ -68,29 +72,88 @@ export async function adminUpdateUser(
     throw new Error("Unauthorized");
   }
 
-  try {
-    await requireAdmin(session.user.id);
-  } catch {
+  const currentAdmin = await getUserSystemRole(
+    session.user.id,
+  );
+
+  if (
+    currentAdmin !== "system_admin" &&
+    currentAdmin !== "system_super_admin"
+  ) {
     throw new Error("Admin access required");
   }
 
-  // Validate input
   if (!userId) {
     throw new Error("User ID is required");
   }
 
-  if (data.name !== undefined && typeof data.name !== "string") {
+  if (
+    data.name !== undefined &&
+    typeof data.name !== "string"
+  ) {
     throw new Error("Invalid name");
   }
 
   if (
     data.status !== undefined &&
-    !["active", "inactive", "suspended"].includes(data.status)
+    !["active", "inactive", "suspended"].includes(
+      data.status,
+    )
   ) {
     throw new Error(
       "Invalid status. Must be: active, inactive, or suspended",
     );
   }
 
-  return updateUserAdmin(userId, data);
+  if (
+    data.system_role !== undefined &&
+    ![
+      "user",
+      "system_admin",
+      "system_super_admin",
+    ].includes(data.system_role)
+  ) {
+    throw new Error("Invalid system role");
+  }
+
+  const targetUser = await getUserDetail(userId);
+
+  if (!targetUser) {
+    throw new Error("User not found");
+  }
+
+  const targetRole =
+    targetUser.system_role ?? "user";
+
+  if (
+    currentAdmin === "system_admin" &&
+    (
+      targetRole === "system_admin" ||
+      targetRole === "system_super_admin" ||
+      data.system_role === "system_admin" ||
+      data.system_role === "system_super_admin"
+    )
+  ) {
+    throw new Error(
+      "Only a system super admin can manage system administrators",
+    );
+  }
+
+  if (
+    currentAdmin === "system_admin" &&
+    (
+      data.status === "inactive" ||
+      data.status === "suspended"
+    ) &&
+    targetRole !== "user"
+  ) {
+    throw new Error(
+      "Only a system super admin can disable system administrators",
+    );
+  }
+
+  return updateUserAdmin(
+    userId,
+    data,
+  );
 }

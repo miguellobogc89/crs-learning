@@ -172,6 +172,7 @@ model users {
   password_hash                                                                                String?
   email_verified_at                                                                            DateTime?                          @db.Timestamptz(6)
   last_login_at                                                                                DateTime?                          @db.Timestamptz(6)
+  system_role                                                                                  String                             @default("user")
   auth_tokens                                                                                  auth_tokens[]
   chat_conversations_chat_conversations_created_by_user_idTousers                              chat_conversations[]               @relation("chat_conversations_created_by_user_idTousers")
   chat_conversations_chat_conversations_owner_user_idTousers                                   chat_conversations[]               @relation("chat_conversations_owner_user_idTousers")

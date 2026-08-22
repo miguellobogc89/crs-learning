@@ -16,6 +16,7 @@ interface UserEditFormProps {
     email: string;
     name: string | null;
     status: string;
+    system_role: string;
   };
 }
 
@@ -23,10 +24,11 @@ export function UserEditForm({ user }: UserEditFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState({
     name: user.name || "",
     status: user.status,
-  });
+    system_role: user.system_role,
+    });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +39,7 @@ export function UserEditForm({ user }: UserEditFormProps) {
       await adminUpdateUser(user.id, {
         name: formData.name || undefined,
         status: formData.status,
+        system_role: formData.system_role,
       });
 
       router.refresh();
@@ -105,6 +108,42 @@ export function UserEditForm({ user }: UserEditFormProps) {
           suspendido negará el acceso.
         </p>
       </div>
+
+      <div>
+        <Label htmlFor="system_role">
+            Rol del sistema
+        </Label>
+
+        <Select
+            id="system_role"
+            className="mt-2"
+            value={formData.system_role}
+            onChange={(e) =>
+            setFormData({
+                ...formData,
+                system_role: e.target.value,
+            })
+            }
+        >
+            <option value="user">
+            Usuario
+            </option>
+
+            <option value="system_admin">
+            System Admin
+            </option>
+
+            <option value="system_super_admin">
+            System Super Admin
+            </option>
+        </Select>
+
+        <p className="mt-2 text-xs text-muted-foreground">
+            Los roles System Admin y System Super Admin
+            controlan el acceso al panel de administración
+            global de CRS LAB.
+        </p>
+        </div>
 
       <div className="flex gap-3 pt-6">
         <Button type="submit" disabled={isLoading}>

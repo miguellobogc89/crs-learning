@@ -117,6 +117,7 @@ export async function getUserDetail(userId: string) {
       email: true,
       name: true,
       status: true,
+      system_role: true,
       provider: true,
       created_at: true,
       updated_at: true,
@@ -178,7 +179,7 @@ export async function getUserDetail(userId: string) {
 
 /**
  * Update user admin fields
- * Restricted to: name, status
+ * Restricted to: name, status, system_role
  * Cannot update: email, password_hash, company_id, sensitive fields
  */
 export async function updateUserAdmin(
@@ -186,13 +187,24 @@ export async function updateUserAdmin(
   data: {
     name?: string;
     status?: string;
+    system_role?: string;
   },
 ) {
   return prisma.users.update({
     where: { id: userId },
     data: {
-      name: data.name !== undefined ? data.name : undefined,
-      status: data.status !== undefined ? data.status : undefined,
+      name:
+        data.name !== undefined
+          ? data.name
+          : undefined,
+      status:
+        data.status !== undefined
+          ? data.status
+          : undefined,
+      system_role:
+        data.system_role !== undefined
+          ? data.system_role
+          : undefined,
       updated_at: new Date(),
     },
     select: {
@@ -200,6 +212,7 @@ export async function updateUserAdmin(
       email: true,
       name: true,
       status: true,
+      system_role: true,
       created_at: true,
       last_login_at: true,
     },
