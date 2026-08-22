@@ -15,27 +15,23 @@ export function StorageStats({ stats }: { stats: StorageStats }) {
   return (
     <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
-        title="Almacenamiento total"
+        title={`Almacenamiento total (${stats.totalFiles} archivos)`}
         value={`${stats.totalStorageGB} GB`}
-        subtitle={`${stats.totalFiles} archivos`}
       />
 
       <StatCard
         title="Archivos totales"
         value={stats.totalFiles.toLocaleString()}
-        subtitle={`${formatBytes(stats.averageFileSizeBytes)} promedio`}
       />
 
       <StatCard
         title="Tamaño promedio"
         value={formatBytes(stats.averageFileSizeBytes)}
-        subtitle={`${stats.averageFileSizeKB} KB`}
       />
 
       <StatCard
         title="Mayor consumidor"
         value={stats.topUserByStorage?.userName || stats.topUserByStorage?.userEmail || "—"}
-        subtitle={`${formatBytes(stats.topUserByStorage?.storageBytes || 0)} (${stats.topUserByStorage?.fileCount || 0} archivos)`}
       />
     </div>
   );

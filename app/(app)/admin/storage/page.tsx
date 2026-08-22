@@ -33,7 +33,7 @@ export default async function AdminStoragePage() {
     <div className="space-y-6">
       <PageTitle
         title="Almacenamiento"
-        description="Administra y monitorea el uso de almacenamiento de Knowledge. Visualiza archivos, tamaños y estado de procesamiento."
+        subtitle="Administra y monitorea el uso de almacenamiento de Knowledge. Visualiza archivos, tamaños y estado de procesamiento."
       />
 
       <StorageStats stats={stats} />

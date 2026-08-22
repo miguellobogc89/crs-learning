@@ -18,6 +18,24 @@ interface StorageTableProps {
 type SortField = "fileName" | "fileSize" | "createdAt";
 type SortDirection = "asc" | "desc";
 
+function SortIcon({
+  field,
+  sortField,
+  sortDirection,
+}: {
+  field: SortField;
+  sortField: SortField;
+  sortDirection: SortDirection;
+}) {
+  if (sortField !== field) {
+    return <ChevronsUpDown className="h-3.5 w-3.5" />;
+  }
+
+  return sortDirection === "asc"
+    ? <ChevronUp className="h-3.5 w-3.5" />
+    : <ChevronDown className="h-3.5 w-3.5" />;
+}
+
 export function StorageTable({
   initialFiles,
   users,
@@ -35,7 +53,7 @@ export function StorageTable({
   const [selectedFile, setSelectedFile] = useState<StorageFileWithDetails | null>(null);
 
   const filteredAndSortedFiles = useMemo(() => {
-    let filtered = initialFiles.filter((file) => {
+    const filtered = initialFiles.filter((file) => {
       const matchesSearch = search === "" ||
         file.fileName.toLowerCase().includes(search.toLowerCase());
 
@@ -127,15 +145,6 @@ export function StorageTable({
       default:
         return "bg-gray-100 text-gray-900";
     }
-  };
-
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) {
-      return <ChevronsUpDown className="h-3.5 w-3.5" />;
-    }
-    return sortDirection === "asc"
-      ? <ChevronUp className="h-3.5 w-3.5" />
-      : <ChevronDown className="h-3.5 w-3.5" />;
   };
 
   return (
@@ -243,7 +252,11 @@ export function StorageTable({
                     className="flex items-center gap-1.5 hover:text-brand transition"
                   >
                     Archivo
-                    <SortIcon field="fileName" />
+                    <SortIcon
+                      field="fileName"
+                      sortField={sortField}
+                      sortDirection={sortDirection}
+                    />
                   </button>
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-foreground">
@@ -252,7 +265,11 @@ export function StorageTable({
                     className="flex items-center gap-1.5 hover:text-brand transition"
                   >
                     Tamaño
-                    <SortIcon field="fileSize" />
+                    <SortIcon
+                      field="fileSize"
+                      sortField={sortField}
+                      sortDirection={sortDirection}
+                    />
                   </button>
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-foreground">
@@ -279,7 +296,11 @@ export function StorageTable({
                     className="flex items-center gap-1.5 hover:text-brand transition"
                   >
                     Fecha
-                    <SortIcon field="createdAt" />
+                    <SortIcon
+                      field="createdAt"
+                      sortField={sortField}
+                      sortDirection={sortDirection}
+                    />
                   </button>
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-foreground">

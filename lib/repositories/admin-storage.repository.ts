@@ -398,7 +398,6 @@ export async function getStorageFileDetail(
           tokens_input: true,
           tokens_output: true,
           created_at: true,
-          completed_at: true,
         },
       },
     },
