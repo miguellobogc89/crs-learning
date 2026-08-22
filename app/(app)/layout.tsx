@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
+import { isUserAdmin } from "@/lib/auth/admin";
 import { AppSidebar } from "@/components/app/sidebar";
 import { AppTopbar } from "@/components/app/topbar";
 import {
@@ -33,17 +34,16 @@ export default async function AppLayout({
     redirect("/");
   }
 
-  const workspaceContext = await getActiveWorkspaceContext(
-    session.user.id,
-  );
-
   const [
+    workspaceContext,
     conversations,
     notificationSummary,
+    isAdmin,
   ] = await Promise.all([
+    getActiveWorkspaceContext(session.user.id),
     listChatConversations(
       session.user.id,
-      workspaceContext.activeWorkspace.id,
+      (await getActiveWorkspaceContext(session.user.id)).activeWorkspace.id,
     ),
     getUserNotificationSummary(
       session.user.id,
@@ -51,13 +51,14 @@ export default async function AppLayout({
         take: 6,
       },
     ),
+    isUserAdmin(session.user.id),
   ]);
 
   return (
     <KnowledgeImportProvider>
       <Sheet>
         <div className="flex h-screen bg-background text-foreground">
-          <AppSidebar />
+          <AppSidebar isAdmin={isAdmin} />
 
           <div className="flex min-w-0 flex-1 flex-col">
             <AppTopbar
@@ -99,7 +100,7 @@ export default async function AppLayout({
           className="w-[min(20rem,86vw)] gap-0 p-0 lg:hidden"
         >
           <SheetTitle className="sr-only">Navegación principal</SheetTitle>
-          <AppSidebar mobile />
+          <AppSidebar mobile isAdmin={isAdmin} />
         </SheetContent>
       </Sheet>
     </KnowledgeImportProvider>

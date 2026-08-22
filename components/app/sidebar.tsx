@@ -12,6 +12,7 @@ import {
   Inbox,
   Library,
   Settings,
+  ShieldCheck,
   UserRound,
 } from "lucide-react";
 
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 type AppSidebarProps = {
   notificationCount?: number;
   mobile?: boolean;
+  isAdmin?: boolean;
 };
 
 const navItems = [
@@ -84,6 +86,7 @@ function SidebarTooltip({
 export function AppSidebar({
   notificationCount = 0,
   mobile = false,
+  isAdmin = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
 
@@ -168,25 +171,51 @@ export function AppSidebar({
       </div>
 
       {mobile ? (
-        <SheetClose asChild>
+        <div className="flex flex-col gap-1 items-stretch">
+          {isAdmin && (
+            <SheetClose asChild>
+              <Link
+                href="/admin"
+                aria-label="Administración"
+                className="group relative flex h-9 w-full items-center justify-start gap-3 rounded-md px-3 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+              >
+                <ShieldCheck className="h-[18px] w-[18px]" />
+                <span>Administración</span>
+              </Link>
+            </SheetClose>
+          )}
+          <SheetClose asChild>
+            <Link
+              href="/settings"
+              aria-label="Configuración"
+              className="group relative flex h-9 w-full items-center justify-start gap-3 rounded-md px-3 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+            >
+              <Settings className="h-[18px] w-[18px]" />
+              <span>Configuración</span>
+            </Link>
+          </SheetClose>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1 items-center">
+          {isAdmin && (
+            <Link
+              href="/admin"
+              aria-label="Administración"
+              className="group relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+            >
+              <ShieldCheck className="h-[18px] w-[18px]" />
+              <SidebarTooltip label="Administración" />
+            </Link>
+          )}
           <Link
             href="/settings"
             aria-label="Configuración"
-            className="group relative flex h-9 w-full items-center justify-start gap-3 rounded-md px-3 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+            className="group relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
           >
             <Settings className="h-[18px] w-[18px]" />
-            <span>Configuración</span>
+            <SidebarTooltip label="Configuración" />
           </Link>
-        </SheetClose>
-      ) : (
-        <Link
-          href="/settings"
-          aria-label="Configuración"
-          className="group relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
-        >
-          <Settings className="h-[18px] w-[18px]" />
-          <SidebarTooltip label="Configuración" />
-        </Link>
+        </div>
       )}
     </aside>
   );
