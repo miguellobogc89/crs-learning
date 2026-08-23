@@ -1,4 +1,4 @@
-// lib/repositories/admin-user.repository.ts
+// lib/repositories/admin/user.repository.ts
 import { prisma } from "@/lib/prisma";
 
 export interface UserAdminView {

@@ -1,4 +1,4 @@
-// lib/repositories/admin-storage.repository.ts
+// lib/repositories/admin/storage.repository.ts
  
 import { prisma } from "@/lib/prisma";
 

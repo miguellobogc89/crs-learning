@@ -11,7 +11,7 @@ import {
   UserRound,
 } from "lucide-react";
 
-import type { StorageStats } from "@/lib/repositories/admin-storage.repository";
+import type { StorageStats } from "@/lib/repositories/admin/storage.repository";
 
 export function StorageStats({
   stats,

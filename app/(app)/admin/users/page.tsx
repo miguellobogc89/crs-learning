@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { requireAdmin } from "@/lib/auth/admin";
-import { getAllUsers } from "@/lib/repositories/admin-user.repository";
+import { getAllUsers } from "@/lib/repositories/admin/user.repository";
 
 import { AdminPage } from "@/components/admin/admin-page";
 import { UsersTable } from "@/components/admin/users-table";

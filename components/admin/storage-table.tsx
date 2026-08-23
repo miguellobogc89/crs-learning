@@ -21,7 +21,7 @@ import {
 
 import type {
   StorageFileWithDetails,
-} from "@/lib/repositories/admin-storage.repository";
+} from "@/lib/repositories/admin/storage.repository";
 
 import { FileDetailModal } from "./file-detail-modal";
 

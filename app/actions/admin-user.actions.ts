@@ -10,7 +10,7 @@ import {
   getAllUsers,
   getUserDetail,
   updateUserAdmin,
-} from "@/lib/repositories/admin-user.repository";
+} from "@/lib/repositories/admin/user.repository";
 
 /**
  * Admin action: Get all users (with filters)

@@ -12,7 +12,7 @@ import {
   type DataTableColumn,
 } from "@/components/ui/data-table";
 
-import type { UserAdminView } from "@/lib/repositories/admin-user.repository";
+import type { UserAdminView } from "@/lib/repositories/admin/user.repository";
 
 type SortField =
   | "created_at"

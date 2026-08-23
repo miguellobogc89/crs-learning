@@ -8,7 +8,7 @@ import {
   getStorageFileDetail,
   getStorageFilterOptions,
   type StorageFileFilter,
-} from "@/lib/repositories/admin-storage.repository";
+} from "@/lib/repositories/admin/storage.repository";
 
 /**
  * Get all storage files with filtering

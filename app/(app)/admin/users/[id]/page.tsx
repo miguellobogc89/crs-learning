@@ -3,7 +3,7 @@ import { redirect, notFound } from "next/navigation";
 
 import { auth } from "@/auth";
 import { requireAdmin } from "@/lib/auth/admin";
-import { getUserDetail } from "@/lib/repositories/admin-user.repository";
+import { getUserDetail } from "@/lib/repositories/admin/user.repository";
 import { UserEditForm } from "@/components/admin/user-edit-form";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";

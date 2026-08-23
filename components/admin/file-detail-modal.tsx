@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import type { StorageFileWithDetails } from "@/lib/repositories/admin-storage.repository";
+import type { StorageFileWithDetails } from "@/lib/repositories/admin/storage.repository";
 
 interface FileDetailModalProps {
   file: StorageFileWithDetails;
