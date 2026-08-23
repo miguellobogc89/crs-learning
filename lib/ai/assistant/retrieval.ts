@@ -220,7 +220,7 @@ export async function retrieveKnowledge(
     chunks
       .filter((chunk) => chunk.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 12)
+      .slice(0, 6)
       .map((chunk, index) => ({
         citationId: `F${index + 1}`,
         knowledgeSourceId:
@@ -428,11 +428,9 @@ function buildContextText(
         ? `Documento asociado: ${item.documentName}`
         : "Documento asociado: ninguno";
 
-      return `
+
+return `
 [Fuente ${item.citationId}]
-ID del artículo: ${item.knowledgeSourceId}
-Título: ${item.title}
-Biblioteca: ${item.libraryName ?? "Sin biblioteca"}
 ${documentLine}
 ${origin}
 

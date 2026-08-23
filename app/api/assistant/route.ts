@@ -155,7 +155,17 @@ const retrievedKnowledge =
     contextText: retrievedKnowledge.contextText,
   });
 
-
+console.log("AI INPUT DEBUG", {
+  systemPromptChars: systemPrompt.length,
+  retrievalContextChars:
+    retrievedKnowledge.contextText.length,
+  historyMessages: conversationHistory.length,
+  historyChars: conversationHistory.reduce(
+    (total, item) => total + item.content.length,
+    0,
+  ),
+  questionChars: message.length,
+});
 
 
 
@@ -176,8 +186,6 @@ const retrievedKnowledge =
         role: "user",
         content: buildCurrentQuestionPrompt({
           message,
-          contextText:
-            retrievedKnowledge.contextText,
         }),
       },
     ],
@@ -229,23 +237,30 @@ const retrievedKnowledge =
     );
   }
 
-  const savedAssistantMessage =
-    await prisma.chat_messages.create({
-      data: {
-        conversation_id: conversation.id,
-        user_id: userId,
-        role: "assistant",
-        content: assistantMessage,
-        model: "gpt-4.1-mini",
-        sources_json: {
-          retrievedKnowledge: messageSources,
-          citedSourceIds:
-            finalCitationValidation.citedIds,
-          citationsValid:
-            finalCitationValidation.isValid,
-        },
+const savedAssistantMessage =
+  await prisma.chat_messages.create({
+    data: {
+      conversation_id: conversation.id,
+      user_id: userId,
+      role: "assistant",
+      content: assistantMessage,
+      model: "gpt-4.1-mini",
+
+      tokens_input:
+        response.usage?.input_tokens ?? null,
+
+      tokens_output:
+        response.usage?.output_tokens ?? null,
+
+      sources_json: {
+        retrievedKnowledge: messageSources,
+        citedSourceIds:
+          finalCitationValidation.citedIds,
+        citationsValid:
+          finalCitationValidation.isValid,
       },
-    });
+    },
+  });
 
   await prisma.chat_conversations.update({
     where: {
@@ -322,10 +337,8 @@ ${contextText}
 
 function buildCurrentQuestionPrompt({
   message,
-  contextText,
 }: {
   message: string;
-  contextText: string;
 }) {
   return `
 Pregunta actual del usuario:
@@ -344,9 +357,7 @@ No inventes hechos corporativos, políticas, procedimientos, herramientas, respo
 
 Cita con [F1], [F2], etc. únicamente las afirmaciones que procedan del conocimiento recuperado. No atribuyas una cita del Knowledge Hub a un ejemplo o explicación creada por ti.
 
-Conocimiento recuperado:
 
-${contextText}
 `.trim();
 }
 
