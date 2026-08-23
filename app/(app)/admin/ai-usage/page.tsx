@@ -11,6 +11,11 @@ import { AiUsageChart } from "@/components/admin/ai-usage/chart";
 import { AiFeedbackSummary } from "@/components/admin/ai-usage/feedback-summary";
 import { AiNegativeFeedbackTable } from "@/components/admin/ai-usage/negative-feedback-table";
 
+import {
+  getAiUsageStats,
+  getAiUsageChart,
+} from "@/lib/repositories/admin/ai-usage.repository";
+
 export default async function AdminAiUsagePage() {
   const session = await auth();
 
@@ -24,17 +29,18 @@ export default async function AdminAiUsagePage() {
     redirect("/dashboard");
   }
 
+  const [usageStats, usageData] = await Promise.all([
+    getAiUsageStats(),
+    getAiUsageChart(30),
+  ]);
+
   const stats = {
-    weeklyTokens: 0,
-    activeUsers: 0,
-    averageTokensPerUser: 0,
+    weeklyTokens: usageStats.weeklyTokens,
+    activeUsers: usageStats.activeUsers,
+    averageTokensPerUser:
+      usageStats.averageTokensPerUser,
     satisfactionRate: null as number | null,
   };
-
-  const usageData: Array<{
-    date: string;
-    tokens: number;
-  }> = [];
 
   const feedback = {
     positive: 0,
