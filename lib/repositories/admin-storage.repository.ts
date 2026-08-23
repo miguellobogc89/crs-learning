@@ -1,3 +1,5 @@
+// lib/repositories/admin-storage.repository.ts
+ 
 import { prisma } from "@/lib/prisma";
 
 export interface StorageFileWithDetails {
@@ -19,14 +21,14 @@ export interface StorageFileWithDetails {
     title: string;
     status: string;
   };
-  library: {
+library: {
+  id: string;
+  name: string;
+  workspace: {
     id: string;
     name: string;
-    workspace: {
-      id: string;
-      name: string;
-    } | null;
-  };
+  } | null;
+} | null;
   analysis: {
     status: string;
     errorMessage: string | null;
@@ -185,11 +187,14 @@ export async function getAllStorageFiles(
       title: file.knowledge_sources.title,
       status: file.knowledge_sources.status,
     },
-    library: {
-      id: file.knowledge_sources.knowledge_libraries!.id,
-      name: file.knowledge_sources.knowledge_libraries!.name,
-      workspace: file.knowledge_sources.knowledge_libraries!.workspaces,
-    },
+library: file.knowledge_sources.knowledge_libraries
+  ? {
+      id: file.knowledge_sources.knowledge_libraries.id,
+      name: file.knowledge_sources.knowledge_libraries.name,
+      workspace:
+        file.knowledge_sources.knowledge_libraries.workspaces,
+    }
+  : null,
     analysis: file.knowledge_file_analysis ? {
       status: file.knowledge_file_analysis.status,
       errorMessage: file.knowledge_file_analysis.error_message,
@@ -426,11 +431,14 @@ export async function getStorageFileDetail(
       title: file.knowledge_sources.title,
       status: file.knowledge_sources.status,
     },
-    library: {
-      id: file.knowledge_sources.knowledge_libraries!.id,
-      name: file.knowledge_sources.knowledge_libraries!.name,
-      workspace: file.knowledge_sources.knowledge_libraries!.workspaces,
-    },
+library: file.knowledge_sources.knowledge_libraries
+  ? {
+      id: file.knowledge_sources.knowledge_libraries.id,
+      name: file.knowledge_sources.knowledge_libraries.name,
+      workspace:
+        file.knowledge_sources.knowledge_libraries.workspaces,
+    }
+  : null,
     analysis: file.knowledge_file_analysis ? {
       status: file.knowledge_file_analysis.status,
       errorMessage: file.knowledge_file_analysis.error_message,

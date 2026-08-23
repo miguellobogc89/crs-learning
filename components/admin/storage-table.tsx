@@ -60,8 +60,9 @@ export function StorageTable({
       const matchesUser = selectedUser === "" ||
         file.uploadedByUser?.id === selectedUser;
 
-      const matchesWorkspace = selectedWorkspace === "" ||
-        file.library.workspace?.id === selectedWorkspace;
+const matchesWorkspace =
+  selectedWorkspace === "" ||
+  file.library?.workspace?.id === selectedWorkspace;
 
       const matchesFileType = selectedFileType === "" ||
         file.fileType === selectedFileType;
@@ -303,16 +304,13 @@ export function StorageTable({
                     />
                   </button>
                 </th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">
-                  Acción
-                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {filteredAndSortedFiles.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={9}
                     className="px-4 py-8 text-center text-muted-foreground"
                   >
                     No hay archivos que coincidan con los filtros.
@@ -320,10 +318,24 @@ export function StorageTable({
                 </tr>
               ) : (
                 filteredAndSortedFiles.map((file) => (
-                  <tr
+                    <tr
                     key={file.id}
-                    className="hover:bg-surface transition"
-                  >
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedFile(file)}
+                    onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                        setSelectedFile(file);
+                        }
+                    }}
+                    className="
+                        cursor-pointer
+                        transition-colors duration-150
+                        hover:bg-surface/60
+                        focus:bg-surface/60
+                        focus:outline-none
+                    "
+                    >
                     <td className="px-4 py-3 text-foreground">
                       <span title={file.fileName} className="line-clamp-1">
                         {file.fileName}
@@ -350,12 +362,15 @@ export function StorageTable({
                       </div>
                     </td>
                     <td className="px-4 py-3 text-foreground">
-                      {file.library.workspace?.name || "—"}
+                      {file.library?.workspace?.name || "—"}
                     </td>
                     <td className="px-4 py-3 text-foreground">
-                      <span title={file.library.name} className="line-clamp-1">
-                        {file.library.name}
-                      </span>
+                        <span
+                        title={file.library?.name || undefined}
+                        className="line-clamp-1"
+                        >
+                        {file.library?.name || "—"}
+                        </span>
                     </td>
                     <td className="px-4 py-3 text-foreground">
                       <span
@@ -376,14 +391,6 @@ export function StorageTable({
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">
                       {formatDate(file.createdAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => setSelectedFile(file)}
-                        className="text-brand hover:underline font-medium text-sm"
-                      >
-                        Ver
-                      </button>
                     </td>
                   </tr>
                 ))

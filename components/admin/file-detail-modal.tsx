@@ -117,13 +117,13 @@ export function FileDetailModal({ file, onClose }: FileDetailModalProps) {
               <div className="flex justify-between items-start gap-2">
                 <span className="text-sm text-muted-foreground">Workspace:</span>
                 <span className="text-sm font-medium text-foreground">
-                  {file.library.workspace?.name || "—"}
+                  {file.library?.workspace?.name || "—"}
                 </span>
               </div>
               <div className="flex justify-between items-start gap-2">
                 <span className="text-sm text-muted-foreground">Biblioteca:</span>
                 <span className="text-sm font-medium text-foreground">
-                  {file.library.name}
+                  {file.library?.name || "—"}
                 </span>
               </div>
               <div className="flex justify-between items-start gap-2">
