@@ -1,9 +1,14 @@
+// app/(app)/admin/storage/page.tsx
+
 import { redirect } from "next/navigation";
+
 import { auth } from "@/auth";
 import { requireAdmin } from "@/lib/auth/admin";
-import { PageTitle } from "@/components/app/page-title";
+
+import { AdminPage } from "@/components/admin/admin-page";
 import { StorageStats } from "@/components/admin/storage-stats";
 import { StorageTable } from "@/components/admin/storage-table";
+
 import {
   adminGetStorageFiles,
   adminGetStorageStats,
@@ -30,14 +35,13 @@ export default async function AdminStoragePage() {
   ]);
 
   return (
-    <div className="space-y-6">
-      <PageTitle
-        title="Almacenamiento"
-        subtitle="Administra y monitorea el uso de almacenamiento de Knowledge. Visualiza archivos, tamaños y estado de procesamiento."
-      />
-
-      <StorageStats stats={stats} />
-
+    <AdminPage
+      title="Almacenamiento"
+      subtitle="Administra y monitorea el uso de almacenamiento de Knowledge. Visualiza archivos, tamaños y estado de procesamiento."
+      summary={
+        <StorageStats stats={stats} />
+      }
+    >
       <StorageTable
         initialFiles={files}
         users={filterOptions.users}
@@ -45,6 +49,6 @@ export default async function AdminStoragePage() {
         statuses={filterOptions.statuses}
         workspaces={filterOptions.workspaces}
       />
-    </div>
+    </AdminPage>
   );
 }

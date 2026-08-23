@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { requireAdmin } from "@/lib/auth/admin";
 import { getAllUsers } from "@/lib/repositories/admin-user.repository";
+
+import { AdminPage } from "@/components/admin/admin-page";
 import { UsersTable } from "@/components/admin/users-table";
 
 export const metadata = {
@@ -20,23 +22,18 @@ export default async function UsersPage() {
 
   try {
     await requireAdmin(session.user.id);
-  } catch (error) {
+  } catch {
     redirect("/dashboard");
   }
 
   const users = await getAllUsers();
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Usuarios</h1>
-        <p className="mt-2 text-muted-foreground">
-          Gestiona todos los usuarios del sistema. Puedes buscar, filtrar y editar
-          información de usuarios.
-        </p>
-      </div>
-
+    <AdminPage
+      title="Usuarios"
+      subtitle="Gestiona todos los usuarios del sistema. Puedes buscar, filtrar y editar información de usuarios."
+    >
       <UsersTable initialUsers={users} />
-    </div>
+    </AdminPage>
   );
 }

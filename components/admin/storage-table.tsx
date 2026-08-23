@@ -1,22 +1,56 @@
+// components/admin/storage-table.tsx
+
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { Search, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
+import {
+  Search,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+} from "lucide-react";
+
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
+
 import type {
   StorageFileWithDetails,
 } from "@/lib/repositories/admin-storage.repository";
+
 import { FileDetailModal } from "./file-detail-modal";
 
 interface StorageTableProps {
   initialFiles: StorageFileWithDetails[];
-  users: Array<{ id: string; email: string; name: string | null }>;
+
+  users: Array<{
+    id: string;
+    email: string;
+    name: string | null;
+  }>;
+
   fileTypes: string[];
   statuses: string[];
-  workspaces: Array<{ id: string; name: string }>;
+
+  workspaces: Array<{
+    id: string;
+    name: string;
+  }>;
 }
 
-type SortField = "fileName" | "fileSize" | "createdAt";
-type SortDirection = "asc" | "desc";
+type SortField =
+  | "fileName"
+  | "fileSize"
+  | "createdAt";
+
+type SortDirection =
+  | "asc"
+  | "desc";
 
 function SortIcon({
   field,
@@ -28,12 +62,60 @@ function SortIcon({
   sortDirection: SortDirection;
 }) {
   if (sortField !== field) {
-    return <ChevronsUpDown className="h-3.5 w-3.5" />;
+    return (
+      <ChevronsUpDown className="h-3.5 w-3.5 opacity-40" />
+    );
   }
 
-  return sortDirection === "asc"
-    ? <ChevronUp className="h-3.5 w-3.5" />
-    : <ChevronDown className="h-3.5 w-3.5" />;
+  if (sortDirection === "asc") {
+    return (
+      <ChevronUp className="h-3.5 w-3.5" />
+    );
+  }
+
+  return (
+    <ChevronDown className="h-3.5 w-3.5" />
+  );
+}
+
+function formatFileType(
+  mimeType: string | null,
+): string {
+  if (!mimeType) {
+    return "—";
+  }
+
+  const mimeMap: Record<string, string> = {
+    "application/pdf": ".pdf",
+
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      ".docx",
+
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+      ".xlsx",
+
+    "application/vnd.ms-powerpoint": ".ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+      ".pptx",
+
+    "text/plain": ".txt",
+    "text/csv": ".csv",
+
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+  };
+
+  const mappedType = mimeMap[mimeType];
+
+  if (mappedType) {
+    return mappedType;
+  }
+
+  return mimeType;
 }
 
 export function StorageTable({
@@ -43,373 +125,638 @@ export function StorageTable({
   statuses,
   workspaces,
 }: StorageTableProps) {
-  const [search, setSearch] = useState("");
-  const [selectedUser, setSelectedUser] = useState("");
-  const [selectedWorkspace, setSelectedWorkspace] = useState("");
-  const [selectedFileType, setSelectedFileType] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState("");
-  const [sortField, setSortField] = useState<SortField>("createdAt");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [selectedFile, setSelectedFile] = useState<StorageFileWithDetails | null>(null);
+  const [search, setSearch] =
+    useState("");
 
-  const filteredAndSortedFiles = useMemo(() => {
-    const filtered = initialFiles.filter((file) => {
-      const matchesSearch = search === "" ||
-        file.fileName.toLowerCase().includes(search.toLowerCase());
+  const [selectedUser, setSelectedUser] =
+    useState("");
 
-      const matchesUser = selectedUser === "" ||
-        file.uploadedByUser?.id === selectedUser;
-
-const matchesWorkspace =
-  selectedWorkspace === "" ||
-  file.library?.workspace?.id === selectedWorkspace;
-
-      const matchesFileType = selectedFileType === "" ||
-        file.fileType === selectedFileType;
-
-      const matchesStatus = selectedStatus === "" ||
-        file.status === selectedStatus;
-
-      return (
-        matchesSearch &&
-        matchesUser &&
-        matchesWorkspace &&
-        matchesFileType &&
-        matchesStatus
-      );
-    });
-
-    filtered.sort((a, b) => {
-      let comparison = 0;
-
-      if (sortField === "fileName") {
-        comparison = a.fileName.localeCompare(b.fileName);
-      } else if (sortField === "fileSize") {
-        comparison = (a.fileSize || 0) - (b.fileSize || 0);
-      } else if (sortField === "createdAt") {
-        comparison = a.createdAt.getTime() - b.createdAt.getTime();
-      }
-
-      return sortDirection === "asc" ? comparison : -comparison;
-    });
-
-    return filtered;
-  }, [
-    initialFiles,
-    search,
-    selectedUser,
+  const [
     selectedWorkspace,
+    setSelectedWorkspace,
+  ] = useState("");
+
+  const [
     selectedFileType,
+    setSelectedFileType,
+  ] = useState("");
+
+  const [
     selectedStatus,
-    sortField,
+    setSelectedStatus,
+  ] = useState("");
+
+  const [sortField, setSortField] =
+    useState<SortField>("createdAt");
+
+  const [
     sortDirection,
-  ]);
+    setSortDirection,
+  ] =
+    useState<SortDirection>("desc");
 
-  const handleSort = useCallback((field: SortField) => {
-    if (sortField === field) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortField(field);
-      setSortDirection("desc");
+  const [
+    selectedFile,
+    setSelectedFile,
+  ] =
+    useState<StorageFileWithDetails | null>(
+      null,
+    );
+
+  const filteredAndSortedFiles =
+    useMemo(() => {
+      const filtered =
+        initialFiles.filter(
+          (file) => {
+            const matchesSearch =
+              search === "" ||
+              file.fileName
+                .toLowerCase()
+                .includes(
+                  search.toLowerCase(),
+                );
+
+            const matchesUser =
+              selectedUser === "" ||
+              file.uploadedByUser?.id ===
+                selectedUser;
+
+            const matchesWorkspace =
+              selectedWorkspace === "" ||
+              file.library?.workspace?.id ===
+                selectedWorkspace;
+
+            const matchesFileType =
+              selectedFileType === "" ||
+              file.fileType ===
+                selectedFileType;
+
+            const matchesStatus =
+              selectedStatus === "" ||
+              file.status ===
+                selectedStatus;
+
+            return (
+              matchesSearch &&
+              matchesUser &&
+              matchesWorkspace &&
+              matchesFileType &&
+              matchesStatus
+            );
+          },
+        );
+
+      filtered.sort((a, b) => {
+        let comparison = 0;
+
+        if (
+          sortField === "fileName"
+        ) {
+          comparison =
+            a.fileName.localeCompare(
+              b.fileName,
+            );
+        }
+
+        if (
+          sortField === "fileSize"
+        ) {
+          comparison =
+            (a.fileSize || 0) -
+            (b.fileSize || 0);
+        }
+
+        if (
+          sortField === "createdAt"
+        ) {
+          comparison =
+            a.createdAt.getTime() -
+            b.createdAt.getTime();
+        }
+
+        if (
+          sortDirection === "asc"
+        ) {
+          return comparison;
+        }
+
+        return -comparison;
+      });
+
+      return filtered;
+    }, [
+      initialFiles,
+      search,
+      selectedUser,
+      selectedWorkspace,
+      selectedFileType,
+      selectedStatus,
+      sortField,
+      sortDirection,
+    ]);
+
+  const handleSort =
+    useCallback(
+      (field: SortField) => {
+        if (
+          sortField === field
+        ) {
+          setSortDirection(
+            (current) => {
+              if (
+                current === "asc"
+              ) {
+                return "desc";
+              }
+
+              return "asc";
+            },
+          );
+
+          return;
+        }
+
+        setSortField(field);
+        setSortDirection("desc");
+      },
+      [sortField],
+    );
+
+  function formatBytes(
+    bytes: number | null,
+  ): string {
+    if (bytes === null) {
+      return "—";
     }
-  }, [sortField]);
 
-  const formatBytes = (bytes: number | null): string => {
-    if (!bytes) return "—";
-    if (bytes === 0) return "0 B";
+    if (bytes === 0) {
+      return "0 B";
+    }
+
     const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return (bytes / Math.pow(k, i)).toFixed(2) + " " + sizes[i];
-  };
+    const sizes = [
+      "B",
+      "KB",
+      "MB",
+      "GB",
+    ];
 
-  const formatDate = (date: Date): string => {
-    return new Date(date).toLocaleDateString("es-ES", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+    const index = Math.floor(
+      Math.log(bytes) /
+        Math.log(k),
+    );
 
-  const getStatusBadgeColor = (status: string): string => {
+    return `${(
+      bytes /
+      Math.pow(k, index)
+    ).toFixed(2)} ${sizes[index]}`;
+  }
+
+  function formatDate(
+    date: Date,
+  ): string {
+    return new Date(
+      date,
+    ).toLocaleDateString(
+      "es-ES",
+      {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      },
+    );
+  }
+
+  function getStatusBadgeColor(
+    status: string,
+  ): string {
     switch (status) {
       case "uploaded":
         return "bg-blue-100 text-blue-900";
+
       case "processing":
         return "bg-yellow-100 text-yellow-900";
+
       case "completed":
         return "bg-green-100 text-green-900";
+
       case "failed":
         return "bg-red-100 text-red-900";
+
       default:
         return "bg-gray-100 text-gray-900";
     }
-  };
+  }
+
+  const columns: DataTableColumn<StorageFileWithDetails>[] =
+    [
+      {
+        id: "fileName",
+        header: (
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1.5 hover:text-foreground"
+            onClick={() => {
+              handleSort("fileName");
+            }}
+          >
+            Archivo
+
+            <SortIcon
+              field="fileName"
+              sortField={sortField}
+              sortDirection={
+                sortDirection
+              }
+            />
+          </button>
+        ),
+        align: "center",
+        render: (file) => (
+          <span
+            title={file.fileName}
+            className="line-clamp-1"
+          >
+            {file.fileName}
+          </span>
+        ),
+      },
+
+      {
+        id: "fileSize",
+        header: (
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1.5 hover:text-foreground"
+            onClick={() => {
+              handleSort("fileSize");
+            }}
+          >
+            Tamaño
+
+            <SortIcon
+              field="fileSize"
+              sortField={sortField}
+              sortDirection={
+                sortDirection
+              }
+            />
+          </button>
+        ),
+        align: "center",
+        render: (file) =>
+          formatBytes(
+            file.fileSize,
+          ),
+      },
+
+      {
+        id: "fileType",
+        header: "Tipo",
+        align: "center",
+            render: (file) => (
+            <span className="text-muted-foreground">
+                {formatFileType(file.fileType)}
+            </span>
+            ),
+      },
+
+      {
+        id: "uploadedBy",
+        header: "Subido por",
+        align: "center",
+        render: (file) => (
+          <div>
+            <div>
+              {file.uploadedByUser
+                ?.name || "—"}
+            </div>
+
+            <div className="text-[0.85em] text-muted-foreground">
+              {
+                file.uploadedByUser
+                  ?.email
+              }
+            </div>
+          </div>
+        ),
+      },
+
+      {
+        id: "workspace",
+        header: "Workspace",
+        align: "center",
+        render: (file) =>
+          file.library
+            ?.workspace?.name ||
+          "—",
+      },
+
+      {
+        id: "library",
+        header: "Biblioteca",
+        align: "center",
+        render: (file) => (
+          <span
+            title={
+              file.library?.name ||
+              undefined
+            }
+            className="line-clamp-1"
+          >
+            {file.library?.name ||
+              "—"}
+          </span>
+        ),
+      },
+
+      {
+        id: "knowledgeSource",
+        header:
+          "Knowledge Source",
+        align: "center",
+        render: (file) => (
+          <span
+            title={
+              file.knowledgeSource
+                .title
+            }
+            className="line-clamp-1"
+          >
+            {
+              file.knowledgeSource
+                .title
+            }
+          </span>
+        ),
+      },
+
+      {
+        id: "status",
+        header: "Estado",
+        align: "center",
+        render: (file) => (
+          <span
+            className={[
+              "inline-block rounded px-2 py-1 text-[0.9em] font-medium",
+              getStatusBadgeColor(
+                file.status,
+              ),
+            ].join(" ")}
+          >
+            {file.status}
+          </span>
+        ),
+      },
+
+      {
+        id: "createdAt",
+        header: (
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1.5 hover:text-foreground"
+            onClick={() => {
+              handleSort(
+                "createdAt",
+              );
+            }}
+          >
+            Fecha
+
+            <SortIcon
+              field="createdAt"
+              sortField={sortField}
+              sortDirection={
+                sortDirection
+              }
+            />
+          </button>
+        ),
+        align: "center",
+        render: (file) => (
+          <span className="text-muted-foreground">
+            {formatDate(
+              file.createdAt,
+            )}
+          </span>
+        ),
+      },
+    ];
 
   return (
     <div className="space-y-4">
       {/* Filtros */}
       <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface p-4 sm:flex-row sm:items-end sm:gap-2">
         <div className="flex-1">
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
             Buscar archivo
           </label>
+
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
             <input
               type="text"
               placeholder="Nombre de archivo..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-2 text-sm border border-border rounded-md bg-background hover:border-foreground/50 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0"
+              onChange={(
+                event,
+              ) => {
+                setSearch(
+                  event.target
+                    .value,
+                );
+              }}
+              className="w-full rounded-md border border-border bg-background py-2 pl-8 pr-3 text-sm hover:border-foreground/50 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0"
             />
           </div>
         </div>
 
         <div className="min-w-max">
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
             Subido por
           </label>
+
           <select
             value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-            className="px-3 py-2 text-sm border border-border rounded-md bg-background hover:border-foreground/50 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0"
+            onChange={(
+              event,
+            ) => {
+              setSelectedUser(
+                event.target
+                  .value,
+              );
+            }}
+            className="rounded-md border border-border bg-background px-3 py-2 text-sm hover:border-foreground/50 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0"
           >
-            <option value="">Todos</option>
-            {users.map((user) => (
-              <option key={user.id} value={user.id}>
-                {user.name || user.email}
-              </option>
-            ))}
+            <option value="">
+              Todos
+            </option>
+
+            {users.map(
+              (user) => (
+                <option
+                  key={user.id}
+                  value={user.id}
+                >
+                  {user.name ||
+                    user.email}
+                </option>
+              ),
+            )}
           </select>
         </div>
 
         <div className="min-w-max">
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
             Workspace
           </label>
+
           <select
-            value={selectedWorkspace}
-            onChange={(e) => setSelectedWorkspace(e.target.value)}
-            className="px-3 py-2 text-sm border border-border rounded-md bg-background hover:border-foreground/50 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0"
+            value={
+              selectedWorkspace
+            }
+            onChange={(
+              event,
+            ) => {
+              setSelectedWorkspace(
+                event.target
+                  .value,
+              );
+            }}
+            className="rounded-md border border-border bg-background px-3 py-2 text-sm hover:border-foreground/50 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0"
           >
-            <option value="">Todos</option>
-            {workspaces.map((workspace) => (
-              <option key={workspace.id} value={workspace.id}>
-                {workspace.name}
-              </option>
-            ))}
+            <option value="">
+              Todos
+            </option>
+
+            {workspaces.map(
+              (workspace) => (
+                <option
+                  key={
+                    workspace.id
+                  }
+                  value={
+                    workspace.id
+                  }
+                >
+                  {
+                    workspace.name
+                  }
+                </option>
+              ),
+            )}
           </select>
         </div>
 
         <div className="min-w-max">
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
             Tipo
           </label>
+
           <select
-            value={selectedFileType}
-            onChange={(e) => setSelectedFileType(e.target.value)}
-            className="px-3 py-2 text-sm border border-border rounded-md bg-background hover:border-foreground/50 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0"
+            value={
+              selectedFileType
+            }
+            onChange={(
+              event,
+            ) => {
+              setSelectedFileType(
+                event.target
+                  .value,
+              );
+            }}
+            className="rounded-md border border-border bg-background px-3 py-2 text-sm hover:border-foreground/50 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0"
           >
-            <option value="">Todos</option>
-            {fileTypes.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
+            <option value="">
+              Todos
+            </option>
+
+            {fileTypes.map(
+              (type) => (
+                <option
+                  key={type}
+                  value={type}
+                >
+                  {type}
+                </option>
+              ),
+            )}
           </select>
         </div>
 
         <div className="min-w-max">
-          <label className="block text-xs font-medium text-muted-foreground mb-1">
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
             Estado
           </label>
+
           <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-3 py-2 text-sm border border-border rounded-md bg-background hover:border-foreground/50 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0"
+            value={
+              selectedStatus
+            }
+            onChange={(
+              event,
+            ) => {
+              setSelectedStatus(
+                event.target
+                  .value,
+              );
+            }}
+            className="rounded-md border border-border bg-background px-3 py-2 text-sm hover:border-foreground/50 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-0"
           >
-            <option value="">Todos</option>
-            {statuses.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
+            <option value="">
+              Todos
+            </option>
+
+            {statuses.map(
+              (status) => (
+                <option
+                  key={status}
+                  value={status}
+                >
+                  {status}
+                </option>
+              ),
+            )}
           </select>
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="rounded-lg border border-border overflow-hidden bg-background">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface">
-                <th className="px-4 py-3 text-left font-semibold text-foreground">
-                  <button
-                    onClick={() => handleSort("fileName")}
-                    className="flex items-center gap-1.5 hover:text-brand transition"
-                  >
-                    Archivo
-                    <SortIcon
-                      field="fileName"
-                      sortField={sortField}
-                      sortDirection={sortDirection}
-                    />
-                  </button>
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">
-                  <button
-                    onClick={() => handleSort("fileSize")}
-                    className="flex items-center gap-1.5 hover:text-brand transition"
-                  >
-                    Tamaño
-                    <SortIcon
-                      field="fileSize"
-                      sortField={sortField}
-                      sortDirection={sortDirection}
-                    />
-                  </button>
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">
-                  Tipo
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">
-                  Subido por
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">
-                  Workspace
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">
-                  Biblioteca
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">
-                  Knowledge Source
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">
-                  Estado
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">
-                  <button
-                    onClick={() => handleSort("createdAt")}
-                    className="flex items-center gap-1.5 hover:text-brand transition"
-                  >
-                    Fecha
-                    <SortIcon
-                      field="createdAt"
-                      sortField={sortField}
-                      sortDirection={sortDirection}
-                    />
-                  </button>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filteredAndSortedFiles.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={9}
-                    className="px-4 py-8 text-center text-muted-foreground"
-                  >
-                    No hay archivos que coincidan con los filtros.
-                  </td>
-                </tr>
-              ) : (
-                filteredAndSortedFiles.map((file) => (
-                    <tr
-                    key={file.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setSelectedFile(file)}
-                    onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                        setSelectedFile(file);
-                        }
-                    }}
-                    className="
-                        cursor-pointer
-                        transition-colors duration-150
-                        hover:bg-surface/60
-                        focus:bg-surface/60
-                        focus:outline-none
-                    "
-                    >
-                    <td className="px-4 py-3 text-foreground">
-                      <span title={file.fileName} className="line-clamp-1">
-                        {file.fileName}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-foreground">
-                      {formatBytes(file.fileSize)}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {file.fileType ? (
-                        <code className="text-xs bg-surface px-2 py-1 rounded">
-                          {file.fileType}
-                        </code>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-foreground">
-                      <div>
-                        <div>{file.uploadedByUser?.name || "—"}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {file.uploadedByUser?.email}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-foreground">
-                      {file.library?.workspace?.name || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-foreground">
-                        <span
-                        title={file.library?.name || undefined}
-                        className="line-clamp-1"
-                        >
-                        {file.library?.name || "—"}
-                        </span>
-                    </td>
-                    <td className="px-4 py-3 text-foreground">
-                      <span
-                        title={file.knowledgeSource.title}
-                        className="line-clamp-1"
-                      >
-                        {file.knowledgeSource.title}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block px-2 py-1 rounded text-xs font-medium ${getStatusBadgeColor(
-                          file.status,
-                        )}`}
-                      >
-                        {file.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
-                      {formatDate(file.createdAt)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        rows={
+          filteredAndSortedFiles
+        }
+        columns={columns}
+        getRowId={(file) =>
+          file.id
+        }
+        emptyMessage="No hay archivos que coincidan con los filtros."
+        onRowClick={(file) => {
+          setSelectedFile(
+            file,
+          );
+        }}
+      />
 
-      {/* Total de archivos */}
       <div className="text-sm text-muted-foreground">
-        Mostrando {filteredAndSortedFiles.length} de {initialFiles.length} archivos
+        Mostrando{" "}
+        {
+          filteredAndSortedFiles.length
+        }{" "}
+        de {initialFiles.length}{" "}
+        archivos
       </div>
 
-      {/* Modal de detalles */}
       {selectedFile && (
         <FileDetailModal
           file={selectedFile}
-          onClose={() => setSelectedFile(null)}
+          onClose={() => {
+            setSelectedFile(
+              null,
+            );
+          }}
         />
       )}
     </div>
