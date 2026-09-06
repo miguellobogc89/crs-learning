@@ -112,9 +112,10 @@ export function DashboardWorkspaceSidebar({
             <div className="flex items-center gap-2">
               <Button
                 type="submit"
+                variant="brand"
                 size="sm"
                 disabled={isPending}
-                className="h-8 bg-brand text-primary-foreground hover:bg-brand-hover"
+                className="h-8"
               >
                 Crear
               </Button>

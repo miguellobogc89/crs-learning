@@ -3,6 +3,7 @@
 import { loginWithGoogle } from "@/app/actions/auth";
 import { auth } from "@/auth";
 import { LoginCredentialsForm } from "@/components/auth/login-credentials-form";
+import { Button } from "@/components/ui/button";
 import { Check, Sparkles } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -37,7 +38,7 @@ export default async function HomePage() {
         </div>
 
         <div className="relative z-10 max-w-sm xl:max-w-md 2xl:max-w-lg">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#1DA1F2]/20 bg-[#1DA1F2]/10 px-3 py-1.5 text-xs font-medium text-[#1DA1F2]">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand">
             <Sparkles className="h-3.5 w-3.5" />
             Plataforma de conocimiento interno
           </div>
@@ -87,7 +88,7 @@ export default async function HomePage() {
 
             <Link
               href="/register"
-              className="font-medium text-foreground transition-colors hover:text-[#1DA1F2]"
+              className="font-medium text-foreground transition-colors hover:text-brand"
             >
               Crear cuenta
             </Link>
@@ -119,13 +120,14 @@ export default async function HomePage() {
             </div>
 
             <form action={loginWithGoogle} className="mt-7">
-              <button
+              <Button
                 type="submit"
-                className="flex h-11 w-full items-center justify-center gap-3 rounded-lg border border-input bg-background px-4 text-sm font-medium shadow-sm transition-all hover:border-[#1DA1F2]/40 hover:bg-accent focus:outline-none focus:ring-2 focus:ring-[#1DA1F2]/20 sm:h-11"
+                variant="outline"
+                className="h-11 w-full gap-3 px-4 shadow-sm sm:h-11"
               >
                 <GoogleIcon />
                 Continuar con Google
-              </button>
+              </Button>
             </form>
 
             <div className="my-6 flex items-center gap-3">
@@ -145,7 +147,7 @@ export default async function HomePage() {
                 Todavia no tienes una cuenta?{" "}
                 <Link
                   href="/register"
-                  className="font-semibold text-[#1DA1F2]"
+                  className="font-semibold text-brand"
                 >
                   Registrate
                 </Link>
@@ -179,7 +181,7 @@ export default async function HomePage() {
 function Feature({ text }: { text: string }) {
   return (
     <div className="flex items-center gap-3 text-sm text-foreground/80 2xl:text-[15px]">
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1DA1F2]/15 text-[#1DA1F2]">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
         <Check className="h-3 w-3 stroke-[2.5]" />
       </span>
 
@@ -221,8 +223,8 @@ function GoogleIcon() {
 function BrandBackground() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute -left-32 top-[30%] h-[420px] w-[420px] rounded-full bg-[#1DA1F2]/15 blur-[140px]" />
-      <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-[#1DA1F2]/10 blur-[120px]" />
+      <div className="absolute -left-32 top-[30%] h-[420px] w-[420px] rounded-full bg-brand/15 blur-[140px]" />
+      <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-brand/10 blur-[120px]" />
 
       <div
         className="absolute inset-0 opacity-[0.035]"

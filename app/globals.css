@@ -76,8 +76,10 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-brand-hover: var(--brand-hover);
+  --color-brand-active: var(--brand-active);
   --color-brand-soft: var(--brand-soft);
   --color-brand-soft-hover: var(--brand-soft-hover);
+  --color-brand-border: var(--brand-border);
 
   /* Superficies */
   --color-panel: var(--panel);
@@ -210,17 +212,17 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.72 0.16 215);
 
-/* Marca CRS */
---brand: oklch(0.72 0.16 215);
---brand-foreground: oklch(0.985 0 0);
+  /* Marca CRS */
+  --brand: oklch(0.72 0.16 215);
+  --brand-foreground: oklch(0.985 0 0);
 
---brand-hover: oklch(0.67 0.16 215);
---brand-active: oklch(0.63 0.16 215);
+  --brand-hover: oklch(0.67 0.16 215);
+  --brand-active: oklch(0.63 0.16 215);
 
---brand-soft: oklch(0.72 0.16 215 / 0.12);
---brand-soft-hover: oklch(0.72 0.16 215 / 0.18);
+  --brand-soft: oklch(0.72 0.16 215 / 0.12);
+  --brand-soft-hover: oklch(0.72 0.16 215 / 0.18);
 
---brand-border: oklch(0.72 0.16 215 / 0.35);
+  --brand-border: oklch(0.72 0.16 215 / 0.35);
 
   /* Editor */
   --section: oklch(0.68 0.02 260);

@@ -8,6 +8,7 @@ import {
   requestPasswordReset,
 } from "@/app/actions/auth";
 import { AuthFormMessage } from "@/components/auth/auth-form-message";
+import { Button } from "@/components/ui/button";
 
 const initialState: AuthActionState = {
   status: "idle",
@@ -38,18 +39,19 @@ export function ForgotPasswordForm() {
           autoComplete="email"
           placeholder="nombre@empresa.com"
           required
-          className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:border-[#1DA1F2] focus:ring-2 focus:ring-[#1DA1F2]/15"
+          className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:border-brand-border focus:ring-2 focus:ring-brand/15"
         />
       </div>
 
-      <button
+      <Button
         type="submit"
         disabled={pending}
-        className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#1DA1F2] px-4 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#168BD2] focus:outline-none focus:ring-2 focus:ring-[#1DA1F2]/30 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+        variant="brand"
+        className="h-11 w-full gap-2 px-4 font-semibold shadow-sm"
       >
         {pending ? "Enviando..." : "Enviar enlace"}
         <Send className="h-4 w-4" />
-      </button>
+      </Button>
     </form>
   );
 }

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { AssistantSidebarTrigger } from "./assistant-sidebar-trigger";
+import { ResizableSectionShell } from "./resizable-section-shell";
 
 type AppSectionSidebarProps = {
   children: ReactNode;
@@ -12,7 +13,7 @@ export function AppSectionSidebar({
   children,
 }: AppSectionSidebarProps) {
   return (
-    <aside className="flex min-h-0 flex-col border-r border-border bg-panel">
+    <aside className="flex h-full min-h-0 flex-col border-r border-border bg-panel">
       <div className="min-h-0 flex-1">
         {children}
       </div>
@@ -34,14 +35,14 @@ export function AppSectionShell({
   children,
 }: AppSectionShellProps) {
   return (
-    <div className="grid h-full grid-cols-[280px_minmax(0,1fr)] bg-background">
-      <AppSectionSidebar>
-        {sidebar}
-      </AppSectionSidebar>
-
-      <section className="min-w-0 overflow-hidden">
-        {children}
-      </section>
-    </div>
+    <ResizableSectionShell
+      sidebar={
+        <AppSectionSidebar>
+          {sidebar}
+        </AppSectionSidebar>
+      }
+    >
+      {children}
+    </ResizableSectionShell>
   );
 }

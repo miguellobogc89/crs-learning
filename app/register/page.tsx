@@ -26,7 +26,7 @@ export default async function RegisterPage() {
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
         Ya tienes cuenta?{" "}
-        <Link href="/" className="font-semibold text-[#1DA1F2]">
+        <Link href="/" className="font-semibold text-brand">
           Inicia sesion
         </Link>
       </p>

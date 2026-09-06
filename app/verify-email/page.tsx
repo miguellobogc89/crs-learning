@@ -1,4 +1,5 @@
 import { verifyEmailToken } from "@/lib/auth/account.service";
+import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -65,12 +66,9 @@ export default async function VerifyEmailPage({
           {copy.body}
         </div>
 
-        <Link
-          href="/"
-          className="mt-6 flex h-11 w-full items-center justify-center rounded-lg bg-[#1DA1F2] px-4 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#168BD2]"
-        >
-          Ir al login
-        </Link>
+        <Button asChild variant="brand" className="mt-6 h-11 w-full px-4 font-semibold shadow-sm">
+          <Link href="/">Ir al login</Link>
+        </Button>
       </div>
     </main>
   );

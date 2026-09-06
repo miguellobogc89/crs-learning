@@ -39,7 +39,7 @@ export function AnalyzeKnowledgeButton({
         type="button"
         onClick={handleAnalyze}
         disabled={isAnalyzing}
-        className="bg-brand text-primary-foreground hover:bg-brand-hover"
+        variant="brand"
       >
         {isAnalyzing ? (
           <Loader2 className="h-4 w-4 animate-spin" />

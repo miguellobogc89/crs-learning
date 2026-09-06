@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import type { AccessibleWorkspace } from "@/lib/repositories/workspace.repository";
+import { Button } from "../ui";
 
 type Props = {
   activeWorkspace: AccessibleWorkspace;
@@ -133,12 +134,9 @@ export function WorkspaceSelector({
               placeholder="Nombre"
               className="h-8"
             />
-            <button
-              type="submit"
-              className="flex h-8 w-full items-center justify-center rounded-md bg-brand px-2 text-sm font-medium text-brand-foreground hover:bg-brand/90"
-            >
-              Crear workspace
-            </button>
+<Button variant="brand">
+  Crear workspace
+</Button>
           </form>
         ) : (
           <DropdownMenuItem

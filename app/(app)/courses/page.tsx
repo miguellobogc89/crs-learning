@@ -5,7 +5,6 @@ import {
   BookOpen,
   Building2,
   FileText,
-  FlaskConical,
   GraduationCap,
   Plus,
   Search,
@@ -45,8 +44,9 @@ export default async function CoursesPage() {
 
             <Button
               asChild
+              variant="brand"
               size="sm"
-              className="h-8 gap-1.5 bg-brand text-primary-foreground hover:bg-brand-hover"
+              className="h-8 gap-1.5"
             >
               <Link href="/courses/new">
                 <Plus className="h-3.5 w-3.5" />
@@ -133,8 +133,9 @@ function CoursesSidebar() {
 
         <Button
           asChild
+          variant="brand"
           size="sm"
-          className="w-full justify-start gap-1.5 bg-brand text-primary-foreground hover:bg-brand-hover"
+          className="w-full justify-start gap-1.5"
         >
           <Link href="/courses/new">
             <Plus className="h-3.5 w-3.5" />
@@ -263,8 +264,9 @@ function EmptyState() {
 
       <Button
         asChild
+        variant="brand"
         size="sm"
-        className="mt-4 h-8 gap-1.5 bg-brand text-primary-foreground hover:bg-brand-hover"
+        className="mt-4 h-8 gap-1.5"
       >
         <Link href="/courses/new">
           <Plus className="h-3.5 w-3.5" />

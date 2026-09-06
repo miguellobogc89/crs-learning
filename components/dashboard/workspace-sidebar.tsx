@@ -90,7 +90,7 @@ export function DashboardWorkspaceSidebar({
                 disabled={isPending}
                 className="flex h-9 w-full items-center justify-center rounded-md bg-brand px-3 text-sm font-medium text-white transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Crear workspace
+                Crear workspacess
               </button>
             </form>
           </div>
