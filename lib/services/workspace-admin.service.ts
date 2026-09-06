@@ -1,6 +1,10 @@
 import { randomBytes } from "node:crypto";
 
 import { prisma } from "@/lib/prisma";
+import {
+  assertPlanAllows,
+  canInviteMember,
+} from "@/lib/services/entitlements.service";
 import { createNotification } from "@/lib/services/notification.service";
 import {
   createWorkspaceInviteRecord,
@@ -133,6 +137,10 @@ export async function inviteWorkspaceMember(data: {
   if (invitedUser?.id === data.userId) {
     throw new Error("No puedes invitarte a ti mismo");
   }
+
+  assertPlanAllows(
+    await canInviteMember(data.userId, data.workspaceId),
+  );
 
   if (
     invitedUser &&
@@ -426,6 +434,11 @@ export async function acceptWorkspaceInvite(data: {
     role: invite.role === "owner" ? "member" : "member",
   });
 
+  await ensureOrganizationMemberForWorkspace({
+    userId: data.userId,
+    workspaceId: invite.workspace_id,
+  });
+
   await updateWorkspaceInviteStatus({
     inviteId: invite.id,
     currentStatus: "pending",
@@ -434,6 +447,47 @@ export async function acceptWorkspaceInvite(data: {
   });
 
   return invite.workspace_id;
+}
+
+async function ensureOrganizationMemberForWorkspace({
+  userId,
+  workspaceId,
+}: {
+  userId: string;
+  workspaceId: string;
+}) {
+  const workspace = await prisma.workspaces.findUnique({
+    where: {
+      id: workspaceId,
+    },
+    select: {
+      organization_id: true,
+    },
+  });
+
+  if (!workspace?.organization_id) {
+    return;
+  }
+
+  await prisma.organization_members.upsert({
+    where: {
+      organization_id_user_id: {
+        organization_id: workspace.organization_id,
+        user_id: userId,
+      },
+    },
+    create: {
+      organization_id: workspace.organization_id,
+      user_id: userId,
+      role: "member",
+      status: "active",
+      is_primary: false,
+    },
+    update: {
+      status: "active",
+      updated_at: new Date(),
+    },
+  });
 }
 
 export async function rejectWorkspaceInvite(data: {

@@ -3,26 +3,39 @@ import {
   addKnowledgeTeamMember,
   createKnowledgeTeam,
   findUserByEmail,
-  listKnowledgeTeamsForUser,
+  listKnowledgeTeamsForWorkspace,
   shareLibraryWithTeam,
   listLibraryTeamShares,
 removeLibraryTeamShare,
 } from "@/lib/repositories/knowledge-team.repository";
+import {
+  assertPlanAllows,
+  canCreateGroup,
+} from "@/lib/services/entitlements.service";
 
 export async function createTeam(data: {
   ownerUserId: string;
+  workspaceId: string;
   name: string;
   description?: string;
 }) {
+  assertPlanAllows(
+    await canCreateGroup(data.ownerUserId, data.workspaceId),
+  );
+
   return createKnowledgeTeam(data);
 }
 
-export async function listTeams(userId: string) {
-  return listKnowledgeTeamsForUser(userId);
+export async function listTeams(data: {
+  userId: string;
+  workspaceId: string;
+}) {
+  return listKnowledgeTeamsForWorkspace(data);
 }
 
 export async function addMemberToTeam(data: {
   teamId: string;
+  workspaceId: string;
   email: string;
   role?: string;
 }) {
@@ -34,6 +47,7 @@ export async function addMemberToTeam(data: {
 
   return addKnowledgeTeamMember({
     teamId: data.teamId,
+    workspaceId: data.workspaceId,
     userId: user.id,
     role: data.role ?? "member",
   });

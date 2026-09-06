@@ -10,6 +10,10 @@ import {
   removeTeamShareFromLibrary,
   shareLibraryWithKnowledgeTeam,
 } from "@/lib/services/knowledge-team.service";
+import {
+  serializePlanLimitError,
+  type PlanLimitErrorPayload,
+} from "@/lib/services/entitlements.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export async function shareKnowledgeLibraryWithTeamAction(
@@ -74,13 +78,36 @@ export async function createKnowledgeTeamAction(
     return;
   }
 
-  await createTeam({
-    ownerUserId: session.user.id,
-    name,
-    description,
-  });
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
 
-  revalidatePath("/my-space");
+  try {
+    await createTeam({
+      ownerUserId: session.user.id,
+      workspaceId: activeWorkspace.id,
+      name,
+      description,
+    });
+
+    revalidatePath("/my-space");
+    revalidatePath(`/my-space/workspaces/${activeWorkspace.id}`);
+
+    return {
+      ok: true as const,
+    };
+  } catch (error) {
+    const planLimit = serializePlanLimitError(error);
+
+    if (planLimit) {
+      return {
+        ok: false as const,
+        planLimit,
+      };
+    }
+
+    throw error;
+  }
 }
 
 export async function addKnowledgeTeamMemberAction(
@@ -104,8 +131,13 @@ export async function addKnowledgeTeamMemberAction(
     return;
   }
 
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   await addMemberToTeam({
     teamId,
+    workspaceId: activeWorkspace.id,
     email,
   });
 
@@ -147,3 +179,12 @@ export async function removeKnowledgeLibraryTeamShareAction(
   revalidatePath("/knowledge");
   revalidatePath(`/knowledge/library/${libraryId}`);
 }
+
+export type KnowledgeTeamActionResult =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      planLimit: PlanLimitErrorPayload;
+    };

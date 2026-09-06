@@ -13,7 +13,6 @@ import {
 import {
   cancelWorkspaceInviteAction,
   deleteWorkspaceAction,
-  inviteWorkspaceMemberAction,
   leaveWorkspaceAction,
   removeWorkspaceMemberAction,
   updateWorkspaceGeneralAction,
@@ -22,6 +21,7 @@ import {
 import { auth } from "@/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { WorkspaceInviteForm } from "@/components/workspace/workspace-invite-form";
 import { getWorkspaceAdminDetail } from "@/lib/services/workspace-admin.service";
 
 export default async function WorkspaceDetailPage({
@@ -137,27 +137,9 @@ export default async function WorkspaceDetailPage({
             />
 
             {isOwner ? (
-              <form
-                action={inviteWorkspaceMemberAction}
-                className="mt-5 grid gap-3 md:grid-cols-[1fr_auto]"
-              >
-                <input
-                  type="hidden"
-                  name="workspaceId"
-                  value={detail.workspace.id}
-                />
-                <input
-                  name="email"
-                  type="email"
-                  placeholder="persona@empresa.com"
-                  required
-                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none"
-                />
-                <Button type="submit">
-                  <Mail className="mr-2 h-4 w-4" />
-                  Invitar
-                </Button>
-              </form>
+              <WorkspaceInviteForm
+                workspaceId={detail.workspace.id}
+              />
             ) : null}
 
             <div className="mt-5 divide-y divide-border rounded-lg border border-border">

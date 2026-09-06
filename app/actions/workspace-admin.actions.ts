@@ -5,6 +5,10 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import {
+  serializePlanLimitError,
+  type PlanLimitErrorPayload,
+} from "@/lib/services/entitlements.service";
+import {
   acceptWorkspaceInvite,
   cancelWorkspaceInvite,
   deleteWorkspace,
@@ -47,14 +51,40 @@ export async function inviteWorkspaceMemberAction(formData: FormData) {
   const user = await getAuthenticatedUser();
   const workspaceId = String(formData.get("workspaceId") ?? "");
 
-  await inviteWorkspaceMember({
-    userId: user.id,
-    workspaceId,
-    email: String(formData.get("email") ?? ""),
-  });
+  try {
+    await inviteWorkspaceMember({
+      userId: user.id,
+      workspaceId,
+      email: String(formData.get("email") ?? ""),
+    });
+  } catch (error) {
+    const planLimit = serializePlanLimitError(error);
+
+    if (planLimit) {
+      return {
+        ok: false as const,
+        planLimit,
+      };
+    }
+
+    throw error;
+  }
 
   revalidatePath(`/my-space/workspaces/${workspaceId}`);
+
+  return {
+    ok: true as const,
+  };
 }
+
+export type WorkspaceInviteActionResult =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      planLimit: PlanLimitErrorPayload;
+    };
 
 export async function cancelWorkspaceInviteAction(formData: FormData) {
   const user = await getAuthenticatedUser();

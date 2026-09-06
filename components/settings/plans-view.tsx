@@ -540,14 +540,14 @@ function getPricing(
     };
   }
 
-  if (plan.annualMonthlyPriceCents === null) {
-    return {
-      price: "A medida",
-      detail: "Configuración personalizada",
-      secondary: null,
-      saving: null,
-    };
-  }
+if (plan.annualMonthlyPriceCents == null) {
+  return {
+    price: "Precio no disponible",
+    detail: "Revisa la configuración del plan",
+    secondary: null,
+    saving: null,
+  };
+}
 
   const annualMonthlyPrice =
     plan.annualMonthlyPriceCents / 100;

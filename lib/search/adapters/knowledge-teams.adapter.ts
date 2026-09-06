@@ -16,25 +16,22 @@ export const teamsSearchProvider: SearchProvider = {
   label: "🏢 Equipos",
 
   async search(context: SearchContext): Promise<SearchResult[]> {
-    const { query, userId, limit = 10 } = context;
+    const { query, userId, workspaceId, limit = 10 } = context;
 
     try {
       const teams = await prisma.knowledge_teams.findMany({
         where: {
           AND: [
             {
-              OR: [
-                {
-                  owner_user_id: userId,
-                },
-                {
-                  knowledge_team_members: {
-                    some: {
-                      user_id: userId,
-                    },
+              workspace_id: workspaceId,
+              workspaces: {
+                workspace_members: {
+                  some: {
+                    user_id: userId,
+                    status: "active",
                   },
                 },
-              ],
+              },
             },
             {
               name: {

@@ -56,7 +56,10 @@ export default async function KnowledgeLibraryAdminPage({
   const [teams, shares] = isRootLibrary
     ? [[], []]
     : await Promise.all([
-        listTeams(session.user.id),
+        listTeams({
+          userId: session.user.id,
+          workspaceId: activeWorkspace.id,
+        }),
         listTeamSharesForLibrary({
           libraryId,
           ownerUserId: session.user.id,

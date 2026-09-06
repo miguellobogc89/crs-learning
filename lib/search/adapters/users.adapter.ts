@@ -1,6 +1,6 @@
 //lib/search/adapters/users.adapter.ts
 
-import { prisma } from "@/lib/prisma";
+import { listVisibleUsersForViewer } from "@/lib/services/user-profile.service";
 import type {
   SearchContext,
   SearchProvider,
@@ -16,25 +16,10 @@ export const usersSearchProvider: SearchProvider = {
     const { query, userId, limit = 10 } = context;
 
     try {
-      const users = await prisma.users.findMany({
-        where: {
-          id: userId,
-          OR: [
-            {
-              name: {
-                contains: query,
-                mode: "insensitive",
-              },
-            },
-            {
-              email: {
-                contains: query,
-                mode: "insensitive",
-              },
-            },
-          ],
-        },
-        take: limit,
+      const users = await listVisibleUsersForViewer({
+        viewerUserId: userId,
+        query,
+        limit,
       });
 
       return users.map((user) => ({
@@ -42,6 +27,7 @@ export const usersSearchProvider: SearchProvider = {
         title: user.name || user.email,
         category: "usuarios",
         description: user.email,
+        avatar: user.image ?? undefined,
         url: `/users/${user.id}`,
       }));
     } catch (error) {

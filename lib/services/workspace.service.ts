@@ -8,6 +8,7 @@ import {
   upsertPersonalWorkspace,
   type AccessibleWorkspace,
 } from "@/lib/repositories/workspace.repository";
+import { getActiveOrganizationForUser } from "@/lib/services/organization.service";
 
 export const ACTIVE_WORKSPACE_COOKIE = "crs_active_workspace_id";
 
@@ -156,6 +157,7 @@ async function bootstrapPersonalWorkspace(userId: string) {
 }
 
 export async function ensureWorkspaceBootstrap(userId: string) {
+  await getActiveOrganizationForUser(userId);
   let workspaces = await listAccessibleWorkspaces(userId);
 
   const personalWorkspaces =
@@ -291,6 +293,7 @@ export async function createPersonalWorkspace(data: {
     throw new Error("El nombre del workspace es obligatorio");
   }
 
+  await getActiveOrganizationForUser(data.userId);
   const slug = await getAvailablePersonalWorkspaceSlug(
     data.userId,
     normalizedName,

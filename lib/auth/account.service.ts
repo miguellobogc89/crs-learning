@@ -4,6 +4,7 @@ import {
   sendWelcomeEmail,
 } from "@/lib/email/email.service";
 import { ensureWorkspaceBootstrap } from "@/lib/services/workspace.service";
+import { ensureUserPrimaryOrganization } from "@/lib/services/organization.service";
 import {
   AUTH_TOKEN_TYPES,
   RESET_PASSWORD_TOKEN_TTL_MS,
@@ -102,6 +103,7 @@ export async function registerCredentialsUser(data: {
     },
   });
 
+  await ensureUserPrimaryOrganization(user.id);
   await ensureWorkspaceBootstrap(user.id);
 
   const verificationToken = await createAuthToken({

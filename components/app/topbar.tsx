@@ -150,16 +150,32 @@ export function AppTopbar({
             className="w-64"
           >
             <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col gap-1">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {user.name ?? "Usuario"}
-                </p>
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface text-muted-foreground">
+                  {user.image ? (
+                    <Image
+                      src={user.image}
+                      alt={userLabel}
+                      width={36}
+                      height={36}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <UserCircle className="h-full w-full" />
+                  )}
+                </span>
 
-                {user.email ? (
-                  <p className="truncate text-xs text-muted-foreground">
-                    {user.email}
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {user.name ?? "Usuario"}
                   </p>
-                ) : null}
+
+                  {user.email ? (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {user.email}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </DropdownMenuLabel>
 
@@ -188,10 +204,13 @@ export function AppTopbar({
             <DropdownMenuSeparator />
 
             <form action={logout}>
-              <DropdownMenuItem asChild>
+              <DropdownMenuItem
+                asChild
+                variant="destructive"
+              >
                 <button
                   type="submit"
-                  className="w-full cursor-pointer text-destructive focus:text-destructive"
+                  className="w-full cursor-pointer"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   Cerrar sesión

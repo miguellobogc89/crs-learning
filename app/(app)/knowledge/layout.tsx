@@ -26,7 +26,10 @@ export default async function KnowledgeLayout({
     session!.user.id,
     activeWorkspace.id,
   );
-  const knowledgeTeams = await listTeams(session!.user.id);
+  const knowledgeTeams = await listTeams({
+    userId: session!.user.id,
+    workspaceId: activeWorkspace.id,
+  });
 
   const rootLibrary = knowledgeLibraries.find(
     (library) =>

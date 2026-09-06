@@ -13,12 +13,14 @@ import {
   createWorkspaceAction,
   switchWorkspaceAction,
 } from "@/app/actions/workspace.actions";
+import { PlanLimitDialog } from "@/components/billing/plan-limit-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type {
   AccessibleWorkspace,
 } from "@/lib/repositories/workspace.repository";
+import type { PlanLimitErrorPayload } from "@/lib/services/entitlements.service";
 
 type Props = {
   activeWorkspaceId: string;
@@ -33,6 +35,8 @@ export function DashboardWorkspaceSidebar({
 }: Props) {
   const [query, setQuery] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [planLimit, setPlanLimit] =
+    useState<PlanLimitErrorPayload | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -71,6 +75,7 @@ export function DashboardWorkspaceSidebar({
   }
 
   return (
+    <>
     <div className="flex min-h-full flex-col bg-panel">
       <div className="border-b border-border p-4">
         <div className="flex items-center justify-between gap-3">
@@ -92,7 +97,12 @@ export function DashboardWorkspaceSidebar({
         {isCreating ? (
           <form
             action={async (formData) => {
-              await createWorkspaceAction(formData);
+              const result =
+                await createWorkspaceAction(formData);
+              if (result && !result.ok) {
+                setPlanLimit(result.planLimit);
+                return;
+              }
               setIsCreating(false);
               router.push("/knowledge");
               router.refresh();
@@ -172,6 +182,16 @@ export function DashboardWorkspaceSidebar({
         ) : null}
       </div>
     </div>
+    <PlanLimitDialog
+      open={Boolean(planLimit)}
+      limit={planLimit}
+      onOpenChange={(open) => {
+        if (!open) {
+          setPlanLimit(null);
+        }
+      }}
+    />
+    </>
   );
 }
 

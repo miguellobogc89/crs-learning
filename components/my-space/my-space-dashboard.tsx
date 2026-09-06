@@ -13,10 +13,12 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { PlanLimitDialog } from "@/components/billing/plan-limit-dialog";
 import {
   addKnowledgeTeamMemberAction,
   createKnowledgeTeamAction,
 } from "@/app/actions/knowledge";
+import type { PlanLimitErrorPayload } from "@/lib/services/entitlements.service";
 
 type Team = {
   id: string;
@@ -30,6 +32,7 @@ type Team = {
 
 type Props = {
   teams: Team[];
+  workspaceName?: string;
 };
 
 const courses = [
@@ -44,10 +47,16 @@ const activity = [
   "Se generó nuevo conocimiento por IA",
 ];
 
-export function MySpaceDashboard({ teams }: Props) {
+export function MySpaceDashboard({
+  teams,
+  workspaceName,
+}: Props) {
   const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [planLimit, setPlanLimit] =
+    useState<PlanLimitErrorPayload | null>(null);
 
   return (
+    <>
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-7xl px-8 py-8">
         <div className="mb-8 flex items-start justify-between gap-6">
@@ -68,12 +77,19 @@ export function MySpaceDashboard({ teams }: Props) {
 
         {showCreateTeam && (
           <form
-            action={createKnowledgeTeamAction}
+            action={async (formData) => {
+              const result =
+                await createKnowledgeTeamAction(formData);
+
+              if (result && !result.ok) {
+                setPlanLimit(result.planLimit);
+              }
+            }}
             className="mb-6 rounded-2xl border border-border bg-card p-5"
           >
             <h2 className="font-semibold">Crear nuevo grupo</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Crea un equipo para compartir conocimiento y organizar miembros.
+              Crea un equipo en {workspaceName ?? "el workspace activo"} para compartir conocimiento y organizar miembros.
             </p>
 
             <div className="mt-4 grid gap-3 md:grid-cols-[1fr_2fr_auto]">
@@ -265,6 +281,16 @@ export function MySpaceDashboard({ teams }: Props) {
         </div>
       </div>
     </div>
+    <PlanLimitDialog
+      open={Boolean(planLimit)}
+      limit={planLimit}
+      onOpenChange={(open) => {
+        if (!open) {
+          setPlanLimit(null);
+        }
+      }}
+    />
+    </>
   );
 }
 

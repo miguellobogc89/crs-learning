@@ -6,6 +6,7 @@ import {
 } from "@/components/app/section-sidebar";
 import { MySpaceDashboard } from "@/components/my-space/my-space-dashboard";
 import { listTeams } from "@/lib/services/knowledge-team.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export default async function MySpacePage() {
   const session = await auth();
@@ -18,11 +19,20 @@ export default async function MySpacePage() {
     );
   }
 
-  const teams = await listTeams(session.user.id);
+  const { activeWorkspace } = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+  const teams = await listTeams({
+    userId: session.user.id,
+    workspaceId: activeWorkspace.id,
+  });
 
   return (
     <MySpaceShell>
-      <MySpaceDashboard teams={teams} />
+      <MySpaceDashboard
+        teams={teams}
+        workspaceName={activeWorkspace.name}
+      />
     </MySpaceShell>
   );
 }

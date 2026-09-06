@@ -467,14 +467,8 @@ async function getSharedKnowledgeTeams({
           },
         },
         {
-          knowledge_library_team_permissions: {
-            some: {
-              knowledge_libraries: {
-                workspace_id: {
-                  in: sharedWorkspaceIds,
-                },
-              },
-            },
+          workspace_id: {
+            in: sharedWorkspaceIds,
           },
         },
       ],
@@ -526,14 +520,8 @@ async function getSharedKnowledgeTeamsByUserId({
           },
         },
         {
-          knowledge_library_team_permissions: {
-            some: {
-              knowledge_libraries: {
-                workspace_id: {
-                  in: workspaceIds,
-                },
-              },
-            },
+          workspace_id: {
+            in: workspaceIds,
           },
         },
       ],

@@ -35,7 +35,10 @@ export default async function KnowledgeDetailPage({
 const [knowledge, libraries, teams] = await Promise.all([
   findAccessibleKnowledgeSource(id, session.user.id, activeWorkspace.id),
   listKnowledgeLibraries(session.user.id, activeWorkspace.id),
-  listTeams(session.user.id),
+  listTeams({
+    userId: session.user.id,
+    workspaceId: activeWorkspace.id,
+  }),
 ]);
 
   if (!knowledge) {

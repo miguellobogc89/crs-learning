@@ -12,7 +12,6 @@ import {
   Library,
   Settings,
   ShieldCheck,
-  UserRound,
   UsersRound,
 } from "lucide-react";
 
@@ -52,11 +51,6 @@ const navItems = [
     icon: UsersRound,
     label: "Usuarios",
   },
-  {
-    href: "/my-space",
-    icon: UserRound,
-    label: "Mi espacio",
-  },
 ];
 
 function SidebarTooltip({
@@ -71,8 +65,8 @@ function SidebarTooltip({
         absolute left-full top-1/2 z-50 ml-2
         -translate-x-1 -translate-y-1/2
         whitespace-nowrap rounded-md
-        bg-blue-600 px-2.5 py-1.5
-        text-xs font-medium text-white
+        bg-foreground px-2.5 py-1.5
+        text-xs font-medium text-background
         opacity-0 shadow-lg
         transition-all duration-150 ease-out
         group-hover:translate-x-0

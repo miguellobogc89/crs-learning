@@ -744,6 +744,7 @@ model organizations {
   created_at                       DateTime                           @default(now()) @db.Timestamptz(6)
   updated_at                       DateTime                           @default(now()) @db.Timestamptz(6)
   knowledge_libraries              knowledge_libraries[]
+  organization_billing_profiles    organization_billing_profiles?
   organization_entities            organization_entities[]
   organization_entity_relations    organization_entity_relations[]
   organization_entity_sources      organization_entity_sources[]
@@ -756,6 +757,7 @@ model organizations {
   organization_members             organization_members[]
   organization_positions           organization_positions[]
   organization_public_sources      organization_public_sources[]
+  organization_subscriptions       organization_subscriptions?
   organizations                    organizations?                     @relation("organizationsToorganizations", fields: [parent_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
   other_organizations              organizations[]                    @relation("organizationsToorganizations")
   workspaces                       workspaces[]
@@ -1357,7 +1359,52 @@ model subscription_plans {
   created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
   updated_at                 DateTime                     @default(now()) @db.Timestamptz(6)
   annual_monthly_price_cents Int?
+  stripe_monthly_price_id    String?                      @unique(map: "subscription_plans_stripe_monthly_price_unique", where: raw("(stripe_monthly_price_id IS NOT NULL)"))
+  stripe_annual_price_id     String?                      @unique(map: "subscription_plans_stripe_annual_price_unique", where: raw("(stripe_annual_price_id IS NOT NULL)"))
+  organization_subscriptions organization_subscriptions[]
   subscription_plan_features subscription_plan_features[]
 
   @@index([is_active, sort_order], map: "idx_subscription_plans_active_order")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_billing_profiles {
+  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id    String        @unique @db.Uuid
+  legal_name         String?
+  tax_id             String?
+  billing_email      String?
+  address_line1      String?
+  address_line2      String?
+  city               String?
+  postal_code        String?
+  region             String?
+  country_code       String?
+  stripe_customer_id String?       @unique
+  created_at         DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime      @default(now()) @db.Timestamptz(6)
+  organizations      organizations @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "organization_billing_profiles_org_fk")
+
+  @@index([organization_id], map: "organization_billing_profiles_org_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model organization_subscriptions {
+  id                     String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id        String             @unique @db.Uuid
+  plan_id                String             @db.Uuid
+  billing_period         String             @default("monthly")
+  status                 String             @default("active")
+  stripe_subscription_id String?            @unique
+  current_period_start   DateTime?          @db.Timestamptz(6)
+  current_period_end     DateTime?          @db.Timestamptz(6)
+  cancel_at_period_end   Boolean            @default(false)
+  canceled_at            DateTime?          @db.Timestamptz(6)
+  created_at             DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime           @default(now()) @db.Timestamptz(6)
+  organizations          organizations      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "organization_subscriptions_org_fk")
+  subscription_plans     subscription_plans @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "organization_subscriptions_plan_fk")
+
+  @@index([plan_id], map: "organization_subscriptions_plan_idx")
+  @@index([status])
 }

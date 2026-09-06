@@ -8,6 +8,7 @@ import {
   createWorkspaceAction,
   switchWorkspaceAction,
 } from "@/app/actions/workspace.actions";
+import { PlanLimitDialog } from "@/components/billing/plan-limit-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import type { AccessibleWorkspace } from "@/lib/repositories/workspace.repository";
+import type { PlanLimitErrorPayload } from "@/lib/services/entitlements.service";
 import { Button } from "../ui";
 
 type Props = {
@@ -30,10 +32,13 @@ export function WorkspaceSelector({
   workspaces,
 }: Props) {
   const [isCreating, setIsCreating] = useState(false);
+  const [planLimit, setPlanLimit] =
+    useState<PlanLimitErrorPayload | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
@@ -119,7 +124,12 @@ export function WorkspaceSelector({
         {isCreating ? (
           <form
             action={async (formData) => {
-              await createWorkspaceAction(formData);
+              const result =
+                await createWorkspaceAction(formData);
+              if (result && !result.ok) {
+                setPlanLimit(result.planLimit);
+                return;
+              }
               setIsCreating(false);
               router.refresh();
             }}
@@ -151,5 +161,15 @@ export function WorkspaceSelector({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    <PlanLimitDialog
+      open={Boolean(planLimit)}
+      limit={planLimit}
+      onOpenChange={(open) => {
+        if (!open) {
+          setPlanLimit(null);
+        }
+      }}
+    />
+    </>
   );
 }
