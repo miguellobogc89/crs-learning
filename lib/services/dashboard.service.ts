@@ -18,10 +18,61 @@ export type ContinueWorkingItem = {
   progressPercent?: number;
 };
 
+export type DashboardRecentActivityType =
+  | "knowledge.import.completed"
+  | "knowledge.file.uploaded"
+  | "knowledge.article.created"
+  | "knowledge.article.updated"
+  | "knowledge.folder.created";
+
+export type DashboardRecentActivityItem = {
+  id: string;
+  type: DashboardRecentActivityType;
+  actorUserId: string;
+  actorName: string;
+  actorImage?: string | null;
+  title: string;
+  description?: string | null;
+  href?: string;
+  occurredAt: Date;
+  isCurrentUser: boolean;
+};
+
 type GetContinueWorkingItemsInput = {
   userId: string;
   workspaceId: string;
   limit?: number;
+};
+
+type GetDashboardRecentActivityInput = {
+  userId: string;
+  workspaceId: string;
+  limit?: number;
+};
+
+type ActivityActor = {
+  id: string;
+  name: string | null;
+  email?: string | null;
+  image: string | null;
+};
+
+type ImportEventMetadata = {
+  summary?: {
+    documentsCreated?: number;
+  };
+  targetLibrary?: {
+    name?: string;
+  };
+  folders?: Array<{
+    databaseFolderId?: string;
+  }>;
+  articles?: Array<{
+    databaseArticleId?: string;
+  }>;
+  documents?: Array<{
+    knowledgeFileId?: string;
+  }>;
 };
 
 export async function getContinueWorkingItems({
@@ -31,7 +82,10 @@ export async function getContinueWorkingItems({
 }: GetContinueWorkingItemsInput): Promise<
   ContinueWorkingItem[]
 > {
-  const take = Math.min(Math.max(Math.trunc(limit), 1), 6);
+  const normalizedLimit = Number.isFinite(limit)
+    ? Math.trunc(limit)
+    : 6;
+  const take = Math.min(Math.max(normalizedLimit, 1), 20);
   const recentAccess = await getRecentResourceAccess({
     userId,
     workspaceId,
@@ -175,6 +229,321 @@ export async function getContinueWorkingItems({
   }
 
   return items;
+}
+
+export async function getDashboardRecentActivity({
+  userId,
+  workspaceId,
+  limit = 12,
+}: GetDashboardRecentActivityInput): Promise<
+  DashboardRecentActivityItem[]
+> {
+  const normalizedLimit = Number.isFinite(limit)
+    ? Math.trunc(limit)
+    : 12;
+  const take = Math.min(Math.max(normalizedLimit, 1), 15);
+  const queryLimit = 20;
+
+  const [
+    importEvents,
+    uploadedFiles,
+    createdArticles,
+    updatedArticleCandidates,
+    createdFolders,
+  ] = await Promise.all([
+    prisma.knowledge_events.findMany({
+      where: {
+        action: "knowledge.import.completed",
+        knowledge_libraries: knowledgeLibraryReadWhere(
+          userId,
+          workspaceId,
+        ),
+      },
+      orderBy: {
+        created_at: "desc",
+      },
+      take: queryLimit,
+      select: {
+        id: true,
+        action: true,
+        title: true,
+        description: true,
+        metadata: true,
+        created_at: true,
+        user_id: true,
+        users: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+        knowledge_libraries: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    }),
+    prisma.knowledge_files.findMany({
+      where: {
+        uploaded_by_user_id: {
+          not: null,
+        },
+        knowledge_sources: knowledgeSourceReadWhere(
+          userId,
+          workspaceId,
+        ),
+      },
+      orderBy: {
+        created_at: "desc",
+      },
+      take: queryLimit,
+      select: {
+        id: true,
+        file_name: true,
+        created_at: true,
+        uploaded_by_user_id: true,
+        users: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+        knowledge_sources: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    }),
+    prisma.knowledge_sources.findMany({
+      where: {
+        created_by_user_id: {
+          not: null,
+        },
+        AND: [knowledgeSourceReadWhere(userId, workspaceId)],
+      },
+      orderBy: {
+        created_at: "desc",
+      },
+      take: queryLimit,
+      select: {
+        id: true,
+        title: true,
+        created_at: true,
+        created_by_user_id: true,
+        users_knowledge_sources_created_by_user_idTousers: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+      },
+    }),
+    prisma.knowledge_sources.findMany({
+      where: {
+        updated_by_user_id: {
+          not: null,
+        },
+        AND: [knowledgeSourceReadWhere(userId, workspaceId)],
+      },
+      orderBy: {
+        updated_at: "desc",
+      },
+      take: queryLimit * 2,
+      select: {
+        id: true,
+        title: true,
+        created_at: true,
+        updated_at: true,
+        updated_by_user_id: true,
+        users_knowledge_sources_updated_by_user_idTousers: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+      },
+    }),
+    prisma.knowledge_libraries.findMany({
+      where: {
+        created_by_user_id: {
+          not: null,
+        },
+        AND: [
+          knowledgeLibraryReadWhere(userId, workspaceId),
+        ],
+      },
+      orderBy: {
+        created_at: "desc",
+      },
+      take: queryLimit,
+      select: {
+        id: true,
+        name: true,
+        created_at: true,
+        created_by_user_id: true,
+        users_knowledge_libraries_created_by_user_idTousers: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const importedIds =
+    getImportedResourceIds(importEvents);
+
+  const activity: DashboardRecentActivityItem[] = [
+    ...importEvents.map((event) => {
+      const metadata = parseImportEventMetadata(
+        event.metadata,
+      );
+      const documentsCreated =
+        metadata?.summary?.documentsCreated ??
+        metadata?.documents?.length ??
+        0;
+      const libraryName =
+        event.knowledge_libraries?.name ??
+        metadata?.targetLibrary?.name ??
+        "Knowledge";
+
+      return buildActivityItem({
+        id: event.id,
+        type: "knowledge.import.completed",
+        actor: event.users,
+        actorUserId: event.user_id,
+        currentUserId: userId,
+        title:
+          documentsCreated > 0
+            ? `${documentsCreated} documentos en ${libraryName}`
+            : libraryName,
+        description: event.description,
+        href: event.knowledge_libraries
+          ? `/knowledge?library=${event.knowledge_libraries.id}`
+          : "/knowledge/activity?view=activity",
+        occurredAt: event.created_at,
+      });
+    }),
+    ...uploadedFiles
+      .filter(
+        (file) =>
+          !isImportedDerivative(
+            importedIds.fileTimes,
+            file.id,
+            file.created_at,
+          ) &&
+          file.uploaded_by_user_id,
+      )
+      .map((file) =>
+        buildActivityItem({
+          id: file.id,
+          type: "knowledge.file.uploaded",
+          actor: file.users,
+          actorUserId: file.uploaded_by_user_id!,
+          currentUserId: userId,
+          title: file.file_name,
+          href: `/knowledge/${file.knowledge_sources.id}`,
+          occurredAt: file.created_at,
+        }),
+      ),
+    ...createdArticles
+      .filter(
+        (article) =>
+          !isImportedDerivative(
+            importedIds.articleTimes,
+            article.id,
+            article.created_at,
+          ) &&
+          article.created_by_user_id,
+      )
+      .map((article) =>
+        buildActivityItem({
+          id: article.id,
+          type: "knowledge.article.created",
+          actor:
+            article.users_knowledge_sources_created_by_user_idTousers,
+          actorUserId: article.created_by_user_id!,
+          currentUserId: userId,
+          title: article.title,
+          href: `/knowledge/${article.id}`,
+          occurredAt: article.created_at,
+        }),
+      ),
+    ...updatedArticleCandidates
+      .filter(
+        (article) =>
+          article.updated_at.getTime() >
+            article.created_at.getTime() &&
+          !isImportedDerivative(
+            importedIds.articleTimes,
+            article.id,
+            article.updated_at,
+          ) &&
+          article.updated_by_user_id,
+      )
+      .slice(0, queryLimit)
+      .map((article) =>
+        buildActivityItem({
+          id: `${article.id}:updated`,
+          type: "knowledge.article.updated",
+          actor:
+            article.users_knowledge_sources_updated_by_user_idTousers,
+          actorUserId: article.updated_by_user_id!,
+          currentUserId: userId,
+          title: article.title,
+          href: `/knowledge/${article.id}`,
+          occurredAt: article.updated_at,
+        }),
+      ),
+    ...createdFolders
+      .filter(
+        (folder) =>
+          !isImportedDerivative(
+            importedIds.folderTimes,
+            folder.id,
+            folder.created_at,
+          ) &&
+          folder.created_by_user_id,
+      )
+      .map((folder) =>
+        buildActivityItem({
+          id: folder.id,
+          type: "knowledge.folder.created",
+          actor:
+            folder.users_knowledge_libraries_created_by_user_idTousers,
+          actorUserId: folder.created_by_user_id!,
+          currentUserId: userId,
+          title: folder.name,
+          href: `/knowledge?library=${folder.id}`,
+          occurredAt: folder.created_at,
+        }),
+      ),
+  ];
+
+  activity.sort(
+    (left, right) =>
+      right.occurredAt.getTime() -
+      left.occurredAt.getTime(),
+  );
+
+  return prioritizeDashboardActivity(
+    activity,
+    take,
+  );
 }
 
 function groupResourceIdsByType(
@@ -375,4 +744,151 @@ function clampProgressPercent(
   }
 
   return Math.min(Math.max(value, 0), 100);
+}
+
+function buildActivityItem({
+  id,
+  type,
+  actor,
+  actorUserId,
+  currentUserId,
+  title,
+  description,
+  href,
+  occurredAt,
+}: {
+  id: string;
+  type: DashboardRecentActivityType;
+  actor: ActivityActor | null;
+  actorUserId: string;
+  currentUserId: string;
+  title: string;
+  description?: string | null;
+  href?: string;
+  occurredAt: Date;
+}): DashboardRecentActivityItem {
+  return {
+    id,
+    type,
+    actorUserId,
+    actorName:
+      actor?.name ?? actor?.email ?? "Usuario",
+    actorImage: actor?.image ?? null,
+    title,
+    description,
+    href,
+    occurredAt,
+    isCurrentUser: actorUserId === currentUserId,
+  };
+}
+
+function parseImportEventMetadata(
+  metadata: unknown,
+): ImportEventMetadata | null {
+  if (!metadata || typeof metadata !== "object") {
+    return null;
+  }
+
+  return metadata as ImportEventMetadata;
+}
+
+function getImportedResourceIds(
+  importEvents: Array<{
+    metadata: unknown;
+    created_at: Date;
+  }>,
+) {
+  const fileTimes = new Map<string, Date>();
+  const articleTimes = new Map<string, Date>();
+  const folderTimes = new Map<string, Date>();
+
+  for (const event of importEvents) {
+    const metadata = parseImportEventMetadata(
+      event.metadata,
+    );
+
+    for (const file of metadata?.documents ?? []) {
+      if (file.knowledgeFileId) {
+        fileTimes.set(file.knowledgeFileId, event.created_at);
+      }
+    }
+
+    for (const article of metadata?.articles ?? []) {
+      if (article.databaseArticleId) {
+        articleTimes.set(
+          article.databaseArticleId,
+          event.created_at,
+        );
+      }
+    }
+
+    for (const folder of metadata?.folders ?? []) {
+      if (folder.databaseFolderId) {
+        folderTimes.set(folder.databaseFolderId, event.created_at);
+      }
+    }
+  }
+
+  return {
+    fileTimes,
+    articleTimes,
+    folderTimes,
+  };
+}
+
+function isImportedDerivative(
+  importTimesByResourceId: Map<string, Date>,
+  resourceId: string,
+  occurredAt: Date,
+) {
+  const importTime =
+    importTimesByResourceId.get(resourceId);
+
+  if (!importTime) {
+    return false;
+  }
+
+  const diffMs = Math.abs(
+    occurredAt.getTime() - importTime.getTime(),
+  );
+
+  return diffMs <= 5 * 60 * 1000;
+}
+
+function prioritizeDashboardActivity(
+  activity: DashboardRecentActivityItem[],
+  limit: number,
+) {
+  const otherUserCount = activity.filter(
+    (item) => !item.isCurrentUser,
+  ).length;
+
+  if (otherUserCount < limit) {
+    return activity.slice(0, limit);
+  }
+
+  const maxCurrentUserItems = Math.max(
+    1,
+    Math.floor(limit / 3),
+  );
+  const result: DashboardRecentActivityItem[] = [];
+  let currentUserItems = 0;
+
+  for (const item of activity) {
+    if (result.length >= limit) {
+      break;
+    }
+
+    if (item.isCurrentUser) {
+      if (currentUserItems >= maxCurrentUserItems) {
+        continue;
+      }
+
+      currentUserItems += 1;
+    }
+
+    result.push(item);
+  }
+
+  return result;
 }

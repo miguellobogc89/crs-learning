@@ -1,6 +1,7 @@
 //app/(app)/dashboard/page.tsx
 
 import Link from "next/link";
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import {
   ArrowRight,
@@ -8,7 +9,6 @@ import {
   Brain,
   Clock3,
   FileText,
-  Folder,
   GraduationCap,
   MessageSquareText,
   Sparkles,
@@ -20,10 +20,13 @@ import { AppSectionShell } from "@/components/app/section-sidebar";
 import { DashboardWorkspaceSidebar } from "@/components/dashboard/dashboard-workspace-sidebar";
 import {
   getContinueWorkingItems,
+  getDashboardRecentActivity,
   type ContinueWorkingItem,
+  type DashboardRecentActivityItem,
 } from "@/lib/services/dashboard.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { cn } from "@/lib/utils";
+import { formatShortRelativeTime } from "@/lib/utils/relative-time";
 
 const quickAccessItems = [
   {
@@ -52,13 +55,17 @@ const quickAccessItems = [
   },
 ];
 
+type LucideContinueWorkingResourceType = Exclude<
+  ContinueWorkingItem["resourceType"],
+  "knowledge_library"
+>;
+
 const continueWorkingIcons = {
   knowledge_source: FileText,
-  knowledge_library: Folder,
   chat_conversation: MessageSquareText,
   course: GraduationCap,
 } satisfies Record<
-  ContinueWorkingItem["resourceType"],
+  LucideContinueWorkingResourceType,
   typeof FileText
 >;
 
@@ -75,7 +82,13 @@ export default async function DashboardPage() {
     await getContinueWorkingItems({
       userId: session.user.id,
       workspaceId: activeWorkspace.id,
-      limit: 6,
+      limit: 20,
+    });
+  const recentActivity =
+    await getDashboardRecentActivity({
+      userId: session.user.id,
+      workspaceId: activeWorkspace.id,
+      limit: 5,
     });
 
   return (
@@ -180,15 +193,17 @@ export default async function DashboardPage() {
 
               <div className="overflow-hidden rounded-xl border border-border bg-background">
                 {continueWorkingItems.length > 0 ? (
-                  continueWorkingItems.map((item, index) => (
-                    <ContinueWorkingRow
-                      key={`${item.resourceType}-${item.resourceId}`}
-                      item={item}
-                      isLast={
-                        index === continueWorkingItems.length - 1
-                      }
-                    />
-                  ))
+                  <div className="max-h-96 overflow-y-auto">
+                    {continueWorkingItems.map((item, index) => (
+                      <ContinueWorkingRow
+                        key={`${item.resourceType}-${item.resourceId}`}
+                        item={item}
+                        isLast={
+                          index === continueWorkingItems.length - 1
+                        }
+                      />
+                    ))}
+                  </div>
                 ) : (
                   <div className="min-h-24 px-5 py-5">
                     <h3 className="text-sm font-semibold text-foreground">
@@ -212,70 +227,26 @@ export default async function DashboardPage() {
                   </h2>
                 </div>
 
-                <div className="space-y-5">
-                  <div className="flex gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-medium text-muted-foreground">
-                      LR
-                    </div>
-
-                    <div className="min-w-0">
-                      <p className="text-sm leading-5 text-foreground">
-                        <span className="font-medium">Laura</span>{" "}
-                        <span className="text-muted-foreground">añadió</span>{" "}
-                        <span className="font-medium">
-                          Manual de siniestros.pdf
-                        </span>
-                      </p>
-
-                      <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Clock3 className="h-3 w-3" />
-                        hace 22 min
-                      </div>
-                    </div>
+                {recentActivity.length > 0 ? (
+                  <div className="space-y-5">
+                    {recentActivity.map((item) => (
+                      <RecentActivityRow
+                        key={`${item.type}-${item.id}`}
+                        item={item}
+                      />
+                    ))}
                   </div>
+                ) : (
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Todavía no hay actividad reciente
+                    </p>
 
-                  <div className="flex gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-medium text-muted-foreground">
-                      CM
-                    </div>
-
-                    <div className="min-w-0">
-                      <p className="text-sm leading-5 text-foreground">
-                        <span className="font-medium">Carlos</span>{" "}
-                        <span className="text-muted-foreground">actualizó</span>{" "}
-                        <span className="font-medium">
-                          Procedimiento de reclamaciones
-                        </span>
-                      </p>
-
-                      <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Clock3 className="h-3 w-3" />
-                        hace 1 h
-                      </div>
-                    </div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Los cambios realizados en este espacio aparecerán aquí.
+                    </p>
                   </div>
-
-                  <div className="flex gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-medium text-muted-foreground">
-                      EQ
-                    </div>
-
-                    <div className="min-w-0">
-                      <p className="text-sm leading-5 text-foreground">
-                        <span className="font-medium">Equipo</span>{" "}
-                        <span className="text-muted-foreground">
-                          te añadió a
-                        </span>{" "}
-                        <span className="font-medium">Comercial</span>
-                      </p>
-
-                      <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Clock3 className="h-3 w-3" />
-                        ayer
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                )}
               </section>
 
               <section className="border-t border-border pt-8">
@@ -318,7 +289,6 @@ function ContinueWorkingRow({
   item: ContinueWorkingItem;
   isLast: boolean;
 }) {
-  const Icon = continueWorkingIcons[item.resourceType];
   const showProgress =
     item.resourceType === "course" &&
     typeof item.progressPercent === "number";
@@ -339,7 +309,7 @@ function ContinueWorkingRow({
             : "bg-surface text-muted-foreground",
         )}
       >
-        <Icon className="h-4 w-4" />
+        <ContinueWorkingIcon item={item} />
       </div>
 
       <div className="min-w-0 flex-1">
@@ -372,4 +342,121 @@ function ContinueWorkingRow({
       <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
     </Link>
   );
+}
+
+function ContinueWorkingIcon({
+  item,
+}: {
+  item: ContinueWorkingItem;
+}) {
+  if (item.resourceType === "knowledge_library") {
+    return (
+      <Image
+        src="/icons/files/folder.png"
+        alt=""
+        width={24}
+        height={24}
+        className="h-6 w-6 object-contain"
+      />
+    );
+  }
+
+  const Icon = continueWorkingIcons[item.resourceType];
+
+  return <Icon className="h-4 w-4" />;
+}
+
+function RecentActivityRow({
+  item,
+}: {
+  item: DashboardRecentActivityItem;
+}) {
+  const content = (
+    <>
+      <ActivityAvatar item={item} />
+
+      <div className="min-w-0">
+        <p className="text-sm leading-5 text-foreground">
+          <span className="font-medium">{item.actorName}</span>{" "}
+          <span className="text-muted-foreground">
+            {getActivityActionLabel(item.type)}
+          </span>{" "}
+          <span className="font-medium">{item.title}</span>
+        </p>
+
+        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock3 className="h-3 w-3" />
+          {formatShortRelativeTime(item.occurredAt)}
+        </div>
+      </div>
+    </>
+  );
+
+  if (item.href) {
+    return (
+      <Link
+        href={item.href}
+        className="flex gap-3 transition-colors hover:text-foreground"
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return <div className="flex gap-3">{content}</div>;
+}
+
+function ActivityAvatar({
+  item,
+}: {
+  item: DashboardRecentActivityItem;
+}) {
+  if (item.actorImage) {
+    return (
+      <Image
+        src={item.actorImage}
+        alt=""
+        width={32}
+        height={32}
+        className="h-8 w-8 shrink-0 rounded-full object-cover"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-medium text-muted-foreground">
+      {getInitials(item.actorName)}
+    </div>
+  );
+}
+
+function getActivityActionLabel(
+  type: DashboardRecentActivityItem["type"],
+) {
+  if (type === "knowledge.import.completed") {
+    return "importó";
+  }
+
+  if (type === "knowledge.file.uploaded") {
+    return "subió";
+  }
+
+  if (type === "knowledge.article.updated") {
+    return "actualizó";
+  }
+
+  if (type === "knowledge.folder.created") {
+    return "creó la carpeta";
+  }
+
+  return "creó";
+}
+
+function getInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 }
