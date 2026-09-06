@@ -11,6 +11,7 @@ import {
 } from "@/lib/ai/assistant/retrieval";
 import { prisma } from "@/lib/prisma";
 import { listAccessibleKnowledgeSpaces } from "@/lib/services/knowledge-space.service";
+import { recordResourceAccess } from "@/lib/services/resource-access.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { resolveRetrievalQuery } from "@/lib/ai/assistant/resolve-retrieval-query";
 
@@ -108,6 +109,14 @@ export async function POST(request: Request) {
         content: message,
       },
     });
+
+  await recordResourceAccess({
+    userId,
+    workspaceId: activeWorkspace.id,
+    resourceType: "chat_conversation",
+    resourceId: conversation.id,
+    interactionType: "messaged",
+  });
 
   const previousMessages =
     await prisma.chat_messages.findMany({

@@ -13,6 +13,7 @@ import {
   listTeams,
   listTeamSharesForLibrary,
 } from "@/lib/services/knowledge-team.service";
+import { recordResourceAccess } from "@/lib/services/resource-access.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export default async function KnowledgeDetailPage({
@@ -40,6 +41,14 @@ const [knowledge, libraries, teams] = await Promise.all([
   if (!knowledge) {
     notFound();
   }
+
+  await recordResourceAccess({
+    userId: session.user.id,
+    workspaceId: activeWorkspace.id,
+    resourceType: "knowledge_source",
+    resourceId: knowledge.id,
+    interactionType: "viewed",
+  });
 
 const libraryShares = knowledge.library_id
   ? await listTeamSharesForLibrary({

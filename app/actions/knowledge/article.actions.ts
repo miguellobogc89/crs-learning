@@ -14,6 +14,7 @@ import { analyzeKnowledgeSource } from "@/lib/services/knowledge-analysis.servic
 import {
   editKnowledgeSource,
 } from "@/lib/services/knowledge.service";
+import { recordResourceAccess } from "@/lib/services/resource-access.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export async function updateKnowledgeAction(
@@ -57,7 +58,7 @@ export async function updateKnowledgeAction(
     return;
   }
 
-  await editKnowledgeSource({
+  const updateResult = await editKnowledgeSource({
     id,
     ownerUserId: session.user.id,
     workspaceId: activeWorkspace.id,
@@ -68,6 +69,16 @@ export async function updateKnowledgeAction(
     knowledgeType,
     content,
   });
+
+  if (updateResult.count > 0) {
+    await recordResourceAccess({
+      userId: session.user.id,
+      workspaceId: activeWorkspace.id,
+      resourceType: "knowledge_source",
+      resourceId: id,
+      interactionType: "edited",
+    });
+  }
 
   revalidatePath("/knowledge");
   revalidatePath(`/knowledge/${id}`);

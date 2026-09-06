@@ -5,10 +5,10 @@ import { redirect } from "next/navigation";
 import {
   ArrowRight,
   Bot,
-  BookOpen,
   Brain,
   Clock3,
   FileText,
+  Folder,
   GraduationCap,
   MessageSquareText,
   Sparkles,
@@ -18,7 +18,12 @@ import {
 import { auth } from "@/auth";
 import { AppSectionShell } from "@/components/app/section-sidebar";
 import { DashboardWorkspaceSidebar } from "@/components/dashboard/dashboard-workspace-sidebar";
+import {
+  getContinueWorkingItems,
+  type ContinueWorkingItem,
+} from "@/lib/services/dashboard.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
+import { cn } from "@/lib/utils";
 
 const quickAccessItems = [
   {
@@ -35,7 +40,7 @@ const quickAccessItems = [
   },
   {
     title: "Cursos",
-    description: "Aprende y continúa tus cursos y los de tu organización",
+    description: "Aprende y continúa tus cursos",
     href: "/courses",
     icon: GraduationCap,
   },
@@ -47,6 +52,16 @@ const quickAccessItems = [
   },
 ];
 
+const continueWorkingIcons = {
+  knowledge_source: FileText,
+  knowledge_library: Folder,
+  chat_conversation: MessageSquareText,
+  course: GraduationCap,
+} satisfies Record<
+  ContinueWorkingItem["resourceType"],
+  typeof FileText
+>;
+
 export default async function DashboardPage() {
   const session = await auth();
 
@@ -56,6 +71,12 @@ export default async function DashboardPage() {
 
   const { activeWorkspace, workspaces } =
     await getActiveWorkspaceContext(session.user.id);
+  const continueWorkingItems =
+    await getContinueWorkingItems({
+      userId: session.user.id,
+      workspaceId: activeWorkspace.id,
+      limit: 6,
+    });
 
   return (
     <AppSectionShell
@@ -90,58 +111,56 @@ export default async function DashboardPage() {
               </p>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-border bg-background">
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5">
-                {quickAccessItems.map((item) => {
-                  const Icon = item.icon;
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              {quickAccessItems.map((item) => {
+                const Icon = item.icon;
 
-                  return (
-                    <Link
-                      key={item.title}
-                      href={item.href}
-                      className="group relative flex min-h-40 flex-col border-b border-border p-5 transition-colors hover:bg-surface md:[&:nth-child(odd)]:border-r xl:border-b-0 xl:border-r xl:[&:nth-child(odd)]:border-r xl:[&:nth-child(4)]:border-r"
-                    >
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-soft text-brand transition-colors group-hover:bg-brand-soft-hover">
-                        <Icon className="h-4 w-4" />
-                      </div>
-
-                      <div className="mt-auto pt-7">
-                        <div className="flex items-center justify-between gap-3">
-                          <h3 className="text-sm font-semibold text-foreground">
-                            {item.title}
-                          </h3>
-
-                          <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
-                        </div>
-
-                        <p className="mt-1 max-w-[180px] text-xs leading-5 text-muted-foreground">
-                          {item.description}
-                        </p>
-                      </div>
-                    </Link>
-                  );
-                })}
-
-                <div className="group relative flex min-h-40 flex-col p-5 transition-colors hover:bg-surface">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-soft text-brand">
-                      <Bot className="h-4 w-4" />
+                return (
+                  <Link
+                    key={item.title}
+                    href={item.href}
+                    className="group flex min-h-40 flex-col rounded-xl border border-border bg-background p-5 transition-colors hover:bg-surface"
+                  >
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-soft text-brand transition-colors group-hover:bg-brand-soft-hover">
+                      <Icon className="h-4 w-4" />
                     </div>
 
-                    <span className="rounded-md bg-brand-soft px-2 py-1 text-[10px] font-medium text-brand">
-                      Próximamente
-                    </span>
+                    <div className="mt-6">
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-semibold text-foreground">
+                          {item.title}
+                        </h3>
+
+                        <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
+                      </div>
+
+                      <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                        {item.description}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
+
+              <div className="flex min-h-40 flex-col rounded-xl border border-border bg-background p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-soft text-brand">
+                    <Bot className="h-4 w-4" />
                   </div>
 
-                  <div className="mt-auto pt-7">
-                    <h3 className="text-sm font-semibold text-foreground">
-                      Agentes
-                    </h3>
+                  <span className="rounded-md bg-brand-soft px-2 py-1 text-[10px] font-medium text-brand">
+                    Próximamente
+                  </span>
+                </div>
 
-                    <p className="mt-1 max-w-[180px] text-xs leading-5 text-muted-foreground">
-                      Automatiza tareas y procesos con agentes personalizados
-                    </p>
-                  </div>
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Agentes
+                  </h3>
+
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Automatiza tareas y procesos con agentes personalizados
+                  </p>
                 </div>
               </div>
             </div>
@@ -160,65 +179,28 @@ export default async function DashboardPage() {
               </div>
 
               <div className="overflow-hidden rounded-xl border border-border bg-background">
-                <div className="group flex min-h-24 items-center gap-4 border-b border-border px-5 py-4 transition-colors hover:bg-surface">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
-                    <FileText className="h-4 w-4" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-semibold text-foreground">
-                      Política de vacaciones 2026
+                {continueWorkingItems.length > 0 ? (
+                  continueWorkingItems.map((item, index) => (
+                    <ContinueWorkingRow
+                      key={`${item.resourceType}-${item.resourceId}`}
+                      item={item}
+                      isLast={
+                        index === continueWorkingItems.length - 1
+                      }
+                    />
+                  ))
+                ) : (
+                  <div className="min-h-24 px-5 py-5">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Todavía no tienes actividad reciente
                     </h3>
 
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Knowledge · Modificado hace 18 min
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Los artículos, cursos y conversaciones que utilices
+                      aparecerán aquí.
                     </p>
                   </div>
-
-                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                </div>
-
-                <div className="group flex min-h-24 items-center gap-4 border-b border-border px-5 py-4 transition-colors hover:bg-surface">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface text-muted-foreground">
-                    <GraduationCap className="h-4 w-4" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-semibold text-foreground">
-                      Curso de prevención
-                    </h3>
-
-                    <div className="mt-1 flex items-center gap-3">
-                      <p className="shrink-0 text-xs text-muted-foreground">
-                        Cursos · 64 % completado
-                      </p>
-
-                      <div className="hidden h-1 w-24 overflow-hidden rounded-full bg-surface sm:block">
-                        <div className="h-full w-[64%] rounded-full bg-brand" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                </div>
-
-                <div className="group flex min-h-24 items-center gap-4 px-5 py-4 transition-colors hover:bg-surface">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface text-muted-foreground">
-                    <MessageSquareText className="h-4 w-4" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-semibold text-foreground">
-                      Análisis de contratos
-                    </h3>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Asistente · Conversación reciente
-                    </p>
-                  </div>
-
-                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                </div>
+                )}
               </div>
             </section>
 
@@ -326,5 +308,68 @@ export default async function DashboardPage() {
         </div>
       </main>
     </AppSectionShell>
+  );
+}
+
+function ContinueWorkingRow({
+  item,
+  isLast,
+}: {
+  item: ContinueWorkingItem;
+  isLast: boolean;
+}) {
+  const Icon = continueWorkingIcons[item.resourceType];
+  const showProgress =
+    item.resourceType === "course" &&
+    typeof item.progressPercent === "number";
+
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "group flex min-h-24 items-center gap-4 px-5 py-4 transition-colors hover:bg-surface",
+        !isLast && "border-b border-border",
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+          item.resourceType === "knowledge_source"
+            ? "bg-brand-soft text-brand"
+            : "bg-surface text-muted-foreground",
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate text-sm font-semibold text-foreground">
+          {item.title}
+        </h3>
+
+        {showProgress ? (
+          <div className="mt-1 flex items-center gap-3">
+            <p className="shrink-0 text-xs text-muted-foreground">
+              {item.subtitle}
+            </p>
+
+            <div className="hidden h-1 w-24 overflow-hidden rounded-full bg-surface sm:block">
+              <div
+                className="h-full rounded-full bg-brand"
+                style={{
+                  width: `${item.progressPercent}%`,
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {item.subtitle}
+          </p>
+        )}
+      </div>
+
+      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+    </Link>
   );
 }

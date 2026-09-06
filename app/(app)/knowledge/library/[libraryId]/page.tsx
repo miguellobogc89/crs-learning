@@ -10,6 +10,7 @@ import {
   listTeams,
   listTeamSharesForLibrary,
 } from "@/lib/services/knowledge-team.service";
+import { recordResourceAccess } from "@/lib/services/resource-access.service";
 import {
   removeKnowledgeLibraryTeamShareAction,
   shareKnowledgeLibraryWithTeamAction,
@@ -41,6 +42,14 @@ export default async function KnowledgeLibraryAdminPage({
   if (!library) {
     notFound();
   }
+
+  await recordResourceAccess({
+    userId: session.user.id,
+    workspaceId: activeWorkspace.id,
+    resourceType: "knowledge_library",
+    resourceId: library.id,
+    interactionType: "viewed",
+  });
 
   const isRootLibrary = library.parent_id === null;
 

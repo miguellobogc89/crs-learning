@@ -210,6 +210,7 @@ model users {
   user_achievements                                                                            user_achievements[]
   user_course_progress                                                                         user_course_progress[]
   user_lesson_progress                                                                         user_lesson_progress[]
+  user_resource_access                                                                         user_resource_access[]
   companies                                                                                    companies?                         @relation(fields: [company_id], references: [id], onUpdate: NoAction)
   workspace_invites                                                                            workspace_invites[]
   workspace_members                                                                            workspace_members[]
@@ -1215,21 +1216,22 @@ model workspace_members {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model workspaces {
-  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  owner_user_id       String?               @db.Uuid
-  organization_id     String?               @db.Uuid
-  name                String
-  slug                String
-  description         String?
-  visibility          String                @default("private")
-  status              String                @default("active")
-  created_at          DateTime              @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime              @default(now()) @db.Timestamptz(6)
-  knowledge_libraries knowledge_libraries[]
-  workspace_invites   workspace_invites[]
-  workspace_members   workspace_members[]
-  organizations       organizations?        @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users               users?                @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id        String?                @db.Uuid
+  organization_id      String?                @db.Uuid
+  name                 String
+  slug                 String
+  description          String?
+  visibility           String                 @default("private")
+  status               String                 @default("active")
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  knowledge_libraries  knowledge_libraries[]
+  user_resource_access user_resource_access[]
+  workspace_invites    workspace_invites[]
+  workspace_members    workspace_members[]
+  organizations        organizations?         @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                users?                 @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([organization_id, slug], map: "workspaces_organization_slug_unique", where: raw("(organization_id IS NOT NULL)"))
   @@unique([owner_user_id, slug], map: "workspaces_personal_slug_unique", where: raw("(owner_user_id IS NOT NULL)"))
@@ -1289,4 +1291,19 @@ model chat_message_feedback {
   users         users         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "chat_message_feedback_user_fk")
 
   @@unique([message_id, user_id], map: "chat_message_feedback_unique")
+}
+
+model user_resource_access {
+  id               String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String     @db.Uuid
+  workspace_id     String     @db.Uuid
+  resource_type    String
+  resource_id      String     @db.Uuid
+  interaction_type String
+  last_accessed_at DateTime   @default(now()) @db.Timestamptz(6)
+  users            users      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "user_resource_access_user_fk")
+  workspaces       workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "user_resource_access_workspace_fk")
+
+  @@unique([user_id, workspace_id, resource_type, resource_id], map: "user_resource_access_unique_resource")
+  @@index([user_id, workspace_id, last_accessed_at(sort: Desc)], map: "user_resource_access_recent_idx")
 }

@@ -5,6 +5,7 @@ import { KnowledgeContent } from "@/components/knowledge/content/knowledge-conte
 import { auth } from "@/auth";
 import { listVisibleKnowledgeSources } from "@/lib/services/knowledge.service";
 import { listKnowledgeLibraries } from "@/lib/services/knowledge-library.service";
+import { recordResourceAccess } from "@/lib/services/resource-access.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export default async function KnowledgePage({
@@ -33,6 +34,22 @@ export default async function KnowledgePage({
     session.user.id,
     activeWorkspace.id,
   );
+
+  const selectedLibrary = selectedLibraryId
+    ? knowledgeLibraries.find(
+        (library) => library.id === selectedLibraryId,
+      )
+    : null;
+
+  if (selectedLibrary) {
+    await recordResourceAccess({
+      userId: session.user.id,
+      workspaceId: activeWorkspace.id,
+      resourceType: "knowledge_library",
+      resourceId: selectedLibrary.id,
+      interactionType: "viewed",
+    });
+  }
 
   const sharedLibraryIds = knowledgeLibraries
     .filter((library) => library.is_shared)
