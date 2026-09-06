@@ -58,7 +58,10 @@ export default async function AppLayout({
     <KnowledgeImportProvider>
       <Sheet>
         <div className="flex h-screen bg-background text-foreground">
-          <AppSidebar isAdmin={isAdmin} />
+          <AppSidebar
+            isAdmin={isAdmin}
+            notificationCount={notificationSummary.unreadCount}
+          />
 
           <div className="flex min-w-0 flex-1 flex-col">
             <AppTopbar
@@ -100,7 +103,11 @@ export default async function AppLayout({
           className="w-[min(20rem,86vw)] gap-0 p-0 lg:hidden"
         >
           <SheetTitle className="sr-only">Navegación principal</SheetTitle>
-          <AppSidebar mobile isAdmin={isAdmin} />
+            <AppSidebar
+              mobile
+              isAdmin={isAdmin}
+              notificationCount={notificationSummary.unreadCount}
+            />
         </SheetContent>
       </Sheet>
     </KnowledgeImportProvider>

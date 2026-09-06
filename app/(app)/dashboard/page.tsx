@@ -10,8 +10,8 @@ import {
   Clock3,
   FileText,
   GraduationCap,
+  Inbox,
   MessageSquareText,
-  Sparkles,
   UsersRound,
 } from "lucide-react";
 
@@ -42,10 +42,10 @@ const quickAccessItems = [
     icon: MessageSquareText,
   },
   {
-    title: "Cursos",
-    description: "Aprende y continúa tus cursos",
-    href: "/courses",
-    icon: GraduationCap,
+    title: "Bandeja",
+    description: "Revisa tus notificaciones y novedades",
+    href: "/notifications",
+    icon: Inbox,
   },
   {
     title: "Equipos",
@@ -84,12 +84,12 @@ export default async function DashboardPage() {
       workspaceId: activeWorkspace.id,
       limit: 20,
     });
-  const recentActivity =
-    await getDashboardRecentActivity({
-      userId: session.user.id,
-      workspaceId: activeWorkspace.id,
-      limit: 5,
-    });
+const recentActivity =
+  await getDashboardRecentActivity({
+    userId: session.user.id,
+    workspaceId: activeWorkspace.id,
+    limit: 20,
+  });
 
   return (
     <AppSectionShell
@@ -103,15 +103,11 @@ export default async function DashboardPage() {
     >
       <main className="h-full overflow-y-auto bg-background">
         <div className="mx-auto max-w-6xl px-8 py-10">
-          <header>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              Inicio
-            </h1>
-
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Todo tu conocimiento, aprendizaje y trabajo en un mismo lugar.
-            </p>
-          </header>
+<header>
+  <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+    Bienvenido{session.user.name ? `, ${session.user.name.split(" ")[0]}` : ""}
+  </h1>
+</header>
 
           <section className="mt-10">
             <div className="mb-4">
@@ -219,7 +215,7 @@ export default async function DashboardPage() {
               </div>
             </section>
 
-            <aside className="space-y-10">
+            <aside>
               <section>
                 <div className="mb-5">
                   <h2 className="text-sm font-semibold text-foreground">
@@ -228,7 +224,7 @@ export default async function DashboardPage() {
                 </div>
 
                 {recentActivity.length > 0 ? (
-                  <div className="space-y-5">
+                  <div className="max-h-96 space-y-5 overflow-y-auto pr-2">
                     {recentActivity.map((item) => (
                       <RecentActivityRow
                         key={`${item.type}-${item.id}`}
@@ -247,32 +243,6 @@ export default async function DashboardPage() {
                     </p>
                   </div>
                 )}
-              </section>
-
-              <section className="border-t border-border pt-8">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Próximamente
-                </p>
-
-                <div className="mt-4 flex gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground">
-                      Agentes IA
-                    </h3>
-
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Conecta tus herramientas y deja que CRS LAB trabaje por ti.
-                    </p>
-
-                    <p className="mt-3 text-xs font-medium text-brand">
-                      En preparación
-                    </p>
-                  </div>
-                </div>
               </section>
             </aside>
           </div>
@@ -371,17 +341,37 @@ function RecentActivityRow({
 }: {
   item: DashboardRecentActivityItem;
 }) {
-  const content = (
-    <>
-      <ActivityAvatar item={item} />
+  return (
+    <div className="flex gap-3">
+      <Link
+        href={`/users/${item.actorUserId}`}
+        className="h-8 w-8 shrink-0 rounded-full transition-colors hover:text-brand"
+        aria-label={`Ver perfil de ${item.actorName}`}
+      >
+        <ActivityAvatar item={item} />
+      </Link>
 
       <div className="min-w-0">
         <p className="text-sm leading-5 text-foreground">
-          <span className="font-medium">{item.actorName}</span>{" "}
+          <Link
+            href={`/users/${item.actorUserId}`}
+            className="font-medium transition-colors hover:text-brand"
+          >
+            {item.actorName}
+          </Link>{" "}
           <span className="text-muted-foreground">
             {getActivityActionLabel(item.type)}
           </span>{" "}
-          <span className="font-medium">{item.title}</span>
+          {item.href ? (
+            <Link
+              href={item.href}
+              className="font-medium transition-colors hover:text-brand"
+            >
+              {item.title}
+            </Link>
+          ) : (
+            <span className="font-medium">{item.title}</span>
+          )}
         </p>
 
         <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -389,21 +379,8 @@ function RecentActivityRow({
           {formatShortRelativeTime(item.occurredAt)}
         </div>
       </div>
-    </>
+    </div>
   );
-
-  if (item.href) {
-    return (
-      <Link
-        href={item.href}
-        className="flex gap-3 transition-colors hover:text-foreground"
-      >
-        {content}
-      </Link>
-    );
-  }
-
-  return <div className="flex gap-3">{content}</div>;
 }
 
 function ActivityAvatar({

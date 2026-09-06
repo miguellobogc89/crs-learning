@@ -2,6 +2,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { UsersRound } from "lucide-react";
 
 import { AppBreadcrumb } from "@/components/ui/app-breadcrumb";
 import { APP_SECTIONS } from "@/lib/navigation/app-sections";
@@ -50,6 +51,22 @@ export function AutoBreadcrumb() {
             : isDetail
               ? [{ label: "Detalle" }]
               : []),
+        ]}
+      />
+    );
+  }
+
+  if (pathname === "/users") {
+    return (
+      <AppBreadcrumb
+        items={[
+          {
+            label: "Usuarios",
+            icon: UsersRound,
+          },
+          {
+            label: "Perfil",
+          },
         ]}
       />
     );

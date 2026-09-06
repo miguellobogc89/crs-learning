@@ -7,13 +7,13 @@ import { usePathname } from "next/navigation";
 import { SheetClose } from "@/components/ui/sheet";
 import {
   GraduationCap,
-  Grid2X2,
   Home,
   Inbox,
   Library,
   Settings,
   ShieldCheck,
   UserRound,
+  UsersRound,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -39,17 +39,18 @@ const navItems = [
     href: "/courses",
     icon: GraduationCap,
     label: "Cursos",
-  },
-  {
-    href: "/achievements",
-    icon: Grid2X2,
-    label: "Logros",
+    disabled: true,
   },
   {
     href: "/notifications",
     icon: Inbox,
     label: "Bandeja",
     notifications: true,
+  },
+  {
+    href: "/users",
+    icon: UsersRound,
+    label: "Usuarios",
   },
   {
     href: "/my-space",
@@ -124,49 +125,88 @@ export function AppSidebar({
         </Link>
 
         <nav className={cn("flex flex-col gap-1", mobile ? "items-stretch" : "items-center")}>
-          {navItems.map((item) => {
-            const active = pathname.startsWith(item.href);
+{navItems.map((item) => {
+  const active =
+    !item.disabled && pathname.startsWith(item.href);
 
-            const link = (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-label={item.label}
-                className={cn(
-                  "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
-                  mobile ? "w-full justify-start gap-3 px-3" : "w-9 justify-center",
-                  active && "bg-surface text-foreground",
-                )}
-              >
-                <item.icon className="h-[18px] w-[18px]" />
-                {mobile ? <span>{item.label}</span> : null}
+  if (item.disabled) {
+    return (
+      <div
+        key={item.href}
+        aria-label={`${item.label} - Próximamente`}
+        aria-disabled="true"
+        className={cn(
+          "group relative flex h-9 cursor-default items-center rounded-md text-muted-foreground/40",
+          mobile
+            ? "w-full justify-start gap-3 px-3"
+            : "w-9 justify-center",
+        )}
+      >
+        <item.icon className="h-[18px] w-[18px]" />
 
-                {item.notifications && notificationCount > 0 && (
-                  <span
-                    className="
-                      absolute right-[3px] top-[3px]
-                      flex min-h-3.5 min-w-3.5
-                      items-center justify-center
-                      rounded-full bg-red-500
-                      px-1 text-[9px] font-semibold
-                      leading-none text-white
-                      ring-2 ring-background
-                    "
-                  >
-                    {notificationCount > 9 ? "9+" : notificationCount}
-                  </span>
-                )}
+        {mobile ? (
+          <>
+            <span>{item.label}</span>
+            <span className="ml-auto text-[10px] text-muted-foreground/60">
+              Próximamente
+            </span>
+          </>
+        ) : null}
 
-                
+        {!mobile ? (
+          <SidebarTooltip label={`${item.label} · Próximamente`} />
+        ) : null}
+      </div>
+    );
+  }
 
-                {!mobile ? <SidebarTooltip label={item.label} /> : null}
-              </Link>
-            );
+  const link = (
+    <Link
+      key={item.href}
+      href={item.href}
+      aria-label={item.label}
+      className={cn(
+        "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
+        mobile
+          ? "w-full justify-start gap-3 px-3"
+          : "w-9 justify-center",
+        active && "bg-surface text-foreground",
+      )}
+    >
+      <item.icon className="h-[18px] w-[18px]" />
 
-            return (
-              mobile ? <SheetClose asChild>{link}</SheetClose> : link
-            );
-          })}
+      {mobile ? <span>{item.label}</span> : null}
+
+      {item.notifications && notificationCount > 0 && (
+        <span
+          className="
+            absolute right-[3px] top-[3px]
+            flex min-h-3.5 min-w-3.5
+            items-center justify-center
+            rounded-full bg-red-500
+            px-1 text-[9px] font-semibold
+            leading-none text-white
+            ring-2 ring-background
+          "
+        >
+          {notificationCount > 9 ? "9+" : notificationCount}
+        </span>
+      )}
+
+      {!mobile ? (
+        <SidebarTooltip label={item.label} />
+      ) : null}
+    </Link>
+  );
+
+  return mobile ? (
+    <SheetClose key={item.href} asChild>
+      {link}
+    </SheetClose>
+  ) : (
+    link
+  );
+})}
         </nav>
       </div>
 
