@@ -1,3 +1,5 @@
+/* Globals.css */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -208,12 +210,17 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.72 0.16 215);
 
-  /* Marca */
-  --brand: oklch(0.72 0.16 215);
-  --brand-foreground: oklch(0.985 0 0);
-  --brand-hover: oklch(0.67 0.16 215);
-  --brand-soft: oklch(0.72 0.16 215 / 0.12);
-  --brand-soft-hover: oklch(0.72 0.16 215 / 0.18);
+/* Marca CRS */
+--brand: oklch(0.72 0.16 215);
+--brand-foreground: oklch(0.985 0 0);
+
+--brand-hover: oklch(0.67 0.16 215);
+--brand-active: oklch(0.63 0.16 215);
+
+--brand-soft: oklch(0.72 0.16 215 / 0.12);
+--brand-soft-hover: oklch(0.72 0.16 215 / 0.18);
+
+--brand-border: oklch(0.72 0.16 215 / 0.35);
 
   /* Editor */
   --section: oklch(0.68 0.02 260);
@@ -313,12 +320,17 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.76 0.16 215);
 
-  /* Marca */
+  /* Marca CRS */
   --brand: oklch(0.76 0.16 215);
   --brand-foreground: oklch(0.16 0.03 215);
+
   --brand-hover: oklch(0.71 0.16 215);
+  --brand-active: oklch(0.67 0.16 215);
+
   --brand-soft: oklch(0.76 0.16 215 / 0.14);
   --brand-soft-hover: oklch(0.76 0.16 215 / 0.22);
+
+  --brand-border: oklch(0.76 0.16 215 / 0.4);
 
   /* Editor */
   --section: oklch(0.72 0.02 260);
