@@ -3,13 +3,27 @@
 
 import type { ReactNode } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, UserCircle } from "lucide-react";
+import {
+  LogOut,
+  Menu,
+  Settings,
+  UserCircle,
+} from "lucide-react";
 
 import { logout } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { GlobalSearch } from "@/components/search/global-search";
 import { WorkspaceSelector } from "@/components/workspace/workspace-selector";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SheetTrigger } from "@/components/ui/sheet";
 import type { NotificationItem } from "@/lib/services/notification.service";
 import type { AccessibleWorkspace } from "@/lib/repositories/workspace.repository";
@@ -109,25 +123,83 @@ export function AppTopbar({
           initialUnreadCount={unreadNotificationCount}
         />
 
-        <form action={logout}>
-          <button
-            type="submit"
-            aria-label="Cerrar sesión"
-            className="flex h-full aspect-square items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Abrir menú de usuario"
+              className="flex h-full aspect-square items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+            >
+              {user.image ? (
+                <Image
+                  src={user.image}
+                  alt={userLabel}
+                  width={28}
+                  height={28}
+                  className="h-full w-full rounded-full object-cover"
+                />
+              ) : (
+                <UserCircle className="h-full w-full" />
+              )}
+            </button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent
+            align="end"
+            sideOffset={8}
+            className="w-64"
           >
-            {user.image ? (
-              <Image
-                src={user.image}
-                alt={userLabel}
-                width={28}
-                height={28}
-                className="h-full w-full rounded-full object-cover"
-              />
-            ) : (
-              <UserCircle className="h-full w-full" />
-            )}
-          </button>
-        </form>
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col gap-1">
+                <p className="truncate text-sm font-medium text-foreground">
+                  {user.name ?? "Usuario"}
+                </p>
+
+                {user.email ? (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {user.email}
+                  </p>
+                ) : null}
+              </div>
+            </DropdownMenuLabel>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem asChild>
+              <Link
+                href="/my-space"
+                className="cursor-pointer"
+              >
+                <UserCircle className="mr-2 h-4 w-4" />
+                Mi espacio
+              </Link>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem asChild>
+              <Link
+                href="/settings"
+                className="cursor-pointer"
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                Configuración
+              </Link>
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            <form action={logout}>
+              <DropdownMenuItem asChild>
+                <button
+                  type="submit"
+                  className="w-full cursor-pointer text-destructive focus:text-destructive"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Cerrar sesión
+                </button>
+              </DropdownMenuItem>
+            </form>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

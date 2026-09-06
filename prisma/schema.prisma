@@ -1312,3 +1312,51 @@ model user_resource_access {
   @@unique([user_id, workspace_id, resource_type, resource_id], map: "user_resource_access_unique_resource")
   @@index([user_id, workspace_id, last_accessed_at(sort: Desc)], map: "user_resource_access_recent_idx")
 }
+
+model plan_features {
+  id                         String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                       String                       @unique
+  name                       String
+  description                String?
+  sort_order                 Int                          @default(0)
+  created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  subscription_plan_features subscription_plan_features[]
+}
+
+model subscription_plan_features {
+  plan_id            String             @db.Uuid
+  feature_id         String             @db.Uuid
+  value              String?
+  is_included        Boolean            @default(true)
+  sort_order         Int                @default(0)
+  plan_features      plan_features      @relation(fields: [feature_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "subscription_plan_features_feature_fk")
+  subscription_plans subscription_plans @relation(fields: [plan_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "subscription_plan_features_plan_fk")
+
+  @@id([plan_id, feature_id])
+  @@index([plan_id, sort_order], map: "idx_subscription_plan_features_plan")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model subscription_plans {
+  id                         String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                       String                       @unique
+  name                       String
+  description                String
+  monthly_price_cents        Int?
+  annual_discount_percent    Decimal                      @default(15.00) @db.Decimal(5, 2)
+  max_users                  Int?
+  max_workspaces             Int?
+  max_groups                 Int?
+  storage_bytes              BigInt?
+  monthly_ai_tokens          BigInt?
+  is_recommended             Boolean                      @default(false)
+  is_active                  Boolean                      @default(true)
+  sort_order                 Int                          @default(0)
+  requires_contact           Boolean                      @default(false)
+  created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  subscription_plan_features subscription_plan_features[]
+
+  @@index([is_active, sort_order], map: "idx_subscription_plans_active_order")
+}
