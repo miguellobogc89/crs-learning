@@ -14,6 +14,8 @@ import { AiNegativeFeedbackTable } from "@/components/admin/ai-usage/negative-fe
 import {
   getAiUsageStats,
   getAiUsageChart,
+  getAiFeedbackSummary,
+  getNegativeAiFeedback,
 } from "@/lib/repositories/admin/ai-usage.repository";
 
 export default async function AdminAiUsagePage() {
@@ -29,9 +31,16 @@ export default async function AdminAiUsagePage() {
     redirect("/dashboard");
   }
 
-  const [usageStats, usageData] = await Promise.all([
+  const [
+    usageStats,
+    usageData,
+    feedback,
+    negativeFeedback,
+  ] = await Promise.all([
     getAiUsageStats(),
     getAiUsageChart(30),
+    getAiFeedbackSummary(),
+    getNegativeAiFeedback(),
   ]);
 
   const stats = {
@@ -39,23 +48,9 @@ export default async function AdminAiUsagePage() {
     activeUsers: usageStats.activeUsers,
     averageTokensPerUser:
       usageStats.averageTokensPerUser,
-    satisfactionRate: null as number | null,
+    satisfactionRate:
+      feedback.satisfactionRate,
   };
-
-  const feedback = {
-    positive: 0,
-    negative: 0,
-    total: 0,
-    satisfactionRate: null as number | null,
-  };
-
-  const negativeFeedback: Array<{
-    id: string;
-    userName: string;
-    userEmail: string;
-    question: string;
-    createdAt: Date;
-  }> = [];
 
   return (
     <AdminPage

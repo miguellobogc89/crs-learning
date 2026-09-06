@@ -177,6 +177,7 @@ model users {
   chat_conversations_chat_conversations_created_by_user_idTousers                              chat_conversations[]               @relation("chat_conversations_created_by_user_idTousers")
   chat_conversations_chat_conversations_owner_user_idTousers                                   chat_conversations[]               @relation("chat_conversations_owner_user_idTousers")
   chat_conversations_chat_conversations_updated_by_user_idTousers                              chat_conversations[]               @relation("chat_conversations_updated_by_user_idTousers")
+  chat_message_feedback                                                                        chat_message_feedback[]
   chat_messages                                                                                chat_messages[]
   knowledge_activity                                                                           knowledge_activity[]
   knowledge_correction_requests_knowledge_correction_requests_assigned_to_user_idTousers       knowledge_correction_requests[]    @relation("knowledge_correction_requests_assigned_to_user_idTousers")
@@ -405,18 +406,19 @@ model chat_conversations {
 }
 
 model chat_messages {
-  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  conversation_id    String             @db.Uuid
-  user_id            String?            @db.Uuid
-  role               String
-  content            String
-  sources_json       Json?
-  model              String?
-  tokens_input       Int?
-  tokens_output      Int?
-  created_at         DateTime           @default(now()) @db.Timestamptz(6)
-  chat_conversations chat_conversations @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users              users?             @relation(fields: [user_id], references: [id], onUpdate: NoAction)
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversation_id       String                  @db.Uuid
+  user_id               String?                 @db.Uuid
+  role                  String
+  content               String
+  sources_json          Json?
+  model                 String?
+  tokens_input          Int?
+  tokens_output         Int?
+  created_at            DateTime                @default(now()) @db.Timestamptz(6)
+  chat_message_feedback chat_message_feedback[]
+  chat_conversations    chat_conversations      @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                 users?                  @relation(fields: [user_id], references: [id], onUpdate: NoAction)
 
   @@index([conversation_id], map: "idx_chat_messages_conversation_id")
   @@index([user_id], map: "idx_chat_messages_user_id")
@@ -1272,4 +1274,19 @@ model auth_tokens {
   @@index([expires_at], map: "idx_auth_tokens_expires_at")
   @@index([user_id], map: "idx_auth_tokens_user_id")
   @@index([user_id, type], map: "idx_auth_tokens_user_type")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model chat_message_feedback {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  message_id    String        @db.Uuid
+  user_id       String        @db.Uuid
+  rating        String
+  comment       String?
+  created_at    DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime      @default(now()) @db.Timestamptz(6)
+  chat_messages chat_messages @relation(fields: [message_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "chat_message_feedback_message_fk")
+  users         users         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "chat_message_feedback_user_fk")
+
+  @@unique([message_id, user_id], map: "chat_message_feedback_unique")
 }

@@ -72,6 +72,8 @@ export async function GET(
           content: message.content,
           createdAt: message.created_at,
           sources: extractSources(message.sources_json),
+          feedback:
+            message.chat_message_feedback[0]?.rating ?? null,
         }),
       ),
     },

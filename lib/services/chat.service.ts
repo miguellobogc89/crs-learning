@@ -74,6 +74,16 @@ export async function getChatConversation(
           content: true,
           created_at: true,
           sources_json: true,
+
+          chat_message_feedback: {
+            where: {
+              user_id: userId,
+            },
+            select: {
+              rating: true,
+            },
+            take: 1,
+          },
         },
       },
     },

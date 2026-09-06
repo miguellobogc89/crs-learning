@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useRef, useState, } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -10,7 +10,10 @@ import {
   Bot,
   FileText,
   User,
+  ThumbsDown,
+  ThumbsUp,
 } from "lucide-react";
+import { rateChatMessageAction } from "@/app/actions/chat-message-feedback.actions";
 
 type ChatSource = {
   citationId: string;
@@ -29,6 +32,7 @@ type ChatMessageData = {
   role: "user" | "assistant";
   content: string;
   sources: ChatSource[];
+  feedback?: "positive" | "negative" | null;
 };
 
 type Props = {
@@ -49,6 +53,44 @@ export function ChatMessage({
   message,
 }: Props) {
   const isUser = message.role === "user";
+
+  const [feedback, setFeedback] = useState<
+  "positive" | "negative" | null
+>(message.feedback ?? null);
+
+const [isSavingFeedback, setIsSavingFeedback] =
+  useState(false);
+
+async function handleFeedback(
+  rating: "positive" | "negative",
+) {
+  if (isSavingFeedback) {
+    return;
+  }
+
+  const previousFeedback = feedback;
+
+  const nextFeedback =
+    feedback === rating
+      ? null
+      : rating;
+
+  setFeedback(nextFeedback);
+  setIsSavingFeedback(true);
+
+  try {
+    await rateChatMessageAction(
+      message.id,
+      nextFeedback,
+    );
+  } catch (error) {
+    console.error(error);
+
+    setFeedback(previousFeedback);
+  } finally {
+    setIsSavingFeedback(false);
+  }
+}
 
   return (
     <div
@@ -92,14 +134,56 @@ export function ChatMessage({
             </p>
           ) : (
             <>
-              <AssistantMessageContent
-                text={message.content}
-                sources={message.sources}
-              />
+            <AssistantMessageContent
+              text={message.content}
+              sources={message.sources}
+            />
 
-              <ConsultedArticles
-                message={message}
-              />
+            <ConsultedArticles
+              message={message}
+            />
+
+            <div className="mt-3 flex items-center gap-1">
+              <button
+                type="button"
+                disabled={isSavingFeedback}
+                aria-label="Respuesta útil"
+                onClick={() => {
+                  void handleFeedback("positive");
+                }}
+                className={[
+                  "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+                  feedback === "positive"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  isSavingFeedback
+                    ? "cursor-not-allowed opacity-50"
+                    : "",
+                ].join(" ")}
+              >
+                <ThumbsUp className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                disabled={isSavingFeedback}
+                aria-label="Respuesta no útil"
+                onClick={() => {
+                  void handleFeedback("negative");
+                }}
+                className={[
+                  "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+                  feedback === "negative"
+                    ? "bg-destructive/10 text-destructive"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  isSavingFeedback
+                    ? "cursor-not-allowed opacity-50"
+                    : "",
+                ].join(" ")}
+              >
+                <ThumbsDown className="h-4 w-4" />
+              </button>
+            </div>
             </>
           )}
         </div>

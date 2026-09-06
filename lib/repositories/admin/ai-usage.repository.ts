@@ -15,6 +15,22 @@ export type AiUsageChartPoint = {
   tokens: number;
 };
 
+export type AiFeedbackSummary = {
+  positive: number;
+  negative: number;
+  total: number;
+  satisfactionRate: number | null;
+};
+
+export type NegativeAiFeedbackItem = {
+  id: string;
+  userName: string;
+  userEmail: string;
+  question: string;
+  answer: string;
+  createdAt: Date;
+};
+
 function getStartOfDay(date: Date) {
   const result = new Date(date);
 
@@ -46,6 +62,121 @@ function getMessageTokens(message: {
     (message.tokens_input ?? 0) +
     (message.tokens_output ?? 0)
   );
+}
+
+export async function getAiFeedbackSummary(): Promise<AiFeedbackSummary> {
+  const feedback =
+    await prisma.chat_message_feedback.findMany({
+      select: {
+        rating: true,
+      },
+    });
+
+  let positive = 0;
+  let negative = 0;
+
+  for (const item of feedback) {
+    if (item.rating === "positive") {
+      positive += 1;
+    }
+
+    if (item.rating === "negative") {
+      negative += 1;
+    }
+  }
+
+  const total =
+    positive + negative;
+
+  let satisfactionRate: number | null = null;
+
+  if (total > 0) {
+    satisfactionRate =
+      Math.round(
+        (positive / total) * 100,
+      );
+  }
+
+  return {
+    positive,
+    negative,
+    total,
+    satisfactionRate,
+  };
+}
+
+export async function getNegativeAiFeedback(): Promise<
+  NegativeAiFeedbackItem[]
+> {
+  const feedback =
+    await prisma.chat_message_feedback.findMany({
+      where: {
+        rating: "negative",
+      },
+      orderBy: {
+        created_at: "desc",
+      },
+      select: {
+        id: true,
+        created_at: true,
+        users: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+        chat_messages: {
+          select: {
+            id: true,
+            content: true,
+            conversation_id: true,
+            created_at: true,
+          },
+        },
+      },
+    });
+
+  const items: NegativeAiFeedbackItem[] = [];
+
+  for (const item of feedback) {
+    const assistantMessage =
+      item.chat_messages;
+
+    const previousUserMessage =
+      await prisma.chat_messages.findFirst({
+        where: {
+          conversation_id:
+            assistantMessage.conversation_id,
+          role: "user",
+          created_at: {
+            lt: assistantMessage.created_at,
+          },
+        },
+        orderBy: {
+          created_at: "desc",
+        },
+        select: {
+          content: true,
+        },
+      });
+
+    items.push({
+      id: item.id,
+      userName:
+        item.users.name ?? "Sin nombre",
+      userEmail:
+        item.users.email,
+      question:
+        previousUserMessage?.content ??
+        "Pregunta no encontrada",
+      answer:
+        assistantMessage.content,
+      createdAt:
+        item.created_at,
+    });
+  }
+
+  return items;
 }
 
 export async function getAiUsageStats(): Promise<AiUsageStats> {
@@ -87,20 +218,27 @@ export async function getAiUsageStats(): Promise<AiUsageStats> {
     const tokens =
       getMessageTokens(message);
 
-    if (
-      message.created_at >=
-      currentWeekStart
-    ) {
-      weeklyTokens += tokens;
+if (
+  message.created_at >=
+  currentWeekStart
+) {
+  weeklyTokens += tokens;
 
-      if (message.user_id) {
-        activeUserIds.add(
-          message.user_id,
-        );
-      }
+  const hasUsage =
+    message.tokens_input !== null ||
+    message.tokens_output !== null;
 
-      continue;
-    }
+  if (
+    message.user_id &&
+    hasUsage
+  ) {
+    activeUserIds.add(
+      message.user_id,
+    );
+  }
+
+  continue;
+}
 
     previousWeekTokens += tokens;
   }
