@@ -1356,6 +1356,7 @@ model subscription_plans {
   requires_contact           Boolean                      @default(false)
   created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
   updated_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  annual_monthly_price_cents Int?
   subscription_plan_features subscription_plan_features[]
 
   @@index([is_active, sort_order], map: "idx_subscription_plans_active_order")
