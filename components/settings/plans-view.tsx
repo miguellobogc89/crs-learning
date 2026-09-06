@@ -28,6 +28,7 @@ export type PlanViewModel = {
 
   storageBytes: number | null;
   monthlyAiTokens: number | null;
+  annualMonthlyPriceCents: number | null;
 
   isRecommended: boolean;
   requiresContact: boolean;
@@ -522,68 +523,67 @@ function getPricing(
   const monthlyPrice =
     plan.monthlyPriceCents / 100;
 
-  /*
-   * MENSUAL
-   */
   if (billingPeriod === "monthly") {
     const pricePerUser =
       plan.maxUsers && plan.maxUsers > 0
-        ? monthlyPrice / plan.maxUsers
+        ? Math.floor(monthlyPrice / plan.maxUsers)
         : null;
 
     return {
       price: `${formatCurrency(monthlyPrice)}/mes`,
       detail: "Facturación mensual",
-
       secondary:
         pricePerUser !== null
           ? `${formatCurrency(pricePerUser)} por usuario / mes`
           : null,
-
       saving: null,
     };
   }
 
-  /*
-   * ANUAL
-   *
-   * Calculamos el precio anual exacto,
-   * pero en esta pantalla mostramos
-   * su equivalente mensual.
-   */
-  const discount =
-    plan.annualDiscountPercent / 100;
+  if (plan.annualMonthlyPriceCents === null) {
+    return {
+      price: "A medida",
+      detail: "Configuración personalizada",
+      secondary: null,
+      saving: null,
+    };
+  }
 
-  const annualWithoutDiscount =
+  const annualMonthlyPrice =
+    plan.annualMonthlyPriceCents / 100;
+
+  const annualTotal =
+    annualMonthlyPrice * 12;
+
+  const monthlyAnnualTotal =
     monthlyPrice * 12;
 
-  const annualPrice =
-    annualWithoutDiscount * (1 - discount);
-
-  const equivalentMonthly =
-    annualPrice / 12;
-
   const annualSaving =
-    annualWithoutDiscount - annualPrice;
+    monthlyAnnualTotal - annualTotal;
+
+  const realDiscount =
+    (1 - annualMonthlyPrice / monthlyPrice) * 100;
 
   const pricePerUser =
     plan.maxUsers && plan.maxUsers > 0
-      ? equivalentMonthly / plan.maxUsers
+      ? Math.floor(annualMonthlyPrice / plan.maxUsers)
       : null;
 
   return {
-    price: `${formatCurrency(equivalentMonthly)}/mes`,
+    price: `${formatCurrency(annualMonthlyPrice)}/mes`,
 
-    detail: `Facturación anual · -${formatPercentage(
-      plan.annualDiscountPercent,
-    )}`,
+    detail: `Facturación anual · -${Math.round(
+      realDiscount,
+    )}%`,
 
     secondary:
       pricePerUser !== null
         ? `${formatCurrency(pricePerUser)} por usuario / mes`
         : null,
 
-    saving: `Ahorras ${formatCurrency(annualSaving)} al año`,
+    saving: `Ahorras ${formatCurrency(
+      annualSaving,
+    )} al año`,
   };
 }
 

@@ -60,25 +60,23 @@ export default async function CheckoutPage({
    * Trabajamos en céntimos para evitar cálculos monetarios
    * con floats.
    */
-  const monthlyPriceCents =
-    plan.monthly_price_cents;
+const monthlyPriceCents =
+  plan.monthly_price_cents;
 
-  const discountPercent =
-    Number(plan.annual_discount_percent);
+const annualMonthlyPriceCents =
+  plan.annual_monthly_price_cents;
 
-  let subtotalCents: number;
+if (
+  billingPeriod === "annual" &&
+  annualMonthlyPriceCents === null
+) {
+  notFound();
+}
 
-  if (billingPeriod === "annual") {
-    const annualBaseCents =
-      monthlyPriceCents * 12;
-
-    subtotalCents = Math.round(
-      annualBaseCents *
-        (1 - discountPercent / 100),
-    );
-  } else {
-    subtotalCents = monthlyPriceCents;
-  }
+const subtotalCents =
+  billingPeriod === "annual"
+    ? annualMonthlyPriceCents! * 12
+    : monthlyPriceCents;
 
   /*
    * IVA provisional España.
@@ -93,16 +91,15 @@ export default async function CheckoutPage({
   const totalCents =
     subtotalCents + vatCents;
 
-  const annualSavingCents =
-    billingPeriod === "annual"
-      ? monthlyPriceCents * 12 -
-        subtotalCents
-      : 0;
+const annualSavingCents =
+  billingPeriod === "annual"
+    ? monthlyPriceCents * 12 - subtotalCents
+    : 0;
 
-  const equivalentMonthlyCents =
-    billingPeriod === "annual"
-      ? Math.round(subtotalCents / 12)
-      : monthlyPriceCents;
+const equivalentMonthlyCents =
+  billingPeriod === "annual"
+    ? annualMonthlyPriceCents!
+    : monthlyPriceCents;
 
   return (
     <SettingsShell>
