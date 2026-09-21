@@ -1,5 +1,4 @@
-// create-folder-dialog/folder-recipient-picker.tsx
-
+// components/knowledge/content/create-folder-dialog/folder-recipient-picker.tsx
 "use client";
 
 import {
@@ -7,31 +6,30 @@ import {
   useId,
   useRef,
   useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import {
-  Loader2,
-  Search,
-  X,
-} from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 
 import type { FolderRecipient } from "@/lib/actions/knowledge-folder-recipients.actions";
-import type { AccessLevel } from "./use-create-folder";
+import type { SelectedFolderRecipient } from "./use-create-folder";
 
 type Props = {
   suggestions: FolderRecipient[];
-  selectedRecipients: FolderRecipient[];
+  selectedRecipients: SelectedFolderRecipient[];
   search: string;
   suggestionsOpen: boolean;
   loading: boolean;
   error: string | null;
+  inputError: string | null;
   disabled: boolean;
-  accessLevel: AccessLevel;
   onSearchChange: (value: string) => void;
   onSuggestionsOpenChange: (open: boolean) => void;
   onSelect: (id: string) => void;
+  onAddEmails: (value: string) => boolean;
   onRemove: (id: string) => void;
-  onAccessLevelChange: (level: AccessLevel) => void;
+  onInputErrorChange: (value: string | null) => void;
 };
 
 export function FolderRecipientPicker({
@@ -41,17 +39,21 @@ export function FolderRecipientPicker({
   suggestionsOpen,
   loading,
   error,
+  inputError,
   disabled,
-  accessLevel,
   onSearchChange,
   onSuggestionsOpenChange,
   onSelect,
+  onAddEmails,
   onRemove,
-  onAccessLevelChange,
+  onInputErrorChange,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const fieldRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const listId = useId();
+
+  const [activeIndex, setActiveIndex] = useState(-1);
 
   const [popupPosition, setPopupPosition] = useState({
     top: 0,
@@ -64,7 +66,7 @@ export function FolderRecipientPicker({
 
     function updatePosition() {
       const rect =
-        inputRef.current?.getBoundingClientRect();
+        fieldRef.current?.getBoundingClientRect();
 
       if (!rect) return;
 
@@ -79,19 +81,12 @@ export function FolderRecipientPicker({
       const target = event.target as Node;
 
       if (
-        inputRef.current?.contains(target) ||
+        fieldRef.current?.contains(target) ||
         popupRef.current?.contains(target)
       ) {
         return;
       }
 
-      onSuggestionsOpenChange(false);
-    }
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-
-      event.stopImmediatePropagation();
       onSuggestionsOpenChange(false);
     }
 
@@ -106,11 +101,6 @@ export function FolderRecipientPicker({
     document.addEventListener(
       "pointerdown",
       handlePointerDown,
-      true,
-    );
-    window.addEventListener(
-      "keydown",
-      handleEscape,
       true,
     );
 
@@ -129,20 +119,125 @@ export function FolderRecipientPicker({
         handlePointerDown,
         true,
       );
-      window.removeEventListener(
-        "keydown",
-        handleEscape,
-        true,
-      );
     };
-  }, [
-    suggestionsOpen,
-    onSuggestionsOpenChange,
-  ]);
+  }, [suggestionsOpen, onSuggestionsOpenChange]);
+
+  function handleKeyDown(
+    event: KeyboardEvent<HTMLInputElement>,
+  ) {
+    if (
+      event.key === "ArrowDown" &&
+      suggestionsOpen &&
+      suggestions.length > 0
+    ) {
+      event.preventDefault();
+      setActiveIndex((current) =>
+        Math.min(current + 1, suggestions.length - 1),
+      );
+      return;
+    }
+
+    if (
+      event.key === "ArrowUp" &&
+      suggestionsOpen &&
+      suggestions.length > 0
+    ) {
+      event.preventDefault();
+      setActiveIndex((current) =>
+        Math.max(current - 1, 0),
+      );
+      return;
+    }
+
+    if (event.key === "Escape") {
+      if (suggestionsOpen) {
+        event.stopPropagation();
+        onSuggestionsOpenChange(false);
+      }
+      return;
+    }
+
+    if (
+      event.key === "Backspace" &&
+      !search &&
+      selectedRecipients.length > 0
+    ) {
+      onRemove(
+        selectedRecipients[
+          selectedRecipients.length - 1
+        ].id,
+      );
+      return;
+    }
+
+    if (
+      event.key !== "Enter" &&
+      event.key !== "Tab" &&
+      event.key !== "," &&
+      event.key !== ";"
+    ) {
+      return;
+    }
+
+    const value = search.trim();
+
+    if (!value) return;
+
+    const selectedSuggestion =
+      activeIndex >= 0
+        ? suggestions[activeIndex]
+        : undefined;
+
+    if (
+      event.key === "Enter" &&
+      suggestionsOpen &&
+      selectedSuggestion
+    ) {
+      event.preventDefault();
+      onSelect(selectedSuggestion.id);
+      setActiveIndex(-1);
+      return;
+    }
+
+    // Tab mantiene su comportamiento normal cuando
+    // no hay un correo válido que confirmar.
+    if (
+      event.key === "Tab" &&
+      !value.includes("@")
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    onAddEmails(value);
+    setActiveIndex(-1);
+  }
+
+  function handlePaste(
+    event: ClipboardEvent<HTMLInputElement>,
+  ) {
+    const pastedText =
+      event.clipboardData.getData("text");
+
+    if (!/[\s,;]/.test(pastedText.trim())) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const combined = [search, pastedText]
+      .filter(Boolean)
+      .join(" ");
+
+    onAddEmails(combined);
+    setActiveIndex(-1);
+  }
 
   const popup =
     suggestionsOpen &&
     !disabled &&
+    search.trim().length > 0 &&
     typeof document !== "undefined"
       ? createPortal(
           <div
@@ -170,17 +265,29 @@ export function FolderRecipientPicker({
               </p>
             ) : suggestions.length === 0 ? (
               <p className="px-3 py-3 text-xs text-muted-foreground">
-                No hay personas disponibles para esta búsqueda.
+                No hay coincidencias. Puedes añadir
+                un correo externo.
               </p>
             ) : (
-              suggestions.map((recipient) => (
+              suggestions.map((recipient, index) => (
                 <button
                   key={recipient.id}
                   type="button"
                   role="option"
-                  aria-selected={false}
-                  onClick={() => onSelect(recipient.id)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-surface focus:bg-surface focus:outline-none"
+                  aria-selected={index === activeIndex}
+                  onMouseEnter={() =>
+                    setActiveIndex(index)
+                  }
+                  onClick={() => {
+                    onSelect(recipient.id);
+                    setActiveIndex(-1);
+                    inputRef.current?.focus();
+                  }}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-surface focus:bg-surface focus:outline-none ${
+                    index === activeIndex
+                      ? "bg-surface"
+                      : ""
+                  }`}
                 >
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-semibold text-foreground">
                     {recipient.name
@@ -193,7 +300,6 @@ export function FolderRecipientPicker({
                     <span className="block truncate text-xs font-medium text-foreground">
                       {recipient.name}
                     </span>
-
                     <span className="block truncate text-[11px] text-muted-foreground">
                       {recipient.email}
                     </span>
@@ -207,92 +313,93 @@ export function FolderRecipientPicker({
       : null;
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-surface/50 p-3">
-      <div className="space-y-1.5">
-        <label
-          htmlFor="folder-recipients"
-          className="block text-xs font-semibold text-foreground"
-        >
-          Personas
-        </label>
+    <div className="space-y-2">
+      <label
+        htmlFor="folder-recipients"
+        className="block text-xs font-semibold text-foreground"
+      >
+        Personas y correos electrónicos
+      </label>
 
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-
-          <input
-            ref={inputRef}
-            id="folder-recipients"
-            type="text"
-            role="combobox"
-            aria-autocomplete="list"
-            aria-expanded={suggestionsOpen}
-            aria-controls={listId}
-            autoComplete="off"
-            value={search}
-            onFocus={() =>
-              onSuggestionsOpenChange(true)
-            }
-            onChange={(event) => {
-              onSearchChange(event.target.value);
-              onSuggestionsOpenChange(true);
-            }}
-            disabled={disabled}
-            placeholder="Buscar por nombre o correo"
-            className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-xs text-foreground outline-none transition placeholder:text-muted-foreground focus:border-foreground disabled:opacity-50"
-          />
-        </div>
-
-        {popup}
-
-        {selectedRecipients.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {selectedRecipients.map((recipient) => (
-              <span
-                key={recipient.id}
-                className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-background px-2 py-1 text-[11px] font-medium text-foreground"
-              >
-                <span className="truncate">
-                  {recipient.name}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => onRemove(recipient.id)}
-                  disabled={disabled}
-                  aria-label={`Quitar a ${recipient.name}`}
-                  className="shrink-0 rounded-full hover:bg-surface disabled:opacity-50"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-          </div>
+      <div
+        ref={fieldRef}
+        onClick={() => inputRef.current?.focus()}
+        className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 transition-colors focus-within:border-foreground"
+      >
+        {selectedRecipients.length === 0 && (
+          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         )}
-      </div>
 
-      <div className="space-y-1.5">
-        <label
-          htmlFor="folder-access-level"
-          className="block text-xs font-semibold text-foreground"
-        >
-          Nivel de acceso
-        </label>
+        {selectedRecipients.map((recipient) => (
+          <span
+            key={recipient.id}
+            className="inline-flex max-w-full items-center gap-1 rounded-md bg-surface px-2 py-1 text-[11px] font-medium text-foreground"
+          >
+            <span className="max-w-40 truncate">
+              {recipient.external
+                ? recipient.email
+                : recipient.name}
+            </span>
 
-        <select
-          id="folder-access-level"
-          value={accessLevel}
-          onChange={(event) =>
-            onAccessLevelChange(
-              event.target.value as AccessLevel,
-            )
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRemove(recipient.id);
+              }}
+              disabled={disabled}
+              aria-label={`Quitar a ${recipient.name}`}
+              className="shrink-0 rounded hover:bg-background disabled:opacity-50"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+
+        <input
+          ref={inputRef}
+          id="folder-recipients"
+          type="text"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={suggestionsOpen}
+          aria-controls={listId}
+          autoComplete="off"
+          value={search}
+          onFocus={() =>
+            onSuggestionsOpenChange(true)
           }
+          onChange={(event) => {
+            onSearchChange(event.target.value);
+            onInputErrorChange(null);
+            onSuggestionsOpenChange(true);
+            setActiveIndex(-1);
+          }}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           disabled={disabled}
-          className="h-9 w-full rounded-lg border border-border bg-background px-3 text-xs text-foreground outline-none focus:border-foreground"
-        >
-          <option value="read">Lectura</option>
-          <option value="edit">Edición</option>
-        </select>
+          placeholder={
+            selectedRecipients.length > 0
+              ? "Añadir más..."
+              : "Nombre o correo electrónico"
+          }
+          className="h-7 min-w-28 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50"
+        />
       </div>
+
+      {popup}
+
+      {inputError && (
+        <p className="text-[11px] text-red-600">
+          {inputError}
+        </p>
+      )}
+
+      <p className="text-[11px] text-muted-foreground">
+        Pulsa Intro o Tab para añadir un correo.
+        También puedes pegar varios correos separados
+        por comas, espacios o saltos de línea.
+      </p>
     </div>
   );
 }

@@ -1,12 +1,7 @@
-// create-folder-dialog/folder-access-options.tsx
-
+// components/knowledge/content/create-folder-dialog/folder-access-options.tsx
 "use client";
 
-import {
-  Check,
-  LockKeyhole,
-  UsersRound,
-} from "lucide-react";
+import { LockKeyhole, UsersRound } from "lucide-react";
 
 import type { AccessMode } from "./use-create-folder";
 
@@ -16,82 +11,64 @@ type Props = {
   onChange: (value: AccessMode) => void;
 };
 
-const options = [
-  {
-    value: "private",
-    title: "Solo yo",
-    description: "No añadir destinatarios.",
-    icon: LockKeyhole,
-  },
-  {
-    value: "specific",
-    title: "Personas y equipos específicos",
-    description: "Selecciona quién podrá acceder.",
-    icon: UsersRound,
-  },
-] as const;
-
 export function FolderAccessOptions({
   value,
   disabled,
   onChange,
 }: Props) {
+  const options = [
+    {
+      id: "private",
+      title: "Privada",
+      description: "Solo tú tendrás acceso a esta carpeta.",
+      Icon: LockKeyhole,
+    },
+    {
+      id: "specific",
+      title: "Compartida",
+      description: "Selecciona quién puede acceder a ella.",
+      Icon: UsersRound,
+    },
+  ] as const;
+
   return (
-    <div className="space-y-2">
-      <div>
-        <p className="text-xs font-semibold text-foreground">
-          Quiénes tendrán acceso
-        </p>
+    <div className="space-y-1.5">
+      <p className="text-xs font-semibold text-foreground">
+        Acceso
+      </p>
 
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          Elige quién tendrá acceso a esta carpeta.
-        </p>
-      </div>
-
-      <div className="space-y-1.5">
-        {options.map((option) => {
-          const selected = value === option.value;
-          const Icon = option.icon;
+      <div className="grid grid-cols-2 gap-2">
+        {options.map(({ id, title, description, Icon }) => {
+          const selected = value === id;
 
           return (
             <button
-              key={option.value}
+              key={id}
               type="button"
-              disabled={disabled}
               aria-pressed={selected}
-              onClick={() => onChange(option.value)}
-              className={`flex min-h-12 w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition disabled:opacity-50 ${
+              disabled={disabled}
+              onClick={() => onChange(id)}
+              className={`rounded-lg border p-3 text-left transition disabled:opacity-50 ${
                 selected
-                  ? "border-foreground bg-surface"
+                  ? "border-primary bg-primary/5"
                   : "border-border hover:bg-surface"
               }`}
             >
-              <span
-                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+              <Icon
+                className={`mb-2 h-4 w-4 ${
                   selected
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-muted-foreground"
+                    ? "text-primary"
+                    : "text-muted-foreground"
                 }`}
-              >
-                {selected && (
-                  <Check
-                    className="h-3 w-3"
-                    strokeWidth={3}
-                  />
-                )}
-              </span>
+              />
 
-              <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <p className="text-xs font-semibold text-foreground">
+                {title}
+              </p>
 
-              <span className="min-w-0">
-                <span className="block text-xs font-semibold text-foreground">
-                  {option.title}
-                </span>
-
-                <span className="block text-[11px] text-muted-foreground">
-                  {option.description}
-                </span>
-              </span>
+              <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                {description}
+              </p>
             </button>
           );
         })}

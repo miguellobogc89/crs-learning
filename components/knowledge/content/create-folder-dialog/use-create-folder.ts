@@ -1,5 +1,4 @@
-// create-folder-dialog/use-create-folder.ts
-
+// components/knowledge/content/create-folder-dialog/use-create-folder.ts
 "use client";
 
 import {
@@ -20,11 +19,21 @@ import {
 export type AccessMode = "private" | "specific";
 export type AccessLevel = "read" | "edit";
 
+export type SelectedFolderRecipient = FolderRecipient & {
+  external?: boolean;
+};
+
 type Options = {
   open: boolean;
   parentLibraryId: string | null;
   onClose: () => void;
 };
+
+const EMAIL_REGEX = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
 
 export function useCreateFolder({
   open,
@@ -37,26 +46,28 @@ export function useCreateFolder({
   const [name, setName] = useState("");
   const [accessMode, setAccessMode] =
     useState<AccessMode>("private");
-  const [accessLevel, setAccessLevel] =
-    useState<AccessLevel>("read");
 
   const [recipients, setRecipients] = useState<
     FolderRecipient[]
   >([]);
-  const [selectedIds, setSelectedIds] = useState<
-    string[]
-  >([]);
+
+  const [selectedRecipients, setSelectedRecipients] =
+    useState<SelectedFolderRecipient[]>([]);
+
   const [search, setSearch] = useState("");
   const [suggestionsOpen, setSuggestionsOpen] =
     useState(false);
 
   const [loadingRecipients, setLoadingRecipients] =
     useState(false);
+
   const [recipientsError, setRecipientsError] =
     useState<string | null>(null);
-  const [error, setError] = useState<string | null>(
-    null,
-  );
+
+  const [inputError, setInputError] =
+    useState<string | null>(null);
+
+  const [error, setError] = useState<string | null>(null);
 
   const [isPending, startTransition] = useTransition();
 
@@ -65,13 +76,13 @@ export function useCreateFolder({
 
     setName("");
     setAccessMode("private");
-    setAccessLevel("read");
     setRecipients([]);
-    setSelectedIds([]);
+    setSelectedRecipients([]);
     setSearch("");
     setSuggestionsOpen(false);
     setLoadingRecipients(false);
     setRecipientsError(null);
+    setInputError(null);
     setError(null);
 
     const timeout = window.setTimeout(
@@ -119,51 +130,131 @@ export function useCreateFolder({
     };
   }, [open, accessMode]);
 
-  const normalizedSearch = search
-    .trim()
-    .toLocaleLowerCase();
+  const normalizedSearch = search.trim().toLowerCase();
 
   const suggestions = recipients
-    .filter(
-      (recipient) =>
-        !selectedIds.includes(recipient.id) &&
-        (recipient.name
-          .toLocaleLowerCase()
+    .filter((recipient) => {
+      const alreadySelected = selectedRecipients.some(
+        (selected) =>
+          selected.id === recipient.id ||
+          normalizeEmail(selected.email) ===
+            normalizeEmail(recipient.email),
+      );
+
+      if (alreadySelected) return false;
+
+      return (
+        recipient.name
+          .toLowerCase()
           .includes(normalizedSearch) ||
-          recipient.email
-            .toLocaleLowerCase()
-            .includes(normalizedSearch)),
-    )
+        recipient.email
+          .toLowerCase()
+          .includes(normalizedSearch)
+      );
+    })
     .slice(0, 5);
 
-  const selectedRecipients = recipients.filter(
-    (recipient) => selectedIds.includes(recipient.id),
-  );
-
   function selectRecipient(recipientId: string) {
-    setSelectedIds((current) =>
-      current.includes(recipientId)
-        ? current
-        : [...current, recipientId],
+    const recipient = recipients.find(
+      (item) => item.id === recipientId,
     );
 
+    if (!recipient) return;
+
+    setSelectedRecipients((current) => {
+      if (
+        current.some(
+          (item) =>
+            item.id === recipient.id ||
+            normalizeEmail(item.email) ===
+              normalizeEmail(recipient.email),
+        )
+      ) {
+        return current;
+      }
+
+      return [...current, recipient];
+    });
+
     setSearch("");
+    setInputError(null);
     setSuggestionsOpen(false);
   }
 
+  function addEmails(value: string): boolean {
+    const emails = value
+      .split(/[\s,;]+/)
+      .map(normalizeEmail)
+      .filter(Boolean);
+
+    if (emails.length === 0) return false;
+
+    const invalidEmails = emails.filter(
+      (email) => !EMAIL_REGEX.test(email),
+    );
+
+    if (invalidEmails.length > 0) {
+      setInputError(
+        `Correo no válido: ${invalidEmails[0]}`,
+      );
+      return false;
+    }
+
+    setSelectedRecipients((current) => {
+      const next = [...current];
+
+      for (const email of emails) {
+        if (
+          next.some(
+            (recipient) =>
+              normalizeEmail(recipient.email) === email,
+          )
+        ) {
+          continue;
+        }
+
+        const existingRecipient = recipients.find(
+          (recipient) =>
+            normalizeEmail(recipient.email) === email,
+        );
+
+        next.push(
+          existingRecipient ?? {
+            id: `external:${email}`,
+            name: email,
+            email,
+            image: null,
+            external: true,
+          },
+        );
+      }
+
+      return next;
+    });
+
+    setSearch("");
+    setInputError(null);
+    setSuggestionsOpen(false);
+
+    return true;
+  }
+
   function removeRecipient(recipientId: string) {
-    setSelectedIds((current) =>
-      current.filter((id) => id !== recipientId),
+    setSelectedRecipients((current) =>
+      current.filter(
+        (recipient) => recipient.id !== recipientId,
+      ),
     );
   }
 
   function changeAccessMode(mode: AccessMode) {
     setAccessMode(mode);
     setSuggestionsOpen(false);
+    setInputError(null);
   }
 
-  // La creación compartida sigue pendiente de conectar
-  // con el guardado de permisos en el servidor.
+  // La creación compartida requiere guardar permisos
+  // y gestionar invitaciones desde el servidor.
   const canCreate =
     name.trim().length > 0 &&
     accessMode === "private" &&
@@ -203,8 +294,6 @@ export function useCreateFolder({
     setName,
     accessMode,
     changeAccessMode,
-    accessLevel,
-    setAccessLevel,
     recipients,
     selectedRecipients,
     suggestions,
@@ -214,11 +303,14 @@ export function useCreateFolder({
     setSuggestionsOpen,
     loadingRecipients,
     recipientsError,
+    inputError,
+    setInputError,
     error,
     setError,
     isPending,
     canCreate,
     selectRecipient,
+    addEmails,
     removeRecipient,
     handleSubmit,
   };
