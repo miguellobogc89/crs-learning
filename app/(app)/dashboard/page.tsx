@@ -17,9 +17,11 @@ import {
 
 import { auth } from "@/auth";
 import { AppSectionShell } from "@/components/app/section-sidebar";
+import { FirstSteps } from "@/components/dashboard/first-steps";
 import { DashboardWorkspaceSidebar } from "@/components/dashboard/dashboard-workspace-sidebar";
 import {
   getContinueWorkingItems,
+  getDashboardFirstSteps,
   getDashboardRecentActivity,
   type ContinueWorkingItem,
   type DashboardRecentActivityItem,
@@ -78,18 +80,27 @@ export default async function DashboardPage() {
 
   const { activeWorkspace, workspaces } =
     await getActiveWorkspaceContext(session.user.id);
-  const continueWorkingItems =
-    await getContinueWorkingItems({
+  const [
+    onboarding,
+    continueWorkingItems,
+    recentActivity,
+  ] = await Promise.all([
+    getDashboardFirstSteps({
+      userId: session.user.id,
+      workspaceId: activeWorkspace.id,
+      workspaceCount: workspaces.length,
+    }),
+    getContinueWorkingItems({
       userId: session.user.id,
       workspaceId: activeWorkspace.id,
       limit: 20,
-    });
-const recentActivity =
-  await getDashboardRecentActivity({
-    userId: session.user.id,
-    workspaceId: activeWorkspace.id,
-    limit: 20,
-  });
+    }),
+    getDashboardRecentActivity({
+      userId: session.user.id,
+      workspaceId: activeWorkspace.id,
+      limit: 20,
+    }),
+  ]);
 
   return (
     <AppSectionShell
@@ -108,6 +119,8 @@ const recentActivity =
     Bienvenido{session.user.name ? `, ${session.user.name.split(" ")[0]}` : ""}
   </h1>
 </header>
+
+          <FirstSteps onboarding={onboarding} />
 
           <section className="mt-10">
             <div className="mb-4">

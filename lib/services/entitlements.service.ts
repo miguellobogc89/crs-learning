@@ -60,6 +60,23 @@ type OrganizationPlanContext = {
   };
 };
 
+export type OrganizationPlanUsage = {
+  organization: OrganizationPlanContext["organization"];
+  plan: {
+    id: string;
+    code: string;
+    name: string;
+    maxUsers: number | null;
+    maxWorkspaces: number | null;
+    maxGroups: number | null;
+  };
+  usage: {
+    workspaces: number;
+    users: number;
+    groups: number;
+  };
+};
+
 export function isPlanLimitError(error: unknown) {
   return (
     error instanceof PlanLimitError ||
@@ -149,6 +166,67 @@ export async function canCreateWorkspace(
       current + 1,
     ),
   });
+}
+
+export async function getPlanUsageForUser(
+  userId: string,
+): Promise<OrganizationPlanUsage> {
+  const context =
+    await getOrganizationPlanContextForUser(userId);
+
+  const workspaceScope = {
+    OR: [
+      {
+        owner_user_id: userId,
+        organization_id: null,
+      },
+      {
+        organization_id: context.organization.id,
+      },
+    ],
+    status: "active",
+  };
+
+  const [workspaces, users, pendingInvites, groups] =
+    await Promise.all([
+      prisma.workspaces.count({
+        where: workspaceScope,
+      }),
+      prisma.organization_members.count({
+        where: {
+          organization_id: context.organization.id,
+          status: "active",
+        },
+      }),
+      prisma.workspace_invites.count({
+        where: {
+          status: "pending",
+          workspaces: workspaceScope,
+        },
+      }),
+      prisma.knowledge_teams.count({
+        where: {
+          workspaces: workspaceScope,
+        },
+      }),
+    ]);
+
+  return {
+    organization: context.organization,
+    plan: {
+      id: context.plan.id,
+      code: context.plan.code,
+      name: context.plan.name,
+      maxUsers: context.plan.max_users,
+      maxWorkspaces: context.plan.max_workspaces,
+      maxGroups: context.plan.max_groups,
+    },
+    usage: {
+      workspaces,
+      users: users + pendingInvites,
+      groups,
+    },
+  };
 }
 
 export async function canCreateGroup(

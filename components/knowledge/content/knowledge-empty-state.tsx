@@ -21,7 +21,7 @@ export function KnowledgeEmptyState({
   return (
     <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-border bg-card px-6">
       <div className="max-w-md text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600 dark:bg-cyan-950/30 dark:text-cyan-300">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-brand-soft text-brand">
           {icon}
         </div>
 
@@ -36,7 +36,8 @@ export function KnowledgeEmptyState({
         {actionLabel && onAction ? (
           <Button
             onClick={onAction}
-            className="mt-6 bg-black text-white hover:bg-black/85"
+            variant="brand"
+            className="mt-6"
           >
             {actionIcon}
             {actionLabel}

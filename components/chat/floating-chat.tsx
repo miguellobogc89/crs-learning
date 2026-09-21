@@ -126,10 +126,6 @@ const [messages, setMessages] = useState<
     );
 
 useEffect(() => {
-  setConversationList(conversations);
-}, [conversations]);
-
-useEffect(() => {
   window.dispatchEvent(
     new CustomEvent("crs:assistant-state", {
       detail: { isOpen },
@@ -798,7 +794,7 @@ function EmptyChat({
   return (
     <>
       <div className="mb-8">
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-950 text-white shadow-sm">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-brand shadow-sm">
           <Sparkles className="h-5 w-5" />
         </div>
 
@@ -808,8 +804,8 @@ function EmptyChat({
 
         <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
           Pregunta sobre procesos,
-          documentación, políticas o cualquier
-          conocimiento disponible en tu empresa.
+          documentacion, politicas o cualquier
+          conocimiento disponible en tu organizacion.
         </p>
       </div>
 
@@ -841,7 +837,7 @@ function EmptyChat({
 
       <div className="mt-auto pt-8">
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          <span className="h-1.5 w-1.5 rounded-full bg-success" />
           Respuestas basadas únicamente en
           contenido autorizado
         </div>

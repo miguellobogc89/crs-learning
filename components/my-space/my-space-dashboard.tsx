@@ -141,6 +141,28 @@ export function MySpaceDashboard({
             />
 
             <div className="grid gap-4 md:grid-cols-2">
+              {teams.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border bg-card p-6 md:col-span-2">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Todavia no hay grupos
+                  </h3>
+                  <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                    Los grupos te ayudan a compartir carpetas y coordinar
+                    conocimiento con personas concretas. Crea el primero para
+                    empezar a organizar el espacio.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="brand"
+                    className="mt-5"
+                    onClick={() => setShowCreateTeam(true)}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Crear grupo
+                  </Button>
+                </div>
+              ) : null}
+
               {teams.map((team) => {
                 let members = 0;
 

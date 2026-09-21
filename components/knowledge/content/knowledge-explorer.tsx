@@ -68,7 +68,8 @@ type Props = {
   selectedView: string;
   search: string;
   selectedArticleIds: Set<string>;
-selectedFolderIds: Set<string>;
+  selectedFolderIds: Set<string>;
+  onUploadRequested?: () => void;
 
 onArticleSelectedChange: (
   id: string,
@@ -170,6 +171,7 @@ export function KnowledgeExplorer({
   search,
   selectedArticleIds,
 selectedFolderIds,
+onUploadRequested,
 onArticleSelectedChange,
 onFolderSelectedChange,
 }: Props) {
@@ -182,7 +184,6 @@ onFolderSelectedChange,
     useState<string | null>(null);
 
   const [isMoving, setIsMoving] = useState(false);
-  const [showImport, setShowImport] = useState(false);
 
   const isSearchEmpty =
     search.trim().length > 0 &&
@@ -347,7 +348,7 @@ onFolderSelectedChange,
       <KnowledgeEmptyState
         icon={<FileSearch className="h-5 w-5" />}
         title="No se han encontrado resultados"
-        description="Prueba con otro término de búsqueda o elimina los filtros para ver más contenido."
+        description="Knowledge te ayuda a encontrar documentacion y articulos autorizados. Prueba con otro termino o elimina filtros para ampliar la busqueda."
       />
     );
   }
@@ -358,7 +359,7 @@ onFolderSelectedChange,
         <KnowledgeEmptyState
           icon={<UsersRound className="h-5 w-5" />}
           title="Todavía no tienes contenido compartido"
-          description="Cuando otro equipo comparta una carpeta contigo aparecerá aquí."
+          description="Aqui apareceran carpetas que otros equipos compartan contigo para trabajar con conocimiento comun."
         />
       );
     }
@@ -367,8 +368,11 @@ onFolderSelectedChange,
       return (
         <KnowledgeEmptyState
           icon={<FolderTree className="h-5 w-5" />}
-          title="Aqui todavia no hay articulos"
-          description="Crea o importa contenido desde las acciones superiores."
+          title="Aqui todavia no hay contenido"
+          description="Anade documentacion o articulos para que esta carpeta sirva como base de trabajo del asistente."
+          actionLabel="Subir documentacion"
+          actionIcon={<FileStack className="h-4 w-4" />}
+          onAction={onUploadRequested}
         />
       );
     }
@@ -377,7 +381,10 @@ onFolderSelectedChange,
       <KnowledgeEmptyState
         icon={<FolderTree className="h-5 w-5" />}
         title="Tu biblioteca está vacía"
-        description="Crea una carpeta para empezar a organizar el conocimiento de tu empresa."
+        description="Centraliza documentacion para que el asistente pueda trabajar con el conocimiento de tu organizacion."
+        actionLabel="Subir documentacion"
+        actionIcon={<FileStack className="h-4 w-4" />}
+        onAction={onUploadRequested}
       />
     );
   }

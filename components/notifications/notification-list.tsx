@@ -44,8 +44,8 @@ export function NotificationList({
 
         <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">
           {compact
-            ? "Cuando llegue algo nuevo aparecera aqui."
-            : "Cuando recibas notificaciones, se guardaran en este historial."}
+            ? "Las invitaciones y avisos importantes apareceran aqui."
+            : "La bandeja reune invitaciones, avisos y actualizaciones importantes de tus espacios."}
         </p>
       </div>
     );

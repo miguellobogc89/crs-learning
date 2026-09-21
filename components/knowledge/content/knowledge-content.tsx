@@ -165,9 +165,11 @@ function toggleArticleSelection(
   setSelectedArticleIds((current) => {
     const next = new Set(current);
 
-    selected
-      ? next.add(id)
-      : next.delete(id);
+    if (selected) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
 
     return next;
   });
@@ -180,9 +182,11 @@ function toggleFolderSelection(
   setSelectedFolderIds((current) => {
     const next = new Set(current);
 
-    selected
-      ? next.add(id)
-      : next.delete(id);
+    if (selected) {
+      next.add(id);
+    } else {
+      next.delete(id);
+    }
 
     return next;
   });
@@ -506,6 +510,7 @@ function clearSelection() {
         search={explorerState.search}
         selectedArticleIds={selectedArticleIds}
 selectedFolderIds={selectedFolderIds}
+onUploadRequested={() => handleUpload("files")}
 onArticleSelectedChange={
   toggleArticleSelection
 }

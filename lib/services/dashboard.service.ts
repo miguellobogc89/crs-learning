@@ -1,6 +1,11 @@
 import { knowledgeLibraryReadWhere, knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { prisma } from "@/lib/prisma";
 import {
+  canCreateGroup,
+  canCreateWorkspace,
+  type PlanLimitErrorPayload,
+} from "@/lib/services/entitlements.service";
+import {
   getRecentResourceAccess,
   type ResourceAccessInteraction,
   type ResourceAccessType,
@@ -38,6 +43,27 @@ export type DashboardRecentActivityItem = {
   isCurrentUser: boolean;
 };
 
+export type DashboardFirstStepId =
+  | "workspace"
+  | "knowledge"
+  | "assistant"
+  | "team";
+
+export type DashboardFirstStep = {
+  id: DashboardFirstStepId;
+  title: string;
+  description: string;
+  href: string;
+  isComplete: boolean;
+  planLimit?: PlanLimitErrorPayload;
+};
+
+export type DashboardFirstSteps = {
+  completedCount: number;
+  totalCount: number;
+  steps: DashboardFirstStep[];
+};
+
 type GetContinueWorkingItemsInput = {
   userId: string;
   workspaceId: string;
@@ -48,6 +74,12 @@ type GetDashboardRecentActivityInput = {
   userId: string;
   workspaceId: string;
   limit?: number;
+};
+
+type GetDashboardFirstStepsInput = {
+  userId: string;
+  workspaceId: string;
+  workspaceCount: number;
 };
 
 type ActivityActor = {
@@ -229,6 +261,113 @@ export async function getContinueWorkingItems({
   }
 
   return items;
+}
+
+export async function getDashboardFirstSteps({
+  userId,
+  workspaceId,
+  workspaceCount,
+}: GetDashboardFirstStepsInput): Promise<DashboardFirstSteps> {
+  const [
+    createdKnowledgeCount,
+    uploadedFileCount,
+    assistantInteractionCount,
+    workspaceTeamCount,
+    activeWorkspaceMemberCount,
+    workspaceLimit,
+    groupLimit,
+  ] = await Promise.all([
+    prisma.knowledge_sources.count({
+      where: {
+        created_by_user_id: userId,
+        AND: [knowledgeSourceReadWhere(userId, workspaceId)],
+      },
+    }),
+    prisma.knowledge_files.count({
+      where: {
+        uploaded_by_user_id: userId,
+        knowledge_sources: knowledgeSourceReadWhere(
+          userId,
+          workspaceId,
+        ),
+      },
+    }),
+    prisma.user_resource_access.count({
+      where: {
+        user_id: userId,
+        workspace_id: workspaceId,
+        resource_type: "chat_conversation",
+        interaction_type: "messaged",
+      },
+    }),
+    prisma.knowledge_teams.count({
+      where: {
+        workspace_id: workspaceId,
+      },
+    }),
+    prisma.workspace_members.count({
+      where: {
+        workspace_id: workspaceId,
+        status: "active",
+      },
+    }),
+    canCreateWorkspace(userId),
+    canCreateGroup(userId, workspaceId),
+  ]);
+
+  const hasKnowledge =
+    createdKnowledgeCount > 0 || uploadedFileCount > 0;
+  const hasTeamSetup =
+    workspaceTeamCount > 0 || activeWorkspaceMemberCount > 1;
+
+  const steps: DashboardFirstStep[] = [
+    {
+      id: "workspace",
+      title: "Ten tu primer espacio listo",
+      description:
+        "Trabaja en un entorno separado para organizar documentos, preguntas y equipo.",
+      href: "/my-space/workspaces",
+      isComplete: workspaceCount > 0,
+      planLimit:
+        workspaceLimit.allowed || workspaceCount > 0
+          ? undefined
+          : workspaceLimit.error,
+    },
+    {
+      id: "knowledge",
+      title: "Anade conocimiento",
+      description:
+        "Centraliza documentacion para que el asistente pueda responder con contexto real.",
+      href: "/knowledge",
+      isComplete: hasKnowledge,
+    },
+    {
+      id: "assistant",
+      title: "Haz tu primera pregunta",
+      description:
+        "Pregunta sobre tus documentos y obten respuestas basadas en tu Knowledge.",
+      href: "/assistant",
+      isComplete: assistantInteractionCount > 0,
+    },
+    {
+      id: "team",
+      title: "Organiza tu espacio o equipo",
+      description:
+        "Gestiona colaboradores y grupos para compartir conocimiento con claridad.",
+      href: `/my-space/workspaces/${workspaceId}`,
+      isComplete: hasTeamSetup,
+      planLimit:
+        groupLimit.allowed || hasTeamSetup
+          ? undefined
+          : groupLimit.error,
+    },
+  ];
+
+  return {
+    completedCount: steps.filter((step) => step.isComplete).length,
+    totalCount: steps.length,
+    steps,
+  };
 }
 
 export async function getDashboardRecentActivity({

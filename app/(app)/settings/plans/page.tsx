@@ -1,14 +1,22 @@
 // app/(app)/settings/plans
 
 import { SettingsShell } from "@/components/settings/settings-shell";
+import { auth } from "@/auth";
 import {
   PlansView,
   type PlanViewModel,
 } from "@/components/settings/plans-view";
+import { getPlanUsageForUser } from "@/lib/services/entitlements.service";
 import { getActiveSubscriptionPlans } from "@/lib/services/subscription-plan.service";
 
 export default async function PlansPage() {
-  const plans = await getActiveSubscriptionPlans();
+  const session = await auth();
+  const [plans, currentPlan] = await Promise.all([
+    getActiveSubscriptionPlans(),
+    session?.user?.id
+      ? getPlanUsageForUser(session.user.id)
+      : Promise.resolve(undefined),
+  ]);
 
 const viewModels: PlanViewModel[] = plans.map((plan) => ({
   id: plan.id,
@@ -40,7 +48,10 @@ const viewModels: PlanViewModel[] = plans.map((plan) => ({
 
   return (
     <SettingsShell>
-      <PlansView plans={viewModels} />
+      <PlansView
+        plans={viewModels}
+        currentPlan={currentPlan}
+      />
     </SettingsShell>
   );
 }

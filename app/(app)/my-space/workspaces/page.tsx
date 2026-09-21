@@ -81,8 +81,21 @@ export default async function WorkspacesPage() {
         </div>
 
         {workspaces.length === 0 ? (
-          <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
-            Todavia no tienes workspaces disponibles.
+          <div className="rounded-lg border border-border bg-card p-6">
+            <h2 className="text-sm font-semibold text-foreground">
+              Todavia no tienes workspaces disponibles
+            </h2>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+              Los workspaces separan documentos, conversaciones y equipos por
+              contexto. Crea tu primer espacio desde el selector lateral del
+              dashboard.
+            </p>
+            <Button asChild variant="brand" className="mt-5">
+              <Link href="/dashboard">
+                Ir al dashboard
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
         ) : null}
       </div>

@@ -110,7 +110,7 @@ export function NotificationsPageContent({
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [expandedId]);
+  }, [expandedId, router]);
 
   function updateReadState(
     notificationId: string,
@@ -321,7 +321,7 @@ function InboxRow({
         expanded
           ? "bg-brand-soft/40"
           : isUnread
-            ? "bg-white"
+            ? "bg-background"
             : "bg-panel/70",
       )}
     >
@@ -512,9 +512,13 @@ function EmptyInbox() {
       </h2>
 
       <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-        Cuando recibas avisos, invitaciones o actualizaciones,
-        apareceran aqui como historial completo.
+        La bandeja reune invitaciones, avisos y actualizaciones importantes
+        de tus espacios. Cuando haya algo que revisar, aparecera aqui.
       </p>
+
+      <Button asChild variant="brand" className="mt-6">
+        <Link href="/dashboard">Volver al dashboard</Link>
+      </Button>
     </div>
   );
 }

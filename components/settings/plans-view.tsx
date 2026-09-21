@@ -3,15 +3,16 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Building2,
   Check,
   Minus,
-  Sparkles,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import type { OrganizationPlanUsage } from "@/lib/services/entitlements.service";
 
 export type PlanViewModel = {
   id: string;
@@ -44,8 +45,10 @@ type BillingPeriod = "monthly" | "annual";
 
 export function PlansView({
   plans,
+  currentPlan,
 }: {
   plans: PlanViewModel[];
+  currentPlan?: OrganizationPlanUsage;
 }) {
   const [billingPeriod, setBillingPeriod] =
     useState<BillingPeriod>("annual");
@@ -64,6 +67,10 @@ export function PlansView({
             organización cuando lo necesites.
           </p>
         </header>
+
+        {currentPlan ? (
+          <CurrentPlanSummary currentPlan={currentPlan} />
+        ) : null}
 
         <div className="mt-8 flex justify-center">
           <BillingSwitcher
@@ -131,6 +138,74 @@ export function PlansView({
           LAB continúa en desarrollo.
         </p>
       </main>
+    </div>
+  );
+}
+
+function CurrentPlanSummary({
+  currentPlan,
+}: {
+  currentPlan: OrganizationPlanUsage;
+}) {
+  return (
+    <section className="mt-8 rounded-xl border border-border bg-background p-5">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Plan actual
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-foreground">
+            {currentPlan.plan.name}
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            {currentPlan.organization.name} usa este plan para definir la
+            capacidad disponible del equipo.
+          </p>
+        </div>
+
+        <Button asChild variant="brand">
+          <Link href="/settings/plans">Actualizar plan</Link>
+        </Button>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <UsageMetric
+          label="Workspaces"
+          current={currentPlan.usage.workspaces}
+          limit={currentPlan.plan.maxWorkspaces}
+        />
+        <UsageMetric
+          label="Usuarios"
+          current={currentPlan.usage.users}
+          limit={currentPlan.plan.maxUsers}
+        />
+        <UsageMetric
+          label="Grupos"
+          current={currentPlan.usage.groups}
+          limit={currentPlan.plan.maxGroups}
+        />
+      </div>
+    </section>
+  );
+}
+
+function UsageMetric({
+  label,
+  current,
+  limit,
+}: {
+  label: string;
+  current: number;
+  limit: number | null;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-2 text-xl font-semibold text-foreground">
+        {current} / {limit ?? "Ilimitado"}
+      </p>
     </div>
   );
 }
@@ -477,22 +552,6 @@ function formatCurrency(value: number) {
   }).format(value);
 
   return `${formatted} €`;
-}
-
-function formatCurrencyWhole(value: number) {
-  const formatted = new Intl.NumberFormat("es-ES", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-    useGrouping: "always",
-  }).format(value);
-
-  return `${formatted} €`;
-}
-
-function formatPercentage(value: number) {
-  return new Intl.NumberFormat("es-ES", {
-    maximumFractionDigits: 2,
-  }).format(value) + "%";
 }
 
 function getPricing(

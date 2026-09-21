@@ -91,8 +91,16 @@ export default async function UsersDirectoryPage({
                 No hay usuarios visibles
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Los usuarios apareceran aqui cuando compartan contigo un workspace activo.
+                Este directorio muestra las personas con las que compartes
+                espacios activos. Invita a tu equipo desde la gestion del
+                workspace para colaborar sobre el mismo conocimiento.
               </p>
+              <Button asChild variant="brand" className="mt-5">
+                <Link href="/my-space/workspaces">
+                  Gestionar espacios
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
             </div>
           )}
         </section>
