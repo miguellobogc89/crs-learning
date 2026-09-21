@@ -215,6 +215,8 @@ export function CreateFolderDialog({
             <FolderReview
               folderName={folder.name.trim()}
               recipients={folder.selectedRecipients}
+              permissions={folder.permissions}
+              onPermissionChange={folder.changePermission}
             />
           ) : (
             <div className="space-y-2 rounded-lg border border-border bg-surface/50 p-3">

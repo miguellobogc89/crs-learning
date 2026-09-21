@@ -1,4 +1,4 @@
-// components/knowledge/sidebar/knowledge-sidebar.tsx
+// components/app/section-sidebar.tsx
 
 import type { ReactNode } from "react";
 

@@ -203,6 +203,21 @@ function clearSelection() {
     );
   }, [knowledgeLibraries, selectedLibraryId]);
 
+  // La vista general representa la carpeta real «Mi biblioteca».
+  // Dentro de una subcarpeta, conservamos siempre el ID seleccionado.
+  const currentFolderId = useMemo(() => {
+    if (selectedLibraryId) return selectedLibraryId;
+
+    const rootLibraries = knowledgeLibraries.filter(
+      (library) =>
+        library.parent_id === null &&
+        library.name === "Mi biblioteca" &&
+        !library.is_shared,
+    );
+
+    return rootLibraries.length === 1 ? rootLibraries[0].id : null;
+  }, [knowledgeLibraries, selectedLibraryId]);
+
   const baseChildLibraries = useMemo(() => {
     if (selectedView === "shared") {
       return knowledgeLibraries.filter(
@@ -215,11 +230,11 @@ function clearSelection() {
         return false;
       }
 
-      return library.parent_id === selectedLibraryId;
+      return library.parent_id === currentFolderId;
     });
   }, [
     knowledgeLibraries,
-    selectedLibraryId,
+    currentFolderId,
     selectedView,
   ]);
 
@@ -494,6 +509,10 @@ function clearSelection() {
           )
         }
         onCreateFolder={() => {
+          if (!currentFolderId) {
+            window.alert("No se ha encontrado la carpeta «Mi biblioteca». Recarga la página antes de crear una carpeta.");
+            return;
+          }
           setIsCreateFolderOpen(true);
         }}
         onUpload={handleUpload}
@@ -521,7 +540,7 @@ onFolderSelectedChange={
 
       <CreateFolderDialog
         open={isCreateFolderOpen}
-        parentLibraryId={selectedLibraryId}
+        parentLibraryId={currentFolderId}
         onClose={() => {
           setIsCreateFolderOpen(false);
         }}

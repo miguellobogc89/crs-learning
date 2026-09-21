@@ -1,7 +1,6 @@
 // components/knowledge/content/create-folder-dialog/folder-review.tsx
 "use client";
 
-import { useState } from "react";
 import { Mail, UserRound } from "lucide-react";
 
 import type {
@@ -12,30 +11,19 @@ import type {
 type Props = {
   folderName: string;
   recipients: SelectedFolderRecipient[];
+  permissions: Record<string, AccessLevel>;
+  onPermissionChange: (
+    recipientId: string,
+    permission: AccessLevel,
+  ) => void;
 };
 
 export function FolderReview({
   folderName,
   recipients,
+  permissions,
+  onPermissionChange,
 }: Props) {
-  const [permissions, setPermissions] = useState<
-    Record<string, AccessLevel>
-  >({});
-
-  function getPermission(id: string): AccessLevel {
-    return permissions[id] ?? "read";
-  }
-
-  function changePermission(
-    id: string,
-    permission: AccessLevel,
-  ) {
-    setPermissions((current) => ({
-      ...current,
-      [id]: permission,
-    }));
-  }
-
   return (
     <div className="space-y-3">
       <div className="rounded-lg bg-surface/60 px-3 py-2">
@@ -76,15 +64,15 @@ export function FolderReview({
 
                 <p className="truncate text-[11px] text-muted-foreground">
                   {recipient.external
-                    ? "Invitación pendiente"
+                    ? "Correo externo · Invitaciones pendientes de implementar"
                     : recipient.email}
                 </p>
               </div>
 
               <select
-                value={getPermission(recipient.id)}
+                value={permissions[recipient.id] ?? "read"}
                 onChange={(event) =>
-                  changePermission(
+                  onPermissionChange(
                     recipient.id,
                     event.target.value as AccessLevel,
                   )
@@ -100,10 +88,13 @@ export function FolderReview({
         </div>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
-        Vista previa: los permisos y las invitaciones
-        todavía no se guardan.
-      </p>
+      {recipients.some((recipient) => recipient.external) && (
+        <p className="text-[11px] text-amber-600">
+          Para guardar esta carpeta compartida, elimina
+          primero los correos externos. Las invitaciones
+          por correo se conectarán en una fase posterior.
+        </p>
+      )}
     </div>
   );
 }

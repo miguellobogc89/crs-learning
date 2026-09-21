@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import { createNamedKnowledgeLibrary } from "@/lib/actions/knowledge-library.actions";
+import { createSharedKnowledgeFolder } from "@/lib/actions/create-shared-knowledge-folder.actions";
 import {
   getFolderRecipients,
   type FolderRecipient,
@@ -54,6 +55,10 @@ export function useCreateFolder({
   const [selectedRecipients, setSelectedRecipients] =
     useState<SelectedFolderRecipient[]>([]);
 
+  const [permissions, setPermissions] = useState<
+    Record<string, AccessLevel>
+  >({});
+
   const [search, setSearch] = useState("");
   const [suggestionsOpen, setSuggestionsOpen] =
     useState(false);
@@ -78,6 +83,7 @@ export function useCreateFolder({
     setAccessMode("private");
     setRecipients([]);
     setSelectedRecipients([]);
+    setPermissions({});
     setSearch("");
     setSuggestionsOpen(false);
     setLoadingRecipients(false);
@@ -245,20 +251,42 @@ export function useCreateFolder({
         (recipient) => recipient.id !== recipientId,
       ),
     );
+
+    setPermissions((current) => {
+      const next = { ...current };
+      delete next[recipientId];
+      return next;
+    });
+  }
+
+  function changePermission(
+    recipientId: string,
+    permission: AccessLevel,
+  ) {
+    setPermissions((current) => ({
+      ...current,
+      [recipientId]: permission,
+    }));
   }
 
   function changeAccessMode(mode: AccessMode) {
     setAccessMode(mode);
     setSuggestionsOpen(false);
     setInputError(null);
+    setError(null);
   }
 
-  // La creación compartida requiere guardar permisos
-  // y gestionar invitaciones desde el servidor.
+  const hasExternalRecipients =
+    selectedRecipients.some(
+      (recipient) => recipient.external,
+    );
+
   const canCreate =
     name.trim().length > 0 &&
-    accessMode === "private" &&
-    !isPending;
+    !isPending &&
+    (accessMode === "private" ||
+      (selectedRecipients.length > 0 &&
+        !hasExternalRecipients));
 
   function handleSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -271,10 +299,24 @@ export function useCreateFolder({
 
     startTransition(async () => {
       try {
-        await createNamedKnowledgeLibrary(
-          name.trim(),
-          parentLibraryId,
-        );
+        if (accessMode === "private") {
+          await createNamedKnowledgeLibrary(
+            name.trim(),
+            parentLibraryId,
+          );
+        } else {
+          await createSharedKnowledgeFolder({
+            name: name.trim(),
+            parentLibraryId,
+            recipients: selectedRecipients.map(
+              (recipient) => ({
+                userId: recipient.id,
+                accessLevel:
+                  permissions[recipient.id] ?? "read",
+              }),
+            ),
+          });
+        }
 
         router.refresh();
         onClose();
@@ -296,6 +338,8 @@ export function useCreateFolder({
     changeAccessMode,
     recipients,
     selectedRecipients,
+    permissions,
+    changePermission,
     suggestions,
     search,
     setSearch,
