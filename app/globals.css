@@ -635,3 +635,23 @@
     overflow: visible !important;
   }
 }
+/* Nueva carpeta: tipografía centralizada */
+
+.create-folder-dialog {
+  --folder-font-title: 1rem;
+  --folder-font-label: 0.875rem;
+  --folder-font-body: 0.875rem;
+  --folder-font-caption: 0.75rem;
+  --folder-font-input: 0.875rem;
+}
+
+/* Portátiles: reutiliza el breakpoint lg del proyecto */
+@media (min-width: 1024px) and (max-width: 1399px) {
+  .create-folder-dialog {
+    --folder-font-title: 0.875rem;
+    --folder-font-label: 0.75rem;
+    --folder-font-body: 0.75rem;
+    --folder-font-caption: 0.6875rem;
+    --folder-font-input: 0.75rem;
+  }
+}
