@@ -71,6 +71,30 @@ export async function analyzeKnowledgeText(
               type: "string",
             },
 
+            executive_summary: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                synthesis: {
+                  type: "string",
+                },
+                key_points: {
+                  type: "array",
+                  items: {
+                    type: "string",
+                  },
+                },
+                conclusion: {
+                  type: ["string", "null"],
+                },
+              },
+              required: [
+                "synthesis",
+                "key_points",
+                "conclusion",
+              ],
+            },
+
             objective: {
               type: "string",
             },
@@ -254,6 +278,95 @@ export async function analyzeKnowledgeText(
                   },
                 },
                 required: ["name", "goal", "steps"],
+              },
+            },
+
+            responsibilities: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  action: {
+                    type: "string",
+                  },
+                  responsible: {
+                    type: "string",
+                  },
+                  confidence: {
+                    type: "string",
+                    enum: [
+                      "identified",
+                      "undetermined",
+                    ],
+                  },
+                  notes: {
+                    type: "string",
+                  },
+                },
+                required: [
+                  "action",
+                  "responsible",
+                  "confidence",
+                  "notes",
+                ],
+              },
+            },
+
+            checklists: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  title: {
+                    type: "string",
+                  },
+                  items: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                    },
+                  },
+                },
+                required: ["title", "items"],
+              },
+            },
+
+            catalog_tables: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  title: {
+                    type: "string",
+                  },
+                  description: {
+                    type: "string",
+                  },
+                  columns: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                    },
+                  },
+                  rows: {
+                    type: "array",
+                    items: {
+                      type: "array",
+                      items: {
+                        type: "string",
+                      },
+                    },
+                  },
+                },
+                required: [
+                  "title",
+                  "description",
+                  "columns",
+                  "rows",
+                ],
               },
             },
 
@@ -580,6 +693,7 @@ export async function analyzeKnowledgeText(
             "detected_type",
             "meta",
             "summary",
+            "executive_summary",
             "objective",
             "scope",
             "tags",
@@ -595,6 +709,9 @@ export async function analyzeKnowledgeText(
             "business_rules",
             "warnings",
             "procedures",
+            "responsibilities",
+            "checklists",
+            "catalog_tables",
             "outputs",
             "glossary",
             "common_questions",

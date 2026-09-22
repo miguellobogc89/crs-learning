@@ -1,20 +1,27 @@
 // app/api/knowledge/articles/[articleId]/rebuild/route.ts
 
 import type { Prisma } from "@prisma/client";
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
+import { analyzeKnowledgeText } from "@/lib/ai/knowledge-analysis";
 import { getKnowledgeImportModel } from "@/lib/ai/openai";
 import { knowledgeSourceOwnerWhere } from "@/lib/knowledge/access-control";
 import { getValidCanonicalAnalysis } from "@/lib/knowledge/file-analysis/article-content-projection";
 import { analyzeKnowledgeDocuments } from "@/lib/knowledge/import/analyze-documents";
 import { generateArticleContent } from "@/lib/knowledge/import/generate-article-content";
 import { truncateDocument } from "@/lib/knowledge/import/truncate-document";
+import {
+  KNOWLEDGE_TYPES,
+  type KnowledgeType,
+} from "@/lib/knowledge/knowledge-types";
 import type {
   KnowledgeImportDocumentAnalysis,
   KnowledgeImportOrganizationArea,
 } from "@/lib/knowledge/import/types";
 import { prisma } from "@/lib/prisma";
+import { updateKnowledgeRelationships } from "@/lib/services/knowledge-graph.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export const runtime = "nodejs";
@@ -26,22 +33,6 @@ type RouteContext = {
     articleId: string;
   }>;
 };
-
-type AnalysisJsonRecord = Record<string, unknown>;
-
-function asAnalysisJsonRecord(
-  value: Prisma.JsonValue | null,
-): AnalysisJsonRecord {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    Array.isArray(value)
-  ) {
-    return {};
-  }
-
-  return value as AnalysisJsonRecord;
-}
 
 function normalizeComparableText(
   value: string,
@@ -119,6 +110,77 @@ function mergeOrganizationAreas(
   return Array.from(areasByKey.values());
 }
 
+function normalizeKnowledgeType(
+  value: string | null | undefined,
+): KnowledgeType {
+  if (
+    value &&
+    KNOWLEDGE_TYPES.includes(value as KnowledgeType)
+  ) {
+    return value as KnowledgeType;
+  }
+
+  return "unknown";
+}
+
+function buildAnalysisCorpus({
+  title,
+  description,
+  knowledgeType,
+  files,
+}: {
+  title: string;
+  description: string | null;
+  knowledgeType: KnowledgeType;
+  files: {
+    id: string;
+    file_name: string;
+    file_type: string | null;
+    extracted_text: string;
+    knowledge_file_analysis: {
+      status: string;
+      analysis_json: Prisma.JsonValue | null;
+    } | null;
+  }[];
+}) {
+  const documentBlocks = files.map((file, index) => {
+    const canonicalAnalysis =
+      file.knowledge_file_analysis?.status === "ready"
+        ? getValidCanonicalAnalysis(
+            file.knowledge_file_analysis.analysis_json,
+          )
+        : null;
+
+    return [
+      `=== DOCUMENTO ${index + 1} ===`,
+      `SOURCE_ID: ${file.id}`,
+      `FILE_NAME: ${file.file_name}`,
+      `FILE_TYPE: ${file.file_type ?? "unknown"}`,
+      "",
+      "DOCUMENT_TEXT:",
+      truncateDocument(file.extracted_text),
+      canonicalAnalysis
+        ? [
+            "",
+            "CANONICAL_MODEL:",
+            JSON.stringify(canonicalAnalysis),
+          ].join("\n")
+        : "",
+      `=== FIN DOCUMENTO ${index + 1} ===`,
+    ].join("\n");
+  });
+
+  return [
+    "=== UNIDAD DE CONOCIMIENTO ===",
+    `TITLE: ${title.trim()}`,
+    `DESCRIPTION: ${description?.trim() ?? ""}`,
+    `DECLARED_KNOWLEDGE_TYPE: ${knowledgeType}`,
+    "",
+    "=== DOCUMENTOS FUENTE ===",
+    ...documentBlocks,
+  ].join("\n\n");
+}
+
 export async function POST(
   _request: Request,
   context: RouteContext,
@@ -159,6 +221,7 @@ export async function POST(
         title: true,
         description: true,
         content: true,
+        knowledge_type: true,
         knowledge_analysis: {
           select: {
             analysis_json: true,
@@ -266,7 +329,22 @@ export async function POST(
   ]);
 
   try {
-    const [generatedContent, documentAnalyses] =
+    const declaredType = normalizeKnowledgeType(
+      article.knowledge_type,
+    );
+
+    const analysisCorpus = buildAnalysisCorpus({
+      title: article.title,
+      description: article.description,
+      knowledgeType: declaredType,
+      files: filesForContent,
+    });
+
+    const [
+      generatedContent,
+      documentAnalyses,
+      structuredAnalysis,
+    ] =
       await Promise.all([
         generateArticleContent({
           title: article.title,
@@ -308,21 +386,39 @@ export async function POST(
               })),
             )
           : Promise.resolve([]),
+        analyzeKnowledgeText(
+          analysisCorpus,
+          declaredType,
+        ),
       ]);
 
     const organizationAreas =
       mergeOrganizationAreas(documentAnalyses);
 
-    const previousAnalysis =
-      asAnalysisJsonRecord(
-        article.knowledge_analysis?.analysis_json ?? null,
-      );
+    const modelDetectedType = normalizeKnowledgeType(
+      typeof structuredAnalysis.analysisJson
+        .detected_type === "string"
+        ? structuredAnalysis.analysisJson.detected_type
+        : null,
+    );
+
+    const finalKnowledgeType =
+      declaredType === "unknown"
+        ? modelDetectedType
+        : declaredType;
 
     const analysisJson = {
-      ...previousAnalysis,
+      ...structuredAnalysis.analysisJson,
       organizationAreas,
       documentAnalyses,
       analyzedAt: new Date().toISOString(),
+      source_manifest: {
+        knowledge_source_id: article.id,
+        document_count: filesForContent.length,
+        document_ids: filesForContent.map(
+          (file) => file.id,
+        ),
+      },
     } as Prisma.InputJsonValue;
 
     await prisma.$transaction([
@@ -330,6 +426,26 @@ export async function POST(
         where: { id: article.id },
         data: {
           content: generatedContent,
+          knowledge_type: finalKnowledgeType,
+          summary:
+            typeof structuredAnalysis.analysisJson
+              .summary === "string"
+              ? structuredAnalysis.analysisJson.summary
+              : "",
+          language:
+            structuredAnalysis.analysisJson.meta.language,
+          domain:
+            structuredAnalysis.analysisJson.meta.domain,
+          level:
+            structuredAnalysis.analysisJson.meta.level,
+          confidence:
+            structuredAnalysis.analysisJson.meta
+              .confidence,
+          tags: structuredAnalysis.analysisJson.tags,
+          keywords:
+            structuredAnalysis.analysisJson.keywords,
+          entities:
+            structuredAnalysis.analysisJson.entities,
           status: "ready",
           updated_by_user_id: session.user.id,
           updated_at: new Date(),
@@ -343,25 +459,72 @@ export async function POST(
           knowledge_source_id: article.id,
           status: "completed",
           analysis_json: analysisJson,
-          model,
+          model: structuredAnalysis.model,
           prompt_version:
-            "knowledge-document-analysis-v1",
-          processing_ms: Date.now() - startedAt,
+            structuredAnalysis.promptVersion,
+          tokens_input:
+            structuredAnalysis.tokensInput,
+          tokens_output:
+            structuredAnalysis.tokensOutput,
+          processing_ms:
+            Date.now() - startedAt,
           error_message: null,
           updated_at: new Date(),
         },
         update: {
           status: "completed",
           analysis_json: analysisJson,
-          model,
+          model: structuredAnalysis.model,
           prompt_version:
-            "knowledge-document-analysis-v1",
-          processing_ms: Date.now() - startedAt,
+            structuredAnalysis.promptVersion,
+          tokens_input:
+            structuredAnalysis.tokensInput,
+          tokens_output:
+            structuredAnalysis.tokensOutput,
+          processing_ms:
+            Date.now() - startedAt,
           error_message: null,
           updated_at: new Date(),
         },
       }),
+      prisma.knowledge_graph.upsert({
+        where: {
+          knowledge_source_id: article.id,
+        },
+        create: {
+          knowledge_source_id: article.id,
+          applications:
+            structuredAnalysis.analysisJson.applications,
+          products:
+            structuredAnalysis.analysisJson.products,
+          regulations:
+            structuredAnalysis.analysisJson.regulations,
+          dependencies:
+            structuredAnalysis.analysisJson.dependencies,
+          related_documents:
+            structuredAnalysis.analysisJson
+              .related_documents,
+        },
+        update: {
+          applications:
+            structuredAnalysis.analysisJson.applications,
+          products:
+            structuredAnalysis.analysisJson.products,
+          regulations:
+            structuredAnalysis.analysisJson.regulations,
+          dependencies:
+            structuredAnalysis.analysisJson.dependencies,
+          related_documents:
+            structuredAnalysis.analysisJson
+              .related_documents,
+          updated_at: new Date(),
+        },
+      }),
     ]);
+
+    await updateKnowledgeRelationships(article.id);
+    revalidatePath("/knowledge");
+    revalidatePath(`/knowledge/${article.id}`);
 
     return NextResponse.json({
       success: true,

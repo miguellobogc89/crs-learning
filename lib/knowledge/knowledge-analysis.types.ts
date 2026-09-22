@@ -44,6 +44,31 @@ export type KnowledgeGlossaryItem = {
   definition: string;
 };
 
+export type KnowledgeExecutiveSummary = {
+  synthesis: string;
+  keyPoints: string[];
+  conclusion: string | null;
+};
+
+export type KnowledgeCatalogTable = {
+  title: string;
+  description: string;
+  columns: string[];
+  rows: string[][];
+};
+
+export type KnowledgeResponsibility = {
+  action: string;
+  responsible: string;
+  confidence: "identified" | "undetermined" | string;
+  notes: string;
+};
+
+export type KnowledgeChecklist = {
+  title: string;
+  items: string[];
+};
+
 export type KnowledgeDocumentRole =
   | "procedure"
   | "process"
@@ -92,6 +117,7 @@ export type KnowledgeDocumentContribution = {
 export type KnowledgeViewModel = {
   detectedType: string;
   meta: KnowledgeMeta;
+  executiveSummary: KnowledgeExecutiveSummary;
   summary: string;
   objective: string;
   scope: string;
@@ -105,6 +131,9 @@ export type KnowledgeViewModel = {
   businessRules: string[];
   warnings: string[];
   procedures: KnowledgeProcedure[];
+  responsibilities: KnowledgeResponsibility[];
+  checklists: KnowledgeChecklist[];
+  catalogTables: KnowledgeCatalogTable[];
   outputs: string[];
   glossary: KnowledgeGlossaryItem[];
   commonQuestions: string[];

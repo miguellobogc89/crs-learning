@@ -8,14 +8,18 @@ import {
   Box,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   CircleHelp,
   ClipboardCheck,
+  ClipboardList,
   FileText,
   GitBranch,
   Info,
   ListChecks,
   Network,
   PlayCircle,
+  Table2,
+  UserCheck,
   ScrollText,
   ShieldAlert,
   UserRound,
@@ -24,6 +28,7 @@ import {
 import type { KnowledgeViewModel } from "@/lib/knowledge/knowledge-analysis.types";
 import { parseKnowledgeAnalysis } from "@/lib/knowledge/parse-knowledge-analysis";
 import { KnowledgeReviewPanel } from "@/components/knowledge/detail/summary/knowledge-review-panel";
+import { KnowledgeSummaryPanel } from "@/components/knowledge/detail/general/knowledge-summary-panel";
 import type { KnowledgeFile } from "@/components/knowledge/detail/knowledge-detail.types";
 
 type PanelMode = "general" | "details";
@@ -135,7 +140,6 @@ function buildNavigation(
   const items: NavigationItem[] = [];
 
   if (
-    hasText(analysis.summary) ||
     hasText(analysis.objective) ||
     hasText(analysis.scope)
   ) {
@@ -177,6 +181,22 @@ function buildNavigation(
     });
   }
 
+  if (analysis.responsibilities.length > 0) {
+    items.push({
+      id: "responsibilities",
+      label: "Responsables",
+      group: "General",
+    });
+  }
+
+  if (analysis.catalogTables.length > 0) {
+    items.push({
+      id: "catalogs",
+      label: "Catalogos",
+      group: "Referencia",
+    });
+  }
+
   if (analysis.prerequisites.length > 0) {
     items.push({
       id: "prerequisites",
@@ -206,6 +226,14 @@ function buildNavigation(
       id: "business-rules",
       label: "Reglas de negocio",
       group: "Contenido",
+    });
+  }
+
+  if (analysis.checklists.length > 0) {
+    items.push({
+      id: "checklists",
+      label: "Checklist",
+      group: "Validacion",
     });
   }
 
@@ -298,14 +326,15 @@ export function KnowledgeAnalysisPanel({
     dependencies.length +
     relatedDocuments.length;
 
-if (mode === "general") {
-  return (
-    <KnowledgeReviewPanel
-      analysisJson={analysisJson}
-      files={files}
-    />
-  );
-}
+  if (mode === "general") {
+    return (
+      <GeneralView
+        summary={analysis.executiveSummary}
+        analysisJson={analysisJson}
+        files={files}
+      />
+    );
+  }
 
   return (
     <DetailsView
@@ -315,8 +344,51 @@ if (mode === "general") {
       products={products}
       regulations={regulations}
       dependencies={dependencies}
-      relatedDocuments={relatedDocuments}
     />
+  );
+}
+
+function GeneralView({
+  summary,
+  analysisJson,
+  files,
+}: {
+  summary: KnowledgeViewModel["executiveSummary"];
+  analysisJson: unknown;
+  files: KnowledgeFile[];
+}) {
+  return (
+    <div className="space-y-6">
+      <KnowledgeSummaryPanel summary={summary} />
+
+      <details className="group overflow-hidden rounded-2xl border border-border bg-card">
+        <summary className="flex cursor-pointer list-none items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <ClipboardList className="h-5 w-5" />
+          </span>
+
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold text-foreground">
+              Revision documental
+            </h2>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              Contradicciones, cobertura, documentos
+              integrados y referencias del analisis.
+            </p>
+          </div>
+
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+
+        <div className="border-t border-border px-5 py-5">
+          <KnowledgeReviewPanel
+            analysisJson={analysisJson}
+            files={files}
+          />
+        </div>
+      </details>
+    </div>
   );
 }
 
@@ -329,7 +401,6 @@ function DetailsView({
   products,
   regulations,
   dependencies,
-  relatedDocuments,
 }: {
   analysis: KnowledgeViewModel;
   relationsCount: number;
@@ -337,14 +408,11 @@ function DetailsView({
   products: string[];
   regulations: string[];
   dependencies: string[];
-  relatedDocuments: RelatedDocument[];
 }) {
   const navigation = buildNavigation(
     analysis,
     relationsCount,
   );
-
-  const relatedConcepts = analysis.concepts.slice(0, 8);
 
   return (
     <div className="grid h-full min-h-0 lg:grid-cols-[240px_minmax(0,1fr)_280px]">
@@ -399,8 +467,7 @@ function DetailsView({
         className="min-h-0 overflow-y-auto"
       >
         <article className="mx-auto max-w-3xl space-y-14 px-8 py-10 pb-20">
-          {(hasText(analysis.summary) ||
-            hasText(analysis.objective) ||
+          {(hasText(analysis.objective) ||
             hasText(analysis.scope)) && (
             <KnowledgeSection
               id="overview"
@@ -409,13 +476,6 @@ function DetailsView({
               description="Visión general, finalidad y alcance del artículo."
             >
               <div className="space-y-8">
-                {analysis.summary ? (
-                  <TextBlock
-                    title="Resumen"
-                    value={analysis.summary}
-                  />
-                ) : null}
-
                 {analysis.objective ? (
                   <TextBlock
                     title="Objetivo"
@@ -557,6 +617,63 @@ function DetailsView({
             </KnowledgeSection>
           ) : null}
 
+          {analysis.responsibilities.length > 0 ? (
+            <KnowledgeSection
+              id="responsibilities"
+              icon={<UserCheck className="h-5 w-5" />}
+              title="Responsables"
+              description="Acciones con responsable identificado y acciones donde la fuente no determina uno de forma inequivoca."
+            >
+              <div className="overflow-x-auto rounded-xl border border-border">
+                <table className="w-full min-w-[640px] border-collapse text-sm">
+                  <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="border-b border-border px-4 py-3 font-semibold">
+                        Accion
+                      </th>
+                      <th className="border-b border-border px-4 py-3 font-semibold">
+                        Responsable
+                      </th>
+                      <th className="border-b border-border px-4 py-3 font-semibold">
+                        Estado
+                      </th>
+                      <th className="border-b border-border px-4 py-3 font-semibold">
+                        Notas
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analysis.responsibilities.map(
+                      (item, index) => (
+                        <tr
+                          key={`${item.action}-${index}`}
+                          className="border-b border-border last:border-b-0"
+                        >
+                          <td className="px-4 py-3 align-top text-foreground">
+                            {item.action}
+                          </td>
+                          <td className="px-4 py-3 align-top text-muted-foreground">
+                            {item.responsible ||
+                              "No determinado"}
+                          </td>
+                          <td className="px-4 py-3 align-top text-muted-foreground">
+                            {item.confidence ===
+                            "identified"
+                              ? "Identificado"
+                              : "No determinado"}
+                          </td>
+                          <td className="px-4 py-3 align-top text-muted-foreground">
+                            {item.notes}
+                          </td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </KnowledgeSection>
+          ) : null}
+
           {analysis.prerequisites.length > 0 ? (
             <KnowledgeSection
               id="prerequisites"
@@ -654,6 +771,45 @@ function DetailsView({
               description="Restricciones y criterios que deben cumplirse."
             >
               <BulletList values={analysis.businessRules} />
+            </KnowledgeSection>
+          ) : null}
+
+          {analysis.checklists.length > 0 ? (
+            <KnowledgeSection
+              id="checklists"
+              icon={<ClipboardCheck className="h-5 w-5" />}
+              title="Checklist"
+              description="Comprobaciones para verificar la ejecucion sin repetir el procedimiento completo."
+            >
+              <div className="space-y-8">
+                {analysis.checklists.map((checklist) => (
+                  <div key={checklist.title}>
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {checklist.title ||
+                        "Checklist de verificacion"}
+                    </h3>
+                    <BulletList values={checklist.items} />
+                  </div>
+                ))}
+              </div>
+            </KnowledgeSection>
+          ) : null}
+
+          {analysis.catalogTables.length > 0 ? (
+            <KnowledgeSection
+              id="catalogs"
+              icon={<Table2 className="h-5 w-5" />}
+              title="Catalogos y tablas"
+              description="Datos estructurados conservados desde las fuentes."
+            >
+              <div className="space-y-10">
+                {analysis.catalogTables.map((table) => (
+                  <CatalogTable
+                    key={`${table.title}-${table.columns.join("|")}`}
+                    table={table}
+                  />
+                ))}
+              </div>
             </KnowledgeSection>
           ) : null}
 
@@ -940,6 +1096,69 @@ function TagGroup({
             #{value}
           </span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function CatalogTable({
+  table,
+}: {
+  table: KnowledgeViewModel["catalogTables"][number];
+}) {
+  const columnCount = table.columns.length;
+  const rows = table.rows.filter((row) =>
+    row.some((cell) => cell.trim().length > 0),
+  );
+
+  if (columnCount === 0 || rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-foreground">
+        {table.title || "Tabla"}
+      </h3>
+
+      {table.description ? (
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          {table.description}
+        </p>
+      ) : null}
+
+      <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+        <table className="w-full min-w-[720px] border-collapse text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              {table.columns.map((column, columnIndex) => (
+                <th
+                  key={`${column}-${columnIndex}`}
+                  className="border-b border-border px-4 py-3 font-semibold"
+                >
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr
+                key={`${table.title}-${rowIndex}`}
+                className="border-b border-border last:border-b-0"
+              >
+                {table.columns.map((column, columnIndex) => (
+                  <td
+                    key={`${column}-${columnIndex}`}
+                    className="px-4 py-3 align-top text-muted-foreground"
+                  >
+                    {row[columnIndex] ?? ""}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

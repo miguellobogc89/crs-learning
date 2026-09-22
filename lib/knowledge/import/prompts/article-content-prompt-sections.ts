@@ -21,6 +21,8 @@ FIDELIDAD DOCUMENTAL:
 - Si existen diferencias no reconciliables, indícalas de forma breve y neutral.
 - No declares que un documento está obsoleto salvo que esté confirmado.
 - No atribuyas una acción a un responsable si la documentación no lo identifica.
+- Cuando una acción esté documentada pero el responsable no sea inequívoco,
+  indícalo de forma explícita sin inventarlo.
 - No conviertas una inferencia en una instrucción.
 `.trim();
 
@@ -92,7 +94,6 @@ secciones ni crees secciones vacías.
 
 Cuando sean relevantes, utiliza secciones como:
 
-- Resumen
 - Objetivo
 - Alcance
 - Requisitos previos
@@ -106,11 +107,8 @@ Cuando sean relevantes, utiliza secciones como:
 - Resultado esperado
 - Documentación de referencia
 
-Comienza normalmente con un resumen breve que explique:
-
-- qué contiene el artículo;
-- para qué sirve;
-- cuándo debe consultarse.
+No comiences con una sección de resumen: la pestaña General ya muestra la
+síntesis del artículo. El contenido editable debe desarrollar el conocimiento.
 
 Ordena la información desde lo general hacia lo operativo.
 No repitas el mismo flujo en tabla, lista, diagrama y párrafos salvo que cada
@@ -156,6 +154,7 @@ TABLAS:
 
 Usa tablas cuando existan datos comparables, como:
 
+- catálogos de SKUs, códigos o referencias;
 - roles y responsabilidades;
 - fases y resultados;
 - estados y significados;
@@ -183,6 +182,8 @@ Ejemplo:
 No conviertas información narrativa en tabla si pierde claridad.
 No generes tablas de una sola columna.
 No repitas en una tabla el mismo procedimiento ya explicado paso a paso.
+Conserva códigos, SKUs, referencias de producto y descripciones de Excel en
+filas y columnas legibles; no los conviertas en un párrafo largo.
 `.trim();
 
 export const ARTICLE_CHECKLIST_PROMPT = `

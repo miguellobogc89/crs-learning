@@ -24,6 +24,26 @@ function toStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
+function toNullableString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value
+    : null;
+}
+
+function toStringMatrix(value: unknown): string[][] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(Array.isArray)
+    .map((row) =>
+      row.map((cell) =>
+        typeof cell === "string" ? cell : String(cell ?? ""),
+      ),
+    );
+}
+
 export function parseKnowledgeAnalysis(
   raw: RawKnowledgeAnalysisJson | null | undefined
 ): KnowledgeViewModel | null {
@@ -83,6 +103,37 @@ export function parseKnowledgeAnalysis(
       }))
     : [];
 
+  const executiveSummaryRaw = isRecord(raw.executive_summary)
+    ? raw.executive_summary
+    : {};
+
+  const legacySummary = toString(raw.summary);
+
+  const responsibilities = Array.isArray(raw.responsibilities)
+    ? raw.responsibilities.filter(isRecord).map((item) => ({
+        action: toString(item.action),
+        responsible: toString(item.responsible),
+        confidence: toString(item.confidence),
+        notes: toString(item.notes),
+      }))
+    : [];
+
+  const checklists = Array.isArray(raw.checklists)
+    ? raw.checklists.filter(isRecord).map((item) => ({
+        title: toString(item.title),
+        items: toStringArray(item.items),
+      }))
+    : [];
+
+  const catalogTables = Array.isArray(raw.catalog_tables)
+    ? raw.catalog_tables.filter(isRecord).map((item) => ({
+        title: toString(item.title),
+        description: toString(item.description),
+        columns: toStringArray(item.columns),
+        rows: toStringMatrix(item.rows),
+      }))
+    : [];
+
   return {
     detectedType: toString(raw.detected_type),
     meta: {
@@ -91,7 +142,13 @@ export function parseKnowledgeAnalysis(
       level: toString(metaRaw.level),
       confidence: toNumber(metaRaw.confidence),
     },
-    summary: toString(raw.summary),
+    executiveSummary: {
+      synthesis:
+        toString(executiveSummaryRaw.synthesis) || legacySummary,
+      keyPoints: toStringArray(executiveSummaryRaw.key_points),
+      conclusion: toNullableString(executiveSummaryRaw.conclusion),
+    },
+    summary: legacySummary,
     objective: toString(raw.objective),
     scope: toString(raw.scope),
     importantDates,
@@ -104,6 +161,9 @@ export function parseKnowledgeAnalysis(
     businessRules: toStringArray(raw.business_rules),
     warnings: toStringArray(raw.warnings),
     procedures,
+    responsibilities,
+    checklists,
+    catalogTables,
     outputs: toStringArray(raw.outputs),
     glossary,
     commonQuestions: toStringArray(raw.common_questions),

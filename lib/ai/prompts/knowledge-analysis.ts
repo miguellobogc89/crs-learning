@@ -3,7 +3,7 @@ import { KnowledgeType } from "@/lib/knowledge/knowledge-types";
 import { DOCUMENT_CONTRIBUTIONS_PROMPT } from "./knowledge/document-contributions";
 
 export const KNOWLEDGE_ANALYSIS_PROMPT_VERSION =
-  "knowledge-corpus-document-roles-v3";
+  "knowledge-functional-article-v4";
 
 const BASE_PROMPT = `
 Eres un motor avanzado de comprensión y consolidación de conocimiento empresarial.
@@ -467,11 +467,24 @@ REDACCIÓN DEL CONOCIMIENTO
 
 summary:
 
-- debe ser una síntesis ejecutiva;
-- debe explicar qué conocimiento contiene la unidad;
+- debe contener la misma idea que executive_summary.synthesis para mantener compatibilidad con articulos antiguos;
+- no debe incluir puntos clave ni conclusion;
 - no debe enumerar archivos;
 - no debe decir "este documento";
 - no debe mencionar el proceso de análisis de IA.
+
+executive_summary:
+
+- synthesis debe ser una sintesis breve y directa;
+- debe explicar que conocimiento contiene la unidad;
+- debe indicar para que sirve y cuando consultarlo solo si esta respaldado por fuentes;
+- no debe enumerar archivos;
+- no debe decir "este documento";
+- no debe mencionar el proceso de analisis de IA;
+- key_points debe contener normalmente entre 3 y 5 ideas esenciales, especificas y no genericas;
+- key_points no debe repetir literalmente synthesis;
+- conclusion debe ser una idea final u operativa solo cuando proceda y este respaldada por la documentacion;
+- si no hay una conclusion respaldada, conclusion debe ser null.
 
 objective:
 
@@ -523,11 +536,40 @@ procedures:
 - genera procedimientos solo cuando exista una secuencia operativa real;
 - no conviertas una lista conceptual en procedimiento;
 - ordena los pasos según el corpus;
+- no repitas el procedimiento completo en business_rules, checklists u otras secciones;
 - cada paso debe incluir:
   - order;
   - title;
   - instruction;
   - expected_result.
+
+responsibilities:
+
+- registra acciones relevantes y su responsable solo cuando la fuente permita distinguirlo;
+- si una accion esta documentada pero el responsable no esta identificado de forma inequivoca:
+  - responsible debe ser una cadena vacia;
+  - confidence debe ser "undetermined";
+  - notes debe explicar la incertidumbre sin inventar responsables;
+- si el responsable esta identificado:
+  - confidence debe ser "identified";
+  - responsible debe conservar el nombre o rol tal como aparezca en la fuente.
+
+checklists:
+
+- genera checklists solo cuando sirvan para verificar ejecucion, controles, evidencias o preparacion;
+- no conviertas automaticamente todos los pasos del procedimiento en checklist;
+- no repitas el procedimiento completo;
+- cada item debe ser una comprobacion breve y verificable.
+
+catalog_tables:
+
+- conserva catalogos, tablas, equivalencias, SKUs, codigos, parametros y datos de referencia como datos estructurados;
+- usa columns para los encabezados originales o equivalentes claros;
+- usa rows para filas alineadas por posicion con columns;
+- conserva codigos, SKUs, referencias de producto y descripciones originales;
+- no conviertas filas de Excel o tablas en parrafos largos;
+- no inventes columnas ni valores ausentes;
+- si una tabla es muy extensa, conserva las filas relevantes que aparezcan en el corpus disponible y explica la limitacion en quality_report.confidence_notes.
 
 outputs:
 
