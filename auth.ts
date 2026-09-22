@@ -130,12 +130,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       await ensureWorkspaceBootstrap(dbUser.id);
 
-      if (!existingUser) {
-        await sendWelcomeEmail({
-          to: dbUser.email,
-          name: dbUser.name,
-        });
-      }
+if (!existingUser) {
+  try {
+    await sendWelcomeEmail({
+      to: dbUser.email,
+      name: dbUser.name,
+    });
+  } catch (error) {
+    console.error(
+      "[AUTH] Error enviando correo de bienvenida:",
+      error,
+    );
+  }
+}
 
       return true;
     },
