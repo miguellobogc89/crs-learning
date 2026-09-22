@@ -546,17 +546,17 @@ onFolderSelectedChange={
         }}
       />
 
-      {selectedLibraryId ? (
-        <KnowledgeImportModal
-          open={isKnowledgeImportOpen}
-          context={{
-            origin: "folder",
-            libraryId: selectedLibraryId,
-          }}
-          selectedFiles={selectedFiles}
-          onOpenChange={setIsKnowledgeImportOpen}
-        />
-      ) : null}
+{currentFolderId ? (
+  <KnowledgeImportModal
+    open={isKnowledgeImportOpen}
+    context={{
+      origin: selectedLibraryId ? "folder" : "root",
+      libraryId: currentFolderId,
+    }}
+    selectedFiles={selectedFiles}
+    onOpenChange={setIsKnowledgeImportOpen}
+  />
+) : null}
 
       <input
         ref={filesInputRef}

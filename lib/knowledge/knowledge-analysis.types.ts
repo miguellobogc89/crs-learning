@@ -53,6 +53,8 @@ export type KnowledgeExecutiveSummary = {
 export type KnowledgeCatalogTable = {
   title: string;
   description: string;
+  sourceDocumentId: string;
+  sourceDocumentName: string;
   columns: string[];
   rows: string[][];
 };

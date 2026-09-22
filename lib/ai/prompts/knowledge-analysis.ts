@@ -483,6 +483,8 @@ executive_summary:
 - no debe mencionar el proceso de analisis de IA;
 - key_points debe contener normalmente entre 3 y 5 ideas esenciales, especificas y no genericas;
 - key_points no debe repetir literalmente synthesis;
+- key_points no debe dedicar dos puntos a la misma regla, coste, obligacion o condicion con distinta redaccion;
+- si una regla tiene varios matices, fusiona los matices en un unico punto clave salvo que impliquen acciones operativas realmente distintas;
 - conclusion debe ser una idea final u operativa solo cuando proceda y este respaldada por la documentacion;
 - si no hay una conclusion respaldada, conclusion debe ser null.
 
@@ -546,6 +548,9 @@ procedures:
 responsibilities:
 
 - registra acciones relevantes y su responsable solo cuando la fuente permita distinguirlo;
+- en documentos visuales como flujogramas o diapositivas, no asignes responsables basandote solo en el orden del texto linealizado;
+- usa relaciones visuales, carriles, conectores, agrupaciones, proximidad estructural objetiva o evidencias del canonicalModel cuando existan;
+- si el corpus solo proporciona una lista lineal de actores y acciones sin relacion estructural clara, no marques la responsabilidad como identificada;
 - si una accion esta documentada pero el responsable no esta identificado de forma inequivoca:
   - responsible debe ser una cadena vacia;
   - confidence debe ser "undetermined";
@@ -553,6 +558,7 @@ responsibilities:
 - si el responsable esta identificado:
   - confidence debe ser "identified";
   - responsible debe conservar el nombre o rol tal como aparezca en la fuente.
+- mantiene coherencia: una responsabilidad incierta no debe aparecer como confirmada en actors, procedures, synthesis o key_points.
 
 checklists:
 
@@ -564,6 +570,7 @@ checklists:
 catalog_tables:
 
 - conserva catalogos, tablas, equivalencias, SKUs, codigos, parametros y datos de referencia como datos estructurados;
+- source_document_id y source_document_name deben identificar el documento fuente del que procede la tabla;
 - usa columns para los encabezados originales o equivalentes claros;
 - usa rows para filas alineadas por posicion con columns;
 - conserva codigos, SKUs, referencias de producto y descripciones originales;

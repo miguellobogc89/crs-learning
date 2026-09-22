@@ -345,6 +345,12 @@ export async function analyzeKnowledgeText(
                   description: {
                     type: "string",
                   },
+                  source_document_id: {
+                    type: "string",
+                  },
+                  source_document_name: {
+                    type: "string",
+                  },
                   columns: {
                     type: "array",
                     items: {
@@ -364,6 +370,8 @@ export async function analyzeKnowledgeText(
                 required: [
                   "title",
                   "description",
+                  "source_document_id",
+                  "source_document_name",
                   "columns",
                   "rows",
                 ],

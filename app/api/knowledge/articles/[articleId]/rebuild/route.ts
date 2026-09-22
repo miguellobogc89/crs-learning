@@ -16,6 +16,12 @@ import {
   KNOWLEDGE_TYPES,
   type KnowledgeType,
 } from "@/lib/knowledge/knowledge-types";
+import type { KnowledgeCatalogTable } from "@/lib/knowledge/knowledge-analysis.types";
+import type { KnowledgeFileCanonicalAnalysis } from "@/lib/knowledge/file-analysis/types";
+import {
+  extractStructuredCatalogTables,
+  mergeCatalogTables,
+} from "@/lib/knowledge/structured-catalog-tables";
 import type {
   KnowledgeImportDocumentAnalysis,
   KnowledgeImportOrganizationArea,
@@ -32,6 +38,22 @@ type RouteContext = {
   params: Promise<{
     articleId: string;
   }>;
+};
+
+type RawCatalogTable = {
+  title?: unknown;
+  description?: unknown;
+  source_document_id?: unknown;
+  source_document_name?: unknown;
+  columns?: unknown;
+  rows?: unknown;
+};
+
+type RawResponsibility = {
+  action?: unknown;
+  responsible?: unknown;
+  confidence?: unknown;
+  notes?: unknown;
 };
 
 function normalizeComparableText(
@@ -179,6 +201,226 @@ function buildAnalysisCorpus({
     "=== DOCUMENTOS FUENTE ===",
     ...documentBlocks,
   ].join("\n\n");
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((item) =>
+    typeof item === "string" ? item : String(item ?? ""),
+  );
+}
+
+function toStringMatrix(value: unknown): string[][] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(Array.isArray)
+    .map((row) =>
+      row.map((cell) =>
+        typeof cell === "string" ? cell : String(cell ?? ""),
+      ),
+    );
+}
+
+function fromRawCatalogTable(
+  table: RawCatalogTable,
+): KnowledgeCatalogTable {
+  return {
+    title:
+      typeof table.title === "string"
+        ? table.title
+        : "",
+    description:
+      typeof table.description === "string"
+        ? table.description
+        : "",
+    sourceDocumentId:
+      typeof table.source_document_id === "string"
+        ? table.source_document_id
+        : "",
+    sourceDocumentName:
+      typeof table.source_document_name === "string"
+        ? table.source_document_name
+        : "",
+    columns: toStringArray(table.columns),
+    rows: toStringMatrix(table.rows),
+  };
+}
+
+function toRawCatalogTable(
+  table: KnowledgeCatalogTable,
+) {
+  return {
+    title: table.title,
+    description: table.description,
+    source_document_id: table.sourceDocumentId,
+    source_document_name: table.sourceDocumentName,
+    columns: table.columns,
+    rows: table.rows,
+  };
+}
+
+function normalizeComparableTextForMatch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getMeaningfulTokens(value: string) {
+  return normalizeComparableTextForMatch(value)
+    .split(" ")
+    .filter((token) => token.length > 2);
+}
+
+function tokenOverlap(
+  source: string,
+  candidate: string,
+) {
+  const sourceTokens = getMeaningfulTokens(source);
+  const candidateTokens = new Set(
+    getMeaningfulTokens(candidate),
+  );
+
+  if (sourceTokens.length === 0 || candidateTokens.size === 0) {
+    return 0;
+  }
+
+  const matches = sourceTokens.filter((token) =>
+    candidateTokens.has(token),
+  ).length;
+
+  return matches / sourceTokens.length;
+}
+
+function textMatchesEvidence(
+  text: string,
+  evidence: string,
+) {
+  const normalizedText =
+    normalizeComparableTextForMatch(text);
+  const normalizedEvidence =
+    normalizeComparableTextForMatch(evidence);
+
+  if (!normalizedText || !normalizedEvidence) {
+    return false;
+  }
+
+  return (
+    normalizedEvidence.includes(normalizedText) ||
+    tokenOverlap(text, evidence) >= 0.55
+  );
+}
+
+function hasResponsibilityEvidence(
+  responsibility: RawResponsibility,
+  analyses: KnowledgeFileCanonicalAnalysis[],
+) {
+  const action =
+    typeof responsibility.action === "string"
+      ? responsibility.action
+      : "";
+  const responsible =
+    typeof responsibility.responsible === "string"
+      ? responsibility.responsible
+      : "";
+
+  if (!action.trim() || !responsible.trim()) {
+    return false;
+  }
+
+  for (const analysis of analyses) {
+    const entities = [
+      ...analysis.semanticModel.owners,
+      ...analysis.semanticModel.lanes,
+      ...analysis.semanticModel.steps,
+      ...analysis.semanticModel.processes,
+      ...analysis.semanticModel.nodes,
+    ];
+
+    const entityById = new Map(
+      entities.map((entity) => [entity.id, entity]),
+    );
+
+    for (const edge of analysis.semanticModel.edges) {
+      if (edge.confidence < 0.75 || edge.inferred) {
+        continue;
+      }
+
+      const from = entityById.get(edge.from);
+      const to = entityById.get(edge.to);
+      const evidence = [
+        edge.label,
+        edge.evidence,
+        from?.label,
+        from?.evidence,
+        to?.label,
+        to?.evidence,
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      if (
+        textMatchesEvidence(responsible, evidence) &&
+        textMatchesEvidence(action, evidence)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function normalizeResponsibilities(
+  value: unknown,
+  analyses: KnowledgeFileCanonicalAnalysis[],
+) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((item) => {
+    const responsibility = item as RawResponsibility;
+    const confidence =
+      responsibility.confidence === "identified"
+        ? "identified"
+        : "undetermined";
+
+    if (
+      confidence !== "identified" ||
+      hasResponsibilityEvidence(
+        responsibility,
+        analyses,
+      )
+    ) {
+      return responsibility;
+    }
+
+    const notes =
+      typeof responsibility.notes === "string"
+        ? responsibility.notes
+        : "";
+
+    return {
+      ...responsibility,
+      responsible: "",
+      confidence: "undetermined",
+      notes: [
+        notes,
+        "No se ha encontrado evidencia visual o semantica suficiente para vincular la accion con un responsable concreto.",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    };
+  });
 }
 
 export async function POST(
@@ -395,6 +637,64 @@ export async function POST(
     const organizationAreas =
       mergeOrganizationAreas(documentAnalyses);
 
+    const filesWithCanonicalAnalysis =
+      filesForContent.map((file) => {
+        const fileAnalysis =
+          file.knowledge_file_analysis;
+        const canonicalAnalysis =
+          fileAnalysis?.status === "ready"
+            ? getValidCanonicalAnalysis(
+                fileAnalysis.analysis_json,
+              )
+            : null;
+
+        return {
+          file,
+          canonicalAnalysis,
+        };
+      });
+
+    const canonicalAnalyses =
+      filesWithCanonicalAnalysis
+        .map(({ canonicalAnalysis }) => canonicalAnalysis)
+        .filter(
+          (
+            analysis,
+          ): analysis is KnowledgeFileCanonicalAnalysis =>
+            analysis !== null,
+        );
+
+    const extractedCatalogTables =
+      extractStructuredCatalogTables(
+        filesWithCanonicalAnalysis.map(
+          ({ file, canonicalAnalysis }) => {
+          return {
+            id: file.id,
+            fileName: file.file_name,
+            fileType: file.file_type,
+            extractedText: file.extracted_text,
+            canonicalAnalysis,
+          };
+          },
+        ),
+      );
+
+    const generatedCatalogTables = Array.isArray(
+      structuredAnalysis.analysisJson.catalog_tables,
+    )
+      ? structuredAnalysis.analysisJson.catalog_tables.map(
+          (table: unknown) =>
+            fromRawCatalogTable(
+              table as RawCatalogTable,
+            ),
+        )
+      : [];
+
+    const catalogTables = mergeCatalogTables(
+      generatedCatalogTables,
+      extractedCatalogTables,
+    ).map(toRawCatalogTable);
+
     const modelDetectedType = normalizeKnowledgeType(
       typeof structuredAnalysis.analysisJson
         .detected_type === "string"
@@ -409,6 +709,11 @@ export async function POST(
 
     const analysisJson = {
       ...structuredAnalysis.analysisJson,
+      catalog_tables: catalogTables,
+      responsibilities: normalizeResponsibilities(
+        structuredAnalysis.analysisJson.responsibilities,
+        canonicalAnalyses,
+      ),
       organizationAreas,
       documentAnalyses,
       analyzedAt: new Date().toISOString(),

@@ -275,6 +275,7 @@ function extractExcel(
     const rows =
       XLSX.utils.sheet_to_json(sheet, {
         header: 1,
+        defval: "",
       });
 
     for (

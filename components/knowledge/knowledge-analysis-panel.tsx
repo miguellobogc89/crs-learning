@@ -1127,6 +1127,12 @@ function CatalogTable({
         </p>
       ) : null}
 
+      {table.sourceDocumentName ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Fuente: {table.sourceDocumentName}
+        </p>
+      ) : null}
+
       <div className="mt-4 overflow-x-auto rounded-xl border border-border">
         <table className="w-full min-w-[720px] border-collapse text-sm">
           <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">

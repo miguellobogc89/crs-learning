@@ -44,6 +44,83 @@ function toStringMatrix(value: unknown): string[][] {
     );
 }
 
+function normalizeComparableText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getTokenSet(value: string) {
+  return new Set(
+    normalizeComparableText(value)
+      .split(" ")
+      .filter((token) => token.length > 2),
+  );
+}
+
+function isNearDuplicate(
+  first: string,
+  second: string,
+) {
+  const firstText = normalizeComparableText(first);
+  const secondText = normalizeComparableText(second);
+
+  if (!firstText || !secondText) {
+    return false;
+  }
+
+  if (
+    firstText.includes(secondText) ||
+    secondText.includes(firstText)
+  ) {
+    return true;
+  }
+
+  const firstTokens = getTokenSet(first);
+  const secondTokens = getTokenSet(second);
+
+  if (firstTokens.size === 0 || secondTokens.size === 0) {
+    return false;
+  }
+
+  const intersection = Array.from(firstTokens).filter(
+    (token) => secondTokens.has(token),
+  ).length;
+  const union = new Set([
+    ...firstTokens,
+    ...secondTokens,
+  ]).size;
+
+  return intersection / union >= 0.72;
+}
+
+function dedupeTextItems(values: string[]) {
+  const result: string[] = [];
+
+  for (const value of values) {
+    const trimmedValue = value.trim();
+
+    if (!trimmedValue) {
+      continue;
+    }
+
+    if (
+      result.some((existing) =>
+        isNearDuplicate(existing, trimmedValue),
+      )
+    ) {
+      continue;
+    }
+
+    result.push(trimmedValue);
+  }
+
+  return result;
+}
+
 export function parseKnowledgeAnalysis(
   raw: RawKnowledgeAnalysisJson | null | undefined
 ): KnowledgeViewModel | null {
@@ -129,6 +206,8 @@ export function parseKnowledgeAnalysis(
     ? raw.catalog_tables.filter(isRecord).map((item) => ({
         title: toString(item.title),
         description: toString(item.description),
+        sourceDocumentId: toString(item.source_document_id),
+        sourceDocumentName: toString(item.source_document_name),
         columns: toStringArray(item.columns),
         rows: toStringMatrix(item.rows),
       }))
@@ -145,7 +224,9 @@ export function parseKnowledgeAnalysis(
     executiveSummary: {
       synthesis:
         toString(executiveSummaryRaw.synthesis) || legacySummary,
-      keyPoints: toStringArray(executiveSummaryRaw.key_points),
+      keyPoints: dedupeTextItems(
+        toStringArray(executiveSummaryRaw.key_points),
+      ),
       conclusion: toNullableString(executiveSummaryRaw.conclusion),
     },
     summary: legacySummary,
