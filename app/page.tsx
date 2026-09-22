@@ -1,13 +1,49 @@
 // app/page.tsx
 
+
 import { loginWithGoogle } from "@/app/actions/auth";
 import { auth } from "@/auth";
 import { LoginCredentialsForm } from "@/components/auth/login-credentials-form";
 import { Button } from "@/components/ui/button";
-import { Check, Sparkles } from "lucide-react";
+import { SecurityInfo } from "@/components/auth/security-info";
+
+import {
+  ArrowRight,
+  ArrowUpRight,
+  BookOpen,
+  BrainCircuit,
+  Database,
+  GraduationCap,
+  LockKeyhole,
+  ShieldCheck,
+  Sparkles,
+  UsersRound,
+} from "lucide-react";
+
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+
+const features = [
+  {
+    icon: BrainCircuit,
+    title: "Knowledge con IA integrada",
+    description:
+      "Encuentra, resume y crea contenido con ayuda de la inteligencia artificial.",
+  },
+  {
+    icon: GraduationCap,
+    title: "Formación y aprendizaje interno",
+    description:
+      "Crea rutas de aprendizaje y mide el progreso de tu equipo.",
+  },
+  {
+    icon: UsersRound,
+    title: "Conocimiento organizado por equipos",
+    description:
+      "Comparte información de forma estructurada y segura.",
+  },
+];
 
 export default async function HomePage() {
   const session = await auth();
@@ -18,11 +54,15 @@ export default async function HomePage() {
 
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground">
-      <aside className="relative hidden min-h-screen w-[42%] flex-col justify-between overflow-hidden border-r border-border bg-sidebar px-8 py-8 lg:flex xl:w-[44%] xl:px-10 xl:py-10 2xl:w-[46%] 2xl:px-14 2xl:py-12">
+      {/* COLUMNA IZQUIERDA */}
+
+      <aside className="relative hidden min-h-screen w-[44%] flex-col justify-between overflow-hidden border-r border-border bg-sidebar px-8 py-8 lg:flex xl:px-10 xl:py-10 2xl:px-14 2xl:py-12">
         <BrandBackground />
 
+        {/* Logotipo */}
+
         <div className="relative z-10 flex items-center gap-3">
-          <div className="relative h-10 w-10 overflow-hidden rounded-xl xl:h-11 xl:w-11">
+          <div className="relative h-11 w-11 overflow-hidden rounded-xl">
             <Image
               src="/logo/logo.png"
               alt="CRS LAB"
@@ -32,41 +72,79 @@ export default async function HomePage() {
             />
           </div>
 
-          <span className="text-[15px] font-semibold tracking-tight xl:text-base">
+          <span className="text-base font-semibold tracking-tight">
             CRS LAB
           </span>
         </div>
 
-        <div className="relative z-10 max-w-sm xl:max-w-md 2xl:max-w-lg">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand">
+        {/* Contenido principal */}
+
+        <div className="relative z-10 my-12 w-full max-w-xl">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand">
             <Sparkles className="h-3.5 w-3.5" />
             Plataforma de conocimiento interno
           </div>
 
-          <h2 className="text-[28px] font-semibold leading-[1.15] tracking-tight xl:text-3xl 2xl:text-4xl">
+          <h2 className="max-w-lg text-[30px] font-semibold leading-[1.15] tracking-tight xl:text-[34px] 2xl:text-[40px]">
             Todo el conocimiento de tu empresa, en un solo lugar.
           </h2>
 
-          <p className="mt-4 max-w-md text-sm leading-6 text-muted-foreground xl:text-[15px] 2xl:text-base 2xl:leading-7">
-            Centraliza documentacion, crea formacion y transforma el
-            conocimiento interno de tu organizacion en informacion accesible
-            para todo tu equipo.
+          <p className="mt-5 max-w-lg text-sm leading-7 text-muted-foreground xl:text-[15px] 2xl:text-base">
+            Centraliza documentación, crea formación y transforma el
+            conocimiento interno de tu organización en información
+            accesible para todo tu equipo.
           </p>
 
-          <div className="mt-7 space-y-3.5 xl:mt-8">
-            <Feature text="Knowledge con IA integrada" />
-            <Feature text="Formacion y aprendizaje interno" />
-            <Feature text="Conocimiento organizado por equipos" />
+          {/* Funcionalidades */}
+
+          <div className="mt-10 space-y-7 xl:mt-12">
+            {features.map((feature) => {
+              const Icon = feature.icon;
+
+              return (
+                <div
+                  key={feature.title}
+                  className="flex items-start gap-4"
+                >
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-brand-border/50 bg-brand-soft text-brand xl:h-14 xl:w-14">
+                    <Icon
+                      className="h-6 w-6 xl:h-7 xl:w-7"
+                      strokeWidth={1.8}
+                    />
+                  </div>
+
+                  <div className="min-w-0 pt-0.5">
+                    <h3 className="text-sm font-semibold tracking-tight xl:text-[15px]">
+                      {feature.title}
+                    </h3>
+
+                    <p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground xl:text-sm xl:leading-6">
+                      {feature.description}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        <div className="relative z-10 text-xs text-muted-foreground">
-          (c) 2026 CRS LAB
+        {/* Seguridad y pie */}
+
+        <div className="relative z-10 space-y-5">
+          <SecurityInfo variant="sidebar" />
+
+          <p className="text-xs text-muted-foreground">
+            © 2026 CRS LAB. Todos los derechos reservados.
+          </p>
         </div>
       </aside>
 
+      {/* COLUMNA DERECHA */}
+
       <main className="flex min-h-screen flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between px-5 sm:px-8 lg:h-20 lg:px-8 xl:px-10 2xl:px-14">
+        {/* Cabecera */}
+
+        <header className="flex h-16 shrink-0 items-center justify-between px-5 sm:px-8 lg:h-20 lg:px-10 xl:px-12 2xl:px-16">
           <div className="flex items-center gap-2.5 lg:invisible">
             <div className="relative h-8 w-8 overflow-hidden rounded-lg">
               <Image
@@ -84,21 +162,27 @@ export default async function HomePage() {
           </div>
 
           <div className="flex items-center gap-2 text-xs text-muted-foreground sm:text-sm">
-            <span className="hidden sm:inline">No tienes cuenta?</span>
+            <span className="hidden sm:inline">
+              ¿No tienes cuenta?
+            </span>
 
             <Link
               href="/register"
-              className="font-medium text-foreground transition-colors hover:text-brand"
+              className="font-semibold text-brand transition-colors hover:text-brand/80"
             >
               Crear cuenta
             </Link>
           </div>
         </header>
 
-        <div className="flex flex-1 items-center justify-center px-5 pb-12 pt-4 sm:px-8 sm:pb-16 lg:px-10 lg:pb-20 xl:px-12 2xl:px-16">
-          <div className="w-full max-w-[390px] sm:max-w-[410px] xl:max-w-[430px] 2xl:max-w-[450px]">
+        {/* Área de login */}
+
+        <div className="flex flex-1 flex-col items-center justify-center px-5 py-8 sm:px-8 lg:px-10 xl:px-12 2xl:px-16">
+          <div className="w-full max-w-[390px] sm:max-w-[410px] xl:max-w-[450px] 2xl:max-w-[490px]">
+            {/* Logo móvil */}
+
             <div className="mb-8 flex justify-center lg:hidden">
-              <div className="relative h-14 w-14 overflow-hidden rounded-2xl sm:h-16 sm:w-16">
+              <div className="relative h-14 w-14 overflow-hidden rounded-2xl">
                 <Image
                   src="/logo/logo.png"
                   alt="CRS LAB"
@@ -109,67 +193,83 @@ export default async function HomePage() {
               </div>
             </div>
 
+            {/* Título */}
+
             <div className="text-center lg:text-left">
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-[26px] 2xl:text-3xl">
+              <h1 className="text-2xl font-semibold tracking-tight xl:text-[28px]">
                 Bienvenido de nuevo
               </h1>
 
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Inicia sesion para acceder a tu espacio de trabajo.
+                Inicia sesión para acceder a tu espacio de trabajo.
               </p>
             </div>
+
+            {/* Google */}
 
             <form action={loginWithGoogle} className="mt-7">
               <Button
                 type="submit"
                 variant="outline"
-                className="h-11 w-full gap-3 px-4 shadow-sm sm:h-11"
+                className="h-11 w-full gap-3 rounded-xl px-4 shadow-sm"
               >
                 <GoogleIcon />
                 Continuar con Google
               </Button>
             </form>
 
+            {/* Separador */}
+
             <div className="my-6 flex items-center gap-3">
               <div className="h-px flex-1 bg-border" />
 
               <span className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground sm:text-[11px]">
-                o continua con email
+                O continúa con email
               </span>
 
               <div className="h-px flex-1 bg-border" />
             </div>
 
+            {/* Formulario existente */}
+
             <LoginCredentialsForm />
+
+            {/* Registro móvil */}
 
             <div className="mt-6 text-center sm:hidden">
               <p className="text-xs text-muted-foreground">
-                Todavia no tienes una cuenta?{" "}
+                ¿Todavía no tienes una cuenta?{" "}
                 <Link
                   href="/register"
                   className="font-semibold text-brand"
                 >
-                  Registrate
+                  Regístrate
                 </Link>
               </p>
             </div>
 
-            <p className="mx-auto mt-8 max-w-sm text-center text-[10px] leading-5 text-muted-foreground/80 sm:text-[11px]">
+            {/* Términos */}
+
+            <p className="mx-auto mt-7 max-w-sm text-center text-[10px] leading-5 text-muted-foreground sm:text-[11px]">
               Al continuar aceptas los{" "}
-              <button
-                type="button"
-                className="underline-offset-2 hover:text-foreground hover:underline"
-              >
-                Terminos de uso
-              </button>{" "}
+              <span className="font-medium text-brand">
+                Términos de uso
+              </span>{" "}
               y la{" "}
-              <button
-                type="button"
-                className="underline-offset-2 hover:text-foreground hover:underline"
-              >
-                Politica de privacidad
-              </button>{" "}
+              <span className="font-medium text-brand">
+                Política de privacidad
+              </span>{" "}
               de CRS LAB.
+            </p>
+
+            {/* TARJETA DE SEGURIDAD */}
+
+            <SecurityInfo variant="login" />
+
+            {/* Pie móvil */}
+
+            <p className="mt-8 text-center text-[10px] text-muted-foreground lg:hidden">
+              © 2026 CRS LAB
             </p>
           </div>
         </div>
@@ -178,17 +278,7 @@ export default async function HomePage() {
   );
 }
 
-function Feature({ text }: { text: string }) {
-  return (
-    <div className="flex items-center gap-3 text-sm text-foreground/80 2xl:text-[15px]">
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
-        <Check className="h-3 w-3 stroke-[2.5]" />
-      </span>
-
-      <span>{text}</span>
-    </div>
-  );
-}
+/* ICONO GOOGLE */
 
 function GoogleIcon() {
   return (
@@ -220,10 +310,13 @@ function GoogleIcon() {
   );
 }
 
+/* FONDO CORPORATIVO */
+
 function BrandBackground() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       <div className="absolute -left-32 top-[30%] h-[420px] w-[420px] rounded-full bg-brand/15 blur-[140px]" />
+
       <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-brand/10 blur-[120px]" />
 
       <div

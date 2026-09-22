@@ -318,8 +318,8 @@ export function useCreateFolder({
           });
         }
 
-        router.refresh();
         onClose();
+        router.refresh();
       } catch (caughtError) {
         setError(
           caughtError instanceof Error
