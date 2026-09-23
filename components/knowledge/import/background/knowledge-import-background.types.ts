@@ -7,7 +7,7 @@ import type {
 import type {
   KnowledgeImportFlowFile,
   KnowledgeImportFlowSummary,
-} from "@/lib/knowledge/import-flow";
+} from "@/components/knowledge/import/types/import-flow.types";
 
 import type {
   KnowledgeImportProgress,

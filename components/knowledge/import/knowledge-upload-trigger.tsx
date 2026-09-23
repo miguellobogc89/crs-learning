@@ -9,7 +9,7 @@ import { KnowledgeImportModal } from "@/components/knowledge/import/modal";
 import type { KnowledgeImportContext } from "@/components/knowledge/import/modal/knowledge-import-modal.types";
 import {
   KNOWLEDGE_IMPORT_DOCUMENT_ACCEPT,
-} from "@/lib/knowledge/import-flow";
+} from "@/lib/knowledge/import/supported-formats";
 
 type Props = {
   context: KnowledgeImportContext;

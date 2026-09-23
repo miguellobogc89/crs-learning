@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import {
   createEmptyImportSummary,
   mergeServerProgress,
-} from "@/lib/knowledge/import-flow";
+} from "@/components/knowledge/import/utils/progress";
 
 import {
   cancelKnowledgeImport,

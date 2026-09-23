@@ -27,16 +27,22 @@ import {
   createInitialImportFiles,
   createInitialImportSummary,
   createSummaryFromAnalysisSnapshot,
-  deduplicateBrowserFiles,
   finalizeImportAnalysis,
   finalizeImportFiles,
-  getBrowserFileRelativePath,
-  getBrowserImportMode,
   markFilesUploaded,
   markFilesUploading,
-  type KnowledgeImportFlowFile,
-  type KnowledgeImportFlowSummary,
-} from "@/lib/knowledge/import-flow";
+} from "@/components/knowledge/import/utils/progress";
+
+import {
+  deduplicateBrowserFiles,
+  getBrowserFileRelativePath,
+  getBrowserImportMode,
+} from "@/components/knowledge/import/utils/file-selection";
+
+import type {
+  KnowledgeImportFlowFile,
+  KnowledgeImportFlowSummary,
+} from "@/components/knowledge/import/types/import-flow.types";
 
 import type {
   KnowledgeImportContext,

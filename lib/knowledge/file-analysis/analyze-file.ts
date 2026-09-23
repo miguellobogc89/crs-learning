@@ -4,7 +4,7 @@ import crypto from "crypto";
 import path from "path";
 import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
 import type { Prisma } from "@prisma/client";
-import { extractDocumentText } from "./extract-document-text";
+import { extractDocumentText } from "@/lib/knowledge/documents/extract-document-text";
 
 import {
   getKnowledgeImportModel,
@@ -13,7 +13,7 @@ import {
 import {
   isPlainTextKnowledgeDocument,
   isSupportedKnowledgeDocument,
-} from "@/lib/knowledge/import-flow";
+} from "@/lib/knowledge/import/supported-formats";
 
 import {
   extractPptxVisualModel,

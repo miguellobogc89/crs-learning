@@ -6,7 +6,7 @@ import { parseOffice } from "officeparser";
 import {
   isPlainTextKnowledgeDocument,
   isSupportedKnowledgeDocument,
-} from "@/lib/knowledge/import-flow";
+} from "@/lib/knowledge/import/supported-formats";
 
 const OFFICE_FILE_TYPES = {
   ".pdf": "pdf",

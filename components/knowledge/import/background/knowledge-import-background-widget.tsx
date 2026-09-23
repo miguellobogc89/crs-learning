@@ -26,7 +26,7 @@ import type {
 } from "./knowledge-import-background.types";
 import type {
   KnowledgeImportFlowFile,
-} from "@/lib/knowledge/import-flow";
+} from "@/components/knowledge/import/types/import-flow.types";
 
 function formatBytes(size?: number | null) {
   if (!size) {
