@@ -40,7 +40,10 @@ function assertAcceptedDocument(
     );
   }
 
-  if (result.duplicate !== null) {
+  if (
+    result.duplicate !== null &&
+    result.duplicate.status !== "unique"
+  ) {
     throw new Error(
       `El documento ${result.file.relativePath} tiene una comprobación de duplicidad pendiente.`,
     );
