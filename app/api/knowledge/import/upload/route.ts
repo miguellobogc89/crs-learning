@@ -7,6 +7,13 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import { knowledgeLibraryWriteWhere } from "@/lib/knowledge/access-control";
+import {
+  buildKnowledgeImportInventory,
+  type KnowledgeImportSelectionMode,
+} from "@/lib/knowledge/import/pipeline/build-inventory";
+import {
+  runKnowledgeImportPreflight,
+} from "@/lib/knowledge/import/pipeline/preflight";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import {
@@ -18,8 +25,21 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MAX_IMPORT_SIZE = 150 * 1024 * 1024;
+const MAX_SELECTED_FILES = 5_000;
 
-const ALLOWED_MODES = new Set(["files", "folder", "zip"]);
+const ALLOWED_MODES = new Set<KnowledgeImportSelectionMode>([
+  "files",
+  "folder",
+  "zip",
+]);
+
+function isImportMode(
+  value: string,
+): value is KnowledgeImportSelectionMode {
+  return ALLOWED_MODES.has(
+    value as KnowledgeImportSelectionMode,
+  );
+}
 
 function sanitizeFileName(fileName: string) {
   const baseName = path.basename(
@@ -54,9 +74,12 @@ function sanitizeRelativePath(
 
 function parseRelativePaths(
   value: FormDataEntryValue | null,
-) {
-  if (typeof value !== "string" || !value.trim()) {
-    return [] as string[];
+): string[] {
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+    return [];
   }
 
   try {
@@ -72,6 +95,12 @@ function parseRelativePaths(
   } catch {
     return [];
   }
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : "Error desconocido durante la importación.";
 }
 
 export async function POST(request: Request) {
@@ -92,6 +121,28 @@ export async function POST(request: Request) {
 
     const { activeWorkspace } =
       await getActiveWorkspaceContext(userId);
+
+    /*
+     * El Content-Length es una comprobación preliminar.
+     * No sustituye un límite de tamaño aplicado por
+     * el servidor o la infraestructura HTTP.
+     */
+    const contentLength = Number(
+      request.headers.get("content-length"),
+    );
+
+    if (
+      Number.isFinite(contentLength) &&
+      contentLength > MAX_IMPORT_SIZE
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "La petición supera el límite máximo de 150 MB.",
+        },
+        { status: 413 },
+      );
+    }
 
     const formData = await request.formData();
 
@@ -115,9 +166,12 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!ALLOWED_MODES.has(mode)) {
+    if (!isImportMode(mode)) {
       return NextResponse.json(
-        { error: "El tipo de importación no es válido." },
+        {
+          error:
+            "El tipo de importación no es válido.",
+        },
         { status: 400 },
       );
     }
@@ -131,7 +185,33 @@ export async function POST(request: Request) {
 
     if (files.length === 0) {
       return NextResponse.json(
-        { error: "No se ha recibido ningún archivo." },
+        {
+          error:
+            "No se ha recibido ningún archivo.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (files.length > MAX_SELECTED_FILES) {
+      return NextResponse.json(
+        {
+          error:
+            `La selección supera el límite de ${MAX_SELECTED_FILES} archivos.`,
+        },
+        { status: 413 },
+      );
+    }
+
+    if (
+      mode === "zip" &&
+      files.length !== 1
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Selecciona un único ZIP para esta modalidad.",
+        },
         { status: 400 },
       );
     }
@@ -163,7 +243,10 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json(
-        { error: "No se ha encontrado el usuario." },
+        {
+          error:
+            "No se ha encontrado el usuario.",
+        },
         { status: 404 },
       );
     }
@@ -196,6 +279,136 @@ export async function POST(request: Request) {
       formData.get("relativePaths"),
     );
 
+    /*
+     * Primero leemos y validamos toda la selección.
+     * Hasta completar el preflight no se crea ninguna
+     * importación ni se guarda ningún archivo.
+     */
+    const selectedFiles = await Promise.all(
+      files.map(async (file, index) => ({
+        id: `selected:${index + 1}`,
+        fileName: file.name,
+        relativePath:
+          relativePaths[index] || file.name,
+        mimeType: file.type || null,
+        content: new Uint8Array(
+          await file.arrayBuffer(),
+        ),
+      })),
+    );
+
+    let inventory;
+
+    try {
+      inventory = buildKnowledgeImportInventory({
+        mode,
+        files: selectedFiles,
+      });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error: getErrorMessage(error),
+        },
+        { status: 400 },
+      );
+    }
+
+    const preflight =
+      await runKnowledgeImportPreflight({
+        ownerUserId: user.id,
+        workspaceId: activeWorkspace.id,
+        files: inventory.files,
+      });
+
+    const reviewFiles = preflight.files
+      .filter(
+        (result) =>
+          result.status !== "accepted",
+      )
+      .map((result) => ({
+        id: result.file.id,
+        fileName: result.file.fileName,
+        relativePath:
+          result.file.relativePath,
+        fileSize:
+          result.file.content.byteLength,
+        status: result.status,
+        duplicate:
+          result.duplicate?.status ?? null,
+        existingKnowledgeFileId:
+          result.duplicate?.status ===
+            "duplicate-in-knowledge" ||
+          result.duplicate?.status ===
+            "possible-duplicate"
+            ? result.duplicate.existingKnowledgeFileId
+            : null,
+      }));
+
+    /*
+     * Una coincidencia por nombre y tamaño sin hash
+     * requiere revisión; no se descarta automáticamente.
+     *
+     * Tampoco se sube parcialmente una selección con
+     * duplicados o formatos no admitidos.
+     */
+    if (
+      reviewFiles.length > 0 ||
+      preflight.unreadableExistingDocumentIds
+        .length > 0
+    ) {
+      return NextResponse.json(
+        {
+          status: "requires_review",
+          error:
+            "La selección contiene archivos que requieren revisión antes de importarse.",
+          inventory: {
+            totalFiles: inventory.totalFiles,
+            totalBytes: inventory.totalBytes,
+            archiveCount: inventory.archiveCount,
+            skippedArchiveEntries:
+              inventory.skippedArchiveEntries,
+          },
+          acceptedFiles:
+            preflight.acceptedFiles.map(
+              (result) => ({
+                id: result.file.id,
+                fileName:
+                  result.file.fileName,
+                relativePath:
+                  result.file.relativePath,
+                fileSize:
+                  result.file.content.byteLength,
+              }),
+            ),
+          reviewFiles,
+          unreadableExistingDocumentIds:
+            preflight.unreadableExistingDocumentIds,
+        },
+        { status: 409 },
+      );
+    }
+
+    if (
+      preflight.acceptedFiles.length === 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "No hay documentos admitidos para importar.",
+        },
+        { status: 400 },
+      );
+    }
+
+    /*
+     * Conservamos la estructura de subida actual:
+     * - files/folder: originales individuales.
+     * - zip: ZIP original.
+     *
+     * La ruta de análisis existente seguirá tratando
+     * el ZIP. El inventario expandido se ha utilizado
+     * únicamente para validar antes de almacenar.
+     */
     const originalName =
       mode === "zip"
         ? files[0]?.name ?? null
@@ -232,33 +445,38 @@ export async function POST(request: Request) {
       status: string;
     }> = [];
 
-    for (const [index, file] of files.entries()) {
+    for (
+      const [index, file] of files.entries()
+    ) {
       const safeFileName =
         sanitizeFileName(file.name) ||
         `archivo-${index + 1}`;
 
-      const relativePath = sanitizeRelativePath(
-        relativePaths[index] || file.name,
-        safeFileName,
-      );
+      const relativePath =
+        sanitizeRelativePath(
+          relativePaths[index] || file.name,
+          safeFileName,
+        );
 
-      const storedFileName = `${String(
-        index + 1,
-      ).padStart(4, "0")}-${safeFileName}`;
+      const storedFileName =
+        `${String(index + 1).padStart(4, "0")}-` +
+        safeFileName;
 
       const pathname =
         `knowledge/imports/${importId}/originals/` +
         storedFileName;
 
       const buffer = Buffer.from(
-        await file.arrayBuffer(),
+        selectedFiles[index].content,
       );
 
-      const storagePath = await uploadKnowledgeFile(
-        pathname,
-        buffer,
-        file.type || "application/octet-stream",
-      );
+      const storagePath =
+        await uploadKnowledgeFile(
+          pathname,
+          buffer,
+          file.type ||
+            "application/octet-stream",
+        );
 
       uploadedStoragePaths.push(storagePath);
 
@@ -277,7 +495,6 @@ export async function POST(request: Request) {
       prisma.knowledge_import_files.createMany({
         data: uploadedFiles,
       }),
-
       prisma.knowledge_imports.update({
         where: {
           id: importId,
@@ -296,6 +513,8 @@ export async function POST(request: Request) {
         mode,
         fileCount: files.length,
         totalSize,
+        inventoryFileCount:
+          inventory.totalFiles,
       },
       { status: 201 },
     );
@@ -306,8 +525,9 @@ export async function POST(request: Request) {
     );
 
     await Promise.allSettled(
-      uploadedStoragePaths.map((storagePath) =>
-        deleteKnowledgeFile(storagePath),
+      uploadedStoragePaths.map(
+        (storagePath) =>
+          deleteKnowledgeFile(storagePath),
       ),
     );
 
@@ -320,9 +540,7 @@ export async function POST(request: Request) {
           data: {
             status: "failed",
             error_message:
-              error instanceof Error
-                ? error.message
-                : "Error desconocido durante la subida.",
+              getErrorMessage(error),
             updated_at: new Date(),
           },
         })
