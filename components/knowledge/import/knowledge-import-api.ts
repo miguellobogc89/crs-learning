@@ -1,3 +1,4 @@
+
 // components/knowledge/import/knowledge-import-api.ts
 
 import type {
@@ -5,12 +6,27 @@ import type {
   GenerateKnowledgeImportProposalResult,
   KnowledgeImportProposal,
 } from "@/lib/knowledge/import/types";
+
 import type {
   AnalyzeImportFlowFile,
 } from "@/lib/knowledge/import-flow";
 
+import {
+  KnowledgeImportReviewRequiredError,
+  readKnowledgeImportReview,
+} from "./knowledge-import-review";
+
 type ApiErrorBody = {
   error?: string;
+};
+
+export type KnowledgeImportUploadResult = {
+  importId: string;
+  status: "uploaded";
+  mode: "files" | "folder" | "zip";
+  fileCount: number;
+  totalSize: number;
+  inventoryFileCount?: number;
 };
 
 export type KnowledgeImportDuplicateFile = {
@@ -217,6 +233,49 @@ async function readResponse<T>(
   return body as T;
 }
 
+/*
+ * La revisión es una respuesta funcional del pipeline:
+ * no debe convertirse en un error genérico que pierda
+ * el inventario y los documentos afectados.
+ */
+async function readImportResponse<T>(
+  response: Response,
+  fallbackError: string,
+): Promise<T> {
+  if (!response.ok) {
+    const review =
+      await readKnowledgeImportReview(response);
+
+    if (review) {
+      throw new KnowledgeImportReviewRequiredError(
+        review,
+      );
+    }
+  }
+
+  return readResponse<T>(
+    response,
+    fallbackError,
+  );
+}
+
+export async function uploadKnowledgeImport(
+  formData: FormData,
+): Promise<KnowledgeImportUploadResult> {
+  const response = await fetch(
+    "/api/knowledge/import/upload",
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+
+  return readImportResponse<KnowledgeImportUploadResult>(
+    response,
+    "No se han podido subir los documentos",
+  );
+}
+
 async function analyzeImport(
   importId: string,
 ) {
@@ -227,7 +286,7 @@ async function analyzeImport(
     },
   );
 
-  return readResponse<AnalyzeImportResponse>(
+  return readImportResponse<AnalyzeImportResponse>(
     response,
     "No se ha podido extraer la documentación",
   );
@@ -512,9 +571,8 @@ export async function runKnowledgeImportAnalysis(
   );
 
   /*
-   * Si todos los documentos ya existen, detenemos
-   * aquí el proceso. No extraemos texto ni llamamos
-   * posteriormente a la IA.
+   * Si no hay documentos aceptados, no iniciamos
+   * la extracción de texto ni llamamos a la IA.
    */
   if (extraction.fileCount === 0) {
     return {
