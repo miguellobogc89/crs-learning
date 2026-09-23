@@ -19,7 +19,7 @@ import {
   getKnowledgeFileIcon,
   getKnowledgeFileType,
   getKnowledgeStatus,
-} from "@/lib/knowledge/file-utils";
+} from "@/lib/knowledge/documents/file-utils";
 
 import type {
   KnowledgeAnalysis,

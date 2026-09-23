@@ -2,7 +2,7 @@
 
 import {
   isSupportedKnowledgeArchive,
-} from "../supported-formats";
+} from "@/lib/knowledge/import/supported-formats";
 
 export function getBrowserFileIdentity(
   file: File,

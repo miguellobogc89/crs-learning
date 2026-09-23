@@ -9,7 +9,7 @@ import type {
   KnowledgeImportFlowFile,
   KnowledgeImportFlowSummary,
   ServerProgressSnapshot,
-} from "./types";
+} from "../types/import-flow.types";
 
 export function createEmptyImportSummary(): KnowledgeImportFlowSummary {
   return {

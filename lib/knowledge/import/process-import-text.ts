@@ -1,6 +1,6 @@
 // lib/knowledge/import/process-import-text.ts
 
-import { extractDocumentText } from "@/lib/knowledge/file-analysis/extract-document-text";
+import { extractDocumentText } from "@/lib/knowledge/documents/extract-document-text";
 import { prisma } from "@/lib/prisma";
 import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
 

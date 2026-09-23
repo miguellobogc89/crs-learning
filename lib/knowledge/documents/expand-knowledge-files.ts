@@ -4,7 +4,7 @@ import JSZip from "jszip";
 
 import {
   isAcceptedKnowledgeFileType,
-} from "@/lib/knowledge/file-types";
+} from "@/lib/knowledge/documents/file-types";
 
 const ZIP_MIME_TYPES = new Set([
   "application/zip",

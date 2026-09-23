@@ -12,7 +12,7 @@ import {
   formatFileSize,
   getKnowledgeFileIcon,
   getKnowledgeFileType,
-} from "@/lib/knowledge/file-utils";
+} from "@/lib/knowledge/documents/file-utils";
 
 type KnowledgeUploadFileCardProps = {
   file: File;

@@ -13,7 +13,7 @@ import {
 import {
   getKnowledgeFileIcon,
   getKnowledgeFileType,
-} from "@/lib/knowledge/file-utils";
+} from "@/lib/knowledge/documents/file-utils";
 import { cn } from "@/lib/utils";
 
 import type {

@@ -5,10 +5,10 @@ import JSZip from "jszip";
 import * as XLSX from "xlsx";
 import { XMLParser } from "fast-xml-parser";
 
-import { ingestDocument } from "@/lib/knowledge/document-ingestion.service";
+import { ingestDocument } from "@/lib/knowledge/documents/document-ingestion.service";
 import {
   isAcceptedKnowledgeFileType,
-} from "@/lib/knowledge/file-types";
+} from "@/lib/knowledge/documents/file-types";
 
 const ZIP_MIME_TYPES = new Set([
   "application/zip",

@@ -15,7 +15,7 @@ import {
   formatFileSize,
   getKnowledgeFileIcon,
   getKnowledgeFileType,
-} from "@/lib/knowledge/file-utils";
+} from "@/lib/knowledge/documents/file-utils";
 
 type KnowledgeFile = {
   id: string;
