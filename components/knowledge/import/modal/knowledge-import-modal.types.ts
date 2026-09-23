@@ -39,4 +39,5 @@ export type KnowledgeImportModalProps = {
     result: ConfirmKnowledgeImportResult,
   ) => void;
   selectedFiles?: File[];
+  resumeImportId?: string;
 };

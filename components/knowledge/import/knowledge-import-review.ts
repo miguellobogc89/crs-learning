@@ -106,7 +106,7 @@ export function isKnowledgeImportReviewResult(
 export async function readKnowledgeImportReview(
   response: Response,
 ): Promise<KnowledgeImportReviewResult | null> {
-  if (response.status !== 409) {
+  if (response.status !== 409 && response.status !== 200) {
     return null;
   }
 
@@ -120,9 +120,22 @@ export async function readKnowledgeImportReview(
     : null;
 }
 
+export function isAllDuplicateReview(review: KnowledgeImportReviewResult | null) {
+  return Boolean(
+    review &&
+    review.acceptedFiles.length === 0 &&
+    review.reviewFiles.length > 0 &&
+    review.reviewFiles.every((file) => file.status === "duplicate") &&
+    review.unreadableExistingDocumentIds.length === 0,
+  );
+}
+
 export function getKnowledgeImportReviewMessage(
   review: KnowledgeImportReviewResult,
 ): string {
+  if (isAllDuplicateReview(review)) {
+    return "Todos los archivos son duplicados. No se procesará ninguno. Puedes cerrar esta ventana.";
+  }
   const reviewCount = review.reviewFiles.length;
   const unreadableCount =
     review.unreadableExistingDocumentIds.length;

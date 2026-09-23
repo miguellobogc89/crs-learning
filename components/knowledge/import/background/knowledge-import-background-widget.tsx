@@ -777,6 +777,7 @@ export function KnowledgeImportBackgroundWidget() {
         <KnowledgeImportModal
           open
           context={modalTask.context}
+          resumeImportId={modalTask.importId}
           onOpenChange={() =>
             undefined
           }

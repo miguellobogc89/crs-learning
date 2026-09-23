@@ -57,10 +57,12 @@ import {
   runKnowledgeImportAnalysis,
   uploadKnowledgeImport,
   type KnowledgeImportProposalProgress,
+  type KnowledgeImportUploadResult,
 } from "../knowledge-import-api";
 
 import {
   KnowledgeImportReviewRequiredError,
+  isAllDuplicateReview,
   type KnowledgeImportReviewResult,
 } from "../knowledge-import-review";
 
@@ -71,6 +73,7 @@ import {
 
 type UseKnowledgeImportParams = {
   context: KnowledgeImportContext;
+  resumeImportId?: string;
   onCompleted?: (
     result: ConfirmKnowledgeImportResult,
   ) => void;
@@ -79,11 +82,12 @@ type UseKnowledgeImportParams = {
 export function useKnowledgeImport({
   context,
   onCompleted,
+  resumeImportId,
 }: UseKnowledgeImportParams) {
   const {
     registerImport,
     updateImport,
-    currentTask,
+    tasks,
     getImportState,
     continueWithValidDocuments:
       continueSharedImport,
@@ -107,8 +111,9 @@ export function useKnowledgeImport({
     SelectedKnowledgeDocument[]
   >([]);
 
-  const [importId, setImportId] =
+  const [localImportId, setImportId] =
     useState<string | null>(null);
+  const importId = localImportId ?? resumeImportId ?? null;
 
   const [proposal, setProposal] =
     useState<KnowledgeImportProposal | null>(
@@ -125,6 +130,7 @@ export function useKnowledgeImport({
 
   const [error, setError] =
     useState<string | null>(null);
+  const [duplicateNotice, setDuplicateNotice] = useState<string | null>(null);
 
   const [
     importReview,
@@ -182,6 +188,11 @@ export function useKnowledgeImport({
 
   const activeOperationRef =
     useRef(0);
+  const analysisInFlightRef = useRef<number | null>(null);
+  const uploadedSelectionRef = useRef<{
+    documents: SelectedKnowledgeDocument[];
+    result: KnowledgeImportUploadResult;
+  } | null>(null);
 
   const files = useMemo(
     () =>
@@ -192,18 +203,7 @@ export function useKnowledgeImport({
   );
 
   const sharedTask =
-    importId &&
-    currentTask?.importId === importId
-      ? currentTask
-      : !importId &&
-          selectedDocuments.length === 0 &&
-          currentTask &&
-          (currentTask.step !==
-            "completed" ||
-            currentTask.detailHost ===
-              "global")
-        ? currentTask
-        : null;
+    tasks.find((task) => task.importId === importId) ?? null;
 
   const sharedState =
     sharedTask
@@ -211,68 +211,6 @@ export function useKnowledgeImport({
           sharedTask.importId,
         )
       : null;
-
-  useEffect(() => {
-    if (
-      importId ||
-      selectedDocuments.length > 0 ||
-      !currentTask ||
-      (currentTask.step ===
-        "completed" &&
-        currentTask.detailHost !==
-          "global")
-    ) {
-      return;
-    }
-
-    setImportId(
-      currentTask.importId,
-    );
-
-    setStep(
-      currentTask.step,
-    );
-
-    setProcessingPhase(
-      currentTask.phase,
-    );
-
-    setFileProgress(
-      currentTask.files,
-    );
-
-    setProgressSummary(
-      currentTask.summary,
-    );
-
-    setError(
-      currentTask.error,
-    );
-
-    setProposal(
-      currentTask.proposal,
-    );
-
-    setProposalProgress(
-      currentTask.proposalProgress,
-    );
-
-    setCompletionResult(
-      currentTask.completionResult,
-    );
-
-    setIsAnalyzing(
-      currentTask.isAnalyzing,
-    );
-
-    setIsConfirming(
-      currentTask.isConfirming,
-    );
-  }, [
-    currentTask,
-    importId,
-    selectedDocuments.length,
-  ]);
 
   const visibleStep =
     sharedTask?.step ?? step;
@@ -334,8 +272,10 @@ export function useKnowledgeImport({
   const handleFilesChange =
     useCallback(
       (nextFiles: File[]) => {
+        uploadedSelectionRef.current = null;
         setError(null);
         setImportReview(null);
+        setDuplicateNotice(null);
 
         const {
           uniqueFiles,
@@ -384,6 +324,9 @@ export function useKnowledgeImport({
 
   const analyzeDocuments =
     useCallback(async () => {
+      if (analysisInFlightRef.current || isAllDuplicateReview(importReview)) {
+        return;
+      }
       if (
         selectedDocuments.length === 0
       ) {
@@ -395,6 +338,7 @@ export function useKnowledgeImport({
 
       const operationId =
         activeOperationRef.current + 1;
+      analysisInFlightRef.current = operationId;
 
       activeOperationRef.current =
         operationId;
@@ -483,7 +427,9 @@ export function useKnowledgeImport({
           uploadingFiles;
 
         const uploadResult =
-          await uploadKnowledgeImport(
+          uploadedSelectionRef.current?.documents === selectedDocuments
+          ? uploadedSelectionRef.current.result
+          : await uploadKnowledgeImport(
             formData,
           );
 
@@ -495,15 +441,21 @@ export function useKnowledgeImport({
 
         activeImportId =
           uploadResult.importId;
+        uploadedSelectionRef.current = { documents: selectedDocuments, result: uploadResult };
 
         setImportId(
           uploadResult.importId,
         );
 
-        const uploadedFiles =
-          markFilesUploaded(
-            uploadingFiles,
+        const uploadedFiles: KnowledgeImportFlowFile[] = uploadResult.storedFiles
+          ? uploadResult.storedFiles.map((file) => ({ ...file, status: "uploaded" }))
+          : markFilesUploaded(uploadingFiles);
+        const skippedDuplicates = uploadResult.skippedDuplicateFiles ?? [];
+        if (skippedDuplicates.length > 0) {
+          setDuplicateNotice(
+            `Archivos duplicados omitidos: ${skippedDuplicates.map((file) => file.relativePath).join(", ")}. Solo se subirán y procesarán los documentos válidos.`,
           );
+        }
 
         setFileProgress(
           uploadedFiles,
@@ -527,7 +479,7 @@ export function useKnowledgeImport({
             files: uploadedFiles,
             summary:
               createInitialImportSummary(
-                selectedDocuments.length,
+                uploadedFiles.length,
               ),
             error: null,
             isAnalyzing: true,
@@ -696,13 +648,17 @@ export function useKnowledgeImport({
         if (
           duplicateFiles.length > 0
         ) {
+          setDuplicateNotice((current) => [
+            current,
+            `Archivos duplicados excluidos del procesamiento: ${duplicateFiles.map((file) => file.relativePath).join(", ")}.`,
+          ].filter(Boolean).join(" "));
           toast.warning(
             duplicateFiles.length === 1
               ? "Se ha detectado un documento duplicado"
               : `Se han detectado ${duplicateFiles.length} documentos duplicados`,
             {
               description:
-                "Los duplicados se mostrarán en amarillo y no se incluirán en la propuesta.",
+                "Los documentos duplicados no se procesarán ni se incluirán en la propuesta.",
             },
           );
         }
@@ -734,6 +690,14 @@ export function useKnowledgeImport({
 
           setError(null);
           setStep("upload");
+          if (activeImportId) {
+            updateImport(activeImportId, {
+              step: "upload",
+              status: "requires_review",
+              isAnalyzing: false,
+              error: null,
+            });
+          }
 
           setProcessingPhase(
             "uploading",
@@ -792,10 +756,14 @@ export function useKnowledgeImport({
             false,
           );
         }
+        if (analysisInFlightRef.current === operationId) {
+          analysisInFlightRef.current = null;
+        }
       }
     }, [
       context,
       context.libraryId,
+      importReview,
       registerImport,
       selectedDocuments,
       updateImport,
@@ -901,9 +869,11 @@ export function useKnowledgeImport({
     useCallback(() => {
       activeOperationRef.current +=
         1;
+      analysisInFlightRef.current = null;
 
       latestFileProgressRef.current =
         [];
+      uploadedSelectionRef.current = null;
 
       setStep("upload");
       setSelectedDocuments([]);
@@ -912,6 +882,7 @@ export function useKnowledgeImport({
       setCompletionResult(null);
       setError(null);
       setImportReview(null);
+      setDuplicateNotice(null);
       setIsAnalyzing(false);
       setIsConfirming(false);
 
@@ -1001,6 +972,8 @@ export function useKnowledgeImport({
     ]);
 
   return {
+    duplicateNotice,
+    allFilesDuplicate: isAllDuplicateReview(importReview),
     step: visibleStep,
     files,
     proposal: visibleProposal,

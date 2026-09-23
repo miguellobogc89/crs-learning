@@ -27,15 +27,17 @@ export type KnowledgeImportUploadResult = {
   fileCount: number;
   totalSize: number;
   inventoryFileCount?: number;
+  skippedDuplicateFiles?: Array<{ fileName: string; relativePath: string }>;
+  storedFiles?: Array<{ id: string; name: string; relativePath: string; size: number }>;
 };
 
 export type KnowledgeImportDuplicateFile = {
   name: string;
   relativePath: string;
   size: number;
-  existingFileId: string;
-  existingArticleId: string;
-  existingArticleTitle: string;
+  existingFileId?: string;
+  existingArticleId?: string;
+  existingArticleTitle?: string;
 };
 
 type AnalyzeImportResponse = {
@@ -242,15 +244,9 @@ async function readImportResponse<T>(
   response: Response,
   fallbackError: string,
 ): Promise<T> {
-  if (!response.ok) {
-    const review =
-      await readKnowledgeImportReview(response);
-
-    if (review) {
-      throw new KnowledgeImportReviewRequiredError(
-        review,
-      );
-    }
+  const review = await readKnowledgeImportReview(response);
+  if (review) {
+    throw new KnowledgeImportReviewRequiredError(review);
   }
 
   return readResponse<T>(

@@ -1,4 +1,5 @@
 // components/knowledge/import/knowledge-upload-trigger.tsx
+
 "use client";
 
 import { useRef, useState } from "react";
@@ -17,23 +18,43 @@ type Props = {
   variant?: "default" | "outline" | "ghost";
 };
 
-export function KnowledgeUploadTrigger({ context, label = "Subir", variant = "default" }: Props) {
+export function KnowledgeUploadTrigger({
+  context,
+  label = "Subir",
+  variant = "default",
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
+
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+  const [sessionId, setSessionId] = useState(0);
 
   function handlePick() {
     inputRef.current?.click();
   }
 
-  function handleFilesSelected(event: React.ChangeEvent<HTMLInputElement>) {
+  function handleFilesSelected(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
     const picked = Array.from(event.target.files ?? []);
-    event.target.value = ""; // permite volver a elegir el mismo archivo más adelante
 
-    if (picked.length === 0) return;
+    event.target.value = "";
 
+    if (picked.length === 0) {
+      return;
+    }
+
+    setSessionId((current) => current + 1);
     setFiles(picked);
     setOpen(true);
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+
+    if (!nextOpen) {
+      setFiles([]);
+    }
   }
 
   return (
@@ -47,16 +68,21 @@ export function KnowledgeUploadTrigger({ context, label = "Subir", variant = "de
         onChange={handleFilesSelected}
       />
 
-      <Button type="button" variant={variant} onClick={handlePick}>
+      <Button
+        type="button"
+        variant={variant}
+        onClick={handlePick}
+      >
         <Upload className="mr-2 h-4 w-4" />
         {label}
       </Button>
 
       <KnowledgeImportModal
+        key={sessionId}
         open={open}
         context={context}
         selectedFiles={files}
-        onOpenChange={setOpen}
+        onOpenChange={handleOpenChange}
         onCompleted={() => setFiles([])}
       />
     </>

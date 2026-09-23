@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import type { KnowledgeImportModalStep } from "./knowledge-import-modal.types";
 
 type Props = {
+  allFilesDuplicate?: boolean;
   step: KnowledgeImportModalStep;
   fileCount: number;
   validFileCount: number;
@@ -34,6 +35,7 @@ type Props = {
 };
 
 export function KnowledgeImportModalFooter({
+  allFilesDuplicate = false,
   step,
   fileCount,
   validFileCount,
@@ -51,6 +53,15 @@ export function KnowledgeImportModalFooter({
   onConfirm,
   onClose,
 }: Props) {
+  if (allFilesDuplicate) {
+    return (
+      <footer className="flex shrink-0 justify-end border-t border-border bg-background px-6 py-4">
+        <Button type="button" onClick={onCancel} className="h-11 px-5">
+          Cerrar
+        </Button>
+      </footer>
+    );
+  }
   if (step === "analyzing") {
     return (
       <footer className="shrink-0 border-t border-border bg-background px-6 py-4">

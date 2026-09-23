@@ -33,6 +33,7 @@ import type {
   KnowledgeImportReviewFile,
   KnowledgeImportReviewResult,
 } from "../knowledge-import-review";
+import { getKnowledgeImportReviewMessage, isAllDuplicateReview } from "../knowledge-import-review";
 
 function getFilesSelectionKey(
   files: File[] | undefined,
@@ -104,14 +105,11 @@ function KnowledgeImportReview({
     <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
         <h3 className="text-sm font-semibold">
-          Revisión necesaria antes de importar
+          {isAllDuplicateReview(review) ? "Archivos duplicados" : "Revisión necesaria antes de importar"}
         </h3>
 
         <p className="mt-1 text-sm text-muted-foreground">
-          La importación está detenida.
-          No se han guardado los archivos
-          seleccionados ni se ha iniciado
-          su análisis.
+          {getKnowledgeImportReviewMessage(review)}
         </p>
       </div>
 
@@ -256,13 +254,13 @@ function KnowledgeImportReview({
         ) : null}
       </div>
 
-      <p className="text-xs text-muted-foreground">
+      {!isAllDuplicateReview(review) ? <p className="text-xs text-muted-foreground">
         Puedes modificar la selección
         de archivos y volver a iniciar
         la importación. Los documentos
         admitidos no se han importado
         todavía.
-      </p>
+      </p> : null}
     </div>
   );
 }
@@ -273,6 +271,7 @@ export function KnowledgeImportModal({
   onOpenChange,
   onCompleted,
   selectedFiles,
+  resumeImportId,
 }: KnowledgeImportModalProps) {
   const [
     closeGuardOpen,
@@ -292,10 +291,13 @@ export function KnowledgeImportModal({
   const startedSelectionKeyRef =
     useRef<string | null>(null);
 
+  const consumedSelectionRef = useRef<File[] | null>(null);
+
   const knowledgeImport =
     useKnowledgeImport({
       context: context!,
       onCompleted,
+      resumeImportId,
     });
 
   const selectionKey =
@@ -319,16 +321,20 @@ export function KnowledgeImportModal({
     if (!open) {
       startedSelectionKeyRef.current =
         null;
+      consumedSelectionRef.current = null;
       return;
     }
 
     if (
       !selectedFiles?.length ||
+      consumedSelectionRef.current === selectedFiles ||
       knowledgeImport.files.length > 0
     ) {
       return;
     }
 
+    // Resetting the hook during cancellation must not reload the old selection.
+    consumedSelectionRef.current = selectedFiles;
     knowledgeImport.handleFilesChange(
       selectedFiles,
     );
@@ -370,6 +376,12 @@ export function KnowledgeImportModal({
   }
 
   function requestClose() {
+    if (knowledgeImport.allFilesDuplicate) {
+      knowledgeImport.finishActiveImport();
+      startedSelectionKeyRef.current = null;
+      onOpenChange(false);
+      return;
+    }
     if (
       knowledgeImport.step ===
       "completed"
@@ -500,6 +512,11 @@ export function KnowledgeImportModal({
               />
             ) : null}
 
+            {knowledgeImport.duplicateNotice ? (
+              <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+                {knowledgeImport.duplicateNotice}
+              </p>
+            ) : null}
             {!isWaitingToStart &&
             knowledgeImport.step ===
               "upload" &&
@@ -599,6 +616,7 @@ export function KnowledgeImportModal({
 
           {!isWaitingToStart ? (
             <KnowledgeImportModalFooter
+              allFilesDuplicate={knowledgeImport.allFilesDuplicate}
               step={
                 knowledgeImport.step
               }
