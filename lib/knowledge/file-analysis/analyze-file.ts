@@ -2,7 +2,7 @@
 
 import crypto from "crypto";
 import path from "path";
-import { readFile } from "fs/promises";
+import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
 import type { Prisma } from "@prisma/client";
 import { parseOffice } from "officeparser";
 
@@ -245,35 +245,6 @@ const SEMANTIC_MODEL_SCHEMA = {
   },
 } as const;
 
-function resolveStoragePath(storagePath: string) {
-  const normalizedPath = storagePath
-    .replaceAll("\\", "/")
-    .replace(/^\/+/, "");
-
-  const publicRoot = path.resolve(
-    process.cwd(),
-    "public",
-  );
-
-  const absolutePath = path.resolve(
-    publicRoot,
-    normalizedPath,
-  );
-
-  if (
-    absolutePath !== publicRoot &&
-    !absolutePath.startsWith(
-      `${publicRoot}${path.sep}`,
-    )
-  ) {
-    throw new Error(
-      "La ruta del archivo no es valida",
-    );
-  }
-
-  return absolutePath;
-}
-
 function getExtension(fileName: string) {
   return path.extname(fileName).toLowerCase();
 }
@@ -292,9 +263,9 @@ async function extractPlainText(buffer: Buffer) {
 }
 
 async function extractOfficeText(
-  absolutePath: string,
+  buffer: Buffer,
 ) {
-  const ast = await parseOffice(absolutePath);
+  const ast = await parseOffice(buffer);
   return ast.toText();
 }
 
@@ -442,10 +413,9 @@ export async function analyzeKnowledgeFile(
   }
 
   const startedAt = Date.now();
-  const absolutePath = resolveStoragePath(
-    file.storage_path,
-  );
-  const buffer = await readFile(absolutePath);
+const buffer = await readKnowledgeFile(
+  file.storage_path,
+);
   const fileHash = crypto
     .createHash("sha256")
     .update(buffer)
@@ -482,7 +452,7 @@ export async function analyzeKnowledgeFile(
     semanticText =
       semanticText ||
       cleanExtractedText(
-        await extractOfficeText(absolutePath),
+        await extractOfficeText(buffer),
       );
     metadata.limitations.push(
       "Extractor degradado: solo se usa texto y metadatos disponibles; no se extrae geometria objetiva.",
