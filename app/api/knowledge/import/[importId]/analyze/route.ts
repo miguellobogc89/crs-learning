@@ -4,6 +4,11 @@ import AdmZip from "adm-zip";
 import { mkdir, rm, writeFile } from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
+import {
+  deleteKnowledgeFile,
+  readKnowledgeFile,
+  uploadKnowledgeFile,
+} from "@/lib/storage/knowledge-storage";
 
 import { auth } from "@/auth";
 import {
@@ -393,10 +398,9 @@ try {
       );
     }
 
-    const absoluteSourcePath =
-      resolveStoragePath(
-        uploadedFile.storage_path,
-      );
+    const sourceBuffer = await readKnowledgeFile(
+      uploadedFile.storage_path,
+    );
 
       const isZip =
         isSupportedKnowledgeArchive(
@@ -556,9 +560,7 @@ if (!isZip) {
   continue;
 }
 
-      const zip = new AdmZip(
-        absoluteSourcePath,
-      );
+      const zip = new AdmZip(sourceBuffer);
 
       const entries = zip.getEntries();
 
@@ -737,22 +739,16 @@ if (
           },
         );
 
-        await writeFile(
-          destinationPath,
-          buffer,
-        );
+const extractedStoragePath = await uploadKnowledgeFile(
+  `knowledge/imports/${importId}/extracted/${processingOrder + 1}-${extractedFileName}`,
+  buffer,
+  getKnowledgeImportMimeType(extractedFileName) ||
+    "application/octet-stream",
+);
 
         totalExtractedSize += buffer.length;
         processingOrder += 1;
 
-        const publicStoragePath = [
-          "",
-          "uploads",
-          "knowledge-imports",
-          importId,
-          "extracted",
-          relativePath,
-        ].join("/");
 
         extractedFiles.push({
           import_id: importId,
@@ -763,8 +759,7 @@ if (
               relativePath,
             ),
           file_size: buffer.length,
-          storage_path:
-            publicStoragePath,
+          storage_path: extractedStoragePath,
           status: "extracted",
           processing_order: processingOrder,
           processing_status: "pending",

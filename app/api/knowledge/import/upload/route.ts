@@ -1,5 +1,6 @@
+
 // app/api/knowledge/import/upload/route.ts
-import { mkdir, rm, writeFile } from "node:fs/promises";
+
 import path from "node:path";
 
 import { NextResponse } from "next/server";
@@ -8,16 +9,22 @@ import { auth } from "@/auth";
 import { knowledgeLibraryWriteWhere } from "@/lib/knowledge/access-control";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
+import {
+  deleteKnowledgeFile,
+  uploadKnowledgeFile,
+} from "@/lib/storage/knowledge-storage";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const MAX_IMPORT_SIZE = 150 * 1024 * 1024; // 150 MB
+const MAX_IMPORT_SIZE = 150 * 1024 * 1024;
 
 const ALLOWED_MODES = new Set(["files", "folder", "zip"]);
 
 function sanitizeFileName(fileName: string) {
-  const baseName = path.basename(fileName);
+  const baseName = path.basename(
+    fileName.replaceAll("\\", "/"),
+  );
 
   return baseName
     .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
@@ -25,7 +32,10 @@ function sanitizeFileName(fileName: string) {
     .trim();
 }
 
-function sanitizeRelativePath(relativePath: string, fallbackName: string) {
+function sanitizeRelativePath(
+  relativePath: string,
+  fallbackName: string,
+) {
   const normalized = relativePath
     .replaceAll("\\", "/")
     .split("/")
@@ -42,7 +52,9 @@ function sanitizeRelativePath(relativePath: string, fallbackName: string) {
   return normalized || fallbackName;
 }
 
-function parseRelativePaths(value: FormDataEntryValue | null) {
+function parseRelativePaths(
+  value: FormDataEntryValue | null,
+) {
   if (typeof value !== "string" || !value.trim()) {
     return [] as string[];
   }
@@ -64,25 +76,22 @@ function parseRelativePaths(value: FormDataEntryValue | null) {
 
 export async function POST(request: Request) {
   let importId: string | null = null;
-  let importDirectory: string | null = null;
+
+  const uploadedStoragePaths: string[] = [];
 
   try {
     const session = await auth();
-
     const userId = session?.user?.id;
 
     if (!userId) {
       return NextResponse.json(
-        {
-          error: "No autorizado",
-        },
-        {
-          status: 401,
-        },
+        { error: "No autorizado" },
+        { status: 401 },
       );
     }
 
-    const { activeWorkspace } = await getActiveWorkspaceContext(userId);
+    const { activeWorkspace } =
+      await getActiveWorkspaceContext(userId);
 
     const formData = await request.formData();
 
@@ -101,38 +110,29 @@ export async function POST(request: Request) {
 
     if (!libraryId) {
       return NextResponse.json(
-        {
-          error: "Falta la carpeta de destino.",
-        },
-        {
-          status: 400,
-        },
+        { error: "Falta la carpeta de destino." },
+        { status: 400 },
       );
     }
 
     if (!ALLOWED_MODES.has(mode)) {
       return NextResponse.json(
-        {
-          error: "El tipo de importación no es válido.",
-        },
-        {
-          status: 400,
-        },
+        { error: "El tipo de importación no es válido." },
+        { status: 400 },
       );
     }
 
     const files = formData
       .getAll("files")
-      .filter((entry): entry is File => entry instanceof File);
+      .filter(
+        (entry): entry is File =>
+          entry instanceof File,
+      );
 
     if (files.length === 0) {
       return NextResponse.json(
-        {
-          error: "No se ha recibido ningún archivo.",
-        },
-        {
-          status: 400,
-        },
+        { error: "No se ha recibido ningún archivo." },
+        { status: 400 },
       );
     }
 
@@ -147,9 +147,7 @@ export async function POST(request: Request) {
           error:
             "La importación supera el límite máximo de 150 MB.",
         },
-        {
-          status: 413,
-        },
+        { status: 413 },
       );
     }
 
@@ -165,24 +163,24 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json(
-        {
-          error: "No se ha encontrado el usuario.",
-        },
-        {
-          status: 404,
-        },
+        { error: "No se ha encontrado el usuario." },
+        { status: 404 },
       );
     }
 
-    const library = await prisma.knowledge_libraries.findFirst({
-      where: {
-        id: libraryId,
-        ...knowledgeLibraryWriteWhere(user.id, activeWorkspace.id),
-      },
-      select: {
-        id: true,
-      },
-    });
+    const library =
+      await prisma.knowledge_libraries.findFirst({
+        where: {
+          id: libraryId,
+          ...knowledgeLibraryWriteWhere(
+            user.id,
+            activeWorkspace.id,
+          ),
+        },
+        select: {
+          id: true,
+        },
+      });
 
     if (!library) {
       return NextResponse.json(
@@ -190,9 +188,7 @@ export async function POST(request: Request) {
           error:
             "La carpeta no existe o no tienes acceso a ella.",
         },
-        {
-          status: 403,
-        },
+        { status: 403 },
       );
     }
 
@@ -207,123 +203,113 @@ export async function POST(request: Request) {
           ? files[0].name
           : `${files.length} archivos`;
 
-  const knowledgeImport =
-  await prisma.knowledge_imports.create({
-    data: {
-      library_id: library.id,
-      owner_user_id: user.id,
-      company_id: user.company_id,
-      status: "uploading",
-      upload_type: mode,
-      original_name: originalName,
-      total_files: files.length,
-      total_size: totalSize,
-    },
-    select: {
-      id: true,
-    },
-  });
+    const knowledgeImport =
+      await prisma.knowledge_imports.create({
+        data: {
+          library_id: library.id,
+          owner_user_id: user.id,
+          company_id: user.company_id,
+          status: "uploading",
+          upload_type: mode,
+          original_name: originalName,
+          total_files: files.length,
+          total_size: totalSize,
+        },
+        select: {
+          id: true,
+        },
+      });
 
-const createdImportId = knowledgeImport.id;
+    importId = knowledgeImport.id;
 
-importId = createdImportId;
+    const uploadedFiles: Array<{
+      import_id: string;
+      file_name: string;
+      relative_path: string;
+      mime_type: string | null;
+      file_size: number;
+      storage_path: string;
+      status: string;
+    }> = [];
 
-importDirectory = path.join(
-  process.cwd(),
-  "public",
-  "uploads",
-  "knowledge-imports",
-  createdImportId,
-);
+    for (const [index, file] of files.entries()) {
+      const safeFileName =
+        sanitizeFileName(file.name) ||
+        `archivo-${index + 1}`;
 
-await mkdir(importDirectory, {
-  recursive: true,
-});
+      const relativePath = sanitizeRelativePath(
+        relativePaths[index] || file.name,
+        safeFileName,
+      );
 
-const uploadedFiles: Array<{
-  import_id: string;
-  file_name: string;
-  relative_path: string;
-  mime_type: string | null;
-  file_size: number;
-  storage_path: string;
-  status: string;
-}> = [];
+      const storedFileName = `${String(
+        index + 1,
+      ).padStart(4, "0")}-${safeFileName}`;
 
-for (const [index, file] of files.entries()) {
-  const safeFileName =
-    sanitizeFileName(file.name) ||
-    `archivo-${index + 1}`;
+      const pathname =
+        `knowledge/imports/${importId}/originals/` +
+        storedFileName;
 
-  const relativePath = sanitizeRelativePath(
-    relativePaths[index] || file.name,
-    safeFileName,
-  );
+      const buffer = Buffer.from(
+        await file.arrayBuffer(),
+      );
 
-  const storedFileName = `${String(index + 1).padStart(
-    4,
-    "0",
-  )}-${safeFileName}`;
+      const storagePath = await uploadKnowledgeFile(
+        pathname,
+        buffer,
+        file.type || "application/octet-stream",
+      );
 
-  const absoluteStoragePath = path.join(
-    importDirectory,
-    storedFileName,
-  );
+      uploadedStoragePaths.push(storagePath);
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-
-  await writeFile(absoluteStoragePath, buffer);
-
-  uploadedFiles.push({
-    import_id: createdImportId,
-    file_name: safeFileName,
-    relative_path: relativePath,
-    mime_type: file.type || null,
-    file_size: file.size,
-    storage_path: `/uploads/knowledge-imports/${createdImportId}/${storedFileName}`,
-    status: "uploaded",
-  });
-}
-
-await prisma.$transaction([
-  prisma.knowledge_import_files.createMany({
-    data: uploadedFiles,
-  }),
-
-  prisma.knowledge_imports.update({
-    where: {
-      id: createdImportId,
-    },
-    data: {
-      status: "uploaded",
-      updated_at: new Date(),
-    },
-  }),
-]);
-
-return NextResponse.json(
-  {
-    importId: createdImportId,
-    status: "uploaded",
-    mode,
-    fileCount: files.length,
-    totalSize,
-  },
-  {
-    status: 201,
-  },
-);
-
-    
-  } catch (error) {
-    console.error("Knowledge import upload error:", error);
-
-    if (importDirectory) {
-      await rm(importDirectory, {
-        recursive: true,
-        force: true,
-      }).catch(() => undefined);
+      uploadedFiles.push({
+        import_id: importId,
+        file_name: safeFileName,
+        relative_path: relativePath,
+        mime_type: file.type || null,
+        file_size: file.size,
+        storage_path: storagePath,
+        status: "uploaded",
+      });
     }
+
+    await prisma.$transaction([
+      prisma.knowledge_import_files.createMany({
+        data: uploadedFiles,
+      }),
+
+      prisma.knowledge_imports.update({
+        where: {
+          id: importId,
+        },
+        data: {
+          status: "uploaded",
+          updated_at: new Date(),
+        },
+      }),
+    ]);
+
+    return NextResponse.json(
+      {
+        importId,
+        status: "uploaded",
+        mode,
+        fileCount: files.length,
+        totalSize,
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    console.error(
+      "Knowledge import upload error:",
+      error,
+    );
+
+    await Promise.allSettled(
+      uploadedStoragePaths.map((storagePath) =>
+        deleteKnowledgeFile(storagePath),
+      ),
+    );
 
     if (importId) {
       await prisma.knowledge_imports
@@ -345,11 +331,10 @@ return NextResponse.json(
 
     return NextResponse.json(
       {
-        error: "No se ha podido completar la importación.",
+        error:
+          "No se ha podido completar la importación.",
       },
-      {
-        status: 500,
-      },
+      { status: 500 },
     );
   }
 }
