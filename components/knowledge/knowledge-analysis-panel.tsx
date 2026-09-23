@@ -27,7 +27,6 @@ import {
 
 import type { KnowledgeViewModel } from "@/lib/knowledge/knowledge-analysis.types";
 import { parseKnowledgeAnalysis } from "@/lib/knowledge/parse-knowledge-analysis";
-import { KnowledgeReviewPanel } from "@/components/knowledge/detail/summary/knowledge-review-panel";
 import { KnowledgeSummaryPanel } from "@/components/knowledge/detail/general/knowledge-summary-panel";
 import type { KnowledgeFile } from "@/components/knowledge/detail/knowledge-detail.types";
 
@@ -326,15 +325,9 @@ export function KnowledgeAnalysisPanel({
     dependencies.length +
     relatedDocuments.length;
 
-  if (mode === "general") {
-    return (
-      <GeneralView
-        summary={analysis.executiveSummary}
-        analysisJson={analysisJson}
-        files={files}
-      />
-    );
-  }
+if (mode === "general") {
+  return <GeneralView summary={analysis.executiveSummary} />;
+}
 
   return (
     <DetailsView
@@ -350,46 +343,10 @@ export function KnowledgeAnalysisPanel({
 
 function GeneralView({
   summary,
-  analysisJson,
-  files,
 }: {
   summary: KnowledgeViewModel["executiveSummary"];
-  analysisJson: unknown;
-  files: KnowledgeFile[];
 }) {
-  return (
-    <div className="space-y-6">
-      <KnowledgeSummaryPanel summary={summary} />
-
-      <details className="group overflow-hidden rounded-2xl border border-border bg-card">
-        <summary className="flex cursor-pointer list-none items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-            <ClipboardList className="h-5 w-5" />
-          </span>
-
-          <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-semibold text-foreground">
-              Revision documental
-            </h2>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              Contradicciones, cobertura, documentos
-              integrados y referencias del analisis.
-            </p>
-          </div>
-
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-        </summary>
-
-        <div className="border-t border-border px-5 py-5">
-          <KnowledgeReviewPanel
-            analysisJson={analysisJson}
-            files={files}
-          />
-        </div>
-      </details>
-    </div>
-  );
+  return <KnowledgeSummaryPanel summary={summary} />;
 }
 
 

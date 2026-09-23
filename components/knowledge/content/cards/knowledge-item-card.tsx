@@ -369,11 +369,13 @@ function KnowledgeItemCardShell({
   rightMeta,
 }: ShellProps) {
   const cardClassName = [
-    // Exterior aprobado: borde estándar de Card y resplandor azul.
-    "group relative h-[308px] min-w-0 self-start cursor-pointer overflow-hidden border-slate-200/50 bg-card !gap-0 !py-0",
-    "shadow-[0_4px_24px_-8px_rgba(59,130,246,0.16),0_12px_48px_-18px_rgba(59,130,246,0.14)]",
+    // Neutralizamos el padding y el gap internos que Card añade por defecto.
+    // Esta es la corrección que ha permitido cuadrar el diseño.
+    "group h-[280px] min-w-0 overflow-hidden !gap-0 !py-0",
+    "border border-slate-200/50 bg-card",
 
-    // Elevación muy leve y suave.
+    // Resplandor azul y elevación suave que ya habíamos aprobado.
+    "shadow-[0_4px_24px_-8px_rgba(59,130,246,0.16),0_12px_48px_-18px_rgba(59,130,246,0.14)]",
     "transform-gpu transition-[transform,box-shadow] duration-500 ease-out",
     "hover:-translate-y-[2px]",
     "hover:shadow-[0_6px_30px_-8px_rgba(59,130,246,0.24),0_18px_56px_-16px_rgba(59,130,246,0.22)]",
@@ -400,32 +402,63 @@ function KnowledgeItemCardShell({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <CardContent className="flex h-full min-h-0 flex-col p-0">
-        {/* Header: ocupa su propio espacio y no se superpone al icono. */}
-        <KnowledgeCardHeader
-          selected={selected}
-          selectionControl={selectionControl}
-          menu={menu}
-        />
-
-        {/* Body: vista previa centrada, sin solaparse con el header. */}
-        <div className="flex h-[120px] shrink-0 items-center justify-center px-6">
-          <div className="flex max-h-[116px] max-w-full items-center justify-center">
-            {preview}
+      {/* Conservamos el padding único que ya ha quedado bien. */}
+      <CardContent className="flex h-full min-h-0 flex-col !p-4">
+        {/* HEADER */}
+        <header className="flex h-8 shrink-0 items-center justify-between">
+          <div
+            className={[
+              "flex h-7 w-7 shrink-0 items-center justify-center",
+              "transition-opacity duration-200",
+              selected
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+            ].join(" ")}
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            {selectionControl}
           </div>
+
+          <div
+            className={[
+              "flex h-7 w-7 shrink-0 items-center justify-center",
+              "[&_button]:!border-0",
+              "[&_button]:!bg-transparent",
+              "[&_button]:!shadow-none",
+              "[&_button]:!ring-0",
+              "[&_button]:!ring-offset-0",
+            ].join(" ")}
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            {menu}
+          </div>
+        </header>
+
+        {/* BODY: icono real de carpeta o artículo */}
+        <div className="flex h-[124px] shrink-0 items-center justify-center">
+          {preview}
         </div>
 
-        {/* Footer: título y metadatos, separado del body. */}
-        <div className="flex min-h-0 flex-1 flex-col border-t border-border/50 px-4 pb-4 pt-4">
-          <div className="min-h-[48px] min-w-0 text-[14px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground [&_*]:max-w-full">
+        {/* FOOTER: título y metadatos reales */}
+        <footer className="flex min-h-0 flex-1 flex-col pt-2">
+          <div className="min-w-0">
             {title}
           </div>
 
-          <div className="mt-auto flex min-w-0 items-end justify-between gap-3 pt-3 text-xs leading-5 text-muted-foreground">
-            <div className="min-w-0 flex-1">{leftMeta}</div>
-            <div className="shrink-0 text-right">{rightMeta}</div>
+          <div className="mt-auto flex min-w-0 items-end justify-between gap-2 text-xs text-muted-foreground">
+            <div className="min-w-0 flex-1">
+              {leftMeta}
+            </div>
+
+            <div className="shrink-0 text-right">
+              {rightMeta}
+            </div>
           </div>
-        </div>
+        </footer>
       </CardContent>
     </Card>
   );
