@@ -5,7 +5,7 @@ import {
   KNOWLEDGE_IMPORT_DOCUMENT_FORMATS,
   KNOWLEDGE_IMPORT_ARCHIVE_FORMATS,
   KNOWLEDGE_IMPORT_ZIP_MIME_TYPES,
-} from "@/lib/knowledge/import-flow/supported-formats";
+} from "@/lib/knowledge/import/supported-formats";
 
 import type {
   KnowledgeImportSource,

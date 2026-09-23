@@ -1,13 +1,15 @@
+// lib/knowledge/import-flow/file-selection.ts
 
 import {
   isSupportedKnowledgeArchive,
-} from "./supported-formats";
+} from "../supported-formats";
 
 export function getBrowserFileIdentity(
   file: File,
 ) {
   return [
-    file.name.toLowerCase(),
+    getBrowserFileRelativePath(file),
+    file.name,
     file.size,
     file.lastModified,
   ].join("::");
@@ -52,28 +54,18 @@ export function getBrowserImportMode(
   return "files" as const;
 }
 
+/**
+ * La deduplicación por nombre, tamaño y fecha no es segura:
+ * dos documentos diferentes pueden compartir esos metadatos.
+ *
+ * Conservamos todos los archivos seleccionados y delegamos
+ * la identificación de duplicados por contenido al servidor.
+ */
 export function deduplicateBrowserFiles(
   files: File[],
 ) {
-  const seenFiles = new Set<string>();
-  const uniqueFiles: File[] = [];
-  const duplicateFiles: File[] = [];
-
-  for (const file of files) {
-    const identity =
-      getBrowserFileIdentity(file);
-
-    if (seenFiles.has(identity)) {
-      duplicateFiles.push(file);
-      continue;
-    }
-
-    seenFiles.add(identity);
-    uniqueFiles.push(file);
-  }
-
   return {
-    uniqueFiles,
-    duplicateFiles,
+    uniqueFiles: [...files],
+    duplicateFiles: [] as File[],
   };
 }
