@@ -2,6 +2,7 @@
 // app/api/knowledge/import/upload/route.ts
 
 import path from "node:path";
+import { resolveDuplicateSelection } from "@/lib/knowledge/import/pipeline/duplicate-selection";
 
 import { NextResponse } from "next/server";
 
@@ -344,18 +345,8 @@ export async function POST(request: Request) {
             : null,
       }));
 
-    /*
-     * Una coincidencia por nombre y tamaño sin hash
-     * requiere revisión; no se descarta automáticamente.
-     *
-     * Tampoco se sube parcialmente una selección con
-     * duplicados o formatos no admitidos.
-     */
-    if (
-      reviewFiles.length > 0 ||
-      preflight.unreadableExistingDocumentIds
-        .length > 0
-    ) {
+    const decision = resolveDuplicateSelection(preflight);
+    if (decision.requiresReview) {
       return NextResponse.json(
         {
           status: "requires_review",
@@ -384,7 +375,7 @@ export async function POST(request: Request) {
           unreadableExistingDocumentIds:
             preflight.unreadableExistingDocumentIds,
         },
-        { status: 409 },
+        { status: decision.allFilesDuplicate ? 200 : 409 },
       );
     }
 
@@ -400,15 +391,16 @@ export async function POST(request: Request) {
       );
     }
 
-    /*
-     * Conservamos la estructura de subida actual:
-     * - files/folder: originales individuales.
-     * - zip: ZIP original.
-     *
-     * La ruta de análisis existente seguirá tratando
-     * el ZIP. El inventario expandido se ha utilizado
-     * únicamente para validar antes de almacenar.
-     */
+    // Ordinary imports keep their originals. Filtered ZIPs store only accepted entries.
+    const storageFiles = preflight.duplicateFiles.length > 0
+      ? preflight.acceptedFiles.map((result) => result.file)
+      : selectedFiles;
+    const storageMode = preflight.duplicateFiles.length > 0 && mode === "zip"
+      ? "folder"
+      : mode;
+    const storedTotalSize = storageFiles.reduce(
+      (total, file) => total + file.content.byteLength, 0,
+    );
     const originalName =
       mode === "zip"
         ? files[0]?.name ?? null
@@ -423,10 +415,10 @@ export async function POST(request: Request) {
           owner_user_id: user.id,
           company_id: user.company_id,
           status: "uploading",
-          upload_type: mode,
+          upload_type: storageMode,
           original_name: originalName,
-          total_files: files.length,
-          total_size: totalSize,
+          total_files: storageFiles.length,
+          total_size: storedTotalSize,
         },
         select: {
           id: true,
@@ -446,15 +438,15 @@ export async function POST(request: Request) {
     }> = [];
 
     for (
-      const [index, file] of files.entries()
+      const [index, file] of storageFiles.entries()
     ) {
       const safeFileName =
-        sanitizeFileName(file.name) ||
+        sanitizeFileName(file.fileName) ||
         `archivo-${index + 1}`;
 
       const relativePath =
         sanitizeRelativePath(
-          relativePaths[index] || file.name,
+          file.relativePath || file.fileName,
           safeFileName,
         );
 
@@ -467,14 +459,14 @@ export async function POST(request: Request) {
         storedFileName;
 
       const buffer = Buffer.from(
-        selectedFiles[index].content,
+        file.content,
       );
 
       const storagePath =
         await uploadKnowledgeFile(
           pathname,
           buffer,
-          file.type ||
+          file.mimeType ||
             "application/octet-stream",
         );
 
@@ -484,8 +476,8 @@ export async function POST(request: Request) {
         import_id: importId,
         file_name: safeFileName,
         relative_path: relativePath,
-        mime_type: file.type || null,
-        file_size: file.size,
+        mime_type: file.mimeType || null,
+        file_size: file.content.byteLength,
         storage_path: storagePath,
         status: "uploaded",
       });
@@ -510,11 +502,18 @@ export async function POST(request: Request) {
       {
         importId,
         status: "uploaded",
-        mode,
-        fileCount: files.length,
-        totalSize,
+        mode: storageMode,
+        fileCount: storageFiles.length,
+        totalSize: storedTotalSize,
+        skippedDuplicateFiles: reviewFiles.filter((file) => file.status === "duplicate"),
+        storedFiles: preflight.duplicateFiles.length > 0 ? storageFiles.map((file) => ({
+          id: file.id,
+          name: file.fileName,
+          relativePath: file.relativePath,
+          size: file.content.byteLength,
+        })) : undefined,
         inventoryFileCount:
-          inventory.totalFiles,
+          preflight.acceptedFiles.length,
       },
       { status: 201 },
     );

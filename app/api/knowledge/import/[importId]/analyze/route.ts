@@ -2,6 +2,7 @@
 // app/api/knowledge/import/[importId]/analyze/route.ts
 
 import { NextResponse } from "next/server";
+import { resolveDuplicateSelection } from "@/lib/knowledge/import/pipeline/duplicate-selection";
 
 import { auth } from "@/auth";
 import {
@@ -55,12 +56,12 @@ function getReviewFile(
 
   return {
     id: result.file.id,
-    name: result.file.fileName,
+    fileName: result.file.fileName,
     relativePath: result.file.relativePath,
-    size: result.file.content.byteLength,
+    fileSize: result.file.content.byteLength,
     fileType: result.file.mimeType ?? null,
     status: result.status,
-    duplicateStatus: duplicate?.status ?? null,
+    duplicate: duplicate?.status ?? null,
     existingKnowledgeFileId:
       duplicate?.status === "duplicate-in-knowledge" ||
       duplicate?.status === "possible-duplicate"
@@ -231,6 +232,7 @@ export async function POST(
       });
 
     const { preflight } = prepared;
+    const decision = resolveDuplicateSelection(preflight);
 
     const reviewFiles = preflight.files
       .filter((result) => result.status !== "accepted")
@@ -240,10 +242,7 @@ export async function POST(
      * No guardamos documentos derivados ni iniciamos
      * procesamiento si el preflight requiere revisión.
      */
-    if (
-      reviewFiles.length > 0 ||
-      preflight.unreadableExistingDocumentIds.length > 0
-    ) {
+    if (decision.requiresReview) {
       await prisma.knowledge_imports.updateMany({
         where: {
           id: importId,
@@ -252,8 +251,8 @@ export async function POST(
           },
         },
         data: {
-          status: "uploaded",
-          processing_status: "pending",
+          status: decision.allFilesDuplicate ? "cancelled" : "uploaded",
+          processing_status: decision.allFilesDuplicate ? "cancelled" : "pending",
           error_message: null,
           updated_at: new Date(),
         },
@@ -275,20 +274,20 @@ export async function POST(
           acceptedFiles:
             preflight.acceptedFiles.map((result) => ({
               id: result.file.id,
-              name: result.file.fileName,
+              fileName: result.file.fileName,
               relativePath: result.file.relativePath,
-              size: result.file.content.byteLength,
+              fileSize: result.file.content.byteLength,
             })),
           reviewFiles,
           unreadableExistingDocumentIds:
             preflight.unreadableExistingDocumentIds,
         },
-        { status: 409 },
+        { status: decision.allFilesDuplicate ? 200 : 409 },
       );
     }
 
     const queue =
-      buildKnowledgeProcessingQueue(preflight);
+      buildKnowledgeProcessingQueue(decision.queuePreflight);
 
     if (queue.items.length === 0) {
       throw new Error(
@@ -520,10 +519,16 @@ export async function POST(
       completedFiles: 0,
       failedFiles: 0,
       totalSize: queue.totalBytes,
-      duplicateCount: 0,
+      duplicateCount: preflight.duplicateFiles.length,
       unsupportedCount: 0,
       allFilesDuplicate: false,
-      duplicateFiles: [],
+      duplicateFiles: preflight.duplicateFiles.map((result) => ({
+        name: result.file.fileName,
+        relativePath: result.file.relativePath,
+        size: result.file.content.byteLength,
+        existingFileId: result.duplicate?.status === "duplicate-in-knowledge"
+          ? result.duplicate.existingKnowledgeFileId : undefined,
+      })),
       files: persistedReadyFiles.map((file) => ({
         id: file.id,
         name: file.file_name,

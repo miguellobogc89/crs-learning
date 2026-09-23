@@ -8,6 +8,8 @@ import {
   isSupportedKnowledgeDocument,
 } from "@/lib/knowledge/import/supported-formats";
 
+import { ingestDocument } from "@/lib/knowledge/documents/document-ingestion.service";
+
 const OFFICE_FILE_TYPES = {
   ".pdf": "pdf",
   ".docx": "docx",
@@ -41,6 +43,16 @@ export async function extractDocumentText(
   if (content.length === 0) {
     throw new Error("El documento está vacío");
   }
+
+  if (extension === ".pdf") {
+  const result = await ingestDocument({
+    buffer: content,
+    fileName,
+    mimeType: "application/pdf",
+  });
+
+  return result.text;
+}
 
   if (isPlainTextKnowledgeDocument(fileName)) {
     return content.toString("utf8");

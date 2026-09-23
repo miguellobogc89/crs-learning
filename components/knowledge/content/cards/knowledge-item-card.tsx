@@ -1,18 +1,17 @@
 // components/knowledge/content/cards/knowledge-item-card.tsx
 
+// components/knowledge/content/cards/knowledge-item-card.tsx
+
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import {
   useEffect,
   useState,
   type DragEvent,
+  type ReactNode,
 } from "react";
-import {
-  Clock,
-  FileText,
-} from "lucide-react";
+import { Clock, FileText, Folder } from "lucide-react";
 
 import { KnowledgeTypeBadge } from "@/components/knowledge/content/knowledge-type-badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,7 +21,7 @@ import { useKnowledgeCardActions } from "./article/use-knowledge-card-actions";
 import { KnowledgeFolderMenu } from "./folder/knowledge-folder-menu";
 import { useKnowledgeFolderActions } from "./folder/use-knowledge-folder-actions";
 import { CardSelectionCheckbox } from "./shared/card-selection-checkbox";
-import { ExpandableCardFooter } from "./shared/expandable-card-footer";
+import { KnowledgeCardHeader } from "./knowledge-card-header";
 import {
   formatRelativeDate,
   getCountLabel,
@@ -83,9 +82,7 @@ type ArticleProps = SharedProps & {
   onShare?: (knowledge: KnowledgeSource) => void;
 };
 
-export type KnowledgeItemCardProps =
-  | FolderProps
-  | ArticleProps;
+export type KnowledgeItemCardProps = FolderProps | ArticleProps;
 
 export function KnowledgeItemCard(
   props: KnowledgeItemCardProps,
@@ -112,11 +109,8 @@ function KnowledgeFolderItemCard({
   const [relativeUpdatedAt, setRelativeUpdatedAt] =
     useState("—");
 
-  const actions = useKnowledgeFolderActions({
-    folder,
-  });
+  const actions = useKnowledgeFolderActions({ folder });
 
-  const isSelected = selected;
   const articleCount = folder.article_count ?? 0;
   const folderCount = folder.folder_count ?? 0;
 
@@ -128,7 +122,7 @@ function KnowledgeFolderItemCard({
 
   return (
     <KnowledgeItemCardShell
-      selected={isSelected}
+      selected={selected}
       draggable={draggable}
       isDropTarget={isDropTarget}
       onClick={actions.openFolder}
@@ -139,7 +133,7 @@ function KnowledgeFolderItemCard({
       onDrop={onDrop}
       selectionControl={
         <CardSelectionCheckbox
-          selected={isSelected}
+          selected={selected}
           label={`Seleccionar ${folder.name}`}
           onSelectedChange={onSelectedChange}
         />
@@ -153,15 +147,11 @@ function KnowledgeFolderItemCard({
           onDelete={actions.deleteFolder}
         />
       }
-      preview={
-        <Image
-          src="/icons/files/folder.png"
-          alt=""
-          width={120}
-          height={120}
-          className="h-[120px] w-[120px] object-contain transition-transform duration-200 group-hover:scale-[1.03]"
-        />
-      }
+preview={
+  <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-lesson-soft text-lesson transition-transform duration-200 group-hover:scale-[1.04]">
+    <Folder size={52} strokeWidth={1.8} />
+  </div>
+}
       title={
         actions.isRenaming ? (
           <div
@@ -176,9 +166,7 @@ function KnowledgeFolderItemCard({
               value={actions.renameValue}
               disabled={actions.isRenamingPending}
               onChange={(event) => {
-                actions.setRenameValue(
-                  event.target.value,
-                );
+                actions.setRenameValue(event.target.value);
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -210,7 +198,7 @@ function KnowledgeFolderItemCard({
         ) : (
           <h2
             title={folder.name}
-            className="block w-full truncate text-sm font-semibold leading-5 text-foreground"
+            className="line-clamp-2 text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground"
           >
             {folder.name}
           </h2>
@@ -223,7 +211,6 @@ function KnowledgeFolderItemCard({
             "artículo",
             "artículos",
           )}
-
           {folderCount > 0
             ? ` · ${getCountLabel(
                 folderCount,
@@ -234,7 +221,7 @@ function KnowledgeFolderItemCard({
         </span>
       }
       rightMeta={
-        <span className="flex shrink-0 items-center gap-1">
+        <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap">
           <Clock className="h-3.5 w-3.5" />
           {relativeUpdatedAt}
         </span>
@@ -256,15 +243,11 @@ function KnowledgeArticleItemCard({
   onDragLeave,
   onDrop,
 }: ArticleProps) {
-  const actions = useKnowledgeCardActions({
-    knowledge,
-  });
-
-  const isSelected = selected;
+  const actions = useKnowledgeCardActions({ knowledge });
 
   return (
     <KnowledgeItemCardShell
-      selected={isSelected}
+      selected={selected}
       draggable={draggable}
       isDropTarget={isDropTarget}
       onClick={actions.openArticle}
@@ -275,7 +258,7 @@ function KnowledgeArticleItemCard({
       onDrop={onDrop}
       selectionControl={
         <CardSelectionCheckbox
-          selected={isSelected}
+          selected={selected}
           label={`Seleccionar ${knowledge.title}`}
           onSelectedChange={onSelectedChange}
         />
@@ -303,10 +286,10 @@ function KnowledgeArticleItemCard({
         />
       }
       preview={
-        <div className="flex h-[120px] w-[120px] items-center justify-center rounded-2xl bg-lesson-soft text-lesson transition-transform duration-200 group-hover:scale-[1.03]">
+        <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-lesson-soft text-lesson transition-transform duration-200 group-hover:scale-[1.04]">
           <FileText
-            className="h-16 w-16"
-            strokeWidth={1.5}
+            className="h-14 w-14"
+            strokeWidth={1.6}
           />
         </div>
       }
@@ -320,14 +303,14 @@ function KnowledgeArticleItemCard({
         >
           <h2
             title={knowledge.title}
-            className="block w-full truncate text-sm font-semibold leading-5 text-foreground hover:text-lesson"
+            className="line-clamp-2 text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground transition-colors hover:text-lesson"
           >
             {knowledge.title}
           </h2>
         </Link>
       }
       leftMeta={
-        <div className="min-w-0 overflow-hidden">
+        <div className="min-w-0">
           <KnowledgeTypeBadge
             type={knowledge.knowledge_type}
             confidence={knowledge.confidence}
@@ -335,9 +318,8 @@ function KnowledgeArticleItemCard({
         </div>
       }
       rightMeta={
-        <span className="flex shrink-0 items-center gap-1">
+        <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap">
           <Clock className="h-3.5 w-3.5" />
-
           {formatRelativeDate(
             knowledge.updated_at,
             "Sin actualizar",
@@ -358,13 +340,16 @@ type ShellProps = {
   onDragOver?: (event: DragEvent<HTMLElement>) => void;
   onDragLeave?: (event: DragEvent<HTMLElement>) => void;
   onDrop?: (event: DragEvent<HTMLElement>) => void;
-  selectionControl: React.ReactNode;
-  menu: React.ReactNode;
-  preview: React.ReactNode;
-  title: React.ReactNode;
-  leftMeta: React.ReactNode;
-  rightMeta: React.ReactNode;
+  selectionControl: ReactNode;
+  menu: ReactNode;
+  preview: ReactNode;
+  title: ReactNode;
+  leftMeta: ReactNode;
+  rightMeta: ReactNode;
 };
+
+
+
 
 function KnowledgeItemCardShell({
   selected,
@@ -384,13 +369,21 @@ function KnowledgeItemCardShell({
   rightMeta,
 }: ShellProps) {
   const cardClassName = [
-    "group relative h-[300px] self-start cursor-pointer overflow-hidden border-border bg-card transition",
-    "hover:border-cyan-200 hover:shadow-md",
+    // Exterior aprobado: borde estándar de Card y resplandor azul.
+    "group relative h-[308px] min-w-0 self-start cursor-pointer overflow-hidden border-slate-200/50 bg-card !gap-0 !py-0",
+    "shadow-[0_4px_24px_-8px_rgba(59,130,246,0.16),0_12px_48px_-18px_rgba(59,130,246,0.14)]",
+
+    // Elevación muy leve y suave.
+    "transform-gpu transition-[transform,box-shadow] duration-500 ease-out",
+    "hover:-translate-y-[2px]",
+    "hover:shadow-[0_6px_30px_-8px_rgba(59,130,246,0.24),0_18px_56px_-16px_rgba(59,130,246,0.22)]",
+
     isDropTarget
-      ? "border-primary ring-2 ring-primary ring-offset-2 ring-offset-background"
+      ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
       : "",
+
     selected && !isDropTarget
-      ? "border-primary ring-2 ring-primary/20"
+      ? "ring-2 ring-primary/20"
       : "",
   ]
     .filter(Boolean)
@@ -407,49 +400,33 @@ function KnowledgeItemCardShell({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-<CardContent className="flex h-full flex-col p-0">
-  <div className="relative flex h-[190px] shrink-0 items-center justify-center bg-card px-6">
-    <div
-      className={[
-        "absolute left-2.5 top-2.5 z-30 transition",
-        selected
-          ? "opacity-100"
-          : "opacity-0 group-hover:opacity-100",
-      ].join(" ")}
-    >
-      {selectionControl}
-    </div>
+      <CardContent className="flex h-full min-h-0 flex-col p-0">
+        {/* Header: ocupa su propio espacio y no se superpone al icono. */}
+        <KnowledgeCardHeader
+          selected={selected}
+          selectionControl={selectionControl}
+          menu={menu}
+        />
 
-    <div
-      className="absolute right-2.5 top-2.5 z-30 opacity-0 transition group-hover:opacity-100"
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-      }}
-    >
-      {menu}
-    </div>
+        {/* Body: vista previa centrada, sin solaparse con el header. */}
+        <div className="flex h-[120px] shrink-0 items-center justify-center px-6">
+          <div className="flex max-h-[116px] max-w-full items-center justify-center">
+            {preview}
+          </div>
+        </div>
 
-    {preview}
-  </div>
+        {/* Footer: título y metadatos, separado del body. */}
+        <div className="flex min-h-0 flex-1 flex-col border-t border-border/50 px-4 pb-4 pt-4">
+          <div className="min-h-[48px] min-w-0 text-[14px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground [&_*]:max-w-full">
+            {title}
+          </div>
 
-<ExpandableCardFooter>
-  <div className="flex h-full min-w-0 flex-col justify-center gap-3 px-4 py-3">
-    <div className="min-w-0">
-      {title}
-    </div>
-
-    <div className="flex min-w-0 items-center justify-between gap-3 text-xs text-muted-foreground">
-      <div className="min-w-0">
-        {leftMeta}
-      </div>
-
-      {rightMeta}
-    </div>
-  </div>
-</ExpandableCardFooter>
-
-</CardContent>
+          <div className="mt-auto flex min-w-0 items-end justify-between gap-3 pt-3 text-xs leading-5 text-muted-foreground">
+            <div className="min-w-0 flex-1">{leftMeta}</div>
+            <div className="shrink-0 text-right">{rightMeta}</div>
+          </div>
+        </div>
+      </CardContent>
     </Card>
   );
 }

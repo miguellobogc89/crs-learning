@@ -1,0 +1,181 @@
+[1mdiff --git a/components/knowledge/import/hooks/use-knowledge-import.ts b/components/knowledge/import/hooks/use-knowledge-import.ts[m
+[1mindex 20a8929..5eb6f35 100644[m
+[1m--- a/components/knowledge/import/hooks/use-knowledge-import.ts[m
+[1m+++ b/components/knowledge/import/hooks/use-knowledge-import.ts[m
+[36m@@ -195,15 +195,7 @@[m [mexport function useKnowledgeImport({[m
+     importId &&[m
+     currentTask?.importId === importId[m
+       ? currentTask[m
+[31m-      : !importId &&[m
+[31m-          selectedDocuments.length === 0 &&[m
+[31m-          currentTask &&[m
+[31m-          (currentTask.step !==[m
+[31m-            "completed" ||[m
+[31m-            currentTask.detailHost ===[m
+[31m-              "global")[m
+[31m-        ? currentTask[m
+[31m-        : null;[m
+[32m+[m[32m      : null;[m
+ [m
+   const sharedState =[m
+     sharedTask[m
+[36m@@ -212,68 +204,6 @@[m [mexport function useKnowledgeImport({[m
+         )[m
+       : null;[m
+ [m
+[31m-  useEffect(() => {[m
+[31m-    if ([m
+[31m-      importId ||[m
+[31m-      selectedDocuments.length > 0 ||[m
+[31m-      !currentTask ||[m
+[31m-      (currentTask.step ===[m
+[31m-        "completed" &&[m
+[31m-        currentTask.detailHost !==[m
+[31m-          "global")[m
+[31m-    ) {[m
+[31m-      return;[m
+[31m-    }[m
+[31m-[m
+[31m-    setImportId([m
+[31m-      currentTask.importId,[m
+[31m-    );[m
+[31m-[m
+[31m-    setStep([m
+[31m-      currentTask.step,[m
+[31m-    );[m
+[31m-[m
+[31m-    setProcessingPhase([m
+[31m-      currentTask.phase,[m
+[31m-    );[m
+[31m-[m
+[31m-    setFileProgress([m
+[31m-      currentTask.files,[m
+[31m-    );[m
+[31m-[m
+[31m-    setProgressSummary([m
+[31m-      currentTask.summary,[m
+[31m-    );[m
+[31m-[m
+[31m-    setError([m
+[31m-      currentTask.error,[m
+[31m-    );[m
+[31m-[m
+[31m-    setProposal([m
+[31m-      currentTask.proposal,[m
+[31m-    );[m
+[31m-[m
+[31m-    setProposalProgress([m
+[31m-      currentTask.proposalProgress,[m
+[31m-    );[m
+[31m-[m
+[31m-    setCompletionResult([m
+[31m-      currentTask.completionResult,[m
+[31m-    );[m
+[31m-[m
+[31m-    setIsAnalyzing([m
+[31m-      currentTask.isAnalyzing,[m
+[31m-    );[m
+[31m-[m
+[31m-    setIsConfirming([m
+[31m-      currentTask.isConfirming,[m
+[31m-    );[m
+[31m-  }, [[m
+[31m-    currentTask,[m
+[31m-    importId,[m
+[31m-    selectedDocuments.length,[m
+[31m-  ]);[m
+[31m-[m
+   const visibleStep =[m
+     sharedTask?.step ?? step;[m
+ [m
+[1mdiff --git a/components/knowledge/import/knowledge-upload-trigger.tsx b/components/knowledge/import/knowledge-upload-trigger.tsx[m
+[1mindex 43037e2..fd00abd 100644[m
+[1m--- a/components/knowledge/import/knowledge-upload-trigger.tsx[m
+[1m+++ b/components/knowledge/import/knowledge-upload-trigger.tsx[m
+[36m@@ -1,4 +1,3 @@[m
+[31m-// components/knowledge/import/knowledge-upload-trigger.tsx[m
+ "use client";[m
+ [m
+ import { useRef, useState } from "react";[m
+[36m@@ -17,25 +16,49 @@[m [mtype Props = {[m
+   variant?: "default" | "outline" | "ghost";[m
+ };[m
+ [m
+[31m-export function KnowledgeUploadTrigger({ context, label = "Subir", variant = "default" }: Props) {[m
+[32m+[m[32mexport function KnowledgeUploadTrigger({[m
+[32m+[m[32m  context,[m
+[32m+[m[32m  label = "Subir",[m
+[32m+[m[32m  variant = "default",[m
+[32m+[m[32m}: Props) {[m
+   const inputRef = useRef<HTMLInputElement>(null);[m
+[32m+[m
+   const [open, setOpen] = useState(false);[m
+   const [files, setFiles] = useState<File[]>([]);[m
+[32m+[m[32m  const [sessionId, setSessionId] = useState(0);[m
+ [m
+   function handlePick() {[m
+     inputRef.current?.click();[m
+   }[m
+ [m
+[31m-  function handleFilesSelected(event: React.ChangeEvent<HTMLInputElement>) {[m
+[32m+[m[32m  function handleFilesSelected([m
+[32m+[m[32m    event: React.ChangeEvent<HTMLInputElement>,[m
+[32m+[m[32m  ) {[m
+     const picked = Array.from(event.target.files ?? []);[m
+[31m-    event.target.value = ""; // permite volver a elegir el mismo archivo más adelante[m
+ [m
+[31m-    if (picked.length === 0) return;[m
+[32m+[m[32m    // Permite seleccionar de nuevo el mismo archivo.[m
+[32m+[m[32m    event.target.value = "";[m
+[32m+[m
+[32m+[m[32m    if (picked.length === 0) {[m
+[32m+[m[32m      return;[m
+[32m+[m[32m    }[m
+ [m
+[32m+[m[32m    // Cada selección inicia una sesión independiente.[m
+[32m+[m[32m    setSessionId((current) => current + 1);[m
+     setFiles(picked);[m
+     setOpen(true);[m
+   }[m
+ [m
+[32m+[m[32m  function handleOpenChange(nextOpen: boolean) {[m
+[32m+[m[32m    setOpen(nextOpen);[m
+[32m+[m
+[32m+[m[32m    if (!nextOpen) {[m
+[32m+[m[32m      // No conservar archivos al cancelar, terminar[m
+[32m+[m[32m      // o continuar una importación en segundo plano.[m
+[32m+[m[32m      setFiles([]);[m
+[32m+[m[32m    }[m
+[32m+[m[32m  }[m
+[32m+[m
+   return ([m
+     <>[m
+       <input[m
+[36m@@ -47,18 +70,23 @@[m [mexport function KnowledgeUploadTrigger({ context, label = "Subir", variant = "de[m
+         onChange={handleFilesSelected}[m
+       />[m
+ [m
+[31m-      <Button type="button" variant={variant} onClick={handlePick}>[m
+[32m+[m[32m      <Button[m
+[32m+[m[32m        type="button"[m
+[32m+[m[32m        variant={variant}[m
+[32m+[m[32m        onClick={handlePick}[m
+[32m+[m[32m      >[m
+         <Upload className="mr-2 h-4 w-4" />[m
+         {label}[m
+       </Button>[m
+ [m
+       <KnowledgeImportModal[m
+[32m+[m[32m        key={sessionId}[m
+         open={open}[m
+         context={context}[m
+         selectedFiles={files}[m
+[31m-        onOpenChange={setOpen}[m
+[32m+[m[32m        onOpenChange={handleOpenChange}[m
+         onCompleted={() => setFiles([])}[m
+       />[m
+     </>[m
+   );[m
+[31m-}[m
+[32m+[m[32m}[m
+\ No newline at end of file[m
