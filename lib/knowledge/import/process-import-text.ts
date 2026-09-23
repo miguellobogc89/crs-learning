@@ -1,12 +1,6 @@
 // lib/knowledge/import/process-import-text.ts
 
-import path from "node:path";
-import { parseOffice } from "officeparser";
-
-import {
-  isPlainTextKnowledgeDocument,
-  isSupportedKnowledgeDocument,
-} from "@/lib/knowledge/import-flow";
+import { extractDocumentText } from "@/lib/knowledge/file-analysis/extract-document-text";
 import { prisma } from "@/lib/prisma";
 import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
 
@@ -58,28 +52,9 @@ async function extractTextFromFile(
   storagePath: string,
   fileName: string,
 ): Promise<string> {
-  const extension = path.extname(fileName).toLowerCase();
-
-  if (!isSupportedKnowledgeDocument(fileName)) {
-    throw new Error(
-      `Formato no compatible: ${extension || "sin extensión"}`,
-    );
-  }
-
-  // El almacenamiento es la fuente de verdad tanto en
-  // localhost como en producción. No convertimos la ruta
-  // de Blob en una ruta local dentro de /public.
   const content = await readKnowledgeFile(storagePath);
 
-  if (isPlainTextKnowledgeDocument(fileName)) {
-    return content.toString("utf8");
-  }
-
-  // OfficeParser recibe los bytes del documento, no una
-  // ruta de archivo del sistema operativo.
-  const ast = await parseOffice(content);
-
-  return ast.toText();
+  return extractDocumentText(content, fileName);
 }
 
 async function isImportCancelled(

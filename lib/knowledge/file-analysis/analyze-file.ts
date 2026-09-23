@@ -4,7 +4,7 @@ import crypto from "crypto";
 import path from "path";
 import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
 import type { Prisma } from "@prisma/client";
-import { parseOffice } from "officeparser";
+import { extractDocumentText } from "./extract-document-text";
 
 import {
   getKnowledgeImportModel,
@@ -258,17 +258,6 @@ function cleanExtractedText(text: string) {
     .trim();
 }
 
-async function extractPlainText(buffer: Buffer) {
-  return buffer.toString("utf8");
-}
-
-async function extractOfficeText(
-  buffer: Buffer,
-) {
-  const ast = await parseOffice(buffer);
-  return ast.toText();
-}
-
 function buildVisualContext(
   visualModel: KnowledgeFileVisualModel,
 ) {
@@ -443,8 +432,9 @@ const buffer = await readKnowledgeFile(
       visualText || semanticText;
   } else if (isPlainTextKnowledgeDocument(file.file_name)) {
     semanticText = cleanExtractedText(
-      await extractPlainText(buffer),
+      await extractDocumentText(buffer, file.file_name),
     );
+
     metadata.limitations.push(
       "Formato textual: visualModel no contiene geometria objetiva.",
     );
@@ -452,8 +442,9 @@ const buffer = await readKnowledgeFile(
     semanticText =
       semanticText ||
       cleanExtractedText(
-        await extractOfficeText(buffer),
+        await extractDocumentText(buffer, file.file_name),
       );
+
     metadata.limitations.push(
       "Extractor degradado: solo se usa texto y metadatos disponibles; no se extrae geometria objetiva.",
     );
