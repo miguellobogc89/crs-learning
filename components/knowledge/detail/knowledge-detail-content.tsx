@@ -35,40 +35,38 @@ export function KnowledgeDetailContent({
   onRebuild,
 }: KnowledgeDetailContentProps) {
   switch (activeTab) {
-    case "general":
-      return (
-        <KnowledgeDetailViewContainer>
-          <div className="space-y-10">
-            <KnowledgeContentEditorSection
-              knowledge={knowledge}
-            />
+case "general":
+  return (
+    <KnowledgeDetailViewContainer>
+      <div className="space-y-6">
+        <KnowledgeContentEditorSection
+          knowledge={knowledge}
+          actionsOnly
+        />
 
-            <KnowledgeGeneralView
-              hasDocuments={hasDocuments}
-              hasAnalysis={hasAnalysis}
-              isRebuilding={isRebuilding}
-              knowledgeType={knowledge.knowledge_type}
-              analysisJson={
-                knowledge.knowledge_analysis
-                  ?.analysis_json
-              }
-              analysisStatus={
-                knowledge.knowledge_analysis
-                  ?.status ?? null
-              }
-              analysisModel={
-                knowledge.knowledge_analysis
-                  ?.model ?? null
-              }
-              graph={knowledge.knowledge_graph}
-              files={knowledge.knowledge_files}
-              onRebuild={onRebuild}
-            />
-          </div>
-        </KnowledgeDetailViewContainer>
-      );
+        <KnowledgeGeneralView
+          hasDocuments={hasDocuments}
+          hasAnalysis={hasAnalysis}
+          isRebuilding={isRebuilding}
+          knowledgeType={knowledge.knowledge_type}
+          analysisJson={
+            knowledge.knowledge_analysis?.analysis_json
+          }
+          analysisStatus={
+            knowledge.knowledge_analysis?.status ?? null
+          }
+          analysisModel={
+            knowledge.knowledge_analysis?.model ?? null
+          }
+          graph={knowledge.knowledge_graph}
+          files={knowledge.knowledge_files}
+          onRebuild={onRebuild}
+        />
+      </div>
+    </KnowledgeDetailViewContainer>
+  );
 
-    case "details":
+      case "details":
       return (
         <KnowledgeDetailViewContainer>
           <KnowledgeDetailsView

@@ -23,10 +23,12 @@ import type { Knowledge } from "./knowledge-detail.types";
 
 type KnowledgeContentEditorSectionProps = {
   knowledge: Knowledge;
+  actionsOnly?: boolean;
 };
 
 export function KnowledgeContentEditorSection({
   knowledge,
+  actionsOnly = false,
 }: KnowledgeContentEditorSectionProps) {
   const router = useRouter();
 
@@ -149,6 +151,110 @@ export function KnowledgeContentEditorSection({
     } finally {
       setIsRebuilding(false);
     }
+  }
+
+    if (actionsOnly) {
+    return (
+      <section className="space-y-4">
+        <div className="flex justify-end">
+          {isEditing ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSaving}
+                onClick={cancelEditing}
+              >
+                <X className="mr-2 h-4 w-4" />
+                Cancelar
+              </Button>
+
+              <Button
+                type="button"
+                disabled={isSaving || !hasChanges}
+                onClick={saveContent}
+              >
+                {isSaving ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="mr-2 h-4 w-4" />
+                )}
+                {isSaving ? "Guardando..." : "Guardar cambios"}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isRebuilding || !hasDocuments}
+                onClick={rebuildArticle}
+              >
+                {isRebuilding ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                {isRebuilding ? "Reconstruyendo..." : "Reconstruir"}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isRebuilding}
+                onClick={startEditing}
+              >
+                <Edit3 className="mr-2 h-4 w-4" />
+                Editar contenido
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!hasContent}
+                onClick={downloadPdf}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Descargar PDF
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {saveError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {saveError}
+          </p>
+        ) : null}
+
+        {rebuildError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {rebuildError}
+          </p>
+        ) : null}
+
+        {isEditing ? (
+          <KnowledgeEditor
+            value={content}
+            onChange={setContent}
+            editable
+          />
+        ) : null}
+
+        <div
+          data-knowledge-print-area
+          className="absolute -left-[10000px] top-0 w-[794px]"
+          aria-hidden="true"
+        >
+          <KnowledgeEditor
+            value={content}
+            onChange={() => undefined}
+            editable={false}
+            className="border-0 bg-transparent"
+          />
+        </div>
+      </section>
+    );
   }
 
   return (

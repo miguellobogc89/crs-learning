@@ -571,7 +571,7 @@ useEffect(() => {
 
 return (
   <div
-    className="flex h-full min-h-0 flex-col bg-panel"
+    className="flex h-full min-h-0 flex-col bg-[#F8FAFF]"
     onMouseDown={(event) => {
       const target = event.target as HTMLElement;
 

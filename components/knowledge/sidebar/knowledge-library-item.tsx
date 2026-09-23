@@ -79,9 +79,9 @@ export function KnowledgeLibraryItem({
       className={[
         "group/library relative flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg py-2 text-left text-sm transition-colors",
         readonly ? "pr-3" : "pr-10",
-        isSelected
-          ? "bg-surface text-foreground"
-          : "text-panel-foreground/70 hover:bg-surface-hover hover:text-foreground",
+isSelected
+  ? "bg-[#EDF3FF] font-medium text-[#0A58FF]"
+  : "font-medium text-slate-600 hover:bg-[#F0F4FC] hover:text-slate-900",
         isDragging ? "opacity-40" : "",
         isDropTarget
           ? "bg-sky-50 text-foreground ring-1 ring-inset ring-sky-300"
@@ -126,11 +126,17 @@ export function KnowledgeLibraryItem({
         )}
       </button>
 
-      {isSelected || library.isExpanded ? (
-        <FolderOpen className="h-4 w-4 shrink-0 text-sky-400" />
-      ) : (
-        <Folder className="h-4 w-4 shrink-0 text-sky-400" />
-      )}
+{isSelected || library.isExpanded ? (
+  <FolderOpen
+    className="h-[18px] w-[18px] shrink-0 text-[#0A58FF]"
+    strokeWidth={2.4}
+  />
+) : (
+  <Folder
+    className="h-[18px] w-[18px] shrink-0 text-[#0A58FF]"
+    strokeWidth={2.4}
+  />
+)}
 
       {library.isEditing && !readonly ? (
         <input
