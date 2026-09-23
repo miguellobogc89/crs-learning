@@ -1,7 +1,6 @@
 // lib/knowledge/import/process-import-text.ts
 
-import { readFile } from "fs/promises";
-import path from "path";
+import path from "node:path";
 import { parseOffice } from "officeparser";
 
 import {
@@ -9,30 +8,24 @@ import {
   isSupportedKnowledgeDocument,
 } from "@/lib/knowledge/import-flow";
 import { prisma } from "@/lib/prisma";
+import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
 
-const MAX_TEXT_LENGTH_PER_FILE =
-  2_000_000;
+const MAX_TEXT_LENGTH_PER_FILE = 2_000_000;
 
 export type ImportTextFileResult = {
   id: string;
   name: string;
   relativePath: string;
   processingOrder: number | null;
-  status:
-    | "text_ready"
-    | "text_error";
+  status: "text_ready" | "text_error";
   characters: number;
   error?: string;
 };
 
 export type ProcessImportTextResult = {
   importId: string;
-  status:
-    | "text_ready"
-    | "text_error";
-  processingStatus:
-    | "completed"
-    | "error";
+  status: "text_ready" | "text_error";
+  processingStatus: "completed" | "error";
   totalFiles: number;
   successfulFiles: number;
   failedFiles: number;
@@ -40,40 +33,7 @@ export type ProcessImportTextResult = {
   files: ImportTextFileResult[];
 };
 
-function resolveStoragePath(
-  storagePath: string,
-) {
-  const normalizedPath = storagePath
-    .replaceAll("\\", "/")
-    .replace(/^\/+/, "");
-
-  const publicRoot = path.resolve(
-    process.cwd(),
-    "public",
-  );
-
-  const absolutePath = path.resolve(
-    publicRoot,
-    normalizedPath,
-  );
-
-  if (
-    absolutePath !== publicRoot &&
-    !absolutePath.startsWith(
-      `${publicRoot}${path.sep}`,
-    )
-  ) {
-    throw new Error(
-      "La ruta del archivo no es válida",
-    );
-  }
-
-  return absolutePath;
-}
-
-function cleanExtractedText(
-  text: string,
-) {
+function cleanExtractedText(text: string): string {
   return text
     .replace(/\u0000/g, "")
     .replace(/\r\n/g, "\n")
@@ -82,81 +42,49 @@ function cleanExtractedText(
     .trim();
 }
 
-function limitExtractedText(
-  text: string,
-) {
-  if (
-    text.length <=
-    MAX_TEXT_LENGTH_PER_FILE
-  ) {
+function limitExtractedText(text: string): string {
+  if (text.length <= MAX_TEXT_LENGTH_PER_FILE) {
     return text;
   }
 
   return [
-    text.slice(
-      0,
-      MAX_TEXT_LENGTH_PER_FILE,
-    ),
+    text.slice(0, MAX_TEXT_LENGTH_PER_FILE),
     "",
     "[CONTENIDO RECORTADO POR LÍMITE DE TAMAÑO]",
   ].join("\n");
 }
 
-async function extractPlainText(
-  absolutePath: string,
-) {
-  const buffer = await readFile(
-    absolutePath,
-  );
+async function extractTextFromFile(
+  storagePath: string,
+  fileName: string,
+): Promise<string> {
+  const extension = path.extname(fileName).toLowerCase();
 
-  return buffer.toString("utf8");
-}
+  if (!isSupportedKnowledgeDocument(fileName)) {
+    throw new Error(
+      `Formato no compatible: ${extension || "sin extensión"}`,
+    );
+  }
 
-async function extractOfficeText(
-  absolutePath: string,
-) {
-  const ast = await parseOffice(
-    absolutePath,
-  );
+  // El almacenamiento es la fuente de verdad tanto en
+  // localhost como en producción. No convertimos la ruta
+  // de Blob en una ruta local dentro de /public.
+  const content = await readKnowledgeFile(storagePath);
+
+  if (isPlainTextKnowledgeDocument(fileName)) {
+    return content.toString("utf8");
+  }
+
+  // OfficeParser recibe los bytes del documento, no una
+  // ruta de archivo del sistema operativo.
+  const ast = await parseOffice(content);
 
   return ast.toText();
 }
 
-async function extractTextFromFile(
-  absolutePath: string,
-  fileName: string,
-) {
-  const extension = path
-    .extname(fileName)
-    .toLowerCase();
-
-  if (
-    !isSupportedKnowledgeDocument(
-      fileName,
-    )
-  ) {
-    throw new Error(
-      `Formato no compatible: ${
-        extension ||
-        "sin extensión"
-      }`,
-    );
-  }
-
-  if (isPlainTextKnowledgeDocument(fileName)) {
-    return extractPlainText(
-      absolutePath,
-    );
-  }
-
-  return extractOfficeText(
-    absolutePath,
-  );
-}
-
 async function isImportCancelled(
   importId: string,
-) {
+): Promise<boolean> {
   const knowledgeImport =
     await prisma.knowledge_imports.findUnique({
       where: {
@@ -169,10 +97,8 @@ async function isImportCancelled(
     });
 
   return (
-    knowledgeImport?.status ===
-      "cancelled" ||
-    knowledgeImport?.processing_status ===
-      "cancelled"
+    knowledgeImport?.status === "cancelled" ||
+    knowledgeImport?.processing_status === "cancelled"
   );
 }
 
@@ -198,8 +124,7 @@ export async function processImportText(
           },
           orderBy: [
             {
-              processing_order:
-                "asc",
+              processing_order: "asc",
             },
             {
               created_at: "asc",
@@ -210,25 +135,17 @@ export async function processImportText(
     });
 
   if (!knowledgeImport) {
-    throw new Error(
-      "Importación no encontrada",
-    );
+    throw new Error("Importación no encontrada");
   }
 
   if (
-    knowledgeImport.status ===
-      "cancelled" ||
-    knowledgeImport.processing_status ===
-      "cancelled"
+    knowledgeImport.status === "cancelled" ||
+    knowledgeImport.processing_status === "cancelled"
   ) {
-    throw new Error(
-      "La importacion ha sido cancelada",
-    );
+    throw new Error("La importacion ha sido cancelada");
   }
 
-  const allFiles =
-    knowledgeImport
-      .knowledge_import_files;
+  const allFiles = knowledgeImport.knowledge_import_files;
 
   if (allFiles.length === 0) {
     throw new Error(
@@ -236,68 +153,46 @@ export async function processImportText(
     );
   }
 
-  const filesToProcess =
-    allFiles.filter(
-      (file) =>
-        file.processing_status !==
-          "completed" ||
-        file.status !==
-          "text_ready",
-    );
+  const filesToProcess = allFiles.filter(
+    (file) =>
+      file.processing_status !== "completed" ||
+      file.status !== "text_ready",
+  );
 
-  const alreadyCompletedFiles =
-    allFiles.filter(
-      (file) =>
-        file.processing_status ===
-          "completed" &&
-        file.status ===
-          "text_ready",
-    );
+  const alreadyCompletedFiles = allFiles.filter(
+    (file) =>
+      file.processing_status === "completed" &&
+      file.status === "text_ready",
+  );
 
-  if (
-    filesToProcess.length === 0
-  ) {
+  if (filesToProcess.length === 0) {
     return {
       importId,
       status: "text_ready",
-      processingStatus:
-        "completed",
-      totalFiles:
-        allFiles.length,
-      successfulFiles:
-        alreadyCompletedFiles.length,
+      processingStatus: "completed",
+      totalFiles: allFiles.length,
+      successfulFiles: alreadyCompletedFiles.length,
       failedFiles: 0,
-      totalCharacters:
-        allFiles.reduce(
-          (total, file) =>
-            total +
-            (file.extracted_text
-              ?.length ?? 0),
-          0,
-        ),
+      totalCharacters: allFiles.reduce(
+        (total, file) =>
+          total + (file.extracted_text?.length ?? 0),
+        0,
+      ),
       files: allFiles.map(
-        (
-          file,
-        ): ImportTextFileResult => ({
+        (file): ImportTextFileResult => ({
           id: file.id,
           name: file.file_name,
-          relativePath:
-            file.relative_path,
-          processingOrder:
-            file.processing_order,
+          relativePath: file.relative_path,
+          processingOrder: file.processing_order,
           status: "text_ready",
-          characters:
-            file.extracted_text
-              ?.length ?? 0,
+          characters: file.extracted_text?.length ?? 0,
         }),
       ),
     };
   }
 
   const processingStartedAt =
-    knowledgeImport
-      .processing_started_at ??
-    new Date();
+    knowledgeImport.processing_started_at ?? new Date();
 
   await prisma.knowledge_imports.updateMany({
     where: {
@@ -311,50 +206,33 @@ export async function processImportText(
     },
     data: {
       status: "text_processing",
-      processing_status:
-        "processing",
-      completed_files:
-        alreadyCompletedFiles.length,
+      processing_status: "processing",
+      completed_files: alreadyCompletedFiles.length,
       failed_files: 0,
       current_file_id: null,
-      processing_started_at:
-        processingStartedAt,
-      processing_completed_at:
-        null,
+      processing_started_at: processingStartedAt,
+      processing_completed_at: null,
       error_message: null,
       updated_at: new Date(),
     },
   });
 
-  const results:
-    ImportTextFileResult[] = [];
+  const results: ImportTextFileResult[] = [];
 
-  let successfulFiles =
-    alreadyCompletedFiles.length;
-
+  let successfulFiles = alreadyCompletedFiles.length;
   let failedFiles = 0;
 
-  let totalCharacters =
-    alreadyCompletedFiles.reduce(
-      (total, file) =>
-        total +
-        (file.extracted_text
-          ?.length ?? 0),
-      0,
-    );
+  let totalCharacters = alreadyCompletedFiles.reduce(
+    (total, file) =>
+      total + (file.extracted_text?.length ?? 0),
+    0,
+  );
 
-  for (
-    const file of filesToProcess
-  ) {
-    const fileStartedAt =
-      new Date();
+  for (const file of filesToProcess) {
+    const fileStartedAt = new Date();
 
     try {
-      if (
-        await isImportCancelled(
-          importId,
-        )
-      ) {
+      if (await isImportCancelled(importId)) {
         throw new Error(
           "La importacion ha sido cancelada",
         );
@@ -366,12 +244,9 @@ export async function processImportText(
             id: importId,
           },
           data: {
-            current_file_id:
-              file.id,
-            processing_status:
-              "processing",
-            updated_at:
-              fileStartedAt,
+            current_file_id: file.id,
+            processing_status: "processing",
+            updated_at: fileStartedAt,
           },
         }),
 
@@ -380,19 +255,14 @@ export async function processImportText(
             id: file.id,
           },
           data: {
-            status:
-              "text_processing",
-            processing_status:
-              "processing",
-            processing_step:
-              "extracting_text",
+            status: "text_processing",
+            processing_status: "processing",
+            processing_step: "extracting_text",
             started_at:
-              file.started_at ??
-              fileStartedAt,
+              file.started_at ?? fileStartedAt,
             completed_at: null,
             error_message: null,
-            updated_at:
-              fileStartedAt,
+            updated_at: fileStartedAt,
           },
         }),
       ]);
@@ -403,47 +273,30 @@ export async function processImportText(
         );
       }
 
-      const absolutePath =
-        resolveStoragePath(
-          file.storage_path,
-        );
+      const rawText = await extractTextFromFile(
+        file.storage_path,
+        file.file_name,
+      );
 
-      const rawText =
-        await extractTextFromFile(
-          absolutePath,
-          file.file_name,
-        );
-
-      if (
-        await isImportCancelled(
-          importId,
-        )
-      ) {
+      if (await isImportCancelled(importId)) {
         throw new Error(
           "La importacion ha sido cancelada",
         );
       }
 
-      await prisma
-        .knowledge_import_files
-        .update({
-          where: {
-            id: file.id,
-          },
-          data: {
-            processing_step:
-              "cleaning_text",
-            updated_at:
-              new Date(),
-          },
-        });
+      await prisma.knowledge_import_files.update({
+        where: {
+          id: file.id,
+        },
+        data: {
+          processing_step: "cleaning_text",
+          updated_at: new Date(),
+        },
+      });
 
-      const extractedText =
-        limitExtractedText(
-          cleanExtractedText(
-            rawText,
-          ),
-        );
+      const extractedText = limitExtractedText(
+        cleanExtractedText(rawText),
+      );
 
       if (!extractedText) {
         throw new Error(
@@ -451,8 +304,7 @@ export async function processImportText(
         );
       }
 
-      const completedAt =
-        new Date();
+      const completedAt = new Date();
 
       await prisma.$transaction([
         prisma.knowledge_import_files.update({
@@ -460,19 +312,13 @@ export async function processImportText(
             id: file.id,
           },
           data: {
-            status:
-              "text_ready",
-            extracted_text:
-              extractedText,
-            processing_status:
-              "completed",
-            processing_step:
-              "completed",
-            completed_at:
-              completedAt,
+            status: "text_ready",
+            extracted_text: extractedText,
+            processing_status: "completed",
+            processing_step: "completed",
+            completed_at: completedAt,
             error_message: null,
-            updated_at:
-              completedAt,
+            updated_at: completedAt,
           },
         }),
 
@@ -484,28 +330,22 @@ export async function processImportText(
             completed_files: {
               increment: 1,
             },
-            current_file_id:
-              null,
-            updated_at:
-              completedAt,
+            current_file_id: null,
+            updated_at: completedAt,
           },
         }),
       ]);
 
       successfulFiles += 1;
-      totalCharacters +=
-        extractedText.length;
+      totalCharacters += extractedText.length;
 
       results.push({
         id: file.id,
         name: file.file_name,
-        relativePath:
-          file.relative_path,
-        processingOrder:
-          file.processing_order,
+        relativePath: file.relative_path,
+        processingOrder: file.processing_order,
         status: "text_ready",
-        characters:
-          extractedText.length,
+        characters: extractedText.length,
       });
     } catch (error) {
       const errorMessage =
@@ -520,62 +360,47 @@ export async function processImportText(
         throw error;
       }
 
-      const completedAt =
-        new Date();
+      const completedAt = new Date();
 
       failedFiles += 1;
 
       await prisma
         .$transaction([
-          prisma
-            .knowledge_import_files
-            .update({
-              where: {
-                id: file.id,
-              },
-              data: {
-                status:
-                  "text_error",
-                extracted_text: "",
-                processing_status:
-                  "error",
-                processing_step:
-                  "error",
-                completed_at:
-                  completedAt,
-                error_message:
-                  errorMessage,
-                updated_at:
-                  completedAt,
-              },
-            }),
+          prisma.knowledge_import_files.update({
+            where: {
+              id: file.id,
+            },
+            data: {
+              status: "text_error",
+              extracted_text: "",
+              processing_status: "error",
+              processing_step: "error",
+              completed_at: completedAt,
+              error_message: errorMessage,
+              updated_at: completedAt,
+            },
+          }),
 
-          prisma
-            .knowledge_imports
-            .update({
-              where: {
-                id: importId,
+          prisma.knowledge_imports.update({
+            where: {
+              id: importId,
+            },
+            data: {
+              failed_files: {
+                increment: 1,
               },
-              data: {
-                failed_files: {
-                  increment: 1,
-                },
-                current_file_id:
-                  null,
-                updated_at:
-                  completedAt,
-              },
-            }),
+              current_file_id: null,
+              updated_at: completedAt,
+            },
+          }),
         ])
         .catch(() => undefined);
 
       results.push({
         id: file.id,
         name: file.file_name,
-        relativePath:
-          file.relative_path,
-        processingOrder:
-          file.processing_order,
+        relativePath: file.relative_path,
+        processingOrder: file.processing_order,
         status: "text_error",
         characters: 0,
         error: errorMessage,
@@ -584,22 +409,17 @@ export async function processImportText(
   }
 
   const finalStatus =
-    successfulFiles > 0
-      ? "text_ready"
-      : "text_error";
+    successfulFiles > 0 ? "text_ready" : "text_error";
 
   const finalProcessingStatus =
-    successfulFiles > 0
-      ? "completed"
-      : "error";
+    successfulFiles > 0 ? "completed" : "error";
 
   const importErrorMessage =
     failedFiles > 0
       ? `${failedFiles} de ${allFiles.length} documentos no pudieron procesarse`
       : null;
 
-  const processingCompletedAt =
-    new Date();
+  const processingCompletedAt = new Date();
 
   await prisma.knowledge_imports.updateMany({
     where: {
@@ -613,27 +433,20 @@ export async function processImportText(
     },
     data: {
       status: finalStatus,
-      processing_status:
-        finalProcessingStatus,
-      completed_files:
-        successfulFiles,
-      failed_files:
-        failedFiles,
+      processing_status: finalProcessingStatus,
+      completed_files: successfulFiles,
+      failed_files: failedFiles,
       current_file_id: null,
-      processing_completed_at:
-        processingCompletedAt,
-      error_message:
-        importErrorMessage,
-      updated_at:
-        processingCompletedAt,
+      processing_completed_at: processingCompletedAt,
+      error_message: importErrorMessage,
+      updated_at: processingCompletedAt,
     },
   });
 
   return {
     importId,
     status: finalStatus,
-    processingStatus:
-      finalProcessingStatus,
+    processingStatus: finalProcessingStatus,
     totalFiles: allFiles.length,
     successfulFiles,
     failedFiles,
