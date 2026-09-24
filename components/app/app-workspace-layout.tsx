@@ -1,4 +1,6 @@
 
+// components/app/app-workspace-layout.tsx
+
 "use client";
 
 import {
@@ -7,14 +9,16 @@ import {
   useContext,
   useEffect,
   useState,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 
 import { AppNavigationPanel } from "@/components/app/app-navigation-panel";
 
 type WorkspaceLayoutContextValue = {
   sidebar: ReactNode | null;
-  setSidebar: (sidebar: ReactNode | null) => void;
+  setSidebar: Dispatch<SetStateAction<ReactNode | null>>;
   sidebarWidth: number;
   setSidebarWidth: (width: number) => void;
 };

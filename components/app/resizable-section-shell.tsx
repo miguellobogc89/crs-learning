@@ -1,6 +1,5 @@
+
 // components/app/resizable-section-shell.tsx
-
-
 
 "use client";
 
@@ -26,10 +25,7 @@ export function ResizableSectionShell({
   sidebar,
   children,
 }: ResizableSectionShellProps) {
-  const {
-    setSidebar,
-    setSidebarWidth,
-  } = useWorkspaceLayout();
+  const { setSidebar, setSidebarWidth } = useWorkspaceLayout();
 
   const [isDragging, setIsDragging] = useState(false);
 
@@ -53,12 +49,12 @@ export function ResizableSectionShell({
   }, []);
 
   /*
-   * Registramos la sidebar en el layout principal.
-   * El registro no depende de isDragging, por lo que arrastrar
-   * el separador no desmonta ni vuelve a montar la sidebar.
+   * Cada registro tiene una identidad propia.
+   * La limpieza de una sección anterior solo puede
+   * eliminar su propio registro, nunca el de la nueva.
    */
   useEffect(() => {
-    setSidebar(
+    const registeredSidebar = (
       <div
         ref={sidebarRef}
         className="relative h-full min-h-0 min-w-0"
@@ -69,7 +65,11 @@ export function ResizableSectionShell({
           type="button"
           aria-label="Redimensionar sidebar secundaria"
           title="Arrastra para redimensionar. Doble clic para restaurar."
-          className="group absolute inset-y-0 right-0 z-20 flex w-3 translate-x-1/2 cursor-col-resize items-stretch justify-center outline-none"
+          className="
+            group absolute inset-y-0 right-0 z-20
+            flex w-3 translate-x-1/2 cursor-col-resize
+            items-stretch justify-center outline-none
+          "
           onPointerDown={handlePointerDown}
           onDoubleClick={handleDoubleClick}
         >
@@ -80,11 +80,19 @@ export function ResizableSectionShell({
             )}
           />
         </button>
-      </div>,
+      </div>
     );
 
+    setSidebar(registeredSidebar);
+
     return () => {
-      setSidebar(null);
+      /*
+       * El layout comprobará que este registro sigue
+       * siendo el activo antes de retirarlo.
+       */
+      setSidebar((current) =>
+        current === registeredSidebar ? null : current,
+      );
     };
   }, [
     sidebar,
@@ -125,15 +133,8 @@ export function ResizableSectionShell({
       setIsDragging(false);
     }
 
-    window.addEventListener(
-      "pointermove",
-      handlePointerMove,
-    );
-
-    window.addEventListener(
-      "pointerup",
-      handlePointerUp,
-    );
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
 
     return () => {
       window.removeEventListener(
