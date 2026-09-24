@@ -1,4 +1,7 @@
 // app/(app)/knowledge/page.tsx
+
+
+
 import { redirect } from "next/navigation";
 
 import { KnowledgeContent } from "@/components/knowledge/content/knowledge-content";
@@ -80,7 +83,7 @@ export default async function KnowledgePage({
   });
 
   return (
-    <div className="min-h-full bg-background">
+    <div className="min-h-full bg-transparent">
       <div className="mx-auto max-w-7xl px-8 py-6">
         <KnowledgeContent
           knowledgeSources={knowledgeSources}

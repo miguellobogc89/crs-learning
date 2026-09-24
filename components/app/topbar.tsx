@@ -1,4 +1,6 @@
 // components/app/topbar.tsx
+
+
 "use client";
 
 import type { ReactNode } from "react";
@@ -6,8 +8,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ChevronDown,
+  CircleHelp,
   LogOut,
   Menu,
+  Plus,
   Settings,
   UserCircle,
 } from "lucide-react";
@@ -40,102 +45,129 @@ type Props = {
   workspaces: AccessibleWorkspace[];
 };
 
-const sectionLabels = [
-  { path: "/dashboard", label: "Inicio" },
-  { path: "/knowledge", label: "Conocimiento" },
-  { path: "/courses", label: "Cursos" },
-  { path: "/achievements", label: "Logros" },
-  { path: "/notifications", label: "Bandeja" },
-  { path: "/my-space", label: "Mi espacio" },
-  { path: "/settings", label: "Configuración" },
-];
+type UploadType = "files" | "folder" | "zip";
+
+function requestKnowledgeUpload(type: UploadType) {
+  window.dispatchEvent(
+    new CustomEvent<UploadType>("crs:knowledge-upload", {
+      detail: type,
+    }),
+  );
+}
 
 export function AppTopbar({
   user,
   notifications,
   unreadNotificationCount,
-  activeWorkspace,
-  workspaces,
 }: Props) {
   const pathname = usePathname();
   const userLabel = user.name ?? user.email ?? "Usuario";
-
-  let sectionLabel = "Inicio";
-
-  const currentSection = sectionLabels.find((section) =>
-    pathname.startsWith(section.path),
-  );
-
-  if (currentSection) {
-    sectionLabel = currentSection.label;
-  }
+  const isKnowledge = pathname.startsWith("/knowledge");
 
   return (
-
-<header
-  className="
-    flex shrink-0 items-center gap-4
-    border-b border-border
-    bg-transparent px-3 py-2
-
-    h-12
-    sm:px-4 sm:py-2
-    md:h-14 md:px-5 md:py-2.5
-    lg:h-[58px] lg:px-6 lg:py-3
-    xl:h-16 xl:px-7 xl:py-3
-    2xl:h-[68px] 2xl:px-8 2xl:py-3.5
-    [&_[data-search-shortcut]]:hidden
-    lg:[&_[data-search-shortcut]]:inline-flex
-  "
->
+    <header className="flex h-[68px] shrink-0 items-center gap-3 border-0 bg-transparent px-4 sm:px-6 lg:px-8">
       <SheetTrigger asChild>
         <button
           type="button"
           aria-label="Abrir navegación"
-          className="flex h-full aspect-square shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground lg:hidden"
+          className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/70 lg:hidden"
         >
           <Menu className="size-5" />
         </button>
       </SheetTrigger>
 
-      <div className="hidden h-full shrink-0 items-center gap-3 lg:flex">
 
-        <div className="my-3 w-px self-stretch bg-border" />
+<div className="flex min-w-0 flex-1 items-center">
+  <div
+    className="
+      h-11 w-full max-w-[470px] rounded-2xl bg-white
+      shadow-[0_1px_2px_rgba(30,64,175,0.03)]
+      lg:fixed lg:left-1/2 lg:top-[34px]
+      lg:z-10 lg:w-[min(470px,calc(100vw-760px))]
+      lg:-translate-x-1/2 lg:-translate-y-1/2
+    "
+  >
+    <GlobalSearch />
+  </div>
+</div>
 
-        <span className="text-sm font-medium text-foreground">
-          {sectionLabel}
-        </span>
-      </div>
-
-      <div className="flex h-full min-w-0 flex-1 justify-center px-2 md:px-4 lg:px-6">
-        <div className="h-full w-full max-w-2xl">
-          <GlobalSearch />
+      <div className="flex shrink-0 items-center gap-2.5">
+        <div className="flex size-10 items-center justify-center rounded-xl border border-[#e5eaf5] bg-white shadow-[0_2px_5px_rgba(30,64,175,0.05)]">
+          <NotificationBell
+            initialNotifications={notifications}
+            initialUnreadCount={unreadNotificationCount}
+          />
         </div>
-      </div>
 
-      <div className="flex h-full shrink-0 items-center gap-1.5 sm:gap-2">
-        <NotificationBell
-          initialNotifications={notifications}
-          initialUnreadCount={unreadNotificationCount}
-        />
+        <Link
+          href="/settings"
+          aria-label="Ayuda"
+          title="Ayuda"
+          className="flex size-10 items-center justify-center rounded-xl border border-[#e5eaf5] bg-white text-[#64748b] shadow-[0_2px_5px_rgba(30,64,175,0.05)] transition-colors hover:text-[#2563eb]"
+        >
+          <CircleHelp className="size-[19px]" />
+        </Link>
+
+        {isKnowledge ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="ml-1 flex h-10 items-center gap-2 rounded-xl bg-[#316be9] px-3.5 text-sm font-semibold text-white shadow-[0_3px_8px_rgba(37,99,235,0.18)] transition-colors hover:bg-[#245bd4] sm:px-4"
+              >
+                <Plus className="size-4 shrink-0" />
+
+                <span className="hidden sm:inline">
+                  Añadir documento
+                </span>
+
+                <ChevronDown className="size-4 shrink-0 opacity-80" />
+              </button>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent
+              align="end"
+              sideOffset={8}
+              className="w-52"
+            >
+              <DropdownMenuItem
+                onSelect={() => requestKnowledgeUpload("files")}
+              >
+                Subir archivos
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onSelect={() => requestKnowledgeUpload("folder")}
+              >
+                Subir carpeta
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onSelect={() => requestKnowledgeUpload("zip")}
+              >
+                Subir ZIP
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
               aria-label="Abrir menú de usuario"
-              className="flex h-full aspect-square items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-white/70"
             >
               {user.image ? (
                 <Image
                   src={user.image}
                   alt={userLabel}
-                  width={28}
-                  height={28}
-                  className="h-full w-full rounded-full object-cover"
+                  width={32}
+                  height={32}
+                  className="size-8 rounded-full object-cover"
                 />
               ) : (
-                <UserCircle className="h-full w-full" />
+                <UserCircle className="size-7" />
               )}
             </button>
           </DropdownMenuTrigger>
@@ -147,17 +179,17 @@ export function AppTopbar({
           >
             <DropdownMenuLabel className="font-normal">
               <div className="flex min-w-0 items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface text-muted-foreground">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface text-muted-foreground">
                   {user.image ? (
                     <Image
                       src={user.image}
                       alt={userLabel}
                       width={36}
                       height={36}
-                      className="h-full w-full rounded-full object-cover"
+                      className="size-9 rounded-full object-cover"
                     />
                   ) : (
-                    <UserCircle className="h-full w-full" />
+                    <UserCircle className="size-6" />
                   )}
                 </span>
 
@@ -178,21 +210,15 @@ export function AppTopbar({
             <DropdownMenuSeparator />
 
             <DropdownMenuItem asChild>
-              <Link
-                href="/my-space"
-                className="cursor-pointer"
-              >
-                <UserCircle className="mr-2 h-4 w-4" />
+              <Link href="/my-space" className="cursor-pointer">
+                <UserCircle className="mr-2 size-4" />
                 Mi espacio
               </Link>
             </DropdownMenuItem>
 
             <DropdownMenuItem asChild>
-              <Link
-                href="/settings"
-                className="cursor-pointer"
-              >
-                <Settings className="mr-2 h-4 w-4" />
+              <Link href="/settings" className="cursor-pointer">
+                <Settings className="mr-2 size-4" />
                 Configuración
               </Link>
             </DropdownMenuItem>
@@ -200,15 +226,12 @@ export function AppTopbar({
             <DropdownMenuSeparator />
 
             <form action={logout}>
-              <DropdownMenuItem
-                asChild
-                variant="destructive"
-              >
+              <DropdownMenuItem asChild variant="destructive">
                 <button
                   type="submit"
                   className="w-full cursor-pointer"
                 >
-                  <LogOut className="mr-2 h-4 w-4" />
+                  <LogOut className="mr-2 size-4" />
                   Cerrar sesión
                 </button>
               </DropdownMenuItem>

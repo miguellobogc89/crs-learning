@@ -1,7 +1,9 @@
 // components/knowledge/content/knowledge-content.tsx
 "use client";
 
+
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -477,6 +479,33 @@ function clearSelection() {
 
     zipInputRef.current?.click();
   }
+
+  
+useEffect(() => {
+  function handleTopbarUpload(event: Event) {
+    const uploadEvent = event as CustomEvent<UploadType>;
+
+    if (
+      uploadEvent.detail === "files" ||
+      uploadEvent.detail === "folder" ||
+      uploadEvent.detail === "zip"
+    ) {
+      handleUpload(uploadEvent.detail);
+    }
+  }
+
+  window.addEventListener(
+    "crs:knowledge-upload",
+    handleTopbarUpload,
+  );
+
+  return () => {
+    window.removeEventListener(
+      "crs:knowledge-upload",
+      handleTopbarUpload,
+    );
+  };
+}, []);
 
   return (
     <>
