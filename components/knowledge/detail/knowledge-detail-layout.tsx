@@ -1,12 +1,16 @@
+
 // components/knowledge/detail/knowledge-detail-layout.tsx
 
 import { KnowledgeDetailHeader } from "./header/knowledge-detail-header";
+
 import type { KnowledgeInsightMetrics } from "./header/knowledge-header-insights";
+
 import type {
   ActiveTab,
   KnowledgeUpdatedByUser,
   LibraryPathItem,
 } from "./knowledge-detail.types";
+
 import { KnowledgeDetailTabs } from "./shared/knowledge-detail-tabs";
 
 type Props = {
@@ -17,22 +21,30 @@ type Props = {
   updatedAt: Date | string;
   updatedBy: KnowledgeUpdatedByUser | null;
   sharedTeamCount: number;
+
   isEditingTitle: boolean;
   isUpdatingHeader: boolean;
+
   activeTab: ActiveTab;
   documentCount: number;
   metrics: KnowledgeInsightMetrics;
+
   onTitleChange: (value: string) => void;
   onEditTitle: () => void;
   onSaveTitle: () => void;
   onCancelTitle: () => void;
-  onVisibilityChange: (
-    visibility: string,
-  ) => void;
+
+  onVisibilityChange: (visibility: string) => void;
   onShare: () => void;
-  onTabChange: (
-    tab: ActiveTab,
-  ) => void;
+  onTabChange: (tab: ActiveTab) => void;
+
+  onEditContent: () => void;
+  isEditingContent: boolean;
+  isSavingContent: boolean;
+  hasContentChanges: boolean;
+  onSaveContent: () => void;
+  onCancelContent: () => void;
+
   children: React.ReactNode;
 };
 
@@ -56,6 +68,12 @@ export function KnowledgeDetailLayout({
   onVisibilityChange,
   onShare,
   onTabChange,
+  onEditContent,
+  isEditingContent,
+  isSavingContent,
+  hasContentChanges,
+  onSaveContent,
+  onCancelContent,
   children,
 }: Props) {
   return (
@@ -77,16 +95,21 @@ export function KnowledgeDetailLayout({
             onEditTitle={onEditTitle}
             onSaveTitle={onSaveTitle}
             onCancelTitle={onCancelTitle}
-            onVisibilityChange={
-              onVisibilityChange
-            }
+            onVisibilityChange={onVisibilityChange}
             onShare={onShare}
+            onEditContent={onEditContent}
+            isEditingContent={isEditingContent}
           />
 
           <KnowledgeDetailTabs
             activeTab={activeTab}
             documentCount={documentCount}
             onTabChange={onTabChange}
+            isEditing={isEditingContent}
+            isSaving={isSavingContent}
+            hasChanges={hasContentChanges}
+            onSave={onSaveContent}
+            onCancel={onCancelContent}
           />
         </div>
       </div>

@@ -11,12 +11,23 @@ type KnowledgeDetailTabsProps = {
   activeTab: ActiveTab;
   documentCount: number;
   onTabChange: (tab: ActiveTab) => void;
+
+  isEditing: boolean;
+  isSaving: boolean;
+  hasChanges: boolean;
+  onSave: () => void;
+  onCancel: () => void;
 };
 
 export function KnowledgeDetailTabs({
   activeTab,
   documentCount,
   onTabChange,
+  isEditing,
+  isSaving,
+  hasChanges,
+  onSave,
+  onCancel,
 }: KnowledgeDetailTabsProps) {
   return (
     <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
@@ -51,9 +62,16 @@ export function KnowledgeDetailTabs({
         </KnowledgeTabButton>
       </div>
 
-      <div className="flex items-center pb-1">
-        <KnowledgeEditActions />
-      </div>
+      {isEditing ? (
+        <div className="flex items-center pb-1">
+          <KnowledgeEditActions
+            onSave={onSave}
+            onCancel={onCancel}
+            isSaving={isSaving}
+            hasChanges={hasChanges}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

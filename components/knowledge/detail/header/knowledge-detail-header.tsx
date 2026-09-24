@@ -10,6 +10,7 @@ import {
   Download,
   FileText,
   Settings,
+  Edit3,
   Share2,
   Trash2,
   UsersRound,
@@ -47,6 +48,8 @@ type Props = {
   isEditingTitle: boolean;
   isUpdating: boolean;
   metrics: KnowledgeInsightMetrics;
+  onEditContent: () => void;
+  isEditingContent: boolean;
   onTitleChange: (value: string) => void;
   onEditTitle: () => void;
   onSaveTitle: () => void;
@@ -287,6 +290,15 @@ export function KnowledgeDetailHeader({
             </DropdownMenuLabel>
 
             <DropdownMenuSeparator />
+
+            
+            <DropdownMenuItem
+              disabled={isEditingContent || isUpdating}
+              onClick={onEditContent}
+            >
+              <Edit3 className="mr-2 h-4 w-4" />
+              Editar contenido
+            </DropdownMenuItem>
 
             <DropdownMenuItem onClick={onShare}>
               <Share2 className="mr-2 h-4 w-4" />
