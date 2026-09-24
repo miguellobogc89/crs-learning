@@ -3,17 +3,61 @@
 
 "use client";
 
-import { ShareLibraryDialog } from "@/components/knowledge/share-library-dialog";
+import { useCallback } from "react";
 
-import { useKnowledgeDetail } from "./hooks/use-knowledge-detail";
-import { useKnowledgeContentEditor } from "./hooks/use-knowledge-content-editor";
-import { KnowledgeDetailContent } from "./knowledge-detail-content";
-import { KnowledgeDetailLayout } from "./knowledge-detail-layout";
+import {
+  saveEditableKnowledgeContentAction,
+} from "@/app/actions/knowledge/editable-content.actions";
+
+import { ShareLibraryDialog } from
+  "@/components/knowledge/share-library-dialog";
+
+import { useKnowledgeDetail } from
+  "./hooks/use-knowledge-detail";
+
+import { useKnowledgeContentEditor } from
+  "./hooks/use-knowledge-content-editor";
+
+import { KnowledgeDetailContent } from
+  "./knowledge-detail-content";
+
+import { KnowledgeDetailLayout } from
+  "./knowledge-detail-layout";
 
 import type {
   ActiveTab,
   KnowledgeDetailClientProps,
 } from "./knowledge-detail.types";
+
+function getSavedSummaryHtml(
+  analysisJson: unknown,
+): string {
+  if (
+    typeof analysisJson !== "object" ||
+    analysisJson === null ||
+    Array.isArray(analysisJson)
+  ) {
+    return "";
+  }
+
+  const editableContent =
+    (analysisJson as Record<string, unknown>)
+      .editableContent;
+
+  if (
+    typeof editableContent !== "object" ||
+    editableContent === null ||
+    Array.isArray(editableContent)
+  ) {
+    return "";
+  }
+
+  const html =
+    (editableContent as Record<string, unknown>)
+      .generalSummaryHtml;
+
+  return typeof html === "string" ? html : "";
+}
 
 export function KnowledgeDetailClient({
   knowledge,
@@ -29,8 +73,24 @@ export function KnowledgeDetailClient({
     analysis,
   } = useKnowledgeDetail({ knowledge });
 
+  const initialHtml = getSavedSummaryHtml(
+    knowledge.knowledge_analysis?.analysis_json,
+  );
+
+  const saveSummary = useCallback(
+    async (html: string) => {
+      await saveEditableKnowledgeContentAction({
+        knowledgeId: knowledge.id,
+        section: "general.summary",
+        html,
+      });
+    },
+    [knowledge.id],
+  );
+
   const editor = useKnowledgeContentEditor({
-    knowledge,
+    initialContent: initialHtml,
+    onSave: saveSummary,
   });
 
   function handleStartEditing() {
@@ -110,6 +170,8 @@ export function KnowledgeDetailClient({
           content={editor.content}
           onContentChange={editor.setContent}
           saveError={editor.saveError}
+          htmlDraft={editor.content}
+          onHtmlDraftChange={editor.setContent}
         />
       </KnowledgeDetailLayout>
 

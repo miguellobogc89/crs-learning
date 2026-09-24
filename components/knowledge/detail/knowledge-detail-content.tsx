@@ -3,9 +3,6 @@
 
 "use client";
 
-import type { KnowledgeExecutiveSummary } from
-  "@/lib/knowledge/knowledge-analysis.types";
-
 import { KnowledgeDetailsView } from
   "./details/knowledge-details-view";
 
@@ -41,10 +38,8 @@ type KnowledgeDetailContentProps = {
   onContentChange: (value: string) => void;
   saveError: string | null;
 
-  summaryDraft?: KnowledgeExecutiveSummary;
-  onSummaryDraftChange?: (
-    draft: KnowledgeExecutiveSummary,
-  ) => void;
+  htmlDraft?: string;
+  onHtmlDraftChange?: (html: string) => void;
 };
 
 export function KnowledgeDetailContent({
@@ -57,8 +52,8 @@ export function KnowledgeDetailContent({
   rebuildError,
   onRebuild,
   isEditingContent,
-  summaryDraft,
-  onSummaryDraftChange,
+  htmlDraft,
+  onHtmlDraftChange,
 }: KnowledgeDetailContentProps) {
   let tabContent: React.ReactNode;
 
@@ -83,8 +78,8 @@ export function KnowledgeDetailContent({
           files={knowledge.knowledge_files}
           onRebuild={onRebuild}
           isEditing={isEditingContent}
-          draft={summaryDraft}
-          onDraftChange={onSummaryDraftChange}
+          htmlDraft={htmlDraft}
+          onHtmlDraftChange={onHtmlDraftChange}
         />
       );
       break;

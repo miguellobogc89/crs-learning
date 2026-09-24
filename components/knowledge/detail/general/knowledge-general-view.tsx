@@ -1,5 +1,5 @@
 
-﻿// components/knowledge/detail/general/knowledge-general-view.tsx
+// components/knowledge/detail/general/knowledge-general-view.tsx
 
 import {
   BrainCircuit,
@@ -7,9 +7,6 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-
-import type { KnowledgeExecutiveSummary } from
-  "@/lib/knowledge/knowledge-analysis.types";
 
 import { KnowledgeGeneralActions } from
   "./knowledge-general-actions";
@@ -39,8 +36,8 @@ type Props = {
   onRebuild: () => void;
 
   isEditing?: boolean;
-  draft?: KnowledgeExecutiveSummary;
-  onDraftChange?: (draft: KnowledgeExecutiveSummary) => void;
+  htmlDraft?: string;
+  onHtmlDraftChange?: (html: string) => void;
 };
 
 export function KnowledgeGeneralView({
@@ -55,8 +52,8 @@ export function KnowledgeGeneralView({
   files,
   onRebuild,
   isEditing = false,
-  draft,
-  onDraftChange,
+  htmlDraft,
+  onHtmlDraftChange,
 }: Props) {
   if (!hasDocuments) {
     return (
@@ -98,8 +95,8 @@ export function KnowledgeGeneralView({
       isRebuilding={isRebuilding}
       onRebuild={onRebuild}
       isEditing={isEditing}
-      draft={draft}
-      onDraftChange={onDraftChange}
+      htmlDraft={htmlDraft}
+      onHtmlDraftChange={onHtmlDraftChange}
     />
   );
 }

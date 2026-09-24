@@ -1,13 +1,10 @@
 
-﻿// components/knowledge/detail/general/knowledge-general-actions.tsx
+// components/knowledge/detail/general/knowledge-general-actions.tsx
 
 "use client";
 
 import { parseKnowledgeAnalysis } from
   "@/lib/knowledge/parse-knowledge-analysis";
-
-import type { KnowledgeExecutiveSummary } from
-  "@/lib/knowledge/knowledge-analysis.types";
 
 import { KnowledgeSummaryPanel } from
   "./knowledge-summary-panel";
@@ -18,15 +15,47 @@ type Props = {
   onRebuild: () => void;
 
   isEditing?: boolean;
-  draft?: KnowledgeExecutiveSummary;
-  onDraftChange?: (draft: KnowledgeExecutiveSummary) => void;
+  htmlDraft?: string;
+  onHtmlDraftChange?: (html: string) => void;
 };
+
+function getSavedSummaryHtml(
+  analysisJson: unknown,
+): string | null {
+  if (
+    typeof analysisJson !== "object" ||
+    analysisJson === null ||
+    Array.isArray(analysisJson)
+  ) {
+    return null;
+  }
+
+  const editableContent =
+    (analysisJson as Record<string, unknown>)
+      .editableContent;
+
+  if (
+    typeof editableContent !== "object" ||
+    editableContent === null ||
+    Array.isArray(editableContent)
+  ) {
+    return null;
+  }
+
+  const html =
+    (editableContent as Record<string, unknown>)
+      .generalSummaryHtml;
+
+  return typeof html === "string"
+    ? html
+    : null;
+}
 
 export function KnowledgeGeneralActions({
   analysisJson,
   isEditing = false,
-  draft,
-  onDraftChange,
+  htmlDraft,
+  onHtmlDraftChange,
 }: Props) {
   const analysis = parseKnowledgeAnalysis(
     analysisJson as Parameters<
@@ -44,8 +73,9 @@ export function KnowledgeGeneralActions({
     <KnowledgeSummaryPanel
       summary={summary}
       isEditing={isEditing}
-      draft={draft}
-      onDraftChange={onDraftChange}
+      savedHtml={getSavedSummaryHtml(analysisJson)}
+      htmlDraft={htmlDraft}
+      onHtmlDraftChange={onHtmlDraftChange}
     />
   );
 }

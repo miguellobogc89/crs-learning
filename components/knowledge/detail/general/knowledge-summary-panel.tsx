@@ -1,9 +1,11 @@
 
-// components/knowledge/detail/general/knowledge-summary-panel.tsx
+﻿// components/knowledge/detail/general/knowledge-summary-panel.tsx
 
 "use client";
 
 import { useMemo } from "react";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
 
 import { KnowledgeEditor } from
   "@/components/knowledge/editor/knowledge-editor";
@@ -19,7 +21,7 @@ type Props = {
   onHtmlDraftChange?: (html: string) => void;
 };
 
-function escapeHtml(value: string) {
+function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -27,17 +29,22 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
-function textToHtml(value: string) {
+function textToHtml(value: string): string {
   return escapeHtml(value)
     .split("\n")
     .map((line) => `<p>${line || "<br>"}</p>`)
     .join("");
 }
 
-function summaryToHtml(summary: KnowledgeExecutiveSummary) {
+function summaryToHtml(
+  summary: KnowledgeExecutiveSummary,
+): string {
   const points = summary.keyPoints
     .filter((point) => point.trim().length > 0)
-    .map((point) => `<li><p>${escapeHtml(point)}</p></li>`)
+    .map(
+      (point) =>
+        `<li><p>${escapeHtml(point)}</p></li>`,
+    )
     .join("");
 
   return [
@@ -46,6 +53,65 @@ function summaryToHtml(summary: KnowledgeExecutiveSummary) {
     "<h2>Puntos clave</h2>",
     `<ul>${points || "<li><p></p></li>"}</ul>`,
   ].join("");
+}
+
+function SavedSummary({
+  html,
+}: {
+  html: string;
+}) {
+  const editor = useEditor({
+    immediatelyRender: false,
+    extensions: [
+      StarterKit.configure({
+        heading: {
+          levels: [2, 3],
+        },
+      }),
+    ],
+    content: html,
+    editable: false,
+    editorProps: {
+      attributes: {
+        class: [
+          "max-w-4xl outline-none",
+          "text-foreground",
+          "[&_h2]:mb-4 [&_h2]:mt-10",
+          "[&_h2:first-child]:mt-0",
+          "[&_h2]:text-2xl [&_h2]:font-semibold",
+          "[&_h2]:tracking-tight",
+          "[&_h3]:mb-3 [&_h3]:mt-7",
+          "[&_h3]:text-xl [&_h3]:font-semibold",
+          "[&_p]:my-3 [&_p]:text-base",
+          "[&_p]:leading-8",
+          "[&_ul]:my-5 [&_ul]:list-disc",
+          "[&_ul]:space-y-3 [&_ul]:pl-6",
+          "[&_ol]:my-5 [&_ol]:list-decimal",
+          "[&_ol]:space-y-3 [&_ol]:pl-6",
+          "[&_li]:pl-1",
+          "[&_li_p]:my-0",
+          "[&_strong]:font-semibold",
+          "[&_blockquote]:my-5",
+          "[&_blockquote]:border-l-4",
+          "[&_blockquote]:border-border",
+          "[&_blockquote]:pl-4",
+          "[&_blockquote]:italic",
+        ].join(" "),
+      },
+    },
+  });
+
+  // El editor de lectura se monta de nuevo cuando
+  // cambia el HTML; no admite edición del usuario.
+  if (!editor) {
+    return null;
+  }
+
+  return (
+    <div className="w-full min-w-0">
+      <EditorContent editor={editor} />
+    </div>
+  );
 }
 
 export function KnowledgeSummaryPanel({
@@ -60,8 +126,6 @@ export function KnowledgeSummaryPanel({
     [summary],
   );
 
-  const initialHtml = savedHtml ?? generatedHtml;
-
   const synthesis = summary.synthesis.trim();
 
   const keyPoints = summary.keyPoints
@@ -73,7 +137,7 @@ export function KnowledgeSummaryPanel({
     return (
       <div className="w-full min-w-0">
         <KnowledgeEditor
-          value={htmlDraft ?? initialHtml}
+          value={htmlDraft || savedHtml || generatedHtml}
           onChange={(html) => {
             onHtmlDraftChange?.(html);
           }}
@@ -81,6 +145,15 @@ export function KnowledgeSummaryPanel({
           className="w-full"
         />
       </div>
+    );
+  }
+
+  if (savedHtml !== null && savedHtml !== undefined) {
+    return (
+      <SavedSummary
+        key={savedHtml}
+        html={savedHtml}
+      />
     );
   }
 
