@@ -31,7 +31,7 @@ import { ArticleDetailsView } from
   "./content/details/article-details-view";
 
   
-import { ArticleBody } from "./layout/article-body";
+import { ArticleBody } from "./content/article-body";
 
 import { ArticleHeader } from "./header/article-header";
 import { ArticleTabs } from "./header/article-tabs";
