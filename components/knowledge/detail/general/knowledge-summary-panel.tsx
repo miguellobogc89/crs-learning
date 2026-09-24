@@ -1,22 +1,85 @@
 
 // components/knowledge/detail/general/knowledge-summary-panel.tsx
 
+"use client";
+
+import { useMemo } from "react";
+
+import { KnowledgeEditor } from
+  "@/components/knowledge/editor/knowledge-editor";
+
 import type { KnowledgeExecutiveSummary } from
   "@/lib/knowledge/knowledge-analysis.types";
 
 type Props = {
   summary: KnowledgeExecutiveSummary;
+  isEditing?: boolean;
+  draft?: KnowledgeExecutiveSummary;
+  onDraftChange?: (draft: KnowledgeExecutiveSummary) => void;
 };
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function textToHtml(value: string) {
+  return escapeHtml(value)
+    .split("\n")
+    .map((line) => `<p>${line || "<br>"}</p>`)
+    .join("");
+}
+
+function summaryToHtml(summary: KnowledgeExecutiveSummary) {
+  const points = summary.keyPoints
+    .filter((point) => point.trim().length > 0)
+    .map((point) => `<li><p>${escapeHtml(point)}</p></li>`)
+    .join("");
+
+  return [
+    "<h2>Resumen</h2>",
+    textToHtml(summary.synthesis),
+    "<h2>Puntos clave</h2>",
+    `<ul>${points || "<li><p></p></li>"}</ul>`,
+  ].join("");
+}
 
 export function KnowledgeSummaryPanel({
   summary,
+  isEditing = false,
+  draft,
+  onDraftChange,
 }: Props) {
+  const initialHtml = useMemo(
+    () => summaryToHtml(summary),
+    [summary],
+  );
+
   const synthesis = summary.synthesis.trim();
 
   const keyPoints = summary.keyPoints
     .map((point) => point.trim())
     .filter(Boolean)
     .slice(0, 5);
+
+  if (isEditing) {
+    return (
+      <div className="w-full min-w-0">
+        <KnowledgeEditor
+          value={initialHtml}
+          onChange={() => {
+            // La conexión del borrador HTML y su guardado
+            // se realizará en el siguiente paso.
+          }}
+          editable
+          className="w-full"
+        />
+      </div>
+    );
+  }
 
   if (!synthesis && keyPoints.length === 0) {
     return (

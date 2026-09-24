@@ -101,6 +101,8 @@ export function KnowledgeDetailHeader({
   onCancelTitle,
   onVisibilityChange,
   onShare,
+  onEditContent,
+  isEditingContent,
 }: Props) {
   const knowledgeTypeLabel =
     KNOWLEDGE_TYPE_LABELS[knowledgeType] ??

@@ -3,13 +3,20 @@
 
 "use client";
 
-import { KnowledgeEditor } from "@/components/knowledge/editor/knowledge-editor";
+import type { KnowledgeExecutiveSummary } from
+  "@/lib/knowledge/knowledge-analysis.types";
 
-import { KnowledgeDetailsView } from "./details/knowledge-details-view";
-import { KnowledgeDocumentsView } from "./documents/knowledge-documents-view";
-import { KnowledgeGeneralView } from "./general/knowledge-general-view";
+import { KnowledgeDetailsView } from
+  "./details/knowledge-details-view";
 
-import { KnowledgeTabContainer } from "./shared/knowledge-tab-container";
+import { KnowledgeDocumentsView } from
+  "./documents/knowledge-documents-view";
+
+import { KnowledgeGeneralView } from
+  "./general/knowledge-general-view";
+
+import { KnowledgeTabContainer } from
+  "./shared/knowledge-tab-container";
 
 import type {
   ActiveTab,
@@ -33,6 +40,11 @@ type KnowledgeDetailContentProps = {
   content: string;
   onContentChange: (value: string) => void;
   saveError: string | null;
+
+  summaryDraft?: KnowledgeExecutiveSummary;
+  onSummaryDraftChange?: (
+    draft: KnowledgeExecutiveSummary,
+  ) => void;
 };
 
 export function KnowledgeDetailContent({
@@ -45,43 +57,14 @@ export function KnowledgeDetailContent({
   rebuildError,
   onRebuild,
   isEditingContent,
-  content,
-  onContentChange,
-  saveError,
+  summaryDraft,
+  onSummaryDraftChange,
 }: KnowledgeDetailContentProps) {
   let tabContent: React.ReactNode;
 
   switch (activeTab) {
     case "general":
-      tabContent = isEditingContent ? (
-        <div className="w-full min-w-0 space-y-6">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">
-              Editar contenido del artículo
-            </h2>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              Los cambios se guardarán al pulsar
-              «Guardar cambios».
-            </p>
-          </div>
-
-          {saveError ? (
-            <p
-              role="alert"
-              className="text-sm text-destructive"
-            >
-              {saveError}
-            </p>
-          ) : null}
-
-          <KnowledgeEditor
-            value={content}
-            onChange={onContentChange}
-            editable
-          />
-        </div>
-      ) : (
+      tabContent = (
         <KnowledgeGeneralView
           hasDocuments={hasDocuments}
           hasAnalysis={hasAnalysis}
@@ -99,6 +82,9 @@ export function KnowledgeDetailContent({
           graph={knowledge.knowledge_graph}
           files={knowledge.knowledge_files}
           onRebuild={onRebuild}
+          isEditing={isEditingContent}
+          draft={summaryDraft}
+          onDraftChange={onSummaryDraftChange}
         />
       );
       break;

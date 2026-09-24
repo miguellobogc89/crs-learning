@@ -1,4 +1,5 @@
-// components/knowledge/detail/general/knowledge-general-view.tsx
+
+﻿// components/knowledge/detail/general/knowledge-general-view.tsx
 
 import {
   BrainCircuit,
@@ -7,16 +8,19 @@ import {
   RefreshCw,
 } from "lucide-react";
 
+import type { KnowledgeExecutiveSummary } from
+  "@/lib/knowledge/knowledge-analysis.types";
+
 import { KnowledgeGeneralActions } from
   "./knowledge-general-actions";
-
-import { KnowledgeAnalysisPanel } from "@/components/knowledge/knowledge-analysis-panel";
 
 import type {
   KnowledgeFile,
   KnowledgeGraph,
 } from "../knowledge-detail.types";
-import { KnowledgeEmptyState } from "../shared/knowledge-empty-state";
+
+import { KnowledgeEmptyState } from
+  "../shared/knowledge-empty-state";
 
 type Props = {
   hasDocuments: boolean;
@@ -33,6 +37,10 @@ type Props = {
   files: KnowledgeFile[];
 
   onRebuild: () => void;
+
+  isEditing?: boolean;
+  draft?: KnowledgeExecutiveSummary;
+  onDraftChange?: (draft: KnowledgeExecutiveSummary) => void;
 };
 
 export function KnowledgeGeneralView({
@@ -46,13 +54,16 @@ export function KnowledgeGeneralView({
   graph,
   files,
   onRebuild,
+  isEditing = false,
+  draft,
+  onDraftChange,
 }: Props) {
   if (!hasDocuments) {
     return (
       <KnowledgeEmptyState
         icon={<FileSearch className="h-5 w-5" />}
-        title="Anade documentacion para construir el articulo"
-        description="La incorporacion de nuevas evidencias se realiza desde el flujo de Importacion de Conocimiento de la carpeta."
+        title="Añade documentación para construir el artículo"
+        description="La incorporación de nuevas evidencias se realiza desde el flujo de Importación de Conocimiento de la carpeta."
       />
     );
   }
@@ -61,8 +72,8 @@ export function KnowledgeGeneralView({
     return (
       <KnowledgeEmptyState
         icon={<BrainCircuit className="h-5 w-5" />}
-        title="Todavia no hay un analisis disponible"
-        description="Procesa la documentacion del articulo para generar su resumen de calidad y trazabilidad."
+        title="Todavía no hay un análisis disponible"
+        description="Procesa la documentación del artículo para generar su resumen de calidad y trazabilidad."
         actionLabel={
           isRebuilding
             ? "Actualizando..."
@@ -86,6 +97,9 @@ export function KnowledgeGeneralView({
       analysisJson={analysisJson}
       isRebuilding={isRebuilding}
       onRebuild={onRebuild}
+      isEditing={isEditing}
+      draft={draft}
+      onDraftChange={onDraftChange}
     />
   );
 }
