@@ -1,10 +1,13 @@
+
 // components/app/sidebar.tsx
+
 "use client";
 
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SheetClose } from "@/components/ui/sheet";
+
 import {
   GraduationCap,
   Home,
@@ -88,142 +91,175 @@ export function AppSidebar({
   return (
     <aside
       className={cn(
-        "flex h-full flex-col justify-between border-border bg-background py-3",
+        "flex h-full min-h-0 flex-col justify-between bg-transparent pt-4 pb-3",
         mobile
           ? "w-full items-stretch px-4"
-          : "hidden w-14 items-center border-r lg:flex",
+          : "hidden w-14 items-center lg:flex",
       )}
     >
-      <div className={cn("flex flex-col gap-1", mobile ? "items-stretch" : "items-center")}>
+      <div
+        className={cn(
+          "flex flex-col gap-1",
+          mobile ? "items-stretch" : "items-center",
+        )}
+      >
+        {/* Logo de Crusader */}
         <Link
           href="/knowledge"
-          aria-label="CRS Learning"
+          aria-label="Crusader"
           className={cn(
-            "mb-3 flex h-9 items-center justify-center",
-            mobile ? "w-full justify-start px-2" : "w-9",
+            "flex h-14 shrink-0 items-center justify-center",
+            mobile
+              ? "mb-3 w-full justify-start px-2"
+              : "mb-5 w-14",
           )}
         >
-          <Image
-            src="/logo/logo.png"
-            alt="CRS Learning"
-            width={24}
-            height={24}
-            className="h-6 w-6 object-contain"
-            priority
-          />
+<Image
+  src="/logo/logo.png"
+  alt="Crusader"
+  width={32}
+  height={32}
+  className="h-8 w-8 object-contain"
+  priority
+/>
+
           {mobile ? (
             <span className="ml-3 text-sm font-semibold tracking-tight text-foreground">
-              CRS Learning
+              Crusader
             </span>
           ) : null}
         </Link>
 
-        <nav className={cn("flex flex-col gap-1", mobile ? "items-stretch" : "items-center")}>
-{navItems.map((item) => {
-  const active =
-    !item.disabled && pathname.startsWith(item.href);
-
-  if (item.disabled) {
-    return (
-      <div
-        key={item.href}
-        aria-label={`${item.label} - Próximamente`}
-        aria-disabled="true"
-        className={cn(
-          "group relative flex h-9 cursor-default items-center rounded-md text-muted-foreground/40",
-          mobile
-            ? "w-full justify-start gap-3 px-3"
-            : "w-9 justify-center",
-        )}
-      >
-        <item.icon className="h-[18px] w-[18px]" />
-
-        {mobile ? (
-          <>
-            <span>{item.label}</span>
-            <span className="ml-auto text-[10px] text-muted-foreground/60">
-              Próximamente
-            </span>
-          </>
-        ) : null}
-
-        {!mobile ? (
-          <SidebarTooltip label={`${item.label} · Próximamente`} />
-        ) : null}
-      </div>
-    );
-  }
-
-  const link = (
-    <Link
-      key={item.href}
-      href={item.href}
-      aria-label={item.label}
-className={cn(
-  "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
-  mobile
-    ? "w-full justify-start gap-3 px-3"
-    : "w-9 justify-center",
-  active &&
-    "bg-[#EDF3FF] text-[#0A58FF] hover:bg-[#EDF3FF] hover:text-[#0A58FF]",
-)}
-    >
-      <item.icon className="h-[18px] w-[18px]" />
-
-      {mobile ? <span>{item.label}</span> : null}
-
-      {item.notifications && notificationCount > 0 && (
-        <span
-          className="
-            absolute right-[3px] top-[3px]
-            flex min-h-3.5 min-w-3.5
-            items-center justify-center
-            rounded-full bg-red-500
-            px-1 text-[9px] font-semibold
-            leading-none text-white
-            ring-2 ring-background
-          "
+        <nav
+          className={cn(
+            "flex flex-col gap-1",
+            mobile ? "items-stretch" : "items-center",
+          )}
         >
-          {notificationCount > 9 ? "9+" : notificationCount}
-        </span>
-      )}
+          {navItems.map((item) => {
+            const active =
+              !item.disabled &&
+              pathname.startsWith(item.href);
 
-      {!mobile ? (
-        <SidebarTooltip label={item.label} />
-      ) : null}
-    </Link>
-  );
+            if (item.disabled) {
+              return (
+                <div
+                  key={item.href}
+                  aria-label={`${item.label} - Próximamente`}
+                  aria-disabled="true"
+                  className={cn(
+                    "group relative flex h-9 cursor-default items-center rounded-md text-muted-foreground/40",
+                    mobile
+                      ? "w-full justify-start gap-3 px-3"
+                      : "w-9 justify-center",
+                  )}
+                >
+                  <item.icon className="h-[18px] w-[18px]" />
 
-  return mobile ? (
-    <SheetClose key={item.href} asChild>
-      {link}
-    </SheetClose>
-  ) : (
-    link
-  );
-})}
+                  {mobile ? (
+                    <>
+                      <span>{item.label}</span>
+
+                      <span className="ml-auto text-[10px] text-muted-foreground/60">
+                        Próximamente
+                      </span>
+                    </>
+                  ) : (
+                    <SidebarTooltip
+                      label={`${item.label} · Próximamente`}
+                    />
+                  )}
+                </div>
+              );
+            }
+
+            const link = (
+              <Link
+                href={item.href}
+                aria-label={item.label}
+                className={cn(
+                  "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
+                  mobile
+                    ? "w-full justify-start gap-3 px-3"
+                    : "w-9 justify-center",
+                  active &&
+                    "bg-[#EDF3FF] text-[#0A58FF] hover:bg-[#EDF3FF] hover:text-[#0A58FF]",
+                )}
+              >
+                <item.icon className="h-[18px] w-[18px]" />
+
+                {mobile ? (
+                  <span>{item.label}</span>
+                ) : null}
+
+                {item.notifications &&
+                  notificationCount > 0 && (
+                    <span
+                      className="
+                        absolute right-[3px] top-[3px]
+                        flex min-h-3.5 min-w-3.5
+                        items-center justify-center
+                        rounded-full bg-red-500
+                        px-1 text-[9px] font-semibold
+                        leading-none text-white
+                        ring-2 ring-background
+                      "
+                    >
+                      {notificationCount > 9
+                        ? "9+"
+                        : notificationCount}
+                    </span>
+                  )}
+
+                {!mobile ? (
+                  <SidebarTooltip label={item.label} />
+                ) : null}
+              </Link>
+            );
+
+            return mobile ? (
+              <SheetClose key={item.href} asChild>
+                {link}
+              </SheetClose>
+            ) : (
+              <div key={item.href}>{link}</div>
+            );
+          })}
         </nav>
       </div>
 
       {mobile ? (
-        <div className="flex flex-col gap-1 items-stretch">
+        <div className="flex flex-col items-stretch gap-1">
           {isAdmin && (
             <SheetClose asChild>
               <Link
                 href="/admin"
                 aria-label="Administración"
-                className="group relative flex h-9 w-full items-center justify-start gap-3 rounded-md px-3 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+                className="
+                  group relative flex h-9 w-full
+                  items-center justify-start gap-3
+                  rounded-md px-3 text-muted-foreground
+                  transition-colors
+                  hover:bg-surface hover:text-foreground
+                "
               >
                 <ShieldCheck className="h-[18px] w-[18px]" />
                 <span>Administración</span>
               </Link>
             </SheetClose>
           )}
+
           <SheetClose asChild>
             <Link
               href="/settings"
               aria-label="Configuración"
-              className="group relative flex h-9 w-full items-center justify-start gap-3 rounded-md px-3 text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+              className="
+                group relative flex h-9 w-full
+                items-center justify-start gap-3
+                rounded-md px-3 text-muted-foreground
+                transition-colors
+                hover:bg-surface hover:text-foreground
+              "
             >
               <Settings className="h-[18px] w-[18px]" />
               <span>Configuración</span>
@@ -231,8 +267,7 @@ className={cn(
           </SheetClose>
         </div>
       ) : (
-
-        <div className="flex flex-col gap-1 items-center">
+        <div className="flex flex-col items-center gap-1">
           {isAdmin && (
             <Link
               href="/admin"

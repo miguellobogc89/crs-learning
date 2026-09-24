@@ -122,7 +122,7 @@ Si la respuesta usa varias fuentes:
 Si el Knowledge Hub no contiene información relevante, dilo claramente.
 
 Respuesta recomendada:
-"No encuentro información suficiente en el Knowledge Hub para responder a eso con seguridad."
+"No encuentro información suficiente en el Hub de conocimiento para responder a eso con seguridad."
 
 Puedes añadir:
 "Podrías revisar con el equipo responsable o subir documentación sobre ese procedimiento al Knowledge Hub."

@@ -147,23 +147,66 @@ export function GlobalSearch() {
 
   return (
     <div ref={containerRef} className="relative h-full w-full">
-      {/* Trigger Button */}
-      <button
-        onClick={() => {
-          setIsOpen(true);
-          resetSelectedIndex();
-        }}
-        className="group flex h-full w-full items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground hover:border-foreground/20"
-      >
-        <Search className="h-4 w-4 shrink-0" />
-        <span className="truncate text-left">Buscar cualquier cosa...</span>
-        <kbd
-          data-search-shortcut
-          className="ml-auto inline-flex gap-0.5 rounded border border-border/50 bg-background px-1.5 py-0.5 text-xs font-medium"
-        >
-          <Command className="h-3 w-3" />K
-        </kbd>
-      </button>
+
+
+
+{/* Trigger Button */}
+<button
+  type="button"
+  onClick={() => {
+    setIsOpen(true);
+    resetSelectedIndex();
+  }}
+  aria-label="Abrir búsqueda global"
+  className="
+    group flex h-full w-full min-w-0 items-center gap-4
+    rounded-[18px]
+    border border-white/90
+    bg-white
+    px-[22px]
+    text-left
+    shadow-[0_8px_28px_rgba(30,64,175,0.045)]
+    transition-all duration-200
+    hover:border-[#E7EDFA]
+    hover:shadow-[0_10px_32px_rgba(30,64,175,0.075)]
+    focus-visible:outline-none
+    focus-visible:ring-2
+    focus-visible:ring-[#2563EB]/20
+  "
+>
+  <Search
+    className="h-[19px] w-[19px] shrink-0 text-[#91A1BB]"
+    strokeWidth={1.8}
+  />
+
+  <span
+    className="
+      min-w-0 flex-1 truncate
+      text-[14px] font-normal
+      tracking-[-0.01em]
+      text-[#8492AA]
+    "
+  >
+    Buscar documentos, carpetas, etiquetas...
+  </span>
+
+  <kbd
+    data-search-shortcut
+    className="
+      ml-auto inline-flex h-[30px] shrink-0
+      items-center justify-center gap-1.5
+      rounded-[9px]
+      border border-[#E7EDFA]
+      bg-white
+      px-2.5
+      text-[12px] font-medium
+      text-[#8492AA]
+    "
+  >
+    <Command className="h-[13px] w-[13px]" strokeWidth={1.6} />
+    <span>K</span>
+  </kbd>
+</button>
 
       {/* Popover */}
       {isOpen && (

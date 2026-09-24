@@ -1,5 +1,5 @@
-// components/app/topbar.tsx
 
+// components/app/topbar.tsx
 
 "use client";
 
@@ -65,7 +65,7 @@ export function AppTopbar({
   const isKnowledge = pathname.startsWith("/knowledge");
 
   return (
-    <header className="flex h-[68px] shrink-0 items-center gap-3 border-0 bg-transparent px-4 sm:px-6 lg:px-8">
+    <header className="flex h-[88px] shrink-0 items-center gap-3 border-0 bg-transparent px-4 sm:px-6 lg:px-8">
       <SheetTrigger asChild>
         <button
           type="button"
@@ -76,20 +76,19 @@ export function AppTopbar({
         </button>
       </SheetTrigger>
 
-
-<div className="flex min-w-0 flex-1 items-center">
-  <div
-    className="
-      h-11 w-full max-w-[470px] rounded-2xl bg-white
-      shadow-[0_1px_2px_rgba(30,64,175,0.03)]
-      lg:fixed lg:left-1/2 lg:top-[34px]
-      lg:z-10 lg:w-[min(470px,calc(100vw-760px))]
-      lg:-translate-x-1/2 lg:-translate-y-1/2
-    "
-  >
-    <GlobalSearch />
-  </div>
-</div>
+      <div className="flex min-w-0 flex-1 items-center">
+        <div
+          className="
+            h-11 w-full max-w-[470px] rounded-2xl bg-white
+            shadow-[0_1px_2px_rgba(30,64,175,0.03)]
+            lg:fixed lg:left-1/2 lg:top-[44px]
+            lg:z-10 lg:w-[min(470px,calc(100vw-760px))]
+            lg:-translate-x-1/2 lg:-translate-y-1/2
+          "
+        >
+          <GlobalSearch />
+        </div>
+      </div>
 
       <div className="flex shrink-0 items-center gap-2.5">
         <div className="flex size-10 items-center justify-center rounded-xl border border-[#e5eaf5] bg-white shadow-[0_2px_5px_rgba(30,64,175,0.05)]">
