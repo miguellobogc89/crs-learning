@@ -1,35 +1,35 @@
+
 // components/knowledge/detail/hooks/use-knowledge-content-editor.ts
 
 "use client";
 
-import { useRouter } from "next/navigation";
 import {
+  useCallback,
   useEffect,
-  useMemo,
   useState,
   useTransition,
 } from "react";
 
-import { updateKnowledgeAction } from "@/app/actions/knowledge";
-
-import type { Knowledge } from "../knowledge-detail.types";
-
 type UseKnowledgeContentEditorParams = {
-  knowledge: Knowledge;
+  initialContent: string;
+  onSave: (content: string) => Promise<void>;
 };
 
 export function useKnowledgeContentEditor({
-  knowledge,
+  initialContent,
+  onSave,
 }: UseKnowledgeContentEditorParams) {
-  const router = useRouter();
+  const [savedContent, setSavedContent] =
+    useState(initialContent);
 
-  const initialContent = knowledge.content ?? "";
+  const [content, setContent] =
+    useState(initialContent);
 
-  const [content, setContent] = useState(initialContent);
-  const [isEditing, setIsEditing] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(
-    null,
-  );
+  const [isEditing, setIsEditing] =
+    useState(false);
+
+  const [saveError, setSaveError] =
+    useState<string | null>(null);
 
   const [isSaving, startSavingTransition] =
     useTransition();
@@ -39,71 +39,48 @@ export function useKnowledgeContentEditor({
       return;
     }
 
-    setContent(knowledge.content ?? "");
-  }, [knowledge.content, isEditing]);
+    setSavedContent(initialContent);
+    setContent(initialContent);
+  }, [initialContent, isEditing]);
 
-  const hasChanges = useMemo(() => {
-    return content !== initialContent;
-  }, [content, initialContent]);
+  const hasChanges = content !== savedContent;
 
-  function startEditing() {
+  const startEditing = useCallback(() => {
+    if (isSaving) {
+      return;
+    }
+
+    setContent(savedContent);
     setSaveError(null);
     setIsEditing(true);
-  }
+  }, [isSaving, savedContent]);
 
-  function cancelEditing() {
+  const cancelEditing = useCallback(() => {
     if (isSaving) {
       return;
     }
 
-    setContent(initialContent);
+    setContent(savedContent);
     setSaveError(null);
     setIsEditing(false);
-  }
+  }, [isSaving, savedContent]);
 
-  function createUpdateFormData() {
-    const formData = new FormData();
-
-    formData.set("id", knowledge.id);
-    formData.set("title", knowledge.title);
-    formData.set(
-      "description",
-      knowledge.description ?? "",
-    );
-    formData.set(
-      "visibility",
-      knowledge.visibility,
-    );
-    formData.set(
-      "knowledgeType",
-      knowledge.knowledge_type,
-    );
-    formData.set("content", content);
-
-    return formData;
-  }
-
-  function saveContent() {
-    if (isSaving) {
+  const saveContent = useCallback(() => {
+    if (isSaving || !isEditing || !hasChanges) {
       return;
     }
 
-    if (!hasChanges) {
-      setIsEditing(false);
-      return;
-    }
+    const contentToSave = content;
 
     setSaveError(null);
 
     startSavingTransition(async () => {
       try {
-        const formData = createUpdateFormData();
+        await onSave(contentToSave);
 
-        await updateKnowledgeAction(formData);
-
+        setSavedContent(contentToSave);
+        setContent(contentToSave);
         setIsEditing(false);
-
-        router.refresh();
       } catch (error) {
         console.error(
           "No se pudo guardar el contenido:",
@@ -115,7 +92,13 @@ export function useKnowledgeContentEditor({
         );
       }
     });
-  }
+  }, [
+    content,
+    hasChanges,
+    isEditing,
+    isSaving,
+    onSave,
+  ]);
 
   return {
     content,

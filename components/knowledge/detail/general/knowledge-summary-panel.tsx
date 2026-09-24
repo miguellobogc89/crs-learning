@@ -14,8 +14,9 @@ import type { KnowledgeExecutiveSummary } from
 type Props = {
   summary: KnowledgeExecutiveSummary;
   isEditing?: boolean;
-  draft?: KnowledgeExecutiveSummary;
-  onDraftChange?: (draft: KnowledgeExecutiveSummary) => void;
+  savedHtml?: string | null;
+  htmlDraft?: string;
+  onHtmlDraftChange?: (html: string) => void;
 };
 
 function escapeHtml(value: string) {
@@ -50,13 +51,16 @@ function summaryToHtml(summary: KnowledgeExecutiveSummary) {
 export function KnowledgeSummaryPanel({
   summary,
   isEditing = false,
-  draft,
-  onDraftChange,
+  savedHtml,
+  htmlDraft,
+  onHtmlDraftChange,
 }: Props) {
-  const initialHtml = useMemo(
+  const generatedHtml = useMemo(
     () => summaryToHtml(summary),
     [summary],
   );
+
+  const initialHtml = savedHtml ?? generatedHtml;
 
   const synthesis = summary.synthesis.trim();
 
@@ -69,10 +73,9 @@ export function KnowledgeSummaryPanel({
     return (
       <div className="w-full min-w-0">
         <KnowledgeEditor
-          value={initialHtml}
-          onChange={() => {
-            // La conexión del borrador HTML y su guardado
-            // se realizará en el siguiente paso.
+          value={htmlDraft ?? initialHtml}
+          onChange={(html) => {
+            onHtmlDraftChange?.(html);
           }}
           editable
           className="w-full"
