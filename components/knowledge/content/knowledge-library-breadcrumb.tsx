@@ -1,4 +1,5 @@
 // components/knowledge/content/knowledge-library-breadcrumb.tsx
+
 "use client";
 
 import Link from "next/link";
@@ -15,51 +16,47 @@ export function KnowledgeLibraryBreadcrumb({
   path,
   includeKnowledgeRoot = false,
 }: Props) {
-  if (path.length === 0 && !includeKnowledgeRoot) {
-    return null;
-  }
+  // El último elemento es la carpeta actual.
+  // Ya se muestra como título debajo del breadcrumb.
+  const parentPath = path.slice(0, -1);
+
+  const showKnowledgeRoot =
+    includeKnowledgeRoot || path.length === 0;
 
   return (
-    <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
-      {includeKnowledgeRoot ? (
-        <>
-          <Link
-            href="/knowledge"
-            className="rounded-md px-2 py-1 transition hover:bg-surface hover:text-foreground"
-          >
-            Conocimiento
-          </Link>
-
-          {path.length > 0 ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : null}
-        </>
+    <nav
+      aria-label="Ruta de carpetas"
+      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
+    >
+      {showKnowledgeRoot ? (
+        <Link
+          href="/knowledge"
+          className="transition-colors hover:text-foreground"
+        >
+          Mi biblioteca
+        </Link>
       ) : null}
 
-      {path.map((library, index) => {
-        const isLast = index === path.length - 1;
+      {parentPath.map((library, index) => (
+        <div
+          key={library.id}
+          className="inline-flex min-w-0 items-center gap-2"
+        >
+          {index > 0 || showKnowledgeRoot ? (
+            <ChevronRight
+              aria-hidden="true"
+              className="h-3.5 w-3.5 shrink-0"
+            />
+          ) : null}
 
-        return (
-          <div
-            key={library.id}
-            className="flex items-center gap-1"
+          <Link
+            href={`/knowledge?library=${encodeURIComponent(library.id)}`}
+            className="truncate transition-colors hover:text-foreground"
           >
-            <Link
-              href={`/knowledge?library=${library.id}`}
-              className={[
-                "rounded-md px-2 py-1 transition hover:bg-surface hover:text-foreground",
-                isLast ? "font-medium text-foreground" : "",
-              ].join(" ")}
-            >
-              {library.name}
-            </Link>
-
-            {!isLast ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : null}
-          </div>
-        );
-      })}
+            {library.name}
+          </Link>
+        </div>
+      ))}
     </nav>
   );
 }

@@ -24,11 +24,11 @@ export function KnowledgeToolbar({
 }: KnowledgeToolbarProps) {
   return (
     <header className="mb-4">
-      {/* Cabecera: breadcrumb y acciones en la misma fila */}
-      <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1">
           <KnowledgeNavigation
             breadcrumb={breadcrumb}
+            title={title}
             parentHref={parentHref}
           />
         </div>
@@ -41,7 +41,6 @@ export function KnowledgeToolbar({
         </div>
       </div>
 
-      {/* Controles del explorador, sin título grande encima */}
       <KnowledgeExplorerControls
         title={title}
         explorerState={explorerState}
