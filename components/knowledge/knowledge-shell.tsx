@@ -1,17 +1,20 @@
 // components/knowledge/knowledge-shell.tsx
-import { ReactNode } from "react";
 
-import {
-  AppSectionShell,
-} from "@/components/app/section-sidebar";
+
+import type { ReactNode } from "react";
+
+import { AppSectionShell } from "@/components/app/section-sidebar";
 import { KnowledgeSidebar } from "@/components/knowledge/sidebar/knowledge-sidebar";
 import type { SidebarItem } from "@/components/knowledge/sidebar/types";
+import type { AccessibleWorkspace } from "@/lib/repositories/workspace.repository";
 
 type Props = {
   knowledgeSources: any[];
   knowledgeLibraries: any[];
   knowledgeTeams: any[];
   defaultLibraryId: string | null;
+  activeWorkspace: AccessibleWorkspace;
+  workspaces: AccessibleWorkspace[];
   children: ReactNode;
 };
 
@@ -20,13 +23,16 @@ export function KnowledgeShell({
   knowledgeLibraries,
   knowledgeTeams,
   defaultLibraryId,
+  activeWorkspace,
+  workspaces,
   children,
 }: Props) {
   const totalPublic = knowledgeSources.filter(
     (knowledge) => knowledge.visibility === "public",
   ).length;
 
-  const totalPrivate = knowledgeSources.length - totalPublic;
+  const totalPrivate =
+    knowledgeSources.length - totalPublic;
 
   const sidebarItems: SidebarItem[] = [
     {
@@ -63,6 +69,8 @@ export function KnowledgeShell({
 
   return (
     <AppSectionShell
+      activeWorkspace={activeWorkspace}
+      workspaces={workspaces}
       sidebar={
         <KnowledgeSidebar
           sidebarItems={sidebarItems}

@@ -229,11 +229,13 @@ export function ArticleClient({
               )}
 
               
-              {activeTab === "documents" && (
+
+                {activeTab === "documents" && (
                 <ArticleDocumentsView
-                  documents={knowledge.knowledge_files}
+                    documents={knowledge.knowledge_files}
+                    analysis={knowledge.knowledge_analysis}
                 />
-              )}
+                )}
             </div>
           </ArticleBody>
         </div>
