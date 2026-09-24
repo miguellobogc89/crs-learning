@@ -1,7 +1,5 @@
 // components/app/app-workspace-layout.tsx
 
-
-
 "use client";
 
 import {
@@ -12,6 +10,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+
+import { AppNavigationPanel } from "@/components/app/app-navigation-panel";
 
 type WorkspaceLayoutContextValue = {
   sidebar: ReactNode | null;
@@ -26,6 +26,7 @@ const WorkspaceLayoutContext =
 const DEFAULT_WIDTH = 280;
 const MIN_WIDTH = 220;
 const MAX_WIDTH = 420;
+
 const STORAGE_KEY = "crs-lab:section-sidebar-width";
 
 export function useWorkspaceLayout() {
@@ -40,15 +41,21 @@ export function useWorkspaceLayout() {
   return context;
 }
 
+type AppWorkspaceLayoutProps = {
+  topbar: ReactNode;
+  sidebarHeader: ReactNode;
+  children: ReactNode;
+  isAdmin: boolean;
+  notificationCount: number;
+};
+
 export function AppWorkspaceLayout({
   topbar,
   sidebarHeader,
   children,
-}: {
-  topbar: ReactNode;
-  sidebarHeader: ReactNode;
-  children: ReactNode;
-}) {
+  isAdmin,
+  notificationCount,
+}: AppWorkspaceLayoutProps) {
   const [sidebar, setSidebar] = useState<ReactNode | null>(null);
 
   const [sidebarWidth, setSidebarWidthState] =
@@ -94,38 +101,32 @@ export function AppWorkspaceLayout({
       }}
     >
       <div className="flex min-h-0 min-w-0 flex-1">
-        {sidebar ? (
-          <div
-            className="hidden h-full min-h-0 shrink-0 flex-col border-r border-border bg-panel lg:flex"
-            style={{ width: sidebarWidth }}
+        <AppNavigationPanel
+          isAdmin={isAdmin}
+          notificationCount={notificationCount}
+          sidebarHeader={sidebarHeader}
+          sidebar={sidebar}
+          sidebarWidth={sidebarWidth}
+        />
+
+        <div
+          className="
+            relative flex min-h-0 min-w-0 flex-1 flex-col
+            bg-[#f8faff]
+            [background-image:radial-gradient(ellipse_65%_55%_at_18%_8%,rgba(59,130,246,0.12),transparent_75%),radial-gradient(ellipse_55%_65%_at_88%_18%,rgba(37,99,235,0.09),transparent_75%),radial-gradient(ellipse_70%_60%_at_55%_95%,rgba(96,165,250,0.07),transparent_80%)]
+          "
+        >
+          {topbar}
+
+          <main
+            className="
+              min-h-0 min-w-0 flex-1
+              overflow-hidden border-0 bg-transparent
+            "
           >
-            <div className="flex h-16 shrink-0 items-center border-b border-border bg-panel px-4">
-              <div className="min-w-0 w-full">
-                {sidebarHeader}
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1">
-              {sidebar}
-            </div>
-          </div>
-        ) : null}
-
-
-<div
-  className="
-    relative flex min-h-0 min-w-0 flex-1 flex-col
-    bg-[#f8faff]
-    [background-image:radial-gradient(ellipse_65%_55%_at_18%_8%,rgba(59,130,246,0.12),transparent_75%),radial-gradient(ellipse_55%_65%_at_88%_18%,rgba(37,99,235,0.09),transparent_75%),radial-gradient(ellipse_70%_60%_at_55%_95%,rgba(96,165,250,0.07),transparent_80%)]
-  "
->
-  {topbar}
-
-
-<main className="min-h-0 min-w-0 flex-1 overflow-hidden border-0 bg-transparent">
-  {children}
-</main>
-</div>
+            {children}
+          </main>
+        </div>
       </div>
     </WorkspaceLayoutContext.Provider>
   );
