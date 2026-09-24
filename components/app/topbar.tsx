@@ -72,26 +72,22 @@ export function AppTopbar({
   }
 
   return (
+    <header
+      className="
+        flex shrink-0 items-center gap-4
+        border-b border-border
+        bg-background px-3 py-2
 
-
-<header
-  className="
-    flex shrink-0 items-center gap-4
-    border-b border-[#e2e8f3]
-    bg-transparent
-    px-3 py-2
-
-    h-12
-    sm:px-4 sm:py-2
-    md:h-14 md:px-5 md:py-2.5
-    lg:h-[58px] lg:px-6 lg:py-3
-    xl:h-16 xl:px-7 xl:py-3
-    2xl:h-[68px] 2xl:px-8 2xl:py-3.5
-
-    [&_[data-search-shortcut]]:hidden
-    lg:[&_[data-search-shortcut]]:inline-flex
-  "
->
+        h-12
+        sm:px-4 sm:py-2
+        md:h-14 md:px-5 md:py-2.5
+        lg:h-[58px] lg:px-6 lg:py-3
+        xl:h-16 xl:px-7 xl:py-3
+        2xl:h-[68px] 2xl:px-8 2xl:py-3.5
+        [&_[data-search-shortcut]]:hidden
+        lg:[&_[data-search-shortcut]]:inline-flex
+      "
+    >
       <SheetTrigger asChild>
         <button
           type="button"

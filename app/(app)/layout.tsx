@@ -1,20 +1,32 @@
 // app/(app)/layout.tsx
 
-
-import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
-import { KnowledgeShell } from "@/components/knowledge/knowledge-shell";
-import { listVisibleKnowledgeSources } from "@/lib/services/knowledge.service";
-import { listKnowledgeLibraries } from "@/lib/services/knowledge-library.service";
-import { listTeams } from "@/lib/services/knowledge-team.service";
+import { isUserAdmin } from "@/lib/auth/admin";
+import { AppSidebar } from "@/components/app/sidebar";
+import { AppTopbar } from "@/components/app/topbar";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { AutoBreadcrumb } from "@/components/app/auto-breadcrumb";
+import { FloatingChat } from "@/components/chat/floating-chat";
+import {
+  KnowledgeImportProvider,
+} from "@/components/knowledge/import/background/knowledge-import-provider";
+import {
+  KnowledgeImportBackgroundWidget,
+} from "@/components/knowledge/import/background/knowledge-import-background-widget";
+import { listChatConversations } from "@/lib/services/chat.service";
+import { getUserNotificationSummary } from "@/lib/services/notification.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
-export default async function KnowledgeLayout({
+export default async function AppLayout({
   children,
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   const session = await auth();
 
@@ -22,50 +34,82 @@ export default async function KnowledgeLayout({
     redirect("/");
   }
 
-  const userId = session.user.id;
-
-  const {
-    activeWorkspace,
-    workspaces,
-  } = await getActiveWorkspaceContext(userId);
-
   const [
-    knowledgeSources,
-    knowledgeLibraries,
-    knowledgeTeams,
+    workspaceContext,
+    conversations,
+    notificationSummary,
+    isAdmin,
   ] = await Promise.all([
-    listVisibleKnowledgeSources(
-      userId,
-      activeWorkspace.id,
+    getActiveWorkspaceContext(session.user.id),
+    listChatConversations(
+      session.user.id,
+      (await getActiveWorkspaceContext(session.user.id)).activeWorkspace.id,
     ),
-
-    listKnowledgeLibraries(
-      userId,
-      activeWorkspace.id,
+    getUserNotificationSummary(
+      session.user.id,
+      {
+        take: 6,
+      },
     ),
-
-    listTeams({
-      userId,
-      workspaceId: activeWorkspace.id,
-    }),
+    isUserAdmin(session.user.id),
   ]);
 
-  const rootLibrary = knowledgeLibraries.find(
-    (library) =>
-      library.owner_user_id === userId &&
-      library.parent_id === null,
-  );
-
   return (
-    <KnowledgeShell
-      knowledgeSources={knowledgeSources}
-      knowledgeLibraries={knowledgeLibraries}
-      knowledgeTeams={knowledgeTeams}
-      defaultLibraryId={rootLibrary?.id ?? null}
-      activeWorkspace={activeWorkspace}
-      workspaces={workspaces}
-    >
-      {children}
-    </KnowledgeShell>
+    <KnowledgeImportProvider>
+      <Sheet>
+        <div className="flex h-screen bg-background text-foreground">
+          <AppSidebar
+            isAdmin={isAdmin}
+            notificationCount={notificationSummary.unreadCount}
+          />
+
+          <div className="flex min-w-0 flex-1 flex-col">
+            <AppTopbar
+              user={session.user}
+              notifications={
+                notificationSummary.notifications
+              }
+              unreadNotificationCount={
+                notificationSummary.unreadCount
+              }
+              activeWorkspace={
+                workspaceContext.activeWorkspace
+              }
+              workspaces={
+                workspaceContext.workspaces
+              }
+              breadcrumb={
+                <AutoBreadcrumb />
+              }
+            />
+
+            <main className="min-h-0 flex-1 overflow-hidden bg-background">
+              {children}
+            </main>
+          </div>
+
+          <FloatingChat
+            conversations={
+              conversations
+            }
+            hideTrigger
+          />
+
+          <KnowledgeImportBackgroundWidget />
+        </div>
+
+        <SheetContent
+          side="left"
+          className="w-[min(20rem,86vw)] gap-0 p-0 lg:hidden"
+        >
+          <SheetTitle className="sr-only">Navegación principal</SheetTitle>
+            <AppSidebar
+              mobile
+              isAdmin={isAdmin}
+              notificationCount={notificationSummary.unreadCount}
+            />
+        </SheetContent>
+      </Sheet>
+    </KnowledgeImportProvider>
   );
 }

@@ -1,33 +1,20 @@
 // components/app/section-sidebar.tsx
 
-
 import type { ReactNode } from "react";
 
-import type { AccessibleWorkspace } from "@/lib/repositories/workspace.repository";
-
 import { AssistantSidebarTrigger } from "./assistant-sidebar-trigger";
-import { SectionSidebarHeader } from "./section-sidebar-header";
-import { WorkspaceSecondarySidebar } from "./workspace-layout";
+import { ResizableSectionShell } from "./resizable-section-shell";
 
 type AppSectionSidebarProps = {
   children: ReactNode;
-  activeWorkspace: AccessibleWorkspace;
-  workspaces: AccessibleWorkspace[];
 };
 
 export function AppSectionSidebar({
   children,
-  activeWorkspace,
-  workspaces,
 }: AppSectionSidebarProps) {
   return (
-    <aside className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-panel">
-      <SectionSidebarHeader
-        activeWorkspace={activeWorkspace}
-        workspaces={workspaces}
-      />
-
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+    <aside className="flex h-full min-h-0 flex-col border-r border-border bg-panel">
+      <div className="min-h-0 flex-1">
         {children}
       </div>
 
@@ -41,30 +28,21 @@ export function AppSectionSidebar({
 type AppSectionShellProps = {
   sidebar: ReactNode;
   children: ReactNode;
-  activeWorkspace: AccessibleWorkspace;
-  workspaces: AccessibleWorkspace[];
 };
 
 export function AppSectionShell({
   sidebar,
   children,
-  activeWorkspace,
-  workspaces,
 }: AppSectionShellProps) {
   return (
-    <>
-      <WorkspaceSecondarySidebar>
-        <AppSectionSidebar
-          activeWorkspace={activeWorkspace}
-          workspaces={workspaces}
-        >
+    <ResizableSectionShell
+      sidebar={
+        <AppSectionSidebar>
           {sidebar}
         </AppSectionSidebar>
-      </WorkspaceSecondarySidebar>
-
-      <div className="h-full min-h-0 min-w-0 overflow-hidden">
-        {children}
-      </div>
-    </>
+      }
+    >
+      {children}
+    </ResizableSectionShell>
   );
 }

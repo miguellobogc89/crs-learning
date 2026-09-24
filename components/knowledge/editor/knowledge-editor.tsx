@@ -27,13 +27,11 @@ import { cn } from "@/lib/utils";
 
 import { MermaidExtension } from "./mermaid/mermaid-extension";
 
-
 type KnowledgeEditorProps = {
   value: string;
   onChange: (value: string) => void;
   editable?: boolean;
   className?: string;
-  embedded?: boolean;
 };
 
 const DEFAULT_MERMAID_DIAGRAM = `flowchart LR
@@ -88,13 +86,11 @@ function normalizeKnowledgeContent(
   return document.body.innerHTML;
 }
 
-
 export function KnowledgeEditor({
   value,
   onChange,
   editable = true,
   className,
-  embedded = false,
 }: KnowledgeEditorProps) {
   const editor = useEditor({
     immediatelyRender: false,

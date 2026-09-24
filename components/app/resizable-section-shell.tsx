@@ -1,6 +1,3 @@
-// components/app/resizable-section-shell.tsx
-
-
 "use client";
 
 import {
@@ -35,38 +32,30 @@ export function ResizableSectionShell({
 }: ResizableSectionShellProps) {
   const [sidebarWidth, setSidebarWidth] =
     useState(DEFAULT_WIDTH);
-
   const [isDragging, setIsDragging] = useState(false);
-
   const shellRef = useRef<HTMLDivElement | null>(null);
-
   const previousBodyStyles = useRef<{
     cursor: string;
     userSelect: string;
   } | null>(null);
 
   useEffect(() => {
-    const storedWidth = window.localStorage.getItem(
-      STORAGE_KEY,
-    );
+    let animationFrame = 0;
+    const storedWidth = window.localStorage.getItem(STORAGE_KEY);
 
     if (!storedWidth) {
-      return;
+      return undefined;
     }
 
     const parsedWidth = Number(storedWidth);
 
     if (!Number.isFinite(parsedWidth)) {
-      return;
+      return undefined;
     }
 
-    const animationFrame = window.requestAnimationFrame(
-      () => {
-        setSidebarWidth(
-          clampSidebarWidth(parsedWidth),
-        );
-      },
-    );
+    animationFrame = window.requestAnimationFrame(() => {
+      setSidebarWidth(clampSidebarWidth(parsedWidth));
+    });
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
@@ -93,15 +82,12 @@ export function ResizableSectionShell({
         return;
       }
 
-      const shellLeft =
-        shell.getBoundingClientRect().left;
-
+      const shellLeft = shell.getBoundingClientRect().left;
       const nextWidth = clampSidebarWidth(
         event.clientX - shellLeft,
       );
 
       setSidebarWidth(nextWidth);
-
       window.localStorage.setItem(
         STORAGE_KEY,
         String(nextWidth),
@@ -112,34 +98,18 @@ export function ResizableSectionShell({
       setIsDragging(false);
     }
 
-    window.addEventListener(
-      "pointermove",
-      handlePointerMove,
-    );
-
-    window.addEventListener(
-      "pointerup",
-      handlePointerUp,
-    );
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
 
     return () => {
-      window.removeEventListener(
-        "pointermove",
-        handlePointerMove,
-      );
-
-      window.removeEventListener(
-        "pointerup",
-        handlePointerUp,
-      );
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
 
       if (previousBodyStyles.current) {
         document.body.style.cursor =
           previousBodyStyles.current.cursor;
-
         document.body.style.userSelect =
           previousBodyStyles.current.userSelect;
-
         previousBodyStyles.current = null;
       }
     };
@@ -147,7 +117,6 @@ export function ResizableSectionShell({
 
   function resetSidebarWidth() {
     setSidebarWidth(DEFAULT_WIDTH);
-
     window.localStorage.setItem(
       STORAGE_KEY,
       String(DEFAULT_WIDTH),
@@ -157,16 +126,13 @@ export function ResizableSectionShell({
   return (
     <div
       ref={shellRef}
-      className="grid h-full min-h-0 min-w-0 overflow-hidden bg-transparent"
+      className="grid h-full min-h-0 bg-background"
       style={{
         gridTemplateColumns: `${sidebarWidth}px minmax(0, 1fr)`,
       }}
     >
-      {/* Columna del menú secundario */}
-      <div className="relative min-h-0 min-w-0 overflow-visible">
-        <div className="h-full min-h-0 min-w-0 overflow-hidden">
-          {sidebar}
-        </div>
+      <div className="relative h-full min-h-0 min-w-0">
+        {sidebar}
 
         <button
           type="button"
@@ -189,8 +155,7 @@ export function ResizableSectionShell({
         </button>
       </div>
 
-      {/* Columna exclusiva del contenido */}
-      <section className="h-full min-h-0 min-w-0 overflow-hidden bg-transparent">
+      <section className="h-full min-w-0 overflow-hidden">
         {children}
       </section>
     </div>
