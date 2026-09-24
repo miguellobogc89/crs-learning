@@ -51,20 +51,31 @@ type SectionProps = {
   count?: number;
 };
 
-function DetailSection({ title, icon: Icon, children, count }: SectionProps) {
+
+function DetailSection({
+  title,
+  icon: Icon,
+  children,
+  count,
+}: SectionProps) {
   return (
-    <section className="!mt-0 min-w-0 py-6 first:pt-0 last:pb-0">
-      <div className="mb-5 flex min-w-0 items-center gap-2.5">
+    <section className="!mt-0 min-w-0 !py-10 first:!pt-0 last:!pb-0">
+      <div className="mb-6 flex min-w-0 items-center gap-2.5">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
           <Icon aria-hidden="true" className="h-4 w-4" />
         </span>
-        <h2 className="!mb-0 !text-[16px] !font-semibold !leading-6">{title}</h2>
+
+        <h2 className="!mb-0 !text-[16px] !font-semibold !leading-6">
+          {title}
+        </h2>
+
         {count !== undefined && (
           <span className="ml-auto rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium tabular-nums text-slate-500">
             {count}
           </span>
         )}
       </div>
+
       {children}
     </section>
   );
@@ -184,17 +195,48 @@ export function ArticleDetailsView({
 
   return (
     <div className="min-w-0 divide-y divide-slate-100">
-      <DetailSection title="Información del análisis" icon={Info}>
-        <dl className="!grid-cols-1 !gap-x-8 !gap-y-5 sm:!grid-cols-2 lg:!grid-cols-3">
-          {knowledgeType && <div><dt>Tipo de conocimiento</dt><dd>{knowledgeType}</dd></div>}
-          {analysis.detectedType && analysis.detectedType !== knowledgeType && (
-            <div><dt>Tipo detectado</dt><dd>{analysis.detectedType}</dd></div>
-          )}
-          {analysisStatus && <div><dt>Estado del análisis</dt><dd>{analysisStatus}</dd></div>}
-          {analysisModel && <div><dt>Modelo</dt><dd>{analysisModel}</dd></div>}
-          <div><dt>Documentos asociados</dt><dd>{files.length}</dd></div>
-        </dl>
-      </DetailSection>
+
+<DetailSection title="Información del análisis" icon={Info}>
+  <div className="flex flex-wrap items-center gap-2.5">
+
+    {knowledgeType && (
+      <span className="inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[13px] font-medium text-blue-700">
+        <BookOpen aria-hidden="true" className="h-4 w-4" />
+        {knowledgeType}
+      </span>
+    )}
+
+    {analysis.detectedType &&
+      analysis.detectedType.trim().toLowerCase() !==
+        knowledgeType.trim().toLowerCase() && (
+        <span className="inline-flex items-center gap-2 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-[13px] font-medium text-violet-700">
+          <Layers3 aria-hidden="true" className="h-4 w-4" />
+          {analysis.detectedType}
+        </span>
+      )}
+
+    {analysisStatus && (
+      <span className="inline-flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-[13px] font-medium text-emerald-700">
+        <CheckCircle2 aria-hidden="true" className="h-4 w-4" />
+        {analysisStatus}
+      </span>
+    )}
+
+    <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] font-medium text-slate-600">
+      <FileText aria-hidden="true" className="h-4 w-4" />
+      {files.length}{" "}
+      {files.length === 1 ? "documento" : "documentos"}
+    </span>
+
+    {analysisModel && (
+      <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] font-medium text-slate-600">
+        <Settings2 aria-hidden="true" className="h-4 w-4" />
+        {analysisModel}
+      </span>
+    )}
+
+  </div>
+</DetailSection>
 
       {analysis.objective && (
         <DetailSection title="Objetivo" icon={Route}><p>{analysis.objective}</p></DetailSection>
