@@ -1,4 +1,7 @@
 // components/knowledge/content/knowledge-type-badge.tsx
+
+
+
 import {
   BookOpen,
   CircleHelp,
@@ -20,61 +23,61 @@ const TYPES = {
     label: "Documento",
     icon: FileSearch,
     className:
-      "bg-slate-100 text-slate-700 border-slate-200",
+      "bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0]",
   },
   procedure: {
     label: "Procedimiento",
     icon: Wrench,
     className:
-      "bg-emerald-100 text-emerald-700 border-emerald-200",
+      "bg-[#EAF6F0] text-[#247A61] border-[#D2EBDD]",
   },
   process: {
     label: "Proceso",
     icon: FolderCog,
     className:
-      "bg-teal-100 text-teal-700 border-teal-200",
+      "bg-[#EAF5F3] text-[#327D76] border-[#D1E9E4]",
   },
   manual: {
     label: "Manual",
     icon: BookOpen,
     className:
-      "bg-sky-100 text-sky-700 border-sky-200",
+      "bg-[#EDF3FF] text-[#0A58FF] border-[#D8E5FF]",
   },
   policy: {
     label: "Política",
     icon: ShieldCheck,
     className:
-      "bg-amber-100 text-amber-700 border-amber-200",
+      "bg-[#FFF5E5] text-[#9A681C] border-[#F3E4C8]",
   },
   reference: {
     label: "Referencia",
     icon: Library,
     className:
-      "bg-violet-100 text-violet-700 border-violet-200",
+      "bg-[#F2EFFA] text-[#7562A8] border-[#E4DDF3]",
   },
   faq: {
     label: "FAQ",
     icon: CircleHelp,
     className:
-      "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+      "bg-[#F8EEF4] text-[#A15F84] border-[#EFDAE6]",
   },
   technical: {
     label: "Técnico",
     icon: FileCog,
     className:
-      "bg-zinc-100 text-zinc-700 border-zinc-200",
+      "bg-[#F1F5F9] text-[#64748B] border-[#E2E8F0]",
   },
   functional: {
     label: "Funcional",
     icon: FileCog,
     className:
-      "bg-indigo-100 text-indigo-700 border-indigo-200",
+      "bg-[#F0F1FA] text-[#626EAB] border-[#DFE2F2]",
   },
   catalog: {
     label: "Catálogo",
     icon: BookOpen,
     className:
-      "bg-orange-100 text-orange-700 border-orange-200",
+      "bg-[#FFF2EA] text-[#A66B46] border-[#F2E0D2]",
   },
 } as const;
 
@@ -88,12 +91,12 @@ export function KnowledgeTypeBadge({
 
   const Icon = item.icon;
 
-  let confidenceColor = "text-red-600";
+  let confidenceColor = "text-[#B64B55]";
 
   if ((confidence ?? 0) >= 0.9) {
-    confidenceColor = "text-emerald-600";
+    confidenceColor = "text-[#247A61]";
   } else if ((confidence ?? 0) >= 0.7) {
-    confidenceColor = "text-amber-600";
+    confidenceColor = "text-[#9A681C]";
   }
 
   return (

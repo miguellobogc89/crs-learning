@@ -17,7 +17,7 @@ export function KnowledgeTabContainer({
   return (
     <div
       className={[
-        "w-full min-w-0 px-6 py-8",
+        "mx-auto w-full min-w-0 max-w-7xl px-6 py-8",
         "lg:px-9 lg:py-9",
         className,
       ]

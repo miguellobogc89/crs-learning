@@ -1,4 +1,5 @@
-// components/knowledge/detail/shared/knowledge-action-bar.tsx
+
+// components/knowledge/details/shared/knowledge-action-bar.tsx
 
 "use client";
 
@@ -20,17 +21,12 @@ type KnowledgeActionBarProps = {
   canEdit?: boolean;
   canDownload?: boolean;
 
-  onEdit: () => void;
-  onSave: () => void | Promise<void>;
-  onCancel: () => void;
-  onRebuild: () => void | Promise<void>;
-  onDownload: () => void | Promise<void>;
+  onEdit?: () => void;
+  onSave?: () => void;
+  onCancel?: () => void;
+  onRebuild?: () => void;
+  onDownload?: () => void;
 };
-
-const buttonClass =
-  "inline-flex items-center gap-2 rounded-lg border border-border " +
-  "px-3 py-2 text-sm font-medium transition-colors " +
-  "hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50";
 
 export function KnowledgeActionBar({
   isEditing = false,
@@ -47,15 +43,21 @@ export function KnowledgeActionBar({
 }: KnowledgeActionBarProps) {
   const isBusy = isSaving || isRebuilding || isDownloading;
 
+  const buttonClassName =
+    "inline-flex h-9 items-center justify-center gap-2 rounded-lg " +
+    "border border-border bg-background px-3 text-sm font-medium " +
+    "transition-colors hover:bg-muted " +
+    "disabled:cursor-not-allowed disabled:opacity-50";
+
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
+    <div className="flex w-full flex-wrap items-center justify-end gap-2">
       {isEditing ? (
         <>
           <button
             type="button"
-            className={buttonClass}
-            disabled={isSaving}
+            className={buttonClassName}
             onClick={onCancel}
+            disabled={isBusy || !onCancel}
           >
             <X className="h-4 w-4" />
             Cancelar
@@ -63,9 +65,9 @@ export function KnowledgeActionBar({
 
           <button
             type="button"
-            className={buttonClass}
-            disabled={isBusy}
+            className={buttonClassName}
             onClick={onSave}
+            disabled={isBusy || !onSave}
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -79,9 +81,9 @@ export function KnowledgeActionBar({
         <>
           <button
             type="button"
-            className={buttonClass}
-            disabled={isBusy}
+            className={buttonClassName}
             onClick={onRebuild}
+            disabled={isBusy || !onRebuild}
           >
             {isRebuilding ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -93,9 +95,9 @@ export function KnowledgeActionBar({
 
           <button
             type="button"
-            className={buttonClass}
-            disabled={isBusy || !canEdit}
+            className={buttonClassName}
             onClick={onEdit}
+            disabled={isBusy || !canEdit || !onEdit}
           >
             <Pencil className="h-4 w-4" />
             Editar contenido
@@ -103,9 +105,9 @@ export function KnowledgeActionBar({
 
           <button
             type="button"
-            className={buttonClass}
-            disabled={isBusy || !canDownload}
+            className={buttonClassName}
             onClick={onDownload}
+            disabled={isBusy || !canDownload || !onDownload}
           >
             {isDownloading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
