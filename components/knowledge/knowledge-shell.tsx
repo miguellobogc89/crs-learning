@@ -1,5 +1,8 @@
 // components/knowledge/knowledge-shell.tsx
-import { ReactNode } from "react";
+
+
+
+import type { ReactNode } from "react";
 
 import {
   AppSectionShell,
@@ -26,7 +29,8 @@ export function KnowledgeShell({
     (knowledge) => knowledge.visibility === "public",
   ).length;
 
-  const totalPrivate = knowledgeSources.length - totalPublic;
+  const totalPrivate =
+    knowledgeSources.length - totalPublic;
 
   const sidebarItems: SidebarItem[] = [
     {
@@ -72,7 +76,7 @@ export function KnowledgeShell({
         />
       }
     >
-      <section className="h-full min-w-0 overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable]">
+      <section className="h-full min-w-0 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
         {children}
       </section>
     </AppSectionShell>

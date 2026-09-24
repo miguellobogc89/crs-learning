@@ -1,4 +1,7 @@
+
 // app/(app)/layout.tsx
+
+
 
 import { redirect } from "next/navigation";
 
@@ -6,6 +9,8 @@ import { auth } from "@/auth";
 import { isUserAdmin } from "@/lib/auth/admin";
 import { AppSidebar } from "@/components/app/sidebar";
 import { AppTopbar } from "@/components/app/topbar";
+import { AppWorkspaceLayout } from "@/components/app/app-workspace-layout";
+import { WorkspaceSelector } from "@/components/workspace/workspace-selector";
 import {
   Sheet,
   SheetContent,
@@ -34,64 +39,57 @@ export default async function AppLayout({
     redirect("/");
   }
 
+  const workspaceContext = await getActiveWorkspaceContext(
+    session.user.id,
+  );
+
   const [
-    workspaceContext,
     conversations,
     notificationSummary,
     isAdmin,
   ] = await Promise.all([
-    getActiveWorkspaceContext(session.user.id),
     listChatConversations(
       session.user.id,
-      (await getActiveWorkspaceContext(session.user.id)).activeWorkspace.id,
+      workspaceContext.activeWorkspace.id,
     ),
-    getUserNotificationSummary(
-      session.user.id,
-      {
-        take: 6,
-      },
-    ),
+    getUserNotificationSummary(session.user.id, {
+      take: 6,
+    }),
     isUserAdmin(session.user.id),
   ]);
 
   return (
     <KnowledgeImportProvider>
       <Sheet>
-        <div className="flex h-screen bg-background text-foreground">
+        <div className="flex h-screen min-h-0 overflow-hidden bg-background text-foreground">
           <AppSidebar
             isAdmin={isAdmin}
             notificationCount={notificationSummary.unreadCount}
           />
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <AppTopbar
-              user={session.user}
-              notifications={
-                notificationSummary.notifications
-              }
-              unreadNotificationCount={
-                notificationSummary.unreadCount
-              }
-              activeWorkspace={
-                workspaceContext.activeWorkspace
-              }
-              workspaces={
-                workspaceContext.workspaces
-              }
-              breadcrumb={
-                <AutoBreadcrumb />
-              }
-            />
-
-            <main className="min-h-0 flex-1 overflow-hidden bg-background">
-              {children}
-            </main>
-          </div>
+          <AppWorkspaceLayout
+            sidebarHeader={
+              <WorkspaceSelector
+                activeWorkspace={workspaceContext.activeWorkspace}
+                workspaces={workspaceContext.workspaces}
+              />
+            }
+            topbar={
+              <AppTopbar
+                user={session.user}
+                notifications={notificationSummary.notifications}
+                unreadNotificationCount={notificationSummary.unreadCount}
+                activeWorkspace={workspaceContext.activeWorkspace}
+                workspaces={workspaceContext.workspaces}
+                breadcrumb={<AutoBreadcrumb />}
+              />
+            }
+          >
+            {children}
+          </AppWorkspaceLayout>
 
           <FloatingChat
-            conversations={
-              conversations
-            }
+            conversations={conversations}
             hideTrigger
           />
 
@@ -102,12 +100,15 @@ export default async function AppLayout({
           side="left"
           className="w-[min(20rem,86vw)] gap-0 p-0 lg:hidden"
         >
-          <SheetTitle className="sr-only">Navegación principal</SheetTitle>
-            <AppSidebar
-              mobile
-              isAdmin={isAdmin}
-              notificationCount={notificationSummary.unreadCount}
-            />
+          <SheetTitle className="sr-only">
+            Navegación principal
+          </SheetTitle>
+
+          <AppSidebar
+            mobile
+            isAdmin={isAdmin}
+            notificationCount={notificationSummary.unreadCount}
+          />
         </SheetContent>
       </Sheet>
     </KnowledgeImportProvider>

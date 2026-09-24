@@ -15,7 +15,6 @@ import {
 import { logout } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { GlobalSearch } from "@/components/search/global-search";
-import { WorkspaceSelector } from "@/components/workspace/workspace-selector";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,22 +71,23 @@ export function AppTopbar({
   }
 
   return (
-    <header
-      className="
-        flex shrink-0 items-center gap-4
-        border-b border-border
-        bg-background px-3 py-2
 
-        h-12
-        sm:px-4 sm:py-2
-        md:h-14 md:px-5 md:py-2.5
-        lg:h-[58px] lg:px-6 lg:py-3
-        xl:h-16 xl:px-7 xl:py-3
-        2xl:h-[68px] 2xl:px-8 2xl:py-3.5
-        [&_[data-search-shortcut]]:hidden
-        lg:[&_[data-search-shortcut]]:inline-flex
-      "
-    >
+<header
+  className="
+    flex shrink-0 items-center gap-4
+    border-b border-border
+    bg-transparent px-3 py-2
+
+    h-12
+    sm:px-4 sm:py-2
+    md:h-14 md:px-5 md:py-2.5
+    lg:h-[58px] lg:px-6 lg:py-3
+    xl:h-16 xl:px-7 xl:py-3
+    2xl:h-[68px] 2xl:px-8 2xl:py-3.5
+    [&_[data-search-shortcut]]:hidden
+    lg:[&_[data-search-shortcut]]:inline-flex
+  "
+>
       <SheetTrigger asChild>
         <button
           type="button"
@@ -99,10 +99,6 @@ export function AppTopbar({
       </SheetTrigger>
 
       <div className="hidden h-full shrink-0 items-center gap-3 lg:flex">
-        <WorkspaceSelector
-          activeWorkspace={activeWorkspace}
-          workspaces={workspaces}
-        />
 
         <div className="my-3 w-px self-stretch bg-border" />
 
