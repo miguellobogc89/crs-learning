@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { KnowledgeEmptyState } from "./knowledge-empty-state";
+import { KnowledgeEmptyFolder } from "./knowledge-empty-folder";
 import { moveKnowledgeLibrary } from "@/lib/actions/knowledge-library.actions";
 import { KnowledgeItemCard } from "./cards/knowledge-item-card";
 
@@ -70,6 +71,9 @@ type Props = {
   selectedArticleIds: Set<string>;
   selectedFolderIds: Set<string>;
   onUploadRequested?: () => void;
+  onUploadFolderRequested?: () => void;
+onCreateFolderRequested?: () => void;
+onFilesDropped?: (files: File[]) => void;
 
 onArticleSelectedChange: (
   id: string,
@@ -174,6 +178,9 @@ selectedFolderIds,
 onUploadRequested,
 onArticleSelectedChange,
 onFolderSelectedChange,
+onUploadFolderRequested,
+onCreateFolderRequested,
+onFilesDropped,
 }: Props) {
   const router = useRouter();
 
@@ -364,18 +371,16 @@ onFolderSelectedChange,
       );
     }
 
-    if (selectedLibraryId) {
-      return (
-        <KnowledgeEmptyState
-          icon={<FolderTree className="h-5 w-5" />}
-          title="Aqui todavia no hay contenido"
-          description="Anade documentacion o articulos para que esta carpeta sirva como base de trabajo del asistente."
-          actionLabel="Subir documentacion"
-          actionIcon={<FileStack className="h-4 w-4" />}
-          onAction={onUploadRequested}
-        />
-      );
-    }
+if (selectedLibraryId) {
+  return (
+    <KnowledgeEmptyFolder
+      onUploadFiles={() => onUploadRequested?.()}
+      onUploadFolder={() => onUploadFolderRequested?.()}
+      onCreateFolder={() => onCreateFolderRequested?.()}
+      onFilesDropped={(files) => onFilesDropped?.(files)}
+    />
+  );
+}
 
     return (
       <KnowledgeEmptyState

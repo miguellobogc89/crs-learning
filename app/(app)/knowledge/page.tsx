@@ -88,7 +88,10 @@ export default async function KnowledgePage({
   });
 
   return (
-    <AppPageLayout aside={<KnowledgeInfoSidebar />}>
+    <AppPageLayout
+      aside={<KnowledgeInfoSidebar />}
+      contentClassName="!flex !flex-col !overflow-hidden"
+    >
       <KnowledgeContent
         knowledgeSources={knowledgeSources}
         knowledgeLibraries={knowledgeLibraries}

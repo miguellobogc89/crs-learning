@@ -510,6 +510,15 @@ export function KnowledgeContent({
     event.target.value = "";
   }
 
+  function handleDroppedFiles(files: File[]) {
+  if (files.length === 0) {
+    return;
+  }
+
+  setSelectedFiles(files);
+  setIsKnowledgeImportOpen(true);
+}
+
   function handleUpload(type: UploadType) {
     if (type === "files") {
       filesInputRef.current?.click();
@@ -553,54 +562,58 @@ export function KnowledgeContent({
 
   return (
     <>
-      <KnowledgeToolbar
-        explorerState={explorerState}
-        onExplorerStateChange={(nextState) => {
-          setExplorerState(nextState);
-          setPage(1);
-        }}
-        title={pageTitle}
-        parentHref={parentHref}
-        breadcrumb={
-          selectedView === "shared" ? (
-            <div className="truncate text-sm text-muted-foreground">
-              Mi biblioteca / Compartido conmigo
-            </div>
-          ) : selectedView === "public" ? (
-            <div className="truncate text-sm text-muted-foreground">
-              Mi biblioteca / Conocimiento público
-            </div>
-          ) : selectedView === "private" ? (
-            <div className="truncate text-sm text-muted-foreground">
-              Mi biblioteca / Documentos privados
-            </div>
-          ) : libraryPath.length > 0 ? (
-            <KnowledgeLibraryBreadcrumb
-              path={libraryPath}
-            />
-          ) : (
-            <div className="truncate text-sm text-muted-foreground">
-              Mi biblioteca
-            </div>
-          )
-        }
-        onCreateFolder={() => {
-          if (!currentFolderId) {
-            window.alert(
-              "No se ha encontrado la carpeta «Mi biblioteca». Recarga la página antes de crear una carpeta.",
-            );
-            return;
-          }
+      <AppCard className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-0">
+        {/* Cabecera fija dentro de la card */}
+        <div className="z-10 shrink-0 px-5 pt-5 sm:px-6 sm:pt-6">
+          <KnowledgeToolbar
+            explorerState={explorerState}
+            onExplorerStateChange={(nextState) => {
+              setExplorerState(nextState);
+              setPage(1);
+            }}
+            title={pageTitle}
+            parentHref={parentHref}
+            breadcrumb={
+              selectedView === "shared" ? (
+                <div className="truncate text-sm text-muted-foreground">
+                  Mi biblioteca / Compartido conmigo
+                </div>
+              ) : selectedView === "public" ? (
+                <div className="truncate text-sm text-muted-foreground">
+                  Mi biblioteca / Conocimiento público
+                </div>
+              ) : selectedView === "private" ? (
+                <div className="truncate text-sm text-muted-foreground">
+                  Mi biblioteca / Documentos privados
+                </div>
+              ) : libraryPath.length > 0 ? (
+                <KnowledgeLibraryBreadcrumb
+                  path={libraryPath}
+                />
+              ) : (
+                <div className="truncate text-sm text-muted-foreground">
+                  Mi biblioteca
+                </div>
+              )
+            }
+            onCreateFolder={() => {
+              if (!currentFolderId) {
+                window.alert(
+                  "No se ha encontrado la carpeta «Mi biblioteca». Recarga la página antes de crear una carpeta.",
+                );
+                return;
+              }
 
-          setIsCreateFolderOpen(true);
-        }}
-        onUpload={handleUpload}
-        selectedCount={selectedCount}
-        onClearSelection={clearSelection}
-      />
+              setIsCreateFolderOpen(true);
+            }}
+            onUpload={handleUpload}
+            selectedCount={selectedCount}
+            onClearSelection={clearSelection}
+          />
+        </div>
 
-      <AppCard className="overflow-hidden p-0">
-        <div className="min-h-[320px] p-5 sm:p-6">
+        {/* Única zona con scroll: carpetas y documentos */}
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 sm:px-6 sm:pb-6">
           <KnowledgeExplorer
             folders={paginatedItems.folders}
             knowledgeSources={
@@ -621,16 +634,31 @@ export function KnowledgeContent({
             onFolderSelectedChange={
               toggleFolderSelection
             }
+            onUploadFolderRequested={() => handleUpload("folder")}
+            onCreateFolderRequested={() => {
+              if (!currentFolderId) {
+                window.alert(
+                  "No se ha encontrado la carpeta actual. Recarga la página antes de crear una carpeta.",
+                );
+                return;
+              }
+
+              setIsCreateFolderOpen(true);
+            }}
+            onFilesDropped={handleDroppedFiles}
           />
         </div>
 
-        <AppPagination
-          page={currentPage}
-          totalPages={totalPages}
-          totalItems={totalItems}
-          pageSize={PAGE_SIZE}
-          onPageChange={setPage}
-        />
+        {/* Paginación fija en el pie de la card */}
+        <div className="shrink-0 border-t border-slate-100">
+          <AppPagination
+            page={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
+        </div>
       </AppCard>
 
       <CreateFolderDialog
@@ -682,4 +710,5 @@ export function KnowledgeContent({
       />
     </>
   );
+
 }
