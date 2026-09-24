@@ -1,20 +1,34 @@
+
 // app/(app)/knowledge/[id]/page.tsx
+
 import { notFound, redirect } from "next/navigation";
 
 import { auth } from "@/auth";
-import { KnowledgeDetailClient } from "@/components/knowledge/detail/knowledge-detail-client";
+
+import { ArticleClient } from
+  "@/components/knowledge/article/article-client";
+
 import {
   buildLibraryTree,
   getLibraryPath,
 } from "@/components/knowledge/sidebar/tree-utils";
-import { listKnowledgeLibraries } from "@/lib/services/knowledge-library.service";
-import { findAccessibleKnowledgeSource } from "@/lib/services/knowledge.service";
+
+import { listKnowledgeLibraries } from
+  "@/lib/services/knowledge-library.service";
+
+import { findAccessibleKnowledgeSource } from
+  "@/lib/services/knowledge.service";
+
 import {
   listTeams,
   listTeamSharesForLibrary,
 } from "@/lib/services/knowledge-team.service";
-import { recordResourceAccess } from "@/lib/services/resource-access.service";
-import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
+
+import { recordResourceAccess } from
+  "@/lib/services/resource-access.service";
+
+import { getActiveWorkspaceContext } from
+  "@/lib/services/workspace.service";
 
 export default async function KnowledgeDetailPage({
   params,
@@ -28,18 +42,26 @@ export default async function KnowledgeDetailPage({
   }
 
   const { id } = await params;
-  const { activeWorkspace } = await getActiveWorkspaceContext(
-    session.user.id,
-  );
 
-const [knowledge, libraries, teams] = await Promise.all([
-  findAccessibleKnowledgeSource(id, session.user.id, activeWorkspace.id),
-  listKnowledgeLibraries(session.user.id, activeWorkspace.id),
-  listTeams({
-    userId: session.user.id,
-    workspaceId: activeWorkspace.id,
-  }),
-]);
+  const { activeWorkspace } =
+    await getActiveWorkspaceContext(session.user.id);
+
+  const [knowledge, libraries, teams] =
+    await Promise.all([
+      findAccessibleKnowledgeSource(
+        id,
+        session.user.id,
+        activeWorkspace.id,
+      ),
+      listKnowledgeLibraries(
+        session.user.id,
+        activeWorkspace.id,
+      ),
+      listTeams({
+        userId: session.user.id,
+        workspaceId: activeWorkspace.id,
+      }),
+    ]);
 
   if (!knowledge) {
     notFound();
@@ -53,13 +75,13 @@ const [knowledge, libraries, teams] = await Promise.all([
     interactionType: "viewed",
   });
 
-const libraryShares = knowledge.library_id
-  ? await listTeamSharesForLibrary({
-      libraryId: knowledge.library_id,
-      ownerUserId: session.user.id,
-      workspaceId: activeWorkspace.id,
-    })
-  : [];
+  const libraryShares = knowledge.library_id
+    ? await listTeamSharesForLibrary({
+        libraryId: knowledge.library_id,
+        ownerUserId: session.user.id,
+        workspaceId: activeWorkspace.id,
+      })
+    : [];
 
   const libraryTree = buildLibraryTree(libraries);
 
@@ -70,12 +92,12 @@ const libraryShares = knowledge.library_id
 
   return (
     <main className="h-full overflow-hidden bg-background">
-<KnowledgeDetailClient
-  knowledge={knowledge}
-  libraryPath={libraryPath}
-  teams={teams}
-  libraryShares={libraryShares}
-/>
+      <ArticleClient
+        knowledge={knowledge}
+        libraryPath={libraryPath}
+        teams={teams}
+        libraryShares={libraryShares}
+      />
     </main>
   );
 }

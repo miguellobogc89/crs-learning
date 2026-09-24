@@ -42,9 +42,10 @@ function ArticleTabButton({
     >
       {children}
 
-      {active && (
-        <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-lesson" />
-      )}
+
+        {active && (
+        <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-blue-600 dark:bg-blue-400" />
+        )}
     </button>
   );
 }
@@ -75,9 +76,6 @@ export function ArticleTabs({
         >
           Detalles
 
-          <span className="ml-1.5 rounded bg-lesson-soft px-1.5 py-0.5 text-[9px] font-semibold uppercase text-lesson">
-            IA
-          </span>
         </ArticleTabButton>
 
         <ArticleTabButton

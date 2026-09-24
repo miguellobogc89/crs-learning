@@ -3,9 +3,13 @@
 
 "use client";
 
-import { FileText, UsersRound } from "lucide-react";
+import {
+  FileText,
+  UsersRound,
+} from "lucide-react";
 
 import { ArticleBreadcrumb } from "./article-breadcrumb";
+import { ArticleTitle } from "./article-title";
 
 type LibraryPathItem = {
   id: string;
@@ -23,7 +27,14 @@ type ArticleHeaderProps = {
     email: string;
   } | null;
   sharedTeamCount: number;
-  onShare?: () => void;
+  isEditingTitle: boolean;
+  isUpdating: boolean;
+  onTitleChange: (title: string) => void;
+  onEditTitle: () => void;
+  onSaveTitle: () => void;
+  onCancelTitle: () => void;
+  onVisibilityChange: (visibility: string) => void;
+  onShare: () => void;
 };
 
 const KNOWLEDGE_TYPE_LABELS: Record<string, string> = {
@@ -38,12 +49,6 @@ const KNOWLEDGE_TYPE_LABELS: Record<string, string> = {
   unknown: "Sin clasificar",
 };
 
-const VISIBILITY_LABELS: Record<string, string> = {
-  private: "Privado",
-  shared: "Compartido",
-  public: "Público",
-};
-
 export function ArticleHeader({
   title,
   knowledgeType,
@@ -52,14 +57,18 @@ export function ArticleHeader({
   updatedAt,
   updatedBy,
   sharedTeamCount,
+  isEditingTitle,
+  isUpdating,
+  onTitleChange,
+  onEditTitle,
+  onSaveTitle,
+  onCancelTitle,
+  onVisibilityChange,
   onShare,
 }: ArticleHeaderProps) {
   const knowledgeTypeLabel =
     KNOWLEDGE_TYPE_LABELS[knowledgeType] ??
     "Sin clasificar";
-
-  const visibilityLabel =
-    VISIBILITY_LABELS[visibility] ?? "Privado";
 
   const updatedByLabel =
     updatedBy?.name ??
@@ -94,15 +103,21 @@ export function ArticleHeader({
       <div className="flex items-start justify-between gap-6">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cyan-50 text-cyan-600 dark:bg-cyan-950/30 dark:text-cyan-300">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-400">
               <FileText className="h-5 w-5" />
             </div>
 
-            <h1 className="min-w-0 truncate text-3xl font-semibold tracking-tight text-foreground">
-              {title}
-            </h1>
+            <ArticleTitle
+              title={title}
+              isEditing={isEditingTitle}
+              isUpdating={isUpdating}
+              onTitleChange={onTitleChange}
+              onEdit={onEditTitle}
+              onSave={onSaveTitle}
+              onCancel={onCancelTitle}
+            />
 
-            {sharedTeamCount > 0 && onShare && (
+            {sharedTeamCount > 0 && (
               <button
                 type="button"
                 onClick={onShare}
@@ -116,21 +131,31 @@ export function ArticleHeader({
                     ? "equipo"
                     : "equipos"
                 }`}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-cyan-600 transition-colors hover:bg-cyan-50 hover:text-cyan-700 dark:hover:bg-cyan-950/30"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
               >
                 <UsersRound className="h-5 w-5" />
               </button>
             )}
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 pl-12">
-            <span className="rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted-foreground">
+          <div className="mt-3 flex flex-wrap items-center gap-2 pl-[52px]">
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-300">
               {knowledgeTypeLabel}
             </span>
 
-            <span className="rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              {visibilityLabel}
-            </span>
+            <select
+              aria-label="Visibilidad del artículo"
+              value={visibility}
+              disabled={isUpdating}
+              onChange={(event) =>
+                onVisibilityChange(event.target.value)
+              }
+              className="cursor-pointer rounded-full border border-blue-200/70 bg-blue-50/60 px-2.5 py-1 text-xs font-medium text-blue-600 outline-none transition-colors hover:bg-blue-100 focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-wait disabled:opacity-50 dark:border-blue-800/40 dark:bg-blue-950/25 dark:text-blue-400 dark:hover:bg-blue-950/50"
+            >
+              <option value="private">Privado</option>
+              <option value="shared">Compartido</option>
+              <option value="public">Público</option>
+            </select>
           </div>
         </div>
       </div>
