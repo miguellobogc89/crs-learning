@@ -1,5 +1,7 @@
+
 // components/knowledge/detail/knowledge-detail-content.tsx
 
+import { KnowledgeTabContainer } from "./shared/knowledge-tab-container";
 import { KnowledgeDetailsView } from "./details/knowledge-details-view";
 import { KnowledgeDocumentsView } from "./documents/knowledge-documents-view";
 import { KnowledgeGeneralView } from "./general/knowledge-general-view";
@@ -34,20 +36,46 @@ export function KnowledgeDetailContent({
   rebuildError,
   onRebuild,
 }: KnowledgeDetailContentProps) {
-  switch (activeTab) {
-case "general":
-  return (
-    <KnowledgeDetailViewContainer>
-      <div className="space-y-6">
-        <KnowledgeContentEditorSection
-          knowledge={knowledge}
-          actionsOnly
-        />
+  let content: React.ReactNode;
 
-        <KnowledgeGeneralView
+  switch (activeTab) {
+    case "general":
+      content = (
+        <div className="space-y-6">
+          <KnowledgeContentEditorSection
+            knowledge={knowledge}
+            actionsOnly
+          />
+
+          <KnowledgeGeneralView
+            hasDocuments={hasDocuments}
+            hasAnalysis={hasAnalysis}
+            isRebuilding={isRebuilding}
+            knowledgeType={knowledge.knowledge_type}
+            analysisJson={
+              knowledge.knowledge_analysis?.analysis_json
+            }
+            analysisStatus={
+              knowledge.knowledge_analysis?.status ?? null
+            }
+            analysisModel={
+              knowledge.knowledge_analysis?.model ?? null
+            }
+            graph={knowledge.knowledge_graph}
+            files={knowledge.knowledge_files}
+            onRebuild={onRebuild}
+          />
+        </div>
+      );
+      break;
+
+    case "details":
+      content = (
+        <KnowledgeDetailsView
           hasDocuments={hasDocuments}
           hasAnalysis={hasAnalysis}
           isRebuilding={isRebuilding}
+          rebuildError={rebuildError}
           knowledgeType={knowledge.knowledge_type}
           analysisJson={
             knowledge.knowledge_analysis?.analysis_json
@@ -62,71 +90,29 @@ case "general":
           files={knowledge.knowledge_files}
           onRebuild={onRebuild}
         />
-      </div>
-    </KnowledgeDetailViewContainer>
-  );
-
-      case "details":
-      return (
-        <KnowledgeDetailViewContainer>
-          <KnowledgeDetailsView
-            hasDocuments={hasDocuments}
-            hasAnalysis={hasAnalysis}
-            isRebuilding={isRebuilding}
-            rebuildError={rebuildError}
-            knowledgeType={knowledge.knowledge_type}
-            analysisJson={
-              knowledge.knowledge_analysis
-                ?.analysis_json
-            }
-            analysisStatus={
-              knowledge.knowledge_analysis
-                ?.status ?? null
-            }
-            analysisModel={
-              knowledge.knowledge_analysis
-                ?.model ?? null
-            }
-            graph={knowledge.knowledge_graph}
-            files={knowledge.knowledge_files}
-            onRebuild={onRebuild}
-          />
-        </KnowledgeDetailViewContainer>
       );
+      break;
 
     case "documents":
-      return (
-        <KnowledgeDetailViewContainer>
-          <KnowledgeDocumentsView
-            files={knowledge.knowledge_files}
-            analysis={knowledge.knowledge_analysis}
-            articleNeedsRebuild={
-              articleNeedsRebuild
-            }
-            isRebuilding={isRebuilding}
-            rebuildError={rebuildError}
-            onRebuild={onRebuild}
-          />
-        </KnowledgeDetailViewContainer>
+      content = (
+        <KnowledgeDocumentsView
+          files={knowledge.knowledge_files}
+          analysis={knowledge.knowledge_analysis}
+          articleNeedsRebuild={articleNeedsRebuild}
+          isRebuilding={isRebuilding}
+          rebuildError={rebuildError}
+          onRebuild={onRebuild}
+        />
       );
+      break;
 
     default:
       return null;
   }
-}
 
-type KnowledgeDetailViewContainerProps = {
-  children: React.ReactNode;
-};
-
-function KnowledgeDetailViewContainer({
-  children,
-}: KnowledgeDetailViewContainerProps) {
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-        {children}
-      </div>
+    <div className="h-full min-h-0 overflow-y-auto">
+      <KnowledgeTabContainer>{content}</KnowledgeTabContainer>
     </div>
   );
 }

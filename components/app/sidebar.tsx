@@ -159,13 +159,14 @@ export function AppSidebar({
       key={item.href}
       href={item.href}
       aria-label={item.label}
-      className={cn(
-        "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
-        mobile
-          ? "w-full justify-start gap-3 px-3"
-          : "w-9 justify-center",
-        active && "bg-surface text-foreground",
-      )}
+className={cn(
+  "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
+  mobile
+    ? "w-full justify-start gap-3 px-3"
+    : "w-9 justify-center",
+  active &&
+    "bg-[#EDF3FF] text-[#0A58FF] hover:bg-[#EDF3FF] hover:text-[#0A58FF]",
+)}
     >
       <item.icon className="h-[18px] w-[18px]" />
 
@@ -230,21 +231,31 @@ export function AppSidebar({
           </SheetClose>
         </div>
       ) : (
+
         <div className="flex flex-col gap-1 items-center">
           {isAdmin && (
             <Link
               href="/admin"
               aria-label="Administración"
-              className="group relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+              className={cn(
+                "group relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
+                pathname.startsWith("/admin") &&
+                  "bg-[#EDF3FF] text-[#0A58FF] hover:bg-[#EDF3FF] hover:text-[#0A58FF]",
+              )}
             >
               <ShieldCheck className="h-[18px] w-[18px]" />
               <SidebarTooltip label="Administración" />
             </Link>
           )}
+
           <Link
             href="/settings"
             aria-label="Configuración"
-            className="group relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground"
+            className={cn(
+              "group relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
+              pathname.startsWith("/settings") &&
+                "bg-[#EDF3FF] text-[#0A58FF] hover:bg-[#EDF3FF] hover:text-[#0A58FF]",
+            )}
           >
             <Settings className="h-[18px] w-[18px]" />
             <SidebarTooltip label="Configuración" />

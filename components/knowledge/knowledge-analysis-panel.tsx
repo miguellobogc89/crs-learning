@@ -8,10 +8,8 @@ import {
   Box,
   CalendarDays,
   CheckCircle2,
-  ChevronDown,
   CircleHelp,
   ClipboardCheck,
-  ClipboardList,
   FileText,
   GitBranch,
   Info,
@@ -55,12 +53,6 @@ type Props = {
   knowledgeType?: string | null;
   graph?: KnowledgeGraph | null;
   files: KnowledgeFile[];
-};
-
-type NavigationItem = {
-  id: string;
-  label: string;
-  group: string;
 };
 
 function hasText(value: string | null | undefined) {
@@ -118,166 +110,6 @@ function toRelatedDocuments(
     .filter((item) => item.title.trim().length > 0);
 }
 
-
-function scrollToSection(id: string) {
-  const element = document.getElementById(id);
-
-  if (!element) {
-    return;
-  }
-
-  element.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
-  });
-}
-
-function buildNavigation(
-  analysis: KnowledgeViewModel,
-  relationsCount: number,
-): NavigationItem[] {
-  const items: NavigationItem[] = [];
-
-  if (
-    hasText(analysis.objective) ||
-    hasText(analysis.scope)
-  ) {
-    items.push({
-      id: "overview",
-      label: "Descripción",
-      group: "General",
-    });
-  }
-
-  if (
-    analysis.systems.length > 0 ||
-    analysis.actors.length > 0 ||
-    analysis.importantDates.length > 0
-  ) {
-    items.push({
-      id: "key-information",
-      label: "Información clave",
-      group: "General",
-    });
-  }
-
-  if (
-    analysis.topics.length > 0 ||
-    analysis.concepts.length > 0
-  ) {
-    items.push({
-      id: "context",
-      label: "Contexto y conceptos",
-      group: "General",
-    });
-  }
-
-  if (relationsCount > 0) {
-    items.push({
-      id: "relations",
-      label: "Relaciones",
-      group: "General",
-    });
-  }
-
-  if (analysis.responsibilities.length > 0) {
-    items.push({
-      id: "responsibilities",
-      label: "Responsables",
-      group: "General",
-    });
-  }
-
-  if (analysis.catalogTables.length > 0) {
-    items.push({
-      id: "catalogs",
-      label: "Catalogos",
-      group: "Referencia",
-    });
-  }
-
-  if (analysis.prerequisites.length > 0) {
-    items.push({
-      id: "prerequisites",
-      label: "Requisitos previos",
-      group: "Contenido",
-    });
-  }
-
-  if (analysis.triggers.length > 0) {
-    items.push({
-      id: "triggers",
-      label: "Cuándo se aplica",
-      group: "Contenido",
-    });
-  }
-
-  if (analysis.procedures.length > 0) {
-    items.push({
-      id: "procedures",
-      label: "Procedimiento",
-      group: "Contenido",
-    });
-  }
-
-  if (analysis.businessRules.length > 0) {
-    items.push({
-      id: "business-rules",
-      label: "Reglas de negocio",
-      group: "Contenido",
-    });
-  }
-
-  if (analysis.checklists.length > 0) {
-    items.push({
-      id: "checklists",
-      label: "Checklist",
-      group: "Validacion",
-    });
-  }
-
-  if (analysis.warnings.length > 0) {
-    items.push({
-      id: "warnings",
-      label: "Advertencias",
-      group: "Contenido",
-    });
-  }
-
-  if (analysis.outputs.length > 0) {
-    items.push({
-      id: "results",
-      label: "Resultados esperados",
-      group: "Validación",
-    });
-  }
-
-  if (analysis.commonErrors.length > 0) {
-    items.push({
-      id: "common-errors",
-      label: "Errores frecuentes",
-      group: "Validación",
-    });
-  }
-
-  if (analysis.commonQuestions.length > 0) {
-    items.push({
-      id: "faq",
-      label: "Preguntas frecuentes",
-      group: "Validación",
-    });
-  }
-
-  if (analysis.glossary.length > 0) {
-    items.push({
-      id: "glossary",
-      label: "Glosario",
-      group: "Referencia",
-    });
-  }
-
-  return items;
-}
 
 export function KnowledgeAnalysisPanel({
   mode,
@@ -366,64 +198,10 @@ function DetailsView({
   regulations: string[];
   dependencies: string[];
 }) {
-  const navigation = buildNavigation(
-    analysis,
-    relationsCount,
-  );
-
   return (
-    <div className="grid h-full min-h-0 lg:grid-cols-[240px_minmax(0,1fr)_280px]">
-      <aside className="hidden min-h-0 border-r border-border lg:block">
-        <div className="flex h-full flex-col px-5 py-6">
-          <p className="shrink-0 pb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            En este artículo
-          </p>
-
-          <nav className="min-h-0 flex-1 overflow-y-auto pr-2">
-            <div className="space-y-1">
-              {navigation.map((item, index) => {
-                const previousGroup =
-                  index > 0
-                    ? navigation[index - 1].group
-                    : null;
-
-                const showGroup =
-                  item.group !== previousGroup;
-
-                return (
-                  <div key={item.id}>
-                    {showGroup && index > 0 ? (
-                      <div className="my-4 border-t border-border" />
-                    ) : null}
-
-                    {showGroup ? (
-                      <p className="pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                        {item.group}
-                      </p>
-                    ) : null}
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        scrollToSection(item.id)
-                      }
-                      className="w-full py-2 text-left text-sm text-muted-foreground transition hover:text-foreground"
-                    >
-                      {item.label}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </nav>
-        </div>
-      </aside>
-
-      <main
-        id="knowledge-details-scroll"
-        className="min-h-0 overflow-y-auto"
-      >
-        <article className="mx-auto max-w-3xl space-y-14 px-8 py-10 pb-20">
+    <div className="w-full min-w-0">
+      <main id="knowledge-details-scroll" className="w-full min-w-0">
+        <article className="w-full min-w-0 space-y-14 pb-20">
           {(hasText(analysis.objective) ||
             hasText(analysis.scope)) && (
             <KnowledgeSection
@@ -854,20 +632,6 @@ function DetailsView({
           ) : null}
         </article>
       </main>
-
-      <aside className="hidden min-h-0 border-l border-border lg:block">
-        <div className="flex h-full flex-col px-5 py-6">
-          <p className="shrink-0 pb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Relacionados
-          </p>
-
-<nav className="min-h-0 flex-1 overflow-y-auto pl-1">
-  <p className="text-sm leading-6 text-muted-foreground">
-    Todavía no hay artículos relacionados.
-  </p>
-</nav>
-        </div>
-      </aside>
     </div>
   );
 }

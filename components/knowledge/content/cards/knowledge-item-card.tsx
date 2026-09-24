@@ -4,7 +4,7 @@
 
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useEffect,
   useState,
@@ -148,7 +148,7 @@ function KnowledgeFolderItemCard({
         />
       }
 preview={
-  <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-lesson-soft text-lesson transition-transform duration-200 group-hover:scale-[1.04]">
+  <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-[#EDF3FF] text-[#0A58FF]">
     <Folder size={52} strokeWidth={1.8} />
   </div>
 }
@@ -285,30 +285,22 @@ function KnowledgeArticleItemCard({
           }
         />
       }
-      preview={
-        <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-lesson-soft text-lesson transition-transform duration-200 group-hover:scale-[1.04]">
-          <FileText
-            className="h-14 w-14"
-            strokeWidth={1.6}
-          />
-        </div>
-      }
-      title={
-        <Link
-          href={actions.articleUrl}
-          onClick={(event) => {
-            event.stopPropagation();
-          }}
-          className="block min-w-0 max-w-full"
-        >
-          <h2
-            title={knowledge.title}
-            className="line-clamp-2 text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground transition-colors hover:text-lesson"
-          >
-            {knowledge.title}
-          </h2>
-        </Link>
-      }
+preview={
+  <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-[#EDF3FF] text-[#0A58FF]">
+    <FileText
+      className="h-14 w-14"
+      strokeWidth={1.6}
+    />
+  </div>
+}
+title={
+  <h2
+    title={knowledge.title}
+    className="line-clamp-2 text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground transition-colors duration-200 group-hover/open:text-[#0A58FF]"
+  >
+    {knowledge.title}
+  </h2>
+}
       leftMeta={
         <div className="min-w-0">
           <KnowledgeTypeBadge
@@ -351,6 +343,7 @@ type ShellProps = {
 
 
 
+
 function KnowledgeItemCardShell({
   selected,
   draggable,
@@ -368,17 +361,14 @@ function KnowledgeItemCardShell({
   leftMeta,
   rightMeta,
 }: ShellProps) {
+  const router = useRouter();
+
   const cardClassName = [
-    // Neutralizamos el padding y el gap internos que Card añade por defecto.
-    // Esta es la corrección que ha permitido cuadrar el diseño.
     "group h-[280px] min-w-0 overflow-hidden !gap-0 !py-0",
     "border border-slate-200/50 bg-card",
-
-    // Resplandor azul y elevación suave que ya habíamos aprobado.
+    "hover:border-[#0A58FF]",
     "shadow-[0_4px_24px_-8px_rgba(59,130,246,0.16),0_12px_48px_-18px_rgba(59,130,246,0.14)]",
-    "transform-gpu transition-[transform,box-shadow] duration-500 ease-out",
-    "hover:-translate-y-[2px]",
-    "hover:shadow-[0_6px_30px_-8px_rgba(59,130,246,0.24),0_18px_56px_-16px_rgba(59,130,246,0.22)]",
+    "transition-[border-color,box-shadow] duration-200 ease-out",
 
     isDropTarget
       ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
@@ -391,20 +381,31 @@ function KnowledgeItemCardShell({
     .filter(Boolean)
     .join(" ");
 
+  function handleOpen() {
+    onClick();
+  }
+
+  function handleOpenKeyDown(
+    event: React.KeyboardEvent<HTMLDivElement>,
+  ) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleOpen();
+    }
+  }
+
   return (
     <Card
       draggable={draggable}
       className={cardClassName}
-      onClick={onClick}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      {/* Conservamos el padding único que ya ha quedado bien. */}
       <CardContent className="flex h-full min-h-0 flex-col !p-4">
-        {/* HEADER */}
+        {/* HEADER: controles independientes, sin apertura de la card */}
         <header className="flex h-8 shrink-0 items-center justify-between">
           <div
             className={[
@@ -438,27 +439,39 @@ function KnowledgeItemCardShell({
           </div>
         </header>
 
-        {/* BODY: icono real de carpeta o artículo */}
-        <div className="flex h-[124px] shrink-0 items-center justify-center">
-          {preview}
+        {/* BODY + FOOTER: zona completa de apertura */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={handleOpen}
+          onKeyDown={handleOpenKeyDown}
+          className={[
+            "group/open flex min-h-0 flex-1 flex-col",
+            "cursor-pointer rounded-md outline-none",
+            "focus-visible:ring-2 focus-visible:ring-[#0A58FF]",
+            "focus-visible:ring-offset-2",
+          ].join(" ")}
+        >
+          <div className="flex h-[124px] shrink-0 items-center justify-center">
+            {preview}
+          </div>
+
+          <footer className="flex min-h-0 flex-1 flex-col pt-2">
+            <div className="min-w-0 [&_h2]:transition-colors [&_h2]:duration-200 group-hover/open:[&_h2]:text-[#0A58FF] group-focus-visible/open:[&_h2]:text-[#0A58FF]">
+              {title}
+            </div>
+
+            <div className="mt-auto flex min-w-0 items-end justify-between gap-2 text-xs text-muted-foreground">
+              <div className="min-w-0 flex-1">
+                {leftMeta}
+              </div>
+
+              <div className="shrink-0 text-right">
+                {rightMeta}
+              </div>
+            </div>
+          </footer>
         </div>
-
-        {/* FOOTER: título y metadatos reales */}
-        <footer className="flex min-h-0 flex-1 flex-col pt-2">
-          <div className="min-w-0">
-            {title}
-          </div>
-
-          <div className="mt-auto flex min-w-0 items-end justify-between gap-2 text-xs text-muted-foreground">
-            <div className="min-w-0 flex-1">
-              {leftMeta}
-            </div>
-
-            <div className="shrink-0 text-right">
-              {rightMeta}
-            </div>
-          </div>
-        </footer>
       </CardContent>
     </Card>
   );

@@ -1,9 +1,14 @@
+// components/knowledge/detail/general/knowledge-general-view.tsx
+
 import {
   BrainCircuit,
   FileSearch,
   Loader2,
   RefreshCw,
 } from "lucide-react";
+
+import { KnowledgeGeneralActions } from
+  "./knowledge-general-actions";
 
 import { KnowledgeAnalysisPanel } from "@/components/knowledge/knowledge-analysis-panel";
 
@@ -77,14 +82,10 @@ export function KnowledgeGeneralView({
   }
 
   return (
-    <KnowledgeAnalysisPanel
-      mode="general"
+    <KnowledgeGeneralActions
       analysisJson={analysisJson}
-      status={analysisStatus}
-      model={analysisModel}
-      knowledgeType={knowledgeType}
-      graph={graph}
-      files={files}
+      isRebuilding={isRebuilding}
+      onRebuild={onRebuild}
     />
   );
 }
