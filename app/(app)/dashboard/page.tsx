@@ -1,4 +1,4 @@
-//app/(app)/dashboard/page.tsx
+// app/(app)/dashboard/page.tsx
 
 import Link from "next/link";
 import Image from "next/image";
@@ -17,8 +17,11 @@ import {
 
 import { auth } from "@/auth";
 import { AppSectionShell } from "@/components/app/section-sidebar";
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+import { AppCard } from "@/components/app/layouts/app-card";
 import { FirstSteps } from "@/components/dashboard/first-steps";
 import { DashboardWorkspaceSidebar } from "@/components/dashboard/dashboard-workspace-sidebar";
+import { DashboardInfoSidebar } from "@/components/dashboard/dashboard-info-sidebar";
 import {
   getContinueWorkingItems,
   getDashboardFirstSteps,
@@ -80,6 +83,7 @@ export default async function DashboardPage() {
 
   const { activeWorkspace, workspaces } =
     await getActiveWorkspaceContext(session.user.id);
+
   const [
     onboarding,
     continueWorkingItems,
@@ -112,39 +116,44 @@ export default async function DashboardPage() {
         />
       }
     >
-      <main className="h-full overflow-y-auto bg-background">
-        <div className="mx-auto max-w-6xl px-8 py-10">
-<header>
-  <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-    Bienvenido{session.user.name ? `, ${session.user.name.split(" ")[0]}` : ""}
-  </h1>
-</header>
+      <AppPageLayout aside={<DashboardInfoSidebar />}>
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Bienvenido
+            {session.user.name
+              ? `, ${session.user.name.split(" ")[0]}`
+              : ""}
+          </h1>
+        </header>
 
-          <FirstSteps onboarding={onboarding} />
+        <FirstSteps onboarding={onboarding} />
 
-          <section className="mt-10">
-            <div className="mb-4">
-              <h2 className="text-sm font-semibold text-foreground">
-                Accesos rápidos
-              </h2>
+        <section className="mt-10">
+          <div className="mb-4">
+            <h2 className="text-sm font-semibold text-foreground">
+              Accesos rápidos
+            </h2>
 
-              <p className="mt-1 text-xs text-muted-foreground">
-                Entra directamente en las áreas que más utilizas.
-              </p>
-            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Entra directamente en las áreas que más utilizas.
+            </p>
+          </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              {quickAccessItems.map((item) => {
-                const Icon = item.icon;
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            {quickAccessItems.map((item) => {
+              const Icon = item.icon;
 
-                return (
+              return (
+                <AppCard
+                  key={item.title}
+                  className="group min-h-40 p-0 transition-shadow hover:shadow-[0_12px_36px_rgba(37,99,235,0.10)]"
+                >
                   <Link
-                    key={item.title}
                     href={item.href}
-                    className="group flex min-h-40 flex-col rounded-xl border border-border bg-background p-5 transition-colors hover:bg-surface"
+                    className="flex h-full min-h-40 flex-col rounded-[28px] p-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                   >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-soft text-brand transition-colors group-hover:bg-brand-soft-hover">
-                      <Icon className="h-4 w-4" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-brand transition-colors group-hover:bg-brand-soft-hover">
+                      <Icon className="h-5 w-5" />
                     </div>
 
                     <div className="mt-6">
@@ -161,106 +170,112 @@ export default async function DashboardPage() {
                       </p>
                     </div>
                   </Link>
-                );
-              })}
+                </AppCard>
+              );
+            })}
 
-              <div className="flex min-h-40 flex-col rounded-xl border border-border bg-background p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-soft text-brand">
-                    <Bot className="h-4 w-4" />
-                  </div>
-
-                  <span className="rounded-md bg-brand-soft px-2 py-1 text-[10px] font-medium text-brand">
-                    Próximamente
-                  </span>
+            <AppCard className="flex min-h-40 flex-col">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                  <Bot className="h-5 w-5" />
                 </div>
 
-                <div className="mt-6">
-                  <h3 className="text-sm font-semibold text-foreground">
-                    Agentes
-                  </h3>
-
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                    Automatiza tareas y procesos con agentes personalizados
-                  </p>
-                </div>
+                <span className="rounded-md bg-brand-soft px-2 py-1 text-[10px] font-medium text-brand">
+                  Próximamente
+                </span>
               </div>
-            </div>
-          </section>
 
-          <div className="mt-12 grid grid-cols-1 gap-12 xl:grid-cols-[minmax(0,2fr)_minmax(280px,0.85fr)]">
-            <section>
-              <div className="mb-4">
-                <h2 className="text-sm font-semibold text-foreground">
-                  Continuar trabajando
-                </h2>
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Agentes
+                </h3>
 
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Vuelve rápidamente a lo último en lo que estabas trabajando.
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                  Automatiza tareas y procesos con agentes personalizados
                 </p>
               </div>
-
-              <div className="overflow-hidden rounded-xl border border-border bg-background">
-                {continueWorkingItems.length > 0 ? (
-                  <div className="max-h-96 overflow-y-auto">
-                    {continueWorkingItems.map((item, index) => (
-                      <ContinueWorkingRow
-                        key={`${item.resourceType}-${item.resourceId}`}
-                        item={item}
-                        isLast={
-                          index === continueWorkingItems.length - 1
-                        }
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="min-h-24 px-5 py-5">
-                    <h3 className="text-sm font-semibold text-foreground">
-                      Todavía no tienes actividad reciente
-                    </h3>
-
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Los artículos, cursos y conversaciones que utilices
-                      aparecerán aquí.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <aside>
-              <section>
-                <div className="mb-5">
-                  <h2 className="text-sm font-semibold text-foreground">
-                    Actividad reciente
-                  </h2>
-                </div>
-
-                {recentActivity.length > 0 ? (
-                  <div className="max-h-96 space-y-5 overflow-y-auto pr-2">
-                    {recentActivity.map((item) => (
-                      <RecentActivityRow
-                        key={`${item.type}-${item.id}`}
-                        item={item}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      Todavía no hay actividad reciente
-                    </p>
-
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Los cambios realizados en este espacio aparecerán aquí.
-                    </p>
-                  </div>
-                )}
-              </section>
-            </aside>
+            </AppCard>
           </div>
+        </section>
+
+        <div className="mt-12 grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(280px,0.85fr)]">
+          <section className="min-w-0">
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-foreground">
+                Continuar trabajando
+              </h2>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                Vuelve rápidamente a lo último en lo que estabas
+                trabajando.
+              </p>
+            </div>
+
+            <AppCard className="overflow-hidden p-0">
+              {continueWorkingItems.length > 0 ? (
+                <div className="max-h-96 overflow-y-auto">
+                  {continueWorkingItems.map((item, index) => (
+                    <ContinueWorkingRow
+                      key={`${item.resourceType}-${item.resourceId}`}
+                      item={item}
+                      isLast={
+                        index === continueWorkingItems.length - 1
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="min-h-24 px-6 py-6">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Todavía no tienes actividad reciente
+                  </h3>
+
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Los artículos, cursos y conversaciones que utilices
+                    aparecerán aquí.
+                  </p>
+                </div>
+              )}
+            </AppCard>
+          </section>
+
+          <aside className="min-w-0">
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-foreground">
+                Actividad reciente
+              </h2>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                Últimos cambios realizados en este espacio.
+              </p>
+            </div>
+
+            <AppCard>
+              {recentActivity.length > 0 ? (
+                <div className="max-h-96 space-y-5 overflow-y-auto pr-2">
+                  {recentActivity.map((item) => (
+                    <RecentActivityRow
+                      key={`${item.type}-${item.id}`}
+                      item={item}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Todavía no hay actividad reciente
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Los cambios realizados en este espacio aparecerán
+                    aquí.
+                  </p>
+                </div>
+              )}
+            </AppCard>
+          </aside>
         </div>
-      </main>
+      </AppPageLayout>
     </AppSectionShell>
   );
 }
@@ -280,13 +295,13 @@ function ContinueWorkingRow({
     <Link
       href={item.href}
       className={cn(
-        "group flex min-h-24 items-center gap-4 px-5 py-4 transition-colors hover:bg-surface",
-        !isLast && "border-b border-border",
+        "group flex min-h-24 items-center gap-4 px-6 py-4 transition-colors hover:bg-surface",
+        !isLast && "border-b border-border/60",
       )}
     >
       <div
         className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
           item.resourceType === "knowledge_source"
             ? "bg-brand-soft text-brand"
             : "bg-surface text-muted-foreground",

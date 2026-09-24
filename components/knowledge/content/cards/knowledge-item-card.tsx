@@ -1,7 +1,5 @@
 // components/knowledge/content/cards/knowledge-item-card.tsx
 
-// components/knowledge/content/cards/knowledge-item-card.tsx
-
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -9,19 +7,19 @@ import {
   useEffect,
   useState,
   type DragEvent,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import { Clock, FileText, Folder } from "lucide-react";
 
+import { AppGridCard } from "@/components/app/layouts/app-grid-card";
 import { KnowledgeTypeBadge } from "@/components/knowledge/content/knowledge-type-badge";
-import { Card, CardContent } from "@/components/ui/card";
 
 import { KnowledgeCardMenu } from "./article/knowledge-card-menu";
 import { useKnowledgeCardActions } from "./article/use-knowledge-card-actions";
 import { KnowledgeFolderMenu } from "./folder/knowledge-folder-menu";
 import { useKnowledgeFolderActions } from "./folder/use-knowledge-folder-actions";
 import { CardSelectionCheckbox } from "./shared/card-selection-checkbox";
-import { KnowledgeCardHeader } from "./knowledge-card-header";
 import {
   formatRelativeDate,
   getCountLabel,
@@ -82,7 +80,9 @@ type ArticleProps = SharedProps & {
   onShare?: (knowledge: KnowledgeSource) => void;
 };
 
-export type KnowledgeItemCardProps = FolderProps | ArticleProps;
+export type KnowledgeItemCardProps =
+  | FolderProps
+  | ArticleProps;
 
 export function KnowledgeItemCard(
   props: KnowledgeItemCardProps,
@@ -147,11 +147,11 @@ function KnowledgeFolderItemCard({
           onDelete={actions.deleteFolder}
         />
       }
-preview={
-  <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-[#EDF3FF] text-[#0A58FF]">
-    <Folder size={52} strokeWidth={1.8} />
-  </div>
-}
+      preview={
+        <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-[#EDF3FF] text-[#0A58FF]">
+          <Folder size={52} strokeWidth={1.8} />
+        </div>
+      }
       title={
         actions.isRenaming ? (
           <div
@@ -166,7 +166,9 @@ preview={
               value={actions.renameValue}
               disabled={actions.isRenamingPending}
               onChange={(event) => {
-                actions.setRenameValue(event.target.value);
+                actions.setRenameValue(
+                  event.target.value,
+                );
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -211,6 +213,7 @@ preview={
             "artículo",
             "artículos",
           )}
+
           {folderCount > 0
             ? ` · ${getCountLabel(
                 folderCount,
@@ -243,7 +246,9 @@ function KnowledgeArticleItemCard({
   onDragLeave,
   onDrop,
 }: ArticleProps) {
-  const actions = useKnowledgeCardActions({ knowledge });
+  const actions = useKnowledgeCardActions({
+    knowledge,
+  });
 
   return (
     <KnowledgeItemCardShell
@@ -285,22 +290,22 @@ function KnowledgeArticleItemCard({
           }
         />
       }
-preview={
-  <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-[#EDF3FF] text-[#0A58FF]">
-    <FileText
-      className="h-14 w-14"
-      strokeWidth={1.6}
-    />
-  </div>
-}
-title={
-  <h2
-    title={knowledge.title}
-    className="line-clamp-2 text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground transition-colors duration-200 group-hover/open:text-[#0A58FF]"
-  >
-    {knowledge.title}
-  </h2>
-}
+      preview={
+        <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-[#EDF3FF] text-[#0A58FF]">
+          <FileText
+            className="h-14 w-14"
+            strokeWidth={1.6}
+          />
+        </div>
+      }
+      title={
+        <h2
+          title={knowledge.title}
+          className="line-clamp-2 text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground transition-colors duration-200 group-hover/open:text-[#0A58FF]"
+        >
+          {knowledge.title}
+        </h2>
+      }
       leftMeta={
         <div className="min-w-0">
           <KnowledgeTypeBadge
@@ -312,6 +317,7 @@ title={
       rightMeta={
         <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap">
           <Clock className="h-3.5 w-3.5" />
+
           {formatRelativeDate(
             knowledge.updated_at,
             "Sin actualizar",
@@ -340,10 +346,6 @@ type ShellProps = {
   rightMeta: ReactNode;
 };
 
-
-
-
-
 function KnowledgeItemCardShell({
   selected,
   draggable,
@@ -361,21 +363,16 @@ function KnowledgeItemCardShell({
   leftMeta,
   rightMeta,
 }: ShellProps) {
-  const router = useRouter();
-
   const cardClassName = [
-    "group h-[280px] min-w-0 overflow-hidden !gap-0 !py-0",
-    "border border-slate-200/50 bg-card",
-    "hover:border-[#0A58FF]",
-    "shadow-[0_4px_24px_-8px_rgba(59,130,246,0.16),0_12px_48px_-18px_rgba(59,130,246,0.14)]",
-    "transition-[border-color,box-shadow] duration-200 ease-out",
+    "group h-[280px] min-w-0 overflow-hidden",
+    "bg-transparent shadow-none",
 
     isDropTarget
-      ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+      ? "!border-blue-400 bg-blue-50/40"
       : "",
 
     selected && !isDropTarget
-      ? "ring-2 ring-primary/20"
+      ? "!border-blue-300 bg-blue-50/20"
       : "",
   ]
     .filter(Boolean)
@@ -386,16 +383,19 @@ function KnowledgeItemCardShell({
   }
 
   function handleOpenKeyDown(
-    event: React.KeyboardEvent<HTMLDivElement>,
+    event: KeyboardEvent<HTMLDivElement>,
   ) {
-    if (event.key === "Enter" || event.key === " ") {
+    if (
+      event.key === "Enter" ||
+      event.key === " "
+    ) {
       event.preventDefault();
       handleOpen();
     }
   }
 
   return (
-    <Card
+    <AppGridCard
       draggable={draggable}
       className={cardClassName}
       onDragStart={onDragStart}
@@ -404,8 +404,8 @@ function KnowledgeItemCardShell({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <CardContent className="flex h-full min-h-0 flex-col !p-4">
-        {/* HEADER: controles independientes, sin apertura de la card */}
+      <div className="flex h-full min-h-0 flex-col p-4">
+        {/* HEADER: controles independientes de la apertura */}
         <header className="flex h-8 shrink-0 items-center justify-between">
           <div
             className={[
@@ -439,7 +439,7 @@ function KnowledgeItemCardShell({
           </div>
         </header>
 
-        {/* BODY + FOOTER: zona completa de apertura */}
+        {/* BODY + FOOTER: zona de apertura */}
         <div
           role="button"
           tabIndex={0}
@@ -472,7 +472,7 @@ function KnowledgeItemCardShell({
             </div>
           </footer>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </AppGridCard>
   );
 }

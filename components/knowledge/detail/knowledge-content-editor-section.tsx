@@ -18,7 +18,7 @@ import { KnowledgeEditor } from "@/components/knowledge/editor/knowledge-editor"
 import { Button } from "@/components/ui/button";
 
 import { useKnowledgeContentEditor } from "./hooks/use-knowledge-content-editor";
-
+import { updateKnowledgeAction } from "@/app/actions/knowledge";
 import type { Knowledge } from "./knowledge-detail.types";
 
 type KnowledgeContentEditorSectionProps = {
@@ -49,7 +49,26 @@ export function KnowledgeContentEditorSection({
     cancelEditing,
     saveContent,
   } = useKnowledgeContentEditor({
-    knowledge,
+    initialContent: knowledge.content ?? "",
+    onSave: async (nextContent: string) => {
+      const formData = new FormData();
+
+      formData.set("id", knowledge.id);
+      formData.set("title", knowledge.title);
+      formData.set(
+        "description",
+        knowledge.description ?? "",
+      );
+      formData.set("visibility", knowledge.visibility);
+      formData.set(
+        "knowledgeType",
+        knowledge.knowledge_type,
+      );
+      formData.set("content", nextContent);
+
+      await updateKnowledgeAction(formData);
+      router.refresh();
+    },
   });
 
   const hasContent = hasMeaningfulContent(content);

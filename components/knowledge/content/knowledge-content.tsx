@@ -1,6 +1,6 @@
 // components/knowledge/content/knowledge-content.tsx
-"use client";
 
+"use client";
 
 import {
   useEffect,
@@ -10,21 +10,26 @@ import {
   type ChangeEvent,
 } from "react";
 
+import { AppCard } from "@/components/app/layouts/app-card";
+import { AppPagination } from "@/components/app/layouts/app-pagination";
+import { KnowledgeImportModal } from "@/components/knowledge/import/modal";
+import {
+  buildLibraryTree,
+  getLibraryPath,
+} from "@/components/knowledge/sidebar/tree-utils";
+
 import { CreateFolderDialog } from "./create-folder-dialog";
 import { KnowledgeExplorer } from "./knowledge-explorer";
 import { KnowledgeLibraryBreadcrumb } from "./knowledge-library-breadcrumb";
 import { KnowledgeToolbar } from "./toolbar/knowledge-toolbar";
+
 import type {
   ExplorerState,
   ExplorerStatus,
   UploadType,
 } from "./toolbar/types";
 
-import { KnowledgeImportModal } from "@/components/knowledge/import/modal";
-import {
-  buildLibraryTree,
-  getLibraryPath,
-} from "@/components/knowledge/sidebar/tree-utils";
+const PAGE_SIZE = 12;
 
 type KnowledgeSource = {
   id: string;
@@ -134,6 +139,8 @@ export function KnowledgeContent({
       status: "all",
     });
 
+  const [page, setPage] = useState(1);
+
   const [isCreateFolderOpen, setIsCreateFolderOpen] =
     useState(false);
 
@@ -142,62 +149,60 @@ export function KnowledgeContent({
     setIsKnowledgeImportOpen,
   ] = useState(false);
 
-  const [selectedFiles, setSelectedFiles] = useState<
-    File[]
-  >([]);
+  const [selectedFiles, setSelectedFiles] =
+    useState<File[]>([]);
 
   const [selectedArticleIds, setSelectedArticleIds] =
-  useState<Set<string>>(new Set());
+    useState<Set<string>>(new Set());
 
-const [selectedFolderIds, setSelectedFolderIds] =
-  useState<Set<string>>(new Set());
+  const [selectedFolderIds, setSelectedFolderIds] =
+    useState<Set<string>>(new Set());
 
   const filesInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
   const selectedCount =
-  selectedArticleIds.size +
-  selectedFolderIds.size;
+    selectedArticleIds.size + selectedFolderIds.size;
 
-function toggleArticleSelection(
-  id: string,
-  selected: boolean,
-) {
-  setSelectedArticleIds((current) => {
-    const next = new Set(current);
+  function toggleArticleSelection(
+    id: string,
+    selected: boolean,
+  ) {
+    setSelectedArticleIds((current) => {
+      const next = new Set(current);
 
-    if (selected) {
-      next.add(id);
-    } else {
-      next.delete(id);
-    }
+      if (selected) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
 
-    return next;
-  });
-}
+      return next;
+    });
+  }
 
-function toggleFolderSelection(
-  id: string,
-  selected: boolean,
-) {
-  setSelectedFolderIds((current) => {
-    const next = new Set(current);
+  function toggleFolderSelection(
+    id: string,
+    selected: boolean,
+  ) {
+    setSelectedFolderIds((current) => {
+      const next = new Set(current);
 
-    if (selected) {
-      next.add(id);
-    } else {
-      next.delete(id);
-    }
+      if (selected) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
 
-    return next;
-  });
-}
+      return next;
+    });
+  }
 
-function clearSelection() {
-  setSelectedArticleIds(new Set());
-  setSelectedFolderIds(new Set());
-}
+  function clearSelection() {
+    setSelectedArticleIds(new Set());
+    setSelectedFolderIds(new Set());
+  }
 
   const selectedLibrary = useMemo(() => {
     return knowledgeLibraries.find(
@@ -206,9 +211,11 @@ function clearSelection() {
   }, [knowledgeLibraries, selectedLibraryId]);
 
   // La vista general representa la carpeta real «Mi biblioteca».
-  // Dentro de una subcarpeta, conservamos siempre el ID seleccionado.
+  // Dentro de una subcarpeta conservamos su ID.
   const currentFolderId = useMemo(() => {
-    if (selectedLibraryId) return selectedLibraryId;
+    if (selectedLibraryId) {
+      return selectedLibraryId;
+    }
 
     const rootLibraries = knowledgeLibraries.filter(
       (library) =>
@@ -217,7 +224,9 @@ function clearSelection() {
         !library.is_shared,
     );
 
-    return rootLibraries.length === 1 ? rootLibraries[0].id : null;
+    return rootLibraries.length === 1
+      ? rootLibraries[0].id
+      : null;
   }, [knowledgeLibraries, selectedLibraryId]);
 
   const baseChildLibraries = useMemo(() => {
@@ -241,10 +250,6 @@ function clearSelection() {
   ]);
 
   const processedLibraries = useMemo(() => {
-    /*
-     * Si se solicitan únicamente artículos, o se aplica
-     * un estado de artículo, no mostramos carpetas.
-     */
     if (
       explorerState.itemType === "articles" ||
       explorerState.status !== "all"
@@ -273,9 +278,7 @@ function clearSelection() {
         return first.name.localeCompare(
           second.name,
           "es",
-          {
-            sensitivity: "base",
-          },
+          { sensitivity: "base" },
         );
       }
 
@@ -283,9 +286,7 @@ function clearSelection() {
         return second.name.localeCompare(
           first.name,
           "es",
-          {
-            sensitivity: "base",
-          },
+          { sensitivity: "base" },
         );
       }
 
@@ -320,51 +321,50 @@ function clearSelection() {
       .trim()
       .toLocaleLowerCase("es");
 
-    const filtered = knowledgeSources.filter((item) => {
-      const normalizedStatus = normalizeArticleStatus(
-        item.status,
-      );
+    const filtered = knowledgeSources.filter(
+      (item) => {
+        const normalizedStatus =
+          normalizeArticleStatus(item.status);
 
-      if (
-        explorerState.status !== "all" &&
-        normalizedStatus !== explorerState.status
-      ) {
-        return false;
-      }
+        if (
+          explorerState.status !== "all" &&
+          normalizedStatus !== explorerState.status
+        ) {
+          return false;
+        }
 
-      if (!searchValue) {
-        return true;
-      }
+        if (!searchValue) {
+          return true;
+        }
 
-      const searchableText = [
-        item.title,
-        item.description,
-        item.content,
-        item.summary,
-        item.language,
-        item.domain,
-        item.level,
-        item.knowledge_type,
-        item.visibility,
-        normalizeSearchValue(item.tags),
-        normalizeSearchValue(item.keywords),
-        normalizeSearchValue(item.entities),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase("es");
+        const searchableText = [
+          item.title,
+          item.description,
+          item.content,
+          item.summary,
+          item.language,
+          item.domain,
+          item.level,
+          item.knowledge_type,
+          item.visibility,
+          normalizeSearchValue(item.tags),
+          normalizeSearchValue(item.keywords),
+          normalizeSearchValue(item.entities),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase("es");
 
-      return searchableText.includes(searchValue);
-    });
+        return searchableText.includes(searchValue);
+      },
+    );
 
     return [...filtered].sort((first, second) => {
       if (explorerState.sort === "name_asc") {
         return first.title.localeCompare(
           second.title,
           "es",
-          {
-            sensitivity: "base",
-          },
+          { sensitivity: "base" },
         );
       }
 
@@ -372,9 +372,7 @@ function clearSelection() {
         return second.title.localeCompare(
           first.title,
           "es",
-          {
-            sensitivity: "base",
-          },
+          { sensitivity: "base" },
         );
       }
 
@@ -407,6 +405,52 @@ function clearSelection() {
     explorerState.search,
     explorerState.sort,
     explorerState.status,
+  ]);
+
+  // Paginamos el conjunto visible: primero carpetas,
+  // después documentos, respetando el orden del explorador.
+  const totalItems =
+    processedLibraries.length +
+    processedKnowledge.length;
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalItems / PAGE_SIZE),
+  );
+
+  const currentPage = Math.min(page, totalPages);
+
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+
+    const visibleFolders =
+      processedLibraries.slice(start, end);
+
+    const documentStart = Math.max(
+      0,
+      start - processedLibraries.length,
+    );
+
+    const remainingSlots =
+      PAGE_SIZE - visibleFolders.length;
+
+    const visibleKnowledge =
+      remainingSlots > 0
+        ? processedKnowledge.slice(
+            documentStart,
+            documentStart + remainingSlots,
+          )
+        : [];
+
+    return {
+      folders: visibleFolders,
+      knowledgeSources: visibleKnowledge,
+    };
+  }, [
+    currentPage,
+    processedLibraries,
+    processedKnowledge,
   ]);
 
   const libraryTree = useMemo(() => {
@@ -480,38 +524,41 @@ function clearSelection() {
     zipInputRef.current?.click();
   }
 
-  
-useEffect(() => {
-  function handleTopbarUpload(event: Event) {
-    const uploadEvent = event as CustomEvent<UploadType>;
+  useEffect(() => {
+    function handleTopbarUpload(event: Event) {
+      const uploadEvent =
+        event as CustomEvent<UploadType>;
 
-    if (
-      uploadEvent.detail === "files" ||
-      uploadEvent.detail === "folder" ||
-      uploadEvent.detail === "zip"
-    ) {
-      handleUpload(uploadEvent.detail);
+      if (
+        uploadEvent.detail === "files" ||
+        uploadEvent.detail === "folder" ||
+        uploadEvent.detail === "zip"
+      ) {
+        handleUpload(uploadEvent.detail);
+      }
     }
-  }
 
-  window.addEventListener(
-    "crs:knowledge-upload",
-    handleTopbarUpload,
-  );
-
-  return () => {
-    window.removeEventListener(
+    window.addEventListener(
       "crs:knowledge-upload",
       handleTopbarUpload,
     );
-  };
-}, []);
+
+    return () => {
+      window.removeEventListener(
+        "crs:knowledge-upload",
+        handleTopbarUpload,
+      );
+    };
+  }, []);
 
   return (
     <>
       <KnowledgeToolbar
         explorerState={explorerState}
-        onExplorerStateChange={setExplorerState}
+        onExplorerStateChange={(nextState) => {
+          setExplorerState(nextState);
+          setPage(1);
+        }}
         title={pageTitle}
         parentHref={parentHref}
         breadcrumb={
@@ -539,33 +586,52 @@ useEffect(() => {
         }
         onCreateFolder={() => {
           if (!currentFolderId) {
-            window.alert("No se ha encontrado la carpeta «Mi biblioteca». Recarga la página antes de crear una carpeta.");
+            window.alert(
+              "No se ha encontrado la carpeta «Mi biblioteca». Recarga la página antes de crear una carpeta.",
+            );
             return;
           }
+
           setIsCreateFolderOpen(true);
         }}
         onUpload={handleUpload}
-          selectedCount={selectedCount}
-  onClearSelection={clearSelection}
+        selectedCount={selectedCount}
+        onClearSelection={clearSelection}
       />
 
-      <KnowledgeExplorer
-        folders={processedLibraries}
-        knowledgeSources={processedKnowledge}
-        viewMode={explorerState.viewMode}
-        selectedLibraryId={selectedLibraryId}
-        selectedView={selectedView}
-        search={explorerState.search}
-        selectedArticleIds={selectedArticleIds}
-selectedFolderIds={selectedFolderIds}
-onUploadRequested={() => handleUpload("files")}
-onArticleSelectedChange={
-  toggleArticleSelection
-}
-onFolderSelectedChange={
-  toggleFolderSelection
-}
-      />
+      <AppCard className="overflow-hidden p-0">
+        <div className="min-h-[320px] p-5 sm:p-6">
+          <KnowledgeExplorer
+            folders={paginatedItems.folders}
+            knowledgeSources={
+              paginatedItems.knowledgeSources
+            }
+            viewMode={explorerState.viewMode}
+            selectedLibraryId={selectedLibraryId}
+            selectedView={selectedView}
+            search={explorerState.search}
+            selectedArticleIds={selectedArticleIds}
+            selectedFolderIds={selectedFolderIds}
+            onUploadRequested={() =>
+              handleUpload("files")
+            }
+            onArticleSelectedChange={
+              toggleArticleSelection
+            }
+            onFolderSelectedChange={
+              toggleFolderSelection
+            }
+          />
+        </div>
+
+        <AppPagination
+          page={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
+      </AppCard>
 
       <CreateFolderDialog
         open={isCreateFolderOpen}
@@ -575,17 +641,19 @@ onFolderSelectedChange={
         }}
       />
 
-{currentFolderId ? (
-  <KnowledgeImportModal
-    open={isKnowledgeImportOpen}
-    context={{
-      origin: selectedLibraryId ? "folder" : "root",
-      libraryId: currentFolderId,
-    }}
-    selectedFiles={selectedFiles}
-    onOpenChange={setIsKnowledgeImportOpen}
-  />
-) : null}
+      {currentFolderId ? (
+        <KnowledgeImportModal
+          open={isKnowledgeImportOpen}
+          context={{
+            origin: selectedLibraryId
+              ? "folder"
+              : "root",
+            libraryId: currentFolderId,
+          }}
+          selectedFiles={selectedFiles}
+          onOpenChange={setIsKnowledgeImportOpen}
+        />
+      ) : null}
 
       <input
         ref={filesInputRef}

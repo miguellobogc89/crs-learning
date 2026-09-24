@@ -1,11 +1,11 @@
 // app/(app)/knowledge/page.tsx
 
-
-
 import { redirect } from "next/navigation";
 
-import { KnowledgeContent } from "@/components/knowledge/content/knowledge-content";
 import { auth } from "@/auth";
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+import { KnowledgeContent } from "@/components/knowledge/content/knowledge-content";
+import { KnowledgeInfoSidebar } from "@/components/knowledge/knowledge-info-sidebar";
 import { listVisibleKnowledgeSources } from "@/lib/services/knowledge.service";
 import { listKnowledgeLibraries } from "@/lib/services/knowledge-library.service";
 import { recordResourceAccess } from "@/lib/services/resource-access.service";
@@ -25,6 +25,7 @@ export default async function KnowledgePage({
   const params = await searchParams;
   const selectedLibraryId = params.library ?? null;
   const selectedView = params.view ?? "all";
+
   const { activeWorkspace } = await getActiveWorkspaceContext(
     session.user.id,
   );
@@ -33,6 +34,7 @@ export default async function KnowledgePage({
     session.user.id,
     activeWorkspace.id,
   );
+
   const knowledgeLibraries = await listKnowledgeLibraries(
     session.user.id,
     activeWorkspace.id,
@@ -67,7 +69,10 @@ export default async function KnowledgePage({
       return sharedLibraryIds.includes(knowledge.library_id);
     }
 
-    if (selectedLibraryId && knowledge.library_id !== selectedLibraryId) {
+    if (
+      selectedLibraryId &&
+      knowledge.library_id !== selectedLibraryId
+    ) {
       return false;
     }
 
@@ -83,15 +88,13 @@ export default async function KnowledgePage({
   });
 
   return (
-    <div className="min-h-full bg-transparent">
-      <div className="mx-auto max-w-7xl px-8 py-6">
-        <KnowledgeContent
-          knowledgeSources={knowledgeSources}
-          knowledgeLibraries={knowledgeLibraries}
-          selectedLibraryId={selectedLibraryId}
-          selectedView={selectedView}
-        />
-      </div>
-    </div>
+    <AppPageLayout aside={<KnowledgeInfoSidebar />}>
+      <KnowledgeContent
+        knowledgeSources={knowledgeSources}
+        knowledgeLibraries={knowledgeLibraries}
+        selectedLibraryId={selectedLibraryId}
+        selectedView={selectedView}
+      />
+    </AppPageLayout>
   );
 }

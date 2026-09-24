@@ -1,4 +1,3 @@
-
 // components/app/app-navigation-panel.tsx
 
 "use client";
@@ -139,14 +138,14 @@ export function AppNavigationPanel({
 
   return (
     <div
-      className="
+      className={`
         relative hidden min-h-0 shrink-0
         overflow-hidden rounded-[20px]
         border border-slate-200/70
         bg-[#FCFDFF]
         shadow-[0_8px_32px_rgba(15,23,42,0.07)]
         lg:my-3 lg:ml-3 lg:flex
-      "
+      `}
     >
       {/* Barra principal */}
       <div
@@ -161,20 +160,20 @@ export function AppNavigationPanel({
 
       {/* Barra secundaria */}
       <div
-        className="
+        className={`
           flex h-full min-h-0 shrink-0 flex-col
           border-l border-slate-200/60
           bg-transparent
-        "
+        `}
         style={{ width: sidebarWidth }}
       >
         {/* Selector de workspace: permanece fijo */}
         <div
-          className="
+          className={`
             flex h-[88px] shrink-0 items-center
             border-b border-slate-200/60
             bg-transparent px-4
-          "
+          `}
         >
           <div className="w-full min-w-0">
             {sidebarHeader}
@@ -183,19 +182,19 @@ export function AppNavigationPanel({
 
         {/* Contenido contextual con transición */}
         <div
-          className="
+          className={`
             relative min-h-0 flex-1
             overflow-hidden bg-transparent
-          "
+          `}
         >
           {!isChangingSection && visibleSidebar ? (
             <div
               key={animationKey}
-              className="
+              className={`
                 h-full min-h-0
                 animate-[sidebarFadeIn_180ms_ease-out_both]
                 motion-reduce:animate-none
-              "
+              `}
             >
               {visibleSidebar}
             </div>
