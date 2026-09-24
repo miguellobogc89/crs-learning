@@ -1,90 +1,129 @@
 ﻿
 // components/knowledge/article/content/details/article-details-view.tsx
 
+"use client";
+
+import {
+  BrainCircuit,
+  FileSearch,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
+
+import { KnowledgeAnalysisPanel } from
+  "@/components/knowledge/knowledge-analysis-panel";
+
+import type {
+  KnowledgeFile,
+  KnowledgeGraph,
+} from "@/components/knowledge/detail/knowledge-detail.types";
+
 type ArticleDetailsViewProps = {
+  hasDocuments: boolean;
+  hasAnalysis: boolean;
+  isRebuilding: boolean;
+  rebuildError: string | null;
   knowledgeType: string;
-  visibility: string;
-  status: string;
+  analysisJson: unknown;
   analysisStatus: string | null;
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  procedure: "Procedimiento",
-  process: "Proceso",
-  policy: "Política",
-  manual: "Manual",
-  guide: "Guía",
-  faq: "FAQ",
-  technical: "Técnico",
-  functional: "Funcional",
-  unknown: "Sin clasificar",
-};
-
-const VISIBILITY_LABELS: Record<string, string> = {
-  private: "Privado",
-  shared: "Compartido",
-  public: "Público",
+  analysisModel: string | null;
+  graph: KnowledgeGraph | null;
+  files: KnowledgeFile[];
+  onRebuild: () => void;
 };
 
 export function ArticleDetailsView({
+  hasDocuments,
+  hasAnalysis,
+  isRebuilding,
+  rebuildError,
   knowledgeType,
-  visibility,
-  status,
+  analysisJson,
   analysisStatus,
+  analysisModel,
+  graph,
+  files,
+  onRebuild,
 }: ArticleDetailsViewProps) {
-  return (
-    <section className="rounded-xl border border-border bg-background p-6">
-      <div className="mb-6">
-        <h2 className="text-base font-semibold text-foreground">
-          Detalles del artículo
+  if (!hasDocuments) {
+    return (
+      <div className="rounded-xl border border-border bg-background px-6 py-14 text-center">
+        <FileSearch className="mx-auto h-6 w-6 text-blue-600" />
+
+        <h2 className="mt-4 font-semibold">
+          Añade documentación para generar el análisis
         </h2>
 
-        <p className="mt-1 text-sm text-muted-foreground">
-          Información y estado del artículo.
+        <p className="mt-2 text-sm text-muted-foreground">
+          La incorporación de nuevas evidencias se realiza
+          desde el flujo de Importación de Conocimiento
+          de la carpeta.
         </p>
       </div>
+    );
+  }
 
-      <dl className="grid gap-6 sm:grid-cols-2">
-        <div>
-          <dt className="text-xs font-medium text-muted-foreground">
-            Tipo
-          </dt>
+  if (!hasAnalysis) {
+    return (
+      <div className="rounded-xl border border-border bg-background px-6 py-14 text-center">
+        <BrainCircuit className="mx-auto h-6 w-6 text-blue-600" />
 
-          <dd className="mt-1 text-sm font-medium text-foreground">
-            {TYPE_LABELS[knowledgeType] ?? knowledgeType}
-          </dd>
-        </div>
+        <h2 className="mt-4 font-semibold">
+          Todavía no hay un análisis disponible
+        </h2>
 
-        <div>
-          <dt className="text-xs font-medium text-muted-foreground">
-            Visibilidad
-          </dt>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Procesa la documentación del artículo para generar
+          su análisis detallado y extraer la estructura
+          de conocimiento.
+        </p>
 
-          <dd className="mt-1 text-sm font-medium text-foreground">
-            {VISIBILITY_LABELS[visibility] ?? visibility}
-          </dd>
-        </div>
+        <button
+          type="button"
+          disabled={isRebuilding}
+          onClick={onRebuild}
+          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+        >
+          {isRebuilding ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
 
-        <div>
-          <dt className="text-xs font-medium text-muted-foreground">
-            Estado
-          </dt>
+          {isRebuilding
+            ? "Actualizando..."
+            : "Actualizar conocimiento"}
+        </button>
 
-          <dd className="mt-1 text-sm font-medium text-foreground">
-            {status}
-          </dd>
-        </div>
+        {rebuildError && (
+          <p role="alert" className="mt-4 text-sm text-red-600">
+            {rebuildError}
+          </p>
+        )}
+      </div>
+    );
+  }
 
-        <div>
-          <dt className="text-xs font-medium text-muted-foreground">
-            Análisis de IA
-          </dt>
 
-          <dd className="mt-1 text-sm font-medium text-foreground">
-            {analysisStatus ?? "Sin análisis"}
-          </dd>
-        </div>
-      </dl>
-    </section>
+
+
+  return (
+    <>
+      <KnowledgeAnalysisPanel
+        mode="details"
+        analysisJson={analysisJson}
+        status={analysisStatus}
+        model={analysisModel}
+        knowledgeType={knowledgeType}
+        graph={graph}
+        files={files}
+      />
+
+      {rebuildError && (
+        <p role="alert" className="mt-4 text-sm text-red-600">
+          {rebuildError}
+        </p>
+      )}
+    </>
   );
 }

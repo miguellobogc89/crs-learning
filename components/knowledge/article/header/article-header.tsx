@@ -3,11 +3,13 @@
 
 "use client";
 
-import {
-  FileText,
-  UsersRound,
-} from "lucide-react";
+import { FileText, UsersRound } from "lucide-react";
 
+import { ArticleActions } from "./article-actions";
+import {
+  ArticleInsights,
+  type ArticleInsightMetrics,
+} from "./article-insights";
 import { ArticleBreadcrumb } from "./article-breadcrumb";
 import { ArticleTitle } from "./article-title";
 
@@ -27,13 +29,16 @@ type ArticleHeaderProps = {
     email: string;
   } | null;
   sharedTeamCount: number;
+  metrics: ArticleInsightMetrics;
   isEditingTitle: boolean;
   isUpdating: boolean;
+  isEditingContent: boolean;
   onTitleChange: (title: string) => void;
   onEditTitle: () => void;
   onSaveTitle: () => void;
   onCancelTitle: () => void;
   onVisibilityChange: (visibility: string) => void;
+  onEditContent: () => void;
   onShare: () => void;
 };
 
@@ -57,13 +62,16 @@ export function ArticleHeader({
   updatedAt,
   updatedBy,
   sharedTeamCount,
+  metrics,
   isEditingTitle,
   isUpdating,
+  isEditingContent,
   onTitleChange,
   onEditTitle,
   onSaveTitle,
   onCancelTitle,
   onVisibilityChange,
+  onEditContent,
   onShare,
 }: ArticleHeaderProps) {
   const knowledgeTypeLabel =
@@ -158,7 +166,18 @@ export function ArticleHeader({
             </select>
           </div>
         </div>
+
+        <ArticleActions
+          knowledgeType={knowledgeType}
+          visibility={visibility}
+          isEditingContent={isEditingContent}
+          isUpdating={isUpdating}
+          onEditContent={onEditContent}
+          onShare={onShare}
+        />
       </div>
+
+      <ArticleInsights metrics={metrics} />
     </header>
   );
 }

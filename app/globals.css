@@ -125,7 +125,7 @@
 :root {
   /* Base */
   --floating-chat-bottom: 1.5rem;
-  --background: oklch(1 0 0);
+  --background: #f7f9ff;
   --foreground: oklch(0.145 0 0);
 
   --card: oklch(1 0 0);
@@ -654,4 +654,46 @@
     --folder-font-caption: 0.6875rem;
     --folder-font-input: 0.75rem;
   }
+}
+
+
+
+/* Fondo global CRS LAB — gradientes radiales */
+
+body {
+  background-color: #f7f9ff;
+
+  background-image:
+    radial-gradient(
+      ellipse 55% 45% at 8% 8%,
+      rgba(207, 222, 255, 0.65) 0%,
+      transparent 75%
+    ),
+    radial-gradient(
+      ellipse 48% 42% at 92% 5%,
+      rgba(213, 232, 255, 0.7) 0%,
+      transparent 75%
+    ),
+    radial-gradient(
+      ellipse 42% 48% at 52% 48%,
+      rgba(239, 233, 255, 0.5) 0%,
+      transparent 80%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 15% 95%,
+      rgba(220, 230, 255, 0.55) 0%,
+      transparent 75%
+    ),
+    radial-gradient(
+      ellipse 45% 40% at 95% 90%,
+      rgba(230, 224, 255, 0.45) 0%,
+      transparent 75%
+    );
+
+  background-attachment: fixed;
+}
+
+.dark body {
+  background-color: var(--background);
+  background-image: none;
 }

@@ -201,7 +201,7 @@ function DetailsView({
   return (
     <div className="w-full min-w-0">
       <main id="knowledge-details-scroll" className="w-full min-w-0">
-        <article className="w-full min-w-0 space-y-14 pb-20">
+        <article className="w-full min-w-0 space-y-6 pb-8">
           {(hasText(analysis.objective) ||
             hasText(analysis.scope)) && (
             <KnowledgeSection
@@ -686,6 +686,7 @@ function EmptyState() {
 }
 
 
+
 function KnowledgeSection({
   id,
   icon,
@@ -702,27 +703,32 @@ function KnowledgeSection({
   return (
     <section
       id={id}
-      className="scroll-mt-8 border-b border-border pb-14 last:border-b-0"
+      className="min-w-0 rounded-xl border border-border bg-background p-6"
     >
-      <div className="mb-8">
-        <div className="flex items-center gap-3">
-          <span className="text-cyan-600">
-            {icon}
-          </span>
+      <header className="mb-6 flex items-start gap-3">
+        <span
+          aria-hidden="true"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 dark:text-blue-300"
+        >
+          {icon}
+        </span>
 
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-foreground">
             {title}
           </h2>
+
+          {description && (
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              {description}
+            </p>
+          )}
         </div>
+      </header>
 
-        {description ? (
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            {description}
-          </p>
-        ) : null}
+      <div className="min-w-0 text-sm leading-7 text-foreground">
+        {children}
       </div>
-
-      {children}
     </section>
   );
 }
