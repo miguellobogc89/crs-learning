@@ -2,7 +2,10 @@
 
 "use client";
 
-import { useRouter } from "next/navigation";
+import {
+  Clock,
+  Folder,
+} from "lucide-react";
 import {
   useEffect,
   useState,
@@ -10,7 +13,6 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { Clock, FileText, Folder } from "lucide-react";
 
 import { AppGridCard } from "@/components/app/layouts/app-grid-card";
 import { KnowledgeTypeBadge } from "@/components/knowledge/content/knowledge-type-badge";
@@ -19,11 +21,14 @@ import { KnowledgeCardMenu } from "./article/knowledge-card-menu";
 import { useKnowledgeCardActions } from "./article/use-knowledge-card-actions";
 import { KnowledgeFolderMenu } from "./folder/knowledge-folder-menu";
 import { useKnowledgeFolderActions } from "./folder/use-knowledge-folder-actions";
+import { KnowledgeItemCardBody } from "./knowledge-item-card-body";
+import { KnowledgeItemCardFooter } from "./knowledge-item-card-footer";
 import { CardSelectionCheckbox } from "./shared/card-selection-checkbox";
 import {
   formatRelativeDate,
   getCountLabel,
 } from "./shared/card-utils";
+import { getKnowledgeTypeVisualStyle } from "./shared/knowledge-type-style";
 
 type KnowledgeLibrary = {
   id: string;
@@ -59,11 +64,21 @@ type SharedProps = {
   onSelectedChange: (selected: boolean) => void;
   draggable?: boolean;
   isDropTarget?: boolean;
-  onDragStart?: (event: DragEvent<HTMLElement>) => void;
-  onDragEnd?: (event: DragEvent<HTMLElement>) => void;
-  onDragOver?: (event: DragEvent<HTMLElement>) => void;
-  onDragLeave?: (event: DragEvent<HTMLElement>) => void;
-  onDrop?: (event: DragEvent<HTMLElement>) => void;
+  onDragStart?: (
+    event: DragEvent<HTMLElement>,
+  ) => void;
+  onDragEnd?: (
+    event: DragEvent<HTMLElement>,
+  ) => void;
+  onDragOver?: (
+    event: DragEvent<HTMLElement>,
+  ) => void;
+  onDragLeave?: (
+    event: DragEvent<HTMLElement>,
+  ) => void;
+  onDrop?: (
+    event: DragEvent<HTMLElement>,
+  ) => void;
 };
 
 type FolderProps = SharedProps & {
@@ -77,7 +92,9 @@ type ArticleProps = SharedProps & {
   itemType: "article";
   knowledge: KnowledgeSource;
   folder?: never;
-  onShare?: (knowledge: KnowledgeSource) => void;
+  onShare?: (
+    knowledge: KnowledgeSource,
+  ) => void;
 };
 
 export type KnowledgeItemCardProps =
@@ -88,11 +105,19 @@ export function KnowledgeItemCard(
   props: KnowledgeItemCardProps,
 ) {
   if (props.itemType === "folder") {
-    return <KnowledgeFolderItemCard {...props} />;
+    return (
+      <KnowledgeFolderItemCard {...props} />
+    );
   }
 
-  return <KnowledgeArticleItemCard {...props} />;
+  return (
+    <KnowledgeArticleItemCard {...props} />
+  );
 }
+
+/* -------------------------------------------------------------------------- */
+/*                                   FOLDER                                   */
+/* -------------------------------------------------------------------------- */
 
 function KnowledgeFolderItemCard({
   folder,
@@ -109,16 +134,41 @@ function KnowledgeFolderItemCard({
   const [relativeUpdatedAt, setRelativeUpdatedAt] =
     useState("—");
 
-  const actions = useKnowledgeFolderActions({ folder });
+  const actions =
+    useKnowledgeFolderActions({
+      folder,
+    });
 
-  const articleCount = folder.article_count ?? 0;
-  const folderCount = folder.folder_count ?? 0;
+  const articleCount =
+    folder.article_count ?? 0;
+
+  const folderCount =
+    folder.folder_count ?? 0;
 
   useEffect(() => {
     setRelativeUpdatedAt(
-      formatRelativeDate(folder.updated_at),
+      formatRelativeDate(
+        folder.updated_at,
+      ),
     );
   }, [folder.updated_at]);
+
+  const contentLabel = [
+    getCountLabel(
+      articleCount,
+      "artículo",
+      "artículos",
+    ),
+    folderCount > 0
+      ? getCountLabel(
+          folderCount,
+          "subcarpeta",
+          "subcarpetas",
+        )
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <KnowledgeItemCardShell
@@ -135,27 +185,40 @@ function KnowledgeFolderItemCard({
         <CardSelectionCheckbox
           selected={selected}
           label={`Seleccionar ${folder.name}`}
-          onSelectedChange={onSelectedChange}
+          onSelectedChange={
+            onSelectedChange
+          }
         />
       }
       menu={
         <KnowledgeFolderMenu
           folder={folder}
-          isDeleting={actions.isDeleting}
-          onOpen={actions.openFolder}
-          onRename={actions.openRename}
-          onDelete={actions.deleteFolder}
+          isDeleting={
+            actions.isDeleting
+          }
+          onOpen={
+            actions.openFolder
+          }
+          onRename={
+            actions.openRename
+          }
+          onDelete={
+            actions.deleteFolder
+          }
         />
       }
-      preview={
-        <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-[#EDF3FF] text-[#0A58FF]">
-          <Folder size={52} strokeWidth={1.8} />
+      icon={
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#0A58FF]/8 text-[#0A58FF]">
+          <Folder
+            className="h-[18px] w-[18px]"
+            strokeWidth={2}
+          />
         </div>
       }
       title={
         actions.isRenaming ? (
           <div
-            className="flex min-w-0 items-center gap-2"
+            className="flex min-w-0 items-center gap-1.5"
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -163,75 +226,79 @@ function KnowledgeFolderItemCard({
           >
             <input
               autoFocus
-              value={actions.renameValue}
-              disabled={actions.isRenamingPending}
+              value={
+                actions.renameValue
+              }
+              disabled={
+                actions.isRenamingPending
+              }
               onChange={(event) => {
                 actions.setRenameValue(
                   event.target.value,
                 );
               }}
               onKeyDown={(event) => {
-                if (event.key === "Enter") {
+                if (
+                  event.key === "Enter"
+                ) {
                   actions.saveRename();
                 }
 
-                if (event.key === "Escape") {
+                if (
+                  event.key === "Escape"
+                ) {
                   actions.cancelRename();
                 }
               }}
-              className="h-8 min-w-0 flex-1 rounded-md border border-primary bg-background px-2 text-sm font-semibold text-foreground outline-none ring-2 ring-primary/20"
+              className="h-7 min-w-0 flex-1 rounded-md border border-[#0A58FF] bg-white px-2 text-xs font-semibold text-slate-950 outline-none ring-2 ring-[#0A58FF]/10"
             />
 
             <button
               type="button"
-              disabled={actions.isRenamingPending}
+              disabled={
+                actions.isRenamingPending
+              }
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 actions.saveRename();
               }}
-              className="h-8 shrink-0 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+              className="h-7 shrink-0 rounded-md bg-[#0A58FF] px-2 text-[10px] font-semibold text-white disabled:opacity-50"
             >
               {actions.isRenamingPending
-                ? "Guardando..."
+                ? "..."
                 : "Guardar"}
             </button>
           </div>
         ) : (
           <h2
             title={folder.name}
-            className="line-clamp-2 text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground"
+            className="truncate text-[13px] font-semibold leading-[18px] tracking-[-0.01em] text-slate-950 transition-colors duration-150 group-hover/open:text-[#0A58FF]"
           >
             {folder.name}
           </h2>
         )
       }
-      leftMeta={
-        <span className="block min-w-0 truncate">
-          {getCountLabel(
-            articleCount,
-            "artículo",
-            "artículos",
-          )}
-
-          {folderCount > 0
-            ? ` · ${getCountLabel(
-                folderCount,
-                "subcarpeta",
-                "subcarpetas",
-              )}`
-            : ""}
-        </span>
+      description={
+        <p
+          title={contentLabel}
+          className="truncate text-[11px] leading-4 text-slate-500"
+        >
+          {contentLabel}
+        </p>
       }
-      rightMeta={
-        <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-          <Clock className="h-3.5 w-3.5" />
+      footerLeft={
+        <CardDate>
           {relativeUpdatedAt}
-        </span>
+        </CardDate>
       }
     />
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/*                                   ARTICLE                                  */
+/* -------------------------------------------------------------------------- */
 
 function KnowledgeArticleItemCard({
   knowledge,
@@ -246,9 +313,23 @@ function KnowledgeArticleItemCard({
   onDragLeave,
   onDrop,
 }: ArticleProps) {
-  const actions = useKnowledgeCardActions({
-    knowledge,
-  });
+  const actions =
+    useKnowledgeCardActions({
+      knowledge,
+    });
+
+  const typeStyle =
+    getKnowledgeTypeVisualStyle(
+      knowledge.knowledge_type,
+    );
+
+  const TypeIcon = typeStyle.Icon;
+
+  const description =
+    knowledge.summary?.trim() ||
+    knowledge.description?.trim() ||
+    knowledge.domain?.trim() ||
+    null;
 
   return (
     <KnowledgeItemCardShell
@@ -265,85 +346,184 @@ function KnowledgeArticleItemCard({
         <CardSelectionCheckbox
           selected={selected}
           label={`Seleccionar ${knowledge.title}`}
-          onSelectedChange={onSelectedChange}
+          onSelectedChange={
+            onSelectedChange
+          }
         />
       }
       menu={
         <KnowledgeCardMenu
           knowledge={knowledge}
-          visibility={actions.visibility}
-          processing={actions.processing}
-          isDeleting={actions.isDeleting}
+          visibility={
+            actions.visibility
+          }
+          processing={
+            actions.processing
+          }
+          isDeleting={
+            actions.isDeleting
+          }
           isUpdatingVisibility={
             actions.isUpdatingVisibility
           }
-          onOpen={actions.openArticle}
-          onReprocess={actions.reprocess}
-          onDelete={actions.deleteArticle}
+          onOpen={
+            actions.openArticle
+          }
+          onReprocess={
+            actions.reprocess
+          }
+          onDelete={
+            actions.deleteArticle
+          }
           onVisibilityChange={
             actions.changeVisibility
           }
           onShare={
             onShare
-              ? () => onShare(knowledge)
+              ? () =>
+                  onShare(knowledge)
               : undefined
           }
         />
       }
-      preview={
-        <div className="flex h-[108px] w-[108px] items-center justify-center rounded-[20px] bg-[#EDF3FF] text-[#0A58FF]">
-          <FileText
-            className="h-14 w-14"
-            strokeWidth={1.6}
+      icon={
+        <div
+          className={[
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]",
+            typeStyle.iconBackgroundClassName,
+            typeStyle.iconClassName,
+          ].join(" ")}
+        >
+          <TypeIcon
+            className="h-[18px] w-[18px]"
+            strokeWidth={2}
           />
         </div>
       }
       title={
         <h2
           title={knowledge.title}
-          className="line-clamp-2 text-[15px] font-semibold leading-[22px] tracking-[-0.01em] text-foreground transition-colors duration-200 group-hover/open:text-[#0A58FF]"
+          className="truncate text-[13px] font-semibold leading-[18px] tracking-[-0.01em] text-slate-950 transition-colors duration-150 group-hover/open:text-[#0A58FF]"
         >
           {knowledge.title}
         </h2>
       }
-      leftMeta={
-        <div className="min-w-0">
-          <KnowledgeTypeBadge
-            type={knowledge.knowledge_type}
-            confidence={knowledge.confidence}
-          />
-        </div>
+      description={
+        description ? (
+          <p
+            title={description}
+            className="truncate text-[11px] leading-4 text-slate-500"
+          >
+            {description}
+          </p>
+        ) : undefined
       }
-      rightMeta={
-        <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-          <Clock className="h-3.5 w-3.5" />
-
-          {formatRelativeDate(
-            knowledge.updated_at,
-            "Sin actualizar",
-          )}
-        </span>
-      }
+badges={
+  <KnowledgeTypeBadge
+    type={knowledge.knowledge_type}
+  />
+}
+footerLeft={
+  <CardDate>
+    {formatRelativeDate(
+      knowledge.updated_at,
+      "Sin actualizar",
+    )}
+  </CardDate>
+}
+footerRight={
+  <KnowledgeAIConfidence
+    confidence={knowledge.confidence}
+  />
+}
     />
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/*                                  CARD DATE                                 */
+/* -------------------------------------------------------------------------- */
+
+function CardDate({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <Clock
+        className="h-3 w-3 shrink-0 text-slate-400"
+        strokeWidth={1.9}
+      />
+
+      <span className="truncate">
+        {children}
+      </span>
+    </span>
+  );
+}
+
+function KnowledgeAIConfidence({
+  confidence,
+}: {
+  confidence?: number | null;
+}) {
+  if (
+    confidence === null ||
+    confidence === undefined
+  ) {
+    return null;
+  }
+
+  const percentage =
+    confidence <= 1
+      ? Math.round(confidence * 100)
+      : Math.round(confidence);
+
+  const normalizedPercentage = Math.min(
+    100,
+    Math.max(0, percentage),
+  );
+
+  return (
+    <span className="whitespace-nowrap text-[10px] font-semibold text-[#00A86B]">
+      IA {normalizedPercentage}%
+    </span>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                    SHELL                                   */
+/* -------------------------------------------------------------------------- */
 
 type ShellProps = {
   selected: boolean;
   draggable: boolean;
   isDropTarget: boolean;
   onClick: () => void;
-  onDragStart?: (event: DragEvent<HTMLElement>) => void;
-  onDragEnd?: (event: DragEvent<HTMLElement>) => void;
-  onDragOver?: (event: DragEvent<HTMLElement>) => void;
-  onDragLeave?: (event: DragEvent<HTMLElement>) => void;
-  onDrop?: (event: DragEvent<HTMLElement>) => void;
+  onDragStart?: (
+    event: DragEvent<HTMLElement>,
+  ) => void;
+  onDragEnd?: (
+    event: DragEvent<HTMLElement>,
+  ) => void;
+  onDragOver?: (
+    event: DragEvent<HTMLElement>,
+  ) => void;
+  onDragLeave?: (
+    event: DragEvent<HTMLElement>,
+  ) => void;
+  onDrop?: (
+    event: DragEvent<HTMLElement>,
+  ) => void;
   selectionControl: ReactNode;
   menu: ReactNode;
-  preview: ReactNode;
+  icon: ReactNode;
   title: ReactNode;
-  leftMeta: ReactNode;
-  rightMeta: ReactNode;
+  description?: ReactNode;
+  badges?: ReactNode;
+  footerLeft?: ReactNode;
+  footerRight?: ReactNode;
 };
 
 function KnowledgeItemCardShell({
@@ -358,26 +538,13 @@ function KnowledgeItemCardShell({
   onDrop,
   selectionControl,
   menu,
-  preview,
+  icon,
   title,
-  leftMeta,
-  rightMeta,
+  description,
+  badges,
+  footerLeft,
+  footerRight,
 }: ShellProps) {
-  const cardClassName = [
-    "group h-[280px] min-w-0 overflow-hidden",
-    "bg-transparent shadow-none",
-
-    isDropTarget
-      ? "!border-blue-400 bg-blue-50/40"
-      : "",
-
-    selected && !isDropTarget
-      ? "!border-blue-300 bg-blue-50/20"
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
   function handleOpen() {
     onClick();
   }
@@ -397,82 +564,72 @@ function KnowledgeItemCardShell({
   return (
     <AppGridCard
       draggable={draggable}
-      className={cardClassName}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
+      className={[
+        "group relative flex w-full min-w-0 flex-col overflow-hidden",
+        "rounded-xl border border-slate-200/90 bg-white",
+        "transition-[border-color,background-color] duration-150",
+        "hover:!border-[#0A58FF]/35",
+        isDropTarget
+          ? "!border-[#0A58FF] bg-[#0A58FF]/[0.025]"
+          : "",
+        selected &&
+        !isDropTarget
+          ? "!border-[#0A58FF]/60 bg-[#0A58FF]/[0.025]"
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
-      <div className="flex h-full min-h-0 flex-col p-4">
-        {/* HEADER: controles independientes de la apertura */}
-        <header className="flex h-8 shrink-0 items-center justify-between">
-          <div
-            className={[
-              "flex h-7 w-7 shrink-0 items-center justify-center",
-              "transition-opacity duration-200",
-              selected
-                ? "opacity-100"
-                : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
-            ].join(" ")}
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-          >
-            {selectionControl}
-          </div>
-
-          <div
-            className={[
-              "flex h-7 w-7 shrink-0 items-center justify-center",
-              "[&_button]:!border-0",
-              "[&_button]:!bg-transparent",
-              "[&_button]:!shadow-none",
-              "[&_button]:!ring-0",
-              "[&_button]:!ring-offset-0",
-            ].join(" ")}
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-          >
-            {menu}
-          </div>
-        </header>
-
-        {/* BODY + FOOTER: zona de apertura */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={handleOpen}
-          onKeyDown={handleOpenKeyDown}
-          className={[
-            "group/open flex min-h-0 flex-1 flex-col",
-            "cursor-pointer rounded-md outline-none",
-            "focus-visible:ring-2 focus-visible:ring-[#0A58FF]",
-            "focus-visible:ring-offset-2",
-          ].join(" ")}
-        >
-          <div className="flex h-[124px] shrink-0 items-center justify-center">
-            {preview}
-          </div>
-
-          <footer className="flex min-h-0 flex-1 flex-col pt-2">
-            <div className="min-w-0 [&_h2]:transition-colors [&_h2]:duration-200 group-hover/open:[&_h2]:text-[#0A58FF] group-focus-visible/open:[&_h2]:text-[#0A58FF]">
-              {title}
-            </div>
-
-            <div className="mt-auto flex min-w-0 items-end justify-between gap-2 text-xs text-muted-foreground">
-              <div className="min-w-0 flex-1">
-                {leftMeta}
-              </div>
-
-              <div className="shrink-0 text-right">
-                {rightMeta}
-              </div>
-            </div>
-          </footer>
-        </div>
+      {/* Selección */}
+      <div
+        className={[
+          "absolute left-2.5 top-2.5 z-20",
+          "transition-opacity duration-150",
+          selected
+            ? "opacity-100"
+            : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+        ].join(" ")}
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+      >
+        {selectionControl}
       </div>
+
+      {/* Menú */}
+      <div
+        className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center [&_button]:!border-0 [&_button]:!bg-transparent [&_button]:!shadow-none [&_button]:!ring-0 [&_button]:!ring-offset-0"
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+      >
+        {menu}
+      </div>
+
+<div
+  role="button"
+  tabIndex={0}
+  onClick={handleOpen}
+  onKeyDown={handleOpenKeyDown}
+  className="group/open flex h-full min-h-0 min-w-0 flex-1 cursor-pointer flex-col px-3.5 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0A58FF]/35"
+>
+  <KnowledgeItemCardBody
+    icon={icon}
+    title={title}
+    description={description}
+    badges={badges}
+  />
+
+  <KnowledgeItemCardFooter
+    left={footerLeft}
+    right={footerRight}
+  />
+</div>
     </AppGridCard>
   );
 }

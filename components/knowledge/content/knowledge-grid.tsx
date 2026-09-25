@@ -57,7 +57,7 @@ export function KnowledgeGrid({
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+    <div className="grid h-full min-h-0 auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {knowledgeSources.map((knowledge) => (
         <KnowledgeItemCard
           key={knowledge.id}
