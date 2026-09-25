@@ -1,55 +1,36 @@
+// components/knowledge/content/knowledge-explorer.tsx
+
 "use client";
 
 import {
   useState,
   type DragEvent,
 } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Clock,
   FileStack,
-  FileText,
-  Folder,
-  FolderTree,
   FileSearch,
+  FolderTree,
   UsersRound,
 } from "lucide-react";
 
 import { KnowledgeEmptyState } from "./knowledge-empty-state";
 import { KnowledgeEmptyFolder } from "./knowledge-empty-folder";
-import { moveKnowledgeLibrary } from "@/lib/actions/knowledge-library.actions";
 import { KnowledgeItemCard } from "./cards/knowledge-item-card";
+import {
+  KnowledgeList,
+  type KnowledgeListFolder,
+  type KnowledgeListSource,
+} from "./knowledge-list";
 
-type KnowledgeLibrary = {
-  id: string;
-  parent_id: string | null;
-  name: string;
-  is_shared?: boolean;
-  created_at?: Date | string | null;
-  updated_at?: Date | string | null;
-  article_count?: number;
-  folder_count?: number;
-  file_count?: number;
-};
+import { moveKnowledgeLibrary } from "@/lib/actions/knowledge-library.actions";
 
-type KnowledgeSource = {
-  id: string;
-  title: string;
-  description?: string | null;
-  content?: string | null;
-  summary?: string | null;
-  language?: string | null;
-  domain?: string | null;
-  level?: string | null;
-  tags?: unknown;
-  status?: string | null;
-  visibility?: string | null;
-  updated_at?: Date | string | null;
-  knowledge_type?: string | null;
-  confidence?: number | null;
-};
+type KnowledgeLibrary =
+  KnowledgeListFolder;
+
+type KnowledgeSource =
+  KnowledgeListSource;
 
 type DraggedItem =
   | {
@@ -72,99 +53,21 @@ type Props = {
   selectedFolderIds: Set<string>;
   onUploadRequested?: () => void;
   onUploadFolderRequested?: () => void;
-onCreateFolderRequested?: () => void;
-onFilesDropped?: (files: File[]) => void;
+  onCreateFolderRequested?: () => void;
+  onFilesDropped?: (
+    files: File[],
+  ) => void;
 
-onArticleSelectedChange: (
-  id: string,
-  selected: boolean,
-) => void;
+  onArticleSelectedChange: (
+    id: string,
+    selected: boolean,
+  ) => void;
 
-onFolderSelectedChange: (
-  id: string,
-  selected: boolean,
-) => void;
+  onFolderSelectedChange: (
+    id: string,
+    selected: boolean,
+  ) => void;
 };
-
-function getStatusLabel(status: string | null | undefined) {
-  if (status === "ready" || status === "processed") {
-    return "IA procesada";
-  }
-
-  if (status === "processing") {
-    return "Procesando";
-  }
-
-  if (status === "error") {
-    return "Error";
-  }
-
-  return "Borrador";
-}
-
-function getSummary(knowledge: KnowledgeSource) {
-  return (
-    knowledge.summary?.trim() ||
-    knowledge.description?.trim() ||
-    knowledge.content?.trim() ||
-    ""
-  );
-}
-
-function formatRelativeDate(
-  date: Date | string | null | undefined,
-) {
-  if (!date) {
-    return "Sin fecha";
-  }
-
-  const timestamp = new Date(date).getTime();
-
-  const diffMinutes = Math.max(
-    1,
-    Math.floor((Date.now() - timestamp) / 60000),
-  );
-
-  if (diffMinutes < 60) {
-    return `Hace ${diffMinutes} min`;
-  }
-
-  const diffHours = Math.floor(diffMinutes / 60);
-
-  if (diffHours < 24) {
-    return `Hace ${diffHours} h`;
-  }
-
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffDays < 30) {
-    return `Hace ${diffDays} días`;
-  }
-
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(date));
-}
-
-function getFolderIcon(folder: KnowledgeLibrary) {
-  if (folder.is_shared) {
-    return (
-      <UsersRound
-        className="h-5 w-5 text-brand"
-        strokeWidth={2.25}
-      />
-    );
-  }
-
-  return (
-    <Folder
-      className="h-5 w-5"
-      strokeWidth={2.25}
-    />
-  );
-}
 
 export function KnowledgeExplorer({
   folders,
@@ -174,23 +77,26 @@ export function KnowledgeExplorer({
   selectedView,
   search,
   selectedArticleIds,
-selectedFolderIds,
-onUploadRequested,
-onArticleSelectedChange,
-onFolderSelectedChange,
-onUploadFolderRequested,
-onCreateFolderRequested,
-onFilesDropped,
+  selectedFolderIds,
+  onUploadRequested,
+  onArticleSelectedChange,
+  onFolderSelectedChange,
+  onUploadFolderRequested,
+  onCreateFolderRequested,
+  onFilesDropped,
 }: Props) {
   const router = useRouter();
 
   const [draggedItem, setDraggedItem] =
     useState<DraggedItem | null>(null);
 
-  const [dropTargetFolderId, setDropTargetFolderId] =
-    useState<string | null>(null);
+  const [
+    dropTargetFolderId,
+    setDropTargetFolderId,
+  ] = useState<string | null>(null);
 
-  const [isMoving, setIsMoving] = useState(false);
+  const [isMoving, setIsMoving] =
+    useState(false);
 
   const isSearchEmpty =
     search.trim().length > 0 &&
@@ -213,7 +119,9 @@ onFilesDropped,
     setDraggedItem(item);
     setDropTargetFolderId(null);
 
-    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.effectAllowed =
+      "move";
+
     event.dataTransfer.setData(
       "application/x-knowledge-item",
       JSON.stringify(item),
@@ -224,7 +132,11 @@ onFilesDropped,
     folder: KnowledgeLibrary,
     event: DragEvent<HTMLElement>,
   ) {
-    if (!draggedItem || folder.is_shared || isMoving) {
+    if (
+      !draggedItem ||
+      folder.is_shared ||
+      isMoving
+    ) {
       return;
     }
 
@@ -238,24 +150,33 @@ onFilesDropped,
     event.preventDefault();
     event.stopPropagation();
 
-    event.dataTransfer.dropEffect = "move";
-    setDropTargetFolderId(folder.id);
+    event.dataTransfer.dropEffect =
+      "move";
+
+    setDropTargetFolderId(
+      folder.id,
+    );
   }
 
   function handleDragLeaveFolder(
     folderId: string,
     event: DragEvent<HTMLElement>,
   ) {
-    const nextTarget = event.relatedTarget;
+    const nextTarget =
+      event.relatedTarget;
 
     if (
       nextTarget instanceof Node &&
-      event.currentTarget.contains(nextTarget)
+      event.currentTarget.contains(
+        nextTarget,
+      )
     ) {
       return;
     }
 
-    if (dropTargetFolderId === folderId) {
+    if (
+      dropTargetFolderId === folderId
+    ) {
       setDropTargetFolderId(null);
     }
   }
@@ -267,7 +188,10 @@ onFilesDropped,
     event.preventDefault();
     event.stopPropagation();
 
-    if (folder.is_shared || isMoving) {
+    if (
+      folder.is_shared ||
+      isMoving
+    ) {
       clearDragState();
       return;
     }
@@ -275,12 +199,15 @@ onFilesDropped,
     let item = draggedItem;
 
     if (!item) {
-      const rawItem = event.dataTransfer.getData(
-        "application/x-knowledge-item",
-      );
+      const rawItem =
+        event.dataTransfer.getData(
+          "application/x-knowledge-item",
+        );
 
       if (rawItem) {
-        item = JSON.parse(rawItem) as DraggedItem;
+        item = JSON.parse(
+          rawItem,
+        ) as DraggedItem;
       }
     }
 
@@ -311,7 +238,8 @@ onFilesDropped,
           {
             method: "PATCH",
             headers: {
-              "Content-Type": "application/json",
+              "Content-Type":
+                "application/json",
             },
             body: JSON.stringify({
               knowledgeId: item.id,
@@ -340,10 +268,13 @@ onFilesDropped,
     } catch (error) {
       console.error(error);
 
-      toast.error("No se ha podido mover", {
-        description:
-          "Ha ocurrido un error al mover el elemento.",
-      });
+      toast.error(
+        "No se ha podido mover",
+        {
+          description:
+            "Ha ocurrido un error al mover el elemento.",
+        },
+      );
     } finally {
       setIsMoving(false);
       clearDragState();
@@ -353,7 +284,9 @@ onFilesDropped,
   if (isSearchEmpty) {
     return (
       <KnowledgeEmptyState
-        icon={<FileSearch className="h-5 w-5" />}
+        icon={
+          <FileSearch className="h-5 w-5" />
+        }
         title="No se han encontrado resultados"
         description="Knowledge te ayuda a encontrar documentacion y articulos autorizados. Prueba con otro termino o elimina filtros para ampliar la busqueda."
       />
@@ -364,192 +297,100 @@ onFilesDropped,
     if (selectedView === "shared") {
       return (
         <KnowledgeEmptyState
-          icon={<UsersRound className="h-5 w-5" />}
+          icon={
+            <UsersRound className="h-5 w-5" />
+          }
           title="Todavía no tienes contenido compartido"
           description="Aqui apareceran carpetas que otros equipos compartan contigo para trabajar con conocimiento comun."
         />
       );
     }
 
-if (selectedLibraryId) {
-  return (
-    <KnowledgeEmptyFolder
-      onUploadFiles={() => onUploadRequested?.()}
-      onUploadFolder={() => onUploadFolderRequested?.()}
-      onCreateFolder={() => onCreateFolderRequested?.()}
-      onFilesDropped={(files) => onFilesDropped?.(files)}
-    />
-  );
-}
+    if (selectedLibraryId) {
+      return (
+        <KnowledgeEmptyFolder
+          onUploadFiles={() =>
+            onUploadRequested?.()
+          }
+          onUploadFolder={() =>
+            onUploadFolderRequested?.()
+          }
+          onCreateFolder={() =>
+            onCreateFolderRequested?.()
+          }
+          onFilesDropped={(files) =>
+            onFilesDropped?.(files)
+          }
+        />
+      );
+    }
 
     return (
       <KnowledgeEmptyState
-        icon={<FolderTree className="h-5 w-5" />}
+        icon={
+          <FolderTree className="h-5 w-5" />
+        }
         title="Tu biblioteca está vacía"
         description="Centraliza documentacion para que el asistente pueda trabajar con el conocimiento de tu organizacion."
         actionLabel="Subir documentacion"
-        actionIcon={<FileStack className="h-4 w-4" />}
-        onAction={onUploadRequested}
+        actionIcon={
+          <FileStack className="h-4 w-4" />
+        }
+        onAction={
+          onUploadRequested
+        }
       />
     );
   }
 
   if (viewMode === "list") {
     return (
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="grid grid-cols-[minmax(260px,1fr)_180px_140px_150px] border-b border-border px-4 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          <div>Nombre</div>
-          <div>Contenido</div>
-          <div>Tipo</div>
-          <div>Actualización</div>
-        </div>
-
-        <div className="divide-y divide-border">
-          {folders.map((folder) => (
-            <div
-              key={folder.id}
-              draggable={
-                !folder.is_shared &&
-                !isMoving
-              }
-              onDragStart={(event) =>
-                handleDragStart(
-                  {
-                    type: "folder",
-                    id: folder.id,
-                  },
-                  event,
-                )
-              }
-              onDragEnd={clearDragState}
-              onDragOver={(event) =>
-                handleDragOverFolder(
-                  folder,
-                  event,
-                )
-              }
-              onDragLeave={(event) =>
-                handleDragLeaveFolder(
-                  folder.id,
-                  event,
-                )
-              }
-              onDrop={(event) =>
-                handleDropOnFolder(
-                  folder,
-                  event,
-                )
-              }
-              className={[
-                "transition",
-                dropTargetFolderId === folder.id
-                  ? "bg-primary/10"
-                  : "",
-              ].join(" ")}
-            >
-              <Link
-                href={`/knowledge?library=${folder.id}`}
-                className="grid grid-cols-[minmax(260px,1fr)_180px_140px_150px] items-center px-4 py-3 text-sm hover:bg-surface"
-              >
-                <div className="flex min-w-0 items-center gap-3 font-medium text-foreground">
-                  {getFolderIcon(folder)}
-                  <span className="truncate">
-                    {folder.name}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <FileText className="h-3.5 w-3.5" />
-                    {folder.article_count ?? 0}
-                  </span>
-
-                  <span className="flex items-center gap-1">
-                    <FileStack className="h-3.5 w-3.5" />
-                    {folder.file_count ?? 0}
-                  </span>
-
-                  <span className="flex items-center gap-1">
-                    <FolderTree className="h-3.5 w-3.5" />
-                    {folder.folder_count ?? 0}
-                  </span>
-                </div>
-
-                <div className="text-muted-foreground">
-                  {folder.is_shared
-                    ? "Compartida"
-                    : "Carpeta"}
-                </div>
-
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" />
-                  {formatRelativeDate(
-                    folder.updated_at,
-                  )}
-                </div>
-              </Link>
-            </div>
-          ))}
-
-          {knowledgeSources.map((knowledge) => (
-            <div
-              key={knowledge.id}
-              draggable={!isMoving}
-              onDragStart={(event) =>
-                handleDragStart(
-                  {
-                    type: "article",
-                    id: knowledge.id,
-                  },
-                  event,
-                )
-              }
-              onDragEnd={clearDragState}
-            >
-              <Link
-                href={`/knowledge/${knowledge.id}`}
-                className="grid grid-cols-[minmax(260px,1fr)_180px_140px_150px] items-center px-4 py-3 text-sm hover:bg-surface"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <FileText
-                    className="h-5 w-5 shrink-0 text-muted-foreground"
-                    strokeWidth={2.25}
-                  />
-
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-foreground">
-                      {knowledge.title}
-                    </p>
-
-                    {getSummary(knowledge) ? (
-                      <p className="truncate text-xs text-muted-foreground">
-                        {getSummary(knowledge)}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="truncate text-muted-foreground">
-                  {knowledge.domain ?? "—"}
-                </div>
-
-                <div className="text-muted-foreground">
-                  {getStatusLabel(
-                    knowledge.status,
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" />
-                  {formatRelativeDate(
-                    knowledge.updated_at,
-                  )}
-                </div>
-              </Link>
-            </div>
-          ))}
-        </div>
-      </div>
+      <KnowledgeList
+        folders={folders}
+        knowledgeSources={
+          knowledgeSources
+        }
+        isMoving={isMoving}
+        dropTargetFolderId={
+          dropTargetFolderId
+        }
+        onFolderDragStart={(
+          folder,
+          event,
+        ) =>
+          handleDragStart(
+            {
+              type: "folder",
+              id: folder.id,
+            },
+            event,
+          )
+        }
+        onArticleDragStart={(
+          knowledge,
+          event,
+        ) =>
+          handleDragStart(
+            {
+              type: "article",
+              id: knowledge.id,
+            },
+            event,
+          )
+        }
+        onDragEnd={
+          clearDragState
+        }
+        onFolderDragOver={
+          handleDragOverFolder
+        }
+        onFolderDragLeave={
+          handleDragLeaveFolder
+        }
+        onFolderDrop={
+          handleDropOnFolder
+        }
+      />
     );
   }
 
@@ -560,19 +401,26 @@ if (selectedLibraryId) {
           key={folder.id}
           itemType="folder"
           folder={folder}
-          selected={selectedFolderIds.has(folder.id)}
-onSelectedChange={(selected) =>
-  onFolderSelectedChange(
-    folder.id,
-    selected,
-  )
-}
+          selected={
+            selectedFolderIds.has(
+              folder.id,
+            )
+          }
+          onSelectedChange={(
+            selected,
+          ) =>
+            onFolderSelectedChange(
+              folder.id,
+              selected,
+            )
+          }
           draggable={
             !folder.is_shared &&
             !isMoving
           }
           isDropTarget={
-            dropTargetFolderId === folder.id
+            dropTargetFolderId ===
+            folder.id
           }
           onDragStart={(event) =>
             handleDragStart(
@@ -583,7 +431,9 @@ onSelectedChange={(selected) =>
               event,
             )
           }
-          onDragEnd={clearDragState}
+          onDragEnd={
+            clearDragState
+          }
           onDragOver={(event) =>
             handleDragOverFolder(
               folder,
@@ -605,35 +455,41 @@ onSelectedChange={(selected) =>
         />
       ))}
 
-{knowledgeSources.map((knowledge) => (
-  <KnowledgeItemCard
-    key={knowledge.id}
-    itemType="article"
-    knowledge={knowledge}
-
-    selected={selectedArticleIds.has(
-      knowledge.id,
-    )}
-    onSelectedChange={(selected) =>
-      onArticleSelectedChange(
-        knowledge.id,
-        selected,
-      )
-    }
-
-    draggable={!isMoving}
-    onDragStart={(event) =>
-      handleDragStart(
-        {
-          type: "article",
-          id: knowledge.id,
-        },
-        event,
-      )
-    }
-    onDragEnd={clearDragState}
-  />
-))}
+      {knowledgeSources.map(
+        (knowledge) => (
+          <KnowledgeItemCard
+            key={knowledge.id}
+            itemType="article"
+            knowledge={knowledge}
+            selected={
+              selectedArticleIds.has(
+                knowledge.id,
+              )
+            }
+            onSelectedChange={(
+              selected,
+            ) =>
+              onArticleSelectedChange(
+                knowledge.id,
+                selected,
+              )
+            }
+            draggable={!isMoving}
+            onDragStart={(event) =>
+              handleDragStart(
+                {
+                  type: "article",
+                  id: knowledge.id,
+                },
+                event,
+              )
+            }
+            onDragEnd={
+              clearDragState
+            }
+          />
+        ),
+      )}
     </div>
   );
 }
