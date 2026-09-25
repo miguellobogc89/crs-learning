@@ -32,10 +32,10 @@ const PROCEDURE_STYLE: KnowledgeTypeVisualStyle = {
 const MANUAL_STYLE: KnowledgeTypeVisualStyle = {
   label: "Manual",
   Icon: BookOpen,
-  iconClassName: "text-[#7047EB]",
-  iconBackgroundClassName: "bg-[#7047EB]/10",
+  iconClassName: "text-[#FF4D4F]",
+  iconBackgroundClassName: "bg-[#FFE7E5]",
   badgeClassName:
-    "border-[#7047EB]/25 bg-[#7047EB]/10 text-[#6038D4]",
+    "border-[#FF6B63] bg-[#FFF0EE] text-[#E23D3F]",
 };
 
 const DIAGRAM_STYLE: KnowledgeTypeVisualStyle = {

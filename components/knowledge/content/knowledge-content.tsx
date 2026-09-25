@@ -613,41 +613,48 @@ export function KnowledgeContent({
         </div>
 
         {/* Única zona con scroll: carpetas y documentos */}
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 sm:px-6 sm:pb-6">
-          <KnowledgeExplorer
-            folders={paginatedItems.folders}
-            knowledgeSources={
-              paginatedItems.knowledgeSources
-            }
-            viewMode={explorerState.viewMode}
-            selectedLibraryId={selectedLibraryId}
-            selectedView={selectedView}
-            search={explorerState.search}
-            selectedArticleIds={selectedArticleIds}
-            selectedFolderIds={selectedFolderIds}
-            onUploadRequested={() =>
-              handleUpload("files")
-            }
-            onArticleSelectedChange={
-              toggleArticleSelection
-            }
-            onFolderSelectedChange={
-              toggleFolderSelection
-            }
-            onUploadFolderRequested={() => handleUpload("folder")}
-            onCreateFolderRequested={() => {
-              if (!currentFolderId) {
-                window.alert(
-                  "No se ha encontrado la carpeta actual. Recarga la página antes de crear una carpeta.",
-                );
-                return;
-              }
+<div className="min-h-0 min-w-0 flex-1 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6">
+<div
+  key={currentPage}
+  className="h-full min-h-0 animate-[knowledge-page-in_180ms_ease-out]"
+>
+  <KnowledgeExplorer
+    folders={paginatedItems.folders}
+    knowledgeSources={
+      paginatedItems.knowledgeSources
+    }
+    viewMode={explorerState.viewMode}
+    selectedLibraryId={selectedLibraryId}
+    selectedView={selectedView}
+    search={explorerState.search}
+    selectedArticleIds={selectedArticleIds}
+    selectedFolderIds={selectedFolderIds}
+    onUploadRequested={() =>
+      handleUpload("files")
+    }
+    onArticleSelectedChange={
+      toggleArticleSelection
+    }
+    onFolderSelectedChange={
+      toggleFolderSelection
+    }
+    onUploadFolderRequested={() =>
+      handleUpload("folder")
+    }
+    onCreateFolderRequested={() => {
+      if (!currentFolderId) {
+        window.alert(
+          "No se ha encontrado la carpeta actual. Recarga la página antes de crear una carpeta.",
+        );
+        return;
+      }
 
-              setIsCreateFolderOpen(true);
-            }}
-            onFilesDropped={handleDroppedFiles}
-          />
-        </div>
+      setIsCreateFolderOpen(true);
+    }}
+    onFilesDropped={handleDroppedFiles}
+  />
+</div>
+</div>
 
         {/* Paginación fija en el pie de la card */}
         <div className="shrink-0 border-t border-slate-100">

@@ -554,7 +554,7 @@ if (selectedLibraryId) {
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+    <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[repeat(12,minmax(0,1fr))] gap-4 sm:grid-cols-2 sm:grid-rows-[repeat(6,minmax(0,1fr))] xl:grid-cols-3 xl:grid-rows-[repeat(4,minmax(0,1fr))] 2xl:grid-cols-4 2xl:grid-rows-[repeat(3,minmax(0,1fr))]">
       {folders.map((folder) => (
         <KnowledgeItemCard
           key={folder.id}

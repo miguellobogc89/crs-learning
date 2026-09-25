@@ -207,14 +207,24 @@ function KnowledgeFolderItemCard({
           }
         />
       }
-      icon={
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#0A58FF]/8 text-[#0A58FF]">
-          <Folder
-            className="h-[18px] w-[18px]"
-            strokeWidth={2}
-          />
-        </div>
-      }
+icon={
+  <div
+    className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-[#E3ECFF] text-[#0057FF]"
+    style={{
+      width: "64px",
+      height: "64px",
+      minWidth: "64px",
+      minHeight: "64px",
+    }}
+  >
+    <Folder
+      className="size-8"
+      width={32}
+      height={32}
+      strokeWidth={2.2}
+    />
+  </div>
+}
       title={
         actions.isRenaming ? (
           <div
@@ -273,7 +283,7 @@ function KnowledgeFolderItemCard({
         ) : (
           <h2
             title={folder.name}
-            className="truncate text-[13px] font-semibold leading-[18px] tracking-[-0.01em] text-slate-950 transition-colors duration-150 group-hover/open:text-[#0A58FF]"
+            className="truncate text-[13px] font-semibold leading-[18px] tracking-[-0.01em] text-slate-950 "
           >
             {folder.name}
           </h2>
@@ -386,24 +396,32 @@ function KnowledgeArticleItemCard({
           }
         />
       }
-      icon={
-        <div
-          className={[
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]",
-            typeStyle.iconBackgroundClassName,
-            typeStyle.iconClassName,
-          ].join(" ")}
-        >
-          <TypeIcon
-            className="h-[18px] w-[18px]"
-            strokeWidth={2}
-          />
-        </div>
-      }
+icon={
+  <div
+    className={[
+      "flex size-16 shrink-0 items-center justify-center rounded-2xl",
+      typeStyle.iconBackgroundClassName,
+      typeStyle.iconClassName,
+    ].join(" ")}
+    style={{
+      width: "64px",
+      height: "64px",
+      minWidth: "64px",
+      minHeight: "64px",
+    }}
+  >
+    <TypeIcon
+      className="size-8"
+      width={32}
+      height={32}
+      strokeWidth={2.2}
+    />
+  </div>
+}
       title={
         <h2
           title={knowledge.title}
-          className="truncate text-[13px] font-semibold leading-[18px] tracking-[-0.01em] text-slate-950 transition-colors duration-150 group-hover/open:text-[#0A58FF]"
+          className="truncate text-[13px] font-semibold leading-[18px] tracking-[-0.01em] text-slate-950 "
         >
           {knowledge.title}
         </h2>
@@ -588,7 +606,7 @@ function KnowledgeItemCardShell({
       {/* Selección */}
       <div
         className={[
-          "absolute left-2.5 top-2.5 z-20",
+          "absolute left-3 top-3 z-20",
           "transition-opacity duration-150",
           selected
             ? "opacity-100"
