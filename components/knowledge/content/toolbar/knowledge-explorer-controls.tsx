@@ -1,4 +1,5 @@
 // components/knowledge/content/toolbar/knowledge-explorer-controls.tsx
+
 "use client";
 
 import {
@@ -11,13 +12,13 @@ import {
   FileText,
   Filter,
   Folder,
+  FolderInput,
   Grid2X2,
   List,
   ListFilter,
   LoaderCircle,
-  Sparkles,
-  FolderInput,
   Share2,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -103,6 +104,12 @@ export function KnowledgeExplorerControls({
     });
   }
 
+  const toolbarButtonClassName =
+    "inline-flex h-10 items-center gap-2 rounded-xl border-0 bg-white px-3.5 text-sm font-medium text-slate-700 shadow-none outline-none transition-colors duration-150 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
+
+  const selectionButtonClassName =
+    "inline-flex h-10 w-10 items-center justify-center rounded-xl border-0 bg-white text-slate-600 shadow-none outline-none transition-colors duration-150 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
+
   return (
     <div className="flex flex-col gap-3 py-3 lg:flex-row lg:items-center">
       <SearchInput
@@ -121,25 +128,22 @@ export function KnowledgeExplorerControls({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className={[
-                "inline-flex h-10 items-center gap-2 rounded-xl border px-3.5 text-sm font-medium outline-none transition",
-                "focus-visible:ring-4 focus-visible:ring-primary/10",
-                activeFilterCount > 0
-                  ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                  : "border-border bg-background text-foreground hover:bg-muted",
-              ].join(" ")}
+              className={toolbarButtonClassName}
             >
-              <Filter className="h-4 w-4" strokeWidth={2.25} />
+              <Filter
+                className="h-4 w-4"
+                strokeWidth={2.25}
+              />
 
-              Filtrar
+              <span>Filtrar</span>
 
               {activeFilterCount > 0 ? (
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 text-[11px] font-semibold text-white">
                   {activeFilterCount}
                 </span>
               ) : null}
 
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-4 w-4 text-slate-400" />
             </button>
           </DropdownMenuTrigger>
 
@@ -159,7 +163,7 @@ export function KnowledgeExplorerControls({
                     event.preventDefault();
                     resetFilters();
                   }}
-                  className="text-xs font-medium text-primary hover:underline"
+                  className="text-xs font-medium text-slate-700 transition-colors hover:text-slate-950 hover:underline"
                 >
                   Limpiar
                 </button>
@@ -242,14 +246,14 @@ export function KnowledgeExplorerControls({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="inline-flex h-10 min-w-40 items-center justify-between gap-2 rounded-xl border border-border bg-background px-3.5 text-sm font-medium text-foreground outline-none transition hover:bg-muted focus-visible:ring-4 focus-visible:ring-primary/10"
+              className={`${toolbarButtonClassName} min-w-40 justify-between`}
             >
               <span className="flex items-center gap-2">
                 {getSortIcon(explorerState.sort)}
                 {sortLabels[explorerState.sort]}
               </span>
 
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-4 w-4 text-slate-400" />
             </button>
           </DropdownMenuTrigger>
 
@@ -294,7 +298,7 @@ export function KnowledgeExplorerControls({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div className="ml-1 flex h-10 items-center rounded-xl border border-border bg-background p-1">
+        <div className="ml-1 flex h-10 items-center rounded-xl border-0 bg-white p-1 shadow-none">
           <button
             type="button"
             onClick={() => {
@@ -303,15 +307,19 @@ export function KnowledgeExplorerControls({
               });
             }}
             className={[
-              "inline-flex h-8 w-8 items-center justify-center rounded-lg transition",
+              "inline-flex h-8 w-8 items-center justify-center rounded-lg border-0 shadow-none outline-none transition-colors duration-150",
+              "focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
               explorerState.viewMode === "grid"
-                ? "bg-muted text-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                ? "bg-slate-100 text-slate-950"
+                : "bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-700",
             ].join(" ")}
             title="Vista de tarjetas"
             aria-label="Vista de tarjetas"
           >
-            <Grid2X2 className="h-4 w-4" strokeWidth={2.25} />
+            <Grid2X2
+              className="h-4 w-4"
+              strokeWidth={2.25}
+            />
           </button>
 
           <button
@@ -322,26 +330,67 @@ export function KnowledgeExplorerControls({
               });
             }}
             className={[
-              "inline-flex h-8 w-8 items-center justify-center rounded-lg transition",
+              "inline-flex h-8 w-8 items-center justify-center rounded-lg border-0 shadow-none outline-none transition-colors duration-150",
+              "focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
               explorerState.viewMode === "list"
-                ? "bg-muted text-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                ? "bg-slate-100 text-slate-950"
+                : "bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-700",
             ].join(" ")}
             title="Vista de lista"
             aria-label="Vista de lista"
           >
-            <List className="h-4 w-4" strokeWidth={2.25} />
+            <List
+              className="h-4 w-4"
+              strokeWidth={2.25}
+            />
           </button>
         </div>
-        {selectedCount > 0 && (
+
+        {selectedCount > 0 ? (
           <>
-            <div className="mx-1 h-6 w-px bg-border" />
-            <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted" onClick={onMoveSelection}><FolderInput className="h-4 w-4" /></button>
-            <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted" onClick={onShareSelection}><Share2 className="h-4 w-4" /></button>
-            <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted" onClick={onDeleteSelection}><Trash2 className="h-4 w-4 text-destructive" /></button>
-            <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-background hover:bg-muted" onClick={onClearSelection}><X className="h-4 w-4" /></button>
+            <div className="mx-1 h-6 w-px bg-slate-200" />
+
+            <button
+              type="button"
+              className={selectionButtonClassName}
+              onClick={onMoveSelection}
+              title="Mover selección"
+              aria-label="Mover selección"
+            >
+              <FolderInput className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              className={selectionButtonClassName}
+              onClick={onShareSelection}
+              title="Compartir selección"
+              aria-label="Compartir selección"
+            >
+              <Share2 className="h-4 w-4" />
+            </button>
+
+            <button
+              type="button"
+              className={selectionButtonClassName}
+              onClick={onDeleteSelection}
+              title="Eliminar selección"
+              aria-label="Eliminar selección"
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </button>
+
+            <button
+              type="button"
+              className={selectionButtonClassName}
+              onClick={onClearSelection}
+              title="Limpiar selección"
+              aria-label="Limpiar selección"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </>
-        )}
+        ) : null}
       </div>
     </div>
   );
