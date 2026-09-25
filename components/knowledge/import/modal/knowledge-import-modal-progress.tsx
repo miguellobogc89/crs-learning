@@ -1,4 +1,5 @@
 // components/knowledge/import/modal/knowledge-import-modal-progress.tsx
+
 "use client";
 
 import {
@@ -34,7 +35,7 @@ const STEPS: StepConfig[] = [
   {
     id: "upload",
     label: "Documentos",
-    description: "Selección de archivos",
+    description: "Selección",
     icon: FileStack,
   },
   {
@@ -46,13 +47,13 @@ const STEPS: StepConfig[] = [
   {
     id: "proposal",
     label: "Propuesta",
-    description: "Estructura sugerida",
+    description: "Organización",
     icon: FolderTree,
   },
   {
     id: "completed",
     label: "Resultado",
-    description: "Incorporación final",
+    description: "Incorporación",
     icon: Sparkles,
   },
 ];
@@ -81,21 +82,23 @@ export function KnowledgeImportModalProgress({
   const normalizedStep =
     normalizeStep(currentStep);
 
-  const activeStepIndex = STEPS.findIndex(
-    (step) => step.id === normalizedStep,
-  );
+  const activeStepIndex =
+    STEPS.findIndex(
+      (step) =>
+        step.id === normalizedStep,
+    );
 
   return (
-    <div className="shrink-0 border-y border-border bg-muted/20 px-6 py-4">
-      <div className="relative grid grid-cols-4 gap-4">
+    <div className="shrink-0 border-b border-slate-100 bg-white px-8 py-4">
+      <div className="relative mx-auto grid max-w-[760px] grid-cols-4">
         <div
           aria-hidden="true"
-          className="absolute left-[12.5%] right-[12.5%] top-5 h-px bg-border"
+          className="absolute left-[12.5%] right-[12.5%] top-[17px] h-px bg-slate-200"
         />
 
         <div
           aria-hidden="true"
-          className="absolute left-[12.5%] top-5 h-px bg-foreground transition-[width] duration-500"
+          className="absolute left-[12.5%] top-[17px] h-px bg-emerald-500 transition-[width] duration-500"
           style={{
             width:
               activeStepIndex === 0
@@ -108,65 +111,78 @@ export function KnowledgeImportModalProgress({
           }}
         />
 
-        {STEPS.map((step, index) => {
-          const Icon = step.icon;
+        {STEPS.map(
+          (step, index) => {
+            const Icon = step.icon;
 
-          const isActive =
-            index === activeStepIndex;
+            const isActive =
+              index ===
+              activeStepIndex;
 
-          const isCompleted =
-            index < activeStepIndex;
+            const isCompleted =
+              index <
+              activeStepIndex;
 
-          return (
-            <div
-              key={step.id}
-              className="relative z-10 flex min-w-0 flex-col items-center text-center"
-            >
+            return (
               <div
-                className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-full border bg-background transition-all duration-300",
-                  isActive &&
-                    "border-sky-500 bg-sky-500 text-white shadow-sm ring-4 ring-sky-500/15",
-                  isCompleted &&
-                    "border-emerald-600 bg-emerald-600 text-white",
-                  !isActive &&
-                    !isCompleted &&
-                    "border-border text-muted-foreground",
-                )}
+                key={step.id}
+                className="relative z-10 flex min-w-0 flex-col items-center text-center"
               >
-                {isCompleted ? (
-                  <Check className="h-4 w-4 stroke-[2.5]" />
-                ) : (
-                  <Icon className="h-4 w-4" />
-                )}
-              </div>
-
-              <div className="mt-2 min-w-0">
-                <p
+                <div
                   className={cn(
-                    "truncate text-xs font-semibold transition-colors",
-                    isActive || isCompleted
-                      ? "text-foreground"
-                      : "text-muted-foreground",
+                    "flex size-[34px] items-center justify-center rounded-full border bg-white transition-all duration-300",
+                    isActive &&
+                      "border-[#0A58FF] bg-[#0A58FF] text-white ring-[5px] ring-[#0A58FF]/10",
+                    isCompleted &&
+                      "border-emerald-500 bg-emerald-500 text-white",
+                    !isActive &&
+                      !isCompleted &&
+                      "border-slate-200 text-slate-400",
                   )}
                 >
-                  {step.label}
-                </p>
-
-                <p
-                  className={cn(
-                    "mt-0.5 hidden truncate text-[11px] sm:block",
-                    isActive
-                      ? "text-muted-foreground"
-                      : "text-muted-foreground/70",
+                  {isCompleted ? (
+                    <Check
+                      className="size-4"
+                      strokeWidth={2.6}
+                    />
+                  ) : (
+                    <Icon
+                      className="size-4"
+                      strokeWidth={2}
+                    />
                   )}
-                >
-                  {step.description}
-                </p>
+                </div>
+
+                <div className="mt-2 min-w-0">
+                  <p
+                    className={cn(
+                      "truncate text-[11px] font-semibold",
+                      isActive ||
+                        isCompleted
+                        ? "text-slate-950"
+                        : "text-slate-400",
+                    )}
+                  >
+                    {step.label}
+                  </p>
+
+                  <p
+                    className={cn(
+                      "mt-0.5 hidden truncate text-[10px] sm:block",
+                      isActive
+                        ? "text-slate-500"
+                        : "text-slate-400",
+                    )}
+                  >
+                    {
+                      step.description
+                    }
+                  </p>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          },
+        )}
       </div>
     </div>
   );

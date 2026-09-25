@@ -1,12 +1,26 @@
 // components/knowledge/import/modal/knowledge-import-modal-header.tsx
 
-import { FolderOpen, Library, Sparkles } from "lucide-react";
-import { DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  FolderOpen,
+  Library,
+  Sparkles,
+} from "lucide-react";
+
+import {
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
 import type { KnowledgeImportContext } from "./knowledge-import-modal.types";
 
-type Props = { context: KnowledgeImportContext };
+type Props = {
+  context: KnowledgeImportContext;
+};
 
-function getContextCopy(context: KnowledgeImportContext) {
+function getContextCopy(
+  context: KnowledgeImportContext,
+) {
   switch (context.origin) {
     case "article":
       return {
@@ -15,6 +29,7 @@ function getContextCopy(context: KnowledgeImportContext) {
         description:
           "La IA evaluará si los documentos enriquecen este artículo o requieren otra ubicación.",
       };
+
     case "folder":
       return {
         icon: FolderOpen,
@@ -22,6 +37,7 @@ function getContextCopy(context: KnowledgeImportContext) {
         description:
           "La carpeta actual será el destino preferente, pero la IA podrá proponer una estructura mejor.",
       };
+
     case "root":
       return {
         icon: Library,
@@ -32,19 +48,30 @@ function getContextCopy(context: KnowledgeImportContext) {
   }
 }
 
-export function KnowledgeImportModalHeader({ context }: Props) {
-  const copy = getContextCopy(context);
+export function KnowledgeImportModalHeader({
+  context,
+}: Props) {
+  const copy =
+    getContextCopy(context);
+
   const Icon = copy.icon;
 
   return (
-    <DialogHeader className="border-b border-border px-6 py-5">
-      <div className="flex items-start gap-3 pr-10">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-900 dark:bg-cyan-950/30 dark:text-cyan-300">
-          <Icon className="h-5 w-5" />
+    <DialogHeader className="shrink-0 border-b border-slate-100 bg-white px-7 py-5">
+      <div className="flex items-center gap-4 pr-10">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-[#E8F1FF] text-[#0A58FF]">
+          <Icon
+            className="size-5"
+            strokeWidth={2.15}
+          />
         </div>
-        <div>
-          <DialogTitle className="text-lg font-semibold">{copy.title}</DialogTitle>
-          <DialogDescription className="mt-1 max-w-2xl leading-6">
+
+        <div className="min-w-0">
+          <DialogTitle className="text-[19px] font-semibold tracking-[-0.02em] text-slate-950">
+            {copy.title}
+          </DialogTitle>
+
+          <DialogDescription className="mt-1 max-w-3xl text-[13px] leading-5 text-slate-500">
             {copy.description}
           </DialogDescription>
         </div>

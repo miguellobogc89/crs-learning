@@ -1,12 +1,8 @@
 // components/knowledge/knowledge-shell.tsx
 
-
-
 import type { ReactNode } from "react";
 
-import {
-  AppSectionShell,
-} from "@/components/app/section-sidebar";
+import { AppSectionShell } from "@/components/app/section-sidebar";
 import { KnowledgeSidebar } from "@/components/knowledge/sidebar/knowledge-sidebar";
 import type { SidebarItem } from "@/components/knowledge/sidebar/types";
 
@@ -29,8 +25,7 @@ export function KnowledgeShell({
     (knowledge) => knowledge.visibility === "public",
   ).length;
 
-  const totalPrivate =
-    knowledgeSources.length - totalPublic;
+  const totalPrivate = knowledgeSources.length - totalPublic;
 
   const sidebarItems: SidebarItem[] = [
     {
@@ -65,6 +60,11 @@ export function KnowledgeShell({
     },
   ];
 
+  const knowledgeSourceLocations = knowledgeSources.map((knowledge) => ({
+    id: knowledge.id,
+    libraryId: knowledge.library_id ?? null,
+  }));
+
   return (
     <AppSectionShell
       sidebar={
@@ -73,6 +73,7 @@ export function KnowledgeShell({
           knowledgeLibraries={knowledgeLibraries}
           knowledgeTeams={knowledgeTeams}
           defaultLibraryId={defaultLibraryId}
+          knowledgeSourceLocations={knowledgeSourceLocations}
         />
       }
     >

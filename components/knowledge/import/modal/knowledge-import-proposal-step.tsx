@@ -5,13 +5,12 @@
 import {
   AlertTriangle,
   FilePlus2,
+  FileText,
   FolderPlus,
   RefreshCw,
 } from "lucide-react";
 
-import type {
-  KnowledgeImportProposal,
-} from "@/lib/knowledge/import/types";
+import type { KnowledgeImportProposal } from "@/lib/knowledge/import/types";
 
 type Props = {
   proposal: KnowledgeImportProposal;
@@ -30,15 +29,21 @@ function getFolderPath(
   }
 
   const foldersById = new Map(
-    proposal.folders.map((folder) => [
-      folder.id,
-      folder,
-    ]),
+    proposal.folders.map(
+      (folder) => [
+        folder.id,
+        folder,
+      ],
+    ),
   );
 
   const path: string[] = [];
-  const visited = new Set<string>();
-  let currentId: string | null = folderId;
+  const visited =
+    new Set<string>();
+
+  let currentId:
+    | string
+    | null = folderId;
 
   while (
     currentId &&
@@ -54,6 +59,7 @@ function getFolderPath(
     }
 
     path.unshift(folder.name);
+
     currentId =
       folder.parentFolderId;
   }
@@ -61,6 +67,53 @@ function getFolderPath(
   return path.length > 0
     ? path.join(" / ")
     : "Biblioteca principal";
+}
+
+function ProposalMetric({
+  value,
+  label,
+}: {
+  value: number;
+  label: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-[11px] text-slate-500">
+      <strong className="font-semibold text-slate-900">
+        {value}
+      </strong>
+      {label}
+    </span>
+  );
+}
+
+function DocumentNames({
+  names,
+}: {
+  names: string[];
+}) {
+  if (names.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 flex min-w-0 items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+      <FileText
+        className="size-3.5 shrink-0 text-slate-400"
+        strokeWidth={2}
+      />
+
+      <span className="min-w-0 flex-1 truncate text-[10px] text-slate-500">
+        {names.join(", ")}
+      </span>
+
+      <span className="shrink-0 text-[10px] text-slate-400">
+        {names.length}{" "}
+        {names.length === 1
+          ? "documento"
+          : "documentos"}
+      </span>
+    </div>
+  );
 }
 
 export function KnowledgeImportProposalStep({
@@ -82,60 +135,104 @@ export function KnowledgeImportProposalStep({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {error ? (
-        <div className="mb-3 shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="mb-4 shrink-0 rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-[12px] text-rose-700">
           {error}
         </div>
       ) : null}
 
       <div className="shrink-0">
-        <h3 className="text-lg font-semibold text-foreground">
+        <h3 className="text-[18px] font-semibold tracking-[-0.02em] text-slate-950">
           {proposal.title}
         </h3>
 
-        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+        <p className="mt-1.5 max-w-3xl text-[12px] leading-5 text-slate-500">
           {proposal.description}
         </p>
 
-        <div className="mt-4 flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full bg-muted px-3 py-1.5">
-            {proposal.summary.totalDocuments} documentos
-          </span>
-          <span className="rounded-full bg-muted px-3 py-1.5">
-            {proposal.summary.totalFolders} carpetas
-          </span>
-          <span className="rounded-full bg-muted px-3 py-1.5">
-            {proposal.summary.totalArticles} artículos
-          </span>
-          <span className="rounded-full bg-muted px-3 py-1.5">
-            {proposal.summary.totalWarnings} avisos
-          </span>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <ProposalMetric
+            value={
+              proposal.summary
+                .totalDocuments
+            }
+            label={
+              proposal.summary
+                .totalDocuments === 1
+                ? "documento"
+                : "documentos"
+            }
+          />
+
+          <ProposalMetric
+            value={
+              proposal.summary
+                .totalFolders
+            }
+            label={
+              proposal.summary
+                .totalFolders === 1
+                ? "carpeta"
+                : "carpetas"
+            }
+          />
+
+          <ProposalMetric
+            value={
+              updatedArticles.length
+            }
+            label={
+              updatedArticles.length ===
+              1
+                ? "actualización"
+                : "actualizaciones"
+            }
+          />
+
+          <ProposalMetric
+            value={
+              createdArticles.length
+            }
+            label={
+              createdArticles.length ===
+              1
+                ? "nuevo"
+                : "nuevos"
+            }
+          />
         </div>
       </div>
 
-      <div className="mt-5 min-h-0 flex-1 space-y-7 overflow-y-auto pr-2">
-        {proposal.folders.length > 0 ? (
+      <div className="mt-5 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
+        {proposal.folders.length >
+        0 ? (
           <section>
-            <div className="mb-2 flex items-center gap-2">
-              <FolderPlus className="h-4 w-4 text-violet-600" />
-              <h4 className="text-sm font-semibold">
+            <div className="mb-2.5 flex items-center gap-2">
+              <FolderPlus className="size-4 text-[#0A58FF]" />
+
+              <h4 className="text-[12px] font-semibold text-slate-900">
                 Carpetas propuestas
               </h4>
-              <span className="text-xs text-muted-foreground">
-                {proposal.folders.length}
+
+              <span className="text-[11px] text-slate-400">
+                {
+                  proposal.folders
+                    .length
+                }
               </span>
             </div>
 
-            <div className="divide-y divide-border rounded-xl border border-border">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               {proposal.folders.map(
                 (folder) => (
                   <div
                     key={folder.id}
-                    className="px-4 py-3"
+                    className="border-b border-slate-100 px-4 py-3.5 last:border-b-0"
                   >
-                    <p className="text-sm font-medium">
+                    <p className="text-[13px] font-medium text-slate-950">
                       {folder.name}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
+
+                    <p className="mt-1 text-[11px] leading-5 text-slate-500">
                       {folder.description ||
                         "Nueva carpeta de conocimiento"}
                     </p>
@@ -146,31 +243,109 @@ export function KnowledgeImportProposalStep({
           </section>
         ) : null}
 
-        {createdArticles.length > 0 ? (
+        {updatedArticles.length >
+        0 ? (
           <section>
-            <div className="mb-2 flex items-center gap-2">
-              <FilePlus2 className="h-4 w-4 text-emerald-600" />
-              <h4 className="text-sm font-semibold">
-                Artículos nuevos
+            <div className="mb-2.5 flex items-center gap-2">
+              <RefreshCw className="size-4 text-[#0A58FF]" />
+
+              <h4 className="text-[12px] font-semibold text-slate-900">
+                Artículos que se actualizarán
               </h4>
-              <span className="text-xs text-muted-foreground">
-                {createdArticles.length}
+
+              <span className="text-[11px] text-slate-400">
+                {
+                  updatedArticles.length
+                }
               </span>
             </div>
 
-            <div className="divide-y divide-border rounded-xl border border-border">
+            <div className="space-y-2">
+              {updatedArticles.map(
+                (article) => (
+                  <div
+                    key={article.id}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-3.5"
+                  >
+                    <div className="flex items-start justify-between gap-5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-semibold text-slate-950">
+                          {
+                            article.title
+                          }
+                        </p>
+
+                        <p className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.04em] text-slate-400">
+                          Artículo existente
+                        </p>
+                      </div>
+
+                      <div className="shrink-0 text-right">
+                        <span className="text-[13px] font-semibold text-[#0A58FF]">
+                          {Math.round(
+                            article.confidence *
+                              100,
+                          )}
+                          %
+                        </span>
+
+                        <p className="mt-0.5 text-[9px] text-slate-400">
+                          coincidencia
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="mt-3 text-[11px] leading-5 text-slate-500">
+                      {
+                        article.description
+                      }
+                    </p>
+
+                    <DocumentNames
+                      names={
+                        article.documentNames
+                      }
+                    />
+                  </div>
+                ),
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        {createdArticles.length >
+        0 ? (
+          <section>
+            <div className="mb-2.5 flex items-center gap-2">
+              <FilePlus2 className="size-4 text-emerald-600" />
+
+              <h4 className="text-[12px] font-semibold text-slate-900">
+                Artículos nuevos
+              </h4>
+
+              <span className="text-[11px] text-slate-400">
+                {
+                  createdArticles.length
+                }
+              </span>
+            </div>
+
+            <div className="space-y-2">
               {createdArticles.map(
                 (article) => (
                   <div
                     key={article.id}
-                    className="px-4 py-3"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-3.5"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {article.title}
+                    <div className="flex items-start justify-between gap-5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-semibold text-slate-950">
+                          {
+                            article.title
+                          }
                         </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
+
+                        <p className="mt-0.5 truncate text-[10px] text-slate-400">
                           {getFolderPath(
                             proposal,
                             article.folderId,
@@ -178,78 +353,32 @@ export function KnowledgeImportProposalStep({
                         </p>
                       </div>
 
-                      <span className="shrink-0 text-xs font-medium text-emerald-700">
-                        {Math.round(
-                          article.confidence *
-                            100,
-                        )}
-                        %
-                      </span>
-                    </div>
+                      <div className="shrink-0 text-right">
+                        <span className="text-[13px] font-semibold text-emerald-600">
+                          {Math.round(
+                            article.confidence *
+                              100,
+                          )}
+                          %
+                        </span>
 
-                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                      {article.description}
-                    </p>
-
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {article.documentNames.join(
-                        ", ",
-                      )}
-                    </p>
-                  </div>
-                ),
-              )}
-            </div>
-          </section>
-        ) : null}
-
-        {updatedArticles.length > 0 ? (
-          <section>
-            <div className="mb-2 flex items-center gap-2">
-              <RefreshCw className="h-4 w-4 text-sky-600" />
-              <h4 className="text-sm font-semibold">
-                Artículos que se actualizarán
-              </h4>
-              <span className="text-xs text-muted-foreground">
-                {updatedArticles.length}
-              </span>
-            </div>
-
-            <div className="divide-y divide-border rounded-xl border border-border">
-              {updatedArticles.map(
-                (article) => (
-                  <div
-                    key={article.id}
-                    className="px-4 py-3"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {article.title}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Artículo existente
+                        <p className="mt-0.5 text-[9px] text-slate-400">
+                          confianza
                         </p>
                       </div>
-
-                      <span className="shrink-0 text-xs font-medium text-sky-700">
-                        {Math.round(
-                          article.confidence *
-                            100,
-                        )}
-                        %
-                      </span>
                     </div>
 
-                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                      {article.description}
+                    <p className="mt-3 text-[11px] leading-5 text-slate-500">
+                      {
+                        article.description
+                      }
                     </p>
 
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {article.documentNames.join(
-                        ", ",
-                      )}
-                    </p>
+                    <DocumentNames
+                      names={
+                        article.documentNames
+                      }
+                    />
                   </div>
                 ),
               )}
@@ -257,33 +386,47 @@ export function KnowledgeImportProposalStep({
           </section>
         ) : null}
 
-        {proposal.warnings.length > 0 ? (
+        {proposal.warnings.length >
+        0 ? (
           <section>
-            <div className="mb-2 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-amber-600" />
-              <h4 className="text-sm font-semibold">
+            <div className="mb-2.5 flex items-center gap-2">
+              <AlertTriangle className="size-4 text-amber-500" />
+
+              <h4 className="text-[12px] font-semibold text-slate-900">
                 Avisos
               </h4>
-              <span className="text-xs text-muted-foreground">
-                {proposal.warnings.length}
+
+              <span className="text-[11px] text-slate-400">
+                {
+                  proposal.warnings
+                    .length
+                }
               </span>
             </div>
 
-            <div className="divide-y divide-amber-200 rounded-xl border border-amber-200 bg-amber-50/60">
+            <div className="space-y-2">
               {proposal.warnings.map(
                 (warning) => (
                   <div
                     key={warning.id}
-                    className="px-4 py-3"
+                    className="rounded-xl border border-amber-100 bg-amber-50/50 px-4 py-3.5"
                   >
-                    <p className="text-sm font-medium text-amber-900">
-                      {warning.title}
+                    <p className="text-[12px] font-semibold text-amber-900">
+                      {
+                        warning.title
+                      }
                     </p>
-                    <p className="mt-1 text-xs leading-5 text-amber-800">
-                      {warning.description}
+
+                    <p className="mt-1 text-[11px] leading-5 text-amber-700">
+                      {
+                        warning.description
+                      }
                     </p>
-                    <p className="mt-2 text-xs font-medium text-amber-900">
-                      {warning.suggestedAction}
+
+                    <p className="mt-2 text-[10px] font-medium text-amber-800">
+                      {
+                        warning.suggestedAction
+                      }
                     </p>
                   </div>
                 ),

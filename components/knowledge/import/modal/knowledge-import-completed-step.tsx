@@ -3,21 +3,37 @@
 "use client";
 
 import {
+  Check,
   CheckCircle2,
-  FilePlus2,
-  FolderPlus,
-  RefreshCw,
-  SkipForward,
+  FileText,
 } from "lucide-react";
 
-import type {
-  ConfirmKnowledgeImportResult,
-} from "@/lib/knowledge/import/types";
+import type { ConfirmKnowledgeImportResult } from "@/lib/knowledge/import/types";
 
 type Props = {
   result: ConfirmKnowledgeImportResult;
   onClose: () => void;
 };
+
+function SummaryMetric({
+  value,
+  label,
+}: {
+  value: number;
+  label: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-4 py-3">
+      <strong className="text-[15px] font-semibold tabular-nums text-slate-950">
+        {value}
+      </strong>
+
+      <span className="truncate text-[11px] text-slate-500">
+        {label}
+      </span>
+    </div>
+  );
+}
 
 export function KnowledgeImportCompletedStep({
   result,
@@ -28,90 +44,124 @@ export function KnowledgeImportCompletedStep({
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-            <CheckCircle2 className="h-5 w-5" />
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+            <CheckCircle2
+              className="size-5"
+              strokeWidth={2.2}
+            />
           </div>
 
-          <div>
-            <h3 className="text-lg font-semibold text-foreground">
+          <div className="min-w-0">
+            <h3 className="text-[18px] font-semibold tracking-[-0.02em] text-slate-950">
               Incorporación completada
             </h3>
 
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">
-              La documentación se ha incorporado a{" "}
-              <strong className="font-medium text-foreground">
-                {log.targetLibrary.name}
+            <p className="mt-1 text-[12px] leading-5 text-slate-500">
+              La documentación se ha
+              incorporado a{" "}
+              <strong className="font-semibold text-slate-800">
+                {
+                  log.targetLibrary
+                    .name
+                }
               </strong>
               .
             </p>
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <SummaryCard
-            label="Carpetas"
-            value={log.summary.foldersCreated}
-            icon={FolderPlus}
+        <div className="mt-5 flex divide-x divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <SummaryMetric
+            value={
+              log.summary
+                .foldersCreated
+            }
+            label="carpetas"
           />
-          <SummaryCard
-            label="Creados"
-            value={log.summary.articlesCreated}
-            icon={FilePlus2}
+
+          <SummaryMetric
+            value={
+              log.summary
+                .articlesCreated
+            }
+            label="nuevos"
           />
-          <SummaryCard
-            label="Actualizados"
-            value={log.summary.articlesUpdated}
-            icon={RefreshCw}
+
+          <SummaryMetric
+            value={
+              log.summary
+                .articlesUpdated
+            }
+            label="actualizados"
           />
-          <SummaryCard
-            label="Duplicados omitidos"
+
+          <SummaryMetric
             value={
               log.summary
                 .documentsSkippedAsDuplicates
             }
-            icon={SkipForward}
+            label="duplicados"
           />
         </div>
       </div>
 
-      <div className="mt-6 min-h-0 flex-1 space-y-7 overflow-y-auto pr-2">
+      <div className="mt-6 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
         {log.articles.length > 0 ? (
           <section>
-            <h4 className="mb-2 text-sm font-semibold">
+            <h4 className="mb-2.5 text-[12px] font-semibold text-slate-900">
               Artículos procesados
             </h4>
 
-            <div className="divide-y divide-border rounded-xl border border-border">
+            <div className="space-y-2">
               {log.articles.map(
                 (article) => (
                   <div
                     key={`${article.proposalArticleId}:${article.databaseArticleId}`}
-                    className="px-4 py-3"
+                    className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {article.title}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {article.action ===
-                          "create"
-                            ? "Artículo creado"
-                            : article.contentChanged
-                              ? "Artículo actualizado"
-                              : "Artículo sin cambios"}
-                        </p>
-                      </div>
-
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {
-                          article
-                            .createdDocumentIds
-                            .length
-                        }{" "}
-                        documentos
-                      </span>
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#E8F1FF] text-[#0A58FF]">
+                      <FileText
+                        className="size-4"
+                        strokeWidth={2.1}
+                      />
                     </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-semibold text-slate-950">
+                        {
+                          article.title
+                        }
+                      </p>
+
+                      <p className="mt-0.5 text-[10px] text-slate-400">
+                        {article.action ===
+                        "create"
+                          ? "Artículo creado"
+                          : article.contentChanged
+                            ? "Artículo actualizado"
+                            : "Artículo sin cambios"}
+                      </p>
+                    </div>
+
+                    <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] text-slate-500">
+                      {
+                        article
+                          .createdDocumentIds
+                          .length
+                      }{" "}
+                      {article
+                        .createdDocumentIds
+                        .length === 1
+                        ? "documento"
+                        : "documentos"}
+                    </span>
+
+                    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                      <Check
+                        className="size-3.5"
+                        strokeWidth={2.5}
+                      />
+                    </span>
                   </div>
                 ),
               )}
@@ -122,23 +172,31 @@ export function KnowledgeImportCompletedStep({
         {log.skippedDocuments.length >
         0 ? (
           <section>
-            <h4 className="mb-2 text-sm font-semibold">
-              Documentos duplicados omitidos
+            <h4 className="mb-2.5 text-[12px] font-semibold text-slate-900">
+              Documentos duplicados
             </h4>
 
-            <div className="divide-y divide-amber-200 rounded-xl border border-amber-200 bg-amber-50/60">
+            <div className="space-y-2">
               {log.skippedDocuments.map(
                 (document) => (
                   <div
-                    key={document.importFileId}
-                    className="px-4 py-3"
+                    key={
+                      document.importFileId
+                    }
+                    className="rounded-xl border border-amber-100 bg-amber-50/50 px-4 py-3"
                   >
-                    <p className="text-sm font-medium text-amber-900">
-                      {document.fileName}
+                    <p className="text-[12px] font-medium text-amber-900">
+                      {
+                        document.fileName
+                      }
                     </p>
-                    <p className="mt-1 text-xs text-amber-800">
+
+                    <p className="mt-1 text-[10px] text-amber-700">
                       Ya existía en “
-                      {document.articleTitle}”.
+                      {
+                        document.articleTitle
+                      }
+                      ”.
                     </p>
                   </div>
                 ),
@@ -147,33 +205,6 @@ export function KnowledgeImportCompletedStep({
           </section>
         ) : null}
       </div>
-    </div>
-  );
-}
-
-type SummaryCardProps = {
-  label: string;
-  value: number;
-  icon: typeof FolderPlus;
-};
-
-function SummaryCard({
-  label,
-  value,
-  icon: Icon,
-}: SummaryCardProps) {
-  return (
-    <div className="rounded-xl border border-border bg-muted/30 p-3">
-      <div className="flex items-center justify-between gap-3">
-        <Icon className="h-4 w-4 text-muted-foreground" />
-        <strong className="text-lg">
-          {value}
-        </strong>
-      </div>
-
-      <p className="mt-2 text-xs text-muted-foreground">
-        {label}
-      </p>
     </div>
   );
 }
