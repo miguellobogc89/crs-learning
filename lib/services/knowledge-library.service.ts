@@ -1,4 +1,5 @@
 // lib/services/knowledge-library.service.ts
+
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { knowledgeLibraryReadWhere } from "@/lib/knowledge/access-control";
@@ -9,6 +10,7 @@ const libraryInclude = {
       knowledge_teams: true,
     },
   },
+
   knowledge_sources: {
     select: {
       id: true,
@@ -19,6 +21,16 @@ const libraryInclude = {
       },
     },
   },
+
+  users_knowledge_libraries_updated_by_user_idTousers: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      image: true,
+    },
+  },
+
   _count: {
     select: {
       knowledge_sources: true,
@@ -67,15 +79,19 @@ export async function listKnowledgeLibraries(
 
   return libraries.map((library) => {
     const fileCount = library.knowledge_sources.reduce(
-      (total, source) => total + source._count.knowledge_files,
+      (total, source) =>
+        total + source._count.knowledge_files,
       0,
     );
 
     return {
       ...library,
-      is_shared: library.owner_user_id !== userId,
-      article_count: library._count.knowledge_sources,
-      folder_count: library._count.other_knowledge_libraries,
+      is_shared:
+        library.owner_user_id !== userId,
+      article_count:
+        library._count.knowledge_sources,
+      folder_count:
+        library._count.other_knowledge_libraries,
       file_count: fileCount,
     };
   });
@@ -85,13 +101,14 @@ export async function ensureRootKnowledgeLibrary(
   userId: string,
   workspaceId: string,
 ) {
-  const existing = await prisma.knowledge_libraries.findFirst({
-    where: {
-      owner_user_id: userId,
-      workspace_id: workspaceId,
-      parent_id: null,
-    },
-  });
+  const existing =
+    await prisma.knowledge_libraries.findFirst({
+      where: {
+        owner_user_id: userId,
+        workspace_id: workspaceId,
+        parent_id: null,
+      },
+    });
 
   if (existing) {
     return existing;
@@ -118,7 +135,10 @@ async function getKnowledgeStatus(
   workspaceId: string,
 ) {
   return client.knowledge_libraries.findMany({
-    where: knowledgeLibraryReadWhere(userId, workspaceId),
+    where: knowledgeLibraryReadWhere(
+      userId,
+      workspaceId,
+    ),
     select: {
       id: true,
       name: true,
@@ -172,7 +192,11 @@ export async function listKnowledgeStatus(
   userId: string,
   workspaceId: string,
 ) {
-  return getKnowledgeStatus(prisma, userId, workspaceId);
+  return getKnowledgeStatus(
+    prisma,
+    userId,
+    workspaceId,
+  );
 }
 
 export async function createKnowledgeStatusSnapshot(
@@ -180,5 +204,9 @@ export async function createKnowledgeStatusSnapshot(
   userId: string,
   workspaceId: string,
 ) {
-  return getKnowledgeStatus(tx, userId, workspaceId);
+  return getKnowledgeStatus(
+    tx,
+    userId,
+    workspaceId,
+  );
 }

@@ -31,6 +31,13 @@ import type {
 
 const PAGE_SIZE = 12;
 
+type UpdatedByUser = {
+  id: string;
+  name: string | null;
+  email?: string | null;
+  image?: string | null;
+};
+
 type KnowledgeSource = {
   id: string;
   title: string;
@@ -49,6 +56,14 @@ type KnowledgeSource = {
   knowledge_type?: string | null;
   confidence?: number | null;
   library_id?: string | null;
+
+  _count?: {
+    knowledge_files: number;
+  };
+
+  users_knowledge_sources_updated_by_user_idTousers?:
+    | UpdatedByUser
+    | null;
 };
 
 type KnowledgeLibrary = {
@@ -61,6 +76,10 @@ type KnowledgeLibrary = {
   article_count?: number;
   folder_count?: number;
   file_count?: number;
+
+  users_knowledge_libraries_updated_by_user_idTousers?:
+    | UpdatedByUser
+    | null;
 };
 
 type Props = {

@@ -1,4 +1,5 @@
 // lib/repositories/knowledge.repository.ts
+
 import { prisma } from "@/lib/prisma";
 import {
   knowledgeSourceReadWhere,
@@ -62,6 +63,21 @@ export async function getVisibleKnowledgeSources(
           },
         },
       },
+
+      users_knowledge_sources_updated_by_user_idTousers: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+        },
+      },
+
+      _count: {
+        select: {
+          knowledge_files: true,
+        },
+      },
     },
     orderBy: {
       updated_at: "desc",
@@ -98,15 +114,15 @@ export async function createKnowledgeSource(data: {
   libraryId: string;
 }) {
   return prisma.knowledge_sources.create({
-data: {
-  owner_user_id: data.ownerUserId,
-  library_id: data.libraryId,
-  title: data.title,
-  description: data.description,
-  visibility: data.visibility,
-  content: "",
-  status: "draft",
-},
+    data: {
+      owner_user_id: data.ownerUserId,
+      library_id: data.libraryId,
+      title: data.title,
+      description: data.description,
+      visibility: data.visibility,
+      content: "",
+      status: "draft",
+    },
   });
 }
 

@@ -5,7 +5,6 @@
 import type { DragEvent } from "react";
 import Link from "next/link";
 import {
-  Clock3,
   Ellipsis,
   FileStack,
   FileText,
@@ -17,6 +16,13 @@ import {
 import { getKnowledgeTypeVisualStyle } from "./cards/shared/knowledge-type-style";
 import { cn } from "@/lib/utils";
 
+type UpdatedByUser = {
+  id: string;
+  name: string | null;
+  email?: string | null;
+  image?: string | null;
+};
+
 export type KnowledgeListFolder = {
   id: string;
   parent_id: string | null;
@@ -27,6 +33,10 @@ export type KnowledgeListFolder = {
   article_count?: number;
   folder_count?: number;
   file_count?: number;
+
+  users_knowledge_libraries_updated_by_user_idTousers?:
+    | UpdatedByUser
+    | null;
 };
 
 export type KnowledgeListSource = {
@@ -44,6 +54,15 @@ export type KnowledgeListSource = {
   updated_at?: Date | string | null;
   knowledge_type?: string | null;
   confidence?: number | null;
+  library_id?: string | null;
+
+  _count?: {
+    knowledge_files: number;
+  };
+
+  users_knowledge_sources_updated_by_user_idTousers?:
+    | UpdatedByUser
+    | null;
 };
 
 type Props = {
@@ -91,47 +110,55 @@ function getSummary(
   );
 }
 
-function formatRelativeDate(
+function formatUpdateDate(
   date: Date | string | null | undefined,
 ) {
   if (!date) {
     return "Sin fecha";
   }
 
-  const timestamp = new Date(date).getTime();
+  const parsedDate = new Date(date);
 
-  const diffMinutes = Math.max(
-    1,
-    Math.floor(
-      (Date.now() - timestamp) / 60000,
-    ),
-  );
-
-  if (diffMinutes < 60) {
-    return `Hace ${diffMinutes} min`;
+  if (
+    Number.isNaN(
+      parsedDate.getTime(),
+    )
+  ) {
+    return "Sin fecha";
   }
 
-  const diffHours = Math.floor(
-    diffMinutes / 60,
+  return new Intl.DateTimeFormat(
+    "es-ES",
+    {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    },
+  ).format(parsedDate);
+}
+
+function UpdatedBy({
+  date,
+  user,
+}: {
+  date:
+    | Date
+    | string
+    | null
+    | undefined;
+  user?: UpdatedByUser | null;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-[12px] font-medium leading-[17px] text-slate-600">
+        {formatUpdateDate(date)}
+      </div>
+
+      <div className="mt-0.5 truncate text-[11px] leading-[16px] text-slate-400">
+        {user?.name?.trim() || "—"}
+      </div>
+    </div>
   );
-
-  if (diffHours < 24) {
-    return `Hace ${diffHours} h`;
-  }
-
-  const diffDays = Math.floor(
-    diffHours / 24,
-  );
-
-  if (diffDays < 30) {
-    return `Hace ${diffDays} días`;
-  }
-
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(date));
 }
 
 function FolderListIcon({
@@ -212,6 +239,23 @@ function KnowledgeTypeListBadge({
         {style.label}
       </span>
     </span>
+  );
+}
+
+function DocumentCount({
+  count,
+}: {
+  count: number;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 text-[12px] text-slate-500">
+      <FileText
+        className="h-3.5 w-3.5 shrink-0"
+        strokeWidth={2}
+      />
+
+      <span>{count}</span>
+    </div>
   );
 }
 
@@ -301,7 +345,7 @@ function KnowledgeFolderListRow({
     >
       <Link
         href={`/knowledge?library=${folder.id}`}
-        className="grid min-h-[60px] grid-cols-[minmax(360px,1fr)_180px_170px_160px_40px] items-center px-5"
+        className="grid min-h-[68px] grid-cols-[minmax(360px,1fr)_180px_170px_160px_40px] items-center px-5"
       >
         <div className="flex min-w-0 items-center gap-3">
           <FolderListIcon
@@ -345,18 +389,12 @@ function KnowledgeFolderListRow({
           />
         </div>
 
-        <div className="flex min-w-0 items-center gap-1.5 text-[12px] text-slate-500">
-          <Clock3
-            className="h-3.5 w-3.5 shrink-0"
-            strokeWidth={2}
-          />
-
-          <span className="truncate">
-            {formatRelativeDate(
-              folder.updated_at,
-            )}
-          </span>
-        </div>
+        <UpdatedBy
+          date={folder.updated_at}
+          user={
+            folder.users_knowledge_libraries_updated_by_user_idTousers
+          }
+        />
 
         <div className="flex justify-end">
           <RowMenuButton />
@@ -417,11 +455,12 @@ function KnowledgeArticleListRow({
           </div>
         </div>
 
-        <div className="min-w-0">
-          <span className="block truncate text-[12px] text-slate-500">
-            {knowledge.domain ?? "—"}
-          </span>
-        </div>
+        <DocumentCount
+          count={
+            knowledge._count
+              ?.knowledge_files ?? 0
+          }
+        />
 
         <div className="min-w-0">
           <KnowledgeTypeListBadge
@@ -431,18 +470,12 @@ function KnowledgeArticleListRow({
           />
         </div>
 
-        <div className="flex min-w-0 items-center gap-1.5 text-[12px] text-slate-500">
-          <Clock3
-            className="h-3.5 w-3.5 shrink-0"
-            strokeWidth={2}
-          />
-
-          <span className="truncate">
-            {formatRelativeDate(
-              knowledge.updated_at,
-            )}
-          </span>
-        </div>
+        <UpdatedBy
+          date={knowledge.updated_at}
+          user={
+            knowledge.users_knowledge_sources_updated_by_user_idTousers
+          }
+        />
 
         <div className="flex justify-end">
           <RowMenuButton />
