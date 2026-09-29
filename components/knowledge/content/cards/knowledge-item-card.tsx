@@ -209,18 +209,10 @@ function KnowledgeFolderItemCard({
       }
 icon={
   <div
-    className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-[#E3ECFF] text-[#0057FF]"
-    style={{
-      width: "64px",
-      height: "64px",
-      minWidth: "64px",
-      minHeight: "64px",
-    }}
+    className="knowledge-item-card__icon flex shrink-0 items-center justify-center rounded-2xl bg-[#E3ECFF] text-[#0057FF]"
   >
     <Folder
-      className="size-8"
-      width={32}
-      height={32}
+      className="knowledge-item-card__icon-svg"
       strokeWidth={2.2}
     />
   </div>
@@ -283,7 +275,7 @@ icon={
         ) : (
           <h2
             title={folder.name}
-            className="truncate text-[13px] font-semibold leading-[18px] tracking-[-0.01em] text-slate-950 "
+            className="knowledge-item-card__title text-body-small font-semibold tracking-[-0.01em] text-slate-950 "
           >
             {folder.name}
           </h2>
@@ -292,7 +284,7 @@ icon={
       description={
         <p
           title={contentLabel}
-          className="truncate text-[11px] leading-4 text-slate-500"
+          className="truncate text-caption text-slate-500"
         >
           {contentLabel}
         </p>
@@ -399,21 +391,13 @@ function KnowledgeArticleItemCard({
 icon={
   <div
     className={[
-      "flex size-16 shrink-0 items-center justify-center rounded-2xl",
+      "knowledge-item-card__icon flex shrink-0 items-center justify-center rounded-2xl",
       typeStyle.iconBackgroundClassName,
       typeStyle.iconClassName,
     ].join(" ")}
-    style={{
-      width: "64px",
-      height: "64px",
-      minWidth: "64px",
-      minHeight: "64px",
-    }}
   >
     <TypeIcon
-      className="size-8"
-      width={32}
-      height={32}
+      className="knowledge-item-card__icon-svg"
       strokeWidth={2.2}
     />
   </div>
@@ -421,7 +405,7 @@ icon={
       title={
         <h2
           title={knowledge.title}
-          className="truncate text-[13px] font-semibold leading-[18px] tracking-[-0.01em] text-slate-950 "
+          className="knowledge-item-card__title text-body-small font-semibold tracking-[-0.01em] text-slate-950 "
         >
           {knowledge.title}
         </h2>
@@ -430,24 +414,17 @@ icon={
         description ? (
           <p
             title={description}
-            className="truncate text-[11px] leading-4 text-slate-500"
+            className="truncate text-caption text-slate-500"
           >
             {description}
           </p>
         ) : undefined
       }
-badges={
-  <KnowledgeTypeBadge
-    type={knowledge.knowledge_type}
-  />
-}
 footerLeft={
-  <CardDate>
-    {formatRelativeDate(
-      knowledge.updated_at,
-      "Sin actualizar",
-    )}
-  </CardDate>
+  <KnowledgeArticleMetadata
+    type={knowledge.knowledge_type}
+    updatedAt={knowledge.updated_at}
+  />
 }
 footerRight={
   <KnowledgeAIConfidence
@@ -468,15 +445,36 @@ function CardDate({
   children: ReactNode;
 }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
+    <span className="flex min-w-0 items-center gap-1.5">
       <Clock
-        className="h-3 w-3 shrink-0 text-slate-400"
+        className="size-icon-xs shrink-0 text-slate-400"
         strokeWidth={1.9}
       />
 
       <span className="truncate">
         {children}
       </span>
+    </span>
+  );
+}
+
+function KnowledgeArticleMetadata({
+  type,
+  updatedAt,
+}: {
+  type?: string | null;
+  updatedAt?: Date | string | null;
+}) {
+  return (
+    <span className="knowledge-item-card__metadata">
+      <KnowledgeTypeBadge type={type} />
+
+      <CardDate>
+        {formatRelativeDate(
+          updatedAt,
+          "Sin actualizar",
+        )}
+      </CardDate>
     </span>
   );
 }
@@ -589,6 +587,7 @@ function KnowledgeItemCardShell({
       onDrop={onDrop}
       className={[
         "group relative flex w-full min-w-0 flex-col overflow-hidden",
+        "knowledge-item-card",
         "rounded-xl border border-slate-200/90 bg-white",
         "transition-[border-color,background-color] duration-150",
         "hover:!border-[#0A58FF]/35",
@@ -621,7 +620,7 @@ function KnowledgeItemCardShell({
 
       {/* Menú */}
       <div
-        className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center [&_button]:!border-0 [&_button]:!bg-transparent [&_button]:!shadow-none [&_button]:!ring-0 [&_button]:!ring-offset-0"
+        className="absolute right-2 top-2 z-20 flex h-control-xs w-control-xs items-center justify-center [&_button]:!border-0 [&_button]:!bg-transparent [&_button]:!shadow-none [&_button]:!ring-0 [&_button]:!ring-offset-0"
         onClick={(event) => {
           event.stopPropagation();
         }}
@@ -634,7 +633,7 @@ function KnowledgeItemCardShell({
   tabIndex={0}
   onClick={handleOpen}
   onKeyDown={handleOpenKeyDown}
-  className="group/open flex h-full min-h-0 min-w-0 flex-1 cursor-pointer flex-col px-3.5 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0A58FF]/35"
+  className="knowledge-item-card__open group/open flex h-full min-h-0 min-w-0 flex-1 cursor-pointer flex-col outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0A58FF]/35"
 >
   <KnowledgeItemCardBody
     icon={icon}

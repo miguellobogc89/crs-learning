@@ -63,14 +63,14 @@ const sortLabels: Record<ExplorerSort, string> = {
 
 function getSortIcon(sort: ExplorerSort) {
   if (sort === "name_asc") {
-    return <ArrowDownAZ className="h-4 w-4" />;
+    return <ArrowDownAZ className="size-icon-md" />;
   }
 
   if (sort === "name_desc") {
-    return <ArrowDownZA className="h-4 w-4" />;
+    return <ArrowDownZA className="size-icon-md" />;
   }
 
-  return <ListFilter className="h-4 w-4" />;
+  return <ListFilter className="size-icon-md" />;
 }
 
 export function KnowledgeExplorerControls({
@@ -105,15 +105,15 @@ export function KnowledgeExplorerControls({
   }
 
   const toolbarButtonClassName =
-    "inline-flex h-10 items-center gap-2 rounded-xl border-0 bg-white px-3.5 text-sm font-medium text-slate-700 shadow-none outline-none transition-colors duration-150 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
+    "inline-flex h-control-lg items-center gap-2 rounded-xl border-0 bg-white px-3.5 text-body font-medium text-slate-700 shadow-none outline-none transition-colors duration-150 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
 
   const selectionButtonClassName =
-    "inline-flex h-10 w-10 items-center justify-center rounded-xl border-0 bg-white text-slate-600 shadow-none outline-none transition-colors duration-150 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
+    "inline-flex size-control-lg items-center justify-center rounded-xl border-0 bg-white text-slate-600 shadow-none outline-none transition-colors duration-150 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
 
   return (
-    <div className="flex flex-col gap-3 py-3 lg:flex-row lg:items-center">
+    <div className="knowledge-explorer-controls">
       <SearchInput
-        className="min-w-0 flex-1"
+        className="knowledge-explorer-controls__search min-w-0"
         placeholder={`Buscar en ${title}...`}
         value={explorerState.search}
         onChange={(value) => {
@@ -123,19 +123,23 @@ export function KnowledgeExplorerControls({
         }}
       />
 
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+      <div className="knowledge-explorer-controls__actions">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className={toolbarButtonClassName}
+              className={`${toolbarButtonClassName} knowledge-filter-trigger`}
+              title="Filtrar"
+              aria-label="Filtrar"
             >
               <Filter
-                className="h-4 w-4"
+                className="size-icon-md"
                 strokeWidth={2.25}
               />
 
-              <span>Filtrar</span>
+              <span className="knowledge-toolbar-label">
+                Filtrar
+              </span>
 
               {activeFilterCount > 0 ? (
                 <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 text-[11px] font-semibold text-white">
@@ -143,7 +147,7 @@ export function KnowledgeExplorerControls({
                 </span>
               ) : null}
 
-              <ChevronDown className="h-4 w-4 text-slate-400" />
+              <ChevronDown className="size-icon-md text-slate-400" />
             </button>
           </DropdownMenuTrigger>
 
@@ -163,7 +167,7 @@ export function KnowledgeExplorerControls({
                     event.preventDefault();
                     resetFilters();
                   }}
-                  className="text-xs font-medium text-slate-700 transition-colors hover:text-slate-950 hover:underline"
+                  className="text-caption font-medium text-slate-700 transition-colors hover:text-slate-950 hover:underline"
                 >
                   Limpiar
                 </button>
@@ -172,7 +176,7 @@ export function KnowledgeExplorerControls({
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
+            <DropdownMenuLabel className="text-caption text-muted-foreground">
               Tipo de contenido
             </DropdownMenuLabel>
 
@@ -185,24 +189,24 @@ export function KnowledgeExplorerControls({
               }}
             >
               <DropdownMenuRadioItem value="all">
-                <ListFilter className="mr-2 h-4 w-4" />
+                <ListFilter className="mr-2 size-icon-md" />
                 Todo el contenido
               </DropdownMenuRadioItem>
 
               <DropdownMenuRadioItem value="folders">
-                <Folder className="mr-2 h-4 w-4" />
+                <Folder className="mr-2 size-icon-md" />
                 Solo carpetas
               </DropdownMenuRadioItem>
 
               <DropdownMenuRadioItem value="articles">
-                <FileText className="mr-2 h-4 w-4" />
+                <FileText className="mr-2 size-icon-md" />
                 Solo artículos
               </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
+            <DropdownMenuLabel className="text-caption text-muted-foreground">
               Estado del artículo
             </DropdownMenuLabel>
 
@@ -215,27 +219,27 @@ export function KnowledgeExplorerControls({
               }}
             >
               <DropdownMenuRadioItem value="all">
-                <Check className="mr-2 h-4 w-4" />
+                <Check className="mr-2 size-icon-md" />
                 Todos los estados
               </DropdownMenuRadioItem>
 
               <DropdownMenuRadioItem value="ready">
-                <Sparkles className="mr-2 h-4 w-4" />
+                <Sparkles className="mr-2 size-icon-md" />
                 IA procesada
               </DropdownMenuRadioItem>
 
               <DropdownMenuRadioItem value="processing">
-                <LoaderCircle className="mr-2 h-4 w-4" />
+                <LoaderCircle className="mr-2 size-icon-md" />
                 Procesando
               </DropdownMenuRadioItem>
 
               <DropdownMenuRadioItem value="draft">
-                <CircleDashed className="mr-2 h-4 w-4" />
+                <CircleDashed className="mr-2 size-icon-md" />
                 Borrador
               </DropdownMenuRadioItem>
 
               <DropdownMenuRadioItem value="error">
-                <CircleAlert className="mr-2 h-4 w-4" />
+                <CircleAlert className="mr-2 size-icon-md" />
                 Error
               </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
@@ -246,14 +250,19 @@ export function KnowledgeExplorerControls({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className={`${toolbarButtonClassName} min-w-40 justify-between`}
+              className={`${toolbarButtonClassName} knowledge-sort-trigger min-w-40 max-w-full justify-between`}
+              title={`Ordenar por ${sortLabels[explorerState.sort]}`}
+              aria-label={`Ordenar por ${sortLabels[explorerState.sort]}`}
             >
-              <span className="flex items-center gap-2">
+              <span className="flex min-w-0 items-center gap-2">
                 {getSortIcon(explorerState.sort)}
-                {sortLabels[explorerState.sort]}
+
+                <span className="knowledge-toolbar-label truncate">
+                  {sortLabels[explorerState.sort]}
+                </span>
               </span>
 
-              <ChevronDown className="h-4 w-4 text-slate-400" />
+              <ChevronDown className="size-icon-md text-slate-400" />
             </button>
           </DropdownMenuTrigger>
 
@@ -298,7 +307,7 @@ export function KnowledgeExplorerControls({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div className="ml-1 flex h-10 items-center rounded-xl border-0 bg-white p-1 shadow-none">
+        <div className="ml-1 flex h-control-lg items-center rounded-xl border-0 bg-white p-1 shadow-none">
           <button
             type="button"
             onClick={() => {
@@ -307,7 +316,7 @@ export function KnowledgeExplorerControls({
               });
             }}
             className={[
-              "inline-flex h-8 w-8 items-center justify-center rounded-lg border-0 shadow-none outline-none transition-colors duration-150",
+              "inline-flex size-control-md items-center justify-center rounded-lg border-0 shadow-none outline-none transition-colors duration-150",
               "focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
               explorerState.viewMode === "grid"
                 ? "bg-slate-100 text-slate-950"
@@ -317,7 +326,7 @@ export function KnowledgeExplorerControls({
             aria-label="Vista de tarjetas"
           >
             <Grid2X2
-              className="h-4 w-4"
+              className="size-icon-md"
               strokeWidth={2.25}
             />
           </button>
@@ -330,7 +339,7 @@ export function KnowledgeExplorerControls({
               });
             }}
             className={[
-              "inline-flex h-8 w-8 items-center justify-center rounded-lg border-0 shadow-none outline-none transition-colors duration-150",
+              "inline-flex size-control-md items-center justify-center rounded-lg border-0 shadow-none outline-none transition-colors duration-150",
               "focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
               explorerState.viewMode === "list"
                 ? "bg-slate-100 text-slate-950"
@@ -340,7 +349,7 @@ export function KnowledgeExplorerControls({
             aria-label="Vista de lista"
           >
             <List
-              className="h-4 w-4"
+              className="size-icon-md"
               strokeWidth={2.25}
             />
           </button>
@@ -357,7 +366,7 @@ export function KnowledgeExplorerControls({
               title="Mover selección"
               aria-label="Mover selección"
             >
-              <FolderInput className="h-4 w-4" />
+              <FolderInput className="size-icon-md" />
             </button>
 
             <button
@@ -367,7 +376,7 @@ export function KnowledgeExplorerControls({
               title="Compartir selección"
               aria-label="Compartir selección"
             >
-              <Share2 className="h-4 w-4" />
+              <Share2 className="size-icon-md" />
             </button>
 
             <button
@@ -377,7 +386,7 @@ export function KnowledgeExplorerControls({
               title="Eliminar selección"
               aria-label="Eliminar selección"
             >
-              <Trash2 className="h-4 w-4 text-destructive" />
+              <Trash2 className="size-icon-md text-destructive" />
             </button>
 
             <button
@@ -387,7 +396,7 @@ export function KnowledgeExplorerControls({
               title="Limpiar selección"
               aria-label="Limpiar selección"
             >
-              <X className="h-4 w-4" />
+              <X className="size-icon-md" />
             </button>
           </>
         ) : null}

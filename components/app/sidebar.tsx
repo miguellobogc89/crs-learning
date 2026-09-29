@@ -69,7 +69,7 @@ function SidebarTooltip({
         -translate-x-1 -translate-y-1/2
         whitespace-nowrap rounded-md
         bg-foreground px-2.5 py-1.5
-        text-xs font-medium text-background
+        text-caption font-medium text-background
         opacity-0 shadow-lg
         transition-all duration-150 ease-out
         group-hover:translate-x-0
@@ -94,7 +94,7 @@ export function AppSidebar({
         "flex h-full min-h-0 flex-col justify-between bg-transparent pt-4 pb-3",
         mobile
           ? "w-full items-stretch px-4"
-          : "hidden w-14 items-center lg:flex",
+          : "hidden w-app-navigation-rail items-center lg:flex",
       )}
     >
       <div
@@ -111,7 +111,7 @@ export function AppSidebar({
             "flex h-14 shrink-0 items-center justify-center",
             mobile
               ? "mb-3 w-full justify-start px-2"
-              : "mb-5 w-14",
+              : "mb-5 w-app-navigation-rail",
           )}
         >
 <Image
@@ -124,7 +124,7 @@ export function AppSidebar({
 />
 
           {mobile ? (
-            <span className="ml-3 text-sm font-semibold tracking-tight text-foreground">
+            <span className="ml-3 text-body font-semibold tracking-tight text-foreground">
               Crusader
             </span>
           ) : null}

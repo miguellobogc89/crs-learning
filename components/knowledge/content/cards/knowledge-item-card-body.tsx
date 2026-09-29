@@ -16,23 +16,23 @@ export function KnowledgeItemCardBody({
   badges,
 }: KnowledgeItemCardBodyProps) {
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="mb-2 flex shrink-0 items-center">
+    <div className="knowledge-item-card__body">
+      <div className="knowledge-item-card__icon-row">
         {icon}
       </div>
 
-      <div className="min-w-0">
+      <div className="knowledge-item-card__content">
         {title}
 
         {description ? (
-          <div className="mt-0.5 min-w-0">
+          <div className="knowledge-item-card__description">
             {description}
           </div>
         ) : null}
       </div>
 
       {badges ? (
-        <div className="mt-1.5 flex min-w-0 items-center">
+        <div className="knowledge-item-card__badges">
           {badges}
         </div>
       ) : null}

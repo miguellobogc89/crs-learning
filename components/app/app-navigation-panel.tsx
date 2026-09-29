@@ -149,7 +149,7 @@ export function AppNavigationPanel({
     >
       {/* Barra principal */}
       <div
-        className="h-full w-14 shrink-0 bg-transparent"
+        className="h-full w-app-navigation-rail shrink-0 bg-transparent"
         onClickCapture={handleNavigationClick}
       >
         <AppSidebar
@@ -170,9 +170,9 @@ export function AppNavigationPanel({
         {/* Selector de workspace: permanece fijo */}
         <div
           className={`
-            flex h-[88px] shrink-0 items-center
+            flex h-app-topbar shrink-0 items-center
             border-b border-slate-200/60
-            bg-transparent px-4
+            bg-transparent px-page-padding-sm
           `}
         >
           <div className="w-full min-w-0">

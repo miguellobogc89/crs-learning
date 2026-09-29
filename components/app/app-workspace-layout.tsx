@@ -26,11 +26,69 @@ type WorkspaceLayoutContextValue = {
 const WorkspaceLayoutContext =
   createContext<WorkspaceLayoutContextValue | null>(null);
 
-const DEFAULT_WIDTH = 280;
-const MIN_WIDTH = 220;
-const MAX_WIDTH = 420;
+const SECTION_SIDEBAR_WIDTH = {
+  compact: 220,
+  laptop: 240,
+  default: 280,
+  max: 420,
+} as const;
+
+const BREAKPOINT = {
+  lg: 1024,
+  xl: 1280,
+  "2xl": 1400,
+} as const;
 
 const STORAGE_KEY = "crs-lab:section-sidebar-width";
+
+type SidebarWidthBounds = {
+  min: number;
+  default: number;
+  max: number;
+};
+
+function getSidebarWidthBounds(viewportWidth: number): SidebarWidthBounds {
+  if (viewportWidth >= BREAKPOINT["2xl"]) {
+    return {
+      min: SECTION_SIDEBAR_WIDTH.compact,
+      default: SECTION_SIDEBAR_WIDTH.default,
+      max: SECTION_SIDEBAR_WIDTH.max,
+    };
+  }
+
+  if (viewportWidth >= BREAKPOINT.xl) {
+    return {
+      min: SECTION_SIDEBAR_WIDTH.compact,
+      default: SECTION_SIDEBAR_WIDTH.laptop,
+      max: SECTION_SIDEBAR_WIDTH.laptop,
+    };
+  }
+
+  if (viewportWidth >= BREAKPOINT.lg) {
+    return {
+      min: SECTION_SIDEBAR_WIDTH.compact,
+      default: SECTION_SIDEBAR_WIDTH.compact,
+      max: SECTION_SIDEBAR_WIDTH.compact,
+    };
+  }
+
+  return {
+    min: SECTION_SIDEBAR_WIDTH.compact,
+    default: SECTION_SIDEBAR_WIDTH.compact,
+    max: SECTION_SIDEBAR_WIDTH.max,
+  };
+}
+
+function clampSidebarWidth(
+  width: number,
+  bounds: SidebarWidthBounds,
+) {
+  return Math.min(bounds.max, Math.max(bounds.min, width));
+}
+
+function getInitialSidebarWidth() {
+  return SECTION_SIDEBAR_WIDTH.default;
+}
 
 export function useWorkspaceLayout() {
   const context = useContext(WorkspaceLayoutContext);
@@ -61,8 +119,18 @@ export function AppWorkspaceLayout({
 }: AppWorkspaceLayoutProps) {
   const [sidebar, setSidebar] = useState<ReactNode | null>(null);
 
-  const [sidebarWidth, setSidebarWidthState] =
-    useState(DEFAULT_WIDTH);
+  const [preferredSidebarWidth, setPreferredSidebarWidth] =
+    useState<number>(getInitialSidebarWidth);
+
+  const [sidebarWidthBounds, setSidebarWidthBounds] =
+    useState<SidebarWidthBounds>(() =>
+      getSidebarWidthBounds(BREAKPOINT["2xl"]),
+    );
+
+  const sidebarWidth = clampSidebarWidth(
+    preferredSidebarWidth,
+    sidebarWidthBounds,
+  );
 
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -74,19 +142,33 @@ export function AppWorkspaceLayout({
     const parsed = Number(stored);
 
     if (Number.isFinite(parsed)) {
-      setSidebarWidthState(
-        Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, parsed)),
-      );
+      setPreferredSidebarWidth(parsed);
     }
   }, []);
 
+  useEffect(() => {
+    function syncSidebarBounds() {
+      setSidebarWidthBounds(
+        getSidebarWidthBounds(window.innerWidth),
+      );
+    }
+
+    syncSidebarBounds();
+
+    window.addEventListener("resize", syncSidebarBounds);
+
+    return () => {
+      window.removeEventListener("resize", syncSidebarBounds);
+    };
+  }, []);
+
   const setSidebarWidth = useCallback((width: number) => {
-    const nextWidth = Math.min(
-      MAX_WIDTH,
-      Math.max(MIN_WIDTH, width),
+    const nextWidth = clampSidebarWidth(
+      width,
+      getSidebarWidthBounds(window.innerWidth),
     );
 
-    setSidebarWidthState(nextWidth);
+    setPreferredSidebarWidth(nextWidth);
 
     window.localStorage.setItem(
       STORAGE_KEY,

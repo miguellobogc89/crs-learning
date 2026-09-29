@@ -35,14 +35,14 @@ export function KnowledgeActions({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-[#0A58FF] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#0849D6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A58FF]/40 focus-visible:ring-offset-2"
+          className="inline-flex h-control-lg shrink-0 items-center gap-2 rounded-xl bg-[#0A58FF] px-4 text-body font-semibold text-white transition-colors hover:bg-[#0849D6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0A58FF]/40 focus-visible:ring-offset-2"
         >
-          <Plus className="h-4 w-4" strokeWidth={2.5} />
+          <Plus className="size-icon-md" strokeWidth={2.5} />
 
           Nuevo
 
           <ChevronDown
-            className="ml-1 h-4 w-4 text-white/80"
+            className="ml-1 size-icon-md text-white/80"
             strokeWidth={2}
           />
         </button>
@@ -57,9 +57,9 @@ export function KnowledgeActions({
           className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5"
           onSelect={onCreateFolder}
         >
-          <FolderPlus className="h-4 w-4 shrink-0 text-[#0A58FF]" />
+          <FolderPlus className="size-icon-md shrink-0 text-[#0A58FF]" />
 
-          <span className="text-sm font-medium">
+          <span className="text-body font-medium">
             Nueva carpeta
           </span>
         </DropdownMenuItem>
@@ -70,9 +70,9 @@ export function KnowledgeActions({
           className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5"
           onSelect={() => onUpload("files")}
         >
-          <FileUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <FileUp className="size-icon-md shrink-0 text-muted-foreground" />
 
-          <span className="text-sm font-medium">
+          <span className="text-body font-medium">
             Subir archivos
           </span>
         </DropdownMenuItem>
@@ -81,9 +81,9 @@ export function KnowledgeActions({
           className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5"
           onSelect={() => onUpload("folder")}
         >
-          <FolderUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <FolderUp className="size-icon-md shrink-0 text-muted-foreground" />
 
-          <span className="text-sm font-medium">
+          <span className="text-body font-medium">
             Subir carpeta
           </span>
         </DropdownMenuItem>
@@ -92,9 +92,9 @@ export function KnowledgeActions({
           className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5"
           onSelect={() => onUpload("zip")}
         >
-          <Archive className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <Archive className="size-icon-md shrink-0 text-muted-foreground" />
 
-          <span className="text-sm font-medium">
+          <span className="text-body font-medium">
             Subir archivo comprimido
           </span>
         </DropdownMenuItem>

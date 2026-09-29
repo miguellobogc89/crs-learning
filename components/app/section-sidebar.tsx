@@ -27,7 +27,7 @@ export function AppSectionSidebar({
       <div
         className="
           shrink-0 border-t border-slate-200/60
-          bg-transparent p-4
+          bg-transparent p-page-padding-sm
         "
       >
         <AssistantSidebarTrigger />

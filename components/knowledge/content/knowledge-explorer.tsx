@@ -395,91 +395,39 @@ export function KnowledgeExplorer({
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[repeat(12,minmax(0,1fr))] gap-4 sm:grid-cols-2 sm:grid-rows-[repeat(6,minmax(0,1fr))] xl:grid-cols-3 xl:grid-rows-[repeat(4,minmax(0,1fr))] 2xl:grid-cols-4 2xl:grid-rows-[repeat(3,minmax(0,1fr))]">
-      {folders.map((folder) => (
-        <KnowledgeItemCard
-          key={folder.id}
-          itemType="folder"
-          folder={folder}
-          selected={
-            selectedFolderIds.has(
-              folder.id,
-            )
-          }
-          onSelectedChange={(
-            selected,
-          ) =>
-            onFolderSelectedChange(
-              folder.id,
-              selected,
-            )
-          }
-          draggable={
-            !folder.is_shared &&
-            !isMoving
-          }
-          isDropTarget={
-            dropTargetFolderId ===
-            folder.id
-          }
-          onDragStart={(event) =>
-            handleDragStart(
-              {
-                type: "folder",
-                id: folder.id,
-              },
-              event,
-            )
-          }
-          onDragEnd={
-            clearDragState
-          }
-          onDragOver={(event) =>
-            handleDragOverFolder(
-              folder,
-              event,
-            )
-          }
-          onDragLeave={(event) =>
-            handleDragLeaveFolder(
-              folder.id,
-              event,
-            )
-          }
-          onDrop={(event) =>
-            handleDropOnFolder(
-              folder,
-              event,
-            )
-          }
-        />
-      ))}
-
-      {knowledgeSources.map(
-        (knowledge) => (
+    <div className="knowledge-grid-container h-full min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pr-1">
+      <div className="knowledge-responsive-grid">
+        {folders.map((folder) => (
           <KnowledgeItemCard
-            key={knowledge.id}
-            itemType="article"
-            knowledge={knowledge}
+            key={folder.id}
+            itemType="folder"
+            folder={folder}
             selected={
-              selectedArticleIds.has(
-                knowledge.id,
+              selectedFolderIds.has(
+                folder.id,
               )
             }
             onSelectedChange={(
               selected,
             ) =>
-              onArticleSelectedChange(
-                knowledge.id,
+              onFolderSelectedChange(
+                folder.id,
                 selected,
               )
             }
-            draggable={!isMoving}
+            draggable={
+              !folder.is_shared &&
+              !isMoving
+            }
+            isDropTarget={
+              dropTargetFolderId ===
+              folder.id
+            }
             onDragStart={(event) =>
               handleDragStart(
                 {
-                  type: "article",
-                  id: knowledge.id,
+                  type: "folder",
+                  id: folder.id,
                 },
                 event,
               )
@@ -487,9 +435,63 @@ export function KnowledgeExplorer({
             onDragEnd={
               clearDragState
             }
+            onDragOver={(event) =>
+              handleDragOverFolder(
+                folder,
+                event,
+              )
+            }
+            onDragLeave={(event) =>
+              handleDragLeaveFolder(
+                folder.id,
+                event,
+              )
+            }
+            onDrop={(event) =>
+              handleDropOnFolder(
+                folder,
+                event,
+              )
+            }
           />
-        ),
-      )}
+        ))}
+
+        {knowledgeSources.map(
+          (knowledge) => (
+            <KnowledgeItemCard
+              key={knowledge.id}
+              itemType="article"
+              knowledge={knowledge}
+              selected={
+                selectedArticleIds.has(
+                  knowledge.id,
+                )
+              }
+              onSelectedChange={(
+                selected,
+              ) =>
+                onArticleSelectedChange(
+                  knowledge.id,
+                  selected,
+                )
+              }
+              draggable={!isMoving}
+              onDragStart={(event) =>
+                handleDragStart(
+                  {
+                    type: "article",
+                    id: knowledge.id,
+                  },
+                  event,
+                )
+              }
+              onDragEnd={
+                clearDragState
+              }
+            />
+          ),
+        )}
+      </div>
     </div>
   );
 }

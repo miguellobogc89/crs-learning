@@ -72,7 +72,7 @@ export function AppTopbar({
           aria-label="Abrir navegación"
           className="flex size-control-lg shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/70 lg:hidden"
         >
-          <Menu className="size-5" />
+          <Menu className="size-icon-xl" />
         </button>
       </SheetTrigger>
 
@@ -109,20 +109,6 @@ export function AppTopbar({
 
         {isKnowledge ? (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="ml-1 flex h-control-lg items-center gap-2 rounded-xl bg-[#316be9] px-3.5 text-body-small font-semibold text-white shadow-[0_3px_8px_rgba(37,99,235,0.18)] transition-colors hover:bg-[#245bd4] sm:px-4"
-              >
-                <Plus className="size-4 shrink-0" />
-
-                <span className="hidden sm:inline">
-                  Añadir documento
-                </span>
-
-                <ChevronDown className="size-4 shrink-0 opacity-80" />
-              </button>
-            </DropdownMenuTrigger>
 
             <DropdownMenuContent
               align="end"
@@ -210,14 +196,14 @@ export function AppTopbar({
 
             <DropdownMenuItem asChild>
               <Link href="/my-space" className="cursor-pointer">
-                <UserCircle className="mr-2 size-4" />
+                <UserCircle className="mr-2 size-icon-md" />
                 Mi espacio
               </Link>
             </DropdownMenuItem>
 
             <DropdownMenuItem asChild>
               <Link href="/settings" className="cursor-pointer">
-                <Settings className="mr-2 size-4" />
+                <Settings className="mr-2 size-icon-md" />
                 Configuración
               </Link>
             </DropdownMenuItem>
@@ -230,7 +216,7 @@ export function AppTopbar({
                   type="submit"
                   className="w-full cursor-pointer"
                 >
-                  <LogOut className="mr-2 size-4" />
+                  <LogOut className="mr-2 size-icon-md" />
                   Cerrar sesión
                 </button>
               </DropdownMenuItem>

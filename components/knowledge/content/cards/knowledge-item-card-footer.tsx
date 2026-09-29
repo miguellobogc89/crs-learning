@@ -16,13 +16,13 @@ export function KnowledgeItemCardFooter({
   }
 
   return (
-    <footer className="mt-2 flex min-w-0 items-center justify-between gap-3 text-[11px] text-slate-500">
-      <div className="min-w-0 flex-1 truncate">
+    <footer className="knowledge-item-card__footer">
+      <div className="knowledge-item-card__footer-left">
         {left}
       </div>
 
       {right ? (
-        <div className="shrink-0 whitespace-nowrap">
+        <div className="knowledge-item-card__footer-right">
           {right}
         </div>
       ) : null}

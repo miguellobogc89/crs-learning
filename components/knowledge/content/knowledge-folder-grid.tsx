@@ -31,12 +31,12 @@ export function KnowledgeFolderGrid({ libraries }: Props) {
   }
 
   return (
-    <div className="mb-6">
-      <h2 className="mb-3 text-sm font-medium text-foreground">
+    <div className="knowledge-grid-container mb-6 min-w-0">
+      <h2 className="mb-3 text-body font-medium text-foreground">
         Carpetas
       </h2>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      <div className="knowledge-responsive-grid">
         {libraries.map((library) => (
           <button
             key={library.id}
@@ -44,11 +44,11 @@ export function KnowledgeFolderGrid({ libraries }: Props) {
             type="button"
             onClick={() => handleOpenLibrary(library.id)}
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface text-muted-foreground">
-              <Folder className="h-5 w-5" />
+            <span className="flex size-control-lg shrink-0 items-center justify-center rounded-xl bg-surface text-muted-foreground">
+              <Folder className="size-icon-xl" />
             </span>
 
-            <span className="min-w-0 truncate text-sm font-medium text-foreground">
+            <span className="min-w-0 truncate text-body font-medium text-foreground">
               {library.name}
             </span>
           </button>

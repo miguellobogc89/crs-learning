@@ -94,7 +94,7 @@ export function WorkspaceSelector({
     {/* Icono más compacto */}
     <span
       className="
-        flex h-8 w-8 shrink-0
+        flex size-control-md shrink-0
         items-center justify-center
         rounded-[10px]
         bg-gradient-to-br
@@ -113,7 +113,7 @@ export function WorkspaceSelector({
     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
       <span
         className="
-          truncate text-[13px] font-semibold
+          truncate text-body-small font-semibold
           leading-[18px] tracking-[-0.02em]
           text-[#17233B]
         "
@@ -129,7 +129,7 @@ export function WorkspaceSelector({
 
     <ChevronDown
       className="
-        h-3.5 w-3.5 shrink-0
+        size-icon-sm shrink-0
         text-[#7B8AA3]
         transition-transform duration-200
         group-data-[state=open]/workspace:rotate-180
@@ -191,20 +191,20 @@ export function WorkspaceSelector({
               >
                 <span
                   className="
-                    flex h-8 w-8 shrink-0
+                    flex size-control-md shrink-0
                     items-center justify-center
                     rounded-[10px]
                     bg-[#EEF4FF]
                     text-[#2563EB]
                   "
                 >
-                  <SquareStack className="h-4 w-4" />
+                  <SquareStack className="size-icon-md" />
                 </span>
 
                 <span
                   className="
                     min-w-0 flex-1 truncate
-                    text-[13px] font-medium
+                    text-body-small font-medium
                     text-[#263550]
                   "
                 >
@@ -221,7 +221,7 @@ export function WorkspaceSelector({
                     "
                   >
                     <Check
-                      className="h-3.5 w-3.5"
+                      className="size-icon-sm"
                       strokeWidth={2.5}
                     />
                   </span>
@@ -256,10 +256,10 @@ export function WorkspaceSelector({
                 maxLength={80}
                 placeholder="Nombre del espacio"
                 className="
-                  h-10 rounded-xl
+                  h-control-lg rounded-xl
                   border-[#E3EAF8]
                   bg-[#F8FAFF]
-                  text-sm
+                  text-body
                 "
               />
 
@@ -277,13 +277,13 @@ export function WorkspaceSelector({
                 flex min-h-10 cursor-pointer
                 items-center gap-2.5
                 rounded-xl px-3
-                text-[13px] font-medium
+                text-body-small font-medium
                 text-[#155DFC]
                 focus:bg-[#F2F6FF]
                 focus:text-[#155DFC]
               "
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="size-icon-md" />
               Nuevo espacio de trabajo
             </DropdownMenuItem>
           )}

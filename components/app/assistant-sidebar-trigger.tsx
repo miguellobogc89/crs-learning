@@ -47,24 +47,24 @@ export function AssistantSidebarTrigger() {
     >
       <span
         className={[
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors",
+          "flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors",
           isOpen
             ? "bg-brand text-brand-foreground"
             : "bg-brand-soft text-brand group-hover:bg-brand group-hover:text-brand-foreground",
         ].join(" ")}
       >
-        <Bot className="h-4 w-4" />
+        <Bot className="size-icon-md" />
       </span>
 
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
-          <span className="text-sm font-medium">
+          <span className="text-body font-medium">
             Asistente
           </span>
 
           <Sparkles
             className={[
-              "h-3.5 w-3.5",
+              "size-icon-sm",
               isOpen
                 ? "text-brand"
                 : "text-muted-foreground",
@@ -72,7 +72,7 @@ export function AssistantSidebarTrigger() {
           />
         </span>
 
-        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+        <span className="mt-0.5 block truncate text-caption text-muted-foreground">
           Pregunta sobre tu conocimiento
         </span>
       </span>

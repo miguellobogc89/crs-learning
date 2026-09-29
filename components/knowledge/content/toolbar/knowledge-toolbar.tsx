@@ -23,7 +23,7 @@ export function KnowledgeToolbar({
   onShareSelection,
 }: KnowledgeToolbarProps) {
   return (
-    <header className="mb-4">
+    <header className="knowledge-toolbar-container mb-4">
       <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1">
           <KnowledgeNavigation
