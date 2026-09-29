@@ -147,7 +147,7 @@ export function KnowledgeExplorerControls({
                 </span>
               ) : null}
 
-              <ChevronDown className="size-icon-md text-slate-400" />
+              <ChevronDown className="knowledge-toolbar-chevron size-icon-md text-slate-400" />
             </button>
           </DropdownMenuTrigger>
 
@@ -262,7 +262,7 @@ export function KnowledgeExplorerControls({
                 </span>
               </span>
 
-              <ChevronDown className="size-icon-md text-slate-400" />
+              <ChevronDown className="knowledge-toolbar-chevron size-icon-md text-slate-400" />
             </button>
           </DropdownMenuTrigger>
 
@@ -307,7 +307,7 @@ export function KnowledgeExplorerControls({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div className="ml-1 flex h-control-lg items-center rounded-xl border-0 bg-white p-1 shadow-none">
+        <div className="knowledge-view-toggle ml-1 flex h-control-lg items-center rounded-xl border-0 bg-white p-1 shadow-none">
           <button
             type="button"
             onClick={() => {
