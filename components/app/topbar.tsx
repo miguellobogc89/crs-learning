@@ -65,12 +65,12 @@ export function AppTopbar({
   const isKnowledge = pathname.startsWith("/knowledge");
 
   return (
-    <header className="flex h-[88px] shrink-0 items-center gap-3 border-0 bg-transparent px-4 sm:px-6 lg:px-8">
+    <header className="flex h-app-topbar shrink-0 items-center gap-3 border-0 bg-transparent px-page-padding-sm sm:px-page-padding-md lg:px-page-padding-lg">
       <SheetTrigger asChild>
         <button
           type="button"
           aria-label="Abrir navegación"
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/70 lg:hidden"
+          className="flex size-control-lg shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-white/70 lg:hidden"
         >
           <Menu className="size-5" />
         </button>
@@ -79,7 +79,7 @@ export function AppTopbar({
       <div className="flex min-w-0 flex-1 items-center">
         <div
           className="
-            h-11 w-full max-w-[470px] rounded-2xl bg-white
+            h-control-xl w-full max-w-[470px] rounded-2xl bg-white
             shadow-[0_1px_2px_rgba(30,64,175,0.03)]
             lg:fixed lg:left-1/2 lg:top-[44px]
             lg:z-10 lg:w-[min(470px,calc(100vw-760px))]
@@ -91,7 +91,7 @@ export function AppTopbar({
       </div>
 
       <div className="flex shrink-0 items-center gap-2.5">
-        <div className="flex size-10 items-center justify-center rounded-xl border border-[#e5eaf5] bg-white shadow-[0_2px_5px_rgba(30,64,175,0.05)]">
+        <div className="flex size-control-lg items-center justify-center rounded-xl border border-[#e5eaf5] bg-white shadow-[0_2px_5px_rgba(30,64,175,0.05)]">
           <NotificationBell
             initialNotifications={notifications}
             initialUnreadCount={unreadNotificationCount}
@@ -102,9 +102,9 @@ export function AppTopbar({
           href="/settings"
           aria-label="Ayuda"
           title="Ayuda"
-          className="flex size-10 items-center justify-center rounded-xl border border-[#e5eaf5] bg-white text-[#64748b] shadow-[0_2px_5px_rgba(30,64,175,0.05)] transition-colors hover:text-[#2563eb]"
+          className="flex size-control-lg items-center justify-center rounded-xl border border-[#e5eaf5] bg-white text-[#64748b] shadow-[0_2px_5px_rgba(30,64,175,0.05)] transition-colors hover:text-[#2563eb]"
         >
-          <CircleHelp className="size-[19px]" />
+          <CircleHelp className="size-icon-lg" />
         </Link>
 
         {isKnowledge ? (
@@ -112,7 +112,7 @@ export function AppTopbar({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="ml-1 flex h-10 items-center gap-2 rounded-xl bg-[#316be9] px-3.5 text-sm font-semibold text-white shadow-[0_3px_8px_rgba(37,99,235,0.18)] transition-colors hover:bg-[#245bd4] sm:px-4"
+                className="ml-1 flex h-control-lg items-center gap-2 rounded-xl bg-[#316be9] px-3.5 text-body-small font-semibold text-white shadow-[0_3px_8px_rgba(37,99,235,0.18)] transition-colors hover:bg-[#245bd4] sm:px-4"
               >
                 <Plus className="size-4 shrink-0" />
 
@@ -155,7 +155,7 @@ export function AppTopbar({
             <button
               type="button"
               aria-label="Abrir menú de usuario"
-              className="flex size-10 shrink-0 items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-white/70"
+              className="flex size-control-lg shrink-0 items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-white/70"
             >
               {user.image ? (
                 <Image
@@ -193,12 +193,12 @@ export function AppTopbar({
                 </span>
 
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">
+                  <p className="truncate text-body-small font-medium text-foreground">
                     {user.name ?? "Usuario"}
                   </p>
 
                   {user.email ? (
-                    <p className="truncate text-xs text-muted-foreground">
+                    <p className="truncate text-caption text-muted-foreground">
                       {user.email}
                     </p>
                   ) : null}

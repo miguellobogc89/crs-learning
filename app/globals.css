@@ -11,6 +11,20 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
+  --text-display: var(--typography-display-size);
+  --text-display--line-height: var(--typography-display-line-height);
+  --text-page-title: var(--typography-page-title-size);
+  --text-page-title--line-height: var(--typography-page-title-line-height);
+  --text-section-title: var(--typography-section-title-size);
+  --text-section-title--line-height: var(--typography-section-title-line-height);
+  --text-heading: var(--typography-heading-size);
+  --text-heading--line-height: var(--typography-heading-line-height);
+  --text-body: var(--typography-body-size);
+  --text-body--line-height: var(--typography-body-line-height);
+  --text-body-small: var(--typography-body-small-size);
+  --text-body-small--line-height: var(--typography-body-small-line-height);
+  --text-caption: var(--typography-caption-size);
+  --text-caption--line-height: var(--typography-caption-line-height);
 
   /* Colores base */
   --color-background: var(--background);
@@ -111,6 +125,28 @@
   --shadow-card-hover: var(--shadow-card-hover);
   --shadow-popover: var(--shadow-popover);
   --shadow-dialog: var(--shadow-dialog);
+
+  /* Controles */
+  --spacing-control-xs: var(--control-height-xs);
+  --spacing-control-sm: var(--control-height-sm);
+  --spacing-control-md: var(--control-height-md);
+  --spacing-control-lg: var(--control-height-lg);
+  --spacing-control-xl: var(--control-height-xl);
+  --spacing-icon-xs: var(--icon-size-xs);
+  --spacing-icon-sm: var(--icon-size-sm);
+  --spacing-icon-md: var(--icon-size-md);
+  --spacing-icon-lg: var(--icon-size-lg);
+  --spacing-icon-xl: var(--icon-size-xl);
+
+  /* Layout */
+  --spacing-app-topbar: var(--layout-topbar-height);
+  --spacing-app-navigation-rail: var(--layout-navigation-rail-width);
+  --spacing-app-sidebar-min: var(--layout-section-sidebar-min);
+  --spacing-app-sidebar-default: var(--layout-section-sidebar-default);
+  --spacing-app-sidebar-max: var(--layout-section-sidebar-max);
+  --spacing-page-padding-sm: var(--layout-page-padding-sm);
+  --spacing-page-padding-md: var(--layout-page-padding-md);
+  --spacing-page-padding-lg: var(--layout-page-padding-lg);
 }
 
 @theme {
@@ -127,6 +163,44 @@
   --floating-chat-bottom: 1.5rem;
   --background: #f7f9ff;
   --foreground: oklch(0.145 0 0);
+
+  /* Tipografía semántica */
+  --typography-display-size: 2.25rem;
+  --typography-display-line-height: 2.5rem;
+  --typography-page-title-size: 1.625rem;
+  --typography-page-title-line-height: 2rem;
+  --typography-section-title-size: 1.125rem;
+  --typography-section-title-line-height: 1.75rem;
+  --typography-heading-size: 1rem;
+  --typography-heading-line-height: 1.5rem;
+  --typography-body-size: 1rem;
+  --typography-body-line-height: 1.5rem;
+  --typography-body-small-size: 0.875rem;
+  --typography-body-small-line-height: 1.25rem;
+  --typography-caption-size: 0.75rem;
+  --typography-caption-line-height: 1rem;
+
+  /* Controles */
+  --control-height-xs: 1.5rem;
+  --control-height-sm: 1.75rem;
+  --control-height-md: 2rem;
+  --control-height-lg: 2.5rem;
+  --control-height-xl: 2.75rem;
+  --icon-size-xs: 0.75rem;
+  --icon-size-sm: 0.875rem;
+  --icon-size-md: 1rem;
+  --icon-size-lg: 1.1875rem;
+  --icon-size-xl: 1.25rem;
+
+  /* Layout */
+  --layout-topbar-height: 5.5rem;
+  --layout-navigation-rail-width: 3.5rem;
+  --layout-section-sidebar-min: 13.75rem;
+  --layout-section-sidebar-default: 17.5rem;
+  --layout-section-sidebar-max: 26.25rem;
+  --layout-page-padding-sm: 1rem;
+  --layout-page-padding-md: 1.5rem;
+  --layout-page-padding-lg: 2rem;
 
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
