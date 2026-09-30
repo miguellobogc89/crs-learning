@@ -1,3 +1,5 @@
+// components/auth/login-credentials-form.tsx
+
 "use client";
 
 import { useActionState } from "react";
@@ -41,7 +43,7 @@ export function LoginCredentialsForm() {
           autoComplete="email"
           placeholder="nombre@empresa.com"
           required
-          className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:border-brand-border focus:ring-2 focus:ring-brand/15"
+          className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:border-[#0A58FF]/40 focus:ring-2 focus:ring-[#0A58FF]/15"
         />
       </div>
 
@@ -56,7 +58,7 @@ export function LoginCredentialsForm() {
 
           <Link
             href="/forgot-password"
-            className="text-xs font-medium text-muted-foreground transition-colors hover:text-brand"
+            className="text-xs font-medium text-muted-foreground transition-colors hover:text-[#0A58FF]"
           >
             Olvidaste tu contrasena?
           </Link>
@@ -69,7 +71,7 @@ export function LoginCredentialsForm() {
           autoComplete="current-password"
           placeholder="********"
           required
-          className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:border-brand-border focus:ring-2 focus:ring-brand/15"
+          className="h-11 w-full rounded-lg border border-input bg-background px-3.5 text-sm outline-none transition-all placeholder:text-muted-foreground/60 focus:border-[#0A58FF]/40 focus:ring-2 focus:ring-[#0A58FF]/15"
         />
       </div>
 
@@ -79,8 +81,9 @@ export function LoginCredentialsForm() {
             name="remember"
             type="checkbox"
             defaultChecked
-            className="h-3.5 w-3.5 rounded border-input accent-brand"
+            className="h-3.5 w-3.5 rounded border-input accent-[#0A58FF]"
           />
+
           Mantener sesion iniciada
         </label>
       </div>
@@ -88,10 +91,10 @@ export function LoginCredentialsForm() {
       <Button
         type="submit"
         disabled={pending}
-        variant="brand"
-        className="h-11 w-full gap-2 px-4 font-semibold shadow-sm"
+        className="h-11 w-full gap-2 bg-[#0A58FF] px-4 font-semibold text-white shadow-sm hover:bg-[#0848D8] active:bg-[#073DB8]"
       >
         {pending ? "Iniciando..." : "Iniciar sesion"}
+
         <ArrowRight className="h-4 w-4" />
       </Button>
     </form>

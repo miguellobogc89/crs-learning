@@ -1,6 +1,5 @@
 // app/page.tsx
 
-
 import { loginWithGoogle } from "@/app/actions/auth";
 import { auth } from "@/auth";
 import { LoginCredentialsForm } from "@/components/auth/login-credentials-form";
@@ -80,7 +79,7 @@ export default async function HomePage() {
         {/* Contenido principal */}
 
         <div className="relative z-10 my-12 w-full max-w-xl">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-border bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#0A58FF]/25 bg-[#0A58FF]/10 px-3 py-1.5 text-xs font-medium text-[#0A58FF]">
             <Sparkles className="h-3.5 w-3.5" />
             Plataforma de conocimiento interno
           </div>
@@ -91,8 +90,8 @@ export default async function HomePage() {
 
           <p className="mt-5 max-w-lg text-sm leading-7 text-muted-foreground xl:text-[15px] 2xl:text-base">
             Centraliza documentación, crea formación y transforma el
-            conocimiento interno de tu organización en información
-            accesible para todo tu equipo.
+            conocimiento interno de tu organización en información accesible
+            para todo tu equipo.
           </p>
 
           {/* Funcionalidades */}
@@ -106,7 +105,7 @@ export default async function HomePage() {
                   key={feature.title}
                   className="flex items-start gap-4"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-brand-border/50 bg-brand-soft text-brand xl:h-14 xl:w-14">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#0A58FF]/20 bg-[#0A58FF]/10 text-[#0A58FF] xl:h-14 xl:w-14">
                     <Icon
                       className="h-6 w-6 xl:h-7 xl:w-7"
                       strokeWidth={1.8}
@@ -131,7 +130,6 @@ export default async function HomePage() {
         {/* Seguridad y pie */}
 
         <div className="relative z-10 space-y-5">
-          <SecurityInfo variant="sidebar" />
 
           <p className="text-xs text-muted-foreground">
             © 2026 CRS LAB. Todos los derechos reservados.
@@ -168,7 +166,7 @@ export default async function HomePage() {
 
             <Link
               href="/register"
-              className="font-semibold text-brand transition-colors hover:text-brand/80"
+              className="font-semibold text-[#0A58FF] transition-colors hover:text-[#0848D8]"
             >
               Crear cuenta
             </Link>
@@ -241,7 +239,7 @@ export default async function HomePage() {
                 ¿Todavía no tienes una cuenta?{" "}
                 <Link
                   href="/register"
-                  className="font-semibold text-brand"
+                  className="font-semibold text-[#0A58FF]"
                 >
                   Regístrate
                 </Link>
@@ -252,11 +250,11 @@ export default async function HomePage() {
 
             <p className="mx-auto mt-7 max-w-sm text-center text-[10px] leading-5 text-muted-foreground sm:text-[11px]">
               Al continuar aceptas los{" "}
-              <span className="font-medium text-brand">
+              <span className="font-medium text-[#0A58FF]">
                 Términos de uso
               </span>{" "}
               y la{" "}
-              <span className="font-medium text-brand">
+              <span className="font-medium text-[#0A58FF]">
                 Política de privacidad
               </span>{" "}
               de CRS LAB.
@@ -264,7 +262,9 @@ export default async function HomePage() {
 
             {/* TARJETA DE SEGURIDAD */}
 
-            <SecurityInfo variant="login" />
+            <div className="mt-10">
+              <SecurityInfo />
+            </div>
 
             {/* Pie móvil */}
 
@@ -315,9 +315,9 @@ function GoogleIcon() {
 function BrandBackground() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute -left-32 top-[30%] h-[420px] w-[420px] rounded-full bg-brand/15 blur-[140px]" />
+      <div className="absolute -left-32 top-[30%] h-[420px] w-[420px] rounded-full bg-[#0A58FF]/15 blur-[140px]" />
 
-      <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-brand/10 blur-[120px]" />
+      <div className="absolute -right-20 -top-20 h-72 w-72 rounded-full bg-[#0A58FF]/10 blur-[120px]" />
 
       <div
         className="absolute inset-0 opacity-[0.035]"
