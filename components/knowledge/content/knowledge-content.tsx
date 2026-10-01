@@ -815,7 +815,7 @@ export function KnowledgeContent({
   return (
     <>
       <AppCard className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-0">
-        <div className="z-10 shrink-0 px-5 pt-5 sm:px-6 sm:pt-6">
+        <div className="z-10 shrink-0 px-5 pt-4 sm:px-6 sm:pt-5 xl:pt-6">
           <KnowledgeToolbar
             explorerState={
               explorerState

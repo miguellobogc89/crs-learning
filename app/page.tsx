@@ -72,7 +72,7 @@ export default async function HomePage() {
           </div>
 
           <span className="text-base font-semibold tracking-tight">
-            CRS LAB
+            CRUSSADER
           </span>
         </div>
 

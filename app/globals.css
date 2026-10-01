@@ -154,9 +154,9 @@
   --breakpoint-sm: 640px;
   --breakpoint-md: 768px;
   --breakpoint-lg: 1024px;
-  --breakpoint-xl: 1280px;
-  --breakpoint-2xl: 1400px;
-  --breakpoint-3xl: 1700px;
+  --breakpoint-xl: 1800px;
+  --breakpoint-2xl: 2000px;
+  --breakpoint-3xl: 2400px;
 }
 
 :root {

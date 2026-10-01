@@ -23,7 +23,7 @@ export function AppPagination({
   const lastItem = Math.min(page * pageSize, totalItems);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 px-6 py-4">
+    <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 px-6 py-3 xl:py-4">
       <p className="text-xs text-slate-500">
         Mostrando {firstItem}–{lastItem} de {totalItems} elementos
       </p>
