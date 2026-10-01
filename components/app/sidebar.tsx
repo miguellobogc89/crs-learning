@@ -40,8 +40,8 @@ const navItems = [
   {
     href: "/courses",
     icon: GraduationCap,
-    label: "Cursos",
-    disabled: true,
+    label: "Academy",
+    disabled: false,
   },
   {
     href: "/notifications",

@@ -69,10 +69,10 @@ getDashboardRecentActivity({
         />
       }
     >
-      <AppPageLayout>
-        <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col pb-4">
+      <AppPageLayout contentClassName="overflow-hidden pb-4">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-[1600px] flex-col">
           {/* Header */}
-          <header className="flex items-start justify-between gap-6 pb-5">
+          <header className="flex shrink-0 items-start justify-between gap-6 pb-5">
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-[22px] font-semibold tracking-tight text-slate-950">
@@ -103,7 +103,7 @@ getDashboardRecentActivity({
           </header>
 
           {/* Zona superior */}
-          <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_260px] 2xl:grid-cols-[minmax(0,1fr)_280px]">
+          <section className="grid shrink-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_260px] 2xl:grid-cols-[minmax(0,1fr)_280px]">
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
 
 
@@ -180,7 +180,7 @@ getDashboardRecentActivity({
           </section>
 
           {/* Zona principal */}
-          <section className="mt-4 grid min-h-0 flex-1 grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_260px] 2xl:grid-cols-[minmax(0,1fr)_280px]">
+          <section className="mt-4 grid min-h-0 flex-1 grid-cols-1 items-stretch gap-4 overflow-hidden lg:grid-cols-[minmax(0,1fr)_260px] 2xl:grid-cols-[minmax(0,1fr)_280px]">
             {/* Tabla documentos */}
             <DashboardKnowledgeTable
               documents={overview.recentDocuments}

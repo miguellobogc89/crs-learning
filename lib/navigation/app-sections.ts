@@ -21,7 +21,7 @@ export const APP_SECTIONS = {
     icon: Library,
   },
   courses: {
-    label: "Cursos",
+    label: "Academy",
     href: "/courses",
     icon: GraduationCap,
   },

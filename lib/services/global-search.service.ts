@@ -23,8 +23,8 @@ const QUICK_ACCESS: QuickAccess[] = [
   },
   {
     id: "courses",
-    title: "Mis Cursos",
-    description: "Ver cursos disponibles",
+    title: "Academy",
+    description: "Ir a Academy",
     icon: "book-open",
     url: "/courses",
   },
