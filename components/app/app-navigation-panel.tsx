@@ -21,6 +21,34 @@ type AppNavigationPanelProps = {
   sidebarWidth: number;
 };
 
+function getAppSection(pathname: string) {
+  if (pathname.startsWith("/knowledge")) {
+    return "knowledge";
+  }
+
+  if (pathname.startsWith("/dashboard")) {
+    return "dashboard";
+  }
+
+  if (pathname.startsWith("/inbox")) {
+    return "inbox";
+  }
+
+  if (pathname.startsWith("/users")) {
+    return "users";
+  }
+
+  if (pathname.startsWith("/settings")) {
+    return "settings";
+  }
+
+  if (pathname.startsWith("/admin")) {
+    return "admin";
+  }
+
+  return pathname.split("/")[1] ?? "";
+}
+
 export function AppNavigationPanel({
   isAdmin,
   notificationCount,
@@ -94,6 +122,13 @@ export function AppNavigationPanel({
       return;
     }
 
+    const currentSection = getAppSection(pathname);
+const destinationSection = getAppSection(destination.pathname);
+
+if (currentSection === destinationSection) {
+  return;
+}
+
     pendingPathRef.current = destination.pathname;
 
     setIsChangingSection(true);
@@ -103,16 +138,24 @@ export function AppNavigationPanel({
    * También cubre cambios de ruta iniciados desde
    * otros puntos de la aplicación.
    */
-  useEffect(() => {
-    if (previousPathRef.current === pathname) {
-      return;
-    }
+useEffect(() => {
+  const previousPath = previousPathRef.current;
 
-    previousPathRef.current = pathname;
-    pendingPathRef.current = pathname;
+  if (previousPath === pathname) {
+    return;
+  }
 
-    setIsChangingSection(true);
-  }, [pathname]);
+  previousPathRef.current = pathname;
+
+  if (getAppSection(previousPath) === getAppSection(pathname)) {
+    pendingPathRef.current = null;
+    setIsChangingSection(false);
+    return;
+  }
+
+  pendingPathRef.current = pathname;
+  setIsChangingSection(true);
+}, [pathname]);
 
   /*
    * Al registrarse la nueva sidebar, mostramos su contenido
