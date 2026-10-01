@@ -30,6 +30,13 @@ model courses {
   created_at           DateTime               @default(now()) @db.Timestamptz(6)
   updated_at           DateTime               @default(now()) @db.Timestamptz(6)
   knowledge_source_id  String?                @db.Uuid
+  company_id           String?                @db.Uuid
+  created_by_user_id   String?                @db.Uuid
+  category             String?
+  thumbnail_url        String?
+  course_assignments   course_assignments[]
+  companies            companies?             @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                users?                 @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
   knowledge_sources    knowledge_sources?     @relation(fields: [knowledge_source_id], references: [id], onUpdate: NoAction)
   courses              courses?               @relation("coursesTocourses", fields: [required_course_id], references: [id], onUpdate: NoAction)
   other_courses        courses[]              @relation("coursesTocourses")
@@ -37,6 +44,9 @@ model courses {
   user_course_progress user_course_progress[]
 
   @@index([knowledge_source_id], map: "idx_courses_knowledge_source_id")
+  @@index([category], map: "idx_courses_category")
+  @@index([company_id], map: "idx_courses_company_id")
+  @@index([created_by_user_id], map: "idx_courses_created_by_user_id")
 }
 
 model lessons {
@@ -179,6 +189,11 @@ model users {
   chat_conversations_chat_conversations_updated_by_user_idTousers                              chat_conversations[]               @relation("chat_conversations_updated_by_user_idTousers")
   chat_message_feedback                                                                        chat_message_feedback[]
   chat_messages                                                                                chat_messages[]
+  course_assignments_course_assignments_assigned_by_user_idTousers                             course_assignments[]               @relation("course_assignments_assigned_by_user_idTousers")
+  course_assignments_course_assignments_user_idTousers                                         course_assignments[]               @relation("course_assignments_user_idTousers")
+  course_request_votes                                                                         course_request_votes[]
+  course_requests                                                                              course_requests[]
+  courses                                                                                      courses[]
   knowledge_activity                                                                           knowledge_activity[]
   knowledge_correction_requests_knowledge_correction_requests_assigned_to_user_idTousers       knowledge_correction_requests[]    @relation("knowledge_correction_requests_assigned_to_user_idTousers")
   knowledge_correction_requests_knowledge_correction_requests_requested_by_user_idTousers      knowledge_correction_requests[]    @relation("knowledge_correction_requests_requested_by_user_idTousers")
@@ -432,6 +447,8 @@ model companies {
   created_at          DateTime              @default(now()) @db.Timestamptz(6)
   updated_at          DateTime              @default(now()) @db.Timestamptz(6)
   chat_conversations  chat_conversations[]
+  course_requests     course_requests[]
+  courses             courses[]
   knowledge_activity  knowledge_activity[]
   knowledge_events    knowledge_events[]
   knowledge_imports   knowledge_imports[]
@@ -1407,4 +1424,59 @@ model organization_subscriptions {
 
   @@index([plan_id], map: "organization_subscriptions_plan_idx")
   @@index([status])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model course_assignments {
+  id                                                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  course_id                                           String    @db.Uuid
+  user_id                                             String    @db.Uuid
+  assigned_by_user_id                                 String?   @db.Uuid
+  is_required                                         Boolean   @default(false)
+  assigned_at                                         DateTime  @default(now()) @db.Timestamptz(6)
+  due_at                                              DateTime? @db.Timestamptz(6)
+  created_at                                          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at                                          DateTime  @default(now()) @db.Timestamptz(6)
+  users_course_assignments_assigned_by_user_idTousers users?    @relation("course_assignments_assigned_by_user_idTousers", fields: [assigned_by_user_id], references: [id], onUpdate: NoAction)
+  courses                                             courses   @relation(fields: [course_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_course_assignments_user_idTousers             users     @relation("course_assignments_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([course_id, user_id], map: "course_assignments_course_user_unique")
+  @@index([course_id], map: "idx_course_assignments_course_id")
+  @@index([due_at], map: "idx_course_assignments_due_at")
+  @@index([user_id, is_required], map: "idx_course_assignments_required")
+  @@index([user_id], map: "idx_course_assignments_user_id")
+}
+
+model course_request_votes {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  request_id      String          @db.Uuid
+  user_id         String          @db.Uuid
+  created_at      DateTime        @default(now()) @db.Timestamptz(6)
+  course_requests course_requests @relation(fields: [request_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([request_id, user_id], map: "course_request_votes_request_user_unique")
+  @@index([request_id], map: "idx_course_request_votes_request_id")
+  @@index([user_id], map: "idx_course_request_votes_user_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model course_requests {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id           String                 @db.Uuid
+  requested_by_user_id String                 @db.Uuid
+  title                String
+  description          String?
+  status               String                 @default("open")
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  course_request_votes course_request_votes[]
+  companies            companies              @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                users                  @relation(fields: [requested_by_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([company_id], map: "idx_course_requests_company_id")
+  @@index([created_at(sort: Desc)], map: "idx_course_requests_created_at")
+  @@index([company_id, status], map: "idx_course_requests_status")
+  @@index([requested_by_user_id], map: "idx_course_requests_user_id")
 }
