@@ -50,12 +50,11 @@ export default async function DashboardPage() {
           activeWorkspace.id,
       }),
 
-      getDashboardRecentActivity({
-        userId: session.user.id,
-        workspaceId:
-          activeWorkspace.id,
-        limit: 6,
-      }),
+getDashboardRecentActivity({
+  userId: session.user.id,
+  workspaceId: activeWorkspace.id,
+  limit: 10,
+}),
     ]);
 
   return (
@@ -71,7 +70,7 @@ export default async function DashboardPage() {
       }
     >
       <AppPageLayout>
-        <div className="mx-auto w-full max-w-[1600px] pb-8">
+        <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col pb-4">
           {/* Header */}
           <header className="flex items-start justify-between gap-6 pb-5">
             <div>
@@ -181,83 +180,77 @@ export default async function DashboardPage() {
           </section>
 
           {/* Zona principal */}
-          <section className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_260px] 2xl:grid-cols-[minmax(0,1fr)_280px]">
+          <section className="mt-4 grid min-h-0 flex-1 grid-cols-1 items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_260px] 2xl:grid-cols-[minmax(0,1fr)_280px]">
             {/* Tabla documentos */}
             <DashboardKnowledgeTable
               documents={overview.recentDocuments}
               totalCount={overview.documentCount}
             />
 
-            {/* Columna derecha integrada */}
-            <div className="space-y-4">
-              <AppCard className="p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-sm font-semibold text-slate-950">
-                    Más consultados
-                  </h2>
+{/* Columna derecha integrada */}
+<div className="flex min-h-0 flex-col gap-4">
+  {/* Más consultados */}
+  <AppCard className="shrink-0 p-5">
+    <div className="mb-4 flex items-center justify-between">
+      <h2 className="text-sm font-semibold text-slate-950">
+        Más consultados
+      </h2>
 
-                  <Link
-                    href="/knowledge"
-                    className="text-[11px] font-medium text-[#0A58FF]"
-                  >
-                    Ver todo
-                  </Link>
-                </div>
+      <Link
+        href="/knowledge"
+        className="text-[11px] font-medium text-[#0A58FF]"
+      >
+        Ver todo
+      </Link>
+    </div>
 
-                <div className="space-y-4">
-                  {overview.topDocuments
-                    .length > 0 ? (
-                    overview.topDocuments.map(
-                      (document) => (
-                        <TopDocument
-                          key={
-                            document.id
-                          }
-                          document={
-                            document
-                          }
-                        />
-                      ),
-                    )
-                  ) : (
-                    <p className="text-xs leading-5 text-slate-500">
-                      Todavía no hay
-                      documentos para
-                      mostrar.
-                    </p>
-                  )}
-                </div>
-              </AppCard>
+    <div className="space-y-4">
+      {overview.topDocuments.length > 0 ? (
+        overview.topDocuments
+          .slice(0, 3)
+          .map((document) => (
+            <TopDocument
+              key={document.id}
+              document={document}
+            />
+          ))
+      ) : (
+        <p className="text-xs leading-5 text-slate-500">
+          Todavía no hay documentos para mostrar.
+        </p>
+      )}
+    </div>
+  </AppCard>
 
-              <AppCard className="p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-sm font-semibold text-slate-950">
-                    Actividad reciente
-                  </h2>
+  {/* Actividad reciente */}
+  <AppCard className="flex min-h-0 flex-1 flex-col p-5">
+    <div className="mb-4 flex items-center justify-between">
+      <h2 className="text-sm font-semibold text-slate-950">
+        Actividad reciente
+      </h2>
 
-                  <Activity className="h-4 w-4 text-slate-400" />
-                </div>
+      <Activity className="h-4 w-4 text-slate-400" />
+    </div>
 
-                <div className="space-y-4">
-                  {recentActivity.length >
-                  0 ? (
-                    recentActivity.map(
-                      (item) => (
-                        <ActivityRow
-                          key={`${item.type}-${item.id}`}
-                          item={item}
-                        />
-                      ),
-                    )
-                  ) : (
-                    <p className="text-xs leading-5 text-slate-500">
-                      Todavía no hay
-                      actividad reciente.
-                    </p>
-                  )}
-                </div>
-              </AppCard>
-            </div>
+    <div className="min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-width:thin]">
+      {recentActivity.length > 0 ? (
+        <div className="space-y-4">
+          {recentActivity.map((item) => (
+            <ActivityRow
+              key={`${item.type}-${item.id}`}
+              item={item}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs leading-5 text-slate-500">
+          Todavía no hay actividad reciente.
+        </p>
+      )}
+    </div>
+  </AppCard>
+</div>
+
           </section>
         </div>
       </AppPageLayout>

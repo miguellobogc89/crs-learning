@@ -22,13 +22,13 @@ export function DashboardKnowledgeTable({
   totalCount,
 }: Props) {
   return (
-    <section
-      className="
-        min-w-0 overflow-hidden
-        rounded-2xl border border-white/70
-        bg-white/90
-        shadow-[0_8px_30px_rgba(31,64,120,0.035)]
-      "
+<section
+  className="
+    flex h-full min-h-0 min-w-0 flex-col overflow-hidden
+    rounded-2xl border border-white/70
+    bg-white/90
+    shadow-[0_8px_30px_rgba(31,64,120,0.035)]
+  "
     >
       {/* Tabs */}
       <div className="border-b border-slate-100 px-5">
@@ -86,7 +86,7 @@ export function DashboardKnowledgeTable({
       </div>
 
       {/* Tabla */}
-      <div className="overflow-x-auto">
+      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
         <table className="w-full min-w-[760px] border-collapse">
 <thead>
   <tr className="border-b border-slate-100">
