@@ -1,3 +1,5 @@
+// lib/services/dashboard.service.ts
+
 import { knowledgeLibraryReadWhere, knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { prisma } from "@/lib/prisma";
 import {
@@ -1030,4 +1032,221 @@ function prioritizeDashboardActivity(
   }
 
   return result;
+}
+
+
+// -----------------------------------------------------------------------------
+// Dashboard overview
+// -----------------------------------------------------------------------------
+
+export type DashboardDocumentItem = {
+  id: string;
+  title: string;
+  type: string;
+  libraryName: string;
+  fileCount: number;
+  updatedAt: Date;
+  updatedBy: string;
+  href: string;
+};
+
+export type DashboardOverview = {
+  documentCount: number;
+  folderCount: number;
+  storageBytes: number;
+  analyzedCount: number;
+  pendingAnalysisCount: number;
+  healthyPercent: number;
+  needsReviewPercent: number;
+  pendingPercent: number;
+  recentDocuments: DashboardDocumentItem[];
+  topDocuments: DashboardDocumentItem[];
+};
+
+export async function getDashboardOverview({
+  userId,
+  workspaceId,
+}: {
+  userId: string;
+  workspaceId: string;
+}): Promise<DashboardOverview> {
+  const sourceWhere =
+    knowledgeSourceReadWhere(
+      userId,
+      workspaceId,
+    );
+
+  const libraryWhere =
+    knowledgeLibraryReadWhere(
+      userId,
+      workspaceId,
+    );
+
+  const [
+    documentCount,
+    folderCount,
+    files,
+    analyzedCount,
+    pendingAnalysisCount,
+    recentSources,
+  ] = await Promise.all([
+    prisma.knowledge_sources.count({
+      where: sourceWhere,
+    }),
+
+    prisma.knowledge_libraries.count({
+      where: libraryWhere,
+    }),
+
+    prisma.knowledge_files.findMany({
+      where: {
+        knowledge_sources:
+          sourceWhere,
+      },
+      select: {
+        file_size: true,
+      },
+    }),
+
+    prisma.knowledge_analysis.count({
+      where: {
+        status: "completed",
+        knowledge_sources:
+          sourceWhere,
+      },
+    }),
+
+    prisma.knowledge_analysis.count({
+      where: {
+        status: {
+          not: "completed",
+        },
+        knowledge_sources:
+          sourceWhere,
+      },
+    }),
+
+    prisma.knowledge_sources.findMany({
+      where: sourceWhere,
+      orderBy: {
+        updated_at: "desc",
+      },
+      take: 8,
+      select: {
+        id: true,
+        title: true,
+        knowledge_type: true,
+        updated_at: true,
+
+        knowledge_libraries: {
+          select: {
+            name: true,
+          },
+        },
+
+        users_knowledge_sources_updated_by_user_idTousers:
+          {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+
+        _count: {
+          select: {
+            knowledge_files: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const storageBytes =
+    files.reduce(
+      (total, file) =>
+        total +
+        (file.file_size ?? 0),
+      0,
+    );
+
+  const analyzedTotal =
+    analyzedCount +
+    pendingAnalysisCount;
+
+  const healthyPercent =
+    analyzedTotal > 0
+      ? Math.round(
+          (analyzedCount /
+            analyzedTotal) *
+            100,
+        )
+      : 0;
+
+  const pendingPercent =
+    analyzedTotal > 0
+      ? Math.round(
+          (pendingAnalysisCount /
+            analyzedTotal) *
+            100,
+        )
+      : 0;
+
+  const needsReviewPercent =
+    Math.max(
+      0,
+      100 -
+        healthyPercent -
+        pendingPercent,
+    );
+
+  const recentDocuments =
+    recentSources.map(
+      (source) => ({
+        id: source.id,
+        title: source.title,
+        type:
+          source.knowledge_type ??
+          "unknown",
+        libraryName:
+          source
+            .knowledge_libraries
+            ?.name ??
+          "Mi biblioteca",
+        fileCount:
+          source._count
+            .knowledge_files,
+        updatedAt:
+          source.updated_at,
+        updatedBy:
+          source
+            .users_knowledge_sources_updated_by_user_idTousers
+            ?.name ??
+          source
+            .users_knowledge_sources_updated_by_user_idTousers
+            ?.email ??
+          "Usuario",
+        href: `/knowledge/${source.id}`,
+      }),
+    );
+
+  /*
+   * Todavía no tenemos un contador persistente de visualizaciones
+   * por artículo. Hasta que exista, usamos los artículos recientes
+   * también en este bloque en lugar de inventar métricas de acceso.
+   */
+  const topDocuments =
+    recentDocuments.slice(0, 5);
+
+  return {
+    documentCount,
+    folderCount,
+    storageBytes,
+    analyzedCount,
+    pendingAnalysisCount,
+    healthyPercent,
+    needsReviewPercent,
+    pendingPercent,
+    recentDocuments,
+    topDocuments,
+  };
 }
