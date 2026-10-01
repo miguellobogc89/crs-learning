@@ -91,7 +91,7 @@ export default async function KnowledgeDetailPage({
   );
 
   return (
-    <main className="h-full overflow-hidden bg-background">
+    <main className="h-full overflow-hidden bg-transparent">
       <ArticleClient
         knowledge={knowledge}
         libraryPath={libraryPath}

@@ -18,10 +18,9 @@ export function ArticleBody({
         // CONTENEDOR ÚNICO
         // Fondo blanco solo para el área de contenido.
         // El exterior conserva el fondo de la página.
-        "min-w-0 w-full rounded-2xl border border-slate-200",
-        "bg-white px-6 py-8 md:px-8 md:py-10",
-        "text-[14px] leading-7 text-slate-700",
-        "shadow-[0_1px_2px_rgba(15,23,42,0.025)]",
+"min-w-0 w-full",
+"px-6 pb-8 pt-4 md:px-8 md:pb-10 md:pt-5",
+"text-[14px] leading-7 text-slate-700",
 
         // ESTRUCTURA GENERAL
         // Las secciones son transparentes: no generan

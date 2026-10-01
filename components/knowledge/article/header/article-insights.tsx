@@ -1,4 +1,3 @@
-
 // components/knowledge/article/header/article-insights.tsx
 
 import {
@@ -17,11 +16,12 @@ export type ArticleInsightMetrics = {
 
 type ArticleInsightsProps = {
   metrics: ArticleInsightMetrics;
+  knowledgeTypeLabel: string;
 };
 
 type InsightPillProps = {
-  icon: React.ReactNode;
-  value: string;
+  icon?: React.ReactNode;
+  value?: string;
   label: string;
   className: string;
 };
@@ -35,13 +35,17 @@ function InsightPill({
   return (
     <div
       className={[
-        "inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-medium",
+        "inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium",
         className,
       ].join(" ")}
     >
       {icon}
 
-      <span className="font-semibold">{value}</span>
+      {value ? (
+        <span className="font-semibold">
+          {value}
+        </span>
+      ) : null}
 
       <span>{label}</span>
     </div>
@@ -50,39 +54,59 @@ function InsightPill({
 
 export function ArticleInsights({
   metrics,
+  knowledgeTypeLabel,
 }: ArticleInsightsProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
       <InsightPill
-        icon={<FileCheck2 className="h-3.5 w-3.5" />}
+        label={knowledgeTypeLabel}
+        className="border-blue-200 bg-blue-50 text-blue-700"
+      />
+
+      <InsightPill
+        icon={
+          <FileCheck2 className="h-3.5 w-3.5" />
+        }
         value={`${metrics.coverage} %`}
         label="Cobertura"
-        className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300"
+        className="border-emerald-200 bg-emerald-50 text-emerald-700"
       />
 
       <InsightPill
-        icon={<FileText className="h-3.5 w-3.5" />}
-        value={String(metrics.documentCount)}
+        icon={
+          <FileText className="h-3.5 w-3.5" />
+        }
+        value={String(
+          metrics.documentCount,
+        )}
         label="Documentos fusionados"
-        className="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300"
+        className="border-blue-200 bg-blue-50 text-blue-700"
       />
 
       <InsightPill
-        icon={<Link2 className="h-3.5 w-3.5" />}
-        value={String(metrics.referenceCount)}
+        icon={
+          <Link2 className="h-3.5 w-3.5" />
+        }
+        value={String(
+          metrics.referenceCount,
+        )}
         label="Referencias"
-        className="border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-300"
+        className="border-violet-200 bg-violet-50 text-violet-700"
       />
 
       <InsightPill
-        icon={<AlertTriangle className="h-3.5 w-3.5" />}
-        value={String(metrics.contradictionCount)}
+        icon={
+          <AlertTriangle className="h-3.5 w-3.5" />
+        }
+        value={String(
+          metrics.contradictionCount,
+        )}
         label={
           metrics.contradictionCount === 1
             ? "Contradicción"
             : "Contradicciones"
         }
-        className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300"
+        className="border-amber-200 bg-amber-50 text-amber-700"
       />
     </div>
   );

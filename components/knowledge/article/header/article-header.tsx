@@ -1,9 +1,11 @@
-﻿
-// components/knowledge/article/header/article-header.tsx
+﻿// components/knowledge/article/header/article-header.tsx
 
 "use client";
 
-import { FileText, UsersRound } from "lucide-react";
+import {
+  FileText,
+  UsersRound,
+} from "lucide-react";
 
 import { ArticleActions } from "./article-actions";
 import {
@@ -37,12 +39,17 @@ type ArticleHeaderProps = {
   onEditTitle: () => void;
   onSaveTitle: () => void;
   onCancelTitle: () => void;
-  onVisibilityChange: (visibility: string) => void;
+  onVisibilityChange: (
+    visibility: string,
+  ) => void;
   onEditContent: () => void;
   onShare: () => void;
 };
 
-const KNOWLEDGE_TYPE_LABELS: Record<string, string> = {
+const KNOWLEDGE_TYPE_LABELS: Record<
+  string,
+  string
+> = {
   procedure: "Procedimiento",
   process: "Proceso",
   policy: "Política",
@@ -75,39 +82,79 @@ export function ArticleHeader({
   onShare,
 }: ArticleHeaderProps) {
   const knowledgeTypeLabel =
-    KNOWLEDGE_TYPE_LABELS[knowledgeType] ??
-    "Sin clasificar";
+    KNOWLEDGE_TYPE_LABELS[
+      knowledgeType
+    ] ?? "Sin clasificar";
 
   const updatedByLabel =
     updatedBy?.name ??
     updatedBy?.email ??
     "Usuario";
 
-  const updatedDate = new Date(updatedAt);
+  const updatedDate =
+    new Date(updatedAt);
 
-  const updatedAtLabel = Number.isNaN(
-    updatedDate.getTime(),
-  )
-    ? null
-    : new Intl.DateTimeFormat("es-ES", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }).format(updatedDate);
+  const updatedAtLabel =
+    Number.isNaN(
+      updatedDate.getTime(),
+    )
+      ? null
+      : new Intl.DateTimeFormat(
+          "es-ES",
+          {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          },
+        ).format(updatedDate);
+
+  const isPublic =
+    visibility === "public";
+
+  function handleVisibilityToggle() {
+    if (isUpdating) {
+      return;
+    }
+
+    const nextVisibility =
+      isPublic
+        ? "private"
+        : "public";
+
+    const confirmed =
+      window.confirm(
+        isPublic
+          ? "¿Quieres hacer privado este artículo? Dejará de estar disponible públicamente."
+          : "¿Quieres hacer público este artículo? Cualquier usuario con acceso al espacio podrá verlo.",
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    onVisibilityChange(
+      nextVisibility,
+    );
+  }
 
   return (
-    <header className="space-y-5">
+    <header className="space-y-3">
+      {/* Breadcrumb y última modificación */}
       <div className="flex min-w-0 items-center justify-between gap-6 border-b border-border pb-3">
-        <ArticleBreadcrumb libraryPath={libraryPath} />
+        <ArticleBreadcrumb
+          libraryPath={libraryPath}
+        />
 
         {updatedAtLabel && (
           <p className="hidden shrink-0 text-xs text-muted-foreground lg:block">
-            Modificado el {updatedAtLabel} por{" "}
+            Modificado el{" "}
+            {updatedAtLabel} por{" "}
             {updatedByLabel}
           </p>
         )}
       </div>
 
+      {/* Título */}
       <div className="flex items-start justify-between gap-6">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-3">
@@ -117,25 +164,34 @@ export function ArticleHeader({
 
             <ArticleTitle
               title={title}
-              isEditing={isEditingTitle}
+              isEditing={
+                isEditingTitle
+              }
               isUpdating={isUpdating}
-              onTitleChange={onTitleChange}
+              onTitleChange={
+                onTitleChange
+              }
               onEdit={onEditTitle}
               onSave={onSaveTitle}
-              onCancel={onCancelTitle}
+              onCancel={
+                onCancelTitle
+              }
             />
 
-            {sharedTeamCount > 0 && (
+            {sharedTeamCount >
+            0 ? (
               <button
                 type="button"
                 onClick={onShare}
                 aria-label={`Compartido con ${sharedTeamCount} ${
-                  sharedTeamCount === 1
+                  sharedTeamCount ===
+                  1
                     ? "equipo"
                     : "equipos"
                 }`}
                 title={`Compartido con ${sharedTeamCount} ${
-                  sharedTeamCount === 1
+                  sharedTeamCount ===
+                  1
                     ? "equipo"
                     : "equipos"
                 }`}
@@ -143,41 +199,80 @@ export function ArticleHeader({
               >
                 <UsersRound className="h-5 w-5" />
               </button>
-            )}
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2 pl-[52px]">
-            <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-300">
-              {knowledgeTypeLabel}
-            </span>
-
-            <select
-              aria-label="Visibilidad del artículo"
-              value={visibility}
-              disabled={isUpdating}
-              onChange={(event) =>
-                onVisibilityChange(event.target.value)
-              }
-              className="cursor-pointer rounded-full border border-blue-200/70 bg-blue-50/60 px-2.5 py-1 text-xs font-medium text-blue-600 outline-none transition-colors hover:bg-blue-100 focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-wait disabled:opacity-50 dark:border-blue-800/40 dark:bg-blue-950/25 dark:text-blue-400 dark:hover:bg-blue-950/50"
-            >
-              <option value="private">Privado</option>
-              <option value="shared">Compartido</option>
-              <option value="public">Público</option>
-            </select>
+            ) : null}
           </div>
         </div>
 
         <ArticleActions
-          knowledgeType={knowledgeType}
-          visibility={visibility}
-          isEditingContent={isEditingContent}
+          knowledgeType={
+            knowledgeType
+          }
+          visibility={
+            visibility
+          }
+          isEditingContent={
+            isEditingContent
+          }
           isUpdating={isUpdating}
-          onEditContent={onEditContent}
+          onEditContent={
+            onEditContent
+          }
           onShare={onShare}
         />
       </div>
 
-      <ArticleInsights metrics={metrics} />
+      {/* Tipo + métricas + visibilidad */}
+      <div className="flex min-w-0 items-center justify-between gap-4 pl-[52px]">
+        <ArticleInsights
+          metrics={metrics}
+          knowledgeTypeLabel={
+            knowledgeTypeLabel
+          }
+        />
+
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-xs font-medium text-slate-500">
+            {isPublic
+              ? "Público"
+              : "Privado"}
+          </span>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isPublic}
+            aria-label={
+              isPublic
+                ? "Cambiar artículo a privado"
+                : "Cambiar artículo a público"
+            }
+            disabled={isUpdating}
+            onClick={
+              handleVisibilityToggle
+            }
+            className={[
+              "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5",
+              "border-0 transition-colors duration-200",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/20",
+              "disabled:cursor-wait disabled:opacity-50",
+              isPublic
+                ? "bg-slate-950"
+                : "bg-slate-300",
+            ].join(" ")}
+          >
+            <span
+              aria-hidden="true"
+              className={[
+                "block h-5 w-5 rounded-full bg-white shadow-sm",
+                "transition-transform duration-200",
+                isPublic
+                  ? "translate-x-5"
+                  : "translate-x-0",
+              ].join(" ")}
+            />
+          </button>
+        </div>
+      </div>
     </header>
   );
 }
