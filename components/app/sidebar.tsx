@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { AcademyNavigation } from "@/components/academy/academy-navigation";
 
 type AppSidebarProps = {
   notificationCount?: number;
@@ -100,7 +101,7 @@ export function AppSidebar({
       <div
         className={cn(
           "flex flex-col gap-1",
-          mobile ? "items-stretch" : "items-center",
+          mobile ? "min-h-0 items-stretch overflow-y-auto" : "items-center",
         )}
       >
         {/* Logo de Crusader */}
@@ -226,6 +227,12 @@ export function AppSidebar({
             );
           })}
         </nav>
+        {mobile && pathname === "/courses" ? (
+          <div className="mt-4 border-t border-slate-200/60 pt-4">
+            <p className="mb-2 px-3 text-xs font-semibold text-slate-500">Academy</p>
+            <AcademyNavigation mobile />
+          </div>
+        ) : null}
       </div>
 
       {mobile ? (
