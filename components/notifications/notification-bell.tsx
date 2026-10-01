@@ -1,3 +1,5 @@
+// components/notifications/notification-bell.tsx
+
 "use client";
 
 import Link from "next/link";
@@ -8,7 +10,10 @@ import {
   useState,
   useTransition,
 } from "react";
-import { Bell, CheckCheck } from "lucide-react";
+import {
+  Bell,
+  CheckCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -37,23 +42,29 @@ export function NotificationBell({
   initialUnreadCount,
 }: NotificationBellProps) {
   const router = useRouter();
+
   const [isPending, startTransition] =
     useTransition();
+
   const [notifications, setNotifications] =
     useState(initialNotifications);
-  const [unreadCount, setUnreadCount] = useState(
-    initialUnreadCount,
-  );
+
+  const [unreadCount, setUnreadCount] =
+    useState(initialUnreadCount);
+
   const knownNotificationIds = useRef(
     new Set(
       initialNotifications.map(
-        (notification) => notification.id,
+        (notification) =>
+          notification.id,
       ),
     ),
   );
 
   const badgeLabel =
-    unreadCount > 9 ? "9+" : String(unreadCount);
+    unreadCount > 9
+      ? "9+"
+      : String(unreadCount);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,8 +88,13 @@ export function NotificationBell({
               ),
           );
 
-        setNotifications(summary.notifications);
-        setUnreadCount(summary.unreadCount);
+        setNotifications(
+          summary.notifications,
+        );
+
+        setUnreadCount(
+          summary.unreadCount,
+        );
 
         summary.notifications.forEach(
           (notification) => {
@@ -88,40 +104,52 @@ export function NotificationBell({
           },
         );
 
-        if (newNotifications.length > 0) {
+        if (
+          newNotifications.length > 0
+        ) {
           const latestNotification =
             newNotifications[0];
 
-          toast(latestNotification.title, {
-            description:
-              latestNotification.body ??
-              "Tienes una nueva notificacion.",
-            className:
-              "border border-border bg-background text-foreground shadow-lg",
-          });
+          toast(
+            latestNotification.title,
+            {
+              description:
+                latestNotification.body ??
+                "Tienes una nueva notificación.",
+              className:
+                "border border-slate-200 bg-white text-slate-900 shadow-lg",
+            },
+          );
         }
       } catch {
-        // El usuario puede cerrar sesion o perder conectividad; el siguiente ciclo reintentara.
+        // El siguiente ciclo volverá a intentarlo.
       }
     }
 
-    const interval = window.setInterval(
-      refreshNotifications,
-      15000,
-    );
+    const interval =
+      window.setInterval(
+        refreshNotifications,
+        15000,
+      );
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      window.clearInterval(
+        interval,
+      );
     };
   }, []);
 
   function markNotificationRead(
     notification: NotificationItem,
   ) {
-    if (notification.readAt !== null) {
+    if (
+      notification.readAt !== null
+    ) {
       if (notification.href) {
-        router.push(notification.href);
+        router.push(
+          notification.href,
+        );
       }
 
       return;
@@ -132,11 +160,13 @@ export function NotificationBell({
         item.id === notification.id
           ? {
               ...item,
-              readAt: new Date().toISOString(),
+              readAt:
+                new Date().toISOString(),
             }
           : item,
       ),
     );
+
     setUnreadCount((current) =>
       Math.max(0, current - 1),
     );
@@ -147,7 +177,9 @@ export function NotificationBell({
       );
 
       if (notification.href) {
-        router.push(notification.href);
+        router.push(
+          notification.href,
+        );
       }
 
       router.refresh();
@@ -159,7 +191,8 @@ export function NotificationBell({
       return;
     }
 
-    const now = new Date().toISOString();
+    const now =
+      new Date().toISOString();
 
     setNotifications((current) =>
       current.map((item) => ({
@@ -167,6 +200,7 @@ export function NotificationBell({
         readAt: item.readAt ?? now,
       })),
     );
+
     setUnreadCount(0);
 
     startTransition(async () => {
@@ -180,13 +214,33 @@ export function NotificationBell({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="relative flex h-full aspect-square items-center justify-center rounded-md text-muted-foreground hover:bg-surface hover:text-foreground"
+          className="
+            relative flex h-full aspect-square
+            items-center justify-center
+            rounded-xl
+            text-slate-500
+            transition-colors
+            hover:bg-white/70
+            hover:text-slate-900
+          "
           aria-label="Notificaciones"
         >
           <Bell className="h-4 w-4" />
 
           {unreadCount > 0 ? (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-semibold leading-none text-brand-foreground">
+            <span
+              className="
+                absolute -right-1 -top-1
+                flex h-4 min-w-4
+                items-center justify-center
+                rounded-full
+                bg-[#0A58FF]
+                px-1
+                text-[10px] font-semibold
+                leading-none text-white
+                shadow-sm
+              "
+            >
               {badgeLabel}
             </span>
           ) : null}
@@ -195,10 +249,10 @@ export function NotificationBell({
 
       <DropdownMenuContent
         align="end"
-        className="w-[360px] p-0"
+        className="w-[360px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-xl"
       >
         <div className="flex items-center justify-between gap-3 px-4 py-3">
-          <DropdownMenuLabel className="p-0 text-sm font-semibold text-foreground">
+          <DropdownMenuLabel className="p-0 text-sm font-semibold text-slate-900">
             Notificaciones
           </DropdownMenuLabel>
 
@@ -207,27 +261,45 @@ export function NotificationBell({
               type="button"
               disabled={isPending}
               onClick={markAllRead}
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-surface hover:text-foreground disabled:opacity-60"
+              className="
+                inline-flex items-center
+                gap-1.5 rounded-lg
+                px-2 py-1
+                text-xs font-medium
+                text-slate-500
+                transition-colors
+                hover:bg-[#EDF3FF]
+                hover:text-[#0A58FF]
+                disabled:opacity-60
+              "
             >
               <CheckCheck className="h-3.5 w-3.5" />
-              Marcar todas como leidas
+              Marcar todas como leídas
             </button>
           ) : null}
         </div>
 
-        <DropdownMenuSeparator className="m-0" />
+        <DropdownMenuSeparator className="m-0 bg-slate-100" />
 
         <div className="max-h-[420px] overflow-y-auto">
           <NotificationList
-            notifications={notifications.slice(0, 6)}
+            notifications={notifications.slice(
+              0,
+              6,
+            )}
             compact
-            onNotificationClick={markNotificationRead}
+            onNotificationClick={
+              markNotificationRead
+            }
           />
         </div>
 
-        <DropdownMenuSeparator className="m-0" />
+        <DropdownMenuSeparator className="m-0 bg-slate-100" />
 
-        <DropdownMenuItem asChild>
+        <DropdownMenuItem
+          asChild
+          className="focus:bg-[#EDF3FF] focus:text-[#0A58FF]"
+        >
           <Link
             href="/notifications"
             className="justify-center py-2.5 text-sm font-medium"

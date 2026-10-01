@@ -9,9 +9,12 @@ import {
   Brain,
   Clock3,
   FileText,
+  FolderOpen,
   GraduationCap,
+  HardDrive,
   Inbox,
   MessageSquareText,
+  Sparkles,
   UsersRound,
 } from "lucide-react";
 
@@ -57,6 +60,33 @@ const quickAccessItems = [
     description: "Gestiona tus espacios y colaboradores",
     href: "/my-space/workspaces",
     icon: UsersRound,
+  },
+];
+
+const workspaceMetrics = [
+  {
+    label: "Documentos",
+    value: "1.248",
+    icon: FileText,
+    iconClassName: "bg-blue-50 text-blue-600",
+  },
+  {
+    label: "Carpetas",
+    value: "38",
+    icon: FolderOpen,
+    iconClassName: "bg-violet-50 text-violet-600",
+  },
+  {
+    label: "Almacenamiento",
+    value: "24,6 GB",
+    icon: HardDrive,
+    iconClassName: "bg-emerald-50 text-emerald-600",
+  },
+  {
+    label: "Actividad IA",
+    value: "—",
+    icon: Sparkles,
+    iconClassName: "bg-amber-50 text-amber-600",
   },
 ];
 
@@ -106,6 +136,10 @@ export default async function DashboardPage() {
     }),
   ]);
 
+  const firstName = session.user.name
+    ? session.user.name.split(" ")[0]
+    : null;
+
   return (
     <AppSectionShell
       sidebar={
@@ -117,19 +151,60 @@ export default async function DashboardPage() {
       }
     >
       <AppPageLayout aside={<DashboardInfoSidebar />}>
+        {/* Cabecera */}
         <header>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Bienvenido
-            {session.user.name
-              ? `, ${session.user.name.split(" ")[0]}`
-              : ""}
+            Bienvenido{firstName ? `, ${firstName}` : ""}
           </h1>
+
+          <p className="mt-1 text-sm text-muted-foreground">
+            Aquí tienes un resumen de tu espacio de trabajo.
+          </p>
         </header>
 
-        <FirstSteps onboarding={onboarding} />
+        {/* Métricas principales */}
+        <section className="mt-6">
+          <div className="grid grid-cols-2 gap-4 2xl:grid-cols-4">
+            {workspaceMetrics.map((metric) => {
+              const Icon = metric.icon;
 
-        <section className="mt-10">
-          <div className="mb-4">
+              return (
+                <AppCard
+                  key={metric.label}
+                  className="min-w-0 p-5"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                        metric.iconClassName,
+                      )}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
+                  </div>
+
+                  <p className="mt-5 text-xs font-medium text-muted-foreground">
+                    {metric.label}
+                  </p>
+
+                  <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+                    {metric.value}
+                  </p>
+                </AppCard>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Primeros pasos */}
+        <section className="mt-6">
+          <FirstSteps onboarding={onboarding} />
+        </section>
+
+        {/* Accesos rápidos */}
+        <section className="mt-8">
+          <div className="mb-3">
             <h2 className="text-sm font-semibold text-foreground">
               Accesos rápidos
             </h2>
@@ -139,81 +214,90 @@ export default async function DashboardPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-5">
             {quickAccessItems.map((item) => {
               const Icon = item.icon;
 
               return (
-                <AppCard
+                <Link
                   key={item.title}
-                  className="group min-h-40 p-0 transition-shadow hover:shadow-[0_12px_36px_rgba(37,99,235,0.10)]"
+                  href={item.href}
+                  className="
+                    group flex min-h-[88px] min-w-0 items-center gap-3
+                    rounded-2xl border border-slate-200 bg-white px-4 py-4
+                    transition-all
+                    hover:border-blue-200
+                    hover:shadow-[0_8px_24px_rgba(37,99,235,0.08)]
+                    focus-visible:outline-2
+                    focus-visible:outline-offset-2
+                    focus-visible:outline-brand
+                  "
                 >
-                  <Link
-                    href={item.href}
-                    className="flex h-full min-h-40 flex-col rounded-[28px] p-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-brand transition-colors group-hover:bg-brand-soft-hover">
-                      <Icon className="h-5 w-5" />
-                    </div>
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <Icon className="h-5 w-5" />
+                  </div>
 
-                    <div className="mt-6">
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-sm font-semibold text-foreground">
-                          {item.title}
-                        </h3>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {item.title}
+                    </h3>
 
-                        <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
-                      </div>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {item.description}
+                    </p>
+                  </div>
 
-                      <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                        {item.description}
-                      </p>
-                    </div>
-                  </Link>
-                </AppCard>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
+                </Link>
               );
             })}
 
-            <AppCard className="flex min-h-40 flex-col">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-brand">
-                  <Bot className="h-5 w-5" />
+            <div
+              className="
+                flex min-h-[88px] min-w-0 items-center gap-3
+                rounded-2xl border border-slate-200 bg-white px-4 py-4
+              "
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <Bot className="h-5 w-5" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Agentes
+                  </h3>
+
+                  <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[9px] font-medium text-blue-600">
+                    Próximamente
+                  </span>
                 </div>
 
-                <span className="rounded-md bg-brand-soft px-2 py-1 text-[10px] font-medium text-brand">
-                  Próximamente
-                </span>
-              </div>
-
-              <div className="mt-6">
-                <h3 className="text-sm font-semibold text-foreground">
-                  Agentes
-                </h3>
-
-                <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  Automatiza tareas y procesos con agentes personalizados
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  Automatiza tareas y procesos
                 </p>
               </div>
-            </AppCard>
+            </div>
           </div>
         </section>
 
-        <div className="mt-12 grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(280px,0.85fr)]">
-          <section className="min-w-0">
-            <div className="mb-4">
+        {/* Zona principal */}
+        <section className="mt-8 grid grid-cols-1 items-start gap-4 2xl:grid-cols-[minmax(0,1.75fr)_minmax(280px,0.75fr)]">
+          {/* Continuar trabajando */}
+          <div className="min-w-0">
+            <div className="mb-3">
               <h2 className="text-sm font-semibold text-foreground">
                 Continuar trabajando
               </h2>
 
               <p className="mt-1 text-xs text-muted-foreground">
-                Vuelve rápidamente a lo último en lo que estabas
-                trabajando.
+                Vuelve rápidamente a lo último en lo que estabas trabajando.
               </p>
             </div>
 
             <AppCard className="overflow-hidden p-0">
               {continueWorkingItems.length > 0 ? (
-                <div className="max-h-96 overflow-y-auto">
+                <div className="max-h-[360px] overflow-y-auto">
                   {continueWorkingItems.map((item, index) => (
                     <ContinueWorkingRow
                       key={`${item.resourceType}-${item.resourceId}`}
@@ -225,7 +309,7 @@ export default async function DashboardPage() {
                   ))}
                 </div>
               ) : (
-                <div className="min-h-24 px-6 py-6">
+                <div className="min-h-28 px-6 py-6">
                   <h3 className="text-sm font-semibold text-foreground">
                     Todavía no tienes actividad reciente
                   </h3>
@@ -237,10 +321,11 @@ export default async function DashboardPage() {
                 </div>
               )}
             </AppCard>
-          </section>
+          </div>
 
-          <aside className="min-w-0">
-            <div className="mb-4">
+          {/* Actividad reciente */}
+          <div className="min-w-0">
+            <div className="mb-3">
               <h2 className="text-sm font-semibold text-foreground">
                 Actividad reciente
               </h2>
@@ -250,9 +335,9 @@ export default async function DashboardPage() {
               </p>
             </div>
 
-            <AppCard>
+            <AppCard className="p-5">
               {recentActivity.length > 0 ? (
-                <div className="max-h-96 space-y-5 overflow-y-auto pr-2">
+                <div className="max-h-[360px] space-y-5 overflow-y-auto pr-2">
                   {recentActivity.map((item) => (
                     <RecentActivityRow
                       key={`${item.type}-${item.id}`}
@@ -267,14 +352,13 @@ export default async function DashboardPage() {
                   </p>
 
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    Los cambios realizados en este espacio aparecerán
-                    aquí.
+                    Los cambios realizados en este espacio aparecerán aquí.
                   </p>
                 </div>
               )}
             </AppCard>
-          </aside>
-        </div>
+          </div>
+        </section>
       </AppPageLayout>
     </AppSectionShell>
   );
@@ -295,7 +379,7 @@ function ContinueWorkingRow({
     <Link
       href={item.href}
       className={cn(
-        "group flex min-h-24 items-center gap-4 px-6 py-4 transition-colors hover:bg-surface",
+        "group flex min-h-20 items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50",
         !isLast && "border-b border-border/60",
       )}
     >
@@ -303,8 +387,8 @@ function ContinueWorkingRow({
         className={cn(
           "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
           item.resourceType === "knowledge_source"
-            ? "bg-brand-soft text-brand"
-            : "bg-surface text-muted-foreground",
+            ? "bg-blue-50 text-blue-600"
+            : "bg-slate-50 text-muted-foreground",
         )}
       >
         <ContinueWorkingIcon item={item} />
@@ -321,9 +405,9 @@ function ContinueWorkingRow({
               {item.subtitle}
             </p>
 
-            <div className="hidden h-1 w-24 overflow-hidden rounded-full bg-surface sm:block">
+            <div className="hidden h-1 w-24 overflow-hidden rounded-full bg-slate-100 sm:block">
               <div
-                className="h-full rounded-full bg-brand"
+                className="h-full rounded-full bg-[#0A58FF]"
                 style={{
                   width: `${item.progressPercent}%`,
                 }}
@@ -331,7 +415,7 @@ function ContinueWorkingRow({
             </div>
           </div>
         ) : (
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 truncate text-xs text-muted-foreground">
             {item.subtitle}
           </p>
         )}
@@ -359,7 +443,8 @@ function ContinueWorkingIcon({
     );
   }
 
-  const Icon = continueWorkingIcons[item.resourceType];
+  const Icon =
+    continueWorkingIcons[item.resourceType];
 
   return <Icon className="h-4 w-4" />;
 }
@@ -373,7 +458,7 @@ function RecentActivityRow({
     <div className="flex gap-3">
       <Link
         href={`/users/${item.actorUserId}`}
-        className="h-8 w-8 shrink-0 rounded-full transition-colors hover:text-brand"
+        className="h-8 w-8 shrink-0 rounded-full transition-colors hover:text-[#0A58FF]"
         aria-label={`Ver perfil de ${item.actorName}`}
       >
         <ActivityAvatar item={item} />
@@ -383,7 +468,7 @@ function RecentActivityRow({
         <p className="text-sm leading-5 text-foreground">
           <Link
             href={`/users/${item.actorUserId}`}
-            className="font-medium transition-colors hover:text-brand"
+            className="font-medium transition-colors hover:text-[#0A58FF]"
           >
             {item.actorName}
           </Link>{" "}
@@ -393,12 +478,14 @@ function RecentActivityRow({
           {item.href ? (
             <Link
               href={item.href}
-              className="font-medium transition-colors hover:text-brand"
+              className="font-medium transition-colors hover:text-[#0A58FF]"
             >
               {item.title}
             </Link>
           ) : (
-            <span className="font-medium">{item.title}</span>
+            <span className="font-medium">
+              {item.title}
+            </span>
           )}
         </p>
 
@@ -429,7 +516,7 @@ function ActivityAvatar({
   }
 
   return (
-    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-medium text-muted-foreground">
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-medium text-muted-foreground">
       {getInitials(item.actorName)}
     </div>
   );
