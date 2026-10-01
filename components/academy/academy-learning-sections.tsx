@@ -10,13 +10,18 @@ import {
 
 import { AppCard } from "@/components/app/layouts/app-card";
 import { AcademyMockAction } from "@/components/academy/academy-mock-action";
-import type { AcademyCourse, AcademyRecommendation } from "@/components/academy/academy-mock-data";
+import type { AcademyRecommendation } from "@/components/academy/academy-mock-data";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { academyHref } from "@/lib/navigation/academy-sections";
+import type {
+  AcademyHomeAssignment,
+  AcademyHomeCourse,
+  AcademyThumbnailVariant,
+} from "@/lib/services/academy.service";
 
-const thumbnailStyles: Record<AcademyCourse["thumbnail"], string> = {
+const thumbnailStyles: Record<AcademyThumbnailVariant, string> = {
   analytics: "from-sky-100 via-white to-blue-200 text-blue-600",
   team: "from-slate-100 via-white to-indigo-200 text-indigo-600",
   security: "from-cyan-950 via-slate-900 to-blue-800 text-cyan-200",
@@ -54,11 +59,27 @@ function SectionHeading({
 
 export function AcademyThumbnail({
   variant,
+  url,
   className,
 }: {
-  variant: AcademyCourse["thumbnail"];
+  variant: AcademyThumbnailVariant;
+  url?: string | null;
   className?: string;
 }) {
+  if (url) {
+    return (
+      <div
+        className={cn(
+          "shrink-0 overflow-hidden rounded-xl bg-cover bg-center",
+          className,
+        )}
+        style={{
+          backgroundImage: `url(${url})`,
+        }}
+      />
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -75,7 +96,7 @@ export function AcademyThumbnail({
   );
 }
 
-export function ContinueLearningSection({ courses }: { courses: AcademyCourse[] }) {
+export function ContinueLearningSection({ courses }: { courses: AcademyHomeCourse[] }) {
   return (
     <AppCard className="p-4 sm:p-5">
       <SectionHeading
@@ -83,14 +104,19 @@ export function ContinueLearningSection({ courses }: { courses: AcademyCourse[] 
         href={academyHref("learning")}
         action="Ver mi aprendizaje"
       />
-      <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-3">
-        {courses.map((course) => (
+      {courses.length > 0 ? (
+        <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-3">
+          {courses.map((course) => (
           <article
             key={course.id}
             className="min-w-0 rounded-xl border border-slate-200/70 bg-white/80 p-3 shadow-card"
           >
             <div className="flex min-w-0 gap-3">
-              <AcademyThumbnail variant={course.thumbnail} className="h-16 w-20" />
+              <AcademyThumbnail
+                variant={course.thumbnail}
+                url={course.thumbnailUrl}
+                className="h-16 w-20"
+              />
               <div className="min-w-0 flex-1">
                 <Badge
                   variant="secondary"
@@ -124,13 +150,19 @@ export function ContinueLearningSection({ courses }: { courses: AcademyCourse[] 
               />
             </div>
           </article>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyAcademyBlock
+          title="No tienes cursos en progreso"
+          description="Cuando empieces un curso publicado, aparecera aqui para que puedas retomarlo."
+        />
+      )}
     </AppCard>
   );
 }
 
-export function PendingTrainingSection({ courses }: { courses: AcademyCourse[] }) {
+export function PendingTrainingSection({ courses }: { courses: AcademyHomeAssignment[] }) {
   return (
     <AppCard className="p-4 sm:p-5">
       <SectionHeading
@@ -138,8 +170,9 @@ export function PendingTrainingSection({ courses }: { courses: AcademyCourse[] }
         href={academyHref("required")}
         action="Ver todas"
       />
-      <div className="mt-4 space-y-2">
-        {courses.map((course) => (
+      {courses.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          {courses.map((course) => (
           <article
             key={course.id}
             className="flex min-w-0 flex-col gap-3 rounded-xl border border-slate-200/70 bg-white/80 p-3 shadow-card sm:flex-row sm:items-center"
@@ -148,7 +181,11 @@ export function PendingTrainingSection({ courses }: { courses: AcademyCourse[] }
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning-soft text-amber-600">
                 <AlertTriangle aria-hidden="true" className="h-4 w-4" />
               </span>
-              <AcademyThumbnail variant={course.thumbnail} className="hidden h-11 w-16 sm:flex" />
+              <AcademyThumbnail
+                variant={course.thumbnail}
+                url={course.thumbnailUrl}
+                className="hidden h-11 w-16 sm:flex"
+              />
               <div className="min-w-0">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <h3 className="truncate text-sm font-semibold text-slate-950">{course.title}</h3>
@@ -174,8 +211,14 @@ export function PendingTrainingSection({ courses }: { courses: AcademyCourse[] }
               <AcademyMockAction title={course.title} label="Comenzar" size="xs" />
             </div>
           </article>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyAcademyBlock
+          title="No tienes formacion pendiente"
+          description="Las asignaciones obligatorias o recomendadas apareceran aqui cuando tu equipo las cree."
+        />
+      )}
     </AppCard>
   );
 }
@@ -224,5 +267,22 @@ export function RecommendedCoursesSection({
         ))}
       </div>
     </AppCard>
+  );
+}
+
+function EmptyAcademyBlock({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/50 p-4">
+      <p className="text-sm font-medium text-slate-800">{title}</p>
+      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+        {description}
+      </p>
+    </div>
   );
 }

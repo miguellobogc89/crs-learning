@@ -1,18 +1,33 @@
-﻿import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { AppSectionShell } from "@/components/app/section-sidebar";
-import { APP_SECTIONS } from "@/lib/navigation/app-sections";
-import { ACADEMY_SECTIONS } from "@/lib/navigation/academy-sections";
-import { AcademySidebar } from "@/components/academy/academy-navigation";
 import { AcademyHome } from "@/components/academy/academy-home";
+import { AcademySidebar } from "@/components/academy/academy-navigation";
+import { ACADEMY_SECTIONS } from "@/lib/navigation/academy-sections";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
+import { getAcademyHomeData } from "@/lib/services/academy.service";
 
 export default async function AcademyPage({
   searchParams,
 }: {
   searchParams: Promise<{ view?: string }>;
 }) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect("/");
+  }
+
   const { view } = await searchParams;
-  const section = ACADEMY_SECTIONS.find((item) => item.id === view) ?? ACADEMY_SECTIONS[0];
+  const section =
+    ACADEMY_SECTIONS.find((item) => item.id === view) ??
+    ACADEMY_SECTIONS[0];
   const isHome = section.id === "home";
+  const academyHomeData = isHome
+    ? await getAcademyHomeData(session.user.id)
+    : null;
 
   return (
     <AppSectionShell sidebar={<AcademySidebar />}>
@@ -23,11 +38,15 @@ export default async function AcademyPage({
               {isHome ? APP_SECTIONS.courses.label : section.label}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              {isHome ? "Tu espacio para aprender y seguir avanzando." : "Academy"}
+              {isHome
+                ? "Tu espacio para aprender y seguir avanzando."
+                : "Academy"}
             </p>
-            {isHome && <p className="mt-2 text-xs text-slate-400">Datos de demostración</p>}
           </header>
-          {isHome && <AcademyHome />}
+
+          {isHome && academyHomeData ? (
+            <AcademyHome data={academyHomeData} />
+          ) : null}
         </div>
       </AppPageLayout>
     </AppSectionShell>

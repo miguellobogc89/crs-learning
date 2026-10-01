@@ -14,21 +14,28 @@ import { AppCard } from "@/components/app/layouts/app-card";
 import { AcademyMockAction } from "@/components/academy/academy-mock-action";
 import { AcademyThumbnail } from "@/components/academy/academy-learning-sections";
 import {
-  academyProgressSummary,
-  academyTeamRequests,
   academyWorkRecommendation,
+  academyProgressSummary as academyMockProgressSummary,
 } from "@/components/academy/academy-mock-data";
 import { Button } from "@/components/ui/button";
 import { academyHref } from "@/lib/navigation/academy-sections";
+import type {
+  AcademyHomeProgressSummary,
+  AcademyHomeTeamRequest,
+} from "@/lib/services/academy.service";
 
-export function AcademyProgressPanel() {
-  const progress = academyProgressSummary.global;
+export function AcademyProgressPanel({
+  summary,
+}: {
+  summary: AcademyHomeProgressSummary;
+}) {
+  const progress = summary.global;
 
   const metrics = [
-    { label: "completados", value: academyProgressSummary.completed, icon: BookOpenCheck },
-    { label: "en curso", value: academyProgressSummary.inProgress, icon: Clock3 },
-    { label: "pendientes", value: academyProgressSummary.pending, icon: Layers3 },
-    { label: "habilidades", value: academyProgressSummary.skills, icon: Sparkles },
+    { label: "completados", value: summary.completed, icon: BookOpenCheck },
+    { label: "en curso", value: summary.inProgress, icon: Clock3 },
+    { label: "pendientes", value: summary.pending, icon: Layers3 },
+    { label: "habilidades", value: academyMockProgressSummary.skills, icon: Sparkles },
   ];
 
   return (
@@ -67,12 +74,12 @@ export function AcademyProgressPanel() {
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-xl bg-brand-soft p-3">
-          <p className="text-lg font-semibold leading-none text-slate-950">{academyProgressSummary.hours}</p>
-          <p className="mt-1 text-xs text-slate-500">de formacion</p>
+          <p className="text-lg font-semibold leading-none text-slate-950">{summary.estimatedCompletedLabel}</p>
+          <p className="mt-1 text-xs text-slate-500">avance estimado</p>
         </div>
         <div className="rounded-xl bg-warning-soft p-3">
           <Trophy aria-hidden="true" className="h-4 w-4 text-warning" />
-          <p className="mt-2 text-lg font-semibold leading-none text-slate-950">{academyProgressSummary.badges}</p>
+          <p className="mt-2 text-lg font-semibold leading-none text-slate-950">{academyMockProgressSummary.badges}</p>
           <p className="mt-1 text-xs text-slate-500">insignias</p>
         </div>
       </div>
@@ -112,7 +119,11 @@ export function WorkBasedRecommendationPanel() {
   );
 }
 
-export function TeamLearningRequestsPanel() {
+export function TeamLearningRequestsPanel({
+  requests,
+}: {
+  requests: AcademyHomeTeamRequest[];
+}) {
   return (
     <AppCard className="p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3">
@@ -123,24 +134,33 @@ export function TeamLearningRequestsPanel() {
           Ver solicitudes
         </Link>
       </div>
-      <div className="mt-4 space-y-2">
-        {academyTeamRequests.map((request) => (
-          <div
-            key={request.id}
-            className="flex min-w-0 items-center gap-3 rounded-xl bg-white/70 p-2.5"
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
-              <MessageSquare aria-hidden="true" className="h-4 w-4" />
-            </span>
-            <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-950">{request.title}</p>
-            <p className="shrink-0 text-xs text-slate-500">{request.votes} votos</p>
-            <Button variant="outline" size="xs" className="shrink-0">
-              <ThumbsUp aria-hidden="true" />
-              Votar
-            </Button>
-          </div>
-        ))}
-      </div>
+      {requests.length > 0 ? (
+        <div className="mt-4 space-y-2">
+          {requests.map((request) => (
+            <div
+              key={request.id}
+              className="flex min-w-0 items-center gap-3 rounded-xl bg-white/70 p-2.5"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
+                <MessageSquare aria-hidden="true" className="h-4 w-4" />
+              </span>
+              <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-950">{request.title}</p>
+              <p className="shrink-0 text-xs text-slate-500">{request.votes} votos</p>
+              <Button variant="outline" size="xs" className="shrink-0" disabled={request.hasVoted}>
+                <ThumbsUp aria-hidden="true" />
+                {request.hasVoted ? "Votado" : "Votar"}
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/50 p-4">
+          <p className="text-sm font-medium text-slate-800">Sin solicitudes abiertas</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+            Las solicitudes de cursos de tu empresa apareceran aqui cuando existan.
+          </p>
+        </div>
+      )}
     </AppCard>
   );
 }
