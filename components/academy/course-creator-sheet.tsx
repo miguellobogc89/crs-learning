@@ -178,7 +178,7 @@ export function CourseCreatorSheet({
         side="right"
         className="!w-[46vw] !max-w-[760px] min-w-[680px] gap-0 border-l border-slate-200 !bg-white p-0 shadow-2xl [&>button]:hidden"
       >
-        <CreateCourseHeader />
+        <CourseManagementHeader mode="create"  />
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-white">
           <CourseBasicInformation

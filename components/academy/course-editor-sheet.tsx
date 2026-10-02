@@ -13,7 +13,7 @@ import {
 } from "@/app/actions/course";
 import { CourseBasicInformation } from "@/components/academy/right-panel-management/course-basic-information";
 import { CourseConfiguration } from "@/components/academy/right-panel-management/course-configuration";
-import { CourseEditHeader } from "@/components/academy/right-panel-management/course-edit-header";
+import { CourseManagementHeader } from "@/components/academy/right-panel-management/course-management-header";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -197,15 +197,15 @@ export function CourseEditorSheet({
     }
 
     startSaving(async () => {
-      const result = await updateCourseAction({
+        const result = await updateCourseAction({
         courseId: course.id,
         title: title.trim(),
-        objective: objective.trim(),
+        description: objective.trim(),
         trainingType,
         level,
         difficulty,
         thumbnailUrl: thumbnailBlobUrl,
-      });
+        });
 
       if (!result.ok) {
         toast.error(result.error);
