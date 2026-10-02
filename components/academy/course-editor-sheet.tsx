@@ -13,7 +13,6 @@ import {
 } from "@/app/actions/course";
 import { CourseBasicInformation } from "@/components/academy/right-panel-management/course-basic-information";
 import { CourseConfiguration } from "@/components/academy/right-panel-management/course-configuration";
-import { CourseManagementHeader } from "@/components/academy/right-panel-management/course-management-header";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -66,57 +65,21 @@ export function CourseEditorSheet({
   const [isUploadingImage, startUploadingImage] =
     useTransition();
 
-  useEffect(() => {
-    if (!open || !course) {
-      return;
-    }
+// components/academy/course-editor-sheet.tsx
 
-    const evaluationConfig =
-      course.evaluation_config &&
-      typeof course.evaluation_config === "object" &&
-      !Array.isArray(course.evaluation_config)
-        ? course.evaluation_config
-        : {};
+useEffect(() => {
+  if (!open || !course) {
+    return;
+  }
 
-    const config = evaluationConfig as {
-      trainingType?: TrainingType;
-      difficulty?: Difficulty;
-    };
-
-    setTitle(course.title ?? "");
-    setObjective(course.description ?? "");
-
-    setTrainingType(
-      config.trainingType === "required" ||
-        config.trainingType === "skills"
-        ? config.trainingType
-        : "skills",
-    );
-
-    setLevel(
-      course.level === "beginner" ||
-        course.level === "intermediate" ||
-        course.level === "advanced"
-        ? course.level
-        : "beginner",
-    );
-
-    setDifficulty(
-      config.difficulty === "low" ||
-        config.difficulty === "medium" ||
-        config.difficulty === "high"
-        ? config.difficulty
-        : "medium",
-    );
-
-    setThumbnailBlobUrl(course.thumbnail_url ?? null);
-
-    setThumbnailPreviewUrl(
-      course.thumbnail_url
-        ? `/api/academy/course-cover/${course.id}`
-        : null,
-    );
-  }, [course, open]);
+  setTitle(course.title ?? "");
+  setObjective(course.description ?? "");
+  setTrainingType(course.type);
+  setLevel(course.level);
+  setDifficulty(course.difficulty);
+  setThumbnailBlobUrl(null);
+  setThumbnailPreviewUrl(course.thumbnailUrl ?? null);
+}, [course, open]);
 
   function generateImage() {
     if (!title.trim() || !objective.trim()) {
@@ -229,7 +192,7 @@ export function CourseEditorSheet({
         side="right"
         className="!w-[46vw] !max-w-[760px] min-w-[680px] gap-0 border-l border-slate-200 !bg-white p-0 shadow-2xl [&>button]:hidden"
       >
-        <CourseEditHeader />
+        <CourseManagementHeader mode="edit" />
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-white">
           <CourseBasicInformation
