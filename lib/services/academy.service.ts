@@ -82,7 +82,7 @@ export async function getAcademyAdminCourses(
       updated_at: true,
       _count: {
         select: {
-          user_course_progress: true,
+          course_assignments: true,
         },
       },
     },

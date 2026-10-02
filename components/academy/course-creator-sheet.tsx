@@ -11,8 +11,10 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { CreateCourseHeader } from "@/components/academy/create-course/create-course-header";
 
 import {
   createCourseDraftAction,
@@ -20,17 +22,13 @@ import {
 } from "@/app/actions/course";
 import type { AcademyAdminCourse } from "@/lib/services/academy.service";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetClose,
   SheetContent,
-  SheetDescription,
   SheetFooter,
-  SheetHeader,
-  SheetTitle,
 } from "@/components/ui/sheet";
-import { Textarea } from "@/components/ui/textarea";
+import { CourseBasicInformation } from "@/components/academy/create-course/course-basic-information";
 import { cn } from "@/lib/utils";
 
 type TrainingType = "required" | "skills";
@@ -125,13 +123,7 @@ export function CourseCreatorSheet({
         return;
       }
 
-      /*
-       * IMPORTANTE:
-       * Actualizamos el estado de la tabla ANTES de cerrar el panel.
-       * No hay reload y el curso aparece inmediatamente.
-       */
       onCourseCreated(result.course);
-
       toast.success("Borrador creado.");
       onOpenChange(false);
     });
@@ -141,188 +133,142 @@ export function CourseCreatorSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="!w-[33vw] !max-w-[33vw] min-w-[620px] gap-0 border-l border-slate-200 !bg-white p-0"
+        className="!w-[46vw] !max-w-[760px] min-w-[680px] gap-0 border-l border-slate-200 !bg-white p-0 shadow-2xl"
       >
-        <SheetHeader className="shrink-0 border-b border-slate-200 bg-white px-7 py-5 pr-16">
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-            <GraduationCap className="h-4 w-4 text-[#315BFF]" />
-            <span>Academy</span>
-            <span className="text-slate-300">/</span>
-            <span>Crear curso</span>
-          </div>
+        <CreateCourseHeader />
 
-          <SheetTitle className="mt-2 text-xl font-semibold tracking-tight text-slate-950">
-            Crear nuevo curso
-          </SheetTitle>
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white">
+          <div className="divide-y divide-slate-200 px-8">
 
-          <SheetDescription className="mt-1 text-sm text-slate-500">
-            Define lo esencial. Academy preparará después el curso y su
-            evaluación.
-          </SheetDescription>
-        </SheetHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col bg-white px-7 py-5">
-          <div className="mb-5 flex items-center gap-3 rounded-xl border border-[#DCE4FF] bg-[#F4F6FF] px-4 py-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#315BFF] shadow-sm">
-              <Sparkles className="h-4 w-4" />
-            </div>
+<CourseBasicInformation
+  title={title}
+  description={objective}
+  imageUrl={thumbnailPreviewUrl}
+  isGeneratingImage={isGeneratingImage}
+  onTitleChange={setTitle}
+  onDescriptionChange={setObjective}
+  onGenerateImage={generateImage}
+/>
 
-            <p className="text-xs leading-5 text-slate-600">
-              La IA decidirá el temario, duración y tipo de evaluación según
-              estas decisiones.
-            </p>
-          </div>
-
-          <div className="grid flex-1 grid-cols-2 gap-6">
-            <section className="space-y-4">
-              <SectionTitle
-                icon={BookOpen}
-                title="Información básica"
+            {/* CONFIGURACIÓN */}
+            <section className="py-6">
+              <SectionHeader
+                icon={GraduationCap}
+                title="Configuración general"
               />
 
-              <Field label="Título del curso">
-                <Input
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="Ej. Procedimiento de puestas en marcha"
-                  className="h-10 bg-white"
-                />
-              </Field>
+              <div className="mt-4 grid grid-cols-3 gap-4">
+                <div>
+                  <ConfigLabel>Tipo de formación</ConfigLabel>
 
-              <Field label="Objetivo">
-                <Textarea
-                  value={objective}
-                  onChange={(event) => setObjective(event.target.value)}
-                  placeholder="¿Qué debe aprender o demostrar el usuario?"
-                  className="min-h-[102px] resize-none bg-white"
-                />
-              </Field>
+                  <div className="space-y-2">
+                    <OptionCard
+                      selected={trainingType === "required"}
+                      onClick={() =>
+                        setTrainingType("required")
+                      }
+                      icon={ShieldCheck}
+                      label="Obligatoria"
+                      description="Conocimiento que debe acreditarse."
+                    />
 
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-medium text-slate-700">
-                    Portada
-                  </span>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1.5 text-[#315BFF] hover:bg-[#EEF2FF] hover:text-[#315BFF]"
-                    disabled={isGeneratingImage}
-                    onClick={generateImage}
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-
-                    {isGeneratingImage
-                      ? "Generando..."
-                      : thumbnailPreviewUrl
-                        ? "Regenerar"
-                        : "Generar con IA"}
-                  </Button>
+                    <OptionCard
+                      selected={trainingType === "skills"}
+                      onClick={() => setTrainingType("skills")}
+                      icon={Target}
+                      label="Competencias"
+                      description="Desarrollo profesional."
+                    />
+                  </div>
                 </div>
 
-                <div className="flex h-[120px] items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                  {thumbnailPreviewUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={thumbnailPreviewUrl}
-                      alt="Portada generada"
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="text-center">
-                      <Sparkles className="mx-auto h-5 w-5 text-slate-300" />
+                <div>
+                  <ConfigLabel>Nivel del curso</ConfigLabel>
 
-                      <p className="mt-2 text-xs text-slate-400">
-                        Genera una portada para el curso
-                      </p>
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    <CompactOption
+                      selected={level === "beginner"}
+                      onClick={() => setLevel("beginner")}
+                      iconLevel={1}
+                      label="Básico"
+                    />
+
+                    <CompactOption
+                      selected={level === "intermediate"}
+                      onClick={() => setLevel("intermediate")}
+                      iconLevel={2}
+                      label="Intermedio"
+                    />
+
+                    <CompactOption
+                      selected={level === "advanced"}
+                      onClick={() => setLevel("advanced")}
+                      iconLevel={3}
+                      label="Avanzado"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <ConfigLabel>Dificultad general</ConfigLabel>
+
+                  <div className="space-y-2">
+                    <CompactOption
+                      selected={difficulty === "low"}
+                      onClick={() => setDifficulty("low")}
+                      iconLevel={1}
+                      label="Baja"
+                    />
+
+                    <CompactOption
+                      selected={difficulty === "medium"}
+                      onClick={() => setDifficulty("medium")}
+                      iconLevel={2}
+                      label="Media"
+                    />
+
+                    <CompactOption
+                      selected={difficulty === "high"}
+                      onClick={() => setDifficulty("high")}
+                      iconLevel={3}
+                      label="Alta"
+                    />
+                  </div>
                 </div>
               </div>
             </section>
 
-            <section className="space-y-5">
-              <div>
-                <SectionTitle
-                  icon={GraduationCap}
-                  title="Tipo de formación"
-                />
+            {/* ASIGNACIÓN */}
+            <section className="py-6">
+              <SectionHeader
+                icon={Users}
+                title="Asignación"
+                optional
+                description="Podrás asignar el curso a personas o equipos después de crearlo."
+              />
 
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <ChoiceCard
-                    selected={trainingType === "required"}
-                    onClick={() => setTrainingType("required")}
-                    icon={ShieldCheck}
-                    title="Obligatoria"
-                    description="Conocimiento que debe acreditarse."
-                  />
+              <div className="mt-4 flex items-center gap-3 rounded-xl border border-[#DCE4FF] bg-[#F8F9FF] px-4 py-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#E9EEFF] text-[#315BFF]">
+                  <Check className="h-4 w-4" />
+                </div>
 
-                  <ChoiceCard
-                    selected={trainingType === "skills"}
-                    onClick={() => setTrainingType("skills")}
-                    icon={Target}
-                    title="Competencias"
-                    description="Desarrollo profesional."
-                  />
+                <div>
+                  <p className="text-xs font-medium text-slate-900">
+                    Sin asignar por ahora
+                  </p>
+
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    El curso se creará como borrador y podrás gestionar
+                    destinatarios desde su panel.
+                  </p>
                 </div>
               </div>
-
-              <ChoiceGroup
-                title="Nivel del curso"
-                value={level}
-                options={[
-                  {
-                    value: "beginner",
-                    label: "Básico",
-                    description: "Fundamentos",
-                  },
-                  {
-                    value: "intermediate",
-                    label: "Intermedio",
-                    description: "Aplicación",
-                  },
-                  {
-                    value: "advanced",
-                    label: "Avanzado",
-                    description: "Dominio",
-                  },
-                ]}
-                onChange={(value) =>
-                  setLevel(value as CourseLevel)
-                }
-              />
-
-              <ChoiceGroup
-                title="Dificultad"
-                value={difficulty}
-                options={[
-                  {
-                    value: "low",
-                    label: "Baja",
-                    description: "Validación sencilla",
-                  },
-                  {
-                    value: "medium",
-                    label: "Media",
-                    description: "Exigencia estándar",
-                  },
-                  {
-                    value: "high",
-                    label: "Alta",
-                    description: "Validación exigente",
-                  },
-                ]}
-                onChange={(value) =>
-                  setDifficulty(value as Difficulty)
-                }
-              />
             </section>
           </div>
         </div>
 
-        <SheetFooter className="shrink-0 flex-row items-center justify-between border-t border-slate-200 bg-white px-7 py-4">
+        <SheetFooter className="shrink-0 flex-row items-center justify-between border-t border-slate-200 bg-white px-8 py-4">
           <SheetClose asChild>
             <Button variant="outline" size="lg">
               Cancelar
@@ -336,9 +282,7 @@ export function CourseCreatorSheet({
             onClick={saveDraft}
             className="gap-2 bg-[#315BFF] px-5 text-white hover:bg-[#244BE8]"
           >
-            <Sparkles className="h-4 w-4" />
-
-            {isSaving ? "Creando..." : "Crear borrador"}
+            {isSaving ? "Creando..." : "Crear curso"}
 
             {!isSaving ? (
               <ArrowRight className="h-4 w-4" />
@@ -350,28 +294,53 @@ export function CourseCreatorSheet({
   );
 }
 
-function SectionTitle({
+function SectionHeader({
   icon: Icon,
   title,
+  description,
+  optional = false,
 }: {
   icon: typeof BookOpen;
   title: string;
+  description?: string;
+  optional?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <Icon className="h-4 w-4 text-[#315BFF]" />
-      <h3 className="text-sm font-semibold text-slate-900">
-        {title}
-      </h3>
+    <div className="flex items-start gap-3">
+      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center text-[#315BFF]">
+        <Icon className="h-[18px] w-[18px]" />
+      </div>
+
+      <div>
+        <div className="flex items-center gap-1">
+          <h3 className="text-sm font-semibold text-slate-950">
+            {title}
+          </h3>
+
+          {optional ? (
+            <span className="text-xs font-normal text-slate-400">
+              (opcional)
+            </span>
+          ) : null}
+        </div>
+
+        {description ? (
+          <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
+            {description}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
 
 function Field({
   label,
+  counter,
   children,
 }: {
   label: string;
+  counter?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -379,22 +348,41 @@ function Field({
       <span className="mb-2 block text-xs font-medium text-slate-700">
         {label}
       </span>
+
       {children}
+
+      {counter ? (
+        <span className="mt-1 block text-right text-[10px] text-slate-400">
+          {counter}
+        </span>
+      ) : null}
     </label>
   );
 }
 
-function ChoiceCard({
+function ConfigLabel({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <p className="mb-2 text-[11px] font-medium text-slate-700">
+      {children}
+    </p>
+  );
+}
+
+function OptionCard({
   selected,
   onClick,
   icon: Icon,
-  title,
+  label,
   description,
 }: {
   selected: boolean;
   onClick: () => void;
-  icon: typeof BookOpen;
-  title: string;
+  icon: typeof ShieldCheck;
+  label: string;
   description: string;
 }) {
   return (
@@ -402,95 +390,111 @@ function ChoiceCard({
       type="button"
       onClick={onClick}
       className={cn(
-        "relative min-h-[92px] rounded-xl border p-3 text-left transition",
+        "relative flex min-h-[62px] w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition",
         selected
-          ? "border-[#315BFF] bg-[#F4F6FF] ring-1 ring-[#315BFF]/10"
+          ? "border-[#315BFF] bg-[#F7F8FF] shadow-[0_0_0_1px_rgba(49,91,255,0.05)]"
           : "border-slate-200 bg-white hover:border-slate-300",
       )}
     >
       <div
         className={cn(
-          "mb-2 flex h-7 w-7 items-center justify-center rounded-lg",
-          selected
-            ? "bg-[#E8EDFF] text-[#315BFF]"
-            : "bg-slate-100 text-slate-500",
+          "flex h-7 w-7 shrink-0 items-center justify-center",
+          selected ? "text-[#315BFF]" : "text-slate-400",
         )}
       >
-        <Icon className="h-3.5 w-3.5" />
+        <Icon className="h-4 w-4" />
       </div>
 
-      <p className="text-xs font-semibold text-slate-900">
-        {title}
-      </p>
+      <div className="min-w-0 pr-3">
+        <p
+          className={cn(
+            "text-[11px] font-semibold",
+            selected ? "text-slate-950" : "text-slate-700",
+          )}
+        >
+          {label}
+        </p>
 
-      <p className="mt-0.5 text-[10px] leading-4 text-slate-500">
-        {description}
-      </p>
+        <p className="mt-0.5 text-[9px] leading-3 text-slate-400">
+          {description}
+        </p>
+      </div>
 
-      {selected ? (
-        <span className="absolute right-3 top-3 flex h-4 w-4 items-center justify-center rounded-full bg-[#315BFF] text-white">
-          <Check className="h-2.5 w-2.5" />
-        </span>
-      ) : null}
+      <span
+        className={cn(
+          "absolute right-2.5 top-2.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border",
+          selected
+            ? "border-[#315BFF] bg-[#315BFF] text-white"
+            : "border-slate-300 bg-white",
+        )}
+      >
+        {selected ? <Check className="h-2 w-2" /> : null}
+      </span>
     </button>
   );
 }
 
-function ChoiceGroup({
-  title,
-  value,
-  options,
-  onChange,
+function CompactOption({
+  selected,
+  onClick,
+  label,
+  iconLevel,
 }: {
-  title: string;
-  value: string;
-  options: Array<{
-    value: string;
-    label: string;
-    description: string;
-  }>;
-  onChange: (value: string) => void;
+  selected: boolean;
+  onClick: () => void;
+  label: string;
+  iconLevel: 1 | 2 | 3;
 }) {
   return (
-    <div>
-      <p className="mb-2 text-xs font-medium text-slate-700">
-        {title}
-      </p>
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex h-[42px] w-full items-center justify-center gap-2 rounded-lg border px-2 transition",
+        selected
+          ? "border-[#315BFF] bg-[#F7F8FF] text-[#315BFF]"
+          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+      )}
+    >
+      <LevelBars level={iconLevel} active={selected} />
 
-      <div className="grid grid-cols-3 gap-2">
-        {options.map((option) => {
-          const selected = option.value === value;
+      <span className="text-[11px] font-medium">
+        {label}
+      </span>
+    </button>
+  );
+}
 
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onChange(option.value)}
-              className={cn(
-                "rounded-xl border px-2 py-3 text-center transition",
-                selected
-                  ? "border-[#315BFF] bg-[#F4F6FF]"
-                  : "border-slate-200 bg-white hover:border-slate-300",
-              )}
-            >
-              <span
-                className={cn(
-                  "block text-xs font-semibold",
-                  selected
-                    ? "text-[#315BFF]"
-                    : "text-slate-800",
-                )}
-              >
-                {option.label}
-              </span>
-
-              <span className="mt-1 block text-[10px] text-slate-500">
-                {option.description}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+function LevelBars({
+  level,
+  active,
+}: {
+  level: 1 | 2 | 3;
+  active: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex h-4 items-end gap-[2px]",
+        active ? "text-[#315BFF]" : "text-slate-400",
+      )}
+    >
+      {[1, 2, 3].map((bar) => (
+        <span
+          key={bar}
+          className={cn(
+            "w-[3px] rounded-[1px]",
+            bar === 1
+              ? "h-1.5"
+              : bar === 2
+                ? "h-2.5"
+                : "h-3.5",
+            bar <= level
+              ? "bg-current"
+              : "bg-slate-200",
+          )}
+        />
+      ))}
     </div>
   );
 }
