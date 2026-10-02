@@ -1,3 +1,6 @@
+// lib/services/academy.service.ts
+
+import { prisma } from "@/lib/prisma";
 import {
   getAcademyUserScope,
   getCompanyCourseRequests,
@@ -8,6 +11,133 @@ import {
   type AcademyAssignmentRecord,
   type AcademyCourseWithProgressRecord,
 } from "@/lib/repositories/course.repository";
+
+export type AcademyAdminCourse = {
+  id: string;
+  title: string;
+  description: string;
+  type: "required" | "skills";
+  level: "beginner" | "intermediate" | "advanced";
+  difficulty: "low" | "medium" | "high";
+  status: "published" | "draft";
+  updatedAt: string;
+  students: number;
+  thumbnailUrl: string | null;
+};
+
+export async function getAcademyAdminCourses(
+  userId: string,
+): Promise<AcademyAdminCourse[]> {
+  const user = await prisma.users.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      company_id: true,
+      system_role: true,
+    },
+  });
+
+  if (!user) {
+    return [];
+  }
+
+  const canManage =
+    user.system_role === "org_manager" ||
+    user.system_role === "system_admin";
+
+  if (!canManage) {
+    return [];
+  }
+
+  const courses = await prisma.courses.findMany({
+    where:
+      user.system_role === "system_admin" && !user.company_id
+        ? {}
+        : {
+            company_id: user.company_id,
+          },
+    orderBy: {
+      updated_at: "desc",
+    },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      level: true,
+      category: true,
+      thumbnail_url: true,
+      evaluation_config: true,
+      is_published: true,
+      updated_at: true,
+      _count: {
+        select: {
+          user_course_progress: true,
+        },
+      },
+    },
+  });
+
+  return courses.map((course) => {
+    const config =
+      course.evaluation_config &&
+      typeof course.evaluation_config === "object" &&
+      !Array.isArray(course.evaluation_config)
+        ? course.evaluation_config
+        : null;
+
+    const generator =
+      config &&
+      "generator" in config &&
+      config.generator &&
+      typeof config.generator === "object" &&
+      !Array.isArray(config.generator)
+        ? config.generator
+        : null;
+
+    const difficulty =
+      generator &&
+      "difficulty" in generator &&
+      (generator.difficulty === "low" ||
+        generator.difficulty === "medium" ||
+        generator.difficulty === "high")
+        ? generator.difficulty
+        : "medium";
+
+    const type =
+      generator &&
+      "trainingType" in generator &&
+      generator.trainingType === "required"
+        ? "required"
+        : course.category === "Formación obligatoria"
+          ? "required"
+          : "skills";
+
+    const level =
+      course.level === "intermediate" || course.level === "advanced"
+        ? course.level
+        : "beginner";
+
+    return {
+      id: course.id,
+      title: course.title,
+      description: course.description ?? "",
+      type,
+      level,
+      difficulty,
+      status: course.is_published ? "published" : "draft",
+      updatedAt: new Intl.DateTimeFormat("es-ES", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }).format(course.updated_at),
+      students: course._count.user_course_progress,
+      thumbnailUrl: course.thumbnail_url
+        ? `/api/academy/course-cover/${course.id}`
+        : null,
+    };
+  });
+}
 
 export type AcademyThumbnailVariant =
   | "analytics"

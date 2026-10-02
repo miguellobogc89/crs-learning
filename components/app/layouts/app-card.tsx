@@ -16,7 +16,7 @@ export function AppCard({
   return (
     <div
       className={cn(
-        "min-w-0 rounded-[28px] bg-white p-6",
+        "min-w-0 rounded-[12px] bg-white p-6",
         "shadow-[0_8px_32px_rgba(37,99,235,0.045)]",
         className,
       )}

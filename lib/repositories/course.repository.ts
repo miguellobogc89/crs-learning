@@ -1,4 +1,5 @@
 // lib/repositories/course.repository.ts
+
 import type { Prisma, courses } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
@@ -109,6 +110,19 @@ export async function getAcademyUserScope(userId: string) {
     select: {
       id: true,
       company_id: true,
+    },
+  });
+}
+
+export async function getCourseCreatorScope(userId: string) {
+  return prisma.users.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      id: true,
+      company_id: true,
+      system_role: true,
     },
   });
 }
@@ -302,13 +316,62 @@ export async function createCourse(data: {
   title: string;
   description: string;
   level: string;
+  category: string;
+  companyId: string | null;
+  createdByUserId: string;
+  thumbnailUrl: string | null;
+  evaluationConfig: Prisma.InputJsonValue;
 }) {
   return prisma.courses.create({
     data: {
       title: data.title,
       slug: crypto.randomUUID(),
-      description: data.description,
+      description: data.description || null,
       level: data.level,
+      category: data.category,
+      company_id: data.companyId,
+      created_by_user_id: data.createdByUserId,
+      thumbnail_url: data.thumbnailUrl,
+      evaluation_config: data.evaluationConfig,
+      is_published: false,
+    },
+  });
+}
+
+export async function getCourseCreatorScope(userId: string) {
+  return prisma.users.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      id: true,
+      company_id: true,
+      system_role: true,
+    },
+  });
+}
+
+export async function createCourse(data: {
+  title: string;
+  description: string;
+  level: string;
+  category: string;
+  companyId: string | null;
+  createdByUserId: string;
+  thumbnailUrl: string | null;
+  evaluationConfig: Prisma.InputJsonValue;
+}) {
+  return prisma.courses.create({
+    data: {
+      title: data.title,
+      slug: crypto.randomUUID(),
+      description: data.description || null,
+      level: data.level,
+      category: data.category,
+      company_id: data.companyId,
+      created_by_user_id: data.createdByUserId,
+      thumbnail_url: data.thumbnailUrl,
+      evaluation_config: data.evaluationConfig,
       is_published: false,
     },
   });

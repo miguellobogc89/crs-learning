@@ -11,7 +11,10 @@ import { AcademySidebar } from "@/components/academy/academy-navigation";
 import { ACADEMY_SECTIONS } from "@/lib/navigation/academy-sections";
 import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { prisma } from "@/lib/prisma";
-import { getAcademyHomeData } from "@/lib/services/academy.service";
+import {
+  getAcademyAdminCourses,
+  getAcademyHomeData,
+} from "@/lib/services/academy.service";
 
 export default async function AcademyPage({
   searchParams,
@@ -33,8 +36,10 @@ export default async function AcademyPage({
   const isHome = section.id === "home";
   const isAdmin = section.id === "admin";
 
-  const [academyHomeData, currentUser] = await Promise.all([
-    isHome ? getAcademyHomeData(session.user.id) : Promise.resolve(null),
+  const [academyHomeData, currentUser, adminCourses] = await Promise.all([
+    isHome
+      ? getAcademyHomeData(session.user.id)
+      : Promise.resolve(null),
 
     isAdmin
       ? prisma.users.findUnique({
@@ -46,6 +51,10 @@ export default async function AcademyPage({
           },
         })
       : Promise.resolve(null),
+
+    isAdmin
+      ? getAcademyAdminCourses(session.user.id)
+      : Promise.resolve([]),
   ]);
 
   const canManageAcademy =
@@ -75,7 +84,10 @@ export default async function AcademyPage({
           ) : null}
 
           {isAdmin ? (
-            <AcademyAdmin canManageAcademy={canManageAcademy} />
+            <AcademyAdmin
+              canManageAcademy={canManageAcademy}
+              initialCourses={adminCourses}
+            />
           ) : null}
         </div>
       </AppPageLayout>
