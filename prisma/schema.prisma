@@ -34,6 +34,7 @@ model courses {
   created_by_user_id   String?                @db.Uuid
   category             String?
   thumbnail_url        String?
+  evaluation_config    Json?
   course_assignments   course_assignments[]
   companies            companies?             @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users                users?                 @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
@@ -243,6 +244,7 @@ model sections {
   required_section_id String?         @db.Uuid
   created_at          DateTime        @default(now()) @db.Timestamptz(6)
   updated_at          DateTime        @default(now()) @db.Timestamptz(6)
+  learning_objectives Json?
   lessons             lessons[]
   quizzes             quizzes[]
   section_items       section_items[]
