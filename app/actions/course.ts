@@ -13,6 +13,7 @@ import {
   newCourse,
   setCoursePublished,
   updateCourse,
+  uploadCourseCover,
 } from "@/lib/services/course.service";
 
 type TrainingType = "required" | "skills";
@@ -97,10 +98,11 @@ export async function generateCourseImageAction(input: {
     };
   }
 
-  if (!input.title.trim()) {
+  if (!input.title.trim() || !input.objective.trim()) {
     return {
       ok: false as const,
-      error: "Escribe primero el título del curso.",
+      error:
+        "Añade el título y la descripción antes de generar una imagen.",
     };
   }
 
@@ -128,6 +130,51 @@ export async function generateCourseImageAction(input: {
         error instanceof Error
           ? error.message
           : "No se ha podido generar la portada.",
+    };
+  }
+}
+
+export async function uploadCourseImageAction(
+  formData: FormData,
+) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return {
+      ok: false as const,
+      error: "Tu sesión ha caducado.",
+    };
+  }
+
+  const file = formData.get("file");
+
+  if (!(file instanceof File)) {
+    return {
+      ok: false as const,
+      error: "No se ha recibido ninguna imagen.",
+    };
+  }
+
+  try {
+    const image = await uploadCourseCover({
+      userId: session.user.id,
+      file,
+    });
+
+    return {
+      ok: true as const,
+      blobUrl: image.blobUrl,
+      previewUrl: image.previewUrl,
+    };
+  } catch (error) {
+    console.error("uploadCourseImageAction", error);
+
+    return {
+      ok: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se ha podido subir la portada.",
     };
   }
 }
@@ -174,7 +221,10 @@ export async function updateCourseAction(input: {
   } catch (error) {
     console.error("updateCourseAction", error);
 
-    return actionError(error, "No se ha podido actualizar el curso.");
+    return actionError(
+      error,
+      "No se ha podido actualizar el curso.",
+    );
   }
 }
 
@@ -214,7 +264,9 @@ export async function setCoursePublishedAction(
   }
 }
 
-export async function deleteCourseAction(courseId: string) {
+export async function deleteCourseAction(
+  courseId: string,
+) {
   const session = await auth();
 
   if (!session?.user?.id) {
@@ -238,7 +290,10 @@ export async function deleteCourseAction(courseId: string) {
   } catch (error) {
     console.error("deleteCourseAction", error);
 
-    return actionError(error, "No se ha podido eliminar el curso.");
+    return actionError(
+      error,
+      "No se ha podido eliminar el curso.",
+    );
   }
 }
 
@@ -265,7 +320,10 @@ export async function getCourseManagementDataAction(
       options,
     };
   } catch (error) {
-    console.error("getCourseManagementDataAction", error);
+    console.error(
+      "getCourseManagementDataAction",
+      error,
+    );
 
     return actionError(
       error,
@@ -303,7 +361,10 @@ export async function assignCourseAction(input: {
   } catch (error) {
     console.error("assignCourseAction", error);
 
-    return actionError(error, "No se ha podido asignar el curso.");
+    return actionError(
+      error,
+      "No se ha podido asignar el curso.",
+    );
   }
 }
 
@@ -324,7 +385,8 @@ function serializeAdminCourse(
   },
 ) {
   const level: CourseLevel =
-    course.level === "intermediate" || course.level === "advanced"
+    course.level === "intermediate" ||
+    course.level === "advanced"
       ? course.level
       : "beginner";
 
@@ -350,9 +412,15 @@ function serializeAdminCourse(
   };
 }
 
-function actionError(error: unknown, fallback: string) {
+function actionError(
+  error: unknown,
+  fallback: string,
+) {
   return {
     ok: false as const,
-    error: error instanceof Error ? error.message : fallback,
+    error:
+      error instanceof Error
+        ? error.message
+        : fallback,
   };
 }

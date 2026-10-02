@@ -1,8 +1,9 @@
-// components/academy/create-course/course-basic-information.tsx
+// components/academy/right-panel-management/course-basic-information.tsx
 
 "use client";
 
-import { BookOpen, ImagePlus, Sparkles } from "lucide-react";
+import { useRef } from "react";
+import { ImagePlus, Sparkles, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,9 +14,11 @@ type CourseBasicInformationProps = {
   description: string;
   imageUrl: string | null;
   isGeneratingImage: boolean;
+  isUploadingImage: boolean;
   onTitleChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
   onGenerateImage: () => void;
+  onUploadImage: (file: File) => void;
 };
 
 export function CourseBasicInformation({
@@ -23,15 +26,39 @@ export function CourseBasicInformation({
   description,
   imageUrl,
   isGeneratingImage,
+  isUploadingImage,
   onTitleChange,
   onDescriptionChange,
   onGenerateImage,
+  onUploadImage,
 }: CourseBasicInformationProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const canGenerateWithAi =
+    title.trim().length > 0 && description.trim().length > 0;
+
+  function handleFileChange(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    onUploadImage(file);
+
+    event.target.value = "";
+  }
+
   return (
-    <section className="border-b border-[#EEF1F6] py-5">
+    <section className="border-b border-[#EEF1F6] px-5 py-5">
       <div className="flex items-start gap-3">
         <div className="flex h-7 w-7 shrink-0 items-center justify-center text-[#315BFF]">
-          <BookOpen className="h-[18px] w-[18px]" strokeWidth={2} />
+          <ImagePlus
+            className="h-[18px] w-[18px]"
+            strokeWidth={2}
+          />
         </div>
 
         <div>
@@ -40,16 +67,24 @@ export function CourseBasicInformation({
           </h3>
 
           <p className="mt-0.5 text-[11.5px] leading-4 tracking-[-0.015em] text-[#536184]">
-            Añade la portada y define la información principal del curso.
+            Añade una portada y define la información principal del
+            curso.
           </p>
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-[1.02fr_0.98fr] gap-5">
-        {/* Portada */}
         <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
           {imageUrl ? (
-            <div className="relative flex h-[210px] overflow-hidden rounded-xl border border-[#DDE3F0] bg-[#FAFBFF]">
+            <div className="relative h-[210px] overflow-hidden rounded-xl border border-[#DDE3F0] bg-[#FAFBFF]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={imageUrl}
@@ -57,20 +92,41 @@ export function CourseBasicInformation({
                 className="h-full w-full object-cover"
               />
 
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={isGeneratingImage}
-                onClick={onGenerateImage}
-                className="absolute bottom-3 right-3 gap-1.5 border border-[#DCE2F0] bg-white/95 text-[11px] text-[#15234E] shadow-sm hover:bg-white"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-[#315BFF]" />
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 bg-gradient-to-t from-black/45 via-black/15 to-transparent px-3 pb-3 pt-10">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={isUploadingImage}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-8 gap-1.5 border border-white/40 bg-white/95 px-3 text-[11px] text-[#15234E] shadow-sm hover:bg-white"
+                >
+                  <Upload className="h-3.5 w-3.5" />
 
-                {isGeneratingImage
-                  ? "Generando..."
-                  : "Generar otra"}
-              </Button>
+                  {isUploadingImage
+                    ? "Subiendo..."
+                    : "Cambiar imagen"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={
+                    !canGenerateWithAi ||
+                    isGeneratingImage ||
+                    isUploadingImage
+                  }
+                  onClick={onGenerateImage}
+                  className="h-8 gap-1.5 border border-white/40 bg-white/95 px-3 text-[11px] text-[#315BFF] shadow-sm hover:bg-white disabled:text-slate-400"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+
+                  {isGeneratingImage
+                    ? "Generando..."
+                    : "Generar otra"}
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="flex h-[210px] flex-col items-center justify-center rounded-xl border border-dashed border-[#C9D4EA] bg-[#FBFCFF] px-5 text-center">
@@ -82,11 +138,11 @@ export function CourseBasicInformation({
               </div>
 
               <p className="mt-3 text-[13px] font-semibold tracking-[-0.02em] text-[#101B45]">
-                Portada del curso
+                Sube una imagen
               </p>
 
               <p className="mt-1 text-[11px] text-[#7180A0]">
-                Formato 16:9 recomendado
+                PNG, JPG o WebP · 16:9 recomendado
               </p>
 
               <div className="mt-4 flex items-center gap-2">
@@ -94,20 +150,28 @@ export function CourseBasicInformation({
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled
+                  disabled={isUploadingImage}
+                  onClick={() => fileInputRef.current?.click()}
                   className="h-9 gap-1.5 px-3 text-[11px]"
                 >
-                  <ImagePlus className="h-3.5 w-3.5" />
-                  Subir imagen
+                  <Upload className="h-3.5 w-3.5" />
+
+                  {isUploadingImage
+                    ? "Subiendo..."
+                    : "Subir imagen"}
                 </Button>
 
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={isGeneratingImage}
+                  disabled={
+                    !canGenerateWithAi ||
+                    isGeneratingImage ||
+                    isUploadingImage
+                  }
                   onClick={onGenerateImage}
-                  className="h-9 gap-1.5 border-[#D6DEFF] bg-[#F7F8FF] px-3 text-[11px] text-[#315BFF] hover:bg-[#EEF2FF] hover:text-[#315BFF]"
+                  className="h-9 gap-1.5 border-[#D6DEFF] bg-[#F7F8FF] px-3 text-[11px] text-[#315BFF] hover:bg-[#EEF2FF] hover:text-[#315BFF] disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
                 >
                   <Sparkles className="h-3.5 w-3.5" />
 
@@ -120,7 +184,6 @@ export function CourseBasicInformation({
           )}
         </div>
 
-        {/* Información */}
         <div className="flex h-[210px] flex-col">
           <label className="block">
             <span className="mb-1.5 block text-[11px] font-medium text-[#1B2851]">

@@ -15,7 +15,6 @@ import {
   getCompanyTeams,
   getCompanyUsers,
   getCourseAssignedUserIds,
-  getCourseAssignmentCount,
   getCourseCreatorScope,
   getCourses,
   getManagedCourse,
@@ -27,13 +26,24 @@ import type {
 } from "@/lib/services/academy.service";
 
 type TrainingType = "required" | "skills";
-type CourseLevel = "beginner" | "intermediate" | "advanced";
+type CourseLevel =
+  | "beginner"
+  | "intermediate"
+  | "advanced";
 type Difficulty = "low" | "medium" | "high";
 
 const COURSE_MANAGER_ROLES = new Set([
   "org_manager",
   "system_admin",
 ]);
+
+const COURSE_COVER_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
+
+const MAX_COURSE_COVER_SIZE = 5 * 1024 * 1024;
 
 export async function listCourses() {
   return getCourses();
@@ -83,13 +93,16 @@ export async function updateCourse(data: {
   thumbnailUrl?: string | null;
 }): Promise<AcademyAdminCourse> {
   const user = await requireCourseManager(data.userId);
+
   const current = await requireManagedCourse(
     data.courseId,
     user.company_id,
     user.system_role,
   );
 
-  const currentConfig = asJsonObject(current.evaluation_config);
+  const currentConfig = asJsonObject(
+    current.evaluation_config,
+  );
 
   const evaluationConfig = {
     ...currentConfig,
@@ -102,20 +115,23 @@ export async function updateCourse(data: {
     },
   } satisfies Prisma.InputJsonObject;
 
-  const updated = await updateManagedCourse(data.courseId, {
-    title: data.title,
-    description: data.description || null,
-    level: data.level,
-    category:
-      data.trainingType === "required"
-        ? "Formación obligatoria"
-        : "Desarrollo de competencias",
-    evaluation_config: evaluationConfig,
-    ...(data.thumbnailUrl
-      ? { thumbnail_url: data.thumbnailUrl }
-      : {}),
-    updated_at: new Date(),
-  });
+  const updated = await updateManagedCourse(
+    data.courseId,
+    {
+      title: data.title,
+      description: data.description || null,
+      level: data.level,
+      category:
+        data.trainingType === "required"
+          ? "Formación obligatoria"
+          : "Desarrollo de competencias",
+      evaluation_config: evaluationConfig,
+      ...(data.thumbnailUrl
+        ? { thumbnail_url: data.thumbnailUrl }
+        : {}),
+      updated_at: new Date(),
+    },
+  );
 
   return mapManagedCourse(updated);
 }
@@ -133,10 +149,13 @@ export async function setCoursePublished(data: {
     user.system_role,
   );
 
-  const updated = await updateManagedCourse(data.courseId, {
-    is_published: data.published,
-    updated_at: new Date(),
-  });
+  const updated = await updateManagedCourse(
+    data.courseId,
+    {
+      is_published: data.published,
+      updated_at: new Date(),
+    },
+  );
 
   return mapManagedCourse(updated);
 }
@@ -172,41 +191,45 @@ export async function getCourseManagementData(data: {
     return [];
   }
 
-  const [users, teams, assignedUserIds] = await Promise.all([
-    getCompanyUsers(course.company_id),
-    getCompanyTeams(course.company_id),
-    getCourseAssignedUserIds(course.id),
-  ]);
+  const [users, teams, assignedUserIds] =
+    await Promise.all([
+      getCompanyUsers(course.company_id),
+      getCompanyTeams(course.company_id),
+      getCourseAssignedUserIds(course.id),
+    ]);
 
-  const userOptions: AcademyCourseAssignmentOption[] = users.map(
-    (member) => ({
+  const userOptions: AcademyCourseAssignmentOption[] =
+    users.map((member) => ({
       id: member.id,
       kind: "user",
       name: member.name || member.email,
       secondary: member.email,
       assigned: assignedUserIds.has(member.id),
-    }),
-  );
+    }));
 
-  const teamOptions: AcademyCourseAssignmentOption[] = teams.map(
-    (team) => {
-      const memberIds = team.knowledge_team_members.map(
-        (member) => member.user_id,
-      );
+  const teamOptions: AcademyCourseAssignmentOption[] =
+    teams.map((team) => {
+      const memberIds =
+        team.knowledge_team_members.map(
+          (member) => member.user_id,
+        );
 
       return {
         id: team.id,
         kind: "team",
         name: team.name,
         secondary: `${memberIds.length} ${
-          memberIds.length === 1 ? "miembro" : "miembros"
+          memberIds.length === 1
+            ? "miembro"
+            : "miembros"
         }`,
         assigned:
           memberIds.length > 0 &&
-          memberIds.every((id) => assignedUserIds.has(id)),
+          memberIds.every((id) =>
+            assignedUserIds.has(id),
+          ),
       };
-    },
-  );
+    });
 
   return [...userOptions, ...teamOptions];
 }
@@ -234,7 +257,10 @@ export async function assignCourse(data: {
   let userIds: string[] = [];
 
   if (data.targetType === "user") {
-    const companyUsers = await getCompanyUsers(course.company_id);
+    const companyUsers = await getCompanyUsers(
+      course.company_id,
+    );
+
     const target = companyUsers.find(
       (member) => member.id === data.targetId,
     );
@@ -247,8 +273,13 @@ export async function assignCourse(data: {
 
     userIds = [target.id];
   } else {
-    const teams = await getCompanyTeams(course.company_id);
-    const team = teams.find((item) => item.id === data.targetId);
+    const teams = await getCompanyTeams(
+      course.company_id,
+    );
+
+    const team = teams.find(
+      (item) => item.id === data.targetId,
+    );
 
     if (!team) {
       throw new Error(
@@ -265,16 +296,72 @@ export async function assignCourse(data: {
     courseId: course.id,
     userIds,
     assignedByUserId: user.id,
-    isRequired: getTrainingType(course) === "required",
+    isRequired:
+      getTrainingType(course) === "required",
   });
 
-  const refreshed = await getManagedCourse(course.id);
+  const refreshed = await getManagedCourse(
+    course.id,
+  );
 
   if (!refreshed) {
     throw new Error("Curso no encontrado.");
   }
 
   return mapManagedCourse(refreshed);
+}
+
+export async function uploadCourseCover(data: {
+  userId: string;
+  file: File;
+}) {
+  await requireCourseManager(data.userId);
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    throw new Error(
+      "Falta BLOB_READ_WRITE_TOKEN para guardar la portada.",
+    );
+  }
+
+  if (!COURSE_COVER_TYPES.has(data.file.type)) {
+    throw new Error(
+      "La portada debe ser una imagen PNG, JPG o WebP.",
+    );
+  }
+
+  if (data.file.size > MAX_COURSE_COVER_SIZE) {
+    throw new Error(
+      "La portada no puede superar los 5 MB.",
+    );
+  }
+
+  const extension =
+    data.file.type === "image/png"
+      ? "png"
+      : data.file.type === "image/webp"
+        ? "webp"
+        : "jpg";
+
+  const pathname =
+    `academy/course-covers/${crypto.randomUUID()}.${extension}`;
+
+  const buffer = Buffer.from(
+    await data.file.arrayBuffer(),
+  );
+
+  const blob = await put(pathname, buffer, {
+    access: "private",
+    contentType: data.file.type,
+    addRandomSuffix: false,
+  });
+
+  const previewUrl =
+    await createPrivatePreviewUrl(pathname);
+
+  return {
+    blobUrl: blob.url,
+    previewUrl,
+  };
 }
 
 export async function generateCourseCover(data: {
@@ -286,6 +373,12 @@ export async function generateCourseCover(data: {
   difficulty: Difficulty;
 }) {
   await requireCourseManager(data.userId);
+
+  if (!data.title.trim() || !data.objective.trim()) {
+    throw new Error(
+      "Añade el título y la descripción antes de generar una imagen.",
+    );
+  }
 
   if (!process.env.OPENAI_API_KEY) {
     throw new Error(
@@ -309,22 +402,37 @@ export async function generateCourseCover(data: {
       : "professional skills development";
 
   const prompt = [
-    "Create a clean premium corporate e-learning course cover.",
-    "Modern European enterprise software aesthetic.",
-    "Professional photography or sophisticated editorial illustration.",
-    "No text, no logos, no letters, no UI, no watermarks.",
-    "Use a restrained palette with electric blue accents.",
-    "The image must work as a horizontal course thumbnail.",
-    `Course: ${data.title}.`,
-    data.objective
-      ? `Learning objective: ${data.objective}.`
-      : "",
+    "Create a premium horizontal cover image for a corporate e-learning course.",
+
+    `The course is specifically about: "${data.title}".`,
+    `Course description and learning objective: "${data.objective}".`,
+
+    "The main visual subject must make the specific course topic immediately recognizable.",
+    "Analyze the course title and description and identify the actual software, technology, professional discipline, process, equipment, workplace, skill or subject being taught.",
+
+    "If the course concerns a recognizable software product or professional platform such as Salesforce, Power BI, Microsoft Excel, SAP, Tableau, Jira or similar, make the visual clearly evoke that specific product domain through characteristic dashboards, workflows, data visualizations, CRM concepts, spreadsheets, business objects or professional context.",
+    "Do not replace a specific software or technical subject with a generic office scene.",
+
+    "If the course concerns a practical procedure, depict the relevant environment, equipment, tools or professional activity.",
+    "If it concerns a conceptual or soft-skill subject, use a sophisticated visual metaphor directly connected to that concept.",
+
+    "Avoid generic corporate stock imagery unless people or an office environment are genuinely relevant to the subject.",
+    "Avoid meaningless abstract cubes, random charts, generic laptops and decorative technology imagery that does not communicate the actual topic.",
+
+    "Professional enterprise learning aesthetic.",
+    "Modern, clean, premium and visually distinctive.",
+    "Prefer realistic professional photography or polished editorial illustration depending on what best communicates the subject.",
+    "Use strong composition with a clear focal point and enough visual simplicity to work as a small course thumbnail.",
+    "Use restrained contemporary colors with subtle electric-blue accents when appropriate.",
+
+    "Do not add the course title or explanatory text to the image.",
+    "No captions, no watermarks and no invented brand logos.",
+    "If a known product is mentioned, communicate it primarily through recognizable visual context rather than reproducing a trademark logo.",
+
     `Training context: ${trainingLabel}.`,
     `Course level: ${data.level}.`,
     `Assessment difficulty: ${data.difficulty}.`,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].join(" ");
 
   const result = await openai.images.generate({
     model: "gpt-image-1.5",
@@ -341,7 +449,10 @@ export async function generateCourseCover(data: {
     );
   }
 
-  const buffer = Buffer.from(image.b64_json, "base64");
+  const buffer = Buffer.from(
+    image.b64_json,
+    "base64",
+  );
 
   const pathname =
     `academy/course-covers/${crypto.randomUUID()}.png`;
@@ -352,39 +463,64 @@ export async function generateCourseCover(data: {
     addRandomSuffix: false,
   });
 
-  const token = await issueSignedToken({
-    pathname,
-    operations: ["get"],
-    validUntil: Date.now() + 15 * 60 * 1000,
-  });
-
-  const { presignedUrl } = await presignUrl(token, {
-    pathname,
-    operation: "get",
-    access: "private",
-    validUntil: Date.now() + 15 * 60 * 1000,
-  });
+  const previewUrl =
+    await createPrivatePreviewUrl(pathname);
 
   return {
     blobUrl: blob.url,
-    previewUrl: presignedUrl,
+    previewUrl,
   };
 }
 
-async function requireCourseManager(userId: string) {
-  const user = await getCourseCreatorScope(userId);
+async function createPrivatePreviewUrl(
+  pathname: string,
+) {
+  const validUntil =
+    Date.now() + 15 * 60 * 1000;
+
+  const token = await issueSignedToken({
+    pathname,
+    operations: ["get"],
+    validUntil,
+  });
+
+  const { presignedUrl } = await presignUrl(
+    token,
+    {
+      pathname,
+      operation: "get",
+      access: "private",
+      validUntil,
+    },
+  );
+
+  return presignedUrl;
+}
+
+async function requireCourseManager(
+  userId: string,
+) {
+  const user =
+    await getCourseCreatorScope(userId);
 
   if (!user) {
     throw new Error("Usuario no encontrado.");
   }
 
-  if (!COURSE_MANAGER_ROLES.has(user.system_role)) {
+  if (
+    !COURSE_MANAGER_ROLES.has(
+      user.system_role,
+    )
+  ) {
     throw new Error(
       "No tienes permisos para gestionar cursos.",
     );
   }
 
-  if (!user.company_id && user.system_role !== "system_admin") {
+  if (
+    !user.company_id &&
+    user.system_role !== "system_admin"
+  ) {
     throw new Error(
       "Tu usuario no está asociado a una organización.",
     );
@@ -398,7 +534,8 @@ async function requireManagedCourse(
   companyId: string | null,
   role: string,
 ) {
-  const course = await getManagedCourse(courseId);
+  const course =
+    await getManagedCourse(courseId);
 
   if (!course) {
     throw new Error("Curso no encontrado.");
@@ -417,13 +554,21 @@ async function requireManagedCourse(
 }
 
 function mapManagedCourse(
-  course: Awaited<ReturnType<typeof getManagedCourse>> extends infer T
+  course: Awaited<
+    ReturnType<typeof getManagedCourse>
+  > extends infer T
     ? NonNullable<T>
     : never,
 ): AcademyAdminCourse {
   const type = getTrainingType(course);
-  const config = asJsonObject(course.evaluation_config);
-  const generator = asJsonObject(config.generator);
+
+  const config = asJsonObject(
+    course.evaluation_config,
+  );
+
+  const generator = asJsonObject(
+    config.generator,
+  );
 
   const difficulty: Difficulty =
     generator.difficulty === "low" ||
@@ -444,13 +589,19 @@ function mapManagedCourse(
     type,
     level,
     difficulty,
-    status: course.is_published ? "published" : "draft",
-    updatedAt: new Intl.DateTimeFormat("es-ES", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    }).format(course.updated_at),
-    students: course._count.course_assignments,
+    status: course.is_published
+      ? "published"
+      : "draft",
+    updatedAt: new Intl.DateTimeFormat(
+      "es-ES",
+      {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      },
+    ).format(course.updated_at),
+    students:
+      course._count.course_assignments,
     thumbnailUrl: course.thumbnail_url
       ? `/api/academy/course-cover/${course.id}?v=${course.updated_at.getTime()}`
       : null,
@@ -459,16 +610,26 @@ function mapManagedCourse(
 
 function getTrainingType(course: {
   category: string | null;
-  evaluation_config: Prisma.JsonValue | null;
+  evaluation_config:
+    | Prisma.JsonValue
+    | null;
 }): TrainingType {
-  const config = asJsonObject(course.evaluation_config);
-  const generator = asJsonObject(config.generator);
+  const config = asJsonObject(
+    course.evaluation_config,
+  );
 
-  if (generator.trainingType === "required") {
+  const generator = asJsonObject(
+    config.generator,
+  );
+
+  if (
+    generator.trainingType === "required"
+  ) {
     return "required";
   }
 
-  return course.category === "Formación obligatoria"
+  return course.category ===
+    "Formación obligatoria"
     ? "required"
     : "skills";
 }
