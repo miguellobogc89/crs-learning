@@ -89,12 +89,8 @@ function academyCompanyCourseWhere(
   return companyId
     ? {
         OR: [
-          {
-            company_id: companyId,
-          },
-          {
-            company_id: null,
-          },
+          { company_id: companyId },
+          { company_id: null },
         ],
       }
     : {
@@ -104,9 +100,7 @@ function academyCompanyCourseWhere(
 
 export async function getAcademyUserScope(userId: string) {
   return prisma.users.findUnique({
-    where: {
-      id: userId,
-    },
+    where: { id: userId },
     select: {
       id: true,
       company_id: true,
@@ -116,13 +110,147 @@ export async function getAcademyUserScope(userId: string) {
 
 export async function getCourseCreatorScope(userId: string) {
   return prisma.users.findUnique({
-    where: {
-      id: userId,
-    },
+    where: { id: userId },
     select: {
       id: true,
       company_id: true,
       system_role: true,
+    },
+  });
+}
+
+export async function getManagedCourse(courseId: string) {
+  return prisma.courses.findUnique({
+    where: { id: courseId },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      level: true,
+      category: true,
+      company_id: true,
+      thumbnail_url: true,
+      evaluation_config: true,
+      is_published: true,
+      updated_at: true,
+      _count: {
+        select: {
+          course_assignments: true,
+        },
+      },
+    },
+  });
+}
+
+export async function updateManagedCourse(
+  courseId: string,
+  data: Prisma.coursesUpdateInput,
+) {
+  return prisma.courses.update({
+    where: { id: courseId },
+    data,
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      level: true,
+      category: true,
+      company_id: true,
+      thumbnail_url: true,
+      evaluation_config: true,
+      is_published: true,
+      updated_at: true,
+      _count: {
+        select: {
+          course_assignments: true,
+        },
+      },
+    },
+  });
+}
+
+export async function deleteManagedCourse(courseId: string) {
+  return prisma.courses.delete({
+    where: { id: courseId },
+  });
+}
+
+export async function getCompanyUsers(companyId: string) {
+  return prisma.users.findMany({
+    where: {
+      company_id: companyId,
+      status: "active",
+    },
+    orderBy: {
+      name: "asc",
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  });
+}
+
+export async function getCompanyTeams(companyId: string) {
+  return prisma.knowledge_teams.findMany({
+    where: {
+      company_id: companyId,
+    },
+    orderBy: {
+      name: "asc",
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      knowledge_team_members: {
+        select: {
+          user_id: true,
+        },
+      },
+    },
+  });
+}
+
+export async function getCourseAssignedUserIds(courseId: string) {
+  const assignments = await prisma.course_assignments.findMany({
+    where: {
+      course_id: courseId,
+    },
+    select: {
+      user_id: true,
+    },
+  });
+
+  return new Set(assignments.map((assignment) => assignment.user_id));
+}
+
+export async function assignCourseToUsers(data: {
+  courseId: string;
+  userIds: string[];
+  assignedByUserId: string;
+  isRequired: boolean;
+}) {
+  if (data.userIds.length === 0) {
+    return;
+  }
+
+  await prisma.course_assignments.createMany({
+    data: data.userIds.map((userId) => ({
+      course_id: data.courseId,
+      user_id: userId,
+      assigned_by_user_id: data.assignedByUserId,
+      is_required: data.isRequired,
+    })),
+    skipDuplicates: true,
+  });
+}
+
+export async function getCourseAssignmentCount(courseId: string) {
+  return prisma.course_assignments.count({
+    where: {
+      course_id: courseId,
     },
   });
 }
@@ -138,12 +266,8 @@ export async function getPublishedCoursesForUserCompany(data: {
       ...academyCompanyCourseWhere(data.companyId),
     },
     orderBy: [
-      {
-        sort_order: "asc",
-      },
-      {
-        updated_at: "desc",
-      },
+      { sort_order: "asc" },
+      { updated_at: "desc" },
     ],
     take: data.limit,
     select: {
@@ -221,9 +345,7 @@ export async function getUserCourseAssignments(data: {
           nulls: "last",
         },
       },
-      {
-        assigned_at: "desc",
-      },
+      { assigned_at: "desc" },
     ],
     take: data.limit,
     include: {
@@ -268,9 +390,7 @@ export async function getCompanyCourseRequests(data: {
           _count: "desc",
         },
       },
-      {
-        created_at: "desc",
-      },
+      { created_at: "desc" },
     ],
     take: data.limit,
     select: {

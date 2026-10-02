@@ -25,6 +25,16 @@ export type AcademyAdminCourse = {
   thumbnailUrl: string | null;
 };
 
+// lib/services/academy.service.ts
+
+export type AcademyCourseAssignmentOption = {
+  id: string;
+  kind: "user" | "team";
+  name: string;
+  secondary: string;
+  assigned: boolean;
+};
+
 export async function getAcademyAdminCourses(
   userId: string,
 ): Promise<AcademyAdminCourse[]> {
@@ -131,7 +141,7 @@ export async function getAcademyAdminCourses(
         month: "short",
         year: "numeric",
       }).format(course.updated_at),
-      students: course._count.user_course_progress,
+      students: course._count.course_assignments,
       thumbnailUrl: course.thumbnail_url
         ? `/api/academy/course-cover/${course.id}`
         : null,

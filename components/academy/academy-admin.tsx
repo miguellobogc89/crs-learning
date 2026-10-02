@@ -2,26 +2,53 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
   CircleDot,
+  EyeOff,
   FileText,
   Filter,
   GraduationCap,
   MoreVertical,
+  Pencil,
   Plus,
   Search,
   ShieldCheck,
+  Trash2,
+  Upload,
   Users,
 } from "lucide-react";
+import { toast } from "sonner";
 
+import {
+  deleteCourseAction,
+  setCoursePublishedAction,
+} from "@/app/actions/course";
 import { CourseCreatorSheet } from "@/components/academy/course-creator-sheet";
+import { CourseManagementSheet } from "@/components/academy/course-management-sheet";
 import type { AcademyAdminCourse } from "@/lib/services/academy.service";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -49,12 +76,18 @@ export function AcademyAdmin({
     useState<AcademyAdminCourse[]>(initialCourses);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedCourse, setSelectedCourse] =
+    useState<AcademyAdminCourse | null>(null);
+  const [managementOpen, setManagementOpen] = useState(false);
+  const [courseToDelete, setCourseToDelete] =
+    useState<AcademyAdminCourse | null>(null);
 
   const [activeTab, setActiveTab] = useState<
     "all" | "published" | "draft"
   >("all");
 
   const [search, setSearch] = useState("");
+  const [isChanging, startChanging] = useTransition();
 
   const visibleCourses = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -85,14 +118,85 @@ export function AcademyAdmin({
     0,
   );
 
-  function handleCourseCreated(course: AcademyAdminCourse) {
-    setCourses((current) => [
-      course,
-      ...current.filter((item) => item.id !== course.id),
-    ]);
+  function upsertCourse(course: AcademyAdminCourse) {
+    setCourses((current) => {
+      const exists = current.some((item) => item.id === course.id);
 
+      if (!exists) {
+        return [course, ...current];
+      }
+
+      return current.map((item) =>
+        item.id === course.id ? course : item,
+      );
+    });
+
+    setSelectedCourse((current) =>
+      current?.id === course.id ? course : current,
+    );
+  }
+
+  function handleCourseCreated(course: AcademyAdminCourse) {
+    upsertCourse(course);
     setActiveTab("all");
     setSearch("");
+  }
+
+  function openCourse(course: AcademyAdminCourse) {
+    setSelectedCourse(course);
+    setManagementOpen(true);
+  }
+
+  function changePublished(
+    course: AcademyAdminCourse,
+    published: boolean,
+  ) {
+    startChanging(async () => {
+      const result = await setCoursePublishedAction(
+        course.id,
+        published,
+      );
+
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+
+      upsertCourse(result.course);
+
+      toast.success(
+        published ? "Curso publicado." : "Curso ocultado.",
+      );
+    });
+  }
+
+  function confirmDelete() {
+    if (!courseToDelete) {
+      return;
+    }
+
+    const id = courseToDelete.id;
+
+    startChanging(async () => {
+      const result = await deleteCourseAction(id);
+
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+
+      setCourses((current) =>
+        current.filter((course) => course.id !== id),
+      );
+
+      if (selectedCourse?.id === id) {
+        setManagementOpen(false);
+        setSelectedCourse(null);
+      }
+
+      setCourseToDelete(null);
+      toast.success("Curso eliminado.");
+    });
   }
 
   if (!canManageAcademy) {
@@ -169,7 +273,7 @@ export function AcademyAdmin({
           <MetricCard
             icon={Users}
             value={studentCount.toLocaleString("es-ES")}
-            label="Estudiantes"
+            label="Asignaciones"
             tone="blue"
           />
         </div>
@@ -229,14 +333,28 @@ export function AcademyAdmin({
                   <th className="px-3 py-3">Dificultad</th>
                   <th className="px-3 py-3">Estado</th>
                   <th className="px-3 py-3">Actualización</th>
-                  <th className="px-3 py-3">Estudiantes</th>
-                  <th className="w-14 px-3 py-3 text-center">Acciones</th>
+                  <th className="px-3 py-3">Asignados</th>
+                  <th className="w-14 px-3 py-3 text-center">
+                    Acciones
+                  </th>
                 </tr>
               </thead>
 
               <tbody>
                 {visibleCourses.map((course) => (
-                  <CourseRow key={course.id} course={course} />
+                  <CourseRow
+                    key={course.id}
+                    course={course}
+                    disabled={isChanging}
+                    onOpen={() => openCourse(course)}
+                    onPublish={() =>
+                      changePublished(course, true)
+                    }
+                    onHide={() =>
+                      changePublished(course, false)
+                    }
+                    onDelete={() => setCourseToDelete(course)}
+                  />
                 ))}
               </tbody>
             </table>
@@ -286,18 +404,75 @@ export function AcademyAdmin({
         onOpenChange={setCreateOpen}
         onCourseCreated={handleCourseCreated}
       />
+
+      <CourseManagementSheet
+        course={selectedCourse}
+        open={managementOpen}
+        onOpenChange={setManagementOpen}
+        onCourseUpdated={upsertCourse}
+      />
+
+      <AlertDialog
+        open={Boolean(courseToDelete)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCourseToDelete(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Eliminar este curso?
+            </AlertDialogTitle>
+
+            <AlertDialogDescription>
+              Se eliminará “{courseToDelete?.title}” y sus datos
+              asociados. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+
+            <AlertDialogAction
+              variant="destructive"
+              disabled={isChanging}
+              onClick={confirmDelete}
+            >
+              Eliminar curso
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
 
 function CourseRow({
   course,
+  disabled,
+  onOpen,
+  onPublish,
+  onHide,
+  onDelete,
 }: {
   course: AcademyAdminCourse;
+  disabled: boolean;
+  onOpen: () => void;
+  onPublish: () => void;
+  onHide: () => void;
+  onDelete: () => void;
 }) {
   return (
-    <tr className="border-t border-slate-100 text-xs transition hover:bg-slate-50/60">
-      <td className="px-4 py-3">
+    <tr
+      onClick={onOpen}
+      className="cursor-pointer border-t border-slate-100 text-xs transition hover:bg-slate-50/70"
+    >
+      <td
+        className="px-4 py-3"
+        onClick={(event) => event.stopPropagation()}
+      >
         <input
           type="checkbox"
           aria-label={`Seleccionar ${course.title}`}
@@ -354,7 +529,7 @@ function CourseRow({
         </Badge>
       </td>
 
-      <td className="px-3 py-3 capitalize text-slate-600">
+      <td className="px-3 py-3 text-slate-600">
         {course.difficulty === "low"
           ? "Baja"
           : course.difficulty === "high"
@@ -371,7 +546,9 @@ function CourseRow({
               : "bg-slate-100 text-slate-600",
           )}
         >
-          {course.status === "published" ? "Publicado" : "Borrador"}
+          {course.status === "published"
+            ? "Publicado"
+            : "Borrador"}
         </Badge>
       </td>
 
@@ -386,10 +563,50 @@ function CourseRow({
         </div>
       </td>
 
-      <td className="px-3 py-3 text-center">
-        <Button variant="ghost" size="icon-sm">
-          <MoreVertical className="h-4 w-4" />
-        </Button>
+      <td
+        className="px-3 py-3 text-center"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={disabled}
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onSelect={onOpen}>
+              <Pencil className="h-4 w-4" />
+              Editar
+            </DropdownMenuItem>
+
+            {course.status === "published" ? (
+              <DropdownMenuItem onSelect={onHide}>
+                <EyeOff className="h-4 w-4" />
+                Ocultar
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onSelect={onPublish}>
+                <Upload className="h-4 w-4" />
+                Publicar
+              </DropdownMenuItem>
+            )}
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={onDelete}
+            >
+              <Trash2 className="h-4 w-4" />
+              Eliminar
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </td>
     </tr>
   );
@@ -428,7 +645,9 @@ function MetricCard({
           {value}
         </p>
 
-        <p className="mt-1.5 text-xs text-slate-500">{label}</p>
+        <p className="mt-1.5 text-xs text-slate-500">
+          {label}
+        </p>
       </div>
     </div>
   );
