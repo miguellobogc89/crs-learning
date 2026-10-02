@@ -8,11 +8,12 @@ import { toast } from "sonner";
 
 import {
   generateCourseImageAction,
-  uploadCourseImageAction,
   updateCourseAction,
+  uploadCourseImageAction,
 } from "@/app/actions/course";
 import { CourseBasicInformation } from "@/components/academy/right-panel-management/course-basic-information";
 import { CourseConfiguration } from "@/components/academy/right-panel-management/course-configuration";
+import { CourseManagementHeader } from "@/components/academy/right-panel-management/course-management-header";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -40,49 +41,42 @@ export function CourseEditorSheet({
   onCourseUpdated,
 }: CourseEditorSheetProps) {
   const [title, setTitle] = useState("");
-  const [objective, setObjective] = useState("");
-
+  const [description, setDescription] = useState("");
   const [trainingType, setTrainingType] =
     useState<TrainingType>("skills");
-
   const [level, setLevel] =
     useState<CourseLevel>("beginner");
-
   const [difficulty, setDifficulty] =
     useState<Difficulty>("medium");
 
   const [thumbnailBlobUrl, setThumbnailBlobUrl] =
     useState<string | null>(null);
-
   const [thumbnailPreviewUrl, setThumbnailPreviewUrl] =
     useState<string | null>(null);
 
   const [isSaving, startSaving] = useTransition();
-
   const [isGeneratingImage, startGeneratingImage] =
     useTransition();
-
   const [isUploadingImage, startUploadingImage] =
     useTransition();
 
-// components/academy/course-editor-sheet.tsx
+  useEffect(() => {
+    if (!open || !course) {
+      return;
+    }
 
-useEffect(() => {
-  if (!open || !course) {
-    return;
-  }
+    setTitle(course.title);
+    setDescription(course.description);
+    setTrainingType(course.type);
+    setLevel(course.level);
+    setDifficulty(course.difficulty);
 
-  setTitle(course.title ?? "");
-  setObjective(course.description ?? "");
-  setTrainingType(course.type);
-  setLevel(course.level);
-  setDifficulty(course.difficulty);
-  setThumbnailBlobUrl(null);
-  setThumbnailPreviewUrl(course.thumbnailUrl ?? null);
-}, [course, open]);
+    setThumbnailBlobUrl(null);
+    setThumbnailPreviewUrl(course.thumbnailUrl);
+  }, [open, course]);
 
   function generateImage() {
-    if (!title.trim() || !objective.trim()) {
+    if (!title.trim() || !description.trim()) {
       toast.error(
         "Añade el título y la descripción antes de generar una imagen.",
       );
@@ -92,7 +86,7 @@ useEffect(() => {
     startGeneratingImage(async () => {
       const result = await generateCourseImageAction({
         title: title.trim(),
-        objective: objective.trim(),
+        objective: description.trim(),
         trainingType,
         level,
         difficulty,
@@ -111,22 +105,6 @@ useEffect(() => {
   }
 
   function uploadImage(file: File) {
-    const allowedTypes = [
-      "image/png",
-      "image/jpeg",
-      "image/webp",
-    ];
-
-    if (!allowedTypes.includes(file.type)) {
-      toast.error("La imagen debe ser PNG, JPG o WebP.");
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("La imagen no puede superar los 5 MB.");
-      return;
-    }
-
     startUploadingImage(async () => {
       const formData = new FormData();
 
@@ -153,22 +131,20 @@ useEffect(() => {
     }
 
     if (!title.trim()) {
-      toast.error(
-        "El título del curso es obligatorio.",
-      );
+      toast.error("El título del curso es obligatorio.");
       return;
     }
 
     startSaving(async () => {
-        const result = await updateCourseAction({
+      const result = await updateCourseAction({
         courseId: course.id,
         title: title.trim(),
-        description: objective.trim(),
+        description: description.trim(),
         trainingType,
         level,
         difficulty,
         thumbnailUrl: thumbnailBlobUrl,
-        });
+      });
 
       if (!result.ok) {
         toast.error(result.error);
@@ -176,9 +152,7 @@ useEffect(() => {
       }
 
       onCourseUpdated(result.course);
-
       toast.success("Cambios guardados.");
-
       onOpenChange(false);
     });
   }
@@ -197,12 +171,12 @@ useEffect(() => {
         <div className="min-h-0 flex-1 overflow-y-auto bg-white">
           <CourseBasicInformation
             title={title}
-            description={objective}
+            description={description}
             imageUrl={thumbnailPreviewUrl}
             isGeneratingImage={isGeneratingImage}
             isUploadingImage={isUploadingImage}
             onTitleChange={setTitle}
-            onDescriptionChange={setObjective}
+            onDescriptionChange={setDescription}
             onGenerateImage={generateImage}
             onUploadImage={uploadImage}
           />
@@ -231,10 +205,10 @@ useEffect(() => {
             type="button"
             size="lg"
             disabled={
+              !course ||
               isSaving ||
               isGeneratingImage ||
-              isUploadingImage ||
-              !course
+              isUploadingImage
             }
             onClick={saveChanges}
             className="gap-2 bg-[#315BFF] px-5 text-white hover:bg-[#244BE8]"
