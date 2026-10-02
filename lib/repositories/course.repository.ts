@@ -312,3 +312,28 @@ export async function getUserVotedCourseRequestIds(data: {
   return new Set(votes.map((vote) => vote.request_id));
 }
 
+export async function createCourse(data: {
+  title: string;
+  description: string;
+  level: string;
+  category: string;
+  companyId: string | null;
+  createdByUserId: string;
+  thumbnailUrl: string | null;
+  evaluationConfig: Prisma.InputJsonValue;
+}) {
+  return prisma.courses.create({
+    data: {
+      title: data.title,
+      slug: crypto.randomUUID(),
+      description: data.description || null,
+      level: data.level,
+      category: data.category,
+      company_id: data.companyId,
+      created_by_user_id: data.createdByUserId,
+      thumbnail_url: data.thumbnailUrl,
+      evaluation_config: data.evaluationConfig,
+      is_published: false,
+    },
+  });
+}

@@ -49,7 +49,7 @@ export const ACADEMY_SECTIONS = [
   },
   {
     id: "admin",
-    label: "Administración",
+    label: "Gestión de cursos",
     icon: Settings,
   },
 ] as const;

@@ -1,7 +1,11 @@
 // lib/services/course.service.ts
 
 import OpenAI from "openai";
-import { put } from "@vercel/blob";
+import {
+  issueSignedToken,
+  presignUrl,
+  put,
+} from "@vercel/blob";
 
 import {
   createCourse,
@@ -119,21 +123,33 @@ export async function generateCourseCover(data: {
     );
   }
 
-  const buffer = Buffer.from(image.b64_json, "base64");
+const buffer = Buffer.from(image.b64_json, "base64");
 
-// lib/services/course.service.ts
+const pathname = `academy/course-covers/${crypto.randomUUID()}.png`;
 
-const blob = await put(
-  `academy/course-covers/${crypto.randomUUID()}.png`,
-  buffer,
-  {
-    access: "private",
-    contentType: "image/png",
-    addRandomSuffix: false,
-  },
-);
+const blob = await put(pathname, buffer, {
+  access: "private",
+  contentType: "image/png",
+  addRandomSuffix: false,
+});
 
-  return blob.url;
+const token = await issueSignedToken({
+  pathname,
+  operations: ["get"],
+  validUntil: Date.now() + 15 * 60 * 1000,
+});
+
+const { presignedUrl } = await presignUrl(token, {
+  pathname,
+  operation: "get",
+  access: "private",
+  validUntil: Date.now() + 15 * 60 * 1000,
+});
+
+return {
+  blobUrl: blob.url,
+  previewUrl: presignedUrl,
+};
 }
 
 async function requireCourseManager(userId: string) {

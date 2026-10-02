@@ -65,19 +65,6 @@ export default async function AcademyPage({
     <AppSectionShell sidebar={<AcademySidebar />}>
       <AppPageLayout>
         <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col">
-          <header className="shrink-0 pb-5">
-            <h1 className="text-[22px] font-semibold tracking-tight text-slate-950">
-              {isHome ? APP_SECTIONS.courses.label : section.label}
-            </h1>
-
-            <p className="mt-1 text-sm text-slate-500">
-              {isHome
-                ? "Tu espacio para aprender y seguir avanzando."
-                : isAdmin
-                  ? "Gestiona la formación disponible en tu organización."
-                  : "Academy"}
-            </p>
-          </header>
 
           {isHome && academyHomeData ? (
             <AcademyHome data={academyHomeData} />
