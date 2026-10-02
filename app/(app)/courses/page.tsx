@@ -1,12 +1,16 @@
+// app/(app)/courses/page.tsx
+
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { AppSectionShell } from "@/components/app/section-sidebar";
+import { AcademyAdmin } from "@/components/academy/academy-admin";
 import { AcademyHome } from "@/components/academy/academy-home";
 import { AcademySidebar } from "@/components/academy/academy-navigation";
 import { ACADEMY_SECTIONS } from "@/lib/navigation/academy-sections";
 import { APP_SECTIONS } from "@/lib/navigation/app-sections";
+import { prisma } from "@/lib/prisma";
 import { getAcademyHomeData } from "@/lib/services/academy.service";
 
 export default async function AcademyPage({
@@ -21,13 +25,32 @@ export default async function AcademyPage({
   }
 
   const { view } = await searchParams;
+
   const section =
     ACADEMY_SECTIONS.find((item) => item.id === view) ??
     ACADEMY_SECTIONS[0];
+
   const isHome = section.id === "home";
-  const academyHomeData = isHome
-    ? await getAcademyHomeData(session.user.id)
-    : null;
+  const isAdmin = section.id === "admin";
+
+  const [academyHomeData, currentUser] = await Promise.all([
+    isHome ? getAcademyHomeData(session.user.id) : Promise.resolve(null),
+
+    isAdmin
+      ? prisma.users.findUnique({
+          where: {
+            id: session.user.id,
+          },
+          select: {
+            system_role: true,
+          },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const canManageAcademy =
+    currentUser?.system_role === "org_manager" ||
+    currentUser?.system_role === "admin";
 
   return (
     <AppSectionShell sidebar={<AcademySidebar />}>
@@ -37,15 +60,22 @@ export default async function AcademyPage({
             <h1 className="text-[22px] font-semibold tracking-tight text-slate-950">
               {isHome ? APP_SECTIONS.courses.label : section.label}
             </h1>
+
             <p className="mt-1 text-sm text-slate-500">
               {isHome
                 ? "Tu espacio para aprender y seguir avanzando."
-                : "Academy"}
+                : isAdmin
+                  ? "Gestiona la formación disponible en tu organización."
+                  : "Academy"}
             </p>
           </header>
 
           {isHome && academyHomeData ? (
             <AcademyHome data={academyHomeData} />
+          ) : null}
+
+          {isAdmin ? (
+            <AcademyAdmin canManageAcademy={canManageAcademy} />
           ) : null}
         </div>
       </AppPageLayout>
