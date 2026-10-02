@@ -50,7 +50,7 @@ export default async function AcademyPage({
 
   const canManageAcademy =
     currentUser?.system_role === "org_manager" ||
-    currentUser?.system_role === "admin";
+    currentUser?.system_role === "system_admin";
 
   return (
     <AppSectionShell sidebar={<AcademySidebar />}>
