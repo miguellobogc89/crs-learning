@@ -1,8 +1,10 @@
 // components/academy/academy-home.tsx
 
 import { ContinueLearningCard } from "@/components/academy/academy-home/continue-learning-card";
-import type { AcademyHomeData } from "@/lib/services/academy.service";
+import { PendingTrainingCard } from "@/components/academy/academy-home/pending-training-card";
 import { ProgressCard } from "@/components/academy/academy-home/progress-card";
+import type { AcademyHomeData } from "@/lib/services/academy.service";
+import { TopRecommendedCard } from "@/components/academy/academy-home/top-recommended-card";
 
 export function AcademyHome({
   data,
@@ -24,16 +26,18 @@ export function AcademyHome({
         courses={data.continueLearning}
       />
 
-{/* Fila 1 · derecha */}
-<ProgressCard
-  progress={data.progressSummary}
-/>
+      {/* Fila 1 · derecha */}
+      <ProgressCard
+        progress={data.progressSummary}
+      />
 
       {/* Fila 2 · izquierda */}
-      <Placeholder />
+      <PendingTrainingCard
+        courses={data.pendingTraining}
+      />
 
       {/* Fila 2 · derecha */}
-      <Placeholder />
+      <TopRecommendedCard />
 
       {/* Fila 3 · izquierda */}
       <Placeholder />

@@ -187,6 +187,8 @@ export type AcademyHomeProgressSummary = {
   completed: number;
   inProgress: number;
   pending: number;
+  skills: number;
+  badges: number;
   estimatedCompletedMinutes: number;
   estimatedCompletedLabel: string;
 };
@@ -246,7 +248,6 @@ export async function getAcademyHomeData(
     getUserCourseAssignments({
       userId,
       companyId,
-      limit: 10,
     }),
     getCompanyCourseRequests({
       companyId,
@@ -273,88 +274,104 @@ export async function getAcademyHomeData(
       mapCourseRecord,
     );
 
-const continueLearning = (() => {
-  const selected = new Map<
-    string,
-    AcademyHomeCourse
-  >();
+  const continueLearning = (() => {
+    const selected = new Map<
+      string,
+      AcademyHomeCourse
+    >();
 
-  // 1. Cursos realmente en progreso.
-  progressRecords
-    .filter((course) => {
-      const progress = clampProgress(
-        course.user_course_progress[0]
-          ?.progress_percent ?? 0,
-      );
-
-      return progress > 0 && progress < 100;
-    })
-    .sort((left, right) => {
-      const leftUpdatedAt =
-        left.user_course_progress[0]
-          ?.updated_at?.getTime() ?? 0;
-
-      const rightUpdatedAt =
-        right.user_course_progress[0]
-          ?.updated_at?.getTime() ?? 0;
-
-      return rightUpdatedAt - leftUpdatedAt;
-    })
-    .forEach((course) => {
-      if (!selected.has(course.id)) {
-        selected.set(
-          course.id,
-          mapCourseRecord(course),
+    progressRecords
+      .filter((course) => {
+        const progress = clampProgress(
+          course.user_course_progress[0]
+            ?.progress_percent ?? 0,
         );
-      }
-    });
 
-  // 2. Si quedan huecos, formación asignada pendiente.
-  assignmentRecords
-    .filter((assignment) => {
-      const progress = clampProgress(
-        assignment.courses
-          .user_course_progress[0]
-          ?.progress_percent ?? 0,
-      );
+        return (
+          progress > 0 &&
+          progress < 100
+        );
+      })
+      .sort((left, right) => {
+        const leftUpdatedAt =
+          left.user_course_progress[0]
+            ?.updated_at?.getTime() ?? 0;
 
-      return progress < 100;
-    })
-.forEach((assignment) => {
-  if (!selected.has(assignment.course_id)) {
-    selected.set(
-      assignment.course_id,
-      mapCourseRecord(
-        assignment.courses,
-      ),
+        const rightUpdatedAt =
+          right.user_course_progress[0]
+            ?.updated_at?.getTime() ?? 0;
+
+        return (
+          rightUpdatedAt -
+          leftUpdatedAt
+        );
+      })
+      .forEach((course) => {
+        if (!selected.has(course.id)) {
+          selected.set(
+            course.id,
+            mapCourseRecord(course),
+          );
+        }
+      });
+
+    assignmentRecords
+      .filter((assignment) => {
+        const progress = clampProgress(
+          assignment.courses
+            .user_course_progress[0]
+            ?.progress_percent ?? 0,
+        );
+
+        return progress < 100;
+      })
+      .forEach((assignment) => {
+        if (
+          !selected.has(
+            assignment.course_id,
+          )
+        ) {
+          selected.set(
+            assignment.course_id,
+            mapCourseRecord(
+              assignment.courses,
+            ),
+          );
+        }
+      });
+
+    availableCourseRecords
+      .filter((course) => {
+        const progress = clampProgress(
+          course.user_course_progress[0]
+            ?.progress_percent ?? 0,
+        );
+
+        return progress < 100;
+      })
+      .forEach((course) => {
+        if (!selected.has(course.id)) {
+          selected.set(
+            course.id,
+            mapCourseRecord(course),
+          );
+        }
+      });
+
+    return Array.from(
+      selected.values(),
     );
-  }
-});
+  })();
 
-  // 3. Si todavía quedan huecos, catálogo disponible.
-  availableCourseRecords
-    .filter((course) => {
-      const progress = clampProgress(
-        course.user_course_progress[0]
-          ?.progress_percent ?? 0,
-      );
-
-      return progress < 100;
-    })
-.forEach((course) => {
-  if (!selected.has(course.id)) {
-    selected.set(
-      course.id,
-      mapCourseRecord(course),
-    );
-  }
-});
-
-  return Array.from(
-  selected.values(),
-);
-})();
-
+  /*
+   * IMPORTANTE:
+   *
+   * Ya no hacemos slice(0, 2).
+   *
+   * AcademyHome recibe todos los cursos pendientes.
+   * El componente decide cuáles dos enseñar en portada
+   * y cuántos quedan detrás de "Ver todas".
+   */
   const pendingTraining =
     assignmentRecords
       .map(mapAssignmentRecord)
@@ -362,19 +379,21 @@ const continueLearning = (() => {
         (assignment) =>
           assignment.progress < 100,
       )
-      .slice(0, 2);
+      .sort(sortPendingTraining);
 
   return {
     previewCourses,
     availableCourses,
     continueLearning,
     pendingTraining,
+
     progressSummary:
       buildProgressSummary({
         availableCourseRecords,
         progressRecords,
         assignmentRecords,
       }),
+
     teamRequests:
       requestRecords
         .slice(0, 3)
@@ -392,6 +411,45 @@ const continueLearning = (() => {
             ),
         })),
   };
+}
+
+function sortPendingTraining(
+  left: AcademyHomeAssignment,
+  right: AcademyHomeAssignment,
+) {
+  /*
+   * 1. Obligatorios primero.
+   * 2. Dentro del mismo tipo, fecha más próxima primero.
+   * 3. Los que no tengan fecha quedan al final.
+   */
+  if (
+    left.isRequired !==
+    right.isRequired
+  ) {
+    return left.isRequired
+      ? -1
+      : 1;
+  }
+
+  if (
+    left.dueAt &&
+    right.dueAt
+  ) {
+    return (
+      left.dueAt.getTime() -
+      right.dueAt.getTime()
+    );
+  }
+
+  if (left.dueAt) {
+    return -1;
+  }
+
+  if (right.dueAt) {
+    return 1;
+  }
+
+  return 0;
 }
 
 function mapCourseRecord(
@@ -418,19 +476,28 @@ function mapCourseRecord(
     id: course.id,
     title: course.title,
     category:
-      course.category || "Academy",
-    duration: formatDuration(
-      estimatedMinutes,
-    ),
+      course.category ||
+      "Academy",
+
+    duration:
+      formatDuration(
+        estimatedMinutes,
+      ),
+
     remaining:
       remainingMinutes > 0
         ? `${formatDuration(
             remainingMinutes,
           )} restantes`
         : "Completado",
+
     progress,
+
     thumbnail:
-      inferThumbnailVariant(course),
+      inferThumbnailVariant(
+        course,
+      ),
+
     thumbnailUrl:
       course.thumbnail_url
         ? `/api/academy/course-cover/${course.id}`
@@ -441,23 +508,30 @@ function mapCourseRecord(
 function mapAssignmentRecord(
   assignment: AcademyAssignmentRecord,
 ): AcademyHomeAssignment {
-  const course = mapCourseRecord(
-    assignment.courses,
-  );
+  const course =
+    mapCourseRecord(
+      assignment.courses,
+    );
 
   return {
     ...course,
+
     assignment:
       assignment.is_required
         ? "Obligatorio"
         : "Asignado",
+
     isRequired:
       assignment.is_required,
-    dueAt: assignment.due_at,
+
+    dueAt:
+      assignment.due_at,
+
     deadlineLabel:
       formatDateLabel(
         assignment.due_at,
       ),
+
     dueLabel:
       formatDueLabel(
         assignment.due_at,
@@ -472,8 +546,10 @@ function buildProgressSummary({
 }: {
   availableCourseRecords:
     AcademyCourseWithProgressRecord[];
+
   progressRecords:
     AcademyCourseWithProgressRecord[];
+
   assignmentRecords:
     AcademyAssignmentRecord[];
 }): AcademyHomeProgressSummary {
@@ -515,7 +591,8 @@ function buildProgressSummary({
     Array.from(
       progressByCourseId.values(),
     ).filter(
-      (progress) => progress >= 100,
+      (progress) =>
+        progress >= 100,
     ).length;
 
   const inProgress =
@@ -552,16 +629,24 @@ function buildProgressSummary({
           Array.from(
             progressByCourseId.values(),
           ).reduce(
-            (total, progress) =>
-              total + progress,
+            (
+              total,
+              progress,
+            ) =>
+              total +
+              progress,
             0,
-          ) / knownCourseCount,
+          ) /
+            knownCourseCount,
         )
       : 0;
 
   const estimatedCompletedMinutes =
     progressRecords.reduce(
-      (total, course) =>
+      (
+        total,
+        course,
+      ) =>
         total +
         Math.round(
           getCourseEstimatedMinutes(
@@ -578,17 +663,19 @@ function buildProgressSummary({
       0,
     );
 
-  return {
-    global,
-    completed,
-    inProgress,
-    pending: assignedPending,
-    estimatedCompletedMinutes,
-    estimatedCompletedLabel:
-      formatDuration(
-        estimatedCompletedMinutes,
-      ),
-  };
+return {
+  global,
+  completed,
+  inProgress,
+  pending: assignedPending,
+  skills: 0,
+  badges: 0,
+  estimatedCompletedMinutes,
+  estimatedCompletedLabel:
+    formatDuration(
+      estimatedCompletedMinutes,
+    ),
+};
 }
 
 function getCourseEstimatedMinutes(
@@ -658,7 +745,9 @@ function inferThumbnailVariant(
 
   if (
     text.includes("ia") ||
-    text.includes("inteligencia")
+    text.includes(
+      "inteligencia",
+    )
   ) {
     return "ai";
   }
@@ -718,7 +807,7 @@ function formatDateLabel(
   date: Date | null,
 ) {
   if (!date) {
-    return "Sin fecha limite";
+    return "Sin fecha límite";
   }
 
   return new Intl.DateTimeFormat(
@@ -738,7 +827,8 @@ function formatDueLabel(
     return "Sin fecha";
   }
 
-  const today = new Date();
+  const today =
+    new Date();
 
   today.setHours(
     0,
@@ -761,13 +851,16 @@ function formatDueLabel(
     Math.ceil(
       (dueDate.getTime() -
         today.getTime()) /
-        (1000 * 60 * 60 * 24),
+        (1000 *
+          60 *
+          60 *
+          24),
     );
 
   if (diffDays < 0) {
-    return `Vencio hace ${Math.abs(
+    return `Venció hace ${Math.abs(
       diffDays,
-    )} dias`;
+    )} días`;
   }
 
   if (diffDays === 0) {
@@ -775,8 +868,8 @@ function formatDueLabel(
   }
 
   if (diffDays === 1) {
-    return "Vence manana";
+    return "Vence mañana";
   }
 
-  return `Quedan ${diffDays} dias`;
+  return `Quedan ${diffDays} días`;
 }

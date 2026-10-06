@@ -24,14 +24,13 @@ export function ProgressCard({
   );
 
   const radius = 48;
-  const circumference = 2 * Math.PI * radius;
+  const circumference =
+    2 * Math.PI * radius;
+
   const offset =
     circumference -
-    (percentage / 100) * circumference;
-
-  const trainingHours = Math.round(
-    progress.estimatedCompletedMinutes / 60,
-  );
+    (percentage / 100) *
+      circumference;
 
   return (
     <section
@@ -44,7 +43,6 @@ export function ProgressCard({
         px-4 pb-4 pt-3
       "
     >
-      {/* Cabecera */}
       <div className="flex shrink-0 items-center gap-2">
         <Target
           aria-hidden="true"
@@ -57,9 +55,7 @@ export function ProgressCard({
         </h2>
       </div>
 
-      {/* Zona principal */}
       <div className="mt-3 grid min-h-0 flex-1 grid-cols-[42%_58%] items-center">
-        {/* Donut */}
         <div className="flex items-center justify-center">
           <div className="relative h-[142px] w-[142px]">
             <svg
@@ -84,8 +80,12 @@ export function ProgressCard({
                 stroke="url(#academyProgressGradient)"
                 strokeWidth="9"
                 strokeLinecap="round"
-                strokeDasharray={circumference}
-                strokeDashoffset={offset}
+                strokeDasharray={
+                  circumference
+                }
+                strokeDashoffset={
+                  offset
+                }
               />
 
               <defs>
@@ -100,6 +100,7 @@ export function ProgressCard({
                     offset="0%"
                     stopColor="#315BFF"
                   />
+
                   <stop
                     offset="100%"
                     stopColor="#5865F2"
@@ -120,7 +121,6 @@ export function ProgressCard({
           </div>
         </div>
 
-        {/* Métricas */}
         <div className="flex min-w-0 flex-col justify-center gap-3">
           <ProgressMetric
             icon={Mail}
@@ -142,29 +142,34 @@ export function ProgressCard({
 
           <ProgressMetric
             icon={Award}
-            value={0}
+            value={progress.skills}
             label="Habilidades adquiridas"
           />
         </div>
       </div>
 
-      {/* Resumen inferior */}
       <div className="mt-3 grid shrink-0 grid-cols-3 gap-2">
         <SummaryMetric
           icon={Clock3}
-          value={`${trainingHours} h`}
+          value={
+            progress.estimatedCompletedLabel
+          }
           label="Horas de formación"
         />
 
         <SummaryMetric
           icon={Layers3}
-          value="0"
+          value={String(
+            progress.skills,
+          )}
           label="Habilidades"
         />
 
         <SummaryMetric
           icon={Award}
-          value="0"
+          value={String(
+            progress.badges,
+          )}
           label="Insignias"
         />
       </div>

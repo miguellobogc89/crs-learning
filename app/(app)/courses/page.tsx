@@ -1,6 +1,7 @@
 // app/(app)/courses/page.tsx
 
 import { redirect } from "next/navigation";
+import { Roboto } from "next/font/google";
 
 import { auth } from "@/auth";
 import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
@@ -14,6 +15,16 @@ import {
   getAcademyAdminCourses,
   getAcademyHomeData,
 } from "@/lib/services/academy.service";
+
+const roboto = Roboto({
+  subsets: ["latin"],
+  weight: [
+    "400",
+    "500",
+    "600",
+    "700",
+  ],
+});
 
 export default async function AcademyPage({
   searchParams,
@@ -105,34 +116,36 @@ export default async function AcademyPage({
     );
 
   return (
-    <AppSectionShell
-      sidebar={<AcademySidebar />}
-    >
-      <AppPageLayout
-        header={header}
-        contentClassName={
-          isHome
-            ? "!flex !min-h-0 !flex-col !overflow-hidden !p-0"
-            : undefined
-        }
+    <div className={roboto.className}>
+      <AppSectionShell
+        sidebar={<AcademySidebar />}
       >
-        {isHome && academyHomeData ? (
-          <AcademyHome
-            data={academyHomeData}
-          />
-        ) : null}
+        <AppPageLayout
+          header={header}
+          contentClassName={
+            isHome
+              ? "!flex !min-h-0 !flex-col !overflow-hidden !p-0"
+              : undefined
+          }
+        >
+          {isHome && academyHomeData ? (
+            <AcademyHome
+              data={academyHomeData}
+            />
+          ) : null}
 
-        {isAdmin ? (
-          <AcademyAdmin
-            canManageAcademy={
-              canManageAcademy
-            }
-            initialCourses={
-              adminCourses
-            }
-          />
-        ) : null}
-      </AppPageLayout>
-    </AppSectionShell>
+          {isAdmin ? (
+            <AcademyAdmin
+              canManageAcademy={
+                canManageAcademy
+              }
+              initialCourses={
+                adminCourses
+              }
+            />
+          ) : null}
+        </AppPageLayout>
+      </AppSectionShell>
+    </div>
   );
 }

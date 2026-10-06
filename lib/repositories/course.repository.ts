@@ -18,6 +18,7 @@ const academyCourseSelect = {
   updated_at: true,
   sections: {
     select: {
+      learning_objectives: true,
       lessons: {
         select: {
           estimated_minutes: true,
@@ -335,7 +336,6 @@ export async function getUserCourseProgress(data: {
           user_id: data.userId,
           progress_percent: {
             gt: 0,
-            lt: 100,
           },
         },
       },
@@ -347,7 +347,6 @@ export async function getUserCourseProgress(data: {
           user_id: data.userId,
           progress_percent: {
             gt: 0,
-            lt: 100,
           },
         },
         orderBy: {
@@ -408,6 +407,16 @@ export async function getUserCourseAssignments(data: {
           },
         },
       },
+    },
+  });
+}
+
+export async function getUserAcademyAchievementCount(
+  userId: string,
+): Promise<number> {
+  return prisma.user_achievements.count({
+    where: {
+      user_id: userId,
     },
   });
 }
