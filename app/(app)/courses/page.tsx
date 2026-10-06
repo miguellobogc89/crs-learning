@@ -9,7 +9,6 @@ import { AcademyAdmin } from "@/components/academy/academy-admin";
 import { AcademyHome } from "@/components/academy/academy-home";
 import { AcademySidebar } from "@/components/academy/academy-navigation";
 import { ACADEMY_SECTIONS } from "@/lib/navigation/academy-sections";
-import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { prisma } from "@/lib/prisma";
 import {
   getAcademyAdminCourses,
@@ -30,15 +29,22 @@ export default async function AcademyPage({
   const { view } = await searchParams;
 
   const section =
-    ACADEMY_SECTIONS.find((item) => item.id === view) ??
-    ACADEMY_SECTIONS[0];
+    ACADEMY_SECTIONS.find(
+      (item) => item.id === view,
+    ) ?? ACADEMY_SECTIONS[0];
 
   const isHome = section.id === "home";
   const isAdmin = section.id === "admin";
 
-  const [academyHomeData, currentUser, adminCourses] = await Promise.all([
+  const [
+    academyHomeData,
+    currentUser,
+    adminCourses,
+  ] = await Promise.all([
     isHome
-      ? getAcademyHomeData(session.user.id)
+      ? getAcademyHomeData(
+          session.user.id,
+        )
       : Promise.resolve(null),
 
     isAdmin
@@ -53,30 +59,79 @@ export default async function AcademyPage({
       : Promise.resolve(null),
 
     isAdmin
-      ? getAcademyAdminCourses(session.user.id)
+      ? getAcademyAdminCourses(
+          session.user.id,
+        )
       : Promise.resolve([]),
   ]);
 
   const canManageAcademy =
-    currentUser?.system_role === "org_manager" ||
-    currentUser?.system_role === "system_admin";
+    currentUser?.system_role ===
+      "org_manager" ||
+    currentUser?.system_role ===
+      "system_admin";
+
+  const header =
+    isHome ? (
+      <div className="min-w-0">
+        <div className="mb-1 truncate text-sm text-muted-foreground">
+          Academy / Inicio
+        </div>
+
+        <h1 className="text-xl font-semibold tracking-tight text-slate-950">
+          Academy
+        </h1>
+      </div>
+    ) : isAdmin ? (
+      <div className="min-w-0">
+        <div className="mb-1 truncate text-sm text-muted-foreground">
+          Academy / Administración
+        </div>
+
+        <h1 className="text-xl font-semibold tracking-tight text-slate-950">
+          Administración
+        </h1>
+      </div>
+    ) : (
+      <div className="min-w-0">
+        <div className="mb-1 truncate text-sm text-muted-foreground">
+          Academy / {section.label}
+        </div>
+
+        <h1 className="text-xl font-semibold tracking-tight text-slate-950">
+          {section.label}
+        </h1>
+      </div>
+    );
 
   return (
-    <AppSectionShell sidebar={<AcademySidebar />}>
-      <AppPageLayout>
-        <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col">
+    <AppSectionShell
+      sidebar={<AcademySidebar />}
+    >
+      <AppPageLayout
+        header={header}
+        contentClassName={
+          isHome
+            ? "!flex !min-h-0 !flex-col !overflow-hidden !p-4"
+            : undefined
+        }
+      >
+        {isHome && academyHomeData ? (
+          <AcademyHome
+            data={academyHomeData}
+          />
+        ) : null}
 
-          {isHome && academyHomeData ? (
-            <AcademyHome data={academyHomeData} />
-          ) : null}
-
-          {isAdmin ? (
-            <AcademyAdmin
-              canManageAcademy={canManageAcademy}
-              initialCourses={adminCourses}
-            />
-          ) : null}
-        </div>
+        {isAdmin ? (
+          <AcademyAdmin
+            canManageAcademy={
+              canManageAcademy
+            }
+            initialCourses={
+              adminCourses
+            }
+          />
+        ) : null}
       </AppPageLayout>
     </AppSectionShell>
   );

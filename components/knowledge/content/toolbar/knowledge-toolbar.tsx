@@ -2,9 +2,7 @@
 
 "use client";
 
-import { KnowledgeActions } from "./knowledge-actions";
 import { KnowledgeExplorerControls } from "./knowledge-explorer-controls";
-import { KnowledgeNavigation } from "./knowledge-navigation";
 
 import type { KnowledgeToolbarProps } from "./types";
 
@@ -12,10 +10,6 @@ export function KnowledgeToolbar({
   explorerState,
   onExplorerStateChange,
   title,
-  breadcrumb,
-  parentHref,
-  onCreateFolder,
-  onUpload,
   selectedCount = 0,
   onClearSelection,
   onDeleteSelection,
@@ -23,24 +17,7 @@ export function KnowledgeToolbar({
   onShareSelection,
 }: KnowledgeToolbarProps) {
   return (
-    <header className="knowledge-toolbar-container mb-3 xl:mb-4">
-      <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 xl:mb-4">
-        <div className="min-w-0 flex-1">
-          <KnowledgeNavigation
-            breadcrumb={breadcrumb}
-            title={title}
-            parentHref={parentHref}
-          />
-        </div>
-
-        <div className="flex shrink-0 items-center">
-          <KnowledgeActions
-            onCreateFolder={onCreateFolder}
-            onUpload={onUpload}
-          />
-        </div>
-      </div>
-
+    <div className="knowledge-toolbar-container">
       <KnowledgeExplorerControls
         title={title}
         explorerState={explorerState}
@@ -51,6 +28,6 @@ export function KnowledgeToolbar({
         onDeleteSelection={onDeleteSelection}
         onClearSelection={onClearSelection}
       />
-    </header>
+    </div>
   );
 }

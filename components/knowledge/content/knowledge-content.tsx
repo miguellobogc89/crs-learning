@@ -8,8 +8,10 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ReactNode,
 } from "react";
 
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { AppCard } from "@/components/app/layouts/app-card";
 import { AppPagination } from "@/components/app/layouts/app-pagination";
 import { KnowledgeImportModal } from "@/components/knowledge/import/modal";
@@ -21,6 +23,7 @@ import {
 import { CreateFolderDialog } from "./create-folder-dialog";
 import { KnowledgeExplorer } from "./knowledge-explorer";
 import { KnowledgeLibraryBreadcrumb } from "./knowledge-library-breadcrumb";
+import { KnowledgePageHeader } from "./toolbar/knowledge-page-header";
 import { KnowledgeToolbar } from "./toolbar/knowledge-toolbar";
 
 import type {
@@ -87,11 +90,10 @@ type Props = {
   knowledgeLibraries: KnowledgeLibrary[];
   selectedLibraryId: string | null;
   selectedView: string;
+  aside?: ReactNode;
 };
 
-function normalizeSearchValue(
-  value: unknown,
-) {
+function normalizeSearchValue(value: unknown) {
   if (!Array.isArray(value)) {
     return "";
   }
@@ -137,18 +139,13 @@ function normalizeArticleStatus(
 }
 
 function getDateTimestamp(
-  value:
-    | Date
-    | string
-    | null
-    | undefined,
+  value: Date | string | null | undefined,
 ) {
   if (!value) {
     return 0;
   }
 
-  const timestamp =
-    new Date(value).getTime();
+  const timestamp = new Date(value).getTime();
 
   return Number.isNaN(timestamp)
     ? 0
@@ -160,20 +157,18 @@ export function KnowledgeContent({
   knowledgeLibraries,
   selectedLibraryId,
   selectedView,
+  aside,
 }: Props) {
-  const [
-    explorerState,
-    setExplorerState,
-  ] = useState<ExplorerState>({
-    search: "",
-    viewMode: "grid",
-    sort: "updated_desc",
-    itemType: "all",
-    status: "all",
-  });
+  const [explorerState, setExplorerState] =
+    useState<ExplorerState>({
+      search: "",
+      viewMode: "grid",
+      sort: "updated_desc",
+      itemType: "all",
+      status: "all",
+    });
 
-  const [page, setPage] =
-    useState(1);
+  const [page, setPage] = useState(1);
 
   const [
     isCreateFolderOpen,
@@ -193,16 +188,12 @@ export function KnowledgeContent({
   const [
     selectedArticleIds,
     setSelectedArticleIds,
-  ] = useState<Set<string>>(
-    new Set(),
-  );
+  ] = useState<Set<string>>(new Set());
 
   const [
     selectedFolderIds,
     setSelectedFolderIds,
-  ] = useState<Set<string>>(
-    new Set(),
-  );
+  ] = useState<Set<string>>(new Set());
 
   const filesInputRef =
     useRef<HTMLInputElement>(null);
@@ -221,363 +212,302 @@ export function KnowledgeContent({
     id: string,
     selected: boolean,
   ) {
-    setSelectedArticleIds(
-      (current) => {
-        const next =
-          new Set(current);
+    setSelectedArticleIds((current) => {
+      const next = new Set(current);
 
-        if (selected) {
-          next.add(id);
-        } else {
-          next.delete(id);
-        }
+      if (selected) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
 
-        return next;
-      },
-    );
+      return next;
+    });
   }
 
   function toggleFolderSelection(
     id: string,
     selected: boolean,
   ) {
-    setSelectedFolderIds(
-      (current) => {
-        const next =
-          new Set(current);
+    setSelectedFolderIds((current) => {
+      const next = new Set(current);
 
-        if (selected) {
-          next.add(id);
-        } else {
-          next.delete(id);
-        }
+      if (selected) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
 
-        return next;
-      },
-    );
+      return next;
+    });
   }
 
   function clearSelection() {
-    setSelectedArticleIds(
-      new Set(),
-    );
-
-    setSelectedFolderIds(
-      new Set(),
-    );
+    setSelectedArticleIds(new Set());
+    setSelectedFolderIds(new Set());
   }
 
-  const selectedLibrary =
-    useMemo(() => {
-      return knowledgeLibraries.find(
+  const selectedLibrary = useMemo(() => {
+    return knowledgeLibraries.find(
+      (library) =>
+        library.id === selectedLibraryId,
+    );
+  }, [
+    knowledgeLibraries,
+    selectedLibraryId,
+  ]);
+
+  const currentFolderId = useMemo(() => {
+    if (selectedLibraryId) {
+      return selectedLibraryId;
+    }
+
+    const rootLibraries =
+      knowledgeLibraries.filter(
         (library) =>
-          library.id ===
-          selectedLibraryId,
+          library.parent_id === null &&
+          library.name === "Mi biblioteca" &&
+          !library.is_shared,
       );
-    }, [
-      knowledgeLibraries,
-      selectedLibraryId,
-    ]);
 
-  const currentFolderId =
-    useMemo(() => {
-      if (selectedLibraryId) {
-        return selectedLibraryId;
-      }
+    return rootLibraries.length === 1
+      ? rootLibraries[0].id
+      : null;
+  }, [
+    knowledgeLibraries,
+    selectedLibraryId,
+  ]);
 
-      const rootLibraries =
-        knowledgeLibraries.filter(
-          (library) =>
-            library.parent_id ===
-              null &&
-            library.name ===
-              "Mi biblioteca" &&
-            !library.is_shared,
-        );
-
-      return rootLibraries.length === 1
-        ? rootLibraries[0].id
-        : null;
-    }, [
-      knowledgeLibraries,
-      selectedLibraryId,
-    ]);
-
-  const baseChildLibraries =
-    useMemo(() => {
-      if (
-        selectedView === "shared"
-      ) {
-        return knowledgeLibraries.filter(
-          (library) =>
-            library.is_shared,
-        );
-      }
-
+  const baseChildLibraries = useMemo(() => {
+    if (selectedView === "shared") {
       return knowledgeLibraries.filter(
+        (library) => library.is_shared,
+      );
+    }
+
+    return knowledgeLibraries.filter(
+      (library) => {
+        if (library.is_shared) {
+          return false;
+        }
+
+        return (
+          library.parent_id === currentFolderId
+        );
+      },
+    );
+  }, [
+    knowledgeLibraries,
+    currentFolderId,
+    selectedView,
+  ]);
+
+  const processedLibraries = useMemo(() => {
+    if (
+      explorerState.itemType === "articles" ||
+      explorerState.status !== "all"
+    ) {
+      return [];
+    }
+
+    const searchValue =
+      explorerState.search
+        .trim()
+        .toLocaleLowerCase("es");
+
+    const filtered =
+      baseChildLibraries.filter(
         (library) => {
-          if (library.is_shared) {
+          if (!searchValue) {
+            return true;
+          }
+
+          return library.name
+            .toLocaleLowerCase("es")
+            .includes(searchValue);
+        },
+      );
+
+    return [...filtered].sort(
+      (first, second) => {
+        if (
+          explorerState.sort === "name_asc"
+        ) {
+          return first.name.localeCompare(
+            second.name,
+            "es",
+            {
+              sensitivity: "base",
+            },
+          );
+        }
+
+        if (
+          explorerState.sort === "name_desc"
+        ) {
+          return second.name.localeCompare(
+            first.name,
+            "es",
+            {
+              sensitivity: "base",
+            },
+          );
+        }
+
+        const firstDate =
+          getDateTimestamp(
+            first.updated_at,
+          );
+
+        const secondDate =
+          getDateTimestamp(
+            second.updated_at,
+          );
+
+        if (
+          explorerState.sort === "updated_asc"
+        ) {
+          return firstDate - secondDate;
+        }
+
+        return secondDate - firstDate;
+      },
+    );
+  }, [
+    baseChildLibraries,
+    explorerState.itemType,
+    explorerState.search,
+    explorerState.sort,
+    explorerState.status,
+  ]);
+
+  const processedKnowledge = useMemo(() => {
+    if (
+      explorerState.itemType === "folders"
+    ) {
+      return [];
+    }
+
+    const searchValue =
+      explorerState.search
+        .trim()
+        .toLocaleLowerCase("es");
+
+    const filtered =
+      knowledgeSources.filter(
+        (item) => {
+          const normalizedStatus =
+            normalizeArticleStatus(
+              item.status,
+            );
+
+          if (
+            explorerState.status !== "all" &&
+            normalizedStatus !==
+              explorerState.status
+          ) {
             return false;
           }
 
-          return (
-            library.parent_id ===
-            currentFolderId
+          if (!searchValue) {
+            return true;
+          }
+
+          const searchableText = [
+            item.title,
+            item.description,
+            item.content,
+            item.summary,
+            item.language,
+            item.domain,
+            item.level,
+            item.knowledge_type,
+            item.visibility,
+            normalizeSearchValue(
+              item.tags,
+            ),
+            normalizeSearchValue(
+              item.keywords,
+            ),
+            normalizeSearchValue(
+              item.entities,
+            ),
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLocaleLowerCase("es");
+
+          return searchableText.includes(
+            searchValue,
           );
         },
       );
-    }, [
-      knowledgeLibraries,
-      currentFolderId,
-      selectedView,
-    ]);
 
-  const processedLibraries =
-    useMemo(() => {
-      if (
-        explorerState.itemType ===
-          "articles" ||
-        explorerState.status !==
-          "all"
-      ) {
-        return [];
-      }
+    return [...filtered].sort(
+      (first, second) => {
+        if (
+          explorerState.sort === "name_asc"
+        ) {
+          return first.title.localeCompare(
+            second.title,
+            "es",
+            {
+              sensitivity: "base",
+            },
+          );
+        }
 
-      const searchValue =
-        explorerState.search
-          .trim()
-          .toLocaleLowerCase(
+        if (
+          explorerState.sort === "name_desc"
+        ) {
+          return second.title.localeCompare(
+            first.title,
+            "es",
+            {
+              sensitivity: "base",
+            },
+          );
+        }
+
+        if (
+          explorerState.sort === "status"
+        ) {
+          return normalizeArticleStatus(
+            first.status,
+          ).localeCompare(
+            normalizeArticleStatus(
+              second.status,
+            ),
             "es",
           );
+        }
 
-      const filtered =
-        baseChildLibraries.filter(
-          (library) => {
-            if (!searchValue) {
-              return true;
-            }
-
-            return library.name
-              .toLocaleLowerCase(
-                "es",
-              )
-              .includes(
-                searchValue,
-              );
-          },
-        );
-
-      return [...filtered].sort(
-        (first, second) => {
-          if (
-            explorerState.sort ===
-            "name_asc"
-          ) {
-            return first.name.localeCompare(
-              second.name,
-              "es",
-              {
-                sensitivity:
-                  "base",
-              },
-            );
-          }
-
-          if (
-            explorerState.sort ===
-            "name_desc"
-          ) {
-            return second.name.localeCompare(
-              first.name,
-              "es",
-              {
-                sensitivity:
-                  "base",
-              },
-            );
-          }
-
-          const firstDate =
-            getDateTimestamp(
-              first.updated_at,
-            );
-
-          const secondDate =
-            getDateTimestamp(
-              second.updated_at,
-            );
-
-          if (
-            explorerState.sort ===
-            "updated_asc"
-          ) {
-            return (
-              firstDate -
-              secondDate
-            );
-          }
-
-          return (
-            secondDate -
-            firstDate
-          );
-        },
-      );
-    }, [
-      baseChildLibraries,
-      explorerState.itemType,
-      explorerState.search,
-      explorerState.sort,
-      explorerState.status,
-    ]);
-
-  const processedKnowledge =
-    useMemo(() => {
-      if (
-        explorerState.itemType ===
-        "folders"
-      ) {
-        return [];
-      }
-
-      const searchValue =
-        explorerState.search
-          .trim()
-          .toLocaleLowerCase(
-            "es",
+        const firstDate =
+          getDateTimestamp(
+            first.updated_at,
           );
 
-      const filtered =
-        knowledgeSources.filter(
-          (item) => {
-            const normalizedStatus =
-              normalizeArticleStatus(
-                item.status,
-              );
-
-            if (
-              explorerState.status !==
-                "all" &&
-              normalizedStatus !==
-                explorerState.status
-            ) {
-              return false;
-            }
-
-            if (!searchValue) {
-              return true;
-            }
-
-            const searchableText =
-              [
-                item.title,
-                item.description,
-                item.content,
-                item.summary,
-                item.language,
-                item.domain,
-                item.level,
-                item.knowledge_type,
-                item.visibility,
-                normalizeSearchValue(
-                  item.tags,
-                ),
-                normalizeSearchValue(
-                  item.keywords,
-                ),
-                normalizeSearchValue(
-                  item.entities,
-                ),
-              ]
-                .filter(Boolean)
-                .join(" ")
-                .toLocaleLowerCase(
-                  "es",
-                );
-
-            return searchableText.includes(
-              searchValue,
-            );
-          },
-        );
-
-      return [...filtered].sort(
-        (first, second) => {
-          if (
-            explorerState.sort ===
-            "name_asc"
-          ) {
-            return first.title.localeCompare(
-              second.title,
-              "es",
-              {
-                sensitivity:
-                  "base",
-              },
-            );
-          }
-
-          if (
-            explorerState.sort ===
-            "name_desc"
-          ) {
-            return second.title.localeCompare(
-              first.title,
-              "es",
-              {
-                sensitivity:
-                  "base",
-              },
-            );
-          }
-
-          if (
-            explorerState.sort ===
-            "status"
-          ) {
-            return normalizeArticleStatus(
-              first.status,
-            ).localeCompare(
-              normalizeArticleStatus(
-                second.status,
-              ),
-              "es",
-            );
-          }
-
-          const firstDate =
-            getDateTimestamp(
-              first.updated_at,
-            );
-
-          const secondDate =
-            getDateTimestamp(
-              second.updated_at,
-            );
-
-          if (
-            explorerState.sort ===
-            "updated_asc"
-          ) {
-            return (
-              firstDate -
-              secondDate
-            );
-          }
-
-          return (
-            secondDate -
-            firstDate
+        const secondDate =
+          getDateTimestamp(
+            second.updated_at,
           );
-        },
-      );
-    }, [
-      knowledgeSources,
-      explorerState.itemType,
-      explorerState.search,
-      explorerState.sort,
-      explorerState.status,
-    ]);
+
+        if (
+          explorerState.sort === "updated_asc"
+        ) {
+          return firstDate - secondDate;
+        }
+
+        return secondDate - firstDate;
+      },
+    );
+  }, [
+    knowledgeSources,
+    explorerState.itemType,
+    explorerState.search,
+    explorerState.sort,
+    explorerState.status,
+  ]);
 
   const totalItems =
     processedLibraries.length +
@@ -585,106 +515,91 @@ export function KnowledgeContent({
 
   const totalPages = Math.max(
     1,
-    Math.ceil(
-      totalItems / PAGE_SIZE,
-    ),
+    Math.ceil(totalItems / PAGE_SIZE),
   );
 
-  const currentPage =
-    Math.min(
-      page,
-      totalPages,
+  const currentPage = Math.min(
+    page,
+    totalPages,
+  );
+
+  const paginatedItems = useMemo(() => {
+    const start =
+      (currentPage - 1) * PAGE_SIZE;
+
+    const end =
+      start + PAGE_SIZE;
+
+    const visibleFolders =
+      processedLibraries.slice(
+        start,
+        end,
+      );
+
+    const documentStart = Math.max(
+      0,
+      start -
+        processedLibraries.length,
     );
 
-  const paginatedItems =
-    useMemo(() => {
-      const start =
-        (currentPage - 1) *
-        PAGE_SIZE;
+    const remainingSlots =
+      PAGE_SIZE -
+      visibleFolders.length;
 
-      const end =
-        start + PAGE_SIZE;
+    const visibleKnowledge =
+      remainingSlots > 0
+        ? processedKnowledge.slice(
+            documentStart,
+            documentStart +
+              remainingSlots,
+          )
+        : [];
 
-      const visibleFolders =
-        processedLibraries.slice(
-          start,
-          end,
-        );
-
-      const documentStart =
-        Math.max(
-          0,
-          start -
-            processedLibraries.length,
-        );
-
-      const remainingSlots =
-        PAGE_SIZE -
-        visibleFolders.length;
-
-      const visibleKnowledge =
-        remainingSlots > 0
-          ? processedKnowledge.slice(
-              documentStart,
-              documentStart +
-                remainingSlots,
-            )
-          : [];
-
-      return {
-        folders:
-          visibleFolders,
-        knowledgeSources:
-          visibleKnowledge,
-      };
-    }, [
-      currentPage,
-      processedLibraries,
-      processedKnowledge,
-    ]);
+    return {
+      folders: visibleFolders,
+      knowledgeSources:
+        visibleKnowledge,
+    };
+  }, [
+    currentPage,
+    processedLibraries,
+    processedKnowledge,
+  ]);
 
   const visibleItems =
-    explorerState.viewMode ===
-    "list"
+    explorerState.viewMode === "list"
       ? {
-          folders:
-            processedLibraries,
+          folders: processedLibraries,
           knowledgeSources:
             processedKnowledge,
         }
       : paginatedItems;
 
-  const libraryTree =
-    useMemo(() => {
-      return buildLibraryTree(
-        knowledgeLibraries,
-      );
-    }, [knowledgeLibraries]);
+  const libraryTree = useMemo(() => {
+    return buildLibraryTree(
+      knowledgeLibraries,
+    );
+  }, [knowledgeLibraries]);
 
-  const libraryPath =
-    useMemo(() => {
-      return getLibraryPath(
-        libraryTree,
-        selectedLibraryId,
-      );
-    }, [
+  const libraryPath = useMemo(() => {
+    return getLibraryPath(
       libraryTree,
       selectedLibraryId,
-    ]);
+    );
+  }, [
+    libraryTree,
+    selectedLibraryId,
+  ]);
 
   const currentLibrary =
     libraryPath[
       libraryPath.length - 1
     ];
 
-  let pageTitle =
-    "Mi biblioteca";
+  let pageTitle = "Mi biblioteca";
 
-  if (
-    selectedView === "shared"
-  ) {
-    pageTitle =
-      "Compartido conmigo";
+  if (selectedView === "shared") {
+    pageTitle = "Compartido conmigo";
   } else if (
     selectedView === "public"
   ) {
@@ -696,53 +611,63 @@ export function KnowledgeContent({
     pageTitle =
       "Documentos privados";
   } else if (currentLibrary) {
-    pageTitle =
-      currentLibrary.name;
+    pageTitle = currentLibrary.name;
   }
 
   let parentHref:
     | string
     | null = null;
 
-  if (
-    selectedView !== "all"
-  ) {
+  if (selectedView !== "all") {
     parentHref = "/knowledge";
-  } else if (
-    selectedLibrary
-  ) {
-    if (
-      selectedLibrary.parent_id
-    ) {
+  } else if (selectedLibrary) {
+    if (selectedLibrary.parent_id) {
       parentHref =
         `/knowledge?library=${encodeURIComponent(
           selectedLibrary.parent_id,
         )}`;
     } else {
-      parentHref =
-        "/knowledge";
+      parentHref = "/knowledge";
     }
   }
+
+  const breadcrumb =
+    selectedView === "shared" ? (
+      <div className="truncate text-sm text-muted-foreground">
+        Mi biblioteca / Compartido conmigo
+      </div>
+    ) : selectedView === "public" ? (
+      <div className="truncate text-sm text-muted-foreground">
+        Mi biblioteca / Conocimiento público
+      </div>
+    ) : selectedView === "private" ? (
+      <div className="truncate text-sm text-muted-foreground">
+        Mi biblioteca / Documentos privados
+      </div>
+    ) : libraryPath.length > 0 ? (
+      <KnowledgeLibraryBreadcrumb
+        path={libraryPath}
+      />
+    ) : (
+      <div className="truncate text-sm text-muted-foreground">
+        Mi biblioteca
+      </div>
+    );
 
   function handleFilesSelected(
     event:
       ChangeEvent<HTMLInputElement>,
   ) {
-    const files =
-      Array.from(
-        event.target.files ?? [],
-      );
+    const files = Array.from(
+      event.target.files ?? [],
+    );
 
-    if (
-      files.length === 0
-    ) {
+    if (files.length === 0) {
       return;
     }
 
     setSelectedFiles(files);
-    setIsKnowledgeImportOpen(
-      true,
-    );
+    setIsKnowledgeImportOpen(true);
 
     event.target.value = "";
   }
@@ -750,16 +675,12 @@ export function KnowledgeContent({
   function handleDroppedFiles(
     files: File[],
   ) {
-    if (
-      files.length === 0
-    ) {
+    if (files.length === 0) {
       return;
     }
 
     setSelectedFiles(files);
-    setIsKnowledgeImportOpen(
-      true,
-    );
+    setIsKnowledgeImportOpen(true);
   }
 
   function handleUpload(
@@ -778,6 +699,18 @@ export function KnowledgeContent({
     zipInputRef.current?.click();
   }
 
+  function handleCreateFolder() {
+    if (!currentFolderId) {
+      window.alert(
+        "No se ha encontrado la carpeta «Mi biblioteca». Recarga la página antes de crear una carpeta.",
+      );
+
+      return;
+    }
+
+    setIsCreateFolderOpen(true);
+  }
+
   useEffect(() => {
     function handleTopbarUpload(
       event: Event,
@@ -786,12 +719,9 @@ export function KnowledgeContent({
         event as CustomEvent<UploadType>;
 
       if (
-        uploadEvent.detail ===
-          "files" ||
-        uploadEvent.detail ===
-          "folder" ||
-        uploadEvent.detail ===
-          "zip"
+        uploadEvent.detail === "files" ||
+        uploadEvent.detail === "folder" ||
+        uploadEvent.detail === "zip"
       ) {
         handleUpload(
           uploadEvent.detail,
@@ -813,254 +743,198 @@ export function KnowledgeContent({
   }, []);
 
   return (
-    <>
-      <AppCard className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-0">
-        <div className="z-10 shrink-0 px-5 pt-4 sm:px-6 sm:pt-5 xl:pt-6">
-          <KnowledgeToolbar
-            explorerState={
-              explorerState
-            }
-            onExplorerStateChange={(
-              nextState,
-            ) => {
-              setExplorerState(
+    <AppPageLayout
+      aside={aside}
+      header={
+        <KnowledgePageHeader
+          title={pageTitle}
+          breadcrumb={breadcrumb}
+          parentHref={parentHref}
+          onCreateFolder={
+            handleCreateFolder
+          }
+          onUpload={handleUpload}
+        />
+      }
+      contentClassName="!flex !flex-col !overflow-hidden !px-0 !pb-0"
+    >
+      <>
+        <AppCard className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none border-0 p-0 shadow-none">
+          {/* Toolbar: búsqueda, filtros, orden y vista */}
+          <div className="z-10 shrink-0 px-5 py-3 sm:px-6">
+            <KnowledgeToolbar
+              explorerState={
+                explorerState
+              }
+              onExplorerStateChange={(
                 nextState,
-              );
-
-              setPage(1);
-            }}
-            title={pageTitle}
-            parentHref={
-              parentHref
-            }
-            breadcrumb={
-              selectedView ===
-              "shared" ? (
-                <div className="truncate text-sm text-muted-foreground">
-                  Mi biblioteca /
-                  Compartido conmigo
-                </div>
-              ) : selectedView ===
-                "public" ? (
-                <div className="truncate text-sm text-muted-foreground">
-                  Mi biblioteca /
-                  Conocimiento público
-                </div>
-              ) : selectedView ===
-                "private" ? (
-                <div className="truncate text-sm text-muted-foreground">
-                  Mi biblioteca /
-                  Documentos privados
-                </div>
-              ) : libraryPath.length >
-                0 ? (
-                <KnowledgeLibraryBreadcrumb
-                  path={
-                    libraryPath
-                  }
-                />
-              ) : (
-                <div className="truncate text-sm text-muted-foreground">
-                  Mi biblioteca
-                </div>
-              )
-            }
-            onCreateFolder={() => {
-              if (
-                !currentFolderId
-              ) {
-                window.alert(
-                  "No se ha encontrado la carpeta «Mi biblioteca». Recarga la página antes de crear una carpeta.",
+              ) => {
+                setExplorerState(
+                  nextState,
                 );
 
-                return;
+                setPage(1);
+              }}
+              title={pageTitle}
+              selectedCount={
+                selectedCount
               }
+              onClearSelection={
+                clearSelection
+              }
+            />
+          </div>
 
-              setIsCreateFolderOpen(
-                true,
-              );
+          {/* Explorer */}
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6">
+            <div
+              key={
+                explorerState.viewMode ===
+                "grid"
+                  ? currentPage
+                  : "list"
+              }
+              className={
+                explorerState.viewMode ===
+                "grid"
+                  ? "h-full min-h-0 animate-[knowledge-page-in_180ms_ease-out]"
+                  : "h-full min-h-0"
+              }
+            >
+              <KnowledgeExplorer
+                folders={
+                  visibleItems.folders
+                }
+                knowledgeSources={
+                  visibleItems.knowledgeSources
+                }
+                viewMode={
+                  explorerState.viewMode
+                }
+                selectedLibraryId={
+                  selectedLibraryId
+                }
+                selectedView={
+                  selectedView
+                }
+                search={
+                  explorerState.search
+                }
+                selectedArticleIds={
+                  selectedArticleIds
+                }
+                selectedFolderIds={
+                  selectedFolderIds
+                }
+                onUploadRequested={() =>
+                  handleUpload("files")
+                }
+                onArticleSelectedChange={
+                  toggleArticleSelection
+                }
+                onFolderSelectedChange={
+                  toggleFolderSelection
+                }
+                onUploadFolderRequested={() =>
+                  handleUpload("folder")
+                }
+                onCreateFolderRequested={
+                  handleCreateFolder
+                }
+                onFilesDropped={
+                  handleDroppedFiles
+                }
+              />
+            </div>
+          </div>
+
+          {/* Paginación */}
+          {explorerState.viewMode ===
+          "grid" ? (
+            <div className="shrink-0 border-t border-slate-100">
+              <AppPagination
+                page={currentPage}
+                totalPages={
+                  totalPages
+                }
+                totalItems={
+                  totalItems
+                }
+                pageSize={PAGE_SIZE}
+                onPageChange={
+                  setPage
+                }
+              />
+            </div>
+          ) : null}
+        </AppCard>
+
+        <CreateFolderDialog
+          open={isCreateFolderOpen}
+          parentLibraryId={
+            currentFolderId
+          }
+          onClose={() => {
+            setIsCreateFolderOpen(
+              false,
+            );
+          }}
+        />
+
+        {currentFolderId ? (
+          <KnowledgeImportModal
+            open={
+              isKnowledgeImportOpen
+            }
+            context={{
+              origin:
+                selectedLibraryId
+                  ? "folder"
+                  : "root",
+              libraryId:
+                currentFolderId,
             }}
-            onUpload={
-              handleUpload
+            selectedFiles={
+              selectedFiles
             }
-            selectedCount={
-              selectedCount
-            }
-            onClearSelection={
-              clearSelection
+            onOpenChange={
+              setIsKnowledgeImportOpen
             }
           />
-        </div>
-
-        <div className="min-h-0 min-w-0 flex-1 overflow-hidden px-5 pb-5 sm:px-6 sm:pb-6">
-          <div
-            key={
-              explorerState.viewMode ===
-              "grid"
-                ? currentPage
-                : "list"
-            }
-            className={
-              explorerState.viewMode ===
-              "grid"
-                ? "h-full min-h-0 animate-[knowledge-page-in_180ms_ease-out]"
-                : "h-full min-h-0"
-            }
-          >
-            <KnowledgeExplorer
-              folders={
-                visibleItems.folders
-              }
-              knowledgeSources={
-                visibleItems.knowledgeSources
-              }
-              viewMode={
-                explorerState.viewMode
-              }
-              selectedLibraryId={
-                selectedLibraryId
-              }
-              selectedView={
-                selectedView
-              }
-              search={
-                explorerState.search
-              }
-              selectedArticleIds={
-                selectedArticleIds
-              }
-              selectedFolderIds={
-                selectedFolderIds
-              }
-              onUploadRequested={() =>
-                handleUpload(
-                  "files",
-                )
-              }
-              onArticleSelectedChange={
-                toggleArticleSelection
-              }
-              onFolderSelectedChange={
-                toggleFolderSelection
-              }
-              onUploadFolderRequested={() =>
-                handleUpload(
-                  "folder",
-                )
-              }
-              onCreateFolderRequested={() => {
-                if (
-                  !currentFolderId
-                ) {
-                  window.alert(
-                    "No se ha encontrado la carpeta actual. Recarga la página antes de crear una carpeta.",
-                  );
-
-                  return;
-                }
-
-                setIsCreateFolderOpen(
-                  true,
-                );
-              }}
-              onFilesDropped={
-                handleDroppedFiles
-              }
-            />
-          </div>
-        </div>
-
-        {explorerState.viewMode ===
-        "grid" ? (
-          <div className="shrink-0 border-t border-slate-100">
-            <AppPagination
-              page={
-                currentPage
-              }
-              totalPages={
-                totalPages
-              }
-              totalItems={
-                totalItems
-              }
-              pageSize={
-                PAGE_SIZE
-              }
-              onPageChange={
-                setPage
-              }
-            />
-          </div>
         ) : null}
-      </AppCard>
 
-      <CreateFolderDialog
-        open={
-          isCreateFolderOpen
-        }
-        parentLibraryId={
-          currentFolderId
-        }
-        onClose={() => {
-          setIsCreateFolderOpen(
-            false,
-          );
-        }}
-      />
-
-      {currentFolderId ? (
-        <KnowledgeImportModal
-          open={
-            isKnowledgeImportOpen
-          }
-          context={{
-            origin:
-              selectedLibraryId
-                ? "folder"
-                : "root",
-            libraryId:
-              currentFolderId,
-          }}
-          selectedFiles={
-            selectedFiles
-          }
-          onOpenChange={
-            setIsKnowledgeImportOpen
+        <input
+          ref={filesInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={
+            handleFilesSelected
           }
         />
-      ) : null}
 
-      <input
-        ref={filesInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={
-          handleFilesSelected
-        }
-      />
+        <input
+          ref={folderInputRef}
+          type="file"
+          // @ts-expect-error webkitdirectory
+          webkitdirectory=""
+          multiple
+          className="hidden"
+          onChange={
+            handleFilesSelected
+          }
+        />
 
-      <input
-        ref={folderInputRef}
-        type="file"
-        // @ts-expect-error webkitdirectory
-        webkitdirectory=""
-        multiple
-        className="hidden"
-        onChange={
-          handleFilesSelected
-        }
-      />
-
-      <input
-        ref={zipInputRef}
-        type="file"
-        accept=".zip"
-        className="hidden"
-        onChange={
-          handleFilesSelected
-        }
-      />
-    </>
+        <input
+          ref={zipInputRef}
+          type="file"
+          accept=".zip"
+          className="hidden"
+          onChange={
+            handleFilesSelected
+          }
+        />
+      </>
+    </AppPageLayout>
   );
 }

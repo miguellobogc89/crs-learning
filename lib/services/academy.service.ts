@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import {
+  getAcademyHomePreviewCourses,
   getAcademyUserScope,
   getCompanyCourseRequests,
   getPublishedCoursesForUserCompany,
@@ -24,8 +25,6 @@ export type AcademyAdminCourse = {
   students: number;
   thumbnailUrl: string | null;
 };
-
-// lib/services/academy.service.ts
 
 export type AcademyCourseAssignmentOption = {
   id: string;
@@ -124,7 +123,8 @@ export async function getAcademyAdminCourses(
           : "skills";
 
     const level =
-      course.level === "intermediate" || course.level === "advanced"
+      course.level === "intermediate" ||
+      course.level === "advanced"
         ? course.level
         : "beginner";
 
@@ -135,7 +135,9 @@ export async function getAcademyAdminCourses(
       type,
       level,
       difficulty,
-      status: course.is_published ? "published" : "draft",
+      status: course.is_published
+        ? "published"
+        : "draft",
       updatedAt: new Intl.DateTimeFormat("es-ES", {
         day: "numeric",
         month: "short",
@@ -169,13 +171,16 @@ export type AcademyHomeCourse = {
   thumbnailUrl: string | null;
 };
 
-export type AcademyHomeAssignment = AcademyHomeCourse & {
-  assignment: "Obligatorio" | "Asignado";
-  isRequired: boolean;
-  dueAt: Date | null;
-  deadlineLabel: string;
-  dueLabel: string;
-};
+export type AcademyHomeAssignment =
+  AcademyHomeCourse & {
+    assignment:
+      | "Obligatorio"
+      | "Asignado";
+    isRequired: boolean;
+    dueAt: Date | null;
+    deadlineLabel: string;
+    dueLabel: string;
+  };
 
 export type AcademyHomeProgressSummary = {
   global: number;
@@ -195,6 +200,7 @@ export type AcademyHomeTeamRequest = {
 };
 
 export type AcademyHomeData = {
+  previewCourses: AcademyHomeCourse[];
   availableCourses: AcademyHomeCourse[];
   continueLearning: AcademyHomeCourse[];
   pendingTraining: AcademyHomeAssignment[];
@@ -205,20 +211,29 @@ export type AcademyHomeData = {
 export async function getAcademyHomeData(
   userId: string,
 ): Promise<AcademyHomeData> {
-  const userScope = await getAcademyUserScope(userId);
+  const userScope =
+    await getAcademyUserScope(userId);
 
   if (!userScope) {
-    throw new Error("Usuario no encontrado");
+    throw new Error(
+      "Usuario no encontrado",
+    );
   }
 
-  const companyId = userScope.company_id;
+  const companyId =
+    userScope.company_id;
 
   const [
+    previewCourseRecords,
     availableCourseRecords,
     progressRecords,
     assignmentRecords,
     requestRecords,
   ] = await Promise.all([
+    getAcademyHomePreviewCourses(
+      userId,
+      companyId,
+    ),
     getPublishedCoursesForUserCompany({
       userId,
       companyId,
@@ -239,38 +254,75 @@ export async function getAcademyHomeData(
     }),
   ]);
 
-  const votedRequestIds = await getUserVotedCourseRequestIds({
-    userId,
-    requestIds: requestRecords.map((request) => request.id),
-  });
+  const votedRequestIds =
+    await getUserVotedCourseRequestIds({
+      userId,
+      requestIds:
+        requestRecords.map(
+          (request) => request.id,
+        ),
+    });
 
-  const availableCourses = availableCourseRecords.map(mapCourseRecord);
-  const continueLearning = progressRecords
-    .map(mapCourseRecord)
-    .filter((course) => course.progress > 0 && course.progress < 100)
-    .sort((left, right) => right.progress - left.progress)
-    .slice(0, 3);
-  const pendingTraining = assignmentRecords
-    .map(mapAssignmentRecord)
-    .filter((assignment) => assignment.progress < 100)
-    .slice(0, 2);
+  const previewCourses =
+    previewCourseRecords.map(
+      mapCourseRecord,
+    );
+
+  const availableCourses =
+    availableCourseRecords.map(
+      mapCourseRecord,
+    );
+
+  const continueLearning =
+    progressRecords
+      .sort((left, right) => {
+        const leftUpdatedAt =
+          left.user_course_progress[0]?.updated_at?.getTime() ?? 0;
+
+        const rightUpdatedAt =
+          right.user_course_progress[0]?.updated_at?.getTime() ?? 0;
+
+        return rightUpdatedAt - leftUpdatedAt;
+      })
+      .slice(0, 3)
+      .map(mapCourseRecord);
+
+  const pendingTraining =
+    assignmentRecords
+      .map(mapAssignmentRecord)
+      .filter(
+        (assignment) =>
+          assignment.progress < 100,
+      )
+      .slice(0, 2);
 
   return {
+    previewCourses,
     availableCourses,
     continueLearning,
     pendingTraining,
-    progressSummary: buildProgressSummary({
-      availableCourseRecords,
-      progressRecords,
-      assignmentRecords,
-    }),
-    teamRequests: requestRecords.slice(0, 3).map((request) => ({
-      id: request.id,
-      title: request.title,
-      description: request.description,
-      votes: request._count.course_request_votes,
-      hasVoted: votedRequestIds.has(request.id),
-    })),
+    progressSummary:
+      buildProgressSummary({
+        availableCourseRecords,
+        progressRecords,
+        assignmentRecords,
+      }),
+    teamRequests:
+      requestRecords
+        .slice(0, 3)
+        .map((request) => ({
+          id: request.id,
+          title: request.title,
+          description:
+            request.description,
+          votes:
+            request._count
+              .course_request_votes,
+          hasVoted:
+            votedRequestIds.has(
+              request.id,
+            ),
+        })),
   };
 }
 
@@ -278,41 +330,70 @@ function mapCourseRecord(
   course: AcademyCourseWithProgressRecord,
 ): AcademyHomeCourse {
   const progress = clampProgress(
-    course.user_course_progress[0]?.progress_percent ?? 0,
+    course.user_course_progress[0]
+      ?.progress_percent ?? 0,
   );
-  const estimatedMinutes = getCourseEstimatedMinutes(course);
-  const remainingMinutes = Math.max(
-    0,
-    Math.round(estimatedMinutes * (1 - progress / 100)),
-  );
+
+  const estimatedMinutes =
+    getCourseEstimatedMinutes(course);
+
+  const remainingMinutes =
+    Math.max(
+      0,
+      Math.round(
+        estimatedMinutes *
+          (1 - progress / 100),
+      ),
+    );
 
   return {
     id: course.id,
     title: course.title,
-    category: course.category || "Academy",
-    duration: formatDuration(estimatedMinutes),
+    category:
+      course.category || "Academy",
+    duration: formatDuration(
+      estimatedMinutes,
+    ),
     remaining:
       remainingMinutes > 0
-        ? `${formatDuration(remainingMinutes)} restantes`
+        ? `${formatDuration(
+            remainingMinutes,
+          )} restantes`
         : "Completado",
     progress,
-    thumbnail: inferThumbnailVariant(course),
-    thumbnailUrl: course.thumbnail_url,
+    thumbnail:
+      inferThumbnailVariant(course),
+    thumbnailUrl:
+      course.thumbnail_url
+        ? `/api/academy/course-cover/${course.id}`
+        : null,
   };
 }
 
 function mapAssignmentRecord(
   assignment: AcademyAssignmentRecord,
 ): AcademyHomeAssignment {
-  const course = mapCourseRecord(assignment.courses);
+  const course = mapCourseRecord(
+    assignment.courses,
+  );
 
   return {
     ...course,
-    assignment: assignment.is_required ? "Obligatorio" : "Asignado",
-    isRequired: assignment.is_required,
+    assignment:
+      assignment.is_required
+        ? "Obligatorio"
+        : "Asignado",
+    isRequired:
+      assignment.is_required,
     dueAt: assignment.due_at,
-    deadlineLabel: formatDateLabel(assignment.due_at),
-    dueLabel: formatDueLabel(assignment.due_at),
+    deadlineLabel:
+      formatDateLabel(
+        assignment.due_at,
+      ),
+    dueLabel:
+      formatDueLabel(
+        assignment.due_at,
+      ),
   };
 }
 
@@ -321,69 +402,113 @@ function buildProgressSummary({
   progressRecords,
   assignmentRecords,
 }: {
-  availableCourseRecords: AcademyCourseWithProgressRecord[];
-  progressRecords: AcademyCourseWithProgressRecord[];
-  assignmentRecords: AcademyAssignmentRecord[];
+  availableCourseRecords:
+    AcademyCourseWithProgressRecord[];
+  progressRecords:
+    AcademyCourseWithProgressRecord[];
+  assignmentRecords:
+    AcademyAssignmentRecord[];
 }): AcademyHomeProgressSummary {
-  const progressByCourseId = new Map(
-    progressRecords.map((course) => [
-      course.id,
-      clampProgress(
-        course.user_course_progress[0]?.progress_percent ?? 0,
+  const progressByCourseId =
+    new Map(
+      progressRecords.map(
+        (course) => [
+          course.id,
+          clampProgress(
+            course
+              .user_course_progress[0]
+              ?.progress_percent ?? 0,
+          ),
+        ],
       ),
-    ]),
-  );
+    );
 
-  for (const assignment of assignmentRecords) {
-    if (!progressByCourseId.has(assignment.course_id)) {
+  for (
+    const assignment of
+    assignmentRecords
+  ) {
+    if (
+      !progressByCourseId.has(
+        assignment.course_id,
+      )
+    ) {
       progressByCourseId.set(
         assignment.course_id,
         clampProgress(
-          assignment.courses.user_course_progress[0]
+          assignment.courses
+            .user_course_progress[0]
             ?.progress_percent ?? 0,
         ),
       );
     }
   }
 
-  const completed = Array.from(progressByCourseId.values()).filter(
-    (progress) => progress >= 100,
-  ).length;
-  const inProgress = Array.from(progressByCourseId.values()).filter(
-    (progress) => progress > 0 && progress < 100,
-  ).length;
-  const assignedPending = assignmentRecords.filter((assignment) => {
-    const progress =
-      progressByCourseId.get(assignment.course_id) ?? 0;
+  const completed =
+    Array.from(
+      progressByCourseId.values(),
+    ).filter(
+      (progress) => progress >= 100,
+    ).length;
 
-    return progress < 100;
-  }).length;
-  const knownCourseCount = Math.max(
-    availableCourseRecords.length,
-    progressByCourseId.size,
-    assignmentRecords.length,
-  );
+  const inProgress =
+    Array.from(
+      progressByCourseId.values(),
+    ).filter(
+      (progress) =>
+        progress > 0 &&
+        progress < 100,
+    ).length;
+
+  const assignedPending =
+    assignmentRecords.filter(
+      (assignment) => {
+        const progress =
+          progressByCourseId.get(
+            assignment.course_id,
+          ) ?? 0;
+
+        return progress < 100;
+      },
+    ).length;
+
+  const knownCourseCount =
+    Math.max(
+      availableCourseRecords.length,
+      progressByCourseId.size,
+      assignmentRecords.length,
+    );
+
   const global =
     knownCourseCount > 0
       ? Math.round(
-          Array.from(progressByCourseId.values()).reduce(
-            (total, progress) => total + progress,
+          Array.from(
+            progressByCourseId.values(),
+          ).reduce(
+            (total, progress) =>
+              total + progress,
             0,
           ) / knownCourseCount,
         )
       : 0;
-  const estimatedCompletedMinutes = progressRecords.reduce(
-    (total, course) =>
-      total +
-      Math.round(
-        getCourseEstimatedMinutes(course) *
-          (clampProgress(
-            course.user_course_progress[0]?.progress_percent ?? 0,
-          ) /
-            100),
-      ),
-    0,
-  );
+
+  const estimatedCompletedMinutes =
+    progressRecords.reduce(
+      (total, course) =>
+        total +
+        Math.round(
+          getCourseEstimatedMinutes(
+            course,
+          ) *
+            (clampProgress(
+              course
+                .user_course_progress[0]
+                ?.progress_percent ??
+                0,
+            ) /
+              100),
+        ),
+      0,
+    );
 
   return {
     global,
@@ -391,29 +516,53 @@ function buildProgressSummary({
     inProgress,
     pending: assignedPending,
     estimatedCompletedMinutes,
-    estimatedCompletedLabel: formatDuration(estimatedCompletedMinutes),
+    estimatedCompletedLabel:
+      formatDuration(
+        estimatedCompletedMinutes,
+      ),
   };
 }
 
 function getCourseEstimatedMinutes(
-  course: Pick<AcademyCourseWithProgressRecord, "sections">,
+  course: Pick<
+    AcademyCourseWithProgressRecord,
+    "sections"
+  >,
 ) {
-  const minutes = course.sections.reduce(
-    (sectionTotal, section) =>
-      sectionTotal +
-      section.lessons.reduce(
-        (lessonTotal, lesson) =>
-          lessonTotal + lesson.estimated_minutes,
-        0,
-      ),
-    0,
-  );
+  const minutes =
+    course.sections.reduce(
+      (
+        sectionTotal,
+        section,
+      ) =>
+        sectionTotal +
+        section.lessons.reduce(
+          (
+            lessonTotal,
+            lesson,
+          ) =>
+            lessonTotal +
+            lesson.estimated_minutes,
+          0,
+        ),
+      0,
+    );
 
-  return minutes > 0 ? minutes : 30;
+  return minutes > 0
+    ? minutes
+    : 30;
 }
 
-function clampProgress(value: number) {
-  return Math.min(Math.max(Math.round(value), 0), 100);
+function clampProgress(
+  value: number,
+) {
+  return Math.min(
+    Math.max(
+      Math.round(value),
+      0,
+    ),
+    100,
+  );
 }
 
 function inferThumbnailVariant(
@@ -422,17 +571,27 @@ function inferThumbnailVariant(
     "category" | "title"
   >,
 ): AcademyThumbnailVariant {
-  const text = `${course.category ?? ""} ${course.title}`.toLowerCase();
+  const text =
+    `${course.category ?? ""} ${course.title}`.toLowerCase();
 
-  if (text.includes("seguridad") || text.includes("ciber")) {
+  if (
+    text.includes("seguridad") ||
+    text.includes("ciber")
+  ) {
     return "security";
   }
 
-  if (text.includes("riesgo") || text.includes("cumpl")) {
+  if (
+    text.includes("riesgo") ||
+    text.includes("cumpl")
+  ) {
     return "risk";
   }
 
-  if (text.includes("ia") || text.includes("inteligencia")) {
+  if (
+    text.includes("ia") ||
+    text.includes("inteligencia")
+  ) {
     return "ai";
   }
 
@@ -444,60 +603,103 @@ function inferThumbnailVariant(
     return "analytics";
   }
 
-  if (text.includes("agil") || text.includes("proyecto")) {
+  if (
+    text.includes("agil") ||
+    text.includes("proyecto")
+  ) {
     return "agile";
   }
 
-  if (text.includes("comunic") || text.includes("equipo")) {
+  if (
+    text.includes("comunic") ||
+    text.includes("equipo")
+  ) {
     return "team";
   }
 
   return "knowledge";
 }
 
-function formatDuration(minutes: number) {
-  const safeMinutes = Math.max(Math.round(minutes), 0);
+function formatDuration(
+  minutes: number,
+) {
+  const safeMinutes =
+    Math.max(
+      Math.round(minutes),
+      0,
+    );
 
   if (safeMinutes < 60) {
     return `${safeMinutes} min`;
   }
 
-  const hours = Math.floor(safeMinutes / 60);
-  const rest = safeMinutes % 60;
+  const hours =
+    Math.floor(
+      safeMinutes / 60,
+    );
 
-  return rest > 0 ? `${hours} h ${rest} min` : `${hours} h`;
+  const rest =
+    safeMinutes % 60;
+
+  return rest > 0
+    ? `${hours} h ${rest} min`
+    : `${hours} h`;
 }
 
-function formatDateLabel(date: Date | null) {
+function formatDateLabel(
+  date: Date | null,
+) {
   if (!date) {
     return "Sin fecha limite";
   }
 
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
+  return new Intl.DateTimeFormat(
+    "es-ES",
+    {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    },
+  ).format(date);
 }
 
-function formatDueLabel(date: Date | null) {
+function formatDueLabel(
+  date: Date | null,
+) {
   if (!date) {
     return "Sin fecha";
   }
 
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
 
-  const dueDate = new Date(date);
-  dueDate.setHours(0, 0, 0, 0);
-
-  const diffDays = Math.ceil(
-    (dueDate.getTime() - today.getTime()) /
-      (1000 * 60 * 60 * 24),
+  today.setHours(
+    0,
+    0,
+    0,
+    0,
   );
 
+  const dueDate =
+    new Date(date);
+
+  dueDate.setHours(
+    0,
+    0,
+    0,
+    0,
+  );
+
+  const diffDays =
+    Math.ceil(
+      (dueDate.getTime() -
+        today.getTime()) /
+        (1000 * 60 * 60 * 24),
+    );
+
   if (diffDays < 0) {
-    return `Vencio hace ${Math.abs(diffDays)} dias`;
+    return `Vencio hace ${Math.abs(
+      diffDays,
+    )} dias`;
   }
 
   if (diffDays === 0) {

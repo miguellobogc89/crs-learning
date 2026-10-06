@@ -223,7 +223,9 @@ export async function getCourseAssignedUserIds(courseId: string) {
     },
   });
 
-  return new Set(assignments.map((assignment) => assignment.user_id));
+  return new Set(
+    assignments.map((assignment) => assignment.user_id),
+  );
 }
 
 export async function assignCourseToUsers(data: {
@@ -251,6 +253,37 @@ export async function getCourseAssignmentCount(courseId: string) {
   return prisma.course_assignments.count({
     where: {
       course_id: courseId,
+    },
+  });
+}
+
+export async function getAcademyHomePreviewCourses(
+  userId: string,
+  companyId: string | null,
+): Promise<AcademyCourseWithProgressRecord[]> {
+  return prisma.courses.findMany({
+    where: {
+      ...academyCompanyCourseWhere(companyId),
+    },
+    orderBy: {
+      created_at: "asc",
+    },
+    take: 3,
+    select: {
+      ...academyCourseWithProgressSelect,
+      user_course_progress: {
+        where: {
+          user_id: userId,
+        },
+        select: {
+          status: true,
+          progress_percent: true,
+          started_at: true,
+          completed_at: true,
+          updated_at: true,
+        },
+        take: 1,
+      },
     },
   });
 }
@@ -300,18 +333,27 @@ export async function getUserCourseProgress(data: {
       user_course_progress: {
         some: {
           user_id: data.userId,
+          progress_percent: {
+            gt: 0,
+            lt: 100,
+          },
         },
       },
-    },
-    orderBy: {
-      updated_at: "desc",
     },
     select: {
       ...academyCourseWithProgressSelect,
       user_course_progress: {
         where: {
           user_id: data.userId,
+          progress_percent: {
+            gt: 0,
+            lt: 100,
+          },
         },
+        orderBy: {
+          updated_at: "desc",
+        },
+        take: 1,
         select: {
           status: true,
           progress_percent: true,
@@ -319,7 +361,6 @@ export async function getUserCourseProgress(data: {
           completed_at: true,
           updated_at: true,
         },
-        take: 1,
       },
     },
   });
@@ -429,7 +470,9 @@ export async function getUserVotedCourseRequestIds(data: {
     },
   });
 
-  return new Set(votes.map((vote) => vote.request_id));
+  return new Set(
+    votes.map((vote) => vote.request_id),
+  );
 }
 
 export async function createCourse(data: {

@@ -1,7 +1,5 @@
 // components/knowledge/content/toolbar/types.ts
 
-import type { ReactNode } from "react";
-
 export type ExplorerSort =
   | "updated_desc"
   | "updated_asc"
@@ -38,13 +36,7 @@ export type KnowledgeToolbarProps = {
   ) => void;
 
   title: string;
-  breadcrumb: ReactNode;
-  parentHref: string | null;
 
-  onCreateFolder: () => void;
-  onUpload: (type: UploadType) => void;
-
-  // NUEVO
   selectedCount?: number;
   onClearSelection?: () => void;
   onDeleteSelection?: () => void;

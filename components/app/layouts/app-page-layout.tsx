@@ -6,19 +6,25 @@ import { cn } from "@/lib/utils";
 
 type AppPageLayoutProps = {
   children: ReactNode;
+  header?: ReactNode;
   aside?: ReactNode;
   className?: string;
   contentClassName?: string;
+  headerClassName?: string;
   asideClassName?: string;
 };
 
 export function AppPageLayout({
   children,
+  header,
   aside,
   className,
   contentClassName,
+  headerClassName,
   asideClassName,
 }: AppPageLayoutProps) {
+  const showAside = Boolean(aside);
+
   return (
     <div
       className={cn(
@@ -26,31 +32,55 @@ export function AppPageLayout({
         className,
       )}
     >
-      {/* Contenido principal: es la única columna que hace scroll */}
+      {/* Card principal */}
       <div
-        className={cn(
-          "h-full min-h-0 min-w-0 flex-1 overflow-y-auto",
-          "px-5 pb-8 pt-0 sm:px-6 lg:px-8 xl:pt-4",
-          contentClassName,
-        )}
+        className="
+          mx-4 mb-4 mt-0
+          flex min-h-0 min-w-0 flex-1 flex-col
+          overflow-hidden
+          rounded-lg border border-slate-200
+          bg-white
+          shadow-sm
+        "
       >
-        {children}
+        {/* Cabecera */}
+        {header ? (
+          <header
+            className={cn(
+              "shrink-0 border-b border-slate-200 px-5 py-4 sm:px-6",
+              headerClassName,
+            )}
+          >
+            {header}
+          </header>
+        ) : null}
+
+        {/* Contenido */}
+        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div
+            className={cn(
+              "min-h-0 min-w-0 flex-1 overflow-y-auto",
+              "px-5 pb-8 pt-0 sm:px-6 lg:px-8",
+              contentClassName,
+            )}
+          >
+            {children}
+          </div>
+        </div>
       </div>
 
-      {/* Columna derecha: permanece visible al desplazarse por la página */}
-      {aside ? (
+      {/* Panel derecho opcional */}
+      {showAside ? (
         <aside
           className={cn(
-            "hidden h-full min-h-0 w-[280px] shrink-0 flex-col",
-            "overflow-y-auto border-l border-slate-200/50",
-            "bg-transparent px-4 pb-6 pt-4",
-            "xl:flex 2xl:w-[300px]",
+            "mb-4 mr-4 mt-0 hidden min-h-0 w-[280px] shrink-0",
+            "overflow-hidden rounded-lg border border-slate-200",
+            "bg-white shadow-sm",
+            "xl:flex xl:flex-col 2xl:w-[300px]",
             asideClassName,
           )}
         >
-          <div className="flex min-h-full flex-col gap-5">
-            {aside}
-          </div>
+          {aside}
         </aside>
       ) : null}
     </div>

@@ -3,7 +3,6 @@
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
-import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { KnowledgeContent } from "@/components/knowledge/content/knowledge-content";
 import { KnowledgeInfoSidebar } from "@/components/knowledge/knowledge-info-sidebar";
 import { listVisibleKnowledgeSources } from "@/lib/services/knowledge.service";
@@ -14,7 +13,10 @@ import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 export default async function KnowledgePage({
   searchParams,
 }: {
-  searchParams: Promise<{ library?: string; view?: string }>;
+  searchParams: Promise<{
+    library?: string;
+    view?: string;
+  }>;
 }) {
   const session = await auth();
 
@@ -23,81 +25,124 @@ export default async function KnowledgePage({
   }
 
   const params = await searchParams;
-  const selectedLibraryId = params.library ?? null;
-  const selectedView = params.view ?? "all";
+  const selectedLibraryId =
+    params.library ?? null;
+  const selectedView =
+    params.view ?? "all";
 
-  const { activeWorkspace } = await getActiveWorkspaceContext(
-    session.user.id,
-  );
+  const { activeWorkspace } =
+    await getActiveWorkspaceContext(
+      session.user.id,
+    );
 
-  const allKnowledgeSources = await listVisibleKnowledgeSources(
-    session.user.id,
-    activeWorkspace.id,
-  );
+  const allKnowledgeSources =
+    await listVisibleKnowledgeSources(
+      session.user.id,
+      activeWorkspace.id,
+    );
 
-  const knowledgeLibraries = await listKnowledgeLibraries(
-    session.user.id,
-    activeWorkspace.id,
-  );
+  const knowledgeLibraries =
+    await listKnowledgeLibraries(
+      session.user.id,
+      activeWorkspace.id,
+    );
 
-  const selectedLibrary = selectedLibraryId
-    ? knowledgeLibraries.find(
-        (library) => library.id === selectedLibraryId,
-      )
-    : null;
+  const selectedLibrary =
+    selectedLibraryId
+      ? knowledgeLibraries.find(
+          (library) =>
+            library.id ===
+            selectedLibraryId,
+        )
+      : null;
 
   if (selectedLibrary) {
     await recordResourceAccess({
       userId: session.user.id,
-      workspaceId: activeWorkspace.id,
-      resourceType: "knowledge_library",
-      resourceId: selectedLibrary.id,
+      workspaceId:
+        activeWorkspace.id,
+      resourceType:
+        "knowledge_library",
+      resourceId:
+        selectedLibrary.id,
       interactionType: "viewed",
     });
   }
 
-  const sharedLibraryIds = knowledgeLibraries
-    .filter((library) => library.is_shared)
-    .map((library) => library.id);
+  const sharedLibraryIds =
+    knowledgeLibraries
+      .filter(
+        (library) =>
+          library.is_shared,
+      )
+      .map(
+        (library) => library.id,
+      );
 
-  const knowledgeSources = allKnowledgeSources.filter((knowledge) => {
-    if (selectedView === "shared") {
-      if (!knowledge.library_id) {
-        return false;
-      }
+  const knowledgeSources =
+    allKnowledgeSources.filter(
+      (knowledge) => {
+        if (
+          selectedView === "shared"
+        ) {
+          if (
+            !knowledge.library_id
+          ) {
+            return false;
+          }
 
-      return sharedLibraryIds.includes(knowledge.library_id);
-    }
+          return sharedLibraryIds.includes(
+            knowledge.library_id,
+          );
+        }
 
-    if (
-      selectedLibraryId &&
-      knowledge.library_id !== selectedLibraryId
-    ) {
-      return false;
-    }
+        if (
+          selectedLibraryId &&
+          knowledge.library_id !==
+            selectedLibraryId
+        ) {
+          return false;
+        }
 
-    if (selectedView === "public") {
-      return knowledge.visibility === "public";
-    }
+        if (
+          selectedView === "public"
+        ) {
+          return (
+            knowledge.visibility ===
+            "public"
+          );
+        }
 
-    if (selectedView === "private") {
-      return knowledge.visibility !== "public";
-    }
+        if (
+          selectedView === "private"
+        ) {
+          return (
+            knowledge.visibility !==
+            "public"
+          );
+        }
 
-    return true;
-  });
+        return true;
+      },
+    );
 
   return (
-    <AppPageLayout
-      aside={<KnowledgeInfoSidebar />}
-      contentClassName="!flex !flex-col !overflow-hidden"
-    >
-      <KnowledgeContent
-        knowledgeSources={knowledgeSources}
-        knowledgeLibraries={knowledgeLibraries}
-        selectedLibraryId={selectedLibraryId}
-        selectedView={selectedView}
-      />
-    </AppPageLayout>
+    <KnowledgeContent
+      knowledgeSources={
+        knowledgeSources
+      }
+      knowledgeLibraries={
+        knowledgeLibraries
+      }
+      selectedLibraryId={
+        selectedLibraryId
+      }
+      selectedView={
+        selectedView
+      }
+      aside={
+        <KnowledgeInfoSidebar />
+      }
+    />
   );
 }

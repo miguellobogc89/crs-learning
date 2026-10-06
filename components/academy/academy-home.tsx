@@ -1,32 +1,55 @@
-import {
-  academyRecommendations,
-} from "@/components/academy/academy-mock-data";
-import {
-  ContinueLearningSection,
-  PendingTrainingSection,
-  RecommendedCoursesSection,
-} from "@/components/academy/academy-learning-sections";
-import {
-  AcademyProgressPanel,
-  TeamLearningRequestsPanel,
-  WorkBasedRecommendationPanel,
-} from "@/components/academy/academy-insight-panels";
+// components/academy/academy-home.tsx
+
+import { ContinueLearningCard } from "@/components/academy/academy-home/continue-learning-card";
 import type { AcademyHomeData } from "@/lib/services/academy.service";
 
-export function AcademyHome({ data }: { data: AcademyHomeData }) {
+export function AcademyHome({
+  data,
+}: {
+  data: AcademyHomeData;
+}) {
   return (
-    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.9fr)_minmax(18rem,1fr)] 2xl:gap-5">
-      <div className="min-w-0 space-y-4 2xl:space-y-5">
-        <ContinueLearningSection courses={data.continueLearning} />
-        <PendingTrainingSection courses={data.pendingTraining} />
-        <RecommendedCoursesSection courses={academyRecommendations.slice(0, 4)} />
-      </div>
+    <div
+      className="
+        grid h-full min-h-0 min-w-0
+        grid-cols-1 grid-rows-6
+        gap-4
+        lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]
+        lg:grid-rows-3
+      "
+    >
+      {/* Fila 1 · izquierda */}
+      <ContinueLearningCard
+        courses={data.previewCourses}
+      />
 
-      <aside className="min-w-0 space-y-4 2xl:space-y-5">
-        <AcademyProgressPanel summary={data.progressSummary} />
-        <WorkBasedRecommendationPanel />
-        <TeamLearningRequestsPanel requests={data.teamRequests} />
-      </aside>
+      {/* Fila 1 · derecha */}
+      <Placeholder />
+
+      {/* Fila 2 · izquierda */}
+      <Placeholder />
+
+      {/* Fila 2 · derecha */}
+      <Placeholder />
+
+      {/* Fila 3 · izquierda */}
+      <Placeholder />
+
+      {/* Fila 3 · derecha */}
+      <Placeholder />
     </div>
+  );
+}
+
+function Placeholder() {
+  return (
+    <section
+      className="
+        min-h-0 min-w-0
+        rounded-lg
+        border border-dashed border-slate-300
+        bg-white
+      "
+    />
   );
 }
