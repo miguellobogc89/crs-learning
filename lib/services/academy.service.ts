@@ -6,6 +6,7 @@ import {
   getAcademyUserScope,
   getCompanyCourseRequests,
   getPublishedCoursesForUserCompany,
+  getTopRecommendedCourse,
   getUserCourseAssignments,
   getUserCourseProgress,
   getUserVotedCourseRequestIds,
@@ -169,6 +170,8 @@ export type AcademyHomeCourse = {
   progress: number;
   thumbnail: AcademyThumbnailVariant;
   thumbnailUrl: string | null;
+  description: string | null;
+level: string;
 };
 
 export type AcademyHomeAssignment =
@@ -206,6 +209,7 @@ export type AcademyHomeData = {
   availableCourses: AcademyHomeCourse[];
   continueLearning: AcademyHomeCourse[];
   pendingTraining: AcademyHomeAssignment[];
+  topRecommended: AcademyHomeCourse | null;
   progressSummary: AcademyHomeProgressSummary;
   teamRequests: AcademyHomeTeamRequest[];
 };
@@ -225,13 +229,14 @@ export async function getAcademyHomeData(
   const companyId =
     userScope.company_id;
 
-  const [
-    previewCourseRecords,
-    availableCourseRecords,
-    progressRecords,
-    assignmentRecords,
-    requestRecords,
-  ] = await Promise.all([
+const [
+  previewCourseRecords,
+  availableCourseRecords,
+  progressRecords,
+  assignmentRecords,
+  requestRecords,
+  topRecommendedRecord,
+] = await Promise.all([
     getAcademyHomePreviewCourses(
       userId,
       companyId,
@@ -253,6 +258,10 @@ export async function getAcademyHomeData(
       companyId,
       limit: 6,
     }),
+    getTopRecommendedCourse({
+      userId,
+      companyId,
+    })
   ]);
 
   const votedRequestIds =
@@ -387,6 +396,11 @@ export async function getAcademyHomeData(
     continueLearning,
     pendingTraining,
 
+    topRecommended:
+    topRecommendedRecord
+      ? mapCourseRecord(topRecommendedRecord)
+      : null,
+
     progressSummary:
       buildProgressSummary({
         availableCourseRecords,
@@ -475,6 +489,8 @@ function mapCourseRecord(
   return {
     id: course.id,
     title: course.title,
+    description: course.description,
+    level: course.level,
     category:
       course.category ||
       "Academy",

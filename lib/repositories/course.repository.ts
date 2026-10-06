@@ -484,6 +484,58 @@ export async function getUserVotedCourseRequestIds(data: {
   );
 }
 
+export async function getTopRecommendedCourse(data: {
+  userId: string;
+  companyId: string | null;
+}): Promise<AcademyCourseWithProgressRecord | null> {
+  return prisma.courses.findFirst({
+    where: {
+      is_published: true,
+      ...academyCompanyCourseWhere(data.companyId),
+
+      NOT: {
+        user_course_progress: {
+          some: {
+            user_id: data.userId,
+            progress_percent: {
+              gte: 100,
+            },
+          },
+        },
+      },
+    },
+
+    orderBy: [
+      {
+        course_assignments: {
+          _count: "desc",
+        },
+      },
+      {
+        updated_at: "desc",
+      },
+    ],
+
+    select: {
+      ...academyCourseWithProgressSelect,
+
+      user_course_progress: {
+        where: {
+          user_id: data.userId,
+        },
+        select: {
+          status: true,
+          progress_percent: true,
+          started_at: true,
+          completed_at: true,
+          updated_at: true,
+        },
+        take: 1,
+      },
+    },
+  });
+}
+
 export async function createCourse(data: {
   title: string;
   description: string;

@@ -37,7 +37,9 @@ export function AcademyHome({
       />
 
       {/* Fila 2 · derecha */}
-      <TopRecommendedCard />
+      <TopRecommendedCard
+        course={data.topRecommended}
+      />
 
       {/* Fila 3 · izquierda */}
       <Placeholder />
