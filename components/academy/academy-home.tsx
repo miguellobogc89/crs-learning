@@ -20,7 +20,7 @@ export function AcademyHome({
     >
       {/* Fila 1 · izquierda */}
       <ContinueLearningCard
-        courses={data.previewCourses}
+        courses={data.continueLearning}
       />
 
       {/* Fila 1 · derecha */}
