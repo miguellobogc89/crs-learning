@@ -50,18 +50,18 @@ export function ContinueLearningCard({
       {courses.length > 0 ? (
         <div
           className="
-            flex min-h-0 min-w-0 flex-1
-            items-start gap-2.5
-            overflow-hidden
-            px-3 pb-3
+            grid min-h-0 min-w-0 flex-1
+grid-cols-5 gap-2.5
+overflow-hidden
+px-3 pb-3
           "
         >
-          {courses.slice(0, 3).map((course) => (
-            <CourseCard
-              key={course.id}
-              course={course}
-            />
-          ))}
+{courses.map((course) => (
+  <CourseCard
+    key={course.id}
+    course={course}
+  />
+))}
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center px-5 pb-3">
@@ -91,8 +91,7 @@ function CourseCard({
         flex
         h-full
         min-h-0
-        aspect-[0.78/1]
-        shrink-0
+        w-full
         flex-col
         overflow-hidden
         rounded-lg

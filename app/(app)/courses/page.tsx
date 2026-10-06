@@ -112,7 +112,7 @@ export default async function AcademyPage({
         header={header}
         contentClassName={
           isHome
-            ? "!flex !min-h-0 !flex-col !overflow-hidden !p-4"
+            ? "!flex !min-h-0 !flex-col !overflow-hidden !p-0"
             : undefined
         }
       >
