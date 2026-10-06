@@ -212,6 +212,7 @@ export type AcademyHomeData = {
   topRecommended: AcademyHomeCourse | null;
   progressSummary: AcademyHomeProgressSummary;
   teamRequests: AcademyHomeTeamRequest[];
+  recommendedCourses: AcademyHomeCourse[];
 };
 
 export async function getAcademyHomeData(
@@ -229,40 +230,40 @@ export async function getAcademyHomeData(
   const companyId =
     userScope.company_id;
 
-const [
-  previewCourseRecords,
-  availableCourseRecords,
-  progressRecords,
-  assignmentRecords,
-  requestRecords,
-  topRecommendedRecord,
-] = await Promise.all([
-    getAcademyHomePreviewCourses(
-      userId,
-      companyId,
-    ),
-    getPublishedCoursesForUserCompany({
-      userId,
-      companyId,
-      limit: 24,
-    }),
-    getUserCourseProgress({
-      userId,
-      companyId,
-    }),
-    getUserCourseAssignments({
-      userId,
-      companyId,
-    }),
-    getCompanyCourseRequests({
-      companyId,
-      limit: 6,
-    }),
-    getTopRecommendedCourse({
-      userId,
-      companyId,
-    })
-  ]);
+  const [
+    previewCourseRecords,
+    availableCourseRecords,
+    progressRecords,
+    assignmentRecords,
+    requestRecords,
+    topRecommendedRecord,
+    ] = await Promise.all([
+        getAcademyHomePreviewCourses(
+          userId,
+          companyId,
+        ),
+        getPublishedCoursesForUserCompany({
+          userId,
+          companyId,
+          limit: 24,
+        }),
+        getUserCourseProgress({
+          userId,
+          companyId,
+        }),
+        getUserCourseAssignments({
+          userId,
+          companyId,
+        }),
+        getCompanyCourseRequests({
+          companyId,
+          limit: 6,
+        }),
+        getTopRecommendedCourse({
+          userId,
+          companyId,
+        })
+    ]);
 
   const votedRequestIds =
     await getUserVotedCourseRequestIds({
@@ -390,11 +391,22 @@ const [
       )
       .sort(sortPendingTraining);
 
+      const recommendedCourses = availableCourseRecords
+  .filter((course) => {
+    const progress =
+      course.user_course_progress[0]?.progress_percent ?? 0;
+
+    return progress < 100;
+  })
+  .slice(0, 4)
+  .map(mapCourseRecord);
+
   return {
     previewCourses,
     availableCourses,
     continueLearning,
     pendingTraining,
+    recommendedCourses,
 
     topRecommended:
     topRecommendedRecord
@@ -520,6 +532,7 @@ function mapCourseRecord(
         : null,
   };
 }
+
 
 function mapAssignmentRecord(
   assignment: AcademyAssignmentRecord,

@@ -29,8 +29,7 @@ export function ProgressCard({
 
   const offset =
     circumference -
-    (percentage / 100) *
-      circumference;
+    (percentage / 100) * circumference;
 
   return (
     <section
@@ -38,8 +37,7 @@ export function ProgressCard({
         flex h-full min-h-0 min-w-0 flex-col
         overflow-hidden
         rounded-lg
-        border border-slate-200/80
-        bg-white
+        bg-transparent
         px-4 pb-4 pt-3
       "
     >
@@ -80,12 +78,8 @@ export function ProgressCard({
                 stroke="url(#academyProgressGradient)"
                 strokeWidth="9"
                 strokeLinecap="round"
-                strokeDasharray={
-                  circumference
-                }
-                strokeDashoffset={
-                  offset
-                }
+                strokeDasharray={circumference}
+                strokeDashoffset={offset}
               />
 
               <defs>
@@ -151,25 +145,19 @@ export function ProgressCard({
       <div className="mt-3 grid shrink-0 grid-cols-3 gap-2">
         <SummaryMetric
           icon={Clock3}
-          value={
-            progress.estimatedCompletedLabel
-          }
+          value={progress.estimatedCompletedLabel}
           label="Horas de formación"
         />
 
         <SummaryMetric
           icon={Layers3}
-          value={String(
-            progress.skills,
-          )}
+          value={String(progress.skills)}
           label="Habilidades"
         />
 
         <SummaryMetric
           icon={Award}
-          value={String(
-            progress.badges,
-          )}
+          value={String(progress.badges)}
           label="Insignias"
         />
       </div>

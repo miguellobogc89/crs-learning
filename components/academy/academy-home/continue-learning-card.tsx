@@ -19,12 +19,10 @@ export function ContinueLearningCard({
     <section
       className="
         flex h-full min-h-0 min-w-0 flex-col
-        overflow-hidden rounded-lg
-        border border-slate-200/80
-        bg-white
+        overflow-hidden
+        bg-transparent
       "
     >
-      {/* Cabecera */}
       <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-2.5">
         <h2 className="text-[14px] font-semibold tracking-[-0.015em] text-[#07113D]">
           Continúa aprendiendo
@@ -46,22 +44,23 @@ export function ContinueLearningCard({
         </Link>
       </div>
 
-      {/* Cursos */}
       {courses.length > 0 ? (
         <div
           className="
             grid min-h-0 min-w-0 flex-1
-grid-cols-5 gap-2.5
-overflow-hidden
-px-3 pb-3
+            grid-cols-3 gap-2.5
+            overflow-hidden
+            px-3 pb-3
+            2xl:grid-cols-5
           "
         >
-{courses.map((course) => (
-  <CourseCard
-    key={course.id}
-    course={course}
-  />
-))}
+          {courses.slice(0, 5).map((course, index) => (
+            <CourseCard
+              key={course.id}
+              course={course}
+              hiddenUntil2xl={index >= 3}
+            />
+          ))}
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center px-5 pb-3">
@@ -82,26 +81,24 @@ px-3 pb-3
 
 function CourseCard({
   course,
+  hiddenUntil2xl,
 }: {
   course: AcademyHomeCourse;
+  hiddenUntil2xl: boolean;
 }) {
   return (
     <article
-      className="
-        flex
-        h-full
-        min-h-0
-        w-full
-        flex-col
+      className={`
+        ${hiddenUntil2xl ? "hidden 2xl:flex" : "flex"}
+        h-full min-h-0 w-full flex-col
         overflow-hidden
         rounded-lg
         border border-slate-200/60
         bg-white
         p-2
         shadow-[0_2px_7px_rgba(15,23,42,0.035)]
-      "
+      `}
     >
-      {/* Imagen · ~30 % */}
       <AcademyThumbnail
         variant={course.thumbnail}
         url={course.thumbnailUrl}
@@ -114,7 +111,6 @@ function CourseCard({
         "
       />
 
-      {/* Zona central · categoría + título */}
       <div className="flex min-h-0 flex-1 flex-col justify-center">
         <div className="shrink-0">
           <span
@@ -147,9 +143,7 @@ function CourseCard({
         </h3>
       </div>
 
-      {/* Zona inferior */}
       <div className="shrink-0">
-        {/* Progreso */}
         <div>
           <p className="text-[11px] font-medium leading-4 text-[#435176]">
             {course.progress} % completado
@@ -167,7 +161,6 @@ function CourseCard({
           />
         </div>
 
-        {/* Tiempo restante */}
         <div
           className="
             mt-2
@@ -187,7 +180,6 @@ function CourseCard({
           </span>
         </div>
 
-        {/* Botón */}
         <div className="flex justify-center pb-0.5 pt-3">
           <button
             type="button"

@@ -25,7 +25,6 @@ export function PendingTrainingCard({
         flex h-full min-h-0 min-w-0 flex-col
         overflow-hidden
         rounded-lg
-        border border-slate-200/80
         bg-white
         px-4 pb-3 pt-3
       "

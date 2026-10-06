@@ -3,8 +3,10 @@
 import { ContinueLearningCard } from "@/components/academy/academy-home/continue-learning-card";
 import { PendingTrainingCard } from "@/components/academy/academy-home/pending-training-card";
 import { ProgressCard } from "@/components/academy/academy-home/progress-card";
-import type { AcademyHomeData } from "@/lib/services/academy.service";
 import { TopRecommendedCard } from "@/components/academy/academy-home/top-recommended-card";
+import type { AcademyHomeData } from "@/lib/services/academy.service";
+import { RecommendedForYouCard } from "@/components/academy/academy-home/recommended-for-you-card";
+import { TeamLearningCard } from "@/components/academy/academy-home/team-learning-card";
 
 export function AcademyHome({
   data,
@@ -14,38 +16,57 @@ export function AcademyHome({
   return (
     <div
       className="
-        grid h-full min-h-0 min-w-0
-        grid-cols-1 grid-rows-6
+        flex h-full min-h-0 min-w-0 flex-col
         gap-4
-        lg:grid-cols-[minmax(0,2.35fr)_minmax(250px,0.85fr)]
-        lg:grid-rows-[1.75fr_1fr_1fr]
       "
     >
-      {/* Fila 1 · izquierda */}
-      <ContinueLearningCard
-        courses={data.continueLearning}
-      />
+      {/* Fila 1 */}
+      <div
+        className="
+          grid min-w-0 shrink-0
+          grid-cols-1 gap-4
+          lg:grid-cols-[minmax(0,2.35fr)_minmax(250px,0.85fr)]
+        "
+      >
+        <ContinueLearningCard
+          courses={data.continueLearning}
+        />
 
-      {/* Fila 1 · derecha */}
-      <ProgressCard
-        progress={data.progressSummary}
-      />
+        <ProgressCard
+          progress={data.progressSummary}
+        />
+      </div>
 
-      {/* Fila 2 · izquierda */}
-      <PendingTrainingCard
-        courses={data.pendingTraining}
-      />
+      {/* Fila 2 */}
+      <div
+        className="
+          grid min-w-0 shrink-0
+          grid-cols-1 gap-4
+          lg:grid-cols-[minmax(0,2.35fr)_minmax(250px,0.85fr)]
+        "
+      >
+        <PendingTrainingCard
+          courses={data.pendingTraining}
+        />
 
-      {/* Fila 2 · derecha */}
-      <TopRecommendedCard
-        course={data.topRecommended}
-      />
+        <TopRecommendedCard
+          course={data.topRecommended}
+        />
+      </div>
 
-      {/* Fila 3 · izquierda */}
-      <Placeholder />
-
-      {/* Fila 3 · derecha */}
-      <Placeholder />
+      {/* Fila 3 · ocupa exactamente el espacio restante */}
+      <div
+        className="
+          grid min-h-0 min-w-0 flex-1
+          grid-cols-1 gap-4
+          lg:grid-cols-[minmax(0,2.35fr)_minmax(250px,0.85fr)]
+        "
+      >
+        <RecommendedForYouCard 
+          courses={data.recommendedCourses}
+        />
+        <TeamLearningCard />
+      </div>
     </div>
   );
 }
@@ -54,7 +75,7 @@ function Placeholder() {
   return (
     <section
       className="
-        min-h-0 min-w-0
+        h-full min-h-0 min-w-0
         rounded-lg
         border border-dashed border-slate-300
         bg-white

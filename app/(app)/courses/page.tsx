@@ -10,11 +10,16 @@ import { AcademyAdmin } from "@/components/academy/academy-admin";
 import { AcademyHome } from "@/components/academy/academy-home";
 import { AcademySidebar } from "@/components/academy/academy-navigation";
 import { ACADEMY_SECTIONS } from "@/lib/navigation/academy-sections";
+import { AcademyCatalog } from "@/components/academy/catalog/academy-catalog";
 import { prisma } from "@/lib/prisma";
 import {
   getAcademyAdminCourses,
   getAcademyHomeData,
 } from "@/lib/services/academy.service";
+import {
+  ChevronRight,
+  GraduationCap,
+} from "lucide-react";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -45,6 +50,7 @@ export default async function AcademyPage({
     ) ?? ACADEMY_SECTIONS[0];
 
   const isHome = section.id === "home";
+  const isCatalog = section.id === "catalog";
   const isAdmin = section.id === "admin";
 
   const [
@@ -82,18 +88,24 @@ export default async function AcademyPage({
     currentUser?.system_role ===
       "system_admin";
 
-  const header =
-    isHome ? (
-      <div className="min-w-0">
-        <div className="mb-1 truncate text-sm text-muted-foreground">
-          Academy / Inicio
-        </div>
+const header =
+  isHome ? (
+    <div className="min-w-0">
+      <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+        <GraduationCap className="h-4 w-4 text-[#315BFF]" />
 
-        <h1 className="text-xl font-semibold tracking-tight text-slate-950">
-          Academy
-        </h1>
+        <span>Academy</span>
+
+        <ChevronRight className="h-3.5 w-3.5" />
+
+        <span>Inicio</span>
       </div>
-    ) : isAdmin ? (
+
+      <h1 className="mt-3 text-[26px] font-semibold tracking-tight text-slate-950">
+        Academy
+      </h1>
+    </div>
+  ) : isAdmin ? (
       <div className="min-w-0">
         <div className="mb-1 truncate text-sm text-muted-foreground">
           Academy / Administración
@@ -115,11 +127,13 @@ export default async function AcademyPage({
       </div>
     );
 
-  return (
-    <div className={roboto.className}>
-      <AppSectionShell
-        sidebar={<AcademySidebar />}
-      >
+return (
+  <div
+    className={`${roboto.className} h-full min-h-0`}
+  >
+    <AppSectionShell
+      sidebar={<AcademySidebar />}
+    >
         <AppPageLayout
           header={header}
           contentClassName={
@@ -133,6 +147,10 @@ export default async function AcademyPage({
               data={academyHomeData}
             />
           ) : null}
+
+          {isCatalog ? (
+  <AcademyCatalog />
+) : null}
 
           {isAdmin ? (
             <AcademyAdmin
