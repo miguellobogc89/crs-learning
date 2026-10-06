@@ -15,7 +15,7 @@ export function AcademyHome({
         grid-cols-1 grid-rows-6
         gap-4
         lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]
-        lg:grid-rows-3
+        lg:grid-rows-[1.75fr_1fr_1fr]
       "
     >
       {/* Fila 1 · izquierda */}

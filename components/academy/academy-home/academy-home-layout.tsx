@@ -1,4 +1,4 @@
-// components/academy-home/academy-home-layout.tsx
+// components/academy/academy-home/academy-home-layout.tsx
 
 import type { ReactNode } from "react";
 
@@ -14,7 +14,7 @@ export function AcademyHomeLayout({
       className="
         flex h-full min-h-0 w-full min-w-0 flex-col
         overflow-hidden
-        rounded-xl border border-slate-200/80
+        rounded-lg border border-slate-200/80
         bg-[#F8FAFF]
       "
     >
@@ -84,7 +84,7 @@ export function AcademyHomeSlot({
     <div
       className={`
         min-h-0 min-w-0
-        rounded-xl border border-slate-200/80
+        rounded-lg border border-slate-200/80
         bg-white
         ${className}
       `}

@@ -273,19 +273,87 @@ export async function getAcademyHomeData(
       mapCourseRecord,
     );
 
-  const continueLearning =
-    progressRecords
-      .sort((left, right) => {
-        const leftUpdatedAt =
-          left.user_course_progress[0]?.updated_at?.getTime() ?? 0;
+const continueLearning = (() => {
+  const selected = new Map<
+    string,
+    AcademyHomeCourse
+  >();
 
-        const rightUpdatedAt =
-          right.user_course_progress[0]?.updated_at?.getTime() ?? 0;
+  // 1. Cursos realmente en progreso.
+  progressRecords
+    .filter((course) => {
+      const progress = clampProgress(
+        course.user_course_progress[0]
+          ?.progress_percent ?? 0,
+      );
 
-        return rightUpdatedAt - leftUpdatedAt;
-      })
-      .slice(0, 3)
-      .map(mapCourseRecord);
+      return progress > 0 && progress < 100;
+    })
+    .sort((left, right) => {
+      const leftUpdatedAt =
+        left.user_course_progress[0]
+          ?.updated_at?.getTime() ?? 0;
+
+      const rightUpdatedAt =
+        right.user_course_progress[0]
+          ?.updated_at?.getTime() ?? 0;
+
+      return rightUpdatedAt - leftUpdatedAt;
+    })
+    .forEach((course) => {
+      if (!selected.has(course.id)) {
+        selected.set(
+          course.id,
+          mapCourseRecord(course),
+        );
+      }
+    });
+
+  // 2. Si quedan huecos, formación asignada pendiente.
+  assignmentRecords
+    .filter((assignment) => {
+      const progress = clampProgress(
+        assignment.courses
+          .user_course_progress[0]
+          ?.progress_percent ?? 0,
+      );
+
+      return progress < 100;
+    })
+.forEach((assignment) => {
+  if (!selected.has(assignment.course_id)) {
+    selected.set(
+      assignment.course_id,
+      mapCourseRecord(
+        assignment.courses,
+      ),
+    );
+  }
+});
+
+  // 3. Si todavía quedan huecos, catálogo disponible.
+  availableCourseRecords
+    .filter((course) => {
+      const progress = clampProgress(
+        course.user_course_progress[0]
+          ?.progress_percent ?? 0,
+      );
+
+      return progress < 100;
+    })
+.forEach((course) => {
+  if (!selected.has(course.id)) {
+    selected.set(
+      course.id,
+      mapCourseRecord(course),
+    );
+  }
+});
+
+  return Array.from(
+  selected.values(),
+);
+})();
 
   const pendingTraining =
     assignmentRecords
