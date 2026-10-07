@@ -8,20 +8,12 @@ type AppPageLayoutProps = {
   children: ReactNode;
   header?: ReactNode;
   aside?: ReactNode;
-
-  /**
-   * Mantiene reservado el rail derecho aunque la página
-   * todavía no tenga contenido secundario.
-   *
-   * Útil para que todas las subsecciones de un mismo módulo
-   * conserven exactamente la misma geometría.
-   */
   reserveAside?: boolean;
-
   className?: string;
   contentClassName?: string;
   headerClassName?: string;
   asideClassName?: string;
+  asideContentClassName?: string;
 };
 
 export function AppPageLayout({
@@ -33,6 +25,7 @@ export function AppPageLayout({
   contentClassName,
   headerClassName,
   asideClassName,
+  asideContentClassName,
 }: AppPageLayoutProps) {
   const showAside =
     Boolean(aside) || reserveAside;
@@ -44,15 +37,13 @@ export function AppPageLayout({
         className,
       )}
     >
-      {/* Página principal */}
       <div
         className="
           mx-4 mb-4 mt-0
           flex min-h-0 min-w-0 flex-1 flex-col
           overflow-hidden
           rounded-lg border border-slate-200
-          bg-white
-          shadow-sm
+          bg-white shadow-sm
         "
       >
         {header ? (
@@ -79,33 +70,24 @@ export function AppPageLayout({
         </div>
       </div>
 
-      {/* Rail derecho común */}
       {showAside ? (
         <aside
           className={cn(
-            /*
-             * IMPORTANTE:
-             * Las dimensiones del panel derecho se controlan
-             * exclusivamente desde este layout.
-             *
-             * Ningún módulo debe definir su propio width,
-             * margin, border exterior o shadow.
-             */
-            "mb-4 mr-4 mt-0 hidden min-h-0 shrink-0",
-            "w-[280px] 2xl:w-[300px]",
-            "overflow-hidden rounded-lg",
-            "border border-slate-200",
+            "mb-4 mr-4 mt-0 hidden min-h-0 w-[280px] shrink-0",
+            "overflow-hidden rounded-lg border border-slate-200",
             "bg-white shadow-sm",
-            "xl:flex xl:flex-col",
+            "xl:flex xl:flex-col 2xl:w-[300px]",
             asideClassName,
           )}
         >
-          {aside ?? (
-            <div
-              aria-hidden="true"
-              className="h-full min-h-0"
-            />
-          )}
+          <div
+            className={cn(
+              "flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto p-4",
+              asideContentClassName,
+            )}
+          >
+            {aside}
+          </div>
         </aside>
       ) : null}
     </div>

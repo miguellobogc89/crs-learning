@@ -30,76 +30,23 @@ export function HomeOverviewAside({
   recentActivity,
 }: Props) {
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4 [scrollbar-width:thin]">
-      <div className="shrink-0">
-        <DashboardKnowledgeHealthCard
-          healthy={healthyPercent}
-          review={needsReviewPercent}
-          pending={pendingPercent}
-        />
-      </div>
+<>
+  <div className="shrink-0">
+    <DashboardKnowledgeHealthCard
+      healthy={healthyPercent}
+      review={needsReviewPercent}
+      pending={pendingPercent}
+    />
+  </div>
 
-      <section className="shrink-0 rounded-xl border border-slate-200 bg-white p-4">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-slate-950">
-            Más consultados
-          </h2>
+  <section className="shrink-0 rounded-xl border border-slate-200 bg-white p-4">
+    ...
+  </section>
 
-          <Link
-            href="/knowledge"
-            className="text-[11px] font-medium text-[#0A58FF] hover:underline"
-          >
-            Ver todo
-          </Link>
-        </div>
-
-        <div className="space-y-4">
-          {topDocuments.length > 0 ? (
-            topDocuments
-              .slice(0, 3)
-              .map((document) => (
-                <TopDocument
-                  key={document.id}
-                  document={document}
-                />
-              ))
-          ) : (
-            <p className="text-xs leading-5 text-slate-500">
-              Todavía no hay documentos para mostrar.
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section className="flex min-h-[220px] flex-1 flex-col rounded-xl border border-slate-200 bg-white p-4">
-        <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-slate-950">
-            Actividad reciente
-          </h2>
-
-          <Activity className="h-4 w-4 text-slate-400" />
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
-          {recentActivity.length > 0 ? (
-            <div className="space-y-4">
-              {recentActivity
-                .slice(0, 5)
-                .map((item) => (
-                  <ActivityRow
-                    key={`${item.type}-${item.id}`}
-                    item={item}
-                  />
-                ))}
-            </div>
-          ) : (
-            <p className="text-xs leading-5 text-slate-500">
-              Todavía no hay actividad reciente.
-            </p>
-          )}
-        </div>
-      </section>
-    </div>
+  <section className="min-h-[220px] rounded-xl border border-slate-200 bg-white p-4">
+    ...
+  </section>
+</>
   );
 }
 
