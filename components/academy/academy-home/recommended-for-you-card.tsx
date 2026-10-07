@@ -24,66 +24,62 @@ const RECOMMENDATION_LABELS = [
 export function RecommendedForYouCard({
   courses,
 }: RecommendedForYouCardProps) {
-  const visibleCourses = courses.slice(0, 4);
+  const visibleCourses =
+    courses.slice(0, 4);
 
   return (
     <section
       className="
-        flex h-full min-h-0 min-w-0 flex-col
-        overflow-hidden
-        rounded-lg
-        bg-white
+        flex h-full min-h-0 min-w-0
+        flex-col overflow-hidden
+        rounded-lg bg-white
       "
     >
-      {/* Cabecera */}
       <div
         className="
-          flex shrink-0 items-center justify-between
-          px-4 pb-2 pt-2.5
+          flex shrink-0
+          items-center justify-between
+          px-1 pb-2 pt-1
         "
       >
-        <h2
-          className="
-            text-[14px] font-semibold
-            tracking-[-0.015em]
-            text-[#07113D]
-          "
-        >
+        <h2 className="text-[16px] font-semibold tracking-[-0.015em] text-[#07113D]">
           Recomendados para ti
         </h2>
 
         <Link
           href="/courses?view=catalog"
-          aria-label="Ver todos los cursos recomendados"
           className="
-            flex h-6 w-6 shrink-0
-            items-center justify-center
-            rounded-md
+            flex shrink-0 items-center gap-1.5
+            text-[11px] font-semibold
             text-[#315BFF]
-            transition-colors
-            hover:bg-[#F1F5FF]
+            transition-opacity
+            hover:opacity-75
           "
         >
+          Ver todas
+
           <ArrowRight
             aria-hidden="true"
-            className="h-[17px] w-[17px]"
+            className="h-3.5 w-3.5"
           />
         </Link>
       </div>
 
-      {/* Cursos */}
-      {visibleCourses.length > 0 ? (
+      {visibleCourses.length >
+      0 ? (
         <div
           className="
-            grid min-h-0 min-w-0 flex-1
-            grid-cols-4
+            grid min-h-0 min-w-0
+            flex-1
+            grid-cols-[repeat(auto-fit,minmax(170px,1fr))]
             gap-2.5
-            overflow-hidden
-            px-3 pb-3
           "
         >
           {visibleCourses.map(
-            (course, index) => (
+            (
+              course,
+              index,
+            ) => (
               <RecommendedCourseCard
                 key={course.id}
                 course={course}
@@ -98,14 +94,17 @@ export function RecommendedForYouCard({
           )}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 items-center justify-center px-5 pb-3">
+        <div className="flex min-h-0 flex-1 items-center justify-center">
           <div className="text-center">
             <p className="text-sm font-semibold text-slate-700">
-              No hay recomendaciones disponibles
+              No hay
+              recomendaciones
+              disponibles
             </p>
 
             <p className="mt-1 text-xs text-slate-500">
-              Cuando haya nuevos cursos aparecerán
+              Cuando haya nuevos
+              cursos aparecerán
               aquí.
             </p>
           </div>
@@ -126,19 +125,18 @@ function RecommendedCourseCard({
     <article
       className="
         flex h-full min-h-0 min-w-0
-        flex-col
-        overflow-hidden
+        flex-col overflow-hidden
         rounded-lg
         border border-slate-200/70
         bg-white
         shadow-[0_2px_7px_rgba(15,23,42,0.035)]
       "
     >
-      {/* Imagen */}
       <div
         className="
-          relative h-[39%] min-h-[64px]
-          w-full shrink-0
+          relative
+          min-h-[82px]
+          flex-[1.15]
         "
       >
         <AcademyThumbnail
@@ -150,11 +148,11 @@ function RecommendedCourseCard({
           "
         />
 
-        {/* Motivo de recomendación */}
         <span
           className="
             absolute bottom-[-9px] left-2
-            inline-flex max-w-[calc(100%-16px)]
+            inline-flex
+            max-w-[calc(100%-16px)]
             items-center
             truncate
             rounded-full
@@ -170,12 +168,12 @@ function RecommendedCourseCard({
         </span>
       </div>
 
-      {/* Contenido */}
       <div
         className="
-          flex min-h-0 flex-1
+          flex min-h-[104px]
+          min-w-0 flex-1
           flex-col
-          px-2.5 pb-2 pt-3
+          px-2.5 pb-2 pt-4
         "
       >
         <h3
@@ -194,9 +192,9 @@ function RecommendedCourseCard({
         <p
           className="
             mt-1
-            line-clamp-2
-            min-h-0
-            text-[11px] font-normal
+            line-clamp-3
+            min-w-0
+            text-[11px]
             leading-[15px]
             text-[#66728F]
           "
@@ -205,20 +203,23 @@ function RecommendedCourseCard({
             "Amplía tus conocimientos con este curso de Academy."}
         </p>
 
-        {/* Footer */}
         <div
           className="
             mt-auto
-            flex shrink-0
-            items-center justify-between
-            border-t border-slate-100
+            flex min-w-0
+            shrink-0
+            items-center
+            justify-between
+            gap-2
+            border-t
+            border-slate-100
             pt-2
           "
         >
           <div
             className="
-              flex min-w-0 items-center
-              gap-1.5
+              flex min-w-0
+              items-center gap-1.5
               text-[#66728F]
             "
           >
@@ -228,37 +229,19 @@ function RecommendedCourseCard({
               className="h-[14px] w-[14px] shrink-0"
             />
 
-            <span
-              className="
-                truncate
-                text-[11px] font-medium
-              "
-            >
+            <span className="truncate text-[11px] font-medium">
               {course.duration}
             </span>
           </div>
 
-          <div
-            className="
-              flex shrink-0
-              items-center gap-1
-            "
-          >
+          <div className="flex shrink-0 items-center gap-1">
             <Star
               aria-hidden="true"
               strokeWidth={1.8}
-              className="
-                h-[14px] w-[14px]
-                text-[#FFB020]
-              "
+              className="h-[14px] w-[14px] text-[#FFB020]"
             />
 
-            <span
-              className="
-                text-[11px] font-medium
-                text-[#66728F]
-              "
-            >
+            <span className="text-[11px] font-medium text-[#66728F]">
               Nuevo
             </span>
           </div>
