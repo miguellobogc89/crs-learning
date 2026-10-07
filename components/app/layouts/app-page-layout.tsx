@@ -47,12 +47,12 @@ export function AppPageLayout({
         "
       >
         {header ? (
-          <header
-            className={cn(
-              "shrink-0 border-b border-slate-200 px-5 py-4 sm:px-6",
-              headerClassName,
-            )}
-          >
+<header
+  className={cn(
+    "shrink-0 px-5 py-3 sm:px-6",
+    headerClassName,
+  )}
+>
             {header}
           </header>
         ) : null}
