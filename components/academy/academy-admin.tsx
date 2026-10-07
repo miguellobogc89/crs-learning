@@ -2,7 +2,12 @@
 
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 import {
   BookOpen,
   ChevronLeft,
@@ -22,7 +27,7 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
-
+import { ACADEMY_CREATE_COURSE_EVENT } from "@/components/academy/academy-create-course-action";
 import {
   deleteCourseAction,
   setCoursePublishedAction,
@@ -117,6 +122,24 @@ export function AcademyAdmin({
     (total, course) => total + course.students,
     0,
   );
+
+  useEffect(() => {
+  function handleCreateCourse() {
+    setCreateOpen(true);
+  }
+
+  window.addEventListener(
+    ACADEMY_CREATE_COURSE_EVENT,
+    handleCreateCourse,
+  );
+
+  return () => {
+    window.removeEventListener(
+      ACADEMY_CREATE_COURSE_EVENT,
+      handleCreateCourse,
+    );
+  };
+}, []);
 
   function upsertCourse(course: AcademyAdminCourse) {
     setCourses((current) => {
@@ -220,33 +243,6 @@ export function AcademyAdmin({
   return (
     <>
       <div className="space-y-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-              <GraduationCap className="h-4 w-4 text-[#315BFF]" />
-              <span>Academy</span>
-              <ChevronRight className="h-3.5 w-3.5" />
-              <span>Gestión de cursos</span>
-            </div>
-
-            <h2 className="mt-3 text-[26px] font-semibold tracking-tight text-slate-950">
-              Gestión de cursos
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Crea y administra la formación de tu organización.
-            </p>
-          </div>
-
-          <Button
-            size="lg"
-            className="gap-2 bg-[#315BFF] px-4 text-white hover:bg-[#244BE8]"
-            onClick={() => setCreateOpen(true)}
-          >
-            <Plus className="h-4 w-4" />
-            Crear curso
-          </Button>
-        </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard

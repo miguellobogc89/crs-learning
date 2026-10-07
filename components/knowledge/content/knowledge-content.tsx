@@ -16,13 +16,12 @@ import {
   buildLibraryTree,
   getLibraryPath,
 } from "@/components/knowledge/sidebar/tree-utils";
-import { SectionBreadcrumb } from "@/components/app/section-breadcrumb";
 import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 
 import { CreateFolderDialog } from "./create-folder-dialog";
 import { KnowledgeExplorer } from "./knowledge-explorer";
-import { KnowledgeLibraryBreadcrumb } from "./knowledge-library-breadcrumb";
-import { KnowledgePageHeader } from "./toolbar/knowledge-page-header";
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
+import { KnowledgeActions } from "./toolbar/knowledge-actions";
 import { KnowledgeToolbar } from "./toolbar/knowledge-toolbar";
 import type { ExplorerState } from "./toolbar/types";
 import {
@@ -217,17 +216,22 @@ export function KnowledgeContent({
     }
   }
 
-const breadcrumb =
+const breadcrumbItems =
   selectedLibraryId &&
-  libraryPath.length > 0 ? (
-    <KnowledgeLibraryBreadcrumb
-      path={libraryPath}
-    />
-  ) : (
-    <SectionBreadcrumb
-      section={APP_SECTIONS.knowledge}
-    />
-  );
+  libraryPath.length > 0
+    ? libraryPath.map(
+        (library, index) => ({
+          label: library.name,
+          href:
+            index <
+            libraryPath.length - 1
+              ? `/knowledge?library=${encodeURIComponent(
+                  library.id,
+                )}`
+              : undefined,
+        }),
+      )
+    : [];
 
   function handleCreateFolder() {
     if (!currentFolderId) {
@@ -242,28 +246,23 @@ const breadcrumb =
   }
 
   return (
-    <AppPageLayout
-      aside={aside}
-      header={
-        <KnowledgePageHeader
-          title={pageTitle}
-          breadcrumb={
-            breadcrumb
-          }
-          parentHref={
-            parentHref
-          }
-          onCreateFolder={
-            handleCreateFolder
-          }
-          onUpload={
-            handleUpload
-          }
+<AppPageLayout
+  aside={aside}
+  header={
+    <AppPageHeader
+      section={APP_SECTIONS.knowledge}
+      title={pageTitle}
+      items={breadcrumbItems}
+      actions={
+        <KnowledgeActions
+          onCreateFolder={handleCreateFolder}
+          onUpload={handleUpload}
         />
       }
-      headerClassName="!border-b-0 !px-6 !py-3"
-      contentClassName="!flex !flex-col !overflow-hidden !px-0 !pb-0"
-    >
+    />
+  }
+  contentClassName="!flex !flex-col !overflow-hidden !px-0 !pb-0"
+>
       <>
         <AppCard className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none border-0 p-0 shadow-none">
           <div className="z-10 shrink-0 px-5 py-3 sm:px-6">

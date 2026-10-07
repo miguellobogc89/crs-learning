@@ -10,9 +10,10 @@ import { AcademySidebar } from "@/components/academy/academy-navigation";
 import { AcademyCatalog } from "@/components/academy/catalog/academy-catalog";
 import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { AppSectionShell } from "@/components/app/section-sidebar";
-import { SectionBreadcrumb } from "@/components/app/section-breadcrumb";
 import { ACADEMY_SECTIONS } from "@/lib/navigation/academy-sections";
 import { APP_SECTIONS } from "@/lib/navigation/app-sections";
+import { AcademyCreateCourseAction } from "@/components/academy/academy-create-course-action";
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
 import { prisma } from "@/lib/prisma";
 import {
   getAcademyAdminCourses,
@@ -94,22 +95,16 @@ export default async function AcademyPage({
       "system_admin";
 
 const header = (
-  <div className="min-w-0">
-    <SectionBreadcrumb
-      section={{
-        label:
-          APP_SECTIONS.courses.label,
-        href:
-          APP_SECTIONS.courses.href,
-        icon:
-          APP_SECTIONS.courses.icon,
-      }}
-    />
-
-    <h1 className="mt-3 text-[26px] font-semibold tracking-tight text-slate-950">
-      {section.label}
-    </h1>
-  </div>
+  <AppPageHeader
+    section={APP_SECTIONS.courses}
+    title={section.label}
+    actions={
+      isAdmin &&
+      canManageAcademy ? (
+        <AcademyCreateCourseAction />
+      ) : undefined
+    }
+  />
 );
 
   return (

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { AppSectionShell } from "@/components/app/section-sidebar";
-import { SectionBreadcrumb } from "@/components/app/section-breadcrumb";
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
 import { AdministrationView } from "@/components/home/administration/administration-view";
 import { HomeNavigation } from "@/components/home/navigation/home-navigation";
 import { OrganizationAside } from "@/components/home/organization/organization-aside";
@@ -70,21 +70,12 @@ export default async function HomePage({
         ])
       : [null, []];
 
-  const header = (
-    <div className="flex items-start justify-between gap-6">
-      <div className="min-w-0">
-        <SectionBreadcrumb
-          section={
-            APP_SECTIONS.dashboard
-          }
-        />
-
-        <h1 className="mt-3 text-[26px] font-semibold tracking-tight text-slate-950">
-          {section.label}
-        </h1>
-      </div>
-
-      {isOverview ? (
+const header = (
+  <AppPageHeader
+    section={APP_SECTIONS.dashboard}
+    title={section.label}
+    actions={
+      isOverview ? (
         <Link
           href="/knowledge"
           className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-[#0A58FF] px-4 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
@@ -94,9 +85,10 @@ export default async function HomePage({
           </span>
           Añadir conocimiento
         </Link>
-      ) : null}
-    </div>
-  );
+      ) : undefined
+    }
+  />
+);
 
   const content = renderContent({
     view: section.id,
