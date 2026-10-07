@@ -90,23 +90,23 @@ export function DashboardKnowledgeTable({
         <table className="w-full table-fixed border-collapse">
 <thead>
   <tr className="border-b border-slate-100">
-<TableHead className="w-[28%] xl:w-[38%]">
-  Nombre
-</TableHead>
+    <TableHead className="w-[40%]">
+      Nombre
+    </TableHead>
 
-    <TableHead align="center">
+    <TableHead align="center" className="w-[15%]">
       Tipo
     </TableHead>
 
-    <TableHead align="center">
+    <TableHead align="center" className="w-[15%]">
       Fuente
     </TableHead>
 
-    <TableHead align="center">
+    <TableHead align="center" className="w-[10%]">
       Uso IA
     </TableHead>
 
-    <TableHead align="center">
+    <TableHead align="center" className="w-[15%]">
       Última modificación
     </TableHead>
 
@@ -246,7 +246,7 @@ className={[
             ].join(" ")}
           />
 
-          <span className="max-w-[140px] truncate text-[11px] text-slate-600">
+          <span className="max-w-[140px] whitespace-normal break-words text-center text-[11px] leading-[14px] text-slate-600">
             {document.libraryName}
           </span>
         </div>
@@ -405,7 +405,7 @@ function TableHead({
   return (
     <th
       className={[
-        "px-5 py-3 text-[10px] font-medium text-slate-400",
+        "px-5 py-2 text-[12px] font-semibold text-slate-600",
         align === "center"
           ? "text-center"
           : align === "right"
