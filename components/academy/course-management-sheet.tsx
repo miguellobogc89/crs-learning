@@ -246,41 +246,47 @@ export function CourseManagementSheet({
     });
   }
 
-  function saveCourse() {
-    if (!title.trim()) {
-      toast.error(
-        "El título del curso es obligatorio.",
-      );
+function saveCourse() {
+  if (!course) {
+    return;
+  }
+
+  if (!title.trim()) {
+    toast.error(
+      "El título del curso es obligatorio.",
+    );
+    return;
+  }
+
+  const courseId = course.id;
+
+  startSaving(async () => {
+    const result = await updateCourseAction({
+      courseId,
+      title: title.trim(),
+      description: description.trim(),
+      trainingType,
+      level,
+      difficulty,
+      thumbnailUrl: thumbnailBlobUrl,
+    });
+
+    if (!result.ok) {
+      toast.error(result.error);
       return;
     }
 
-    startSaving(async () => {
-      const result = await updateCourseAction({
-        courseId: course.id,
-        title: title.trim(),
-        description: description.trim(),
-        trainingType,
-        level,
-        difficulty,
-        thumbnailUrl: thumbnailBlobUrl,
-      });
+    onCourseUpdated(result.course);
 
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
+    setThumbnailBlobUrl(null);
+    setThumbnailPreviewUrl(
+      result.course.thumbnailUrl,
+    );
 
-      onCourseUpdated(result.course);
-
-      setThumbnailBlobUrl(null);
-      setThumbnailPreviewUrl(
-        result.course.thumbnailUrl,
-      );
-
-      toast.success("Curso actualizado.");
-      onOpenChange(false);
-    });
-  }
+    toast.success("Curso actualizado.");
+    onOpenChange(false);
+  });
+}
 
 function assign(
   option: AcademyCourseAssignmentOption,
@@ -380,222 +386,6 @@ function assign(
               setDifficulty
             }
           />
-
-          <section className="px-5 py-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center text-[#315BFF]">
-                  <Users
-                    className="h-[18px] w-[18px]"
-                    strokeWidth={2}
-                  />
-                </div>
-
-                <div>
-                  <h3 className="text-[14px] font-bold leading-5 tracking-[-0.025em] text-[#071747]">
-                    Asignación
-                  </h3>
-
-                  <p className="mt-0.5 text-[11.5px] leading-4 tracking-[-0.015em] text-[#536184]">
-                    Gestiona los usuarios y
-                    equipos asignados al curso.
-                  </p>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setShowAssignmentManager(
-                    (current) => !current,
-                  )
-                }
-                className="h-8 px-3 text-[11px]"
-              >
-                {showAssignmentManager
-                  ? "Cerrar"
-                  : "Gestionar"}
-              </Button>
-            </div>
-
-            {!showAssignmentManager ? (
-              <div className="mt-4">
-                {assignedUsers.length === 0 ? (
-                  <p className="text-[11px] text-[#7180A0]">
-                    Este curso todavía no tiene
-                    usuarios asignados.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {assignedUsers
-                      .slice(0, 5)
-                      .map((user) => (
-                        <div
-                          key={user.id}
-                          className="flex h-9 items-center gap-2 rounded-full bg-[#F7F9FF] px-2.5 pr-3"
-                        >
-                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#E8EDFF] text-[9px] font-semibold text-[#315BFF]">
-                            {getInitials(
-                              user.name,
-                            )}
-                          </div>
-
-                          <span className="max-w-[130px] truncate text-[10px] font-medium text-[#1B2851]">
-                            {user.name}
-                          </span>
-                        </div>
-                      ))}
-
-                    {assignedUsers.length > 5 ? (
-                      <div className="flex h-9 items-center justify-center rounded-full border border-[#DCE4FF] bg-[#F7F9FF] px-3 text-[10px] font-semibold text-[#315BFF]">
-                        +
-                        {assignedUsers.length -
-                          5}
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="mt-4 overflow-hidden rounded-xl border border-[#DDE3F0] bg-white">
-                <div className="border-b border-[#EEF1F6] bg-[#FAFBFD] p-3">
-                  <div className="flex rounded-lg bg-[#F0F2F7] p-1">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setAssignmentMode(
-                          "users",
-                        )
-                      }
-                      className={cn(
-                        "flex-1 rounded-md px-3 py-1.5 text-[11px] font-medium transition",
-                        assignmentMode ===
-                          "users"
-                          ? "bg-white text-[#071747] shadow-sm"
-                          : "text-[#7180A0]",
-                      )}
-                    >
-                      Usuarios
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setAssignmentMode(
-                          "teams",
-                        )
-                      }
-                      className={cn(
-                        "flex-1 rounded-md px-3 py-1.5 text-[11px] font-medium transition",
-                        assignmentMode ===
-                          "teams"
-                          ? "bg-white text-[#071747] shadow-sm"
-                          : "text-[#7180A0]",
-                      )}
-                    >
-                      Equipos
-                    </button>
-                  </div>
-
-                  <div className="relative mt-2">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8190AD]" />
-
-                    <Input
-                      value={
-                        assignmentSearch
-                      }
-                      onChange={(event) =>
-                        setAssignmentSearch(
-                          event.target.value,
-                        )
-                      }
-                      placeholder={
-                        assignmentMode ===
-                        "users"
-                          ? "Buscar usuario..."
-                          : "Buscar equipo..."
-                      }
-                      className="h-9 bg-white pl-8 text-[11px]"
-                    />
-                  </div>
-                </div>
-
-                <div className="max-h-[230px] overflow-y-auto">
-                  {isLoadingAssignments ? (
-                    <div className="px-4 py-8 text-center text-[11px] text-[#7180A0]">
-                      Cargando...
-                    </div>
-                  ) : visibleAssignmentOptions.length ===
-                    0 ? (
-                    <div className="px-4 py-8 text-center text-[11px] text-[#7180A0]">
-                      No hay resultados.
-                    </div>
-                  ) : (
-                    visibleAssignmentOptions.map(
-                      (option) => (
-                        <div
-                          key={`${option.kind}-${option.id}`}
-                          className="flex items-center gap-3 border-b border-[#EEF1F6] px-4 py-3 last:border-0"
-                        >
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[#315BFF]">
-                            {option.kind ===
-                            "team" ? (
-                              <Users className="h-3.5 w-3.5" />
-                            ) : (
-                              <span className="text-[9px] font-semibold">
-                                {getInitials(
-                                  option.name,
-                                )}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[11px] font-medium text-[#071747]">
-                              {option.name}
-                            </p>
-
-                            <p className="mt-0.5 truncate text-[10px] text-[#7180A0]">
-                              {
-                                option.secondary
-                              }
-                            </p>
-                          </div>
-
-                          {option.assigned ? (
-                            <div className="flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-                              <Check className="h-3.5 w-3.5" />
-                              Asignado
-                            </div>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={
-                                isAssigning
-                              }
-                              onClick={() =>
-                                assign(
-                                  option,
-                                )
-                              }
-                              className="h-8 gap-1.5 px-2.5 text-[10px]"
-                            >
-                              <UserPlus className="h-3.5 w-3.5" />
-                              Asignar
-                            </Button>
-                          )}
-                        </div>
-                      ),
-                    )
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
         </div>
 
         <SheetFooter className="shrink-0 flex-row items-center justify-between border-t border-[#EEF1F6] bg-white px-5 py-4">

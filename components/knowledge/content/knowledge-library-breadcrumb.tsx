@@ -2,10 +2,9 @@
 
 "use client";
 
-import Link from "next/link";
-import { ChevronRight } from "lucide-react";
-
 import type { LibraryItem } from "@/components/knowledge/sidebar/types";
+import { SectionBreadcrumb } from "@/components/app/section-breadcrumb";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 
 type Props = {
   path: LibraryItem[];
@@ -21,42 +20,38 @@ export function KnowledgeLibraryBreadcrumb({
   const parentPath = path.slice(0, -1);
 
   const showKnowledgeRoot =
-    includeKnowledgeRoot || path.length === 0;
+    includeKnowledgeRoot ||
+    path.length === 0;
+
+  const items = [
+    ...(showKnowledgeRoot
+      ? [
+          {
+            label: "Mi biblioteca",
+            href: "/knowledge",
+          },
+        ]
+      : []),
+
+    ...parentPath.map((library) => ({
+      label: library.name,
+      href: `/knowledge?library=${encodeURIComponent(
+        library.id,
+      )}`,
+    })),
+  ];
 
   return (
-    <nav
-      aria-label="Ruta de carpetas"
-      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
-    >
-      {showKnowledgeRoot ? (
-        <Link
-          href="/knowledge"
-          className="transition-colors hover:text-foreground"
-        >
-          Mi biblioteca
-        </Link>
-      ) : null}
-
-      {parentPath.map((library, index) => (
-        <div
-          key={library.id}
-          className="inline-flex min-w-0 items-center gap-2"
-        >
-          {index > 0 || showKnowledgeRoot ? (
-            <ChevronRight
-              aria-hidden="true"
-              className="h-3.5 w-3.5 shrink-0"
-            />
-          ) : null}
-
-          <Link
-            href={`/knowledge?library=${encodeURIComponent(library.id)}`}
-            className="truncate transition-colors hover:text-foreground"
-          >
-            {library.name}
-          </Link>
-        </div>
-      ))}
-    </nav>
+    <SectionBreadcrumb
+      section={{
+        label:
+          APP_SECTIONS.knowledge.label,
+        href:
+          APP_SECTIONS.knowledge.href,
+        icon:
+          APP_SECTIONS.knowledge.icon,
+      }}
+      items={items}
+    />
   );
 }

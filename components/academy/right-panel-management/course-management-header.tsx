@@ -2,8 +2,6 @@
 
 "use client";
 
-import { BookOpen } from "lucide-react";
-
 type CourseManagementHeaderProps = {
   mode: "create" | "edit";
 };
@@ -14,29 +12,18 @@ export function CourseManagementHeader({
   const isEditing = mode === "edit";
 
   return (
-    <header className="shrink-0 border-b border-[#EEF1F6] bg-white px-5 py-4">
-      <div className="flex items-start gap-3">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center text-[#315BFF]">
-          <BookOpen
-            className="h-[18px] w-[18px]"
-            strokeWidth={2}
-          />
-        </div>
+    <header className="shrink-0 border-b border-slate-100 bg-white px-7 pb-4 pt-5">
+      <h2 className="text-[26px] font-extrabold leading-[30px] tracking-[-0.045em] text-[#07113D]">
+        {isEditing
+          ? "Editar curso"
+          : "Crear nuevo curso"}
+      </h2>
 
-        <div>
-          <h2 className="text-[15px] font-bold leading-5 tracking-[-0.025em] text-[#071747]">
-            {isEditing
-              ? "Editar curso"
-              : "Crear nuevo curso"}
-          </h2>
-
-          <p className="mt-0.5 text-[11.5px] leading-4 tracking-[-0.015em] text-[#536184]">
-            {isEditing
-              ? "Modifica la información y configuración del curso."
-              : "Define la información básica. Después podrás generar el contenido y las evaluaciones."}
-          </p>
-        </div>
-      </div>
+      <p className="mt-0.5 text-[14px] font-medium leading-[17px] tracking-[-0.025em] text-[#35446F]">
+        {isEditing
+          ? "Modifica la información del curso y su configuración."
+          : "Define la información del curso. La IA te ayudará a generar la estructura y las evaluaciones."}
+      </p>
     </header>
   );
 }
