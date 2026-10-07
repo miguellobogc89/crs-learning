@@ -65,7 +65,7 @@ export function AppTopbar({
   const isKnowledge = pathname.startsWith("/knowledge");
 
   return (
-<header className="flex h-[72px] shrink-0 items-center gap-3 bg-transparent px-page-padding-sm sm:px-page-padding-md lg:px-page-padding-lg xl:h-app-topbar">      
+<header className="flex h-[68px] shrink-0 items-start gap-3 bg-transparent px-page-padding-sm pt-3 sm:px-page-padding-md lg:px-page-padding-lg">      
   <SheetTrigger asChild>
         <button
           type="button"
@@ -81,9 +81,9 @@ export function AppTopbar({
           className="
             h-control-xl w-full max-w-[470px] rounded-2xl bg-white
             shadow-[0_1px_2px_rgba(30,64,175,0.03)]
-            lg:fixed lg:left-1/2 lg:top-[36px] xl:top-[44px]
-            lg:z-10 lg:w-[min(470px,calc(100vw-760px))]
-            lg:-translate-x-1/2 lg:-translate-y-1/2
+            lg:fixed lg:left-1/2 lg:top-3
+lg:z-10 lg:w-[min(470px,calc(100vw-760px))]
+lg:-translate-x-1/2
           "
         >
           <GlobalSearch />

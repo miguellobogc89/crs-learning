@@ -21,8 +21,8 @@ export function HomeOverview({
   analyzedCount,
   recentDocuments,
 }: Props) {
-  return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 pt-6">
+return (
+  <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 pt-3">
       <HomeStats
         documentCount={documentCount}
         storageBytes={storageBytes}

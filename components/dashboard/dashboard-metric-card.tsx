@@ -67,55 +67,54 @@ export function DashboardMetricCard({
   return (
     <article
       className="
-        flex h-[164px] min-w-0 flex-col
+        flex h-[138px] min-w-0 flex-col
         rounded-2xl
-        border border-white/70
+        border border-slate-200/70
         bg-white/90
-        px-4 py-4
+        px-2.5 py-3
         shadow-[0_8px_30px_rgba(31,64,120,0.035)]
+        md:h-[164px]
+        md:px-4 md:py-4
         xl:h-[176px]
-        xl:px-5
-        xl:py-5
+        xl:px-5 xl:py-5
       "
     >
-      {/* Título */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex min-w-0 items-center gap-1.5 md:gap-2.5">
         <div
           className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md",
+            "md:h-8 md:w-8 md:rounded-lg",
             styles.icon,
           )}
         >
-          <Icon className="h-4 w-4" />
+          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4" />
         </div>
 
-        <p className="truncate text-[12px] font-medium text-slate-700">
+        <p className="min-w-0 truncate text-[10px] font-medium text-slate-700 md:text-[12px]">
           {label}
         </p>
       </div>
 
-      {/* Métrica */}
-      <div className="mt-3">
-        <p className="text-[24px] font-semibold leading-none tracking-[-0.025em] text-slate-950 xl:text-[26px]">
+      <div className="mt-2 md:mt-3">
+        <p className="truncate text-[18px] font-semibold leading-none tracking-[-0.025em] text-slate-950 md:text-[24px] xl:text-[26px]">
           {value}
         </p>
 
         {helper ? (
           <p
             className={cn(
-              "mt-2 text-[10px] font-medium",
+              "mt-1.5 truncate text-[8px] font-medium md:mt-2 md:text-[10px]",
               styles.helper,
             )}
           >
             {helper}
           </p>
         ) : (
-          <div className="h-[20px]" />
+          <div className="h-[16px] md:h-[20px]" />
         )}
       </div>
 
-      {/* Gráfica */}
-      <div className="mt-auto h-[38px] w-full">
+      <div className="mt-auto h-[28px] min-w-0 w-full md:h-[38px]">
         <DashboardSparkline
           values={chart}
           stroke={styles.stroke}

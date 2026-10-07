@@ -25,14 +25,13 @@ export function HomeStats({
   const analyzedPercent =
     documentCount > 0
       ? Math.round(
-          (analyzedCount /
-            documentCount) *
+          (analyzedCount / documentCount) *
             100,
         )
       : 0;
 
   return (
-    <section className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+    <section className="grid min-w-0 grid-cols-4 gap-3 xl:gap-4">
       <DashboardMetricCard
         label="Documentos"
         value={formatNumber(documentCount)}
@@ -42,8 +41,7 @@ export function HomeStats({
           documentCount,
         )} disponibles`}
         chart={[
-          28, 34, 30, 41,
-          38, 46, 43, 52,
+          28, 34, 30, 41, 38, 46, 43, 52,
         ]}
       />
 
@@ -54,8 +52,7 @@ export function HomeStats({
         tone="violet"
         helper="Espacio utilizado"
         chart={[
-          30, 26, 36, 32,
-          41, 35, 44, 38,
+          30, 26, 36, 32, 41, 35, 44, 38,
         ]}
       />
 
@@ -66,8 +63,7 @@ export function HomeStats({
         tone="emerald"
         helper="Fuentes organizadas"
         chart={[
-          22, 29, 27, 36,
-          31, 42, 39, 44,
+          22, 29, 27, 36, 31, 42, 39, 44,
         ]}
       />
 
@@ -82,8 +78,7 @@ export function HomeStats({
             : "Sin documentos"
         }
         chart={[
-          24, 31, 27, 40,
-          33, 29, 38, 45,
+          24, 31, 27, 40, 33, 29, 38, 45,
         ]}
       />
     </section>

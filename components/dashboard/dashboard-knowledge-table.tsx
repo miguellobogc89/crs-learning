@@ -87,12 +87,12 @@ export function DashboardKnowledgeTable({
 
       {/* Tabla */}
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-        <table className="w-full min-w-[760px] border-collapse">
+        <table className="w-full table-fixed border-collapse">
 <thead>
   <tr className="border-b border-slate-100">
-    <TableHead className="w-[38%]">
-      Nombre
-    </TableHead>
+<TableHead className="w-[28%] xl:w-[38%]">
+  Nombre
+</TableHead>
 
     <TableHead align="center">
       Tipo
@@ -196,7 +196,7 @@ function DocumentRow({
   return (
     <tr className="group border-b border-slate-100 last:border-b-0 transition-colors hover:bg-slate-50/60">
       {/* Nombre */}
-      <td className="px-5 py-[11px]">
+      <td className="min-w-0 px-3 py-[11px] xl:px-5">
         <Link
           href={document.href}
           className="flex min-w-0 items-center gap-3"
@@ -211,13 +211,14 @@ function DocumentRow({
           </div>
 
           <div className="min-w-0">
-            <p className="max-w-[330px] truncate text-[12px] font-medium text-slate-900">
-              {document.title}
-            </p>
+{/* Nombre */}
+<p className="max-w-[330px] truncate text-[13px] font-medium text-slate-900">
+  {document.title}
+</p>
 
-            <p className="mt-0.5 truncate text-[10px] text-slate-400">
-              {document.libraryName}
-            </p>
+<p className="mt-0.5 truncate text-[11px] text-slate-500">
+  {document.libraryName}
+</p>
           </div>
         </Link>
       </td>
@@ -225,11 +226,11 @@ function DocumentRow({
       {/* Tipo */}
       <td className="px-5 py-[11px] text-center">
         <span
-          className={[
-            "inline-flex rounded-md px-2 py-1",
-            "text-[9px] font-medium uppercase",
-            tone.badge,
-          ].join(" ")}
+className={[
+  "inline-flex rounded-md px-2 py-1",
+  "text-[10px] font-medium uppercase",
+  tone.badge,
+].join(" ")}
         >
           {formatKnowledgeType(document.type)}
         </span>
@@ -254,9 +255,9 @@ function DocumentRow({
       {/* Uso IA */}
       <td className="px-5 py-[11px]">
         <div className="flex items-center justify-center gap-3">
-          <span className="w-6 text-center text-[11px] font-medium tabular-nums text-slate-700">
-            {usage}
-          </span>
+<span className="w-6 text-center text-[12px] font-medium tabular-nums text-slate-700">
+  {usage}
+</span>
 
           <UsageBars seed={index} />
         </div>
@@ -332,6 +333,7 @@ function UsageBars({
   );
 }
 
+// Tabs
 function Tab({
   label,
   active = false,
@@ -343,10 +345,10 @@ function Tab({
     <button
       type="button"
       className={[
-        "relative h-full pt-4 text-[10px] font-medium transition-colors",
+        "relative h-full pt-4 text-[12px] font-medium transition-colors",
         active
           ? "text-[#0A58FF]"
-          : "text-slate-500 hover:text-slate-800",
+          : "text-slate-600 hover:text-slate-900",
       ].join(" ")}
     >
       {label}
@@ -371,10 +373,11 @@ function ToolbarButton({
         gap-2 rounded-lg
         border border-slate-200
         bg-white px-3
-        text-[9px] font-medium
-        text-slate-600
+        text-[11px] font-medium
+        text-slate-700
         transition
         hover:bg-slate-50
+        hover:text-slate-950
       "
     >
       {children}
@@ -384,7 +387,7 @@ function ToolbarButton({
 
 function Chevron() {
   return (
-    <span className="ml-1 text-[10px] text-slate-400">
+    <span className="ml-1 text-[11px] text-slate-500">
       ⌄
     </span>
   );
