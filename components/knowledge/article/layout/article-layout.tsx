@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+
 type ArticleLayoutProps = {
   header: ReactNode;
   tabs: ReactNode;
@@ -14,26 +16,16 @@ export function ArticleLayout({
   children,
 }: ArticleLayoutProps) {
   return (
-    <div className="h-full min-h-0 overflow-hidden bg-transparent px-6 pb-6 lg:px-8">
-      <div
-        className="
-          mx-auto flex h-full min-h-0 max-w-7xl flex-col
-          overflow-hidden rounded-2xl border border-slate-200
-          bg-white
-          shadow-[0_1px_2px_rgba(15,23,42,0.025)]
-        "
-      >
-        {/* Cabecera común del artículo */}
-        <div className="shrink-0 px-6 pt-4 lg:px-8">
+    <AppPageLayout
+      header={
+        <>
           {header}
           {tabs}
-        </div>
-
-        {/* Contenido de General / Detalles / Documentos */}
-        <div className="min-h-0 flex-1 overflow-hidden">
-          {children}
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      contentClassName="overflow-hidden px-0 pb-0 sm:px-0 lg:px-0"
+    >
+      {children}
+    </AppPageLayout>
   );
 }

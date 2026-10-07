@@ -138,15 +138,15 @@ export function ArticleHeader({
   }
 
   return (
-    <header className="space-y-3">
+    <header className="space-y-2.5">
       {/* Breadcrumb y última modificación */}
-      <div className="flex min-w-0 items-center justify-between gap-6 border-b border-border pb-3">
+      <div className="flex min-w-0 items-center justify-between gap-6 border-b border-border pb-2.5">
         <ArticleBreadcrumb
           libraryPath={libraryPath}
         />
 
         {updatedAtLabel && (
-          <p className="hidden shrink-0 text-xs text-muted-foreground lg:block">
+          <p className="hidden shrink-0 text-[11px] text-muted-foreground lg:block">
             Modificado el{" "}
             {updatedAtLabel} por{" "}
             {updatedByLabel}
@@ -155,11 +155,11 @@ export function ArticleHeader({
       </div>
 
       {/* Título */}
-      <div className="flex items-start justify-between gap-6">
+      <div className="flex items-start justify-between gap-5">
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-400">
-              <FileText className="h-5 w-5" />
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-400">
+              <FileText className="h-4 w-4" />
             </div>
 
             <ArticleTitle
@@ -178,26 +178,23 @@ export function ArticleHeader({
               }
             />
 
-            {sharedTeamCount >
-            0 ? (
+            {sharedTeamCount > 0 ? (
               <button
                 type="button"
                 onClick={onShare}
                 aria-label={`Compartido con ${sharedTeamCount} ${
-                  sharedTeamCount ===
-                  1
+                  sharedTeamCount === 1
                     ? "equipo"
                     : "equipos"
                 }`}
                 title={`Compartido con ${sharedTeamCount} ${
-                  sharedTeamCount ===
-                  1
+                  sharedTeamCount === 1
                     ? "equipo"
                     : "equipos"
                 }`}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700 dark:text-blue-400 dark:hover:bg-blue-950/40"
               >
-                <UsersRound className="h-5 w-5" />
+                <UsersRound className="h-4 w-4" />
               </button>
             ) : null}
           </div>
@@ -222,7 +219,7 @@ export function ArticleHeader({
       </div>
 
       {/* Tipo + métricas + visibilidad */}
-      <div className="flex min-w-0 items-center justify-between gap-4 pl-[52px]">
+      <div className="flex min-w-0 items-center justify-between gap-4 pl-[44px]">
         <ArticleInsights
           metrics={metrics}
           knowledgeTypeLabel={
@@ -231,7 +228,7 @@ export function ArticleHeader({
         />
 
         <div className="flex shrink-0 items-center gap-2">
-          <span className="text-xs font-medium text-slate-500">
+          <span className="text-[11px] font-medium text-slate-500">
             {isPublic
               ? "Público"
               : "Privado"}
@@ -251,7 +248,7 @@ export function ArticleHeader({
               handleVisibilityToggle
             }
             className={[
-              "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5",
+              "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full p-0.5",
               "border-0 transition-colors duration-200",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/20",
               "disabled:cursor-wait disabled:opacity-50",
@@ -263,10 +260,10 @@ export function ArticleHeader({
             <span
               aria-hidden="true"
               className={[
-                "block h-5 w-5 rounded-full bg-white shadow-sm",
+                "block h-4 w-4 rounded-full bg-white shadow-sm",
                 "transition-transform duration-200",
                 isPublic
-                  ? "translate-x-5"
+                  ? "translate-x-4"
                   : "translate-x-0",
               ].join(" ")}
             />

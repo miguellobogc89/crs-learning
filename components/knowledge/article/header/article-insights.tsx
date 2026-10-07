@@ -35,7 +35,7 @@ function InsightPill({
   return (
     <div
       className={[
-        "inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium",
+        "inline-flex h-[26px] items-center gap-1 rounded-full border px-2 text-[10px] font-medium",
         className,
       ].join(" ")}
     >
@@ -57,7 +57,7 @@ export function ArticleInsights({
   knowledgeTypeLabel,
 }: ArticleInsightsProps) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <InsightPill
         label={knowledgeTypeLabel}
         className="border-blue-200 bg-blue-50 text-blue-700"
@@ -65,7 +65,7 @@ export function ArticleInsights({
 
       <InsightPill
         icon={
-          <FileCheck2 className="h-3.5 w-3.5" />
+          <FileCheck2 className="h-3 w-3" />
         }
         value={`${metrics.coverage} %`}
         label="Cobertura"
@@ -74,7 +74,7 @@ export function ArticleInsights({
 
       <InsightPill
         icon={
-          <FileText className="h-3.5 w-3.5" />
+          <FileText className="h-3 w-3" />
         }
         value={String(
           metrics.documentCount,
@@ -85,7 +85,7 @@ export function ArticleInsights({
 
       <InsightPill
         icon={
-          <Link2 className="h-3.5 w-3.5" />
+          <Link2 className="h-3 w-3" />
         }
         value={String(
           metrics.referenceCount,
@@ -96,13 +96,14 @@ export function ArticleInsights({
 
       <InsightPill
         icon={
-          <AlertTriangle className="h-3.5 w-3.5" />
+          <AlertTriangle className="h-3 w-3" />
         }
         value={String(
           metrics.contradictionCount,
         )}
         label={
-          metrics.contradictionCount === 1
+          metrics.contradictionCount ===
+          1
             ? "Contradicción"
             : "Contradicciones"
         }

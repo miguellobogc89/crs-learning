@@ -30,9 +30,9 @@ export function AppPageHeader({
           items={items}
         />
 
-        <h1 className="mt-3 min-w-0 truncate text-[26px] font-semibold tracking-tight text-slate-950">
-          {title}
-        </h1>
+<h1 className="mt-3 min-w-0 truncate text-[26px] font-semibold leading-[1.2] tracking-tight text-slate-950">
+  {title}
+</h1>
       </div>
 
       {actions ? (

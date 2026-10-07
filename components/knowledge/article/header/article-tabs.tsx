@@ -1,5 +1,4 @@
-﻿
-// components/knowledge/article/header/article-tabs.tsx
+﻿// components/knowledge/article/header/article-tabs.tsx
 
 "use client";
 
@@ -13,7 +12,9 @@ export type ArticleTab =
 type ArticleTabsProps = {
   activeTab: ArticleTab;
   documentCount: number;
-  onTabChange: (tab: ArticleTab) => void;
+  onTabChange: (
+    tab: ArticleTab,
+  ) => void;
   actions?: ReactNode;
 };
 
@@ -32,9 +33,13 @@ function ArticleTabButton({
     <button
       type="button"
       onClick={onClick}
-      aria-current={active ? "page" : undefined}
+      aria-current={
+        active
+          ? "page"
+          : undefined
+      }
       className={[
-        "relative flex h-12 items-center px-4 text-sm font-medium transition-colors",
+        "relative flex h-[42px] items-center px-3 text-[12px] font-medium transition-colors",
         active
           ? "text-foreground"
           : "text-muted-foreground hover:text-foreground",
@@ -42,10 +47,9 @@ function ArticleTabButton({
     >
       {children}
 
-
-        {active && (
-        <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-blue-600 dark:bg-blue-400" />
-        )}
+      {active && (
+        <span className="absolute inset-x-2.5 bottom-0 h-0.5 rounded-full bg-blue-600 dark:bg-blue-400" />
+      )}
     </button>
   );
 }
@@ -57,34 +61,48 @@ export function ArticleTabs({
   actions,
 }: ArticleTabsProps) {
   return (
-    <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-200">
       <div
         role="navigation"
         aria-label="Secciones del artículo"
         className="flex min-w-0 items-center gap-1"
       >
         <ArticleTabButton
-          active={activeTab === "general"}
-          onClick={() => onTabChange("general")}
+          active={
+            activeTab === "general"
+          }
+          onClick={() =>
+            onTabChange("general")
+          }
         >
           General
         </ArticleTabButton>
 
         <ArticleTabButton
-          active={activeTab === "details"}
-          onClick={() => onTabChange("details")}
+          active={
+            activeTab === "details"
+          }
+          onClick={() =>
+            onTabChange("details")
+          }
         >
           Detalles
-
         </ArticleTabButton>
 
         <ArticleTabButton
-          active={activeTab === "documents"}
-          onClick={() => onTabChange("documents")}
+          active={
+            activeTab ===
+            "documents"
+          }
+          onClick={() =>
+            onTabChange(
+              "documents",
+            )
+          }
         >
           Documentos
 
-          <span className="ml-1.5 rounded-full bg-surface px-1.5 py-0.5 text-[10px] text-muted-foreground">
+          <span className="ml-1.5 rounded-full bg-surface px-1.5 py-0.5 text-[9px] text-muted-foreground">
             {documentCount}
           </span>
         </ArticleTabButton>

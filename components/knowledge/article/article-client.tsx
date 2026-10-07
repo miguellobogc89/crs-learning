@@ -1,9 +1,13 @@
-﻿
-// components/knowledge/article/article-client.tsx
+﻿// components/knowledge/article/article-client.tsx
 
 "use client";
 
-import { useCallback, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   saveEditableKnowledgeContentAction,
@@ -30,13 +34,20 @@ import { ArticleGeneralView } from
 import { ArticleDetailsView } from
   "./content/details/article-details-view";
 
-  
-import { ArticleBody } from "./content/article-body";
+import { ArticleBody } from
+  "./content/article-body";
 
-import { ArticleHeader } from "./header/article-header";
-import { ArticleTabs } from "./header/article-tabs";
-import { ArticleLayout } from "./layout/article-layout";
-import { useArticleAnalysis } from "./hooks/use-article-analysis";
+import { ArticleHeader } from
+  "./header/article-header";
+
+import { ArticleTabs } from
+  "./header/article-tabs";
+
+import { ArticleLayout } from
+  "./layout/article-layout";
+
+import { useArticleAnalysis } from
+  "./hooks/use-article-analysis";
 
 import type {
   ArticleClientProps,
@@ -67,10 +78,16 @@ function getSavedSummaryHtml(
   }
 
   const html =
-    (editableContent as Record<string, unknown>)
-      .generalSummaryHtml;
+    (
+      editableContent as Record<
+        string,
+        unknown
+      >
+    ).generalSummaryHtml;
 
-  return typeof html === "string" ? html : "";
+  return typeof html === "string"
+    ? html
+    : "";
 }
 
 export function ArticleClient({
@@ -79,57 +96,159 @@ export function ArticleClient({
   teams,
   libraryShares,
 }: ArticleClientProps) {
-  const [activeTab, setActiveTab] =
-    useState<ArticleTab>("general");
+  const [
+    activeTab,
+    setActiveTab,
+  ] =
+    useState<ArticleTab>(
+      "general",
+    );
 
-  const header = useKnowledgeHeader({
-    knowledge,
-  });
+  const bodyScrollRef =
+    useRef<HTMLDivElement>(null);
 
-  const documents = useKnowledgeDocuments({
-    knowledge,
-  });
+  const [
+    canScrollUp,
+    setCanScrollUp,
+  ] = useState(false);
 
-  const analysis = useArticleAnalysis(knowledge);
+  const [
+    canScrollDown,
+    setCanScrollDown,
+  ] = useState(false);
 
-  const initialHtml = getSavedSummaryHtml(
-    knowledge.knowledge_analysis?.analysis_json,
-  );
+  const header =
+    useKnowledgeHeader({
+      knowledge,
+    });
 
-  const saveSummary = useCallback(
-    async (html: string) => {
-      await saveEditableKnowledgeContentAction({
-        knowledgeId: knowledge.id,
-        section: "general.summary",
-        html,
-      });
-    },
-    [knowledge.id],
-  );
+  const documents =
+    useKnowledgeDocuments({
+      knowledge,
+    });
 
-  const editor = useKnowledgeContentEditor({
-    initialContent: initialHtml,
-    onSave: saveSummary,
-  });
+  const analysis =
+    useArticleAnalysis(
+      knowledge,
+    );
 
-  function handleStartEditing() {
-    if (editor.isEditing || editor.isSaving) {
+  const initialHtml =
+    getSavedSummaryHtml(
+      knowledge
+        .knowledge_analysis
+        ?.analysis_json,
+    );
+
+  const saveSummary =
+    useCallback(
+      async (html: string) => {
+        await saveEditableKnowledgeContentAction(
+          {
+            knowledgeId:
+              knowledge.id,
+            section:
+              "general.summary",
+            html,
+          },
+        );
+      },
+      [knowledge.id],
+    );
+
+  const editor =
+    useKnowledgeContentEditor({
+      initialContent:
+        initialHtml,
+      onSave: saveSummary,
+    });
+
+  useEffect(() => {
+    const element =
+      bodyScrollRef.current;
+
+    if (!element) {
       return;
     }
 
-    setActiveTab("general");
+    const updateScrollFade =
+      () => {
+        const {
+          scrollTop,
+          scrollHeight,
+          clientHeight,
+        } = element;
+
+        setCanScrollUp(
+          scrollTop > 2,
+        );
+
+        setCanScrollDown(
+          scrollTop +
+            clientHeight <
+            scrollHeight - 2,
+        );
+      };
+
+    element.scrollTop = 0;
+    updateScrollFade();
+
+    element.addEventListener(
+      "scroll",
+      updateScrollFade,
+      {
+        passive: true,
+      },
+    );
+
+    const observer =
+      new ResizeObserver(
+        updateScrollFade,
+      );
+
+    observer.observe(
+      element,
+    );
+
+    return () => {
+      element.removeEventListener(
+        "scroll",
+        updateScrollFade,
+      );
+
+      observer.disconnect();
+    };
+  }, [activeTab]);
+
+  function handleStartEditing() {
+    if (
+      editor.isEditing ||
+      editor.isSaving
+    ) {
+      return;
+    }
+
+    setActiveTab(
+      "general",
+    );
+
     editor.startEditing();
   }
 
-  function handleTabChange(tab: ArticleTab) {
+  function handleTabChange(
+    tab: ArticleTab,
+  ) {
     if (editor.isSaving) {
       return;
     }
 
-    if (editor.isEditing && editor.hasChanges) {
-      const discard = window.confirm(
-        "Tienes cambios sin guardar. ¿Quieres descartarlos y cambiar de pestaña?",
-      );
+    if (
+      editor.isEditing &&
+      editor.hasChanges
+    ) {
+      const discard =
+        window.confirm(
+          "Tienes cambios sin guardar. ¿Quieres descartarlos y cambiar de pestaña?",
+        );
 
       if (!discard) {
         return;
@@ -148,122 +267,269 @@ export function ArticleClient({
       <ArticleLayout
         header={
           <ArticleHeader
-            title={header.title}
-            knowledgeType={header.knowledgeType}
-            visibility={header.visibility}
-            libraryPath={libraryPath}
-            updatedAt={knowledge.updated_at}
-            updatedBy={
-              knowledge.users_knowledge_sources_updated_by_user_idTousers
+            title={
+              header.title
             }
-            sharedTeamCount={libraryShares.length}
-            metrics={analysis.metrics}
-            isEditingTitle={header.isEditingTitle}
-            isUpdating={header.isUpdatingHeader}
-            isEditingContent={editor.isEditing}
-            onTitleChange={header.setTitle}
-            onEditTitle={header.startTitleEditing}
-            onSaveTitle={header.saveTitle}
-            onCancelTitle={header.cancelTitleEditing}
-            onVisibilityChange={header.handleVisibilityChange}
-            onEditContent={handleStartEditing}
-            onShare={header.openShareDialog}
+            knowledgeType={
+              header.knowledgeType
+            }
+            visibility={
+              header.visibility
+            }
+            libraryPath={
+              libraryPath
+            }
+            updatedAt={
+              knowledge.updated_at
+            }
+            updatedBy={
+              knowledge
+                .users_knowledge_sources_updated_by_user_idTousers
+            }
+            sharedTeamCount={
+              libraryShares.length
+            }
+            metrics={
+              analysis.metrics
+            }
+            isEditingTitle={
+              header.isEditingTitle
+            }
+            isUpdating={
+              header.isUpdatingHeader
+            }
+            isEditingContent={
+              editor.isEditing
+            }
+            onTitleChange={
+              header.setTitle
+            }
+            onEditTitle={
+              header.startTitleEditing
+            }
+            onSaveTitle={
+              header.saveTitle
+            }
+            onCancelTitle={
+              header.cancelTitleEditing
+            }
+            onVisibilityChange={
+              header.handleVisibilityChange
+            }
+            onEditContent={
+              handleStartEditing
+            }
+            onShare={
+              header.openShareDialog
+            }
           />
         }
         tabs={
           <ArticleTabs
-            activeTab={activeTab}
-            documentCount={knowledge.knowledge_files.length}
-            onTabChange={handleTabChange}
+            activeTab={
+              activeTab
+            }
+            documentCount={
+              knowledge
+                .knowledge_files
+                .length
+            }
+            onTabChange={
+              handleTabChange
+            }
           />
         }
       >
-        <div className="h-full overflow-y-auto">
-
-<div className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-  <ArticleBody>
-    <div
-      key={activeTab}
-      className="animate-[article-fade-in_180ms_ease-out_both] motion-reduce:animate-none"
-    >
-              {activeTab === "general" && (
-                <ArticleGeneralView
-                  hasDocuments={documents.hasDocuments}
-                  analysisJson={
-                    knowledge.knowledge_analysis?.analysis_json
+        <div className="relative h-full min-h-0">
+          {/* Área con scroll */}
+          <div
+            ref={
+              bodyScrollRef
+            }
+            className="h-full min-h-0 overflow-y-auto"
+          >
+            <div className="px-6 pb-6 pt-8 lg:px-8">
+              <ArticleBody>
+                <div
+                  key={
+                    activeTab
                   }
-                  isRebuilding={documents.isRebuilding}
-                  onRebuild={documents.handleRebuild}
-                  isEditing={editor.isEditing}
-                  isSaving={editor.isSaving}
-                  hasChanges={editor.hasChanges}
-                  saveError={editor.saveError}
-                  htmlDraft={editor.content}
-                  onHtmlDraftChange={editor.setContent}
-                  onSave={editor.saveContent}
-                  onCancel={editor.cancelEditing}
-                />
-              )}
+                  className="animate-[article-fade-in_180ms_ease-out_both] motion-reduce:animate-none"
+                >
+                  {activeTab ===
+                    "general" && (
+                    <ArticleGeneralView
+                      hasDocuments={
+                        documents.hasDocuments
+                      }
+                      analysisJson={
+                        knowledge
+                          .knowledge_analysis
+                          ?.analysis_json
+                      }
+                      isRebuilding={
+                        documents.isRebuilding
+                      }
+                      onRebuild={
+                        documents.handleRebuild
+                      }
+                      isEditing={
+                        editor.isEditing
+                      }
+                      isSaving={
+                        editor.isSaving
+                      }
+                      hasChanges={
+                        editor.hasChanges
+                      }
+                      saveError={
+                        editor.saveError
+                      }
+                      htmlDraft={
+                        editor.content
+                      }
+                      onHtmlDraftChange={
+                        editor.setContent
+                      }
+                      onSave={
+                        editor.saveContent
+                      }
+                      onCancel={
+                        editor.cancelEditing
+                      }
+                    />
+                  )}
 
+                  {activeTab ===
+                    "details" && (
+                    <ArticleDetailsView
+                      hasDocuments={
+                        documents.hasDocuments
+                      }
+                      hasAnalysis={
+                        analysis.hasAnalysis
+                      }
+                      isRebuilding={
+                        documents.isRebuilding
+                      }
+                      rebuildError={
+                        documents.rebuildError
+                      }
+                      knowledgeType={
+                        knowledge.knowledge_type
+                      }
+                      analysisJson={
+                        knowledge
+                          .knowledge_analysis
+                          ?.analysis_json
+                      }
+                      analysisStatus={
+                        knowledge
+                          .knowledge_analysis
+                          ?.status ??
+                        null
+                      }
+                      analysisModel={
+                        knowledge
+                          .knowledge_analysis
+                          ?.model ??
+                        null
+                      }
+                      graph={
+                        knowledge
+                          .knowledge_graph
+                      }
+                      files={
+                        knowledge
+                          .knowledge_files
+                      }
+                      onRebuild={
+                        documents.handleRebuild
+                      }
+                    />
+                  )}
 
-              {activeTab === "details" && (
-                <ArticleDetailsView
-                  hasDocuments={documents.hasDocuments}
-                  hasAnalysis={analysis.hasAnalysis}
-                  isRebuilding={documents.isRebuilding}
-                  rebuildError={documents.rebuildError}
-                  knowledgeType={knowledge.knowledge_type}
-                  analysisJson={
-                    knowledge.knowledge_analysis?.analysis_json
-                  }
-                  analysisStatus={
-                    knowledge.knowledge_analysis?.status ?? null
-                  }
-                  analysisModel={
-                    knowledge.knowledge_analysis?.model ?? null
-                  }
-                  graph={knowledge.knowledge_graph}
-                  files={knowledge.knowledge_files}
-                  onRebuild={documents.handleRebuild}
-                />
-              )}
-
-              
-              {activeTab === "documents" && (
-                <ArticleDocumentsView
-                  documents={knowledge.knowledge_files}
-                />
-              )}
+                  {activeTab ===
+                    "documents" && (
+                    <ArticleDocumentsView
+                      documents={
+                        knowledge
+                          .knowledge_files
+                      }
+                    />
+                  )}
+                </div>
+              </ArticleBody>
             </div>
-          </ArticleBody>
+          </div>
+
+          {/* Fade superior */}
+          <div
+            aria-hidden="true"
+            className={[
+              "pointer-events-none absolute inset-x-0 top-0 z-10 h-10",
+              "bg-gradient-to-b from-white via-white/80 to-transparent",
+              "transition-opacity duration-200",
+              canScrollUp
+                ? "opacity-100"
+                : "opacity-0",
+            ].join(" ")}
+          />
+
+          {/* Fade inferior */}
+          <div
+            aria-hidden="true"
+            className={[
+              "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-12",
+              "bg-gradient-to-t from-white via-white/80 to-transparent",
+              "transition-opacity duration-200",
+              canScrollDown
+                ? "opacity-100"
+                : "opacity-0",
+            ].join(" ")}
+          />
         </div>
-      </div>
 
         <style jsx>{`
           @keyframes article-fade-in {
             from {
               opacity: 0;
-              transform: translateY(4px);
+              transform: translateY(
+                4px
+              );
             }
 
             to {
               opacity: 1;
-              transform: translateY(0);
+              transform: translateY(
+                0
+              );
             }
           }
         `}</style>
       </ArticleLayout>
 
       <ShareLibraryDialog
-        open={header.isShareDialogOpen}
-        libraryId={knowledge.library_id}
+        open={
+          header.isShareDialogOpen
+        }
+        libraryId={
+          knowledge.library_id
+        }
         libraryName={
-          libraryPath[libraryPath.length - 1]?.name ??
+          libraryPath[
+            libraryPath.length -
+              1
+          ]?.name ??
           "Carpeta"
         }
         teams={teams}
-        shares={libraryShares}
-        onClose={header.closeShareDialog}
+        shares={
+          libraryShares
+        }
+        onClose={
+          header.closeShareDialog
+        }
       />
     </>
   );
