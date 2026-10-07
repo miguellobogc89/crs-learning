@@ -160,6 +160,7 @@ export function TopRecommendedCard({
 
             <Link
               href={`/courses/${course.id}`}
+              aria-label={`Ver curso: ${course.title}`}
               className="
                 flex h-10 w-[142px]
                 shrink-0 items-center
@@ -170,6 +171,7 @@ export function TopRecommendedCard({
                 text-[#315BFF]
                 transition-colors
                 hover:bg-[#E4EAFF]
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#315BFF]
               "
             >
               Ver curso

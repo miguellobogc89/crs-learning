@@ -92,22 +92,28 @@ function CourseCard({
   hiddenOnLaptop: boolean;
 }) {
   return (
-    <article
-      className={`
-        ${
-          hiddenOnLaptop
-            ? "hidden 2xl:flex"
-            : "flex"
-        }
-        min-w-0 flex-col
-        overflow-hidden
-        rounded-lg
-        border border-slate-200/60
-        bg-white
-        p-2
-        shadow-[0_2px_7px_rgba(15,23,42,0.035)]
-      `}
-    >
+<Link
+  href={`/courses/${course.id}`}
+  aria-label={`Ver curso: ${course.title}`}
+  className={`
+    ${
+      hiddenOnLaptop
+        ? "hidden 2xl:flex"
+        : "flex"
+    }
+    min-w-0 flex-col
+    overflow-hidden
+    rounded-lg
+    border border-slate-200/60
+    bg-white
+    p-2
+    shadow-[0_2px_7px_rgba(15,23,42,0.035)]
+    cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#315BFF]
+    transition
+    hover:border-slate-300
+    hover:shadow-[0_4px_12px_rgba(15,23,42,0.06)]
+  `}
+>
       <AcademyThumbnail
         variant={course.thumbnail}
         url={course.thumbnailUrl}
@@ -191,34 +197,31 @@ function CourseCard({
         </span>
       </div>
 
-      <div className="mt-auto flex justify-center pb-0.5 pt-3">
-        <button
-          type="button"
-          className="
-            flex h-9
-            w-full max-w-[150px]
-            items-center justify-center
-            gap-2
-            rounded-lg
-            bg-gradient-to-r
-            from-[#315BFF]
-            to-[#5865F2]
-            px-3
-            text-[12px] font-semibold
-            text-white
-            shadow-[0_2px_6px_rgba(49,91,255,0.14)]
-            transition
-            hover:brightness-105
-          "
-        >
-          Continuar
+<div className="mt-auto hidden justify-center pb-0.5 pt-3 2xl:flex">
+  <span
+    className="
+      flex h-9
+      w-full max-w-[150px]
+      items-center justify-center
+      gap-2
+      rounded-lg
+      bg-gradient-to-r
+      from-[#315BFF]
+      to-[#5865F2]
+      px-3
+      text-[12px] font-semibold
+      text-white
+      shadow-[0_2px_6px_rgba(49,91,255,0.14)]
+    "
+  >
+    Continuar
 
-          <ArrowRight
-            aria-hidden="true"
-            className="h-4 w-4"
-          />
-        </button>
-      </div>
-    </article>
+    <ArrowRight
+      aria-hidden="true"
+      className="h-4 w-4"
+    />
+  </span>
+</div>
+    </Link>
   );
 }

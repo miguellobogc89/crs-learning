@@ -1,4 +1,4 @@
-// components/academy/academy-home.tsx
+// components/academy/academy-home/academy-home.tsx
 
 import { ContinueLearningCard } from "@/components/academy/academy-home/continue-learning-card";
 import { PendingTrainingCard } from "@/components/academy/academy-home/pending-training-card";
@@ -12,7 +12,7 @@ export function AcademyHome({
   data: AcademyHomeData;
 }) {
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-4 pt-3">
+    <div className="flex min-h-full min-w-0 flex-col gap-4 pt-0">
       <div className="shrink-0">
         <ContinueLearningCard
           courses={data.continueLearning}
@@ -25,7 +25,7 @@ export function AcademyHome({
         />
       </div>
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-[260px] flex-1">
         <RecommendedForYouCard
           courses={data.recommendedCourses}
         />

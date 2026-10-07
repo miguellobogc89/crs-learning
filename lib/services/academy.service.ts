@@ -1,7 +1,9 @@
 // lib/services/academy.service.ts
 
 import { prisma } from "@/lib/prisma";
+import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import {
+  getCourseCreatorScope,
   getAcademyHomePreviewCourses,
   getAcademyUserScope,
   getCompanyCourseRequests,
@@ -26,6 +28,99 @@ export type AcademyAdminCourse = {
   students: number;
   thumbnailUrl: string | null;
 };
+
+/** Read-only detail. Authorize before loading content or other users' assignments. */
+export async function getAcademyCourseDetail(userId: string, courseId: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId)) return null;
+  const user = await getCourseCreatorScope(userId);
+  if (!user) return null;
+  const scope = await prisma.courses.findUnique({
+    where: { id: courseId },
+    select: { company_id: true, is_published: true },
+  });
+  if (!scope) return null;
+  const canManage = user.system_role === "system_admin" ||
+    (user.system_role === "org_manager" && Boolean(user.company_id) && user.company_id === scope.company_id);
+  if (!canManage && (scope.company_id !== null && scope.company_id !== user.company_id)) return null;
+  if (!canManage && !scope.is_published) return null;
+
+  const identity = { id: true, name: true } as const;
+  const relatedCourseWhere = user.system_role === "system_admin" ? {} : {
+    AND: [
+      { OR: [{ company_id: user.company_id }, { company_id: null }] },
+      { OR: [{ is_published: true }, ...(user.system_role === "org_manager" && user.company_id ? [{ company_id: user.company_id }] : [])] },
+    ],
+  };
+  const quizInclude = {
+    questions: {
+      orderBy: { sort_order: "asc" as const },
+      select: {
+        id: true, quiz_id: true, question_text: true, question_type: true,
+        explanation: canManage, sort_order: true, created_at: true,
+        question_options: {
+          orderBy: { sort_order: "asc" as const },
+          select: { id: true, question_id: true, option_text: true, sort_order: true, is_correct: canManage },
+        },
+      },
+    },
+    quiz_attempts: { where: { user_id: userId }, orderBy: { started_at: "desc" as const } },
+  };
+  const course = await prisma.courses.findUnique({
+    where: { id: courseId, company_id: scope.company_id, is_published: scope.is_published },
+    include: {
+      users: { select: identity },
+      companies: { select: { id: true, name: true, slug: true } },
+      course_assignments: {
+        where: canManage ? {} : { user_id: userId },
+        orderBy: { assigned_at: "desc" },
+        include: {
+          users_course_assignments_user_idTousers: { select: identity },
+          users_course_assignments_assigned_by_user_idTousers: { select: identity },
+        },
+      },
+      user_course_progress: { where: { user_id: userId } },
+      sections: {
+        orderBy: { sort_order: "asc" },
+        include: {
+          section_items: { orderBy: { sort_order: "asc" } },
+          lessons: {
+            orderBy: { sort_order: "asc" },
+            include: {
+              user_lesson_progress: { where: { user_id: userId } },
+              quizzes: { orderBy: { created_at: "asc" }, include: quizInclude },
+            },
+          },
+          quizzes: { where: { lesson_id: null }, orderBy: { created_at: "asc" }, include: quizInclude },
+        },
+      },
+    },
+  });
+  if (!course) return null;
+  const [requiredCourse, dependentCourses, source] = await Promise.all([
+    course.required_course_id ? prisma.courses.findFirst({
+      where: { id: course.required_course_id, ...relatedCourseWhere },
+      select: { id: true, title: true, is_published: true },
+    }) : null,
+    prisma.courses.findMany({
+      where: { required_course_id: courseId, ...relatedCourseWhere },
+      select: { id: true, title: true, is_published: true },
+      orderBy: { sort_order: "asc" },
+    }),
+    course.knowledge_source_id ? prisma.knowledge_sources.findFirst({
+      where: { id: course.knowledge_source_id, ...knowledgeSourceReadWhere(userId) },
+      include: { knowledge_files: { select: {
+        id: true, file_name: true, file_type: true, file_size: true, status: true, created_at: true, updated_at: true,
+      } } },
+    }) : null,
+  ]);
+  return {
+    course, canManage, requiredCourse, dependentCourses, source,
+    estimatedMinutes: course.sections.reduce((total, section) =>
+      total + section.lessons.reduce((minutes, lesson) => minutes + lesson.estimated_minutes, 0), 0),
+  };
+}
+
+export type AcademyCourseDetail = NonNullable<Awaited<ReturnType<typeof getAcademyCourseDetail>>>;
 
 export type AcademyCourseAssignmentOption = {
   id: string;

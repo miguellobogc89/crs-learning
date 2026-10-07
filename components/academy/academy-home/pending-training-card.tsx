@@ -198,6 +198,7 @@ function PendingCourseCard({
 
       <Link
         href={`/courses/${course.id}`}
+        aria-label={`${hasStarted ? "Continuar" : "Comenzar"}: ${course.title}`}
         className="
           flex h-8
           min-w-[72px]
@@ -210,6 +211,7 @@ function PendingCourseCard({
           text-[#315BFF]
           transition-colors
           hover:bg-[#E4EAFF]
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#315BFF]
         "
       >
         {hasStarted

@@ -122,8 +122,9 @@ function RecommendedCourseCard({
   reason: string;
 }) {
   return (
-    <article
+    <Link href={`/courses/${course.id}`} aria-label={`Ver curso: ${course.title}`}
       className="
+        cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#315BFF]
         flex h-full min-h-0 min-w-0
         flex-col overflow-hidden
         rounded-lg
@@ -247,6 +248,6 @@ function RecommendedCourseCard({
           </div>
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
