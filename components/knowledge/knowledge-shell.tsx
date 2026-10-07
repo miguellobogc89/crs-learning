@@ -22,10 +22,12 @@ export function KnowledgeShell({
   children,
 }: Props) {
   const totalPublic = knowledgeSources.filter(
-    (knowledge) => knowledge.visibility === "public",
+    (knowledge) =>
+      knowledge.visibility === "public",
   ).length;
 
-  const totalPrivate = knowledgeSources.length - totalPublic;
+  const totalPrivate =
+    knowledgeSources.length - totalPublic;
 
   const sidebarItems: SidebarItem[] = [
     {
@@ -60,26 +62,36 @@ export function KnowledgeShell({
     },
   ];
 
-  const knowledgeSourceLocations = knowledgeSources.map((knowledge) => ({
-    id: knowledge.id,
-    libraryId: knowledge.library_id ?? null,
-  }));
+  const knowledgeSourceLocations =
+    knowledgeSources.map(
+      (knowledge) => ({
+        id: knowledge.id,
+        libraryId:
+          knowledge.library_id ?? null,
+      }),
+    );
 
   return (
     <AppSectionShell
       sidebar={
         <KnowledgeSidebar
           sidebarItems={sidebarItems}
-          knowledgeLibraries={knowledgeLibraries}
-          knowledgeTeams={knowledgeTeams}
-          defaultLibraryId={defaultLibraryId}
-          knowledgeSourceLocations={knowledgeSourceLocations}
+          knowledgeLibraries={
+            knowledgeLibraries
+          }
+          knowledgeTeams={
+            knowledgeTeams
+          }
+          defaultLibraryId={
+            defaultLibraryId
+          }
+          knowledgeSourceLocations={
+            knowledgeSourceLocations
+          }
         />
       }
     >
-      <section className="h-full min-w-0 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]">
-        {children}
-      </section>
+      {children}
     </AppSectionShell>
   );
 }

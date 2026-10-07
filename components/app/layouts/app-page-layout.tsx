@@ -83,6 +83,7 @@ export function AppPageLayout({
           <div
             className={cn(
               "flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto p-4",
+              "[scrollbar-gutter:stable]",
               asideContentClassName,
             )}
           >

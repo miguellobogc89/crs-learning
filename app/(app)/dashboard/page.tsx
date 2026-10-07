@@ -119,6 +119,7 @@ export default async function HomePage({
       <AppPageLayout
         header={header}
         aside={aside}
+        reserveAside
         contentClassName="overflow-y-auto pb-6"
       >
         {content}
