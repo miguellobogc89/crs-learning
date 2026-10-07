@@ -1,30 +1,23 @@
-// app/(app)/courses/page.tsx
+// app/(app)/courses/[id]/page.tsx
 
-import { redirect } from "next/navigation";
+import {
+  notFound,
+  redirect,
+} from "next/navigation";
 import { Roboto } from "next/font/google";
 
 import { auth } from "@/auth";
 
-import { AcademyAdmin } from "@/components/academy/academy-admin";
-import { AcademyCreateCourseAction } from "@/components/academy/academy-create-course-action";
-import { AcademyHome } from "@/components/academy/academy-home/academy-home";
-import { AcademyHomeAside } from "@/components/academy/academy-home/academy-home-aside";
+import {
+  AcademyCourseDetailAside,
+  AcademyCourseDetailContent,
+} from "@/components/academy/course-detail/academy-course-detail";
 import { AcademySidebar } from "@/components/academy/academy-navigation";
-import { AcademyCatalog } from "@/components/academy/catalog/academy-catalog";
 
-import { AppPageHeader } from "@/components/app/layouts/app-page-header";
 import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { AppSectionShell } from "@/components/app/section-sidebar";
 
-import { ACADEMY_SECTIONS } from "@/lib/navigation/academy-sections";
-import { APP_SECTIONS } from "@/lib/navigation/app-sections";
-
-import { prisma } from "@/lib/prisma";
-
-import {
-  getAcademyAdminCourses,
-  getAcademyHomeData,
-} from "@/lib/services/academy.service";
+import { getAcademyCourseDetail } from "@/lib/services/academy.service";
 
 const roboto = Roboto({
   subsets: ["latin"],
@@ -36,11 +29,11 @@ const roboto = Roboto({
   ],
 });
 
-export default async function AcademyPage({
-  searchParams,
+export default async function CoursePage({
+  params,
 }: {
-  searchParams: Promise<{
-    view?: string;
+  params: Promise<{
+    id: string;
   }>;
 }) {
   const session = await auth();
@@ -49,122 +42,47 @@ export default async function AcademyPage({
     redirect("/");
   }
 
-  const { view } =
-    await searchParams;
+  const { id } = await params;
 
-  const section =
-    ACADEMY_SECTIONS.find(
-      (item) =>
-        item.id === view,
-    ) ??
-    ACADEMY_SECTIONS[0];
+  const detail =
+    await getAcademyCourseDetail(
+      session.user.id,
+      id,
+    );
 
-  const isHome =
-    section.id === "home";
-
-  const isCatalog =
-    section.id === "catalog";
-
-  const isAdmin =
-    section.id === "admin";
-
-  const [
-    academyHomeData,
-    currentUser,
-    adminCourses,
-  ] = await Promise.all([
-    isHome
-      ? getAcademyHomeData(
-          session.user.id,
-        )
-      : Promise.resolve(null),
-
-    isAdmin
-      ? prisma.users.findUnique({
-          where: {
-            id: session.user.id,
-          },
-          select: {
-            system_role: true,
-          },
-        })
-      : Promise.resolve(null),
-
-    isAdmin
-      ? getAcademyAdminCourses(
-          session.user.id,
-        )
-      : Promise.resolve([]),
-  ]);
-
-  const canManageAcademy =
-    currentUser?.system_role ===
-      "org_manager" ||
-    currentUser?.system_role ===
-      "system_admin";
-
-  const header = (
-    <AppPageHeader
-      section={
-        APP_SECTIONS.courses
-      }
-      title={section.label}
-      actions={
-        isAdmin &&
-        canManageAcademy ? (
-          <AcademyCreateCourseAction />
-        ) : undefined
-      }
-    />
-  );
-
-  const aside =
-    isHome &&
-    academyHomeData ? (
-      <AcademyHomeAside
-        data={
-          academyHomeData
-        }
-      />
-    ) : undefined;
+  if (!detail) {
+    notFound();
+  }
 
   return (
     <div
-      className={`${roboto.className} h-full min-h-0`}
+      className={`
+        ${roboto.className}
+        h-full min-h-0 min-w-0
+      `}
     >
       <AppSectionShell
-        sidebar={
-          <AcademySidebar />
-        }
+        sidebar={<AcademySidebar />}
       >
         <AppPageLayout
-          header={header}
-          aside={aside}
-          asideClassName="xl:w-[400px] 2xl:w-[440px]"
+          aside={
+            <AcademyCourseDetailAside
+              detail={detail}
+            />
+          }
+          asideClassName="
+            xl:w-[340px]
+            2xl:w-[360px]
+          "
+          contentClassName="
+            px-5 pb-5 pt-0
+            sm:px-5
+            lg:px-5
+          "
         >
-          {isHome &&
-          academyHomeData ? (
-            <AcademyHome
-              data={
-                academyHomeData
-              }
-            />
-          ) : null}
-
-          {isCatalog ? (
-            <AcademyCatalog />
-          ) : null}
-
-          {isAdmin ? (
-            <AcademyAdmin
-              canManageAcademy={
-                canManageAcademy
-              }
-              initialCourses={
-                adminCourses
-              }
-            />
-          ) : null}
+          <AcademyCourseDetailContent
+            detail={detail}
+          />
         </AppPageLayout>
       </AppSectionShell>
     </div>
