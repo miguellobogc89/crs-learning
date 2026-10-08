@@ -1,10 +1,11 @@
 
- // app/(app)/courses/[id]/learn/page.tsx
+// app/(app)/courses/[id]/learn/page.tsx
 
 import { notFound, redirect } from "next/navigation";
+
 import { auth } from "@/auth";
 import { getAcademyCourseDetail } from "@/lib/services/academy.service";
-import { AcademyLearningRoom } from "@/components/academy/learning-room/academy-learning-room";
+import { AcademyDidacticRoom } from "@/components/academy/learning-room/academy-didactic-room";
 
 export default async function AcademyLearnPage({
   params,
@@ -52,11 +53,12 @@ export default async function AcademyLearnPage({
   }
 
   return (
-    <AcademyLearningRoom
+    <AcademyDidacticRoom
       courseId={course.id}
       courseTitle={course.title}
       modules={modules}
       preview={!course.is_published}
+      canManage={canManage}
     />
   );
 }
