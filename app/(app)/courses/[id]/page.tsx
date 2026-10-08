@@ -59,7 +59,11 @@ export default async function CoursePage({
     <div
       className={`
         ${roboto.className}
-        h-full min-h-0 min-w-0
+        h-full
+        min-h-0
+        min-w-0
+        overflow-hidden
+        bg-200
       `}
     >
       <AppSectionShell
@@ -67,25 +71,50 @@ export default async function CoursePage({
       >
         <AppPageLayout
           aside={
-            <AcademyCourseDetailAside
-              detail={detail}
-            />
+            <div className="h-full bg-200">
+              <AcademyCourseDetailAside
+                detail={detail}
+              />
+            </div>
           }
           asideClassName="
+            bg-200
             xl:w-[340px]
             2xl:w-[360px]
           "
           contentClassName="
-            px-5 pb-5 pt-0
+            min-h-0
+            overflow-hidden
+            bg-yellow-200
+            !px-0
+            !pb-0
+            !pt-0
           "
         >
-          <AcademyCourseDetailHeader
-            detail={detail}
-          />
+          <div className="bg-300 px-5">
+            <AcademyCourseDetailHeader
+              detail={detail}
+            />
+          </div>
 
-          <AcademyCourseDetailContent
-            detail={detail}
-          />
+          <div
+            className="
+              min-h-0
+              min-w-0
+              flex-1
+              overflow-hidden
+              bg-300
+              !px-5
+              !pt-0
+              !pb-0
+            "
+          >
+            <div className="h-full min-h-0 pb-0">
+              <AcademyCourseDetailContent
+                detail={detail}
+              />
+            </div>
+          </div>
         </AppPageLayout>
       </AppSectionShell>
     </div>
