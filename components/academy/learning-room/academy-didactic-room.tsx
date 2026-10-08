@@ -7,6 +7,7 @@ import { generateLessonDidacticAction, getLessonDidacticAction } from "@/app/act
 import type { DidacticPackage } from "@/lib/academy/didactic-package";
 import { DidacticVisual } from "./didactic-visual";
 import { DidacticActivity } from "./didactic-activity";
+import { AcademyInteraction } from "./academy-interaction";
 type Lesson = { id: string; title: string; estimatedMinutes: number; completed: boolean };
 type Module = { id: string; title: string; lessons: Lesson[] };
 type Props = { courseId: string; courseTitle: string; modules: Module[]; preview: boolean; canManage: boolean };
@@ -42,7 +43,7 @@ export function AcademyDidacticRoom({ courseId, courseTitle, modules, preview, c
   const screens = didactic?.screens ?? [];
   const screen = screens[screenIndex];
   const isLast = screenIndex === screens.length - 1;
-  const ready = !screen?.activity || Boolean(reviewed[screen.id]);
+  const ready = (!screen?.activity && !screen?.interaction) || Boolean(reviewed[screen.id]);
   const progress = screens.length ? Math.round((screenIndex + 1) / screens.length * 100) : 0;
   return <div className="flex h-full min-h-0 w-full overflow-hidden bg-[#F7F7FA] text-[#17203C]">
     {showOutline && <aside className="flex h-full w-[270px] shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white">
@@ -57,6 +58,7 @@ export function AcademyDidacticRoom({ courseId, courseTitle, modules, preview, c
           <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><span className="rounded-lg bg-[#EDE9F8] px-3 py-1.5 text-xs font-semibold text-[#6B5CA8]">{PHASE_LABELS[screen.phase]}</span><span className="text-xs text-slate-400">{TYPE_LABELS[screen.type]}</span></div>{canManage && <button type="button" disabled={generating} onClick={() => void generateLesson()} className="flex items-center gap-2 text-xs font-medium text-slate-500 disabled:opacity-40"><RotateCcw className="h-4 w-4"/>{generating ? "Regenerando..." : "Regenerar clase"}</button>}</div>
           {error && <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
           <div className="rounded-[30px] bg-white p-6 shadow-sm lg:p-8"><p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#8A78C4]">Descubre · Pantalla {screenIndex + 1}</p><h2 className="text-2xl font-bold tracking-tight lg:text-3xl">{screen.title}</h2>{screen.subtitle && <p className="mt-2 text-sm leading-6 text-slate-500">{screen.subtitle}</p>}<div className="mt-7"><DidacticVisual key={`${lessonId}:${screen.id}`} screen={screen}/></div></div>
+          {screen.interaction && <AcademyInteraction key={`${lessonId}:${screen.id}`} data={screen.interaction} completed={Boolean(reviewed[screen.id])} onComplete={() => setReviewed(p => ({ ...p, [screen.id]: true }))}/>}
           {screen.activity && <DidacticActivity key={`${lessonId}:${screen.id}`} activity={screen.activity} value={answers[screen.id] ?? ""} onChange={value => { setAnswers(p => ({ ...p, [screen.id]: value })); setReviewed(p => ({ ...p, [screen.id]: false })); }} reviewed={Boolean(reviewed[screen.id])} onReview={() => setReviewed(p => ({ ...p, [screen.id]: true }))}/>}
           <section className="rounded-2xl border border-[#E9E7F4] bg-[#F1EFF9]"><button type="button" onClick={() => setShowTeacher(p => !p)} className="flex w-full items-center gap-3 p-4 text-left"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#8172BC] text-white"><GraduationCap className="h-5 w-5"/></div><div className="flex-1"><p className="text-sm font-bold">Profesor Academy</p><p className="text-xs text-slate-500">{showTeacher ? "Explicación complementaria" : "¿Quieres profundizar?"}</p></div>{showTeacher ? <ChevronUp className="h-4 w-4"/> : <ChevronDown className="h-4 w-4"/>}</button>{showTeacher && <div className="px-5 pb-5 sm:pl-[68px]"><p className="text-sm leading-7 text-slate-700">{screen.teacher.explanation}</p>{screen.teacher.transition && <p className="mt-3 text-sm italic text-slate-500">{screen.teacher.transition}</p>}</div>}</section>
           {isLast && <div className="rounded-2xl bg-[#EAF7F4] p-5"><p className="font-bold">Has llegado al final de la clase</p><p className="mt-2 text-sm text-slate-600">Has completado el recorrido de aprendizaje. La evaluación final y el progreso persistente se incorporarán después.</p></div>}

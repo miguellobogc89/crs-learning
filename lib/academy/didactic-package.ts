@@ -1,4 +1,5 @@
 // lib/academy/didactic-package.ts
+import {validateInteraction, type InteractionData} from "./interaction-schema";
 export const DIDACTIC_PACKAGE_VERSION = 1;
 export const DIDACTIC_PHASES = ["introduction", "development", "assessment", "reflection"] as const;
 export type DidacticPhase = typeof DIDACTIC_PHASES[number];
@@ -21,7 +22,7 @@ export type DidacticScreen = {
   id: string; phase: DidacticPhase; type: DidacticScreenType; title: string; subtitle: string | null;
   visual: { layout: DidacticVisualLayout; items: { title: string; description: string }[] };
   teacher: { explanation: string; transition: string | null };
-  activity: DidacticActivity | null; learningGoal?: string; estimatedMinutes?: number; teachingStrategy?: string;
+  activity: DidacticActivity | null; interaction?: InteractionData | null; learningGoal?: string; estimatedMinutes?: number; teachingStrategy?: string;
 };
 export type DidacticSource = { title: string; author: string | null; url: string | null; relevance: string; verificationStatus: "pending" | "verified" };
 export type DidacticPackage = {
@@ -123,6 +124,7 @@ export function validateDidacticScreen(v: unknown): v is DidacticScreen {
   if (!oneOf(v.visual.layout, LAYOUTS) || !Array.isArray(v.visual.items) || v.visual.items.length < 1 || v.visual.items.length > 6 ||
     !v.visual.items.every((i: unknown) => obj(i) && str(i.title) && str(i.description))) return false;
   if (!str(v.teacher.explanation) || !nullable(v.teacher.transition) || (v.activity !== null && !validActivity(v.activity))) return false;
+  if (v.interaction !== undefined && v.interaction !== null && !validateInteraction(v.interaction)) return false;
   if (v.learningGoal !== undefined && !str(v.learningGoal)) return false;
   if (v.teachingStrategy !== undefined && !str(v.teachingStrategy)) return false;
   if (v.estimatedMinutes !== undefined && (typeof v.estimatedMinutes !== "number" || !Number.isFinite(v.estimatedMinutes) || v.estimatedMinutes <= 0)) return false;
@@ -135,7 +137,7 @@ export function validateDidacticPackage(v: unknown): v is DidacticPackage {
   const screens = v.screens as DidacticScreen[];
   if (new Set(screens.map(s => s.id)).size !== screens.length) return false;
   if (screens.some((s, i) => i > 0 && DIDACTIC_PHASES.indexOf(s.phase) < DIDACTIC_PHASES.indexOf(screens[i - 1].phase))) return false;
-  if (!DIDACTIC_PHASES.every(p => screens.some(s => s.phase === p)) || !screens.some(s => s.phase === "assessment" && s.activity)) return false;
+  if (!DIDACTIC_PHASES.every(p => screens.some(s => s.phase === p)) || !screens.some(s => s.phase === "assessment" && (s.activity || s.interaction))) return false;
   if (!v.sources.every((s: unknown) => obj(s) && str(s.title) && nullable(s.author) && nullable(s.url) && str(s.relevance) && (s.verificationStatus === "pending" || s.verificationStatus === "verified"))) return false;
   if (v.pedagogicalApproach !== undefined && !str(v.pedagogicalApproach)) return false;
   if (v.prerequisites !== undefined && !strings(v.prerequisites)) return false;
