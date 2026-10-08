@@ -1,0 +1,12 @@
+'use client';
+// components/academy/learning-room/interactions/match-pairs.tsx
+import {useState,type DragEvent} from 'react';
+import {card,type InteractionProps} from './types';
+export function MatchPairs({data,onComplete}:InteractionProps){
+ const items=data.items??[];const left=items.filter(x=>x.matchId);const right=items.filter(x=>!x.matchId);
+ const [selected,setSelected]=useState<string|null>(null);const [pairs,setPairs]=useState<Record<string,string>>({});const [checked,setChecked]=useState(false);
+ function assign(leftId:string,rightId:string){if(checked||!left.some(x=>x.id===leftId)||!right.some(x=>x.id===rightId))return;setPairs(p=>({...Object.fromEntries(Object.entries(p).filter(([k,v])=>k!==leftId&&v!==rightId)),[leftId]:rightId}));setSelected(null);}
+ function drop(e:DragEvent,rightId:string){e.preventDefault();assign(e.dataTransfer.getData('text/plain')||selected||'',rightId);}
+ function verify(){if(Object.keys(pairs).length!==left.length)return;setChecked(true);const hits=left.filter(x=>pairs[x.id]===x.matchId).length;onComplete({correct:hits===left.length,score:Math.round(hits/Math.max(1,left.length)*100)});}
+ return <div><p className="mb-4 text-sm text-slate-600">{data.instruction}</p><p className="mb-4 text-xs text-slate-500">Arrastra desde la izquierda o selecciona una tarjeta y después su pareja.</p><div className="grid grid-cols-2 gap-4"><div className="space-y-3">{left.map(x=><button type="button" draggable={!checked} onDragStart={e=>e.dataTransfer.setData('text/plain',x.id)} onClick={()=>setSelected(x.id)} key={x.id} className={`${card} w-full text-left text-sm ${selected===x.id?'ring-2 ring-violet-500':''}`}>{x.label}</button>)}</div><div className="space-y-3">{right.map(x=><button type="button" key={x.id} onDragOver={e=>e.preventDefault()} onDrop={e=>drop(e,x.id)} onClick={()=>selected&&assign(selected,x.id)} className={`${card} w-full text-left text-sm`}><span>{x.label}</span><span className="mt-2 block text-xs text-violet-700">{left.find(l=>pairs[l.id]===x.id)?.label??'Suelta aquí su pareja'}</span></button>)}</div></div>{!checked?<button type="button" disabled={Object.keys(pairs).length!==left.length} onClick={verify} className="mt-5 rounded-xl bg-[#7566B8] px-5 py-3 text-sm font-semibold text-white disabled:opacity-40">Comprobar parejas</button>:<div className="mt-4 rounded-xl bg-[#F2F0FA] p-4 text-sm">{left.filter(x=>pairs[x.id]===x.matchId).length} de {left.length} parejas correctas. {data.debrief}</div>}</div>;
+}
