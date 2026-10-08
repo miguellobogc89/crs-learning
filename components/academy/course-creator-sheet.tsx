@@ -16,6 +16,9 @@ import { CourseOutlineEditor } from "@/components/academy/course-generation/cour
 import { CourseBasicInformation } from "@/components/academy/right-panel-management/course-basic-information";
 import { CourseConfiguration } from "@/components/academy/right-panel-management/course-configuration";
 import { CourseManagementHeader } from "@/components/academy/right-panel-management/course-management-header";
+
+import { CourseContentProgress } from "@/components/academy/course-generation/course-content-progress";
+
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -38,7 +41,8 @@ export function CourseCreatorSheet({
   onOpenChange: (open: boolean) => void;
   onCourseCreated: (course: AcademyAdminCourse) => void;
 }) {
-  const [view, setView] = useState<"form" | "outline">("form");
+  
+  const [view, setView] = useState<"form" | "outline" | "generation">("form");
   const [courseId, setCourseId] = useState<string | null>(null);
   const [outline, setOutline] = useState<CourseOutline | null>(null);
   const [title, setTitle] = useState("");
@@ -191,79 +195,86 @@ export function CourseCreatorSheet({
       open={open}
       onOpenChange={onOpenChange}
     >
+
       <SheetContent
         side="right"
         className="!w-[46vw] !max-w-[760px] min-w-[680px] gap-0 border-l border-slate-200 !bg-white p-0 shadow-2xl [&>button]:hidden"
       >
-        {view === "outline" && courseId && outline ? (
+        {view === "generation" && courseId ? (
+          <CourseContentProgress
+            courseId={courseId}
+            onClose={() => onOpenChange(false)}
+            onComplete={() => onOpenChange(false)}
+          />
+        ) : view === "outline" && courseId && outline ? (
           <CourseOutlineEditor
             courseId={courseId}
             initialOutline={outline}
             onBack={() => setView("form")}
             onSaved={setOutline}
+            onApproved={() => setView("generation")}
           />
         ) : (
           <>
-        <CourseManagementHeader mode="create"  />
+            <CourseManagementHeader mode="create" />
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-white">
-          <CourseBasicInformation
-            title={title}
-            description={objective}
-            imageUrl={thumbnailPreviewUrl}
-            isGeneratingImage={isGeneratingImage}
-            isUploadingImage={isUploadingImage}
-            onTitleChange={setTitle}
-            onDescriptionChange={setObjective}
-            onGenerateImage={generateImage}
-            onUploadImage={uploadImage}
-          />
+            <div className="min-h-0 flex-1 overflow-y-auto bg-white">
+              <CourseBasicInformation
+                title={title}
+                description={objective}
+                imageUrl={thumbnailPreviewUrl}
+                isGeneratingImage={isGeneratingImage}
+                isUploadingImage={isUploadingImage}
+                onTitleChange={setTitle}
+                onDescriptionChange={setObjective}
+                onGenerateImage={generateImage}
+                onUploadImage={uploadImage}
+              />
 
-          <CourseConfiguration
-            trainingType={trainingType}
-            level={level}
-            difficulty={difficulty}
-            onTrainingTypeChange={setTrainingType}
-            onLevelChange={setLevel}
-            onDifficultyChange={setDifficulty}
-          />
+              <CourseConfiguration
+                trainingType={trainingType}
+                level={level}
+                difficulty={difficulty}
+                onTrainingTypeChange={setTrainingType}
+                onLevelChange={setLevel}
+                onDifficultyChange={setDifficulty}
+              />
+            </div>
 
+            <SheetFooter className="shrink-0 flex-row items-center justify-between border-t border-[#EEF1F6] bg-white px-5 py-4">
+              <SheetClose asChild>
+                <Button
+                  variant="outline"
+                  size="lg"
+                >
+                  Cancelar
+                </Button>
+              </SheetClose>
 
-        </div>
+              <Button
+                type="button"
+                size="lg"
+                disabled={
+                  isSaving ||
+                  isGeneratingImage ||
+                  isUploadingImage
+                }
+                onClick={saveDraft}
+                className="gap-2 bg-[#315BFF] px-5 text-white hover:bg-[#244BE8]"
+              >
+                {isSaving
+                  ? "Generando propuesta..."
+                  : "Generar propuesta"}
 
-        <SheetFooter className="shrink-0 flex-row items-center justify-between border-t border-[#EEF1F6] bg-white px-5 py-4">
-          <SheetClose asChild>
-            <Button
-              variant="outline"
-              size="lg"
-            >
-              Cancelar
-            </Button>
-          </SheetClose>
-
-          <Button
-            type="button"
-            size="lg"
-            disabled={
-              isSaving ||
-              isGeneratingImage ||
-              isUploadingImage
-            }
-            onClick={saveDraft}
-            className="gap-2 bg-[#315BFF] px-5 text-white hover:bg-[#244BE8]"
-          >
-            {isSaving
-              ? "Generando propuesta..."
-              : "Generar propuesta"}
-
-            {!isSaving ? (
-              <ArrowRight className="h-4 w-4" />
-            ) : null}
-          </Button>
-        </SheetFooter>
+                {!isSaving ? (
+                  <ArrowRight className="h-4 w-4" />
+                ) : null}
+              </Button>
+            </SheetFooter>
           </>
         )}
       </SheetContent>
+
     </Sheet>
   );
 }
