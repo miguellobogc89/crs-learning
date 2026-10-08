@@ -11,6 +11,8 @@ import {
   uploadCourseImageAction,
 } from "@/app/actions/course";
 import { createCourseWithOutlineAction } from "@/app/actions/course-outline";
+import type { CourseOutline } from "@/academy/generation/course-outline";
+import { CourseOutlineEditor } from "@/components/academy/course-generation/course-outline-editor";
 import { CourseBasicInformation } from "@/components/academy/right-panel-management/course-basic-information";
 import { CourseConfiguration } from "@/components/academy/right-panel-management/course-configuration";
 import { CourseManagementHeader } from "@/components/academy/right-panel-management/course-management-header";
@@ -36,6 +38,9 @@ export function CourseCreatorSheet({
   onOpenChange: (open: boolean) => void;
   onCourseCreated: (course: AcademyAdminCourse) => void;
 }) {
+  const [view, setView] = useState<"form" | "outline">("form");
+  const [courseId, setCourseId] = useState<string | null>(null);
+  const [outline, setOutline] = useState<CourseOutline | null>(null);
   const [title, setTitle] = useState("");
   const [objective, setObjective] = useState("");
 
@@ -64,6 +69,9 @@ export function CourseCreatorSheet({
 
   useEffect(() => {
     if (!open) {
+      setView("form");
+      setCourseId(null);
+      setOutline(null);
       setTitle("");
       setObjective("");
       setTrainingType("skills");
@@ -156,6 +164,7 @@ export function CourseCreatorSheet({
         level,
         difficulty,
         thumbnailUrl: thumbnailBlobUrl,
+        courseId: courseId ?? undefined,
       });
 
       if (!result.ok) {
@@ -164,12 +173,16 @@ export function CourseCreatorSheet({
       }
 
       onCourseCreated(result.course);
+      setCourseId(result.course.id);
+      if (result.outline) {
+        setOutline(result.outline);
+        setView("outline");
+      }
       if (result.warning) {
         toast.warning(result.warning);
       } else {
         toast.success("Curso creado con propuesta de módulos.");
       }
-      onOpenChange(false);
     });
   }
 
@@ -182,6 +195,15 @@ export function CourseCreatorSheet({
         side="right"
         className="!w-[46vw] !max-w-[760px] min-w-[680px] gap-0 border-l border-slate-200 !bg-white p-0 shadow-2xl [&>button]:hidden"
       >
+        {view === "outline" && courseId && outline ? (
+          <CourseOutlineEditor
+            courseId={courseId}
+            initialOutline={outline}
+            onBack={() => setView("form")}
+            onSaved={setOutline}
+          />
+        ) : (
+          <>
         <CourseManagementHeader mode="create"  />
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-white">
@@ -231,14 +253,16 @@ export function CourseCreatorSheet({
             className="gap-2 bg-[#315BFF] px-5 text-white hover:bg-[#244BE8]"
           >
             {isSaving
-              ? "Creando..."
-              : "Crear curso"}
+              ? "Generando propuesta..."
+              : "Generar propuesta"}
 
             {!isSaving ? (
               <ArrowRight className="h-4 w-4" />
             ) : null}
           </Button>
         </SheetFooter>
+          </>
+        )}
       </SheetContent>
     </Sheet>
   );

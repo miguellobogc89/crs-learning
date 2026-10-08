@@ -4,7 +4,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import type { CourseOutline } from "@/lib/academy/generation/course-outline";
+import type { CourseOutline } from "@/academy/generation/course-outline";
 
 export async function saveCourseOutlineAction(courseId: string, outline: CourseOutline) {
   const session = await auth();

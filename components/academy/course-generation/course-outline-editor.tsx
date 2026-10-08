@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { saveCourseOutlineAction } from "@/app/actions/course-outline-review";
-import type { CourseOutline } from "@/lib/academy/generation/course-outline";
+import type { CourseOutline } from "@/academy/generation/course-outline";
 
 type Module = CourseOutline["modules"][number];
 type Props = {
@@ -53,7 +53,10 @@ export function CourseOutlineEditor({ courseId, initialOutline, onBack, onSaved,
   function save() {
     startSaving(async () => {
       const result = await saveCourseOutlineAction(courseId, outline);
-      if (!result.ok) return toast.error(result.error);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
       setDirty(false);
       toast.success("Propuesta guardada. Pendiente de aprobación.");
       onSaved?.(outline);
@@ -119,7 +122,7 @@ export function CourseOutlineEditor({ courseId, initialOutline, onBack, onSaved,
         {onRegenerate && <Button type="button" variant="ghost" onClick={regenerate} className="w-full"><RotateCcw className="mr-2 h-4 w-4" /> Regenerar propuesta</Button>}
       </div>
       <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-slate-100 px-5 py-4">
-        {onBack ? <Button type="button" variant="outline" onClick={back}><ArrowLeft className="mr-2 h-4 w-4" /> Atrás</Button> : <span />}
+        {onBack ? <Button type="button" variant="outline" disabled={saving} onClick={back}><ArrowLeft className="mr-2 h-4 w-4" /> Atrás</Button> : <span />}
         <Button type="button" disabled={saving} onClick={save} className="bg-[#315BFF] text-white hover:bg-[#244BE8]"><Save className="mr-2 h-4 w-4" /> {saving ? "Guardando..." : "Guardar propuesta"}</Button>
       </footer>
     </div>

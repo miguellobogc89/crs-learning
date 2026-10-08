@@ -1,14 +1,24 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createCourseDraftAction } from "@/app/actions/course";
+import { createCourseDraftAction, updateCourseAction } from "@/app/actions/course";
 import { generateCourseOutline, type CourseOutlineInput } from "@/academy/generation/course-outline";
 import { prisma } from "@/lib/prisma";
 
 export async function createCourseWithOutlineAction(
-  input: CourseOutlineInput & { thumbnailUrl?: string | null },
+  input: CourseOutlineInput & { thumbnailUrl?: string | null; courseId?: string },
 ) {
-  const result = await createCourseDraftAction(input);
+  const result = input.courseId
+    ? await updateCourseAction({
+        courseId: input.courseId,
+        title: input.title,
+        description: input.objective,
+        trainingType: input.trainingType,
+        level: input.level,
+        difficulty: input.difficulty,
+        thumbnailUrl: input.thumbnailUrl,
+      })
+    : await createCourseDraftAction(input);
   if (!result.ok) return result;
 
   try {
@@ -34,11 +44,12 @@ export async function createCourseWithOutlineAction(
       },
     });
     revalidatePath("/courses");
-    return { ...result, warning: null };
+    return { ...result, outline, warning: null };
   } catch (error) {
     console.error("createCourseWithOutlineAction", error);
     return {
       ...result,
+      outline: null,
       warning: "Borrador creado, pero no se ha podido generar la propuesta de módulos.",
     };
   }
