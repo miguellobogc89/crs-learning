@@ -87,7 +87,7 @@ function normalizeActivity(raw: unknown, plan: ScreenPlan): DidacticActivity | n
   const d = record(raw);
   if (!d) return null; // Nunca fabricar una respuesta correcta ni opciones.
   const base = {
-    kind: plan.interaction,
+  kind: plan.interaction as "quiz" | "sorting" | "decision",
     instruction: nonempty(d.instruction, plan.learningGoal),
     expectedLearning: nonempty(d.expectedLearning, plan.learningGoal),
     assessmentCriteria: strings(d.assessmentCriteria) && d.assessmentCriteria.length ? d.assessmentCriteria : ["Selecciona una respuesta y razona su efecto."],
