@@ -1,905 +1,146 @@
-
- // lib/academy/didactic-generator.ts
-
+// lib/academy/didactic-generator.ts
 import OpenAI from "openai";
-
 import {
-  DIDACTIC_PHASES,
-  validateDidacticPackage,
-  validateDidacticScreen,
-  type DidacticPackage,
-  type DidacticPhase,
-  type DidacticScreen,
-  type DidacticScreenType,
+  DIDACTIC_PHASES, SCREEN_TYPES, validateDidacticPackage, validateDidacticScreen,
+  type DidacticPackage, type DidacticScreen, type DidacticPhase, type DidacticScreenType,
+  type DidacticActivity,
 } from "@/lib/academy/didactic-package";
 
-type GenerateInput = {
-  lessonId: string;
-  lessonTitle: string;
-  moduleTitle: string;
-  courseTitle: string;
-  courseDescription: string | null;
-  content: string;
-};
-
-type ScreenPlan = {
-  id: string;
-  phase: DidacticPhase;
-  type: DidacticScreenType;
-  title: string;
-  learningGoal: string;
-  teachingStrategy: string;
-  activityRequired: boolean;
-};
-
-type LessonPlan = {
-  objective: string;
-  pedagogicalApproach: string;
-  keyConcepts: string[];
-  screens: ScreenPlan[];
-};
-
+type GenerateInput = { lessonId: string; lessonTitle: string; moduleTitle: string; courseTitle: string; courseDescription: string | null; content: string };
+type ScreenPlan = { id: string; phase: DidacticPhase; type: DidacticScreenType; title: string; learningGoal: string; teachingStrategy: string; activityRequired: boolean; interaction: "none" | "quiz" | "sorting" | "decision" };
+type LessonPlan = { objective: string; pedagogicalApproach: string; keyConcepts: string[]; screens: ScreenPlan[] };
 const MODEL = "gpt-4o";
-const MIN_SCREENS = 5;
-const MAX_SCREENS = 14;
-const PLAN_ATTEMPTS = 3;
-const SCREEN_ATTEMPTS = 3;
-const CONCURRENCY = 3;
-
-const TYPES: DidacticScreenType[] = [
-  "concept",
-  "comparison",
-  "case",
-  "process",
-  "exercise",
-  "summary",
-  "decision",
-  "simulation",
-  "analysis",
-  "demonstration",
-];
-
-function record(
-  value: unknown,
-): Record<string, unknown> | null {
-  if (
-    value === null ||
-    typeof value !== "object" ||
-    Array.isArray(value)
-  ) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
+const record = (v: unknown): Record<string, unknown> | null => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : null;
+const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === "string");
+const string = (v: unknown, fallback = "") => typeof v === "string" ? v : fallback;
+const nonempty = (v: unknown, fallback: string) => typeof v === "string" && v.trim() ? v : fallback;
+const PLAN_PROMPT = `Eres diseñador instruccional de formación empresarial. Diseña SOLO el guion JSON, sin texto fuera.
+Devuelve {"objective":"...","pedagogicalApproach":"...","keyConcepts":["..."],"screens":[{"id":"intro-01","phase":"introduction","type":"case","title":"...","learningGoal":"...","teachingStrategy":"...","activityRequired":false,"interaction":"none"}]}.
+Diseña entre 8 y 12 pantallas cortas, máximo 14; fases introduction, development, assessment, reflection en orden, todas presentes. Debe existir una actividad en assessment.
+La experiencia debe alternar exploración visual y microejercicios. Cada 2 o 3 pantallas aproximadamente, un ejercicio quiz, sorting o decision, según la materia. Evita ejercicios de redacción: se reservan para evaluación final futura.
+Usa interaction: none | quiz | sorting | decision. Al menos dos actividades interactivas y preferiblemente dos modalidades distintas. Si interaction != none, activityRequired=true. No pongas actividades en todas las pantallas. Tipos de pantalla permitidos: ${SCREEN_TYPES.join(", ")}.
+No inventes datos, referencias ni afirmaciones pseudocientíficas. La secuencia debe ser específica al contenido y no seguir siempre la misma plantilla.`;
+const SCREEN_PROMPT = `Desarrolla UNA pantalla del guion como JSON, sin markdown ni texto fuera.
+Devuelve {"subtitle":null,"visual":{"layout":"explore","items":[{"title":"...","description":"..."}]},"teacher":{"explanation":"...","transition":null},"activity":null,"estimatedMinutes":2}.
+Layouts permitidos: cards, steps, columns, statement, scenario, timeline, diagram, explore. Preferir explore para tarjetas verticales interactivas; 2-5 tarjetas con textos muy breves (title <= 50 caracteres, description <= 190). En cualquier layout, 1-6 items. Evita párrafos largos.
+Profesor: explicación breve (idealmente <= 350 caracteres), útil, sin repetir las tarjetas. Transición breve o null.
+Si la pantalla requiere actividad, crea activity con TODOS estos campos: kind, instruction, scenario, expectedLearning, assessmentCriteria, hints, minimumScore, maxAttempts, options, debrief. Usa minimumScore=70, maxAttempts=3, assessmentCriteria y hints arrays no vacíos.
+Para quiz o decision: kind igual a interaction. options entre 2 y 4; cada una {"id":"a","label":"...","consequence":"...","feedback":"...","isPreferred":false}. EXACTAMENTE UNA alternativa isPreferred=true; distractores plausibles; feedback específico y pedagógico.
+Para sorting: kind="sorting", options=[], groups=[{"id":"g1","label":"..."},{"id":"g2","label":"..."}], sortItems=[{"id":"i1","label":"...","groupId":"g1","feedback":"..."}]. Usa 2-3 grupos y 3-6 elementos; clasificaciones objetivas y no ambiguas.
+Si interaction="none", activity=null. No inventes una actividad escrita. El contenido debe ser específico a la lección, no genérico.
+No devuelvas id, phase, type, title ni learningGoal. Los añade el servidor.`;
+async function ask(client: OpenAI, messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]) {
+  const response = await client.chat.completions.create({ model: MODEL, temperature: 0.25, response_format: { type: "json_object" }, messages });
+  const raw = response.choices[0]?.message?.content;
+  if (!raw) throw new Error("La IA devolvió una respuesta vacía.");
+  return JSON.parse(raw) as unknown;
 }
-
-function stringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) &&
-    value.every((item) => typeof item === "string")
-  );
-}
-
-
-function validatePlan(value: unknown): value is LessonPlan {
-  const data = record(value);
-
-  if (!data) {
-    return false;
-  }
-
-  if (
-    typeof data.objective !== "string" ||
-    typeof data.pedagogicalApproach !== "string" ||
-    !stringArray(data.keyConcepts) ||
-    !Array.isArray(data.screens)
-  ) {
-    return false;
-  }
-
-  const screens: unknown[] = data.screens;
-
-  if (
-    screens.length < MIN_SCREENS ||
-    screens.length > MAX_SCREENS
-  ) {
-    return false;
-  }
-
+function validPlan(value: unknown): value is LessonPlan {
+  const d = record(value);
+  if (!d || typeof d.objective !== "string" || typeof d.pedagogicalApproach !== "string" || !strings(d.keyConcepts) || !Array.isArray(d.screens)) return false;
+  const screens: unknown[] = d.screens;
+  if (screens.length < 5 || screens.length > 14) return false;
+  let last = -1;
   const ids = new Set<string>();
-  let previousPhase = -1;
-  let assessmentActivity = false;
-
   for (const raw of screens) {
-    const screen = record(raw);
-
-    if (
-      !screen ||
-      typeof screen.id !== "string" ||
-      !screen.id.trim() ||
-      ids.has(screen.id) ||
-      !DIDACTIC_PHASES.includes(
-        screen.phase as DidacticPhase,
-      ) ||
-      !TYPES.includes(screen.type as DidacticScreenType) ||
-      typeof screen.title !== "string" ||
-      typeof screen.learningGoal !== "string" ||
-      typeof screen.teachingStrategy !== "string" ||
-      typeof screen.activityRequired !== "boolean"
-    ) {
-      return false;
-    }
-
-    ids.add(screen.id);
-
-    const phaseIndex = DIDACTIC_PHASES.indexOf(
-      screen.phase as DidacticPhase,
-    );
-
-    if (phaseIndex < previousPhase) {
-      return false;
-    }
-
-    previousPhase = phaseIndex;
-
-    if (
-      screen.phase === "assessment" &&
-      screen.activityRequired
-    ) {
-      assessmentActivity = true;
-    }
+    const s = record(raw);
+    if (!s || typeof s.id !== "string" || !s.id || ids.has(s.id) || !DIDACTIC_PHASES.includes(s.phase as DidacticPhase) ||
+      !SCREEN_TYPES.includes(s.type as DidacticScreenType) || typeof s.title !== "string" || typeof s.learningGoal !== "string" ||
+      typeof s.teachingStrategy !== "string" || typeof s.activityRequired !== "boolean" ||
+      !["none", "quiz", "sorting", "decision"].includes(String(s.interaction))) return false;
+    if (s.interaction !== "none" && !s.activityRequired) return false;
+    ids.add(s.id);
+    const current = DIDACTIC_PHASES.indexOf(s.phase as DidacticPhase);
+    if (current < last) return false;
+    last = current;
   }
-
-  return (
-    assessmentActivity &&
-    DIDACTIC_PHASES.every((phase) =>
-      screens.some((raw) => record(raw)?.phase === phase),
-    )
-  );
+  return DIDACTIC_PHASES.every(p => screens.some(s => record(s)?.phase === p)) &&
+    screens.some(s => record(s)?.phase === "assessment" && record(s)?.activityRequired === true) &&
+    screens.filter(s => record(s)?.interaction !== "none").length >= 2;
 }
-
-
-
-function diagnosePlan(value: unknown): string[] {
-  const data = record(value);
-
-  if (!data) {
-    return ["El guion no es un objeto JSON."];
-  }
-
-  const issues: string[] = [];
-
-  if (!Array.isArray(data.screens)) {
-    issues.push("Falta el array screens.");
-    return issues;
-  }
-
-  const screens: unknown[] = Array.isArray(data.screens)
-  ? data.screens
-  : [];
-
-  if (
-    screens.length < MIN_SCREENS ||
-    screens.length > MAX_SCREENS
-  ) {
-    issues.push(
-      `Hay ${screens.length} pantallas. ` +
-      `Se admiten entre ${MIN_SCREENS} y ${MAX_SCREENS}.`,
-    );
-  }
-
-  if (typeof data.objective !== "string") {
-    issues.push("Falta objective.");
-  }
-
-  if (typeof data.pedagogicalApproach !== "string") {
-    issues.push("Falta pedagogicalApproach.");
-  }
-
-  if (!stringArray(data.keyConcepts)) {
-    issues.push("keyConcepts debe ser un array de strings.");
-  }
-
-  const ids = new Set<string>();
-  let previousPhase = -1;
-
-  screens.forEach((raw, index) => {
-    const screen = record(raw);
-    const label = `Pantalla ${index + 1}`;
-
-    if (!screen) {
-      issues.push(`${label}: objeto incorrecto.`);
-      return;
-    }
-
-    if (
-      typeof screen.id !== "string" ||
-      !screen.id.trim() ||
-      ids.has(screen.id)
-    ) {
-      issues.push(`${label}: ID ausente o duplicado.`);
-    } else {
-      ids.add(screen.id);
-    }
-
-    const phaseIndex = DIDACTIC_PHASES.indexOf(
-      screen.phase as DidacticPhase,
-    );
-
-    if (phaseIndex === -1) {
-      issues.push(`${label}: fase incorrecta.`);
-    } else {
-      if (phaseIndex < previousPhase) {
-        issues.push(`${label}: fases desordenadas.`);
-      }
-
-      previousPhase = phaseIndex;
-    }
-
-    if (!TYPES.includes(screen.type as DidacticScreenType)) {
-      issues.push(`${label}: tipo incorrecto.`);
-    }
-
-    if (typeof screen.title !== "string") {
-      issues.push(`${label}: falta title.`);
-    }
-
-    if (typeof screen.learningGoal !== "string") {
-      issues.push(`${label}: falta learningGoal.`);
-    }
-
-    if (typeof screen.teachingStrategy !== "string") {
-      issues.push(`${label}: falta teachingStrategy.`);
-    }
-
-    if (typeof screen.activityRequired !== "boolean") {
-      issues.push(`${label}: falta activityRequired.`);
-    }
-  });
-
-  for (const phase of DIDACTIC_PHASES) {
-    if (
-      !screens.some(
-        (raw) => record(raw)?.phase === phase,
-      )
-    ) {
-      issues.push(`Falta la fase ${phase}.`);
-    }
-  }
-
-  if (
-    !screens.some((raw) => {
-      const screen = record(raw);
-
-      return (
-        screen?.phase === "assessment" &&
-        screen.activityRequired === true
-      );
-    })
-  ) {
-    issues.push(
-      "Falta una actividad obligatoria en assessment.",
-    );
-  }
-
-  return issues.length
-    ? issues
-    : ["El guion contiene campos no válidos."];
-}
-
-
-const PLAN_PROMPT = `
-Eres un diseñador instruccional especializado
-en formación empresarial y aprendizaje activo.
-
-PRIMERA ETAPA: DISEÑA EL GUION PEDAGÓGICO.
-
-No desarrolles todavía las explicaciones completas.
-No escribas actividades completas ni contenido visual.
-
-Diseña una secuencia de entre 5 y 9 pantallas
-como punto de partida. Puedes usar hasta 14
-si el contenido realmente lo requiere.
-
-La cantidad debe depender de la complejidad,
-no de una plantilla fija.
-
-Incluye, en orden, las cuatro fases:
-introduction, development, assessment, reflection.
-
-Cada fase debe tener al menos una pantalla.
-En assessment debe haber al menos una actividad.
-
-El alumno debe aprender mediante una combinación
-adecuada de explicación, demostración, aplicación,
-decisiones y reflexión.
-
-Evita empezar siempre con una definición.
-Evita convertir todas las pantallas en tarjetas.
-
-Elige estrategias apropiadas a la materia.
-Una clase de negociación no debe parecerse
-mecánicamente a una de lenguaje corporal.
-
-Cuando proceda, integra marcos profesionales
-o científicos conocidos, con sus limitaciones.
-No inventes estudios, cifras ni referencias.
-
-Tipos permitidos:
-concept, comparison, case, process, exercise,
-summary, decision, simulation, analysis,
-demonstration.
-
-Devuelve SOLO JSON con esta estructura:
-
-{
-  "objective": "Objetivo observable",
-  "pedagogicalApproach": "Por qué esta secuencia enseña",
-  "keyConcepts": ["Concepto 1"],
-  "screens": [
-    {
-      "id": "intro-01",
-      "phase": "introduction",
-      "type": "case",
-      "title": "Título",
-      "learningGoal": "Aprendizaje específico",
-      "teachingStrategy": "Estrategia pedagógica",
-      "activityRequired": false
-    }
-  ]
-}
-
-No incluyas texto explicativo fuera del JSON.
-`.trim();
-
-const SCREEN_PROMPT = `
-Eres un profesor experto y diseñador instruccional.
-
-SEGUNDA ETAPA: DESARROLLA UNA ÚNICA PANTALLA
-de un guion pedagógico previamente aprobado.
-
-Debes respetar el ID, la fase, el tipo,
-el título y el objetivo de esa pantalla.
-
-No crees pantallas adicionales.
-No modifiques el guion.
-
-La explicación del profesor debe aportar
-conocimiento sustantivo, razonamiento,
-ejemplos y matices. No repitas las tarjetas.
-
-Adapta el contenido a la materia.
-Usa situaciones profesionales plausibles.
-Distingue entre hechos, modelos y ejemplos.
-No inventes estudios, fuentes o cifras.
-
-En lenguaje corporal, evita afirmar que
-un gesto aislado demuestra una emoción
-o permite detectar mentiras.
-
-VISUALES
-
-Usa uno de estos layouts:
-cards, steps, columns, statement,
-scenario, timeline, diagram.
-
-Elige el más apropiado.
-visual.items debe tener entre 1 y 6 elementos.
-Cada elemento tiene title y description.
-
-Los layouts son instrucciones para el
-reproductor, no imágenes generadas.
-
-ACTIVIDADES
-
-Si activityRequired es true,
-activity debe ser un objeto completo.
-
-Si activityRequired es false,
-activity puede ser null, salvo que
-una actividad breve aporte valor.
-
-Tipos:
-open_response, decision, case_analysis,
-simulation, reflection.
-
-Toda actividad contiene:
-kind, instruction, scenario, expectedLearning,
-assessmentCriteria, hints, minimumScore,
-maxAttempts, options y debrief.
-
-minimumScore: 70.
-maxAttempts: 3.
-
-Si kind es decision, incluye 2 a 4 opciones.
-Cada opción debe tener:
-id, label, consequence, feedback, isPreferred.
-
-Debe existir una opción preferible.
-Las alternativas deben ser plausibles.
-Las consecuencias deben enseñar.
-
-Si no es decision, utiliza options: [].
-
-No supongas que la actividad ya está
-evaluada por una IA. Diseña los criterios
-para una futura evaluación.
-
-Devuelve exclusivamente JSON:
-
-{
-  "subtitle": null,
-  "visual": {
-    "layout": "scenario",
-    "items": [
-      {
-        "title": "Situación",
-        "description": "Contenido concreto"
-      }
-    ]
-  },
-  "teacher": {
-    "explanation": "Explicación completa",
-    "transition": "Conexión con la siguiente pantalla"
-  },
-  "activity": null,
-  "estimatedMinutes": 3
-}
-
-No devuelvas id, phase, type, title,
-learningGoal ni teachingStrategy.
-Los añade el servidor desde el guion.
-
-No generes HTML, JSX ni Markdown estructural.
-`.trim();
-
-async function requestJson(
-  client: OpenAI,
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-): Promise<unknown> {
-  const result = await client.chat.completions.create({
-    model: MODEL,
-    temperature: 0.25,
-    response_format: {
-      type: "json_object",
-    },
-    messages,
-  });
-
-  const raw = result.choices[0]?.message?.content;
-
-  if (!raw) {
-    throw new Error("La IA ha devuelto una respuesta vacía.");
-  }
-
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    throw new Error("La IA ha devuelto JSON incorrecto.");
-  }
-}
-
-async function generatePlan(
-  client: OpenAI,
-  input: GenerateInput,
-): Promise<LessonPlan> {
+async function generatePlan(client: OpenAI, input: GenerateInput): Promise<LessonPlan> {
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    {
-      role: "system",
-      content: PLAN_PROMPT,
-    },
-    {
-      role: "user",
-      content: JSON.stringify({
-        course: input.courseTitle,
-        courseDescription: input.courseDescription,
-        module: input.moduleTitle,
-        lesson: input.lessonTitle,
-        content: input.content,
-      }),
-    },
+    { role: "system", content: PLAN_PROMPT }, { role: "user", content: JSON.stringify(input) },
   ];
-
-  let lastIssues: string[] = [];
-
-  for (let attempt = 1; attempt <= PLAN_ATTEMPTS; attempt++) {
-    let candidate: unknown;
-
-    try {
-      candidate = await requestJson(client, messages);
-    } catch (error) {
-      lastIssues = [
-        error instanceof Error
-          ? error.message
-          : "Error desconocido al generar el guion.",
-      ];
-      continue;
-    }
-
-    if (validatePlan(candidate)) {
-      console.info(
-        `[Academy] Guion válido: ${candidate.screens.length} pantallas.`,
-      );
-      return candidate;
-    }
-
-    lastIssues = diagnosePlan(candidate);
-
-    console.warn(
-      `[Academy] Guion ${attempt}/${PLAN_ATTEMPTS}:`,
-      lastIssues,
-    );
-
-    messages.push({
-      role: "assistant",
-      content: JSON.stringify(candidate),
-    });
-
-    messages.push({
-      role: "user",
-      content: [
-        "Corrige únicamente la estructura del guion.",
-        "Conserva su contenido pedagógico.",
-        "Errores:",
-        ...lastIssues.map((issue) => `- ${issue}`),
-        "Devuelve el JSON completo corregido.",
-      ].join("\n"),
-    });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const candidate = await ask(client, messages);
+    if (validPlan(candidate)) return candidate;
+    messages.push({ role: "assistant", content: JSON.stringify(candidate) });
+    messages.push({ role: "user", content: "El guion no supera la validación. Corrige: entre 5 y 14 pantallas, fases ordenadas y presentes, IDs únicos, campos completos, assessment con actividad, y al menos dos interacciones quiz/sorting/decision. Devuelve el JSON completo." });
   }
-
-  throw new Error(
-    "No se ha podido construir el guion didáctico. " +
-    (lastIssues[0] ?? "Error desconocido."),
-  );
+  throw new Error("No se ha podido generar un guion didáctico válido.");
 }
-
-function buildScreen(
-  plan: ScreenPlan,
-  generated: unknown,
-): unknown {
-  const data = record(generated);
-
-  if (!data) return null;
-
+function normalizeActivity(raw: unknown, plan: ScreenPlan): DidacticActivity | null {
+  if (plan.interaction === "none") return null;
+  const d = record(raw);
+  if (!d) return null; // Nunca fabricar una respuesta correcta ni opciones.
+  const base = {
+    kind: plan.interaction,
+    instruction: nonempty(d.instruction, plan.learningGoal),
+    expectedLearning: nonempty(d.expectedLearning, plan.learningGoal),
+    assessmentCriteria: strings(d.assessmentCriteria) && d.assessmentCriteria.length ? d.assessmentCriteria : ["Selecciona una respuesta y razona su efecto."],
+    hints: strings(d.hints) && d.hints.length ? d.hints : ["Revisa los conceptos de esta pantalla."],
+    minimumScore: 70, maxAttempts: 3,
+    scenario: typeof d.scenario === "string" ? d.scenario : null,
+    debrief: typeof d.debrief === "string" ? d.debrief : null,
+  };
+  if (plan.interaction === "sorting") {
+    const groups = Array.isArray(d.groups) ? d.groups.map(record).filter((g): g is Record<string, unknown> => !!g)
+      .map(g => ({ id: string(g.id), label: string(g.label) })) : [];
+    const sortItems = Array.isArray(d.sortItems) ? d.sortItems.map(record).filter((i): i is Record<string, unknown> => !!i)
+      .map(i => ({ id: string(i.id), label: string(i.label), groupId: string(i.groupId), feedback: string(i.feedback) })) : [];
+    return { ...base, options: [], groups, sortItems };
+  }
+  const options = Array.isArray(d.options) ? d.options.map(record).filter((o): o is Record<string, unknown> => !!o)
+    .map(o => ({ id: string(o.id), label: string(o.label), consequence: string(o.consequence), feedback: string(o.feedback), isPreferred: o.isPreferred === true })) : [];
+  return { ...base, options };
+}
+function buildScreen(plan: ScreenPlan, raw: unknown): unknown {
+  const d = record(raw);
+  if (!d) return null;
+  const teacher = record(d.teacher);
   return {
-    id: plan.id,
-    phase: plan.phase,
-    type: plan.type,
-    title: plan.title,
-    learningGoal: plan.learningGoal,
-    teachingStrategy: plan.teachingStrategy,
-    subtitle: data.subtitle,
-    visual: data.visual,
-    teacher: data.teacher,
-    activity: data.activity,
-    estimatedMinutes: data.estimatedMinutes,
+    id: plan.id, phase: plan.phase, type: plan.type, title: plan.title, learningGoal: plan.learningGoal,
+    teachingStrategy: plan.teachingStrategy, subtitle: typeof d.subtitle === "string" ? d.subtitle : null,
+    visual: d.visual,
+    teacher: teacher ? { explanation: string(teacher.explanation), transition: typeof teacher.transition === "string" ? teacher.transition : null } : null,
+    activity: normalizeActivity(d.activity, plan),
+    estimatedMinutes: typeof d.estimatedMinutes === "number" && d.estimatedMinutes > 0 ? d.estimatedMinutes : 2,
   };
 }
-
-function diagnoseScreen(
-  plan: ScreenPlan,
-  value: unknown,
-): string[] {
-  const issues: string[] = [];
-  const data = record(value);
-
-  if (!data) {
-    return ["La pantalla no es un objeto JSON."];
-  }
-
-  if (
-    data.subtitle !== null &&
-    typeof data.subtitle !== "string"
-  ) {
-    issues.push("subtitle debe ser string o null.");
-  }
-
-  const visual = record(data.visual);
-
-  if (!visual) {
-    issues.push("Falta visual.");
-  } else {
-    const layouts = [
-      "cards",
-      "steps",
-      "columns",
-      "statement",
-      "scenario",
-      "timeline",
-      "diagram",
-    ];
-
-    if (!layouts.includes(String(visual.layout))) {
-      issues.push("visual.layout no es válido.");
-    }
-
-    if (
-      !Array.isArray(visual.items) ||
-      visual.items.length < 1 ||
-      visual.items.length > 6
-    ) {
-      issues.push("visual.items debe contener de 1 a 6 elementos.");
-    } else {
-      visual.items.forEach((item, index) => {
-        const entry = record(item);
-
-        if (
-          !entry ||
-          typeof entry.title !== "string" ||
-          typeof entry.description !== "string"
-        ) {
-          issues.push(
-            `visual.items[${index}] necesita title y description.`,
-          );
-        }
-      });
-    }
-  }
-
-  const teacher = record(data.teacher);
-
-  if (
-    !teacher ||
-    typeof teacher.explanation !== "string" ||
-    (
-      teacher.transition !== null &&
-      typeof teacher.transition !== "string"
-    )
-  ) {
-    issues.push(
-      "teacher necesita explanation y transition (string o null).",
-    );
-  }
-
-  if (
-    typeof data.estimatedMinutes !== "number" ||
-    !Number.isFinite(data.estimatedMinutes) ||
-    data.estimatedMinutes <= 0
-  ) {
-    issues.push("estimatedMinutes debe ser un número positivo.");
-  }
-
-  if (plan.activityRequired && !record(data.activity)) {
-    issues.push("Esta pantalla requiere una actividad.");
-  }
-
-  if (data.activity !== null) {
-    const activity = record(data.activity);
-
-    if (!activity) {
-      issues.push("activity debe ser objeto o null.");
-    } else {
-      if (
-        typeof activity.instruction !== "string" ||
-        typeof activity.expectedLearning !== "string" ||
-        !stringArray(activity.assessmentCriteria) ||
-        activity.assessmentCriteria.length === 0 ||
-        !stringArray(activity.hints) ||
-        activity.hints.length === 0 ||
-        typeof activity.minimumScore !== "number" ||
-        activity.minimumScore < 0 ||
-        activity.minimumScore > 100 ||
-        typeof activity.maxAttempts !== "number" ||
-        !Number.isInteger(activity.maxAttempts) ||
-        activity.maxAttempts < 1
-      ) {
-        issues.push("Faltan campos obligatorios de activity.");
-      }
-
-      if (activity.kind === "decision") {
-        if (
-          !Array.isArray(activity.options) ||
-          activity.options.length < 2 ||
-          activity.options.length > 4
-        ) {
-          issues.push(
-            "Una decisión necesita entre 2 y 4 alternativas.",
-          );
-        } else if (
-          !activity.options.some(
-            (option) =>
-              record(option) && option.isPreferred === true,
-          )
-        ) {
-          issues.push(
-            "La decisión necesita una alternativa preferible.",
-          );
-        }
-      }
-    }
-  }
-
-  return issues.length
-    ? issues
-    : ["La pantalla contiene un campo no válido."];
-}
-
-async function generateScreen(
-  client: OpenAI,
-  input: GenerateInput,
-  lessonPlan: LessonPlan,
-  screenPlan: ScreenPlan,
-  index: number,
-): Promise<DidacticScreen> {
+async function generateScreen(client: OpenAI, input: GenerateInput, lesson: LessonPlan, plan: ScreenPlan, position: number): Promise<DidacticScreen> {
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    {
-      role: "system",
-      content: SCREEN_PROMPT,
-    },
-    {
-      role: "user",
-      content: JSON.stringify({
-        course: input.courseTitle,
-        lesson: input.lessonTitle,
-        originalContent: input.content,
-        lessonObjective: lessonPlan.objective,
-        keyConcepts: lessonPlan.keyConcepts,
-        completeOutline: lessonPlan.screens.map((screen) => ({
-          id: screen.id,
-          title: screen.title,
-          learningGoal: screen.learningGoal,
-        })),
-        currentScreen: screenPlan,
-        position: index + 1,
-        totalScreens: lessonPlan.screens.length,
-      }),
-    },
+    { role: "system", content: SCREEN_PROMPT },
+    { role: "user", content: JSON.stringify({ course: input.courseTitle, lesson: input.lessonTitle, originalContent: input.content,
+      lessonObjective: lesson.objective, outline: lesson.screens.map(s => ({ id: s.id, title: s.title, interaction: s.interaction })),
+      currentScreen: plan, position, total: lesson.screens.length }) },
   ];
-
-  let lastIssues: string[] = [];
-
-  for (
-    let attempt = 1;
-    attempt <= SCREEN_ATTEMPTS;
-    attempt++
-  ) {
-    let generated: unknown;
-
-    try {
-      generated = await requestJson(client, messages);
-    } catch (error) {
-      lastIssues = [
-        error instanceof Error
-          ? error.message
-          : "Error al desarrollar la pantalla.",
-      ];
-      continue;
-    }
-
-    const candidate = buildScreen(screenPlan, generated);
-
-    if (
-      validateDidacticScreen(candidate) &&
-      (!screenPlan.activityRequired ||
-        candidate.activity !== null)
-    ) {
-      return candidate;
-    }
-
-    lastIssues = diagnoseScreen(screenPlan, generated);
-
-    console.warn(
-      `[Academy] Pantalla ${screenPlan.id}, ` +
-      `intento ${attempt}/${SCREEN_ATTEMPTS}:`,
-      lastIssues,
-    );
-
-    messages.push({
-      role: "assistant",
-      content: JSON.stringify(generated),
-    });
-
-    messages.push({
-      role: "user",
-      content: [
-        "Corrige exclusivamente esta pantalla.",
-        "Mantén su contenido pedagógico.",
-        "Problemas:",
-        ...lastIssues.map((issue) => `- ${issue}`),
-        "Devuelve el JSON corregido.",
-      ].join("\n"),
-    });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const raw = await ask(client, messages);
+    const candidate = buildScreen(plan, raw);
+    if (validateDidacticScreen(candidate) && (plan.interaction === "none" || candidate.activity?.kind === plan.interaction)) return candidate;
+    console.warn(`[Academy] Pantalla ${plan.id} inválida, intento ${attempt}/3`, { interaction: plan.interaction });
+    messages.push({ role: "assistant", content: JSON.stringify(raw) });
+    messages.push({ role: "user", content: `Corrige el JSON completo. El contrato requiere visual.items válidos, teacher completo y activity con kind=${plan.interaction}. Si es quiz/decision, 2-4 options y exactamente una preferible. Si es sorting, groups (2-4) y sortItems (2-8) con groupId existente, ids únicos. Si es none, activity=null. No omitas campos.` });
   }
-
-  throw new Error(
-    `No se ha podido desarrollar "${screenPlan.title}". ` +
-    (lastIssues[0] ?? "Error de validación."),
-  );
+  throw new Error(`No se ha podido desarrollar "${plan.title}". Comprueba la actividad ${plan.interaction}.`);
 }
-
-async function generateScreens(
-  client: OpenAI,
-  input: GenerateInput,
-  plan: LessonPlan,
-): Promise<DidacticScreen[]> {
-  const results: DidacticScreen[] = [];
-
-  // Se procesan grupos pequeños para limitar
-  // las peticiones simultáneas al modelo.
-  for (
-    let start = 0;
-    start < plan.screens.length;
-    start += CONCURRENCY
-  ) {
-    const batch = plan.screens.slice(
-      start,
-      start + CONCURRENCY,
-    );
-
-    const generated = await Promise.all(
-      batch.map((screen, offset) =>
-        generateScreen(
-          client,
-          input,
-          plan,
-          screen,
-          start + offset,
-        ),
-      ),
-    );
-
-    results.push(...generated);
-
-    console.info(
-      `[Academy] Desarrolladas ${results.length}/` +
-      `${plan.screens.length} pantallas.`,
-    );
-  }
-
-  return results;
-}
-
-export async function generateDidacticPackage(
-  input: GenerateInput,
-): Promise<DidacticPackage> {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("Falta configurar OPENAI_API_KEY.");
-  }
-
-  if (!input.content.trim()) {
-    throw new Error("La lección no tiene contenido.");
-  }
-
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  // Etapa 1: estructura pedagógica.
+export async function generateDidacticPackage(input: GenerateInput): Promise<DidacticPackage> {
+  if (!process.env.OPENAI_API_KEY) throw new Error("Falta configurar OPENAI_API_KEY.");
+  if (!input.content.trim()) throw new Error("La lección no tiene contenido.");
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const plan = await generatePlan(client, input);
-
-  // Etapa 2: desarrollo de cada pantalla.
-  const screens = await generateScreens(
-    client,
-    input,
-    plan,
-  );
-
-  const didacticPackage: DidacticPackage = {
-    version: 1,
-    lessonId: input.lessonId,
-    lessonTitle: input.lessonTitle,
-    objective: plan.objective,
-    pedagogicalApproach: plan.pedagogicalApproach,
-    keyConcepts: plan.keyConcepts,
-    prerequisites: [],
-    screens,
-    sources: [],
-    generatedAt: new Date().toISOString(),
-    status: "draft",
-  };
-
-  if (!validateDidacticPackage(didacticPackage)) {
-    throw new Error(
-      "Las pantallas se han generado, pero el paquete " +
-      "final no supera la validación. " +
-      "Revisa el orden de las fases y las actividades.",
-    );
+  console.info(`[Academy] Guion válido: ${plan.screens.length} pantallas.`);
+  const screens: DidacticScreen[] = [];
+  for (let start = 0; start < plan.screens.length; start += 3) {
+    const batch = await Promise.all(plan.screens.slice(start, start + 3).map((s, i) => generateScreen(client, input, plan, s, start + i + 1)));
+    screens.push(...batch);
+    console.info(`[Academy] Desarrolladas ${screens.length}/${plan.screens.length} pantallas.`);
   }
-
-  console.info(
-    `[Academy] Clase generada correctamente: ` +
-    `${screens.length} pantallas.`,
-  );
-
-  return didacticPackage;
+  const result: DidacticPackage = { version: 1, lessonId: input.lessonId, lessonTitle: input.lessonTitle,
+    objective: plan.objective, pedagogicalApproach: plan.pedagogicalApproach, keyConcepts: plan.keyConcepts,
+    prerequisites: [], screens, sources: [], generatedAt: new Date().toISOString(), status: "draft" };
+  if (!validateDidacticPackage(result)) throw new Error("El paquete didáctico no supera la validación final.");
+  console.info(`[Academy] Clase generada correctamente: ${screens.length} pantallas.`);
+  return result;
 }
