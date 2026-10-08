@@ -7,10 +7,10 @@ import { ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 import {
-  createCourseDraftAction,
   generateCourseImageAction,
   uploadCourseImageAction,
 } from "@/app/actions/course";
+import { createCourseWithOutlineAction } from "@/app/actions/course-outline";
 import { CourseBasicInformation } from "@/components/academy/right-panel-management/course-basic-information";
 import { CourseConfiguration } from "@/components/academy/right-panel-management/course-configuration";
 import { CourseManagementHeader } from "@/components/academy/right-panel-management/course-management-header";
@@ -149,7 +149,7 @@ export function CourseCreatorSheet({
     }
 
     startSaving(async () => {
-      const result = await createCourseDraftAction({
+      const result = await createCourseWithOutlineAction({
         title: title.trim(),
         objective: objective.trim(),
         trainingType,
@@ -164,7 +164,11 @@ export function CourseCreatorSheet({
       }
 
       onCourseCreated(result.course);
-      toast.success("Borrador creado.");
+      if (result.warning) {
+        toast.warning(result.warning);
+      } else {
+        toast.success("Curso creado con propuesta de módulos.");
+      }
       onOpenChange(false);
     });
   }

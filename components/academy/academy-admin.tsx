@@ -496,7 +496,7 @@ function CourseRow({
           </div>
 
           <div className="min-w-0">
-            <Link href={`/courses/${course.id}`} onClick={(event) => event.stopPropagation()} className="rounded font-semibold text-slate-900 hover:text-[#315BFF] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#315BFF]">
+            <Link href={course.status === "draft" ? `/courses/${course.id}/outline` : `/courses/${course.id}`} onClick={(event) => event.stopPropagation()} className="rounded font-semibold text-slate-900 hover:text-[#315BFF] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#315BFF]">
               {course.title}
             </Link>
 
