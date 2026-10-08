@@ -57,6 +57,7 @@ const PHASE_LABELS = {
   reflection: "Reflexión",
 } as const;
 
+
 const TYPE_LABELS = {
   concept: "Concepto",
   comparison: "Comparativa",
@@ -64,7 +65,12 @@ const TYPE_LABELS = {
   process: "Proceso",
   exercise: "Actividad",
   summary: "Resumen",
+  decision: "Toma de decisiones",
+  simulation: "Simulación",
+  analysis: "Análisis",
+  demonstration: "Demostración",
 } as const;
+
 
 export function AcademyDidacticRoom({
   courseId,
@@ -190,11 +196,8 @@ export function AcademyDidacticRoom({
     : true;
 
   function nextScreen() {
-    if (!screen || !activityReady) return;
-
-    if (!isLast) {
-      setScreenIndex((value) => value + 1);
-    }
+    if (!screen || !activityReady || isLast) return;
+    setScreenIndex((value) => value + 1);
   }
 
   function selectLesson(id: string) {
@@ -208,10 +211,10 @@ export function AcademyDidacticRoom({
     : 0;
 
   return (
-    <div className="flex h-dvh min-h-0 w-full overflow-hidden bg-[#F5F7FC] text-[#101B3D]">
+    <div className="flex h-full min-h-0 w-full overflow-hidden bg-[#F5F7FC] text-[#101B3D]">
       {showOutline && (
-        <aside className="flex h-full w-[260px] shrink-0 flex-col border-r border-slate-200 bg-white xl:w-[290px]">
-          <div className="border-b border-slate-100 p-5">
+        <aside className="flex h-full w-[260px] shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white xl:w-[290px]">
+          <div className="shrink-0 border-b border-slate-100 p-5">
             <div className="flex items-center gap-2 text-[#315BFF]">
               <GraduationCap className="h-5 w-5" />
               <span className="text-xs font-bold uppercase tracking-wider">
@@ -264,7 +267,7 @@ export function AcademyDidacticRoom({
             ))}
           </nav>
 
-          <div className="border-t border-slate-100 p-4">
+          <div className="shrink-0 border-t border-slate-100 p-4">
             <Link
               href={`/courses/${courseId}`}
               className="flex items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-xs font-semibold hover:bg-slate-200"
@@ -276,7 +279,7 @@ export function AcademyDidacticRoom({
         </aside>
       )}
 
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-5 py-3">
           <button
             type="button"
@@ -320,14 +323,14 @@ export function AcademyDidacticRoom({
         </header>
 
         {loading ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3">
             <LoaderCircle className="h-8 w-8 animate-spin text-[#315BFF]" />
             <p className="text-sm text-slate-500">
               Preparando el aula...
             </p>
           </div>
         ) : !didactic ? (
-          <div className="flex flex-1 items-center justify-center overflow-y-auto p-6">
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
             <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EDF2FF]">
                 <Sparkles className="h-8 w-8 text-[#315BFF]" />
@@ -374,7 +377,7 @@ export function AcademyDidacticRoom({
           </div>
         ) : (
           <>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 lg:p-6">
               <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
@@ -403,7 +406,7 @@ export function AcademyDidacticRoom({
                   )}
                 </div>
 
-                <div className="min-h-[340px] rounded-3xl border border-[#E3E9F5] bg-white p-6 shadow-sm lg:min-h-[430px] lg:p-10">
+                <div className="min-h-[300px] rounded-3xl border border-[#E3E9F5] bg-white p-6 shadow-sm lg:p-8">
                   <div className="mb-7 max-w-3xl">
                     <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-[#315BFF]">
                       Pantalla {screenIndex + 1}
@@ -568,8 +571,8 @@ export function AcademyDidacticRoom({
               </div>
             </div>
 
-            <footer className="shrink-0 border-t border-slate-200 bg-white px-5 py-4">
-              <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4">
+            <footer className="z-30 w-full shrink-0 border-t border-slate-200 bg-white px-5 py-3 shadow-[0_-4px_20px_rgba(15,23,42,0.06)]">
+              <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4">
                 <button
                   type="button"
                   disabled={screenIndex === 0}
@@ -584,8 +587,8 @@ export function AcademyDidacticRoom({
                   Anterior
                 </button>
 
-                <span className="hidden text-xs text-slate-400 sm:block">
-                  {progress}% de la presentación
+                <span className="hidden text-xs text-slate-500 sm:block">
+                  Pantalla {screenIndex + 1} de {screens.length}
                 </span>
 
                 <button
