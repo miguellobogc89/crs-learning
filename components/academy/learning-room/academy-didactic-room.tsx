@@ -1,6 +1,7 @@
 
- // components/academy/learning-room/academy-didactic-room.tsx
 "use client";
+
+// components/academy/learning-room/academy-didactic-room.tsx
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -13,8 +14,6 @@ import {
   ChevronUp,
   GraduationCap,
   LoaderCircle,
-  MessageSquareText,
-  Play,
   RotateCcw,
   Sparkles,
   X,
@@ -24,10 +23,13 @@ import {
   generateLessonDidacticAction,
   getLessonDidacticAction,
 } from "@/app/actions/academy-didactic";
+
 import type {
   DidacticPackage,
-  DidacticScreen,
 } from "@/lib/academy/didactic-package";
+
+import { DidacticVisual } from "./didactic-visual";
+import { DidacticActivity } from "./didactic-activity";
 
 type Lesson = {
   id: string;
@@ -57,7 +59,6 @@ const PHASE_LABELS = {
   reflection: "Reflexión",
 } as const;
 
-
 const TYPE_LABELS = {
   concept: "Concepto",
   comparison: "Comparativa",
@@ -70,7 +71,6 @@ const TYPE_LABELS = {
   analysis: "Análisis",
   demonstration: "Demostración",
 } as const;
-
 
 export function AcademyDidacticRoom({
   courseId,
@@ -101,15 +101,8 @@ export function AcademyDidacticRoom({
   const [error, setError] = useState<string | null>(null);
   const [showTeacher, setShowTeacher] = useState(true);
   const [showOutline, setShowOutline] = useState(true);
-  const [answers, setAnswers] = useState<
-    Record<string, string>
-  >({});
-  const [revealedHints, setRevealedHints] = useState<
-    Record<string, number>
-  >({});
-  const [reviewed, setReviewed] = useState<
-    Record<string, boolean>
-  >({});
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [reviewed, setReviewed] = useState<Record<string, boolean>>({});
 
   const currentLesson = lessons.find(
     (lesson) => lesson.id === lessonId,
@@ -122,7 +115,6 @@ export function AcademyDidacticRoom({
       setDidactic(null);
       setScreenIndex(0);
       setAnswers({});
-      setRevealedHints({});
       setReviewed({});
 
       try {
@@ -152,6 +144,8 @@ export function AcademyDidacticRoom({
   useEffect(() => {
     if (lessonId) {
       void loadLesson(lessonId);
+    } else {
+      setLoading(false);
     }
   }, [lessonId, loadLesson]);
 
@@ -175,7 +169,6 @@ export function AcademyDidacticRoom({
       setScreenIndex(0);
       setAnswers({});
       setReviewed({});
-      setRevealedHints({});
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -195,6 +188,10 @@ export function AcademyDidacticRoom({
     ? Boolean(reviewed[screen.id])
     : true;
 
+  const progress = screens.length
+    ? Math.round(((screenIndex + 1) / screens.length) * 100)
+    : 0;
+
   function nextScreen() {
     if (!screen || !activityReady || isLast) return;
     setScreenIndex((value) => value + 1);
@@ -206,9 +203,24 @@ export function AcademyDidacticRoom({
     }
   }
 
-  const progress = screens.length
-    ? Math.round(((screenIndex + 1) / screens.length) * 100)
-    : 0;
+  function changeAnswer(screenId: string, value: string) {
+    setAnswers((previous) => ({
+      ...previous,
+      [screenId]: value,
+    }));
+
+    setReviewed((previous) => ({
+      ...previous,
+      [screenId]: false,
+    }));
+  }
+
+  function reviewAnswer(screenId: string) {
+    setReviewed((previous) => ({
+      ...previous,
+      [screenId]: true,
+    }));
+  }
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden bg-[#F5F7FC] text-[#101B3D]">
@@ -299,7 +311,7 @@ export function AcademyDidacticRoom({
             </h1>
           </div>
 
-          {didactic && (
+          {didactic && screens.length > 0 && (
             <div className="hidden items-center gap-3 sm:flex">
               <span className="text-xs font-medium text-slate-500">
                 {screenIndex + 1} / {screens.length}
@@ -329,7 +341,7 @@ export function AcademyDidacticRoom({
               Preparando el aula...
             </p>
           </div>
-        ) : !didactic ? (
+        ) : !didactic || !screen ? (
           <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
             <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#EDF2FF]">
@@ -342,7 +354,7 @@ export function AcademyDidacticRoom({
 
               <p className="mt-3 text-sm leading-relaxed text-slate-500">
                 La lección existe, pero todavía no se ha
-                transformado en una presentación didáctica.
+                transformado en una clase didáctica.
               </p>
 
               {error && (
@@ -406,7 +418,13 @@ export function AcademyDidacticRoom({
                   )}
                 </div>
 
-                <div className="min-h-[300px] rounded-3xl border border-[#E3E9F5] bg-white p-6 shadow-sm lg:p-8">
+                {error && (
+                  <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+                    {error}
+                  </p>
+                )}
+
+                <div className="rounded-3xl border border-[#E3E9F5] bg-white p-6 shadow-sm lg:p-8">
                   <div className="mb-7 max-w-3xl">
                     <p className="mb-3 text-xs font-bold uppercase tracking-[0.15em] text-[#315BFF]">
                       Pantalla {screenIndex + 1}
@@ -468,103 +486,27 @@ export function AcademyDidacticRoom({
                 </section>
 
                 {screen.activity && (
-                  <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="mb-4 flex items-center gap-2 text-[#315BFF]">
-                      <MessageSquareText className="h-5 w-5" />
-                      <h3 className="text-sm font-bold">
-                        Participa en la clase
-                      </h3>
-                    </div>
-
-                    <p className="text-sm font-semibold leading-relaxed">
-                      {screen.activity.instruction}
-                    </p>
-
-                    <textarea
-                      value={answers[screen.id] ?? ""}
-                      onChange={(event) => {
-                        setAnswers((previous) => ({
-                          ...previous,
-                          [screen.id]: event.target.value,
-                        }));
-                        setReviewed((previous) => ({
-                          ...previous,
-                          [screen.id]: false,
-                        }));
-                      }}
-                      rows={3}
-                      placeholder="Desarrolla tu respuesta..."
-                      className="mt-4 w-full resize-y rounded-xl border border-slate-200 bg-[#F8FAFD] p-4 text-sm outline-none focus:border-[#315BFF]"
-                    />
-
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        disabled={
-                          (revealedHints[screen.id] ?? 0) >=
-                          screen.activity.hints.length
-                        }
-                        onClick={() =>
-                          setRevealedHints((previous) => ({
-                            ...previous,
-                            [screen.id]:
-                              (previous[screen.id] ?? 0) + 1,
-                          }))
-                        }
-                        className="text-xs font-semibold text-[#315BFF] disabled:opacity-40"
-                      >
-                        Mostrar una pista
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={
-                          !(answers[screen.id] ?? "").trim()
-                        }
-                        onClick={() =>
-                          setReviewed((previous) => ({
-                            ...previous,
-                            [screen.id]: true,
-                          }))
-                        }
-                        className="rounded-lg bg-[#315BFF] px-4 py-2 text-xs font-semibold text-white disabled:opacity-40"
-                      >
-                        Guardar respuesta provisional
-                      </button>
-                    </div>
-
-                    {(revealedHints[screen.id] ?? 0) > 0 && (
-                      <div className="mt-4 rounded-xl bg-amber-50 p-4 text-xs leading-relaxed text-amber-800">
-                        {screen.activity.hints
-                          .slice(0, revealedHints[screen.id])
-                          .map((hint, index) => (
-                            <p key={index} className="mb-2 last:mb-0">
-                              {hint}
-                            </p>
-                          ))}
-                      </div>
-                    )}
-
-                    {reviewed[screen.id] && (
-                      <p className="mt-4 text-xs text-amber-700">
-                        Respuesta registrada solo en esta sesión
-                        del navegador. Todavía no ha sido evaluada
-                        por el profesor IA ni acredita superación.
-                      </p>
-                    )}
-                  </section>
+                  <DidacticActivity
+                    key={`${lessonId}:${screen.id}`}
+                    activity={screen.activity}
+                    value={answers[screen.id] ?? ""}
+                    onChange={(value) =>
+                      changeAnswer(screen.id, value)
+                    }
+                    reviewed={Boolean(reviewed[screen.id])}
+                    onReview={() => reviewAnswer(screen.id)}
+                  />
                 )}
 
                 {isLast && (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
                     <p className="text-sm font-bold text-amber-900">
-                      Fin de la presentación
+                      Fin de la clase
                     </p>
                     <p className="mt-2 text-xs leading-relaxed text-amber-800">
                       Has recorrido las pantallas. La lección
-                      no se marcará como completada hasta
-                      incorporar la evaluación y el progreso
-                      persistente.
+                      todavía no se marca como completada:
+                      faltan la evaluación y el progreso persistente.
                     </p>
                   </div>
                 )}
@@ -605,94 +547,6 @@ export function AcademyDidacticRoom({
           </>
         )}
       </main>
-    </div>
-  );
-}
-
-function DidacticVisual({
-  screen,
-}: {
-  screen: DidacticScreen;
-}) {
-  const { layout, items } = screen.visual;
-
-  if (layout === "steps") {
-    return (
-      <div className="mx-auto max-w-3xl space-y-3">
-        {items.map((item, index) => (
-          <div
-            key={index}
-            className="flex items-start gap-4 rounded-2xl bg-[#F5F8FF] p-5"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#315BFF] text-sm font-bold text-white">
-              {index + 1}
-            </div>
-
-            <div>
-              <h3 className="text-sm font-bold">
-                {item.title}
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                {item.description}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (layout === "statement") {
-    return (
-      <div className="flex min-h-[220px] flex-col items-center justify-center gap-6 text-center">
-        {items.map((item, index) => (
-          <div key={index} className="max-w-2xl">
-            <h3 className="text-xl font-bold text-[#315BFF]">
-              {item.title}
-            </h3>
-            <p className="mt-3 text-base leading-relaxed text-slate-600">
-              {item.description}
-            </p>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`grid gap-4 ${
-        layout === "columns"
-          ? "md:grid-cols-2"
-          : items.length === 1
-            ? "grid-cols-1"
-            : items.length === 2
-              ? "md:grid-cols-2"
-              : "md:grid-cols-2 xl:grid-cols-3"
-      }`}
-    >
-      {items.map((item, index) => (
-        <div
-          key={index}
-          className="flex min-h-[155px] flex-col rounded-2xl border border-[#E2E9F9] bg-[#F8FAFF] p-5"
-        >
-          <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-xl bg-[#E5EDFF] text-[#315BFF]">
-            {screen.type === "case" ? (
-              <Play className="h-4 w-4" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-          </div>
-
-          <h3 className="text-sm font-bold">
-            {item.title}
-          </h3>
-
-          <p className="mt-3 text-sm leading-relaxed text-slate-600">
-            {item.description}
-          </p>
-        </div>
-      ))}
     </div>
   );
 }

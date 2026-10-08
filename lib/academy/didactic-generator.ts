@@ -80,17 +80,28 @@ function stringArray(value: unknown): value is string[] {
   );
 }
 
+
 function validatePlan(value: unknown): value is LessonPlan {
   const data = record(value);
 
+  if (!data) {
+    return false;
+  }
+
   if (
-    !data ||
     typeof data.objective !== "string" ||
     typeof data.pedagogicalApproach !== "string" ||
     !stringArray(data.keyConcepts) ||
-    !Array.isArray(data.screens) ||
-    data.screens.length < MIN_SCREENS ||
-    data.screens.length > MAX_SCREENS
+    !Array.isArray(data.screens)
+  ) {
+    return false;
+  }
+
+  const screens: unknown[] = data.screens;
+
+  if (
+    screens.length < MIN_SCREENS ||
+    screens.length > MAX_SCREENS
   ) {
     return false;
   }
@@ -99,7 +110,7 @@ function validatePlan(value: unknown): value is LessonPlan {
   let previousPhase = -1;
   let assessmentActivity = false;
 
-  for (const raw of data.screens) {
+  for (const raw of screens) {
     const screen = record(raw);
 
     if (
@@ -125,7 +136,9 @@ function validatePlan(value: unknown): value is LessonPlan {
       screen.phase as DidacticPhase,
     );
 
-    if (phaseIndex < previousPhase) return false;
+    if (phaseIndex < previousPhase) {
+      return false;
+    }
 
     previousPhase = phaseIndex;
 
@@ -140,12 +153,11 @@ function validatePlan(value: unknown): value is LessonPlan {
   return (
     assessmentActivity &&
     DIDACTIC_PHASES.every((phase) =>
-      data.screens.some(
-        (screen: ScreenPlan) => screen.phase === phase,
-      ),
+      screens.some((raw) => record(raw)?.phase === phase),
     )
   );
 }
+
 
 
 function diagnosePlan(value: unknown): string[] {
