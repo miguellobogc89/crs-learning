@@ -8,8 +8,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
-  BookOpen,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
   GraduationCap,
@@ -19,15 +17,19 @@ import {
   X,
 } from "lucide-react";
 
+import { AppSectionShell } from "@/components/app/section-sidebar";
+
 import {
   generateLessonDidacticAction,
   getLessonDidacticAction,
 } from "@/app/actions/academy-didactic";
 
 import type { DidacticPackage } from "@/lib/academy/didactic-package";
+
 import { DidacticVisual } from "./didactic-visual";
 import { DidacticActivity } from "./didactic-activity";
 import { AcademyInteraction } from "./academy-interaction";
+import { AcademyLearningOutline } from "./academy-learning-outline";
 
 type Lesson = {
   id: string;
@@ -90,18 +92,19 @@ export function AcademyDidacticRoom({
       ""
   );
 
-  const [didactic, setDidactic] = useState<DidacticPackage | null>(
-    null
-  );
+  const [didactic, setDidactic] =
+    useState<DidacticPackage | null>(null);
+
   const [screenIndex, setScreenIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showTeacher, setShowTeacher] = useState(false);
-  const [showOutline, setShowOutline] = useState(false);
-  const [answers, setAnswers] = useState<Record<string, string>>(
-    {}
-  );
+
+  const [answers, setAnswers] = useState<
+    Record<string, string>
+  >({});
+
   const [reviewed, setReviewed] = useState<
     Record<string, boolean>
   >({});
@@ -188,103 +191,73 @@ export function AcademyDidacticRoom({
   const screen = screens[screenIndex];
 
   const isLast =
-    screens.length > 0 && screenIndex === screens.length - 1;
+    screens.length > 0 &&
+    screenIndex === screens.length - 1;
 
   const ready =
     (!screen?.activity && !screen?.interaction) ||
     Boolean(screen && reviewed[screen.id]);
 
   const progress = screens.length
-    ? Math.round(((screenIndex + 1) / screens.length) * 100)
+    ? Math.round(
+        ((screenIndex + 1) / screens.length) * 100
+      )
     : 0;
 
-  function goToPrevious() {
-    setScreenIndex((previous) => Math.max(0, previous - 1));
+  function selectLesson(id: string) {
+    if (id === lessonId) return;
+    setLessonId(id);
+  }
+
+  function selectScreen(index: number) {
+    if (index < 0 || index >= screens.length) return;
+
+    // Se permite revisar cualquier pantalla anterior.
+    // Para avanzar no se pueden saltar ejercicios pendientes.
+    if (index > screenIndex) {
+      for (let i = screenIndex; i < index; i++) {
+        const previous = screens[i];
+
+        if (
+          (previous.activity || previous.interaction) &&
+          !reviewed[previous.id]
+        ) {
+          return;
+        }
+      }
+    }
+
+    setScreenIndex(index);
     setShowTeacher(false);
+  }
+
+  function goToPrevious() {
+    selectScreen(Math.max(0, screenIndex - 1));
   }
 
   function goToNext() {
     if (!ready || isLast) return;
-
-    setScreenIndex((previous) =>
-      Math.min(screens.length - 1, previous + 1)
-    );
-    setShowTeacher(false);
+    selectScreen(screenIndex + 1);
   }
 
+  const sidebar = (
+    <AcademyLearningOutline
+      courseTitle={courseTitle}
+      modules={modules}
+      lessonId={lessonId}
+      screens={screens}
+      screenIndex={screenIndex}
+      reviewed={reviewed}
+      preview={preview}
+      onSelectLesson={selectLesson}
+      onSelectScreen={selectScreen}
+    />
+  );
+
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden bg-[#F7F7FA] text-[#17203C]">
-      {showOutline && (
-        <aside className="flex h-full w-[270px] shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white">
-          <div className="border-b border-slate-100 p-5">
-            <p className="flex items-center gap-2 text-sm font-bold text-[#7566B8]">
-              <GraduationCap className="h-5 w-5" />
-              Academy
-            </p>
-
-            <h2 className="mt-3 text-sm font-semibold">
-              {courseTitle}
-            </h2>
-
-            {preview && (
-              <p className="mt-2 text-xs text-amber-700">
-                Vista previa
-              </p>
-            )}
-          </div>
-
-          <nav className="min-h-0 flex-1 overflow-y-auto p-3">
-            {modules.map((module, index) => (
-              <div key={module.id} className="mb-4">
-                <p className="px-3 py-2 text-xs font-bold text-slate-500">
-                  {index + 1}. {module.title}
-                </p>
-
-                {module.lessons.map((lesson) => (
-                  <button
-                    key={lesson.id}
-                    type="button"
-                    onClick={() => setLessonId(lesson.id)}
-                    className={[
-                      "flex w-full items-start gap-2 rounded-xl px-3 py-3 text-left text-xs",
-                      lesson.id === lessonId
-                        ? "bg-[#F1EDFA] font-semibold text-[#7566B8]"
-                        : "text-slate-600 hover:bg-slate-50",
-                    ].join(" ")}
-                  >
-                    {lesson.completed ? (
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
-                    ) : (
-                      <BookOpen className="h-4 w-4 shrink-0" />
-                    )}
-
-                    {lesson.title}
-                  </button>
-                ))}
-              </div>
-            ))}
-          </nav>
-
-          <Link
-            href={`/courses/${courseId}`}
-            className="m-4 rounded-xl bg-slate-100 px-4 py-3 text-center text-xs font-semibold"
-          >
-            Salir del aula
-          </Link>
-        </aside>
-      )}
-
-      <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <AppSectionShell sidebar={sidebar}>
+      <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#F7F7FA] text-[#17203C]">
         <header className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-5 py-3">
-          <button
-            type="button"
-            onClick={() => setShowOutline((previous) => !previous)}
-            aria-label="Mostrar u ocultar temario"
-            className="rounded-lg p-2 hover:bg-slate-100"
-          >
-            <BookOpen className="h-5 w-5" />
-          </button>
-
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs text-[#8A83B0]">
               {currentLesson?.moduleTitle}
@@ -312,7 +285,7 @@ export function AcademyDidacticRoom({
 
           <Link
             href={`/courses/${courseId}`}
-            aria-label="Cerrar"
+            aria-label="Cerrar aula"
             className="rounded-lg p-2 hover:bg-slate-100"
           >
             <X className="h-5 w-5" />
@@ -320,15 +293,14 @@ export function AcademyDidacticRoom({
         </header>
 
         {loading ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3">
             <LoaderCircle className="h-8 w-8 animate-spin text-[#7566B8]" />
-
             <p className="text-sm text-slate-500">
               Preparando el aula...
             </p>
           </div>
         ) : !screen ? (
-          <div className="flex flex-1 items-center justify-center overflow-y-auto p-6">
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
             <div className="w-full max-w-lg rounded-3xl bg-white p-8 text-center shadow-sm">
               <Sparkles className="mx-auto h-10 w-10 text-[#7566B8]" />
 
@@ -337,8 +309,8 @@ export function AcademyDidacticRoom({
               </h2>
 
               <p className="mt-3 text-sm text-slate-500">
-                Genera una experiencia interactiva para esta
-                lección.
+                Genera una experiencia interactiva para
+                esta lección.
               </p>
 
               {error && (
@@ -384,7 +356,6 @@ export function AcademyDidacticRoom({
                       className="flex items-center gap-2 text-xs font-medium text-slate-500 disabled:opacity-40"
                     >
                       <RotateCcw className="h-4 w-4" />
-
                       {generating
                         ? "Regenerando..."
                         : "Regenerar clase"}
@@ -552,14 +523,13 @@ export function AcademyDidacticRoom({
                   className="flex items-center gap-2 rounded-xl bg-[#7566B8] px-5 py-2.5 text-xs font-semibold text-white disabled:opacity-40"
                 >
                   {isLast ? "Fin" : "Continuar"}
-
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
             </footer>
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </AppSectionShell>
   );
 }
