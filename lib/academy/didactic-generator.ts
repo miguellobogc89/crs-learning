@@ -1140,6 +1140,7 @@ function getScreenProblems(
   return problems;
 }
 
+
 async function generateScreen(
   client: OpenAI,
   input: GenerateInput,
@@ -1147,40 +1148,38 @@ async function generateScreen(
   plan: ScreenPlan,
   position: number
 ): Promise<DidacticScreen> {
-  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] =
-    [
-      {
-        role: "system",
-        content: SCREEN_PROMPT,
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          course: input.courseTitle,
-          module: input.moduleTitle,
-          lesson: input.lessonTitle,
-          originalContent: input.content,
-          lessonObjective: lesson.objective,
-          outline: lesson.screens.map((screen) => ({
-            id: screen.id,
-            title: screen.title,
-            interaction: screen.interaction,
-          })),
-          currentScreen: plan,
-          position,
-          total: lesson.screens.length,
-        }),
-      },
-    ];
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: SCREEN_PROMPT,
+    },
+    {
+      role: "user",
+      content: JSON.stringify({
+        course: input.courseTitle,
+        module: input.moduleTitle,
+        lesson: input.lessonTitle,
+        originalContent: input.content,
+        lessonObjective: lesson.objective,
+        outline: lesson.screens.map((screen) => ({
+          id: screen.id,
+          title: screen.title,
+          interaction: screen.interaction,
+        })),
+        currentScreen: plan,
+        position,
+        total: lesson.screens.length,
+      }),
+    },
+  ];
+
+  const newKind = isNewInteraction(plan.interaction);
+  const choiceKind = isChoiceInteraction(plan.interaction);
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     const raw = await ask(client, messages);
     const candidate = buildScreen(plan, raw);
-
-    const problems = getScreenProblems(
-      candidate,
-      plan
-    );
+    const problems = getScreenProblems(candidate, plan);
 
     if (
       problems.length === 0 &&
@@ -1189,11 +1188,128 @@ async function generateScreen(
       return candidate;
     }
 
+    const instructions: string[] = [
+      "Devuelve el JSON completo de la pantalla.",
+      "Conserva el objetivo pedagógico.",
+      "Respeta los tipos y campos del contrato.",
+      "No inventes información.",
+    ];
+
+    if (newKind) {
+      instructions.push(
+        "activity debe ser null.",
+        `interactionData.kind debe ser "${plan.interaction}".`
+      );
+    } else if (plan.interaction === "none") {
+      instructions.push(
+        "activity debe ser null.",
+        "interactionData debe ser null."
+      );
+    } else {
+      instructions.push(
+        `activity.kind debe ser "${plan.interaction}".`,
+        "interactionData debe ser null."
+      );
+    }
+
+    switch (plan.interaction) {
+      case "put-in-order":
+        instructions.push(
+          "Genera entre 3 y 7 items.",
+          "Cada item necesita id y label no vacíos.",
+          "Los ids deben ser únicos.",
+          "Coloca los items en el orden CORRECTO.",
+          "El reproductor los mezclará posteriormente.",
+          "No generes options ni grupos.",
+          "Elige pasos con una secuencia inequívoca."
+        );
+        break;
+
+      case "sort-it":
+        instructions.push(
+          "Genera entre 2 y 4 grupos.",
+          "Genera entre 3 y 8 elementos.",
+          "Cada grupo necesita id y label.",
+          "Cada elemento necesita id, label y groupId.",
+          "Todos los groupId deben existir.",
+          "Los ids deben ser únicos.",
+          "La clasificación debe ser inequívoca."
+        );
+        break;
+
+      case "match-pairs":
+        instructions.push(
+          "Genera entre 2 y 6 parejas.",
+          "Cada elemento necesita id y label.",
+          "Los elementos izquierdos tienen matchId.",
+          "Los elementos derechos no tienen matchId.",
+          "Cada matchId apunta a un id derecho existente.",
+          "Todos los ids deben ser únicos."
+        );
+        break;
+
+      case "flip-cards":
+        instructions.push(
+          "Genera entre 2 y 6 tarjetas.",
+          "Cada tarjeta necesita id, label y description.",
+          "Las descripciones deben aportar aprendizaje real."
+        );
+        break;
+
+      case "flip-challenge":
+        instructions.push(
+          "Genera exactamente cuatro opciones.",
+          "Cada opción necesita id, label y feedback.",
+          "Exactamente una debe tener isPreferred=true.",
+          "Las cuatro alternativas deben ser plausibles."
+        );
+        break;
+
+      case "quick-quiz":
+      case "choose-your-path":
+      case "quiz":
+      case "decision":
+        instructions.push(
+          "Describe un caso empresarial comprensible.",
+          "Formula una pregunta aplicada.",
+          "Genera exactamente cuatro alternativas.",
+          "Exactamente una debe tener isPreferred=true.",
+          "Las otras tres deben ser distractores plausibles.",
+          "Incluye feedback específico para todas.",
+          "Evita respuestas obvias o ambiguas."
+        );
+
+        if (plan.interaction === "choose-your-path") {
+          instructions.push(
+            "Incluye consequence en cada alternativa."
+          );
+        }
+        break;
+
+      case "sorting":
+        instructions.push(
+          "Genera entre 2 y 4 grupos.",
+          "Genera entre 3 y 8 sortItems.",
+          "Cada sortItem necesita id, label, groupId y feedback.",
+          "Todos los groupId deben existir.",
+          "Incluye options como array vacío."
+        );
+        break;
+
+      case "none":
+        instructions.push(
+          "Genera contenido visual explicativo.",
+          "No generes actividades."
+        );
+        break;
+    }
+
     console.warn(
       `[Academy] Pantalla "${plan.title}" inválida (${attempt}/3)`,
       {
         kind: plan.interaction,
         problems,
+        screenValid: validateDidacticScreen(candidate),
       }
     );
 
@@ -1204,24 +1320,17 @@ async function generateScreen(
 
     messages.push({
       role: "user",
-      content: `
-Corrige el JSON COMPLETO de esta pantalla.
-
-Problemas detectados:
-${problems.map((problem) => `- ${problem}`).join("\n")}
-
-Requisitos:
-- Conserva el objetivo pedagógico.
-- Si es un test, escribe un caso concreto y comprensible.
-- Incluye exactamente cuatro alternativas.
-- Una única respuesta correcta.
-- Tres distractores plausibles.
-- Feedback específico para todas.
-- Si es una interacción nueva, activity=null.
-- interactionData.kind debe coincidir con ${plan.interaction}.
-- No inventes información.
-- Devuelve únicamente JSON válido.
-`,
+      content: [
+        "El JSON anterior no supera la validación.",
+        "",
+        "Problemas detectados:",
+        ...problems.map((problem) => `- ${problem}`),
+        "",
+        "Instrucciones de corrección:",
+        ...instructions.map((instruction) => `- ${instruction}`),
+        "",
+        "Devuelve únicamente el JSON corregido.",
+      ].join("\n"),
     });
   }
 
@@ -1229,6 +1338,7 @@ Requisitos:
     `No se ha podido desarrollar "${plan.title}". Comprueba la actividad ${plan.interaction}.`
   );
 }
+
 
 export async function generateDidacticPackage(
   input: GenerateInput
