@@ -150,83 +150,85 @@ export function GlobalSearch() {
 
 
 
-    {/* Trigger Button */}
-    <button
-      type="button"
-      onClick={() => {
-        setIsOpen(true);
-        resetSelectedIndex();
-      }}
-      aria-label="Abrir búsqueda global"
-      className="
-        group flex h-full w-full min-w-0
-        items-center gap-4
-        rounded-[18px]
-        border border-white/90
-        bg-white
-        px-[22px]
-        text-left
-        shadow-[0_8px_28px_rgba(30,64,175,0.045)]
-        transition-all duration-200
-        hover:border-[#E7EDFA]
-        hover:shadow-[0_10px_32px_rgba(30,64,175,0.075)]
-        focus-visible:outline-none
-        focus-visible:ring-2
-        focus-visible:ring-[#2563EB]/20
-      "
-    >
-      <Search
-        className="
-          size-icon-lg
-          shrink-0
-          text-[#91A1BB]
-        "
-        strokeWidth={1.8}
-      />
+{/* Campo de búsqueda */}
+<div
+className="
+  group flex h-full w-full min-w-0
+  items-center gap-4
+  rounded-[18px]
+  border border-[#E7EDFA]
+  bg-white px-[22px]
+  shadow-[0_2px_12px_rgba(30,64,175,0.04)]
+  transition-all duration-200
+  hover:!border-[#2563EB]/60
+  focus-within:!border-[#2563EB]
+  focus-within:!ring-[3px]
+  focus-within:!ring-[#2563EB]/20
+  focus-within:shadow-[0_0_22px_rgba(37,99,235,0.16)]
+"
+>
+  <Search
+    className="size-icon-lg shrink-0 text-[#91A1BB]"
+    strokeWidth={1.8}
+  />
 
-      <span
-        className="
-          min-w-0 flex-1 truncate
-          text-body-small
-          font-normal
-          tracking-[-0.01em]
-          text-[#8492AA]
-        "
-      >
-        Buscar documentos, carpetas, etiquetas...
-      </span>
+  <input
+    ref={inputRef}
+    type="search"
+    aria-label="Búsqueda global"
+    placeholder="Buscar documentos, carpetas, etiquetas..."
+    value={query}
+    onFocus={() => {
+      setIsOpen(true);
+      resetSelectedIndex();
+    }}
+    onChange={(e) => {
+      setQuery(e.target.value);
+      resetSelectedIndex();
+      setIsOpen(true);
+    }}
+    className="
+      h-full min-w-0 flex-1
+      cursor-text bg-transparent
+      text-body-small text-foreground
+      outline-none
+      placeholder:text-[#8492AA]
+    "
+  />
 
-      <kbd
-        data-search-shortcut
-        className="
-          ml-auto inline-flex
-          h-[30px]
-          shrink-0
-          items-center justify-center
-          gap-1.5
-          rounded-[9px]
-          border border-[#E7EDFA]
-          bg-white
-          px-2.5
-          text-caption
-          font-medium
-          text-[#8492AA]
-        "
-      >
-        <Command
-          className="
-            size-[13px]
-          "
-          strokeWidth={1.6}
-        />
-
-        <span>K</span>
-      </kbd>
-    </button>
+  <kbd
+    data-search-shortcut
+    className="
+      pointer-events-none ml-auto inline-flex
+      h-[30px] shrink-0
+      items-center justify-center gap-1.5
+      rounded-[9px] border border-[#E7EDFA]
+      bg-white px-2.5 text-caption
+      font-medium text-[#8492AA]
+    "
+  >
+    <Command className="size-[13px]" strokeWidth={1.6} />
+    <span>K</span>
+  </kbd>
+</div>
 
       {/* Popover */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 z-50 mt-2 w-full min-w-96 rounded-xl border border-border bg-background shadow-2xl">
+        <div
+className="
+  group flex h-full w-full min-w-0
+  items-center gap-4
+  rounded-[18px]
+  border border-[#E7EDFA]
+  bg-white px-[22px]
+  shadow-[0_2px_12px_rgba(30,64,175,0.04)]
+  transition-all duration-200
+  focus-within:!border-[#111827]
+  focus-within:!ring-[3px]
+  focus-within:!ring-[#111827]/15
+  focus-within:shadow-[0_0_20px_rgba(17,24,39,0.12)]
+"
+>
           {/* Search Input Header */}
           <div className="border-b border-border/50 px-4 py-3">
             <div className="relative flex items-center">

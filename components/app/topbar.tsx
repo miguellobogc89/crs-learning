@@ -65,7 +65,7 @@ export function AppTopbar({
   const isKnowledge = pathname.startsWith("/knowledge");
 
   return (
-<header className="flex h-[68px] shrink-0 items-start gap-3 bg-transparent px-page-padding-sm pt-3 sm:px-page-padding-md lg:px-page-padding-lg">      
+<header className="relative z-50 flex h-[68px] shrink-0 items-start gap-3 bg-transparent px-page-padding-sm pt-3 sm:px-page-padding-md lg:px-page-padding-lg">    
   <SheetTrigger asChild>
         <button
           type="button"
