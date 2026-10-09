@@ -21,6 +21,8 @@ Diseña entre 8 y 12 pantallas cortas, máximo 14; fases introduction, developme
 La experiencia debe alternar exploración visual y microejercicios. Cada 2 o 3 pantallas aproximadamente, un ejercicio quiz, sorting o decision, según la materia. Evita ejercicios de redacción: se reservan para evaluación final futura.
 Usa interaction: none | quiz | sorting | decision | flip-cards | flip-challenge | match-pairs | sort-it | put-in-order | quick-quiz | choose-your-path. Al menos dos actividades interactivas y preferiblemente dos modalidades distintas. Si interaction != none, activityRequired=true. No pongas actividades en todas las pantallas. Tipos de pantalla permitidos: ${SCREEN_TYPES.join(", ")}.
 No inventes datos, referencias ni afirmaciones pseudocientíficas. La secuencia debe ser específica al contenido y no seguir siempre la misma plantilla.`;
+
+
 const SCREEN_PROMPT = `Desarrolla UNA pantalla del guion como JSON, sin markdown ni texto fuera.
 Devuelve {"subtitle":null,"visual":{"layout":"explore","items":[{"title":"...","description":"..."}]},"teacher":{"explanation":"...","transition":null},"activity":null,"estimatedMinutes":2}.
 Layouts permitidos: cards, steps, columns, statement, scenario, timeline, diagram, explore. Preferir explore para tarjetas verticales interactivas; 2-5 tarjetas con textos muy breves (title <= 50 caracteres, description <= 190). En cualquier layout, 1-6 items. Evita párrafos largos.
@@ -38,6 +40,49 @@ sort-it: 2-4 groups con id,label; 3-8 items con id,label,groupId válido,feedbac
 put-in-order: 3-7 items con id,label EN ORDEN CORRECTO; el reproductor los mezcla.
 quick-quiz: 2-4 options con exactamente una isPreferred=true y feedback para todas.
 choose-your-path: 2-4 options con exactamente una isPreferred=true y consequence y feedback para todas.
+
+
+Ejemplo completo para quick-quiz:
+{
+  "subtitle": "Comprueba lo aprendido",
+  "visual": {
+    "layout": "statement",
+    "items": [
+      {
+        "title": "Evaluación",
+        "description": "Aplica el concepto estudiado."
+      }
+    ]
+  },
+  "teacher": {
+    "explanation": "Recuerda aplicar los principios estudiados.",
+    "transition": null
+  },
+  "activity": null,
+  "interactionData": {
+    "kind": "quick-quiz",
+    "instruction": "¿Qué alternativa representa la actuación correcta?",
+    "options": [
+      {
+        "id": "a",
+        "label": "Alternativa correcta",
+        "isPreferred": true,
+        "feedback": "Explicación de por qué es correcta."
+      },
+      {
+        "id": "b",
+        "label": "Alternativa incorrecta",
+        "isPreferred": false,
+        "feedback": "Explicación de por qué no es adecuada."
+      }
+    ],
+    "maxAttempts": 3
+  },
+  "estimatedMinutes": 2
+}
+El ejemplo solo ilustra la estructura. Sustituye todo su contenido por preguntas y respuestas específicas de la lección.
+
+
 No generes datos ambiguos. Los ids deben ser únicos. Para los tipos antiguos quiz, sorting y decision, usa activity como antes.
 Si interaction="none", activity=null e interactionData=null. No inventes una actividad escrita. El contenido debe ser específico a la lección, no genérico.
 No devuelvas id, phase, type, title ni learningGoal. Los añade el servidor.`;
@@ -70,18 +115,198 @@ function validPlan(value: unknown): value is LessonPlan {
     screens.some(s => record(s)?.phase === "assessment" && record(s)?.activityRequired === true) &&
     screens.filter(s => record(s)?.interaction !== "none").length >= 2;
 }
-async function generatePlan(client: OpenAI, input: GenerateInput): Promise<LessonPlan> {
+
+
+async function generatePlan(
+  client: OpenAI,
+  input: GenerateInput
+): Promise<LessonPlan> {
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: PLAN_PROMPT }, { role: "user", content: JSON.stringify(input) },
+    { role: "system", content: PLAN_PROMPT },
+    { role: "user", content: JSON.stringify(input) },
   ];
+
   for (let attempt = 1; attempt <= 3; attempt++) {
     const candidate = await ask(client, messages);
-    if (validPlan(candidate)) return candidate;
-    messages.push({ role: "assistant", content: JSON.stringify(candidate) });
-    messages.push({ role: "user", content: "El guion no supera la validación. Corrige: entre 5 y 14 pantallas, fases ordenadas y presentes, IDs únicos, campos completos, assessment con actividad, y al menos dos interacciones. interaction debe ser uno de los tipos permitidos. Devuelve el JSON completo." });
+
+    if (validPlan(candidate)) {
+      console.info(
+        `[Academy] Guion válido en intento ${attempt}`
+      );
+
+      return candidate;
+    }
+
+    const d = record(candidate);
+    const screens = Array.isArray(d?.screens)
+      ? d.screens
+      : [];
+
+    const problems: string[] = [];
+
+    if (screens.length < 5 || screens.length > 14) {
+      problems.push(
+        `Número de pantallas inválido: ${screens.length}`
+      );
+    }
+
+    const phases = screens.map(
+      (s) => record(s)?.phase
+    );
+
+    for (const phase of DIDACTIC_PHASES) {
+      if (!phases.includes(phase)) {
+        problems.push(`Falta fase: ${phase}`);
+      }
+    }
+
+    const ids = screens.map((s) => record(s)?.id);
+
+    if (new Set(ids).size !== ids.length) {
+      problems.push("Hay IDs duplicados");
+    }
+
+    screens.forEach((raw, index) => {
+      const s = record(raw);
+
+      if (!s) {
+        problems.push(`Pantalla ${index + 1}: objeto inválido`);
+        return;
+      }
+
+      const requiredStrings = [
+        "id",
+        "phase",
+        "type",
+        "title",
+        "learningGoal",
+        "teachingStrategy",
+        "interaction",
+      ];
+
+      for (const field of requiredStrings) {
+        if (
+          typeof s[field] !== "string" ||
+          !(s[field] as string).trim()
+        ) {
+          problems.push(
+            `Pantalla ${index + 1}: falta ${field}`
+          );
+        }
+      }
+
+      if (
+        ![
+          "none",
+          "quiz",
+          "sorting",
+          "decision",
+          ...INTERACTION_KINDS,
+        ].includes(String(s.interaction))
+      ) {
+        problems.push(
+          `Pantalla ${index + 1}: interacción desconocida ${String(
+            s.interaction
+          )}`
+        );
+      }
+
+      if (
+        typeof s.activityRequired !== "boolean"
+      ) {
+        problems.push(
+          `Pantalla ${index + 1}: activityRequired no es boolean`
+        );
+      }
+
+      if (
+        s.interaction !== "none" &&
+        s.activityRequired !== true
+      ) {
+        problems.push(
+          `Pantalla ${index + 1}: actividad no marcada como obligatoria`
+        );
+      }
+    });
+
+    const phaseIndexes = phases.map((phase) =>
+      DIDACTIC_PHASES.indexOf(phase as DidacticPhase)
+    );
+
+    if (
+      phaseIndexes.some(
+        (phase, index) =>
+          index > 0 && phase < phaseIndexes[index - 1]
+      )
+    ) {
+      problems.push("Las fases están desordenadas");
+    }
+
+    const assessmentWithActivity = screens.some(
+      (raw) => {
+        const s = record(raw);
+        return (
+          s?.phase === "assessment" &&
+          s.activityRequired === true
+        );
+      }
+    );
+
+    if (!assessmentWithActivity) {
+      problems.push(
+        "No existe una actividad en assessment"
+      );
+    }
+
+    const interactionCount = screens.filter(
+      (raw) => record(raw)?.interaction !== "none"
+    ).length;
+
+    if (interactionCount < 2) {
+      problems.push(
+        `Solo hay ${interactionCount} interacciones`
+      );
+    }
+
+    console.warn(
+      `[Academy] Guion inválido, intento ${attempt}/3`,
+      {
+        problems,
+        screens: screens.map((raw) => {
+          const s = record(raw);
+          return {
+            id: s?.id,
+            phase: s?.phase,
+            type: s?.type,
+            interaction: s?.interaction,
+            activityRequired: s?.activityRequired,
+          };
+        }),
+      }
+    );
+
+    messages.push({
+      role: "assistant",
+      content: JSON.stringify(candidate),
+    });
+
+    messages.push({
+      role: "user",
+      content: `Corrige el guion completo. Problemas detectados: ${
+        problems.length
+          ? problems.join("; ")
+          : "Alguna condición del contrato no se cumple. Revisa los tipos y campos."
+      }. Devuelve únicamente el JSON corregido.`,
+    });
   }
-  throw new Error("No se ha podido generar un guion didáctico válido.");
+
+  throw new Error(
+    "No se ha podido generar un guion didáctico válido."
+  );
 }
+
+
+
 function normalizeActivity(raw: unknown, plan: ScreenPlan): DidacticActivity | null {
   if (plan.interaction === "none" || INTERACTION_KINDS.includes(plan.interaction as InteractionData["kind"])) return null;
   const d = record(raw);
@@ -107,20 +332,68 @@ function normalizeActivity(raw: unknown, plan: ScreenPlan): DidacticActivity | n
     .map(o => ({ id: string(o.id), label: string(o.label), consequence: string(o.consequence), feedback: string(o.feedback), isPreferred: o.isPreferred === true })) : [];
   return { ...base, options };
 }
+
+
 function buildScreen(plan: ScreenPlan, raw: unknown): unknown {
   const d = record(raw);
   if (!d) return null;
+
   const teacher = record(d.teacher);
+
+  const isNewInteraction = INTERACTION_KINDS.includes(
+    plan.interaction as InteractionData["kind"]
+  );
+
+  const interactionData = isNewInteraction
+    ? record(d.interactionData)
+    : null;
+
+  const generatedVisual = record(d.visual);
+
+  // Las interacciones nuevas tienen su propia interfaz.
+  // El visual se conserva como dato de compatibilidad,
+  // pero no debe impedir generar una actividad válida.
+  const visual = isNewInteraction
+    ? {
+        layout: "statement",
+        items: [
+          {
+            title: plan.title,
+            description: plan.learningGoal,
+          },
+        ],
+      }
+    : generatedVisual;
+
   return {
-    id: plan.id, phase: plan.phase, type: plan.type, title: plan.title, learningGoal: plan.learningGoal,
-    teachingStrategy: plan.teachingStrategy, subtitle: typeof d.subtitle === "string" ? d.subtitle : null,
-    visual: d.visual,
-    teacher: teacher ? { explanation: string(teacher.explanation), transition: typeof teacher.transition === "string" ? teacher.transition : null } : null,
+    id: plan.id,
+    phase: plan.phase,
+    type: plan.type,
+    title: plan.title,
+    learningGoal: plan.learningGoal,
+    teachingStrategy: plan.teachingStrategy,
+    subtitle:
+      typeof d.subtitle === "string" ? d.subtitle : null,
+    visual,
+    teacher: {
+      explanation: string(teacher?.explanation),
+      transition:
+        typeof teacher?.transition === "string"
+          ? teacher.transition
+          : null,
+    },
     activity: normalizeActivity(d.activity, plan),
-    interaction: INTERACTION_KINDS.includes(plan.interaction as InteractionData["kind"]) ? d.interactionData : null,
-    estimatedMinutes: typeof d.estimatedMinutes === "number" && d.estimatedMinutes > 0 ? d.estimatedMinutes : 2,
+    interaction: interactionData,
+    estimatedMinutes:
+      typeof d.estimatedMinutes === "number" &&
+      Number.isFinite(d.estimatedMinutes) &&
+      d.estimatedMinutes > 0
+        ? d.estimatedMinutes
+        : 2,
   };
 }
+
+
 async function generateScreen(client: OpenAI, input: GenerateInput, lesson: LessonPlan, plan: ScreenPlan, position: number): Promise<DidacticScreen> {
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: SCREEN_PROMPT },
@@ -132,7 +405,29 @@ async function generateScreen(client: OpenAI, input: GenerateInput, lesson: Less
     const raw = await ask(client, messages);
     const candidate = buildScreen(plan, raw);
     if (validateDidacticScreen(candidate) && (plan.interaction === "none" || (INTERACTION_KINDS.includes(plan.interaction as InteractionData["kind"]) ? validateInteraction(candidate.interaction) && candidate.interaction.kind === plan.interaction : candidate.activity?.kind === plan.interaction))) return candidate;
-    console.warn(`[Academy] Pantalla ${plan.id} inválida, intento ${attempt}/3`, { interaction: plan.interaction });
+
+console.warn(
+  `[Academy] Pantalla "${plan.title}" inválida (${attempt}/3)`,
+  {
+    expectedKind: plan.interaction,
+    screenValid: validateDidacticScreen(candidate),
+    interactionValid:
+      candidate &&
+      typeof candidate === "object" &&
+      "interaction" in candidate
+        ? validateInteraction(candidate.interaction)
+        : false,
+    generatedInteraction:
+      raw && typeof raw === "object" && "interactionData" in raw
+        ? raw.interactionData
+        : null,
+    generatedVisual:
+      raw && typeof raw === "object" && "visual" in raw
+        ? raw.visual
+        : null,
+  }
+);
+
     messages.push({ role: "assistant", content: JSON.stringify(raw) });
     messages.push({ role: "user", content: `Corrige el JSON completo. El contrato requiere visual.items válidos, teacher completo y activity con kind=${plan.interaction}. Si es quiz/decision, 2-4 options y exactamente una preferible. Si es sorting, groups (2-4) y sortItems (2-8) con groupId existente, ids únicos. Si es un tipo nuevo, activity=null e interactionData válido según las reglas. Si es none, activity=null e interactionData=null. No omitas campos.` });
   }
