@@ -520,6 +520,53 @@ async function ask(
   return JSON.parse(raw) as unknown;
 }
 
+
+function normalizeScreenType(
+  value: unknown
+): DidacticScreenType {
+  if (
+    typeof value === "string" &&
+    SCREEN_TYPES.includes(
+      value as DidacticScreenType
+    )
+  ) {
+    return value as DidacticScreenType;
+  }
+
+  const aliases: Record<string, DidacticScreenType> = {
+    introduction: "concept",
+    explanation: "concept",
+    theory: "concept",
+    overview: "summary",
+    recap: "summary",
+    conclusion: "summary",
+    reflection: "analysis",
+    discussion: "analysis",
+    practice: "exercise",
+    activity: "exercise",
+    quiz: "exercise",
+    "quick-quiz": "exercise",
+    "flip-cards": "concept",
+    "flip-challenge": "exercise",
+    "put-in-order": "process",
+    "match-pairs": "exercise",
+    "sort-it": "exercise",
+    "choose-your-path": "decision",
+    example: "case",
+    scenario: "case",
+    workflow: "process",
+    steps: "process",
+  };
+
+  const key =
+    typeof value === "string"
+      ? value.trim().toLowerCase()
+      : "";
+
+  return aliases[key] ?? "concept";
+}
+
+
 function validPlan(value: unknown): value is LessonPlan {
   const data = record(value);
 
@@ -924,6 +971,7 @@ function normalizeActivity(
   };
 }
 
+
 function normalizeInteraction(
   raw: unknown,
   plan: ScreenPlan
@@ -936,11 +984,36 @@ function normalizeInteraction(
 
   if (!data) return null;
 
+  const defaultInstructions: Record<
+    InteractionData["kind"],
+    string
+  > = {
+    "flip-cards":
+      "Explora las tarjetas para comprender los conceptos principales.",
+    "flip-challenge":
+      "Analiza la situación y selecciona la alternativa más adecuada.",
+    "match-pairs":
+      "Relaciona cada concepto con su correspondencia.",
+    "sort-it":
+      "Clasifica cada elemento en la categoría correcta.",
+    "put-in-order":
+      "Ordena los pasos del proceso siguiendo su secuencia correcta.",
+    "quick-quiz":
+      "Analiza el caso y selecciona la respuesta más adecuada.",
+    "choose-your-path":
+      "Examina la situación y elige cómo actuarías.",
+  };
+
   return {
     ...data,
     kind: plan.interaction,
+    instruction: nonempty(
+      data.instruction,
+      defaultInstructions[plan.interaction]
+    ),
   } as InteractionData;
 }
+
 
 function buildScreen(
   plan: ScreenPlan,
@@ -1058,22 +1131,34 @@ function validateChoiceQuality(
     ? screen.interaction?.instruction ?? ""
     : screen.activity?.scenario ?? "";
 
-  if (scenario.trim().length < 100) {
-    problems.push(
-      "El caso práctico es demasiado breve: describe participantes, necesidades y conflicto"
-    );
-  }
 
-  if (
-    isNewInteraction(plan.interaction) &&
-    scenario.trim().length > 0 &&
-    !scenario.includes("?") &&
-    !scenario.includes("¿")
-  ) {
-    problems.push(
-      "La instrucción debe incluir una pregunta explícita"
-    );
-  }
+const isDecisionSimulation =
+  plan.interaction === "choose-your-path";
+
+const minimumScenarioLength = isDecisionSimulation
+  ? 60
+  : 100;
+
+if (scenario.trim().length < minimumScenarioLength) {
+  problems.push(
+    isDecisionSimulation
+      ? "La simulación necesita un contexto concreto: participantes, intereses y decisión que debe tomarse"
+      : "El caso práctico es demasiado breve: describe participantes, necesidades y conflicto"
+  );
+}
+
+if (
+  !isDecisionSimulation &&
+  isNewInteraction(plan.interaction) &&
+  scenario.trim().length > 0 &&
+  !scenario.includes("?") &&
+  !scenario.includes("¿")
+) {
+  problems.push(
+    "La instrucción debe incluir una pregunta explícita"
+  );
+}
+
 
   if (
     !isNewInteraction(plan.interaction) &&
@@ -1178,7 +1263,57 @@ async function generateScreen(
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     const raw = await ask(client, messages);
+
+    
+const planData = record(raw);
+
+if (planData && Array.isArray(planData.screens)) {
+  for (const entry of planData.screens) {
+    const screen = record(entry);
+
+    if (screen) {
+      screen.type = normalizeScreenType(screen.type);
+    }
+  }
+}
+
     const candidate = buildScreen(plan, raw);
+
+    
+if (
+  isNewInteraction(plan.interaction) &&
+  !validateDidacticScreen(candidate)
+) {
+  const generated = record(raw);
+  const interaction = record(
+    generated?.interactionData
+  );
+
+  console.error(
+    "[Academy] Diagnóstico de interacción:",
+    JSON.stringify(
+      {
+        screen: plan.title,
+        expectedKind: plan.interaction,
+        rawKeys: generated
+          ? Object.keys(generated)
+          : [],
+        rawInteraction: generated?.interactionData,
+        normalizedInteraction:
+          record(candidate)?.interaction,
+        itemsCount: Array.isArray(interaction?.items)
+          ? interaction.items.length
+          : null,
+        optionsCount: Array.isArray(interaction?.options)
+          ? interaction.options.length
+          : null,
+      },
+      null,
+      2
+    )
+  );
+}
+
     const problems = getScreenProblems(candidate, plan);
 
     if (
