@@ -3,21 +3,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Search,
-  Clock,
-  Zap,
-  HelpCircle,
-  ChevronRight,
-  Loader2,
-  Command,
-} from "lucide-react";
+import { Search, Loader2, Command } from "lucide-react";
 import { useGlobalSearch } from "@/lib/hooks/use-global-search";
 import { SearchResultItem } from "./search-result-item";
 
 /**
- * Componente de búsqueda global con popover tipo Salesforce
- * Centraliza la navegación y búsqueda de toda la aplicación
+ * Componente de búsqueda global con popover tipo Salesforce.
+ * El desplegable solo aparece cuando el usuario escribe y hay coincidencias.
  */
 export function GlobalSearch() {
   const router = useRouter();
@@ -30,8 +22,6 @@ export function GlobalSearch() {
     query,
     isLoading,
     results,
-    recentSearches,
-    quickAccess,
     selectedIndex,
     setQuery,
     clearQuery,
@@ -45,18 +35,36 @@ export function GlobalSearch() {
   // Aplanar resultados para navegación por teclado
   const allResults = results?.groups.flatMap((g) => g.results) ?? [];
 
+  // El popover solo se muestra si hay texto escrito Y hay coincidencias
+  const hasQuery = query.trim().length > 0;
+  const hasResults = !!results && results.total > 0;
+  const showPopover = isOpen && hasQuery && hasResults;
+
+  /**
+   * Cierra el buscador y limpia el estado
+   */
+  const closeAndReset = () => {
+    setIsOpen(false);
+    clearQuery();
+  };
+
   /**
    * Manejo de atajos de teclado
    */
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+K o Cmd+K para abrir/cerrar
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      // Ctrl+K o Cmd+K para enfocar/desenfocar
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setIsOpen(!isOpen);
-        if (!isOpen) {
+        if (document.activeElement === inputRef.current) {
+          inputRef.current?.blur();
+          setIsOpen(false);
+        } else {
+          inputRef.current?.focus();
+          setIsOpen(true);
           resetSelectedIndex();
         }
+        return;
       }
 
       if (!isOpen) return;
@@ -64,44 +72,48 @@ export function GlobalSearch() {
       // Escape para cerrar
       if (e.key === "Escape") {
         e.preventDefault();
-        setIsOpen(false);
-        clearQuery();
+        closeAndReset();
+        inputRef.current?.blur();
+        return;
       }
 
-      // Navegación con flechas
-      if (e.key === "ArrowDown") {
+      // Navegación con flechas (solo si el desplegable está visible)
+      if (e.key === "ArrowDown" && showPopover) {
         e.preventDefault();
         selectNext();
+        return;
       }
 
-      if (e.key === "ArrowUp") {
+      if (e.key === "ArrowUp" && showPopover) {
         e.preventDefault();
         selectPrevious();
+        return;
       }
 
       // Enter para navegar
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && hasQuery) {
         e.preventDefault();
-        const selectedResult = getSelectedResult();
+        const selectedResult = showPopover ? getSelectedResult() : null;
+
         if (selectedResult?.url) {
           router.push(selectedResult.url);
-          addToHistory(query);
-          setIsOpen(false);
-          clearQuery();
-        } else if (query.trim()) {
-          // Si no hay resultado seleccionado, ir a página de búsqueda
+        } else {
+          // Si no hay resultado seleccionado, ir a la página de búsqueda
           router.push(`/search?q=${encodeURIComponent(query)}`);
-          addToHistory(query);
-          setIsOpen(false);
-          clearQuery();
         }
+        addToHistory(query);
+        closeAndReset();
+        inputRef.current?.blur();
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isOpen,
+    showPopover,
+    hasQuery,
     query,
     selectedIndex,
     allResults,
@@ -115,15 +127,6 @@ export function GlobalSearch() {
   ]);
 
   /**
-   * Enfoca el input cuando se abre
-   */
-  useEffect(() => {
-    if (isOpen) {
-      inputRef.current?.focus();
-    }
-  }, [isOpen]);
-
-  /**
    * Cierra al hacer click fuera
    */
   useEffect(() => {
@@ -134,264 +137,152 @@ export function GlobalSearch() {
         containerRef.current &&
         !containerRef.current.contains(e.target as Node)
       ) {
-        setIsOpen(false);
-        clearQuery();
+        closeAndReset();
       }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, clearQuery]);
-
-  const showEmptyState = isOpen && !query.trim();
 
   return (
     <div ref={containerRef} className="relative h-full w-full">
+      {/* Campo de búsqueda */}
+      <div
+        // Al hacer click en cualquier parte de la barra, se enfoca el input
+        onMouseDown={(e) => {
+          if (e.target !== inputRef.current) {
+            e.preventDefault();
+            inputRef.current?.focus();
+          }
+        }}
+        className="
+          flex h-full w-full min-w-0
+          cursor-text items-center gap-4
+          rounded-[18px]
+          border border-[#E7EDFA]
+          bg-white px-[22px]
+          shadow-none
+          transition-colors duration-150
+          focus-within:border-black
+          focus-within:ring-1
+          focus-within:ring-black
+        "
+      >
+        {isLoading ? (
+          <Loader2 className="size-icon-lg shrink-0 animate-spin text-[#91A1BB]" />
+        ) : (
+          <Search
+            className="size-icon-lg shrink-0 text-[#91A1BB]"
+            strokeWidth={1.8}
+          />
+        )}
 
+        <input
+          ref={inputRef}
+          type="text"
+          role="combobox"
+          aria-label="Búsqueda global"
+          aria-expanded={showPopover}
+          aria-autocomplete="list"
+          autoComplete="off"
+          placeholder="Buscar documentos, carpetas, etiquetas..."
+          value={query}
+          onFocus={() => {
+            setIsOpen(true);
+            resetSelectedIndex();
+          }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            resetSelectedIndex();
+            setIsOpen(true);
+          }}
+          className="
+            h-full min-w-0 flex-1
+            cursor-text bg-transparent
+            text-body-small text-foreground
+            outline-none
+            placeholder:text-[#8492AA]
+          "
+        />
 
+        <kbd
+          data-search-shortcut
+          className="
+            pointer-events-none ml-auto inline-flex
+            h-[30px] shrink-0
+            items-center justify-center gap-1.5
+            rounded-[9px] border border-[#E7EDFA]
+            bg-white px-2.5 text-caption
+            font-medium text-[#8492AA]
+          "
+        >
+          <Command className="size-[13px]" strokeWidth={1.6} />
+          <span>K</span>
+        </kbd>
+      </div>
 
-{/* Campo de búsqueda */}
-<div
-className="
-  group flex h-full w-full min-w-0
-  items-center gap-4
-  rounded-[18px]
-  border border-[#E7EDFA]
-  bg-white px-[22px]
-  shadow-[0_2px_12px_rgba(30,64,175,0.04)]
-  transition-all duration-200
-  hover:!border-[#2563EB]/60
-  focus-within:!border-[#2563EB]
-  focus-within:!ring-[3px]
-  focus-within:!ring-[#2563EB]/20
-  focus-within:shadow-[0_0_22px_rgba(37,99,235,0.16)]
-"
->
-  <Search
-    className="size-icon-lg shrink-0 text-[#91A1BB]"
-    strokeWidth={1.8}
-  />
-
-  <input
-    ref={inputRef}
-    type="search"
-    aria-label="Búsqueda global"
-    placeholder="Buscar documentos, carpetas, etiquetas..."
-    value={query}
-    onFocus={() => {
-      setIsOpen(true);
-      resetSelectedIndex();
-    }}
-    onChange={(e) => {
-      setQuery(e.target.value);
-      resetSelectedIndex();
-      setIsOpen(true);
-    }}
-    className="
-      h-full min-w-0 flex-1
-      cursor-text bg-transparent
-      text-body-small text-foreground
-      outline-none
-      placeholder:text-[#8492AA]
-    "
-  />
-
-  <kbd
-    data-search-shortcut
-    className="
-      pointer-events-none ml-auto inline-flex
-      h-[30px] shrink-0
-      items-center justify-center gap-1.5
-      rounded-[9px] border border-[#E7EDFA]
-      bg-white px-2.5 text-caption
-      font-medium text-[#8492AA]
-    "
-  >
-    <Command className="size-[13px]" strokeWidth={1.6} />
-    <span>K</span>
-  </kbd>
-</div>
-
-      {/* Popover */}
-      {isOpen && (
+      {/* Popover: solo con texto escrito y coincidencias */}
+      {showPopover && results && (
         <div
-className="
-  group flex h-full w-full min-w-0
-  items-center gap-4
-  rounded-[18px]
-  border border-[#E7EDFA]
-  bg-white px-[22px]
-  shadow-[0_2px_12px_rgba(30,64,175,0.04)]
-  transition-all duration-200
-  focus-within:!border-[#111827]
-  focus-within:!ring-[3px]
-  focus-within:!ring-[#111827]/15
-  focus-within:shadow-[0_0_20px_rgba(17,24,39,0.12)]
-"
->
-          {/* Search Input Header */}
-          <div className="border-b border-border/50 px-4 py-3">
-            <div className="relative flex items-center">
-              {isLoading ? (
-                <Loader2 className="pointer-events-none absolute left-0 size-icon-md animate-spin text-muted-foreground" />
-              ) : (
-                <Search className="pointer-events-none absolute left-0 size-icon-md text-muted-foreground" />
-              )}
-              <input
-                ref={inputRef}
-                type="text"
-                placeholder="Usuarios, artículos, documentos..."
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  resetSelectedIndex();
-                }}
-                className="w-full bg-transparent pl-6 pr-3 py-2 text-body text-foreground outline-none placeholder:text-muted-foreground"
-              />
-            </div>
-          </div>
+          className="
+            absolute left-0 right-0 top-full z-[100]
+            mt-2 w-full min-w-[min(24rem,calc(100vw-2rem))]
+            overflow-hidden rounded-[18px]
+            border border-[#E7EDFA]
+            bg-white text-[#17243B]
+            shadow-[0_18px_55px_rgba(25,48,100,0.16)]
+          "
+        >
+          {/* Resultados */}
+          <div className="max-h-[450px] overflow-y-auto px-3 py-2">
+            {results.groups.map((group, groupIdx) => {
+              // Índice global donde empieza este grupo
+              const offset = results.groups
+                .slice(0, groupIdx)
+                .reduce((sum, g) => sum + g.results.length, 0);
 
-          {/* Content Area */}
-          <div className="max-h-[450px] overflow-y-auto">
-            {showEmptyState ? (
-              <>
-                {/* Recent Searches */}
-                {recentSearches.length > 0 && (
-                  <div className="border-b border-border/50 px-3 py-3">
-                    <div className="mb-3 flex items-center gap-2 px-1">
-                      <Clock className="size-icon-md text-muted-foreground" />
-                      <h3 className="text-caption font-semibold text-muted-foreground">
-                        Búsquedas Recientes
-                      </h3>
-                    </div>
-                    <div className="space-y-1">
-                      {recentSearches.map((search) => (
-                        <button
-                          key={search.id}
-                          onClick={() => {
-                            setQuery(search.query);
-                          }}
-                          className="w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-body text-foreground transition hover:bg-accent"
-                        >
-                          <span className="truncate">{search.query}</span>
-                          <ChevronRight className="size-icon-sm text-muted-foreground" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Quick Access */}
-                {quickAccess.length > 0 && (
-                  <div className="border-b border-border/50 px-3 py-3">
-                    <div className="mb-3 flex items-center gap-2 px-1">
-                      <Zap className="size-icon-md text-muted-foreground" />
-                      <h3 className="text-caption font-semibold text-muted-foreground">
-                        Accesos Rápidos
-                      </h3>
-                    </div>
-                    <div className="space-y-1">
-                      {quickAccess.map((access) => (
-                        <button
-                          key={access.id}
-                          onClick={() => {
-                            router.push(access.url);
-                            setIsOpen(false);
-                            clearQuery();
-                          }}
-                          className="w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-body text-foreground transition hover:bg-accent"
-                        >
-                          <span className="truncate">{access.title}</span>
-                          <ChevronRight className="size-icon-sm text-muted-foreground" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Help Tips */}
-                <div className="px-4 py-3">
-                  <div className="space-y-2 rounded-lg bg-accent/50 p-3">
-                    <div className="flex items-start gap-2">
-                      <HelpCircle className="mt-0.5 size-icon-md shrink-0 text-foreground" />
-                      <div className="space-y-1">
-                        <p className="text-caption font-medium text-foreground">
-                          Consejos de búsqueda
-                        </p>
-                        <ul className="space-y-0.5 text-caption text-muted-foreground">
-                          <li>
-                            • Escribe para buscar en todas las categorías
-                          </li>
-                          <li>• Usa <kbd className="inline-flex rounded border border-border/30 bg-background/50 px-1 font-mono text-caption">↑↓</kbd> para navegar</li>
-                          <li>• Presiona <kbd className="inline-flex rounded border border-border/30 bg-background/50 px-1 font-mono text-caption">Enter</kbd> para seleccionar</li>
-                        </ul>
-                      </div>
-                    </div>
+              return (
+                <div key={group.category} className="mb-4 last:mb-0">
+                  <h4 className="mb-2 px-1 text-caption font-semibold text-muted-foreground">
+                    {group.label} ({group.results.length})
+                  </h4>
+                  <div className="space-y-1">
+                    {group.results.map((result, idx) => (
+                      <button
+                        key={result.id}
+                        type="button"
+                        // Evita que el input pierda el foco al hacer click
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          if (result.url) {
+                            router.push(result.url);
+                            addToHistory(query);
+                            closeAndReset();
+                            inputRef.current?.blur();
+                          }
+                        }}
+                        className="w-full text-left"
+                      >
+                        <SearchResultItem
+                          {...result}
+                          isSelected={offset + idx === selectedIndex}
+                        />
+                      </button>
+                    ))}
                   </div>
                 </div>
-              </>
-            ) : results && results.total > 0 ? (
-              <div className="px-3 py-2">
-                {results.groups.map((group) => (
-                  <div key={group.category} className="mb-4 last:mb-0">
-                    <h4 className="mb-2 px-1 text-caption font-semibold text-muted-foreground">
-                      {group.label} ({group.results.length})
-                    </h4>
-                    <div className="space-y-1">
-                      {group.results.map((result, idx) => {
-                        // Calcular el índice global
-                        const globalIdx =
-                          results.groups
-                            .slice(0, results.groups.indexOf(group))
-                            .reduce((sum, g) => sum + g.results.length, 0) + idx;
-
-                        return (
-                          <button
-                            key={result.id}
-                            onClick={() => {
-                              if (result.url) {
-                                router.push(result.url);
-                                addToHistory(query);
-                                setIsOpen(false);
-                                clearQuery();
-                              }
-                            }}
-                            className="w-full text-left"
-                          >
-                            <SearchResultItem
-                              {...result}
-                              isSelected={globalIdx === selectedIndex}
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : query.trim() && !isLoading ? (
-              <div className="flex flex-col items-center justify-center py-12 px-4">
-                <Search className="mb-3 h-8 w-8 text-muted-foreground/30" />
-                <p className="text-body font-medium text-foreground">
-                  No se encontraron resultados
-                </p>
-                <p className="mt-1 text-caption text-muted-foreground">
-                  para &quot;{query}&quot;
-                </p>
-              </div>
-            ) : isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="size-icon-xl animate-spin text-muted-foreground" />
-              </div>
-            ) : null}
+              );
+            })}
           </div>
 
           {/* Footer Info */}
-          {query.trim() && results && results.total > 0 && (
-            <div className="border-t border-border/50 px-4 py-2 text-caption text-muted-foreground">
-              {results.total} resultado{results.total !== 1 ? "s" : ""} encontrado{results.total !== 1 ? "s" : ""} en {results.executionTime.toFixed(0)}ms
-            </div>
-          )}
+          <div className="border-t border-border/50 px-4 py-2 text-caption text-muted-foreground">
+            {results.total} resultado{results.total !== 1 ? "s" : ""} encontrado
+            {results.total !== 1 ? "s" : ""} en{" "}
+            {results.executionTime.toFixed(0)}ms
+          </div>
         </div>
       )}
     </div>

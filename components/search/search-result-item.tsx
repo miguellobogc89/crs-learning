@@ -1,9 +1,11 @@
+// components/search/search-result-item.tsx
+
 "use client";
 
-import { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SearchResult, SearchCategory } from "@/types/search";
 import {
+  type LucideIcon,
   Users,
   FileText,
   BookOpen,
@@ -11,6 +13,7 @@ import {
   Users2,
   Lightbulb,
   ArrowRight,
+  File,
 } from "lucide-react";
 
 const CATEGORY_ICONS: Record<SearchCategory, LucideIcon> = {
@@ -32,9 +35,19 @@ const CATEGORY_COLORS: Record<SearchCategory, string> = {
     "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
   carpetas:
     "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
-  equipos:
-    "bg-pink-100 text-pink-700 dark:bg-pink-900 dark:text-pink-300",
+  equipos: "bg-pink-100 text-pink-700 dark:bg-pink-900 dark:text-pink-300",
 };
+
+const CATEGORY_LABELS: Record<SearchCategory, string> = {
+  usuarios: "Perfil",
+  articulos: "Artículo",
+  documentos: "Documento",
+  bibliotecas: "Biblioteca",
+  carpetas: "Carpeta",
+  equipos: "Equipo",
+};
+
+const FALLBACK_COLOR = "bg-muted text-muted-foreground";
 
 type SearchResultItemProps = SearchResult & {
   isSelected?: boolean;
@@ -47,8 +60,14 @@ export function SearchResultItem({
   avatar,
   isSelected,
 }: SearchResultItemProps) {
-  const Icon = CATEGORY_ICONS[category];
-  const colorClass = CATEGORY_COLORS[category];
+  // Si llega una categoría desconocida, usamos valores por defecto en vez de romper
+  if (process.env.NODE_ENV !== "production" && !CATEGORY_ICONS[category]) {
+    console.warn("SearchResultItem: categoría desconocida:", JSON.stringify(category));
+  }
+
+  const Icon = CATEGORY_ICONS[category] ?? File;
+  const colorClass = CATEGORY_COLORS[category] ?? FALLBACK_COLOR;
+  const label = CATEGORY_LABELS[category] ?? "Resultado";
 
   return (
     <div
@@ -60,9 +79,18 @@ export function SearchResultItem({
       )}
     >
       {/* Icon/Avatar */}
-      <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", colorClass)}>
+      <div
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+          colorClass
+        )}
+      >
         {avatar ? (
-          <img src={avatar} alt={title} className="h-10 w-10 rounded-lg object-cover" />
+          <img
+            src={avatar}
+            alt={title}
+            className="h-10 w-10 rounded-lg object-cover"
+          />
         ) : (
           <Icon className="h-5 w-5" />
         )}
@@ -70,26 +98,20 @@ export function SearchResultItem({
 
       {/* Content */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">{title}</p>
+        <p className="truncate text-sm font-semibold text-foreground">
+          {title}
+        </p>
         {description && (
-          <p className="truncate text-xs text-muted-foreground">{description}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {description}
+          </p>
         )}
       </div>
 
       {/* Badge + Arrow */}
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <span className="hidden text-xs font-medium text-muted-foreground sm:inline">
-          {category === "usuarios"
-            ? "Perfil"
-            : category === "articulos"
-              ? "Artículo"
-              : category === "documentos"
-                ? "Documento"
-                : category === "bibliotecas"
-                  ? "Biblioteca"
-                  : category === "carpetas"
-                    ? "Carpeta"
-                    : "Equipo"}
+          {label}
         </span>
         <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-all group-hover:opacity-100" />
       </div>
