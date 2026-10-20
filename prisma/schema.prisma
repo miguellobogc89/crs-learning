@@ -195,6 +195,7 @@ model users {
   course_request_votes                                                                         course_request_votes[]
   course_requests                                                                              course_requests[]
   courses                                                                                      courses[]
+  engine_record_provenance                                                                     engine_record_provenance[]
   engine_record_revisions                                                                      engine_record_revisions[]
   engine_records_engine_records_created_by_user_idTousers                                      engine_records[]                   @relation("engine_records_created_by_user_idTousers")
   engine_records_engine_records_updated_by_user_idTousers                                      engine_records[]                   @relation("engine_records_updated_by_user_idTousers")
@@ -300,6 +301,7 @@ model knowledge_sources {
   entities                                          Json?
   company_id                                        String?                            @db.Uuid
   courses                                           courses[]
+  engine_record_provenance                          engine_record_provenance[]
   knowledge_analysis                                knowledge_analysis?
   knowledge_correction_requests                     knowledge_correction_requests[]
   knowledge_files                                   knowledge_files[]
@@ -320,20 +322,21 @@ model knowledge_sources {
 }
 
 model knowledge_files {
-  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  knowledge_source_id     String                   @db.Uuid
-  file_name               String
-  file_type               String?
-  file_size               Int?
-  storage_path            String?
-  extracted_text          String                   @default("")
-  status                  String                   @default("uploaded")
-  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
-  updated_at              DateTime                 @default(now()) @db.Timestamptz(6)
-  uploaded_by_user_id     String?                  @db.Uuid
-  knowledge_file_analysis knowledge_file_analysis?
-  knowledge_sources       knowledge_sources        @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users                   users?                   @relation(fields: [uploaded_by_user_id], references: [id], onUpdate: NoAction)
+  id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  knowledge_source_id      String                     @db.Uuid
+  file_name                String
+  file_type                String?
+  file_size                Int?
+  storage_path             String?
+  extracted_text           String                     @default("")
+  status                   String                     @default("uploaded")
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  uploaded_by_user_id      String?                    @db.Uuid
+  engine_record_provenance engine_record_provenance[]
+  knowledge_file_analysis  knowledge_file_analysis?
+  knowledge_sources        knowledge_sources          @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                    users?                     @relation(fields: [uploaded_by_user_id], references: [id], onUpdate: NoAction)
 
   @@index([knowledge_source_id], map: "idx_knowledge_files_knowledge_source_id")
   @@index([uploaded_by_user_id], map: "idx_knowledge_files_uploaded_by_user_id")
@@ -1530,22 +1533,23 @@ model engine_object_types {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model engine_records {
-  id                                             String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id                                String                    @db.Uuid
-  object_type_id                                 String                    @db.Uuid
+  id                                             String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                String                     @db.Uuid
+  object_type_id                                 String                     @db.Uuid
   external_key                                   String?
-  status                                         String                    @default("draft")
-  values_json                                    Json                      @default("{}")
-  schema_version                                 Int                       @default(1)
-  revision                                       Int                       @default(1)
-  created_by_user_id                             String?                   @db.Uuid
-  updated_by_user_id                             String?                   @db.Uuid
-  created_at                                     DateTime                  @default(now()) @db.Timestamptz(6)
-  updated_at                                     DateTime                  @default(now()) @db.Timestamptz(6)
+  status                                         String                     @default("draft")
+  values_json                                    Json                       @default("{}")
+  schema_version                                 Int                        @default(1)
+  revision                                       Int                        @default(1)
+  created_by_user_id                             String?                    @db.Uuid
+  updated_by_user_id                             String?                    @db.Uuid
+  created_at                                     DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at                                     DateTime                   @default(now()) @db.Timestamptz(6)
+  engine_record_provenance                       engine_record_provenance[]
   engine_record_revisions                        engine_record_revisions[]
-  users_engine_records_created_by_user_idTousers users?                    @relation("engine_records_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
-  engine_object_types                            engine_object_types       @relation(fields: [organization_id, object_type_id], references: [organization_id, id], onUpdate: NoAction, map: "engine_records_object_fk")
-  users_engine_records_updated_by_user_idTousers users?                    @relation("engine_records_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+  users_engine_records_created_by_user_idTousers users?                     @relation("engine_records_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  engine_object_types                            engine_object_types        @relation(fields: [organization_id, object_type_id], references: [organization_id, id], onUpdate: NoAction, map: "engine_records_object_fk")
+  users_engine_records_updated_by_user_idTousers users?                     @relation("engine_records_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
 
   @@unique([object_type_id, external_key], map: "engine_records_external_key_unique", where: raw("(external_key IS NOT NULL)"))
   @@unique([organization_id, id], map: "engine_records_org_id_unique")
@@ -1556,19 +1560,46 @@ model engine_records {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model engine_record_revisions {
-  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id    String         @db.Uuid
-  record_id          String         @db.Uuid
-  object_type_id     String         @db.Uuid
-  revision           Int
-  schema_version     Int
-  status             String
-  values_json        Json
-  changed_by_user_id String?        @db.Uuid
-  recorded_at        DateTime       @default(now()) @db.Timestamptz(6)
-  users              users?         @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
-  engine_records     engine_records @relation(fields: [organization_id, record_id], references: [organization_id, id], onUpdate: NoAction, map: "engine_revision_record_fk")
+  id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id          String                     @db.Uuid
+  record_id                String                     @db.Uuid
+  object_type_id           String                     @db.Uuid
+  revision                 Int
+  schema_version           Int
+  status                   String
+  values_json              Json
+  changed_by_user_id       String?                    @db.Uuid
+  recorded_at              DateTime                   @default(now()) @db.Timestamptz(6)
+  engine_record_provenance engine_record_provenance[]
+  users                    users?                     @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
+  engine_records           engine_records             @relation(fields: [organization_id, record_id], references: [organization_id, id], onUpdate: NoAction, map: "engine_revision_record_fk")
 
   @@unique([record_id, revision], map: "engine_revision_unique")
   @@index([organization_id, record_id, revision(sort: Desc)], map: "engine_revision_org_record_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model engine_record_provenance {
+  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id         String                  @db.Uuid
+  record_id               String                  @db.Uuid
+  revision                Int
+  field_key               String?
+  knowledge_source_id     String?                 @db.Uuid
+  knowledge_file_id       String?                 @db.Uuid
+  source_locator          String?
+  evidence_text           String?
+  origin_type             String                  @default("document")
+  confidence              Decimal?                @db.Decimal(5, 4)
+  created_by_user_id      String?                 @db.Uuid
+  created_at              DateTime                @default(now()) @db.Timestamptz(6)
+  engine_records          engine_records          @relation(fields: [organization_id, record_id], references: [organization_id, id], onUpdate: NoAction, map: "engine_provenance_record_fk")
+  engine_record_revisions engine_record_revisions @relation(fields: [record_id, revision], references: [record_id, revision], onUpdate: NoAction, map: "engine_provenance_revision_fk")
+  users                   users?                  @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  knowledge_files         knowledge_files?        @relation(fields: [knowledge_file_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  knowledge_sources       knowledge_sources?      @relation(fields: [knowledge_source_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([knowledge_file_id], map: "engine_provenance_file_idx")
+  @@index([organization_id, record_id, revision], map: "engine_provenance_record_idx")
+  @@index([knowledge_source_id], map: "engine_provenance_source_idx")
 }
