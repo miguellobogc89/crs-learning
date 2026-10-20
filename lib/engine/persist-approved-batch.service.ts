@@ -108,6 +108,7 @@ export async function persistApprovedKnowledgeBatch(input: {
     }
     return {
       subject: item.subject, attribute: item.attribute, context: item.context,
+      status: "PENDING_REVIEW", scope: "AFFECTED_VALUE_ONLY",
       alternatives: alternatives as unknown as ValueConflictCandidate["alternatives"],
     };
   });
