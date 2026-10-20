@@ -330,7 +330,12 @@ export async function confirmKnowledgeImport({
   }
 
   const acceptedImportFileIdByHash = new Map<string, string>();
-  const articlePlans = [];
+  const articlePlans: Array<{
+    article: (typeof proposal.articles)[number];
+    filesToCreate: Array<(typeof knowledgeImport.knowledge_import_files)[number]>;
+    skippedDocuments: KnowledgeImportSkippedDocumentLog[];
+    generatedContent: string | null;
+  }> = [];
   for (const article of proposal.articles) {
     const articleFiles = article.documentIds.map((documentId) => {
       const file = importFilesById.get(documentId);
