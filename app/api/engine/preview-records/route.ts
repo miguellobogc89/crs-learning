@@ -5,6 +5,7 @@ import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { previewEngineImportFromKnowledge } from "@/lib/engine/import-knowledge-preview.service";
 import { getKnowledgeImportModel, getOpenAIClient } from "@/lib/ai/openai";
+import { resolvePreviewIdentities } from "@/lib/engine/preview-identity-resolution";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -159,6 +160,7 @@ export async function POST(request: NextRequest) {
     const processedCharacters = selectedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
     return NextResponse.json({
       status: "EXTRACTION_PREVIEW", recipes: blocks, issues,
+      identityPreview: resolvePreviewIdentities(blocks),
       summary: { recipes: blocks.length, ingredientLines: blocks.reduce((n, b) => n + b.ingredients.length, 0),
         proposedBlocks, proposedLines, rejectedLines },
       processedCharacters, totalCharacters: file.extracted_text.length,
