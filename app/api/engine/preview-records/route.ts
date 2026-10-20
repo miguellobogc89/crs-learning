@@ -6,6 +6,7 @@ import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { previewEngineImportFromKnowledge } from "@/lib/engine/import-knowledge-preview.service";
 import { getKnowledgeImportModel, getOpenAIClient } from "@/lib/ai/openai";
 import { resolvePreviewIdentities } from "@/lib/engine/preview-identity-resolution";
+import { buildPreviewImportPlan } from "@/lib/engine/preview-import-plan";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -161,6 +162,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       status: "EXTRACTION_PREVIEW", recipes: blocks, issues,
       identityPreview: resolvePreviewIdentities(blocks),
+      importPlan: buildPreviewImportPlan(blocks, file.extracted_text),
       summary: { recipes: blocks.length, ingredientLines: blocks.reduce((n, b) => n + b.ingredients.length, 0),
         proposedBlocks, proposedLines, rejectedLines },
       processedCharacters, totalCharacters: file.extracted_text.length,
