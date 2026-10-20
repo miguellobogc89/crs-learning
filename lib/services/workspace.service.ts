@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import {
@@ -90,34 +91,40 @@ async function ensureRootLibraryForWorkspace(data: {
     data.isBootstrapWorkspace,
   );
 
-  const existingName = await prisma.knowledge_libraries.findFirst({
-    where: {
-      owner_user_id: data.userId,
-      name: fallbackName,
-      parent_id: null,
-    },
-    select: {
-      id: true,
-    },
-  });
+  try {
+    return await prisma.knowledge_libraries.create({
+      data: {
+        owner_user_id: data.userId,
+        parent_id: null,
+        workspace_id: data.workspaceId,
+        name: fallbackName,
+        position: 0,
+        visibility: "restricted",
+        created_by_user_id: data.userId,
+        updated_by_user_id: data.userId,
+      },
+      select: { id: true },
+    });
+  } catch (error) {
+    if (
+      !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+      error.code !== "P2002"
+    ) {
+      throw error;
+    }
 
-  return prisma.knowledge_libraries.create({
-    data: {
-      owner_user_id: data.userId,
-      parent_id: null,
-      workspace_id: data.workspaceId,
-      name: existingName
-        ? `${fallbackName} ${data.workspaceId.slice(0, 8)}`
-        : fallbackName,
-      position: 0,
-      visibility: "restricted",
-      created_by_user_id: data.userId,
-      updated_by_user_id: data.userId,
-    },
-    select: {
-      id: true,
-    },
-  });
+    // A concurrent bootstrap may have created this workspace's root.
+    const concurrent = await prisma.knowledge_libraries.findFirst({
+      where: {
+        owner_user_id: data.userId,
+        workspace_id: data.workspaceId,
+        parent_id: null,
+      },
+      select: { id: true },
+    });
+    if (concurrent) return concurrent;
+    throw error;
+  }
 }
 
 async function bootstrapPersonalWorkspace(userId: string) {
@@ -208,6 +215,18 @@ export async function ensureWorkspaceBootstrap(userId: string) {
         updated_by_user_id: userId,
       },
     });
+
+    // Repair pre-existing personal workspaces missing their root library.
+    // This belongs to workspace bootstrap, never to a knowledge read.
+    for (const personalWorkspace of personalWorkspaces) {
+      await ensureRootLibraryForWorkspace({
+        userId,
+        workspaceId: personalWorkspace.id,
+        workspaceName: personalWorkspace.name,
+        isBootstrapWorkspace:
+          personalWorkspace.id === oldestPersonalWorkspace.id,
+      });
+    }
 
     workspaces = await listAccessibleWorkspaces(userId);
   }
