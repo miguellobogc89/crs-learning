@@ -9,9 +9,7 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  FileStack,
   FileSearch,
-  FolderTree,
   UsersRound,
 } from "lucide-react";
 
@@ -306,7 +304,7 @@ export function KnowledgeExplorer({
       );
     }
 
-    if (selectedLibraryId) {
+    if (selectedView === "all" || selectedLibraryId) {
       return (
         <KnowledgeEmptyFolder
           onUploadFiles={() =>
