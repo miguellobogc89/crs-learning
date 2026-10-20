@@ -2,7 +2,6 @@
 
 "use client";
 
-import Link from "next/link";
 
 import {
   Archive,
@@ -27,11 +26,13 @@ import type { UploadType } from "./types";
 type Props = {
   onCreateFolder: () => void;
   onUpload: (type: UploadType) => void;
+  onEngineTest: () => void;
 };
 
 export function KnowledgeActions({
   onCreateFolder,
   onUpload,
+  onEngineTest,
 }: Props) {
   return (
     <DropdownMenu>
@@ -69,11 +70,9 @@ export function KnowledgeActions({
 
         <DropdownMenuSeparator className="my-1" />
 
-        <DropdownMenuItem asChild className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5">
-          <Link href="/knowledge/engine-preview">
-            <FlaskConical className="size-icon-md shrink-0 text-muted-foreground" />
-            <span className="text-body font-medium">Analizar con Engine (prueba)</span>
-          </Link>
+        <DropdownMenuItem onSelect={onEngineTest} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5">
+          <FlaskConical className="size-icon-md shrink-0 text-muted-foreground" />
+          <span className="text-body font-medium">Probar con Engine</span>
         </DropdownMenuItem>
 
         <DropdownMenuSeparator className="my-1" />
