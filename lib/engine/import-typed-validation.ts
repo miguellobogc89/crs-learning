@@ -39,10 +39,9 @@ export function validateTypedEngineImport(input: {
   const definitions = new Map(input.definitions
     .filter((definition) => definition.workspaceId === input.workspaceId)
     .map((definition) => [definition.id, definition]));
-  const indices = new Map(input.candidates.map((candidate, index) => [candidate, index]));
 
   for (const candidate of preflight.accepted) {
-    const index = indices.get(candidate)!;
+    const index = input.candidates.indexOf(candidate);
     const definition = definitions.get(candidate.objectTypeId);
     if (!definition) {
       issues.push({ index, code: "OBJECT_TYPE_NOT_FOUND" });
