@@ -4,7 +4,8 @@ import type { ExistingSchemaSemanticCandidate } from "./existing-semantic-review
 
 export type SemanticEvolutionDecision = {
   kind: "REUSE_EXACT_KEY" | "POSSIBLE_ENTITY_ALIAS" | "NEW_ENTITY_REVIEW" |
-    "NEW_FIELD_REVIEW" | "NEW_RELATION_REVIEW" | "OTHER_SCHEMA_REVIEW" |\n    "UNCERTAIN_ENTITY_MATCH" | "POSSIBLE_FIELD_ALIAS" | "UNCERTAIN_FIELD_MATCH";
+    "NEW_FIELD_REVIEW" | "NEW_RELATION_REVIEW" | "OTHER_SCHEMA_REVIEW" |
+    "UNCERTAIN_ENTITY_MATCH" | "POSSIBLE_FIELD_ALIAS" | "UNCERTAIN_FIELD_MATCH";
   source: string;
   target?: string;
   reason: string;
