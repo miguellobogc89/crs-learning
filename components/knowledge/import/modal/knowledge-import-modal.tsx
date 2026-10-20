@@ -525,7 +525,7 @@ export function KnowledgeImportModal({
                     </span>
                   ))}
                 </div>
-                <p className="mt-2 text-[11px] text-blue-700">Detección inicial sobre contenido extraído; no se crean tablas ni registros en Engine.</p>
+                <p className="mt-2 text-[11px] text-blue-700">Detección inicial sobre contenido extraído. Tras incorporar el documento, Engine creará los tipos y registros verificables.</p>
               </div>
             ) : null}
 
