@@ -46,7 +46,7 @@ export async function previewEngineImportFromKnowledge(input: {
       tx.knowledge_files.findMany({
         where: {
           id: { in: input.knowledgeFileIds },
-          status: "ready",
+          status: { in: ["ready", "processed"] },
           knowledge_sources: knowledgeSourceReadWhere(input.userId, input.workspaceId),
         },
         select: { id: true, extracted_text: true },
