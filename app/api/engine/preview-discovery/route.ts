@@ -49,8 +49,19 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Engine preview failed", error);
+    const message = error instanceof Error ? error.message : "";
+    const isPermission = /owner or admin required|workspace.*required/i.test(message);
+    const isFile = /inaccessible|no longer accessible|not ready|Knowledge access changed/i.test(message);
+    const isAi = /OpenAI|schema discovery response|semantic comparison|response size|JSON/i.test(message);
     return NextResponse.json({
-      error: "No se pudo analizar el archivo. Comprueba que está procesado y que tienes permisos de administración.",
-    }, { status: 422 });
+      code: isPermission ? "ENGINE_PERMISSION" : isFile ? "KNOWLEDGE_FILE" : isAi ? "AI_ANALYSIS" : "ENGINE_PREVIEW",
+      error: isPermission
+        ? "Necesitas permisos de propietario o administrador del espacio para ejecutar esta prueba."
+        : isFile
+          ? "El documento no está disponible o no tiene texto procesado accesible en este espacio."
+          : isAi
+            ? "El análisis de IA no pudo completarse. Consulta el registro del servidor."
+            : "El Engine no pudo completar el análisis. Consulta el registro del servidor.",
+    }, { status: isPermission ? 403 : 422 });
   }
 }
