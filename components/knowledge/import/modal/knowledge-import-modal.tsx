@@ -616,6 +616,7 @@ export function KnowledgeImportModal({
               "completed" &&
             knowledgeImport.completionResult ? (
               <KnowledgeImportCompletedStep
+                tableFileNames={knowledgeImport.fileProgress.filter(file => knowledgeImport.tableDetection[file.id] === true).map(file => file.name)}
                 result={
                   knowledgeImport.completionResult
                 }
