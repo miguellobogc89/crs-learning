@@ -16,6 +16,18 @@ type Preview = {
 
 type Extraction = {
   status: string;
+  importPlan?: {
+    status: string;
+    summary: { recipes: number; uniqueIngredients: number; ingredientLines: number; proposedRecipeReferences: number; blockingIssues: number };
+    operations: {
+      recipes: { id: string; name: string; action: string }[];
+      ingredients: { id: string; name: string; occurrences: number; action: string }[];
+      references: { lineId: string; sourceRecipeId: string; targetRecipeId: string; status: string; reason: string }[];
+    };
+    issues: { code: string; subjectId: string; message: string }[];
+    checks: { sourceEvidence: boolean; duplicateNamesWithinDocument: boolean; existingDatabaseRecordsChecked: boolean; schemaApproved: boolean; identitiesApproved: boolean; readyToPersist: boolean };
+    writesPerformed: boolean;
+  };
   identityPreview?: {
     recipes: { id: string; name: string; evidenceText: string }[];
     ingredients: { id: string; name: string; occurrences: number }[];
@@ -259,6 +271,21 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
                     </p>
                   );
                 })}
+              </div>
+            )}
+            {extraction.importPlan && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-slate-800">
+                <p className="font-semibold">Preflight de importación · Pendiente de aprobación</p>
+                <p className="mt-1">
+                  {extraction.importPlan.summary.recipes} recetas · {extraction.importPlan.summary.uniqueIngredients} ingredientes únicos · {extraction.importPlan.summary.ingredientLines} líneas · {extraction.importPlan.summary.proposedRecipeReferences} referencias propuestas
+                </p>
+                <p className="mt-2 font-medium">Operaciones previstas: crear o buscar coincidencia existente. Ninguna operación autorizada todavía.</p>
+                <p className="mt-1">Evidencias: {extraction.importPlan.checks.sourceEvidence ? "válidas" : "con incidencias"} · Nombres repetidos: {extraction.importPlan.checks.duplicateNamesWithinDocument ? "sin conflicto detectado" : "requieren revisión"}</p>
+                <p className="mt-1 text-amber-900">Pendiente: aprobar esquema, verificar duplicados contra la base de datos y confirmar identidades y referencias.</p>
+                <p className="mt-1 font-semibold">Persistencia bloqueada · Sin escrituras</p>
+                {extraction.importPlan.issues.map((issue, index) => (
+                  <p key={index} className="mt-1 text-red-700">{issue.code}: {issue.message}</p>
+                ))}
               </div>
             )}
             {!extraction.recipes.length && <p className="text-sm text-slate-600">No se han validado recetas en esta extracción.</p>}
