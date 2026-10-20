@@ -167,3 +167,28 @@ export async function updateEngineDraftRecord(input: {
     });
   });
 }
+
+/** Returns the stored snapshots of a record, newest revision first. */
+export async function listEngineRecordHistory(input: {
+  organizationId: string;
+  userId: string;
+  recordId: string;
+  take?: number;
+}) {
+  return prisma.$transaction(async (tx) => {
+    await checkMembership(tx, input.organizationId, input.userId, false);
+    const record = await tx.engine_records.findFirst({
+      where: { id: input.recordId, organization_id: input.organizationId },
+      select: { id: true },
+    });
+    if (!record) throw new EngineRecordError("NOT_FOUND", "Record not found.");
+    const take = Number.isFinite(input.take)
+      ? Math.min(100, Math.max(1, Math.trunc(input.take!)))
+      : 50;
+    return tx.engine_record_revisions.findMany({
+      where: { organization_id: input.organizationId, record_id: record.id },
+      orderBy: { revision: "desc" },
+      take,
+    });
+  });
+}
