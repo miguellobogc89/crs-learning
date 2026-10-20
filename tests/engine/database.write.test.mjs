@@ -15,23 +15,23 @@ test("Neon creates immutable record snapshots and provenance (transaction rolled
   try {
     await client.query("BEGIN");
     begun = true;
-    const org = await client.query("SELECT id FROM organizations WHERE status = 'active' LIMIT 1");
+    const org = await client.query("SELECT id FROM workspaces WHERE status = 'active' LIMIT 1");
     if (!org.rowCount) {
-      t.skip("No active development organization exists.");
+      t.skip("No active development workspace exists.");
       return;
     }
     const orgId = org.rows[0].id;
     const object = await client.query(
-      "INSERT INTO engine_object_types (organization_id, key, name) VALUES ($1, $2, $3) RETURNING id",
+      "INSERT INTO engine_object_types (workspace_id, key, name) VALUES ($1, $2, $3) RETURNING id",
       [orgId, "smoke_" + Date.now().toString(36), "Temporary smoke object"],
     );
     const objectId = object.rows[0].id;
     await client.query(
-      "INSERT INTO engine_field_definitions (organization_id, object_type_id, key, name, field_type) VALUES ($1, $2, 'amount', 'Amount', 'integer')",
+      "INSERT INTO engine_field_definitions (workspace_id, object_type_id, key, name, field_type) VALUES ($1, $2, 'amount', 'Amount', 'integer')",
       [orgId, objectId],
     );
     const record = await client.query(
-      "INSERT INTO engine_records (organization_id, object_type_id, values_json) VALUES ($1, $2, $3::jsonb) RETURNING id",
+      "INSERT INTO engine_records (workspace_id, object_type_id, values_json) VALUES ($1, $2, $3::jsonb) RETURNING id",
       [orgId, objectId, JSON.stringify({ amount: 10 })],
     );
     const recordId = record.rows[0].id;
@@ -46,7 +46,7 @@ test("Neon creates immutable record snapshots and provenance (transaction rolled
     assert.deepEqual(revisions.rows.map((r) => [r.revision, r.values_json.amount]), [[1, 10], [2, 20]]);
 
     await client.query(
-      "INSERT INTO engine_record_provenance (organization_id, record_id, revision, field_key, origin_type, evidence_text) VALUES ($1, $2, 2, 'amount', 'manual', 'Smoke evidence')",
+      "INSERT INTO engine_record_provenance (workspace_id, record_id, revision, field_key, origin_type, evidence_text) VALUES ($1, $2, 2, 'amount', 'manual', 'Smoke evidence')",
       [orgId, recordId],
     );
     const evidence = await client.query(
