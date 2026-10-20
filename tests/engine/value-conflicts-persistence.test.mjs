@@ -85,14 +85,14 @@ test("persists validated evidence as pending, without modifying Engine records",
   assert.equal(calls.upsert.length, 1);
   assert.equal(calls.upsert[0].create.scope, "affected_value_only");
   assert.equal(calls.upsert[0].create.alternatives_json.length, 2);
-  assert.deepEqual(calls.upsert[0].update, {});
+  assert.equal(Object.keys(calls.upsert[0].update).length, 0);
 });
 
 test("never reopens an already resolved conflict on duplicate detection", async () => {
   const { persistReviewedValueConflictCandidates: persist, calls } = setup({ storedStatus: "resolved" });
   const result = await persist(input());
   assert.equal(result.stored[0].status, "resolved");
-  assert.deepEqual(calls.upsert[0].update, {});
+  assert.equal(Object.keys(calls.upsert[0].update).length, 0);
 });
 
 test("rejects unauthorized writes before reading evidence", async () => {
