@@ -42,15 +42,50 @@ export async function listEngineRecordProvenance(input: {
       },
       orderBy: { created_at: "desc" },
     });
-    const sourceIds = [...new Set(items.map((item) => item.knowledge_source_id).filter((id): id is string => id !== null))];
-    const allowed = await tx.knowledge_sources.findMany({
-      where: { id: { in: sourceIds }, AND: [knowledgeSourceReadWhere(input.userId)] },
-      select: { id: true },
-    });
-    const allowedIds = new Set(allowed.map((source) => source.id));
-    return items.filter((item) =>
-      item.knowledge_source_id === null || allowedIds.has(item.knowledge_source_id)
+    // Evidence may reference a source, a file, both, or neither (manual).
+    // File-only evidence must be checked through its parent knowledge source.
+    const sourceIds = [...new Set(items
+      .map((item) => item.knowledge_source_id)
+      .filter((id): id is string => id !== null))];
+    const fileIds = [...new Set(items
+      .map((item) => item.knowledge_file_id)
+      .filter((id): id is string => id !== null))];
+
+    const [allowedSources, allowedFiles] = await Promise.all([
+      tx.knowledge_sources.findMany({
+        where: {
+          id: { in: sourceIds },
+          AND: [knowledgeSourceReadWhere(input.userId)],
+        },
+        select: { id: true },
+      }),
+      tx.knowledge_files.findMany({
+        where: {
+          id: { in: fileIds },
+          knowledge_sources: knowledgeSourceReadWhere(input.userId),
+        },
+        select: { id: true, knowledge_source_id: true },
+      }),
+    ]);
+
+    const allowedSourceIds = new Set(allowedSources.map((source) => source.id));
+    const allowedFileById = new Map(
+      allowedFiles.map((file) => [file.id, file.knowledge_source_id]),
     );
+
+    return items.filter((item) => {
+      // When both references are present, verify they belong to the same
+      // accessible source; never trust a mismatched provenance link.
+      if (item.knowledge_source_id &&
+          !allowedSourceIds.has(item.knowledge_source_id)) return false;
+      if (item.knowledge_file_id) {
+        const parentSourceId = allowedFileById.get(item.knowledge_file_id);
+        if (!parentSourceId) return false;
+        if (item.knowledge_source_id &&
+            parentSourceId !== item.knowledge_source_id) return false;
+      }
+      return true; // Manual provenance with no document reference.
+    });
   });
 }
 
