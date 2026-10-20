@@ -23,17 +23,20 @@ function loadService(path, prisma) {
   return module.exports;
 }
 
-const ORG = "org-a";
+const WORKSPACE = "workspace-a";
 const USER = "user-a";
 
-function mockedPrisma(membership) {
+function mockedPrisma(membership, owner = false) {
   const counters = { writes: 0, reads: 0 };
   const tx = {
-    organization_members: {
-      findUnique: async ({ where }) => {
-        assert.equal(where.organization_id_user_id.organization_id, ORG);
-        assert.equal(where.organization_id_user_id.user_id, USER);
-        return membership;
+    workspaces: {
+      findFirst: async ({ where }) => {
+        assert.equal(where.id, WORKSPACE);
+        if (!membership && !owner) return null;
+        return {
+          owner_user_id: owner ? USER : "other-user",
+          workspace_members: membership ? [membership] : [],
+        };
       },
     },
     engine_object_types: {
@@ -54,33 +57,37 @@ function mockedPrisma(membership) {
   return { prisma: { $transaction: async (callback) => callback(tx) }, counters };
 }
 
-const active = (role) => ({ role, status: "active", organizations: { status: "active" } });
+const active = (role) => ({ role });
 
-test("nonmembers and inactive members cannot read records", async () => {
-  for (const membership of [null, active("member"), { ...active("admin"), status: "inactive" }, { ...active("admin"), organizations: { status: "inactive" } }]) {
-    const { prisma, counters } = mockedPrisma(membership);
-    const { listEngineRecords } = loadService("../../lib/engine/records.service.ts", prisma);
-    if (membership?.role === "member" && membership.status === "active") continue;
-    await assert.rejects(listEngineRecords({ organizationId: ORG, userId: USER, objectTypeId: "object-a" }), (error) => error.code === "FORBIDDEN");
-    assert.equal(counters.reads, 0);
-  }
+test("nonmembers cannot read records", async () => {
+  const { prisma, counters } = mockedPrisma(null);
+  const { listEngineRecords } = loadService("../../lib/engine/records.service.ts", prisma);
+  await assert.rejects(listEngineRecords({ workspaceId: WORKSPACE, userId: USER, objectTypeId: "object-a" }), (e) => e.code === "FORBIDDEN");
+  assert.equal(counters.reads, 0);
 });
 
-test("member cannot create records, definitions, or manual evidence", async () => {
+test("member can read but cannot create records, definitions or evidence", async () => {
   const { prisma, counters } = mockedPrisma(active("member"));
   const records = loadService("../../lib/engine/records.service.ts", prisma);
   const definitions = loadService("../../lib/engine/definitions.service.ts", prisma);
   const provenance = loadService("../../lib/engine/provenance.service.ts", prisma);
-  await assert.rejects(records.createEngineDraftRecord({ organizationId: ORG, userId: USER, objectTypeId: "object-a", values: {} }), (e) => e.code === "FORBIDDEN");
-  await assert.rejects(definitions.createEngineObjectType({ organizationId: ORG, userId: USER, key: "test", name: "Test" }), (e) => e.code === "FORBIDDEN");
-  await assert.rejects(provenance.addEngineManualProvenance({ organizationId: ORG, userId: USER, recordId: "record-a", revision: 1 }), (e) => e.code === "FORBIDDEN");
+  await records.listEngineRecords({ workspaceId: WORKSPACE, userId: USER, objectTypeId: "object-a" });
+  await assert.rejects(records.createEngineDraftRecord({ workspaceId: WORKSPACE, userId: USER, objectTypeId: "object-a", values: {} }), (e) => e.code === "FORBIDDEN");
+  await assert.rejects(definitions.createEngineObjectType({ workspaceId: WORKSPACE, userId: USER, key: "test", name: "Test" }), (e) => e.code === "FORBIDDEN");
+  await assert.rejects(provenance.addEngineManualProvenance({ workspaceId: WORKSPACE, userId: USER, recordId: "record-a", revision: 1 }), (e) => e.code === "FORBIDDEN");
   assert.equal(counters.writes, 0);
-  assert.equal(counters.reads, 0);
 });
 
-test("admin passes authorization for a draft creation", async () => {
+test("workspace admin can create a draft record", async () => {
   const { prisma, counters } = mockedPrisma(active("admin"));
   const records = loadService("../../lib/engine/records.service.ts", prisma);
-  await records.createEngineDraftRecord({ organizationId: ORG, userId: USER, objectTypeId: "object-a", values: {} });
+  await records.createEngineDraftRecord({ workspaceId: WORKSPACE, userId: USER, objectTypeId: "object-a", values: {} });
+  assert.equal(counters.writes, 1);
+});
+
+test("personal workspace owner can create without organization", async () => {
+  const { prisma, counters } = mockedPrisma(null, true);
+  const records = loadService("../../lib/engine/records.service.ts", prisma);
+  await records.createEngineDraftRecord({ workspaceId: WORKSPACE, userId: USER, objectTypeId: "object-a", values: {} });
   assert.equal(counters.writes, 1);
 });
