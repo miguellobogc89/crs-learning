@@ -9,34 +9,42 @@ export class EngineProvenanceError extends Error {
   }
 }
 
-async function requireMembership(tx: Prisma.TransactionClient, organizationId: string, userId: string, write: boolean) {
-  const member = await tx.organization_members.findUnique({
-    where: { organization_id_user_id: { organization_id: organizationId, user_id: userId } },
-    select: { role: true, status: true, organizations: { select: { status: true } } },
+async function requireMembership(tx: Prisma.TransactionClient, workspaceId: string, userId: string, write: boolean) {
+  const workspace = await tx.workspaces.findFirst({
+    where: { id: workspaceId, status: "active" },
+    select: {
+      owner_user_id: true,
+      workspace_members: {
+        where: { user_id: userId, status: "active" },
+        select: { role: true },
+      },
+    },
   });
-  if (!member || member.status !== "active" || member.organizations.status !== "active" ||
-      (write && !["owner", "admin"].includes(member.role))) {
-    throw new EngineProvenanceError("FORBIDDEN", "Insufficient organization permissions.");
+  const isOwner = workspace?.owner_user_id === userId;
+  const role = workspace?.workspace_members[0]?.role;
+  if (!workspace || (!isOwner && !role) ||
+      (write && !isOwner && !["owner", "admin"].includes(role ?? ""))) {
+    throw new EngineProvenanceError("FORBIDDEN", "Insufficient workspace permissions.");
   }
 }
 
 /** Returns evidence only when the caller can also read its linked knowledge source. */
 export async function listEngineRecordProvenance(input: {
-  organizationId: string;
+  workspaceId: string;
   userId: string;
   recordId: string;
   revision?: number;
 }) {
   return prisma.$transaction(async (tx) => {
-    await requireMembership(tx, input.organizationId, input.userId, false);
+    await requireMembership(tx, input.workspaceId, input.userId, false);
     const record = await tx.engine_records.findFirst({
-      where: { id: input.recordId, organization_id: input.organizationId },
+      where: { id: input.recordId, workspace_id: input.workspaceId },
       select: { id: true },
     });
     if (!record) throw new EngineProvenanceError("NOT_FOUND", "Record not found.");
     const items = await tx.engine_record_provenance.findMany({
       where: {
-        organization_id: input.organizationId,
+        workspace_id: input.workspaceId,
         record_id: record.id,
         ...(input.revision === undefined ? {} : { revision: input.revision }),
       },
@@ -55,14 +63,14 @@ export async function listEngineRecordProvenance(input: {
       tx.knowledge_sources.findMany({
         where: {
           id: { in: sourceIds },
-          AND: [knowledgeSourceReadWhere(input.userId)],
+          AND: [knowledgeSourceReadWhere(input.userId, input.workspaceId)],
         },
         select: { id: true },
       }),
       tx.knowledge_files.findMany({
         where: {
           id: { in: fileIds },
-          knowledge_sources: knowledgeSourceReadWhere(input.userId),
+          knowledge_sources: knowledgeSourceReadWhere(input.userId, input.workspaceId),
         },
         select: { id: true, knowledge_source_id: true },
       }),
@@ -91,7 +99,7 @@ export async function listEngineRecordProvenance(input: {
 
 /** Attach manual provenance to an existing snapshot; document ingestion is a separate phase. */
 export async function addEngineManualProvenance(input: {
-  organizationId: string;
+  workspaceId: string;
   userId: string;
   recordId: string;
   revision: number;
@@ -105,10 +113,10 @@ export async function addEngineManualProvenance(input: {
     throw new EngineProvenanceError("INVALID", "Invalid field key.");
   }
   return prisma.$transaction(async (tx) => {
-    await requireMembership(tx, input.organizationId, input.userId, true);
+    await requireMembership(tx, input.workspaceId, input.userId, true);
     const snapshot = await tx.engine_record_revisions.findFirst({
       where: {
-        organization_id: input.organizationId,
+        workspace_id: input.workspaceId,
         record_id: input.recordId,
         revision: input.revision,
       },
@@ -124,7 +132,7 @@ export async function addEngineManualProvenance(input: {
     }
     return tx.engine_record_provenance.create({
       data: {
-        organization_id: input.organizationId,
+        workspace_id: input.workspaceId,
         record_id: input.recordId,
         revision: input.revision,
         field_key: input.fieldKey ?? null,
