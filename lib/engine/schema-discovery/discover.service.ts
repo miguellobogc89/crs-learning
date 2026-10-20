@@ -60,7 +60,7 @@ export async function discoverEngineSchemaFromKnowledge(input: {
     model: getKnowledgeImportModel(),
     instructions: SCHEMA_DISCOVERY_INSTRUCTIONS,
     input: JSON.stringify({
-      task: "Discover evidence-backed business entities, fields and relations. Never persist.",
+      task: "Return a JSON object containing evidence-backed business entities, fields and relations. Never persist.",
       documents: documents.map((doc) => ({
         id: doc.id, text: doc.extractedText.slice(0, 16000),
       })),
