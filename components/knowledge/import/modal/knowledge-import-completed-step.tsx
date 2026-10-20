@@ -38,10 +38,16 @@ function SummaryMetric({
   );
 }
 
-type EngineDiscovery = {
+type EngineImportResult = {
   status: string;
-  discoveredEntities?: Array<{ key: string; fields: Array<{ key: string; type: string }> }>;
-  discoveredRelations?: Array<{ key: string }>;
+  typesCreated?: number;
+  fieldsCreated?: number;
+  recordsCreated?: number;
+  recordsReused?: number;
+  recordsPending?: number;
+  relationsDiscovered?: number;
+  issues?: string[];
+  note?: string;
   error?: string;
 };
 
@@ -51,11 +57,13 @@ function EngineImportActivity({ result, tableFileNames }: { result: ConfirmKnowl
   const [activity, setActivity] = useState<Array<{
     name: string;
     status: "pending" | "analyzing" | "done" | "error";
-    entities: number;
-    relations: number;
+    types: number;
+    records: number;
+    reused: number;
+    issues: string[];
     error?: string;
   }>>(() => documents.map(document => ({
-    name: document.fileName, status: "pending", entities: 0, relations: 0,
+    name: document.fileName, status: "pending", types: 0, records: 0, reused: 0, issues: [],
   })));
 
   useEffect(() => {
@@ -68,22 +76,23 @@ function EngineImportActivity({ result, tableFileNames }: { result: ConfirmKnowl
           i === index ? { ...item, status: "analyzing" } : item,
         ));
         try {
-          const response = await fetch("/api/engine/preview-discovery", {
+          const response = await fetch("/api/engine/import-knowledge", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ knowledgeFileId: document.knowledgeFileId }),
             signal: controller.signal,
           });
-          const data = await response.json() as EngineDiscovery;
-          if (!response.ok || data.status === "INVALID_PROPOSAL" ||
-              data.status === "INVALID_SEMANTIC_REVIEW") {
+          const data = await response.json() as EngineImportResult;
+          if (!response.ok || data.status === "review") {
             throw new Error(data.error ?? "No se ha podido validar la estructura propuesta.");
           }
           if (!cancelled) setActivity(previous => previous.map((item, i) =>
             i === index ? {
               ...item, status: "done",
-              entities: data.discoveredEntities?.length ?? 0,
-              relations: data.discoveredRelations?.length ?? 0,
+              types: data.typesCreated ?? 0,
+              records: data.recordsCreated ?? 0,
+              reused: data.recordsReused ?? 0,
+              issues: data.issues ?? [],
             } : item,
           ));
         } catch (error) {
@@ -108,7 +117,7 @@ function EngineImportActivity({ result, tableFileNames }: { result: ConfirmKnowl
   return (
     <section className="rounded-xl border border-blue-200 bg-blue-50/50 p-4">
       <div className="flex items-center justify-between gap-3">
-        <h4 className="text-[13px] font-semibold text-blue-950">Engine · Análisis de estructuras</h4>
+        <h4 className="text-[13px] font-semibold text-blue-950">Engine · Importación de datos</h4>
         <span className="text-[11px] tabular-nums text-blue-700">{finished}/{documents.length} archivos</span>
       </div>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-blue-100">
@@ -120,10 +129,18 @@ function EngineImportActivity({ result, tableFileNames }: { result: ConfirmKnowl
             <span className="max-w-[50%] truncate font-medium text-slate-800">{item.name}</span>
             <span className={item.status === "error" ? "text-amber-700" : "text-blue-700"}>
               {item.status === "pending" ? "Pendiente" :
-               item.status === "analyzing" ? "Descubriendo entidades y relaciones…" :
+               item.status === "analyzing" ? "Descubriendo estructura e insertando registros…" :
                item.status === "error" ? (item.error ?? "Análisis no disponible") :
-               `${item.entities} entidades · ${item.relations} relaciones propuestas`}
+               `${item.types} tipos creados · ${item.records} registros insertados · ${item.reused} reutilizados`}
             </span>
+            {item.issues.length > 0 ? (
+              <details className="w-full text-amber-800">
+                <summary className="cursor-pointer">{item.issues.length} avisos para revisar</summary>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {item.issues.map((issue, i) => <li key={i}>{issue}</li>)}
+                </ul>
+              </details>
+            ) : null}
           </div>
         ))}
       </div>
