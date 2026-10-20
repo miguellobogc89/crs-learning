@@ -469,10 +469,10 @@ export function KnowledgeImportModal({
         <DialogContent
           showCloseButton
           style={{
-            width: "900px",
-            maxWidth: "92vw",
-            height: "680px",
-            maxHeight: "88vh",
+            width: "min(1280px, 96vw)",
+            maxWidth: "96vw",
+            height: "min(900px, 94vh)",
+            maxHeight: "94vh",
           }}
           className="flex flex-col gap-0 overflow-hidden p-0"
         >
