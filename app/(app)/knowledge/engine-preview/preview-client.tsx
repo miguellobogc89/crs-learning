@@ -289,6 +289,20 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
                 <p className="mt-2 text-xs font-medium text-amber-800">Sin aprobación en servidor · Sin escrituras · Persistencia bloqueada</p>
               </div>
             )}
+            {!!preview.discoveredEntities?.length && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-800">Tablas propuestas · Vista de columnas</h3>
+                {preview.discoveredEntities.map(entity => (
+                  <div key={entity.key} className="overflow-x-auto rounded-lg border border-slate-200">
+                    <div className="bg-slate-50 px-3 py-2 text-xs font-semibold">{entityNames[entity.key] ?? entity.key}</div>
+                    <table className="w-full text-left text-xs">
+                      <thead><tr className="border-b border-slate-200"><th className="p-2">Columna</th><th className="p-2">Tipo</th></tr></thead>
+                      <tbody>{entity.fields.map(field => <tr key={field.key} className="border-b border-slate-100"><td className="p-2">{field.key}</td><td className="p-2">{field.type}</td></tr>)}</tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            )}
             {!!preview.reviewPlan?.length && (
               <div>
                 <h3 className="mb-2 text-sm font-semibold text-slate-800">Revisión pendiente</h3>
@@ -411,6 +425,19 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
                 {extraction.importPlan.issues.map((issue, index) => (
                   <p key={index} className="mt-1 text-red-700">{issue.code}: {issue.message}</p>
                 ))}
+              </div>
+            )}
+            {extraction.recipes.length > 0 && (
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <p className="bg-slate-50 px-3 py-2 text-xs font-semibold">Vista de datos · Primeros 3 registros por tabla</p>
+                <table className="w-full text-left text-xs">
+                  <thead><tr className="border-b border-slate-200"><th className="p-2">Receta</th><th className="p-2">Líneas</th></tr></thead>
+                  <tbody>{extraction.recipes.slice(0, 3).map((recipe, index) => <tr key={index} className="border-b border-slate-100"><td className="p-2">{recipe.recipe}</td><td className="p-2">{recipe.ingredients.length}</td></tr>)}</tbody>
+                </table>
+                <table className="mt-3 w-full text-left text-xs">
+                  <thead><tr className="border-b border-slate-200"><th className="p-2">Ingrediente</th><th className="p-2">Cantidad</th><th className="p-2">Unidad</th><th className="p-2">IVA</th></tr></thead>
+                  <tbody>{extraction.recipes.flatMap(recipe => recipe.ingredients).slice(0, 3).map((line, index) => <tr key={index} className="border-b border-slate-100"><td className="p-2">{line.ingredient}</td><td className="p-2">{line.quantity}</td><td className="p-2">{line.unit}</td><td className="p-2">{line.ivaPercent ?? "No consta"}</td></tr>)}</tbody>
+                </table>
               </div>
             )}
             {!extraction.recipes.length && <p className="text-sm text-slate-600">No se han validado recetas en esta extracción.</p>}
