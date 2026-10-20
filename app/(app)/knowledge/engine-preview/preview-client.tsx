@@ -82,6 +82,7 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
   const [extraction, setExtraction] = useState<Extraction | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState("");
+  const [referenceDecisions, setReferenceDecisions] = useState<Record<string, "approve" | "reject">>({});
 
   async function runPreview() {
     if (!fileId || pending) return;
@@ -89,6 +90,7 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
     setError("");
     setPreview(null);
     setExtraction(null);
+    setReferenceDecisions({});
     setCopyStatus("");
     try {
       const response = await fetch("/api/engine/preview-discovery", {
@@ -111,6 +113,7 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
     setExtracting(true);
     setExtractError("");
     setExtraction(null);
+    setReferenceDecisions({});
     try {
       const response = await fetch("/api/engine/preview-records", {
         method: "POST",
@@ -290,6 +293,37 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
                     {item.candidates.length > 0 ? " (" + item.candidates.length + " candidatos)" : ""}
                   </p>
                 ))}
+              </div>
+            )}
+            {!!extraction.importPlan?.operations.references.length && (
+              <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-800">
+                <p className="font-semibold">Revisión manual de referencias (solo en esta pantalla)</p>
+                <p className="mt-1 text-slate-600">Estas decisiones son locales y se perderán al recargar. No se envían al servidor ni habilitan el guardado.</p>
+                {extraction.importPlan.operations.references.map(ref => {
+                  const source = extraction.identityPreview?.recipes.find(r => r.id === ref.sourceRecipeId);
+                  const target = extraction.identityPreview?.recipes.find(r => r.id === ref.targetRecipeId);
+                  return (
+                    <div key={ref.lineId} className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md bg-slate-50 p-2">
+                      <span>{source?.name ?? ref.sourceRecipeId} → {target?.name ?? ref.targetRecipeId}</span>
+                      <select aria-label={"Revisar referencia " + ref.lineId}
+                        value={referenceDecisions[ref.lineId] ?? ""}
+                        onChange={event => {
+                          const decision = event.target.value as "" | "approve" | "reject";
+                          setReferenceDecisions(current => {
+                            const next = { ...current };
+                            if (decision) next[ref.lineId] = decision; else delete next[ref.lineId];
+                            return next;
+                          });
+                        }}
+                        className="rounded border border-slate-300 bg-white px-2 py-1">
+                        <option value="">Pendiente</option>
+                        <option value="approve">Confirmar propuesta</option>
+                        <option value="reject">Rechazar propuesta</option>
+                      </select>
+                    </div>
+                  );
+                })}
+                <p className="mt-2 font-medium">{Object.keys(referenceDecisions).length} de {extraction.importPlan.operations.references.length} referencias revisadas localmente · Persistencia deshabilitada</p>
               </div>
             )}
             {extraction.importPlan && (
