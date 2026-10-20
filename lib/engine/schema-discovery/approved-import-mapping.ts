@@ -33,6 +33,7 @@ export function planApprovedImportMapping(input: {
   const targets = new Map(input.current.entities.map(e => [e.key, e]));
   const entityApprovals = new Map<string, ApprovedEntityMapping>();
   const fieldApprovals = new Map<string, ApprovedFieldMapping>();
+  const usedTargets = new Set<string>();
   for (const mapping of input.approvedEntities) {
     if (entityApprovals.has(mapping.sourceEntity)) {
       issues.push(`DUPLICATE_ENTITY_APPROVAL:${mapping.sourceEntity}`);
@@ -74,6 +75,11 @@ export function planApprovedImportMapping(input: {
         c.targetEntity === mapping.targetEntity && c.targetField === mapping.targetField &&
         c.decision !== "POSSIBLE_EQUIVALENCE");
       if (conflicts.length) { issues.push(`SEMANTIC_CONFLICT:${key}`); continue; }
+      const targetKey = `${mapping.targetEntity}.${mapping.targetField}`;
+      if (usedTargets.has(targetKey)) {
+        issues.push(`TARGET_FIELD_COLLISION:${targetKey}`); continue;
+      }
+      usedTargets.add(targetKey);
       fields.push(mapping);
     }
   }
