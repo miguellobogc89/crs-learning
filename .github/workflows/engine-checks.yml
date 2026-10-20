@@ -1,0 +1,47 @@
+name: Engine schema checks
+
+on:
+  push:
+    branches: [engine]
+    paths:
+      - "prisma/**"
+      - "lib/engine/**"
+      - "tests/engine/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/engine-checks.yml"
+  pull_request:
+    paths:
+      - "prisma/**"
+      - "lib/engine/**"
+      - "tests/engine/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/engine-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # No live database is accessed by this workflow.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/crs_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Validate Prisma schema
+        run: npx prisma validate
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Type-check application
+        run: npx tsc --noEmit
+      - name: Test relation definition planner
+        run: node --test tests/engine/relation-definition-plan.test.cjs
