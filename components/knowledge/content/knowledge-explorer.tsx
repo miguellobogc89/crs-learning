@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   FileSearch,
+  FolderTree,
   UsersRound,
 } from "lucide-react";
 
@@ -332,7 +333,7 @@ export function KnowledgeExplorer({
         description="Centraliza documentacion para que el asistente pueda trabajar con el conocimiento de tu organizacion."
         actionLabel="Subir documentacion"
         actionIcon={
-          <FileStack className="h-4 w-4" />
+          <FolderTree className="h-4 w-4" />
         }
         onAction={
           onUploadRequested
