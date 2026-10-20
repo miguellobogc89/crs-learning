@@ -77,6 +77,7 @@ export async function loadExistingKnowledgeDocuments(
       file_name: true,
       file_size: true,
       storage_path: true,
+      content_hash: true,
     },
   });
 
@@ -84,15 +85,20 @@ export async function loadExistingKnowledgeDocuments(
   const unreadableDocumentIds: string[] = [];
 
   for (const existingFile of existingFiles) {
-    let contentHash: string | null = null;
+    let contentHash: string | null = existingFile.content_hash;
 
-    if (existingFile.storage_path) {
+    // Legacy files without a stored hash still need a one-time read.
+    if (!contentHash && existingFile.storage_path) {
       try {
         const content = await readKnowledgeFile(
           existingFile.storage_path,
         );
 
         contentHash = calculateKnowledgeFileHash(content);
+        await prisma.knowledge_files.updateMany({
+          where: { id: existingFile.id, content_hash: null },
+          data: { content_hash: contentHash },
+        });
       } catch (error) {
         console.warn(
           "No se pudo comprobar el contenido del documento existente:",
@@ -102,7 +108,7 @@ export async function loadExistingKnowledgeDocuments(
 
         unreadableDocumentIds.push(existingFile.id);
       }
-    } else {
+    } else if (!contentHash) {
       unreadableDocumentIds.push(existingFile.id);
     }
 
