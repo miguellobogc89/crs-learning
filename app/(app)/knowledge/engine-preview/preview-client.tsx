@@ -83,6 +83,8 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState("");
   const [referenceDecisions, setReferenceDecisions] = useState<Record<string, "approve" | "reject">>({});
+  const [schemaEntityDecisions, setSchemaEntityDecisions] = useState<Record<string, string>>({});
+  const [schemaRelationDecisions, setSchemaRelationDecisions] = useState<Record<string, string>>({});
 
   async function runPreview() {
     if (!fileId || pending) return;
@@ -91,6 +93,8 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
     setPreview(null);
     setExtraction(null);
     setReferenceDecisions({});
+    setSchemaEntityDecisions({});
+    setSchemaRelationDecisions({});
     setCopyStatus("");
     try {
       const response = await fetch("/api/engine/preview-discovery", {
@@ -161,7 +165,7 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
         </label>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <select id="engine-file" value={fileId}
-            onChange={event => { setFileId(event.target.value); setPreview(null); setExtraction(null); setCopyStatus(""); }}
+            onChange={event => { setFileId(event.target.value); setPreview(null); setExtraction(null); setSchemaEntityDecisions({}); setSchemaRelationDecisions({}); setReferenceDecisions({}); setCopyStatus(""); }}
             className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm">
             {files.length === 0 && <option value="">No hay archivos listos</option>}
             {files.map(file => <option key={file.id} value={file.id}>{file.name}</option>)}
@@ -215,6 +219,74 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {!!preview.discoveredEntities?.length && (
+              <div className="rounded-xl border border-slate-200 p-3">
+                <h3 className="text-sm font-semibold text-slate-900">Revisión del esquema · Borrador local</h3>
+                <p className="mt-1 text-xs text-slate-600">
+                  Revisa cada entidad y relación. Una equivalencia propuesta no confirma compatibilidad de campos.
+                  Las decisiones no se envían al servidor.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {preview.discoveredEntities.map(entity => (
+                    <div key={entity.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-3">
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{entityNames[entity.key] ?? entity.key} ({entity.key})</p>
+                        <p className="text-xs text-slate-600">{entity.fields.map(field => field.key + " · " + field.type).join(" | ")}</p>
+                      </div>
+                      <select aria-label={"Decisión sobre entidad " + entity.key}
+                        value={schemaEntityDecisions[entity.key] ?? ""}
+                        onChange={event => setSchemaEntityDecisions(current => ({ ...current, [entity.key]: event.target.value }))}
+                        className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs">
+                        <option value="">Pendiente</option>
+                        <option value="create">Proponer entidad nueva</option>
+                        <option value="reuse_product">Estudiar equivalencia con product</option>
+                        <option value="reuse_supply_item">Estudiar equivalencia con supply_item</option>
+                        <option value="reject">Descartar entidad</option>
+                      </select>
+                    </div>
+                  ))}
+                </div>
+                {!!preview.discoveredRelations?.length && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-sm font-semibold text-slate-800">Relaciones descubiertas</p>
+                    {preview.discoveredRelations.map(relation => (
+                      <div key={relation.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-3">
+                        <div>
+                          <p className="text-xs font-medium text-slate-800">{relation.key}</p>
+                          <p className="text-xs text-slate-600">{relation.fromEntity} → {relation.toEntity} · {relation.cardinality}</p>
+                        </div>
+                        <select aria-label={"Decisión sobre relación " + relation.key}
+                          value={schemaRelationDecisions[relation.key] ?? ""}
+                          onChange={event => setSchemaRelationDecisions(current => ({ ...current, [relation.key]: event.target.value }))}
+                          className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs">
+                          <option value="">Pendiente</option>
+                          <option value="approve">Proponer relación</option>
+                          <option value="reject">Descartar relación</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="mt-3 text-xs text-slate-700">
+                  {Object.values(schemaEntityDecisions).filter(Boolean).length + Object.values(schemaRelationDecisions).filter(Boolean).length}
+                  {" de "}{preview.discoveredEntities.length + (preview.discoveredRelations?.length ?? 0)} decisiones tomadas en esta sesión.
+                </p>
+                <button type="button" className="mt-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-800"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(JSON.stringify({
+                      status: "SCHEMA_REVIEW_DRAFT", knowledgeFileId: fileId,
+                      entities: preview.discoveredEntities, relations: preview.discoveredRelations ?? [],
+                      entityDecisions: schemaEntityDecisions, relationDecisions: schemaRelationDecisions,
+                      serverApproved: false, writesPerformed: false,
+                    }, null, 2)).then(() => setCopyStatus("Borrador de decisiones copiado"))
+                      .catch(() => setCopyStatus("No se pudo copiar el borrador"));
+                  }}>
+                  Copiar borrador de decisiones
+                </button>
+                <p className="mt-2 text-xs font-medium text-amber-800">Sin aprobación en servidor · Sin escrituras · Persistencia bloqueada</p>
               </div>
             )}
             {!!preview.reviewPlan?.length && (
