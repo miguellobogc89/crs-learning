@@ -15,14 +15,21 @@ export class EngineDefinitionError extends Error {
   }
 }
 
-async function requireAdmin(tx: Prisma.TransactionClient, organizationId: string, userId: string) {
-  const member = await tx.organization_members.findUnique({
-    where: { organization_id_user_id: { organization_id: organizationId, user_id: userId } },
-    select: { role: true, status: true, organizations: { select: { status: true } } },
+async function requireAdmin(tx: Prisma.TransactionClient, workspaceId: string, userId: string) {
+  const workspace = await tx.workspaces.findFirst({
+    where: { id: workspaceId, status: "active" },
+    select: {
+      owner_user_id: true,
+      workspace_members: {
+        where: { user_id: userId, status: "active" },
+        select: { role: true },
+      },
+    },
   });
-  if (!member || member.status !== "active" || member.organizations.status !== "active" ||
-      !["owner", "admin"].includes(member.role)) {
-    throw new EngineDefinitionError("FORBIDDEN", "Active owner or admin membership required.");
+  const isOwner = workspace?.owner_user_id === userId;
+  const role = workspace?.workspace_members[0]?.role;
+  if (!workspace || (!isOwner && !["owner", "admin"].includes(role ?? ""))) {
+    throw new EngineDefinitionError("FORBIDDEN", "Active workspace owner or admin required.");
   }
 }
 
@@ -39,7 +46,7 @@ function checkName(name: string) {
 }
 
 export async function createEngineObjectType(input: {
-  organizationId: string;
+  workspaceId: string;
   userId: string;
   key: string;
   name: string;
@@ -48,10 +55,10 @@ export async function createEngineObjectType(input: {
   checkKey(input.key);
   checkName(input.name);
   return prisma.$transaction(async (tx) => {
-    await requireAdmin(tx, input.organizationId, input.userId);
+    await requireAdmin(tx, input.workspaceId, input.userId);
     return tx.engine_object_types.create({
       data: {
-        organization_id: input.organizationId,
+        workspace_id: input.workspaceId,
         key: input.key,
         name: input.name.trim(),
         description: input.description?.trim() || null,
@@ -61,7 +68,7 @@ export async function createEngineObjectType(input: {
 }
 
 export async function addEngineFieldDefinition(input: {
-  organizationId: string;
+  workspaceId: string;
   userId: string;
   objectTypeId: string;
   key: string;
@@ -88,15 +95,15 @@ export async function addEngineFieldDefinition(input: {
     }
   }
   return prisma.$transaction(async (tx) => {
-    await requireAdmin(tx, input.organizationId, input.userId);
+    await requireAdmin(tx, input.workspaceId, input.userId);
     const objectType = await tx.engine_object_types.findFirst({
-      where: { id: input.objectTypeId, organization_id: input.organizationId, status: "active" },
+      where: { id: input.objectTypeId, workspace_id: input.workspaceId, status: "active" },
       select: { id: true },
     });
     if (!objectType) throw new EngineDefinitionError("NOT_FOUND", "Active object type not found.");
     const field = await tx.engine_field_definitions.create({
       data: {
-        organization_id: input.organizationId,
+        workspace_id: input.workspaceId,
         object_type_id: objectType.id,
         key: input.key,
         name: input.name.trim(),
