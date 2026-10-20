@@ -45,6 +45,7 @@ function mockedPrisma(membership, owner = false) {
     },
     engine_records: {
       create: async () => { counters.writes++; return {}; },
+      findMany: async () => { counters.reads++; return []; },
       findFirst: async () => { counters.reads++; return { id: "record-a" }; },
     },
     engine_record_revisions: {
