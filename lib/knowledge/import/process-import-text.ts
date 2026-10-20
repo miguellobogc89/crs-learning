@@ -13,6 +13,7 @@ export type ImportTextFileResult = {
   processingOrder: number | null;
   status: "text_ready" | "text_error";
   characters: number;
+  hasTables?: boolean;
   error?: string;
 };
 
@@ -26,6 +27,23 @@ export type ProcessImportTextResult = {
   totalCharacters: number;
   files: ImportTextFileResult[];
 };
+
+// Conservative content-based detector. This is independent of the file extension.
+// It recognises delimited rows, Markdown/HTML tables and repeated quantity lines.
+// A negative result means no table was found in the extracted text, not proof
+// that the original image or document contains none.
+function containsStructuredTable(text: string): boolean {
+  const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (/<table[\\s>]/i.test(text)) return true;
+  let delimited = 0;
+  let numericRows = 0;
+  for (const line of lines) {
+    const cells = line.split(/\\s*\\|\\s*|\\t|\\s*;\\s*/).filter(Boolean);
+    if (cells.length >= 3 && cells.some(cell => /[\\p{L}]/u.test(cell))) delimited++;
+    if (/^(?:[-*]\\s*)?[\\p{L}][\\p{L}\\s.,()/-]{2,70}\\s+(?:\\d+[.,]?\\d*\\s*(?:kg|g|l|ml|ud|uds|unidades?|€|%|x)\\b|\\d+[.,]\\d{2}\\s*€)/iu.test(line)) numericRows++;
+  }
+  return delimited >= 2 || numericRows >= 3;
+}
 
 function cleanExtractedText(text: string): string {
   return text
@@ -161,6 +179,7 @@ export async function processImportText(
           processingOrder: file.processing_order,
           status: "text_ready",
           characters: file.extracted_text?.length ?? 0,
+          hasTables: containsStructuredTable(file.extracted_text ?? ""),
         }),
       ),
     };
@@ -321,6 +340,7 @@ export async function processImportText(
         processingOrder: file.processing_order,
         status: "text_ready",
         characters: extractedText.length,
+        hasTables: containsStructuredTable(extractedText),
       });
     } catch (error) {
       const errorMessage =
