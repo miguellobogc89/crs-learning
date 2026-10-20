@@ -106,20 +106,13 @@ export function KnowledgeContent({
         return selectedLibraryId;
       }
 
-      const rootLibraries =
-        knowledgeLibraries.filter(
-          (library) =>
-            library.parent_id ===
-              null &&
-            library.name ===
-              "Mi biblioteca" &&
-            !library.is_shared,
-        );
+      // Root libraries are workspace-scoped; their names need not be
+      // "Mi biblioteca" (new workspaces use "Biblioteca <name>").
+      const rootLibraries = knowledgeLibraries.filter(
+        (library) => library.parent_id === null && !library.is_shared,
+      );
 
-      return rootLibraries.length ===
-        1
-        ? rootLibraries[0].id
-        : null;
+      return rootLibraries.length === 1 ? rootLibraries[0].id : null;
     }, [
       knowledgeLibraries,
       selectedLibraryId,
