@@ -10,7 +10,7 @@ CREATE TABLE engine_relation_proposals (
   relation_definition_id uuid NOT NULL,
   from_record_id uuid NOT NULL,
   to_record_id uuid NOT NULL,
-  document_id uuid NOT NULL,
+  document_id uuid NOT NULL REFERENCES knowledge_files(id) ON DELETE RESTRICT,
   evidence_text text NOT NULL,
   status text NOT NULL DEFAULT 'pending_review',
   proposed_by_user_id uuid REFERENCES users(id) ON DELETE SET NULL,
@@ -51,8 +51,7 @@ CREATE INDEX engine_relation_proposals_to_idx
   ON engine_relation_proposals(workspace_id, to_record_id);
 
 -- A proposal's types must agree with the selected definition.
--- Evidence membership, source authorization and exact quote checks
--- must be performed by the application before insertion.
+-- The document FK proves existence only. The application must validate\n-- source workspace, reader authorization, ready status, and exact quote.\n-- A shared document does NOT itself prove that a relationship exists.\n-- Cardinality is deliberately not enforced here: approved links need\n-- a separate transactional write path with concurrency protection.
 CREATE FUNCTION engine_validate_relation_proposal_types()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
