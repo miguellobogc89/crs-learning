@@ -28,6 +28,12 @@ type Extraction = {
     checks: { sourceEvidence: boolean; duplicateNamesWithinDocument: boolean; existingDatabaseRecordsChecked: boolean; schemaApproved: boolean; identitiesApproved: boolean; readyToPersist: boolean };
     writesPerformed: boolean;
   };
+  existingRecordsPreview?: {
+    recipes: { previewId: string; name: string; state: string; candidates: { id: string; name: string; externalKey: string | null }[] }[];
+    ingredients: { previewId: string; name: string; state: string; candidates: { id: string; name: string; externalKey: string | null }[] }[];
+    summary: { exactMatches: number; ambiguous: number; unmatched: number; unchecked: number };
+    readOnly: boolean; writesPerformed: boolean;
+  };
   identityPreview?: {
     recipes: { id: string; name: string; evidenceText: string }[];
     ingredients: { id: string; name: string; occurrences: number }[];
@@ -263,14 +269,27 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
                 <p className="mt-1">{extraction.identityPreview.summary.uniqueIngredients} ingredientes distintos · {extraction.identityPreview.summary.reusedIngredients} reutilizados · {extraction.identityPreview.summary.proposedRecipeReferences} referencias a recetas por confirmar</p>
                 <p className="mt-1 text-slate-600">Las coincidencias se basan en nombres normalizados. No son equivalencias aprobadas ni identificadores de base de datos.</p>
                 {extraction.identityPreview.links.filter(link => link.ingredientRecipeId).map(link => {
-                  const ingredient = extraction.identityPreview?.ingredients.find(item => item.id === link.ingredientId);
+                  const source = extraction.identityPreview?.recipes.find(item => item.id === link.recipeId);
                   const recipe = extraction.identityPreview?.recipes.find(item => item.id === link.ingredientRecipeId);
                   return (
                     <p key={link.fromLineId} className="mt-1">
-                      {ingredient?.name} → {recipe?.name} <span className="text-amber-800">(pendiente de aprobación)</span>
+                      {source?.name} → {recipe?.name} <span className="text-amber-800">(pendiente de aprobación)</span>
                     </p>
                   );
                 })}
+              </div>
+            )}
+            {extraction.existingRecordsPreview && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">
+                <p className="font-semibold">Comparación con registros existentes · Solo lectura</p>
+                <p className="mt-1">{extraction.existingRecordsPreview.summary.exactMatches} coincidencias exactas · {extraction.existingRecordsPreview.summary.ambiguous} ambiguas · {extraction.existingRecordsPreview.summary.unmatched} sin coincidencia · {extraction.existingRecordsPreview.summary.unchecked} no verificadas</p>
+                <p className="mt-1 text-slate-600">Se comparan nombres dentro del mismo workspace y tipo exacto. Las coincidencias no son equivalencias aprobadas.</p>
+                {[...extraction.existingRecordsPreview.recipes, ...extraction.existingRecordsPreview.ingredients].filter(item => item.state !== "NO_MATCH").map(item => (
+                  <p key={item.previewId} className="mt-1">
+                    {item.name}: {item.state === "TYPE_NOT_DEFINED" ? "Tipo no definido; comprobación pendiente" : item.state === "CHECK_INCOMPLETE" ? "Comprobación incompleta (>2000 registros)" : item.state === "AMBIGUOUS" ? "Varias coincidencias; requiere revisión" : "Coincidencia exacta por nombre; confirmar"}
+                    {item.candidates.length > 0 ? " (" + item.candidates.length + " candidatos)" : ""}
+                  </p>
+                ))}
               </div>
             )}
             {extraction.importPlan && (
