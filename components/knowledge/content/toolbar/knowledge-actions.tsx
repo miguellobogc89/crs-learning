@@ -9,7 +9,6 @@ import {
   FileUp,
   FolderPlus,
   FolderUp,
-  FlaskConical,
   Plus,
 } from "lucide-react";
 
@@ -26,13 +25,11 @@ import type { UploadType } from "./types";
 type Props = {
   onCreateFolder: () => void;
   onUpload: (type: UploadType) => void;
-  onEngineTest?: () => void;
 };
 
 export function KnowledgeActions({
   onCreateFolder,
   onUpload,
-  onEngineTest,
 }: Props) {
   return (
     <DropdownMenu>
@@ -69,11 +66,6 @@ export function KnowledgeActions({
         </DropdownMenuItem>
 
         <DropdownMenuSeparator className="my-1" />
-
-        {onEngineTest && <DropdownMenuItem onSelect={onEngineTest} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5">
-          <FlaskConical className="size-icon-md shrink-0 text-muted-foreground" />
-          <span className="text-body font-medium">Probar con Engine</span>
-        </DropdownMenuItem>}
 
         <DropdownMenuSeparator className="my-1" />
 
