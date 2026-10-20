@@ -241,3 +241,14 @@ export async function importKnowledgeIntoEngine(input: {
     }
   }
 
+  return {
+    status: issues.length ? "completed_with_issues" : "completed",
+    typesCreated, fieldsCreated, recordsCreated, recordsReused,
+    recordsPending: parsed.rows.length - recordsCreated - recordsReused,
+    entitiesDiscovered: proposal.entities.length,
+    relationsDiscovered: proposal.relations.length,
+    issues: [...issues, ...proposal.warnings].slice(0, 100),
+    note: "Identidades conocidas reutilizadas; las líneas sin relaciones verificables quedan pendientes de vinculación.",
+    writesPerformed: typesCreated + fieldsCreated + recordsCreated > 0,
+  };
+}
