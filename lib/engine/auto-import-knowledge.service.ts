@@ -60,7 +60,7 @@ export async function importKnowledgeIntoEngine(input: {
       "The evidence quote must contain enough literal information to support all non-null field values.",
       "Never guess relationships, identifiers, tax rates or quantities. Return at most 150 rows.",
     ].join("\n"),
-    input: JSON.stringify({ schema: proposal.entities.map(e => ({
+    input: JSON.stringify({ task: "Return a valid json object containing the extracted rows.", schema: proposal.entities.map(e => ({
       key: e.key, fields: e.fields.map(f => ({ key: f.key, type: f.type })),
     })), documentText: sourceText }),
     text: { format: { type: "json_object" } },
