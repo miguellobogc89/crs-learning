@@ -61,7 +61,6 @@ export function KnowledgeContent({
 
   const [page, setPage] =
     useState(1);
-  const [engineTestOpen, setEngineTestOpen] = useState(false);
 
   const [
     isCreateFolderOpen,
@@ -251,7 +250,6 @@ const breadcrumbItems =
         <KnowledgeActions
           onCreateFolder={handleCreateFolder}
           onUpload={handleUpload}
-          onEngineTest={() => setEngineTestOpen(true)}
         />
       }
     />
@@ -374,24 +372,6 @@ const breadcrumbItems =
           ) : null}
         </AppCard>
 
-        {engineTestOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 sm:p-6" role="presentation"
-            onMouseDown={event => { if (event.target === event.currentTarget) setEngineTestOpen(false); }}>
-            <section role="dialog" aria-modal="true" aria-label="Prueba de importación Engine"
-              className="flex h-[min(92vh,1000px)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-              <header className="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-3">
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900">Engine · Prueba de importación</h2>
-                  <p className="text-xs text-slate-500">Seleccionar documento → Estructura → Registros → Revisión → JSON</p>
-                </div>
-                <button type="button" aria-label="Cerrar prueba" onClick={() => setEngineTestOpen(false)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium">Cerrar</button>
-              </header>
-              <iframe title="Prueba de importación Engine" src="/knowledge/engine-preview?embedded=1"
-                className="min-h-0 w-full flex-1 border-0" />
-            </section>
-          </div>
-        )}
         <CreateFolderDialog
           open={
             isCreateFolderOpen
