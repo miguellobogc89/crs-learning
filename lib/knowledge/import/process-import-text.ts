@@ -34,13 +34,13 @@ export type ProcessImportTextResult = {
 // that the original image or document contains none.
 function containsStructuredTable(text: string): boolean {
   const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-  if (/<table[\\s>]/i.test(text)) return true;
+  if (/<table[\s>]/i.test(text)) return true;
   let delimited = 0;
   let numericRows = 0;
   for (const line of lines) {
-    const cells = line.split(/\\s*\\|\\s*|\\t|\\s*;\\s*/).filter(Boolean);
-    if (cells.length >= 3 && cells.some(cell => /[\\p{L}]/u.test(cell))) delimited++;
-    if (/^(?:[-*]\\s*)?[\\p{L}][\\p{L}\\s.,()/-]{2,70}\\s+(?:\\d+[.,]?\\d*\\s*(?:kg|g|l|ml|ud|uds|unidades?|€|%|x)\\b|\\d+[.,]\\d{2}\\s*€)/iu.test(line)) numericRows++;
+    const cells = line.split(/\s*\|\s*|\t|\s*;\s*/).filter(Boolean);
+    if (cells.length >= 3 && cells.some(cell => /[\p{L}]/u.test(cell))) delimited++;
+    if (/^(?:[-*]\s*)?[\p{L}][\p{L}\s.,()/-]{2,70}\s+(?:\d+[.,]?\d*\s*(?:kg|g|l|ml|ud|uds|unidades?|€|%|x)\b|\d+[.,]\d{2}\s*€)/iu.test(line)) numericRows++;
   }
   return delimited >= 2 || numericRows >= 3;
 }
