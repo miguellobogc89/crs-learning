@@ -40,7 +40,7 @@ function containsStructuredTable(text: string): boolean {
   for (const line of lines) {
     const cells = line.split(/\s*\|\s*|\t|\s*;\s*/).filter(Boolean);
     if (cells.length >= 3 && cells.some(cell => /[\p{L}]/u.test(cell))) delimited++;
-    if (/^(?:[-*]\s*)?[\p{L}][\p{L}\s.,()/-]{2,70}\s+(?:\d+[.,]?\d*\s*(?:kg|g|l|ml|ud|uds|unidades?|€|%|x)\b|\d+[.,]\d{2}\s*€)/iu.test(line)) numericRows++;
+    if (/^(?:[-*]\s*)?[\p{L}][\p{L}\s.,()-]{2,70}\s+(?:\d+[.,]?\d*\s*(?:kg|g|l|ml|ud|uds|unidades?|€|%|x)\b|\d+[.,]\d{2}\s*€)/iu.test(line)) numericRows++;
   }
   return delimited >= 2 || numericRows >= 3;
 }
