@@ -11,6 +11,7 @@ const { loadEnvConfig } = require("@next/env");
 const root = path.resolve(__dirname, "../..");
 loadEnvConfig(root);
 const workspaceId = "9cb8b07f-7da2-4178-87bb-4e8e2f6d41d7";
+const userId = "ee893ecb-c740-4b93-a9d9-211e5c6f3f1c";
 const fileIds = [
   "1f496a26-2997-4345-ba75-32dfd167d575",
   "6c011fc4-4202-46eb-87f0-79db19d4d30a",
@@ -38,6 +39,7 @@ Module._extensions[".ts"] = (mod, filename) => {
 (async () => {
   try {
     const { prisma } = require("../../lib/prisma.ts");
+    const { knowledgeSourceReadWhere } = require("../../lib/knowledge/access-control.ts");
     const [types, files, conflicts, drafts] = await Promise.all([
       prisma.engine_object_types.findMany({
         where: { workspace_id: workspaceId, status: "active" },
@@ -53,7 +55,7 @@ Module._extensions[".ts"] = (mod, filename) => {
       }),
       prisma.knowledge_files.findMany({
         where: { id: { in: fileIds }, status: "ready",
-          knowledge_sources: { workspace_id: workspaceId } },
+          knowledge_sources: knowledgeSourceReadWhere(userId, workspaceId) },
         select: { id: true, extracted_text: true },
       }),
       prisma.engine_value_conflicts.findMany({
