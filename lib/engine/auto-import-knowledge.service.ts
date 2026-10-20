@@ -7,13 +7,13 @@ import { discoverEngineSchemaFromKnowledge } from "@/lib/engine/schema-discovery
 import { validateEngineRecordValues } from "@/lib/engine/validation";
 
 type Row = { entity: string; values: Record<string, unknown>; evidence: string };
-const normalizeIdentity = (value: string) => value.normalize("NFKC").trim().replace(/\\s+/g, " ").toLocaleLowerCase("es");
-const normalizedSource = (value: string) => value.normalize("NFKC").toLocaleLowerCase("es").replace(/\\s+/g, " ");
+const normalizeIdentity = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
+const normalizedSource = (value: string) => value.normalize("NFKC").toLocaleLowerCase("es").replace(/\s+/g, " ");
 const literalSupported = (value: unknown, text: string) => {
   if (value === null || typeof value === "boolean") return true;
   const normalized = normalizedSource(text);
   if (typeof value === "string") return normalized.includes(normalizedSource(value));
-  return (text.match(/-?\\d+(?:[.,]\\d+)*/g) ?? [])
+  return (text.match(/-?\d+(?:[.,]\d+)*/g) ?? [])
     .some(token => Number(token.replace(",", ".")) === value);
 };
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
