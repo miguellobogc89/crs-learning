@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { discoverEngineSchemaFromKnowledge } from "./discover.service";
 import { compareDiscoveredSchema, type CurrentSchema } from "./compare-existing";
 import { reviewDiscoveredAgainstExistingSchema } from "./existing-semantic-ai.service";
+import { planSemanticSchemaEvolution } from "./semantic-evolution-plan";
 
 /**
  * Read-only first-pass delta between AI-discovered evidence-backed schema
@@ -99,6 +100,12 @@ export async function previewDynamicSchemaEvolutionWithSemanticReview(input: {
   return {
     ...preview,
     semantic,
+    reviewPlan: semantic.valid ? planSemanticSchemaEvolution({
+      proposal: preview.discovery.proposal!,
+      current: preview.currentSchema,
+      suggested: preview.comparison.suggested,
+      candidates: semantic.candidates,
+    }) : [],
     status: semantic.valid
       ? "NEEDS_HUMAN_SCHEMA_APPROVAL" as const
       : "INVALID_SEMANTIC_REVIEW" as const,
