@@ -230,7 +230,8 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
               Copiar JSON de recetas
             </button>
           </div>
-          <div className="max-h-[420px] space-y-2 overflow-y-auto p-4">\n            <p className="text-xs text-slate-500">Vista previa: asociaciones propuestas por IA, pendientes de verificación humana.</p>
+          <div className="max-h-[420px] space-y-2 overflow-y-auto p-4">
+            <p className="text-xs text-slate-500">Vista previa: asociaciones propuestas por IA, pendientes de verificación humana.</p>
             {extraction.partial && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
               Extracción parcial: se han analizado {extraction.processedCharacters} de {extraction.totalCharacters} caracteres,
               o se ha alcanzado el límite de registros. La cobertura completa del documento aún no está verificada.
@@ -245,7 +246,7 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
             ))}
             {extraction.recipes.length > 8 && <p className="text-xs text-slate-500">
               Se muestran 8 recetas. El JSON contiene todos los bloques validados.
-            </p>
+            </p>}
             {!!extraction.issues.length && <p className="text-xs text-amber-800">
               {extraction.issues.length} incidencias detectadas durante la validación. Consulta el JSON.
             </p>}
