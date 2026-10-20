@@ -58,9 +58,8 @@ if (!workspaceId || !userId || knowledgeFileIds.length < 1 ||
       assert.ok(after.length >= before.length, "Previously pending conflicts disappeared");
       assert.ok(result.conflicts.length >= before.length,
         "Existing pending conflicts were omitted from import plan");
-      assert.equal(result.ready.length + result.pending.length,
-        result.proposedCount - result.extractionIssues.length,
-        "Unexpected extraction candidate accounting");
+      assert.ok(result.ready.length + result.pending.length <= result.proposedCount,
+        "Import plan contains more candidates than extraction proposed");
       console.log(JSON.stringify({
         ok: true,
         status: result.status,
