@@ -101,14 +101,15 @@ export async function importKnowledgeIntoEngine(input: {
     }
     // Require a literal textual anchor for all string/number values to prevent
     // unsupported AI enrichment from becoming persisted facts.
+    const evidenceText = raw.evidence as string;
     if (Object.values(values).some(value => {
       if (value === null || typeof value === "boolean") return false;
-      const evidence = raw.evidence.toLocaleLowerCase("es");
+      const evidence = evidenceText.toLocaleLowerCase("es");
       const literal = String(value).toLocaleLowerCase("es");
       if (evidence.includes(literal)) return false;
       if (typeof value !== "number") return true;
-      return !(raw.evidence.match(/-?\\d+(?:[.,]\\d+)*/g) ?? [])
-        .some(token => Number(token.replace(",", ".")) === value);
+      return !(evidenceText.match(/-?\\d+(?:[.,]\\d+)*/g) ?? [])
+        .some((token: string) => Number(token.replace(",", ".")) === value);
     })) {
       issues.push("Registro " + (index + 1) + ": valores sin evidencia literal."); continue;
     }
