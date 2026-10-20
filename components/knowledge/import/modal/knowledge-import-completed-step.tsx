@@ -15,6 +15,7 @@ import type { ConfirmKnowledgeImportResult } from "@/lib/knowledge/import/types"
 type Props = {
   result: ConfirmKnowledgeImportResult;
   onClose: () => void;
+  tableFileNames?: string[];
 };
 
 function SummaryMetric({
@@ -44,8 +45,9 @@ type EngineDiscovery = {
   error?: string;
 };
 
-function EngineImportActivity({ result }: { result: ConfirmKnowledgeImportResult }) {
-  const documents = result.log.documents.filter(document => Boolean(document.knowledgeFileId));
+function EngineImportActivity({ result, tableFileNames }: { result: ConfirmKnowledgeImportResult; tableFileNames: string[] }) {
+  const selectedNames = new Set(tableFileNames);
+  const documents = result.log.documents.filter(document => Boolean(document.knowledgeFileId) && selectedNames.has(document.fileName));
   const [activity, setActivity] = useState<Array<{
     name: string;
     status: "pending" | "analyzing" | "done" | "error";
@@ -135,6 +137,7 @@ function EngineImportActivity({ result }: { result: ConfirmKnowledgeImportResult
 
 export function KnowledgeImportCompletedStep({
   result,
+  tableFileNames = [],
 }: Props) {
   const { log } = result;
 
@@ -204,7 +207,7 @@ export function KnowledgeImportCompletedStep({
       </div>
 
       <div className="mt-6 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
-        <EngineImportActivity result={result} />
+        <EngineImportActivity result={result} tableFileNames={tableFileNames} />
         {log.articles.length > 0 ? (
           <section>
             <h4 className="mb-2.5 text-[12px] font-semibold text-slate-900">
