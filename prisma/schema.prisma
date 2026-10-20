@@ -773,7 +773,6 @@ model organizations {
   last_knowledge_update_at         DateTime?                          @db.Timestamptz(6)
   created_at                       DateTime                           @default(now()) @db.Timestamptz(6)
   updated_at                       DateTime                           @default(now()) @db.Timestamptz(6)
-  engine_object_types              engine_object_types[]
   knowledge_libraries              knowledge_libraries[]
   organization_billing_profiles    organization_billing_profiles?
   organization_entities            organization_entities[]
@@ -1253,23 +1252,28 @@ model workspace_members {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model workspaces {
-  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  owner_user_id        String?                @db.Uuid
-  organization_id      String?                @db.Uuid
-  name                 String
-  slug                 String
-  description          String?
-  visibility           String                 @default("private")
-  status               String                 @default("active")
-  created_at           DateTime               @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
-  knowledge_libraries  knowledge_libraries[]
-  knowledge_teams      knowledge_teams[]
-  user_resource_access user_resource_access[]
-  workspace_invites    workspace_invites[]
-  workspace_members    workspace_members[]
-  organizations        organizations?         @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users                users?                 @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id            String?                    @db.Uuid
+  organization_id          String?                    @db.Uuid
+  name                     String
+  slug                     String
+  description              String?
+  visibility               String                     @default("private")
+  status                   String                     @default("active")
+  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  engine_field_definitions engine_field_definitions[]
+  engine_object_types      engine_object_types[]
+  engine_record_provenance engine_record_provenance[]
+  engine_record_revisions  engine_record_revisions[]
+  engine_records           engine_records[]
+  knowledge_libraries      knowledge_libraries[]
+  knowledge_teams          knowledge_teams[]
+  user_resource_access     user_resource_access[]
+  workspace_invites        workspace_invites[]
+  workspace_members        workspace_members[]
+  organizations            organizations?             @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                    users?                     @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([organization_id, slug], map: "workspaces_organization_slug_unique", where: raw("(organization_id IS NOT NULL)"))
   @@unique([owner_user_id, slug], map: "workspaces_personal_slug_unique", where: raw("(owner_user_id IS NOT NULL)"))
@@ -1498,7 +1502,6 @@ model course_requests {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model engine_field_definitions {
   id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id     String              @db.Uuid
   object_type_id      String              @db.Uuid
   key                 String
   name                String
@@ -1510,16 +1513,17 @@ model engine_field_definitions {
   status              String              @default("active")
   created_at          DateTime            @default(now()) @db.Timestamptz(6)
   updated_at          DateTime            @default(now()) @db.Timestamptz(6)
-  engine_object_types engine_object_types @relation(fields: [organization_id, object_type_id], references: [organization_id, id], onDelete: Cascade, onUpdate: NoAction, map: "engine_fields_object_fk")
+  workspace_id        String              @db.Uuid
+  workspaces          workspaces          @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
+  engine_object_types engine_object_types @relation(fields: [workspace_id, object_type_id], references: [workspace_id, id], onDelete: Cascade, onUpdate: NoAction, map: "engine_fields_object_fk")
 
   @@unique([object_type_id, key], map: "engine_fields_object_key_unique")
-  @@index([organization_id, object_type_id, sort_order], map: "engine_fields_org_object_idx")
+  @@index([workspace_id, object_type_id, sort_order], map: "engine_fields_workspace_object_idx")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model engine_object_types {
   id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id          String                     @db.Uuid
   key                      String
   name                     String
   description              String?
@@ -1528,18 +1532,18 @@ model engine_object_types {
   settings                 Json                       @default("{}")
   created_at               DateTime                   @default(now()) @db.Timestamptz(6)
   updated_at               DateTime                   @default(now()) @db.Timestamptz(6)
+  workspace_id             String                     @db.Uuid
   engine_field_definitions engine_field_definitions[]
-  organizations            organizations              @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaces               workspaces                 @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
   engine_records           engine_records[]
 
-  @@unique([organization_id, id], map: "engine_object_types_org_id_unique")
-  @@unique([organization_id, key], map: "engine_object_types_org_key_unique")
+  @@unique([workspace_id, id], map: "engine_object_types_workspace_id_unique")
+  @@unique([workspace_id, key], map: "engine_object_types_workspace_key_unique")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model engine_records {
   id                                             String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id                                String                     @db.Uuid
   object_type_id                                 String                     @db.Uuid
   external_key                                   String?
   status                                         String                     @default("draft")
@@ -1550,23 +1554,24 @@ model engine_records {
   updated_by_user_id                             String?                    @db.Uuid
   created_at                                     DateTime                   @default(now()) @db.Timestamptz(6)
   updated_at                                     DateTime                   @default(now()) @db.Timestamptz(6)
+  workspace_id                                   String                     @db.Uuid
   engine_record_provenance                       engine_record_provenance[]
   engine_record_revisions                        engine_record_revisions[]
   users_engine_records_created_by_user_idTousers users?                     @relation("engine_records_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
-  engine_object_types                            engine_object_types        @relation(fields: [organization_id, object_type_id], references: [organization_id, id], onUpdate: NoAction, map: "engine_records_object_fk")
+  engine_object_types                            engine_object_types        @relation(fields: [workspace_id, object_type_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_records_object_fk")
   users_engine_records_updated_by_user_idTousers users?                     @relation("engine_records_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+  workspaces                                     workspaces                 @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
 
   @@unique([object_type_id, external_key], map: "engine_records_external_key_unique", where: raw("(external_key IS NOT NULL)"))
-  @@unique([organization_id, id], map: "engine_records_org_id_unique")
-  @@index([organization_id, created_at(sort: Desc)], map: "engine_records_org_created_idx")
-  @@index([organization_id, object_type_id, status], map: "engine_records_org_type_status_idx")
+  @@unique([workspace_id, id], map: "engine_records_workspace_id_unique")
   @@index([values_json], map: "engine_records_values_gin_idx", type: Gin)
+  @@index([workspace_id, created_at(sort: Desc)], map: "engine_records_workspace_created_idx")
+  @@index([workspace_id, object_type_id, status], map: "engine_records_workspace_type_status_idx")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model engine_record_revisions {
   id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id          String                     @db.Uuid
   record_id                String                     @db.Uuid
   object_type_id           String                     @db.Uuid
   revision                 Int
@@ -1575,18 +1580,19 @@ model engine_record_revisions {
   values_json              Json
   changed_by_user_id       String?                    @db.Uuid
   recorded_at              DateTime                   @default(now()) @db.Timestamptz(6)
+  workspace_id             String                     @db.Uuid
   engine_record_provenance engine_record_provenance[]
   users                    users?                     @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
-  engine_records           engine_records             @relation(fields: [organization_id, record_id], references: [organization_id, id], onUpdate: NoAction, map: "engine_revision_record_fk")
+  workspaces               workspaces                 @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
+  engine_records           engine_records             @relation(fields: [workspace_id, record_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_revision_record_fk")
 
   @@unique([record_id, revision], map: "engine_revision_unique")
-  @@index([organization_id, record_id, revision(sort: Desc)], map: "engine_revision_org_record_idx")
+  @@index([workspace_id, record_id, revision(sort: Desc)], map: "engine_revision_workspace_record_idx")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model engine_record_provenance {
   id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id         String                  @db.Uuid
   record_id               String                  @db.Uuid
   revision                Int
   field_key               String?
@@ -1598,13 +1604,15 @@ model engine_record_provenance {
   confidence              Decimal?                @db.Decimal(5, 4)
   created_by_user_id      String?                 @db.Uuid
   created_at              DateTime                @default(now()) @db.Timestamptz(6)
-  engine_records          engine_records          @relation(fields: [organization_id, record_id], references: [organization_id, id], onUpdate: NoAction, map: "engine_provenance_record_fk")
+  workspace_id            String                  @db.Uuid
+  engine_records          engine_records          @relation(fields: [workspace_id, record_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_provenance_record_fk")
   engine_record_revisions engine_record_revisions @relation(fields: [record_id, revision], references: [record_id, revision], onUpdate: NoAction, map: "engine_provenance_revision_fk")
   users                   users?                  @relation(fields: [created_by_user_id], references: [id], onUpdate: NoAction)
   knowledge_files         knowledge_files?        @relation(fields: [knowledge_file_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
   knowledge_sources       knowledge_sources?      @relation(fields: [knowledge_source_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  workspaces              workspaces              @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
 
   @@index([knowledge_file_id], map: "engine_provenance_file_idx")
-  @@index([organization_id, record_id, revision], map: "engine_provenance_record_idx")
   @@index([knowledge_source_id], map: "engine_provenance_source_idx")
+  @@index([workspace_id, record_id, revision], map: "engine_provenance_workspace_record_idx")
 }
