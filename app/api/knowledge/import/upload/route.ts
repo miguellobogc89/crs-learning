@@ -2,6 +2,7 @@
 // app/api/knowledge/import/upload/route.ts
 
 import path from "node:path";
+import { calculateKnowledgeFileHash } from "@/lib/knowledge/import/pipeline/detect-duplicates";
 import { resolveDuplicateSelection } from "@/lib/knowledge/import/pipeline/duplicate-selection";
 
 import { NextResponse } from "next/server";
@@ -433,6 +434,7 @@ export async function POST(request: Request) {
       relative_path: string;
       mime_type: string | null;
       file_size: number;
+      content_hash: string;
       storage_path: string;
       status: string;
     }> = [];
@@ -478,6 +480,7 @@ export async function POST(request: Request) {
         relative_path: relativePath,
         mime_type: file.mimeType || null,
         file_size: file.content.byteLength,
+        content_hash: calculateKnowledgeFileHash(file.content),
         storage_path: storagePath,
         status: "uploaded",
       });
