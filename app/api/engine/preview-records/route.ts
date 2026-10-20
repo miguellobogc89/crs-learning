@@ -7,6 +7,7 @@ import { previewEngineImportFromKnowledge } from "@/lib/engine/import-knowledge-
 import { getKnowledgeImportModel, getOpenAIClient } from "@/lib/ai/openai";
 import { resolvePreviewIdentities } from "@/lib/engine/preview-identity-resolution";
 import { buildPreviewImportPlan } from "@/lib/engine/preview-import-plan";
+import { compareExistingEngineRecords } from "@/lib/engine/preview-existing-records";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -158,10 +159,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const existingRecordsPreview = await compareExistingEngineRecords(activeWorkspace.id, blocks);
     const processedCharacters = selectedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
     return NextResponse.json({
       status: "EXTRACTION_PREVIEW", recipes: blocks, issues,
       identityPreview: resolvePreviewIdentities(blocks),
+      existingRecordsPreview,
       importPlan: buildPreviewImportPlan(blocks, file.extracted_text),
       summary: { recipes: blocks.length, ingredientLines: blocks.reduce((n, b) => n + b.ingredients.length, 0),
         proposedBlocks, proposedLines, rejectedLines },
