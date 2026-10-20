@@ -16,8 +16,12 @@ type Preview = {
 
 type Extraction = {
   status: string;
-  records: { entity: string; values: Record<string, string | number | boolean | null>; evidenceText: string }[];
+  recipes: { recipe: string; recipeEvidence: string; ingredients: {
+    ingredient: string; quantity: number; unit: string; ivaPercent: number | null; evidenceText: string;
+  }[] }[];
+  summary: { recipes: number; ingredientLines: number; proposedBlocks: number; proposedLines: number; rejectedLines: number };
   issues: string[];
+  coverageVerified: boolean;
   processedCharacters: number;
   totalCharacters: number;
   partial: boolean;
@@ -86,7 +90,6 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           knowledgeFileId: fileId,
-          entities: preview.discoveredEntities,
         }),
       });
       const result = await response.json() as Extraction & { error?: string };
@@ -103,7 +106,7 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
     if (!extraction) return;
     try {
       await navigator.clipboard.writeText(JSON.stringify(extraction, null, 2));
-      setCopyStatus("JSON de datos copiado");
+      setCopyStatus("JSON de recetas copiado");
     } catch {
       setCopyStatus("No se pudo copiar el JSON.");
     }
@@ -220,31 +223,31 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4">
             <div>
               <h2 className="font-semibold text-slate-900">Datos extraídos</h2>
-              <p className="text-xs text-slate-600">{extraction.records.length} registros · {extraction.issues.length} incidencias · Sin guardar</p>
+              <p className="text-xs text-slate-600">{extraction.summary.recipes} recetas · {extraction.summary.ingredientLines} ingredientes vinculados · {extraction.issues.length} incidencias · Sin guardar</p>
             </div>
             <button type="button" onClick={copyRecordsJson}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-800">
-              Copiar JSON de datos
+              Copiar JSON de recetas
             </button>
           </div>
-          <div className="max-h-[420px] space-y-2 overflow-y-auto p-4">
+          <div className="max-h-[420px] space-y-2 overflow-y-auto p-4">\n            <p className="text-xs text-slate-500">Vista previa: asociaciones propuestas por IA, pendientes de verificación humana.</p>
             {extraction.partial && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
               Extracción parcial: se han analizado {extraction.processedCharacters} de {extraction.totalCharacters} caracteres,
-              o se ha alcanzado el límite de registros. No representa necesariamente todo el PDF.
+              o se ha alcanzado el límite de registros. La cobertura completa del documento aún no está verificada.
             </p>}
-            {!extraction.records.length && <p className="text-sm text-slate-600">No se han validado registros en esta extracción.</p>}
-            {extraction.records.slice(0, 12).map((record, index) => (
+            {!extraction.recipes.length && <p className="text-sm text-slate-600">No se han validado recetas en esta extracción.</p>}
+            {extraction.recipes.slice(0, 8).map((block, index) => (
               <div key={index} className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
-                <p className="font-semibold">{entityNames[record.entity] ?? record.entity}</p>
-                <p className="mt-1 break-words">{Object.entries(record.values).map(([key, value]) =>
-                  key + ": " + String(value ?? "—")).join(" · ")}</p>
+                <p className="font-semibold">{block.recipe} · {block.ingredients.length} ingredientes</p>
+                <p className="mt-1 break-words">{block.ingredients.slice(0, 6).map(line =>
+                  line.ingredient + ": " + line.quantity + " " + line.unit).join(" · ") || "Sin ingredientes verificados"}</p>
               </div>
             ))}
-            {extraction.records.length > 12 && <p className="text-xs text-slate-500">
-              Se muestran 12 registros como ejemplo. El JSON incluye todos los registros validados.
-            </p>}
+            {extraction.recipes.length > 8 && <p className="text-xs text-slate-500">
+              Se muestran 8 recetas. El JSON contiene todos los bloques validados.
+            </p>
             {!!extraction.issues.length && <p className="text-xs text-amber-800">
-              {extraction.issues.length} registros descartados por problemas de validación. Consulta el JSON.
+              {extraction.issues.length} incidencias detectadas durante la validación. Consulta el JSON.
             </p>}
           </div>
         </section>
