@@ -11,27 +11,35 @@ export class EngineRecordError extends Error {
 
 async function checkMembership(
   tx: Prisma.TransactionClient,
-  organizationId: string,
+  workspaceId: string,
   userId: string,
   write: boolean,
 ) {
-  const member = await tx.organization_members.findUnique({
-    where: { organization_id_user_id: { organization_id: organizationId, user_id: userId } },
-    select: { status: true, role: true, organizations: { select: { status: true } } },
+  const workspace = await tx.workspaces.findFirst({
+    where: { id: workspaceId, status: "active" },
+    select: {
+      owner_user_id: true,
+      workspace_members: {
+        where: { user_id: userId, status: "active" },
+        select: { role: true },
+      },
+    },
   });
-  if (!member || member.status !== "active" || member.organizations.status !== "active") {
-    throw new EngineRecordError("FORBIDDEN", "Active organization membership required.");
+  const isOwner = workspace?.owner_user_id === userId;
+  const role = workspace?.workspace_members[0]?.role;
+  if (!workspace || (!isOwner && !role)) {
+    throw new EngineRecordError("FORBIDDEN", "Active workspace membership required.");
   }
-  if (write && !["owner", "admin"].includes(member.role)) {
-    throw new EngineRecordError("FORBIDDEN", "Owner or admin role required for writes.");
+  if (write && !isOwner && !["owner", "admin"].includes(role ?? "")) {
+    throw new EngineRecordError("FORBIDDEN", "Workspace owner or admin required for writes.");
   }
 }
 
-export async function listEngineObjectTypes(organizationId: string, userId: string) {
+export async function listEngineObjectTypes(workspaceId: string, userId: string) {
   return prisma.$transaction(async (tx) => {
-    await checkMembership(tx, organizationId, userId, false);
+    await checkMembership(tx, workspaceId, userId, false);
     return tx.engine_object_types.findMany({
-      where: { organization_id: organizationId, status: "active" },
+      where: { workspace_id: workspaceId, status: "active" },
       include: { engine_field_definitions: { where: { status: "active" }, orderBy: { sort_order: "asc" } } },
       orderBy: { name: "asc" },
     });
@@ -39,21 +47,21 @@ export async function listEngineObjectTypes(organizationId: string, userId: stri
 }
 
 export async function listEngineRecords(input: {
-  organizationId: string;
+  workspaceId: string;
   userId: string;
   objectTypeId: string;
   take?: number;
 }) {
   return prisma.$transaction(async (tx) => {
-    await checkMembership(tx, input.organizationId, input.userId, false);
+    await checkMembership(tx, input.workspaceId, input.userId, false);
     const objectType = await tx.engine_object_types.findFirst({
-      where: { id: input.objectTypeId, organization_id: input.organizationId, status: "active" },
+      where: { id: input.objectTypeId, workspace_id: input.workspaceId, status: "active" },
       select: { id: true },
     });
     if (!objectType) throw new EngineRecordError("NOT_FOUND", "Object type not found.");
     const take = Number.isFinite(input.take) ? Math.min(100, Math.max(1, Math.trunc(input.take!))) : 50;
     return tx.engine_records.findMany({
-      where: { organization_id: input.organizationId, object_type_id: objectType.id },
+      where: { workspace_id: input.workspaceId, object_type_id: objectType.id },
       orderBy: { created_at: "desc" },
       take,
     });
@@ -62,16 +70,16 @@ export async function listEngineRecords(input: {
 
 /** Draft-only: publishing requires a separate reviewed workflow. */
 export async function createEngineDraftRecord(input: {
-  organizationId: string;
+  workspaceId: string;
   userId: string;
   objectTypeId: string;
   values: unknown;
   externalKey?: string;
 }) {
   return prisma.$transaction(async (tx) => {
-    await checkMembership(tx, input.organizationId, input.userId, true);
+    await checkMembership(tx, input.workspaceId, input.userId, true);
     const objectType = await tx.engine_object_types.findFirst({
-      where: { id: input.objectTypeId, organization_id: input.organizationId, status: "active" },
+      where: { id: input.objectTypeId, workspace_id: input.workspaceId, status: "active" },
       include: { engine_field_definitions: { where: { status: "active" } } },
     });
     if (!objectType) throw new EngineRecordError("NOT_FOUND", "Object type not found.");
@@ -84,7 +92,7 @@ export async function createEngineDraftRecord(input: {
     if (!validation.ok) throw new EngineRecordError("INVALID", JSON.stringify(validation.issues));
     return tx.engine_records.create({
       data: {
-        organization_id: input.organizationId,
+        workspace_id: input.workspaceId,
         object_type_id: objectType.id,
         external_key: input.externalKey?.trim() || null,
         status: "draft",
@@ -100,11 +108,10 @@ export async function createEngineDraftRecord(input: {
 
 /**
  * Replace a draft snapshot using optimistic concurrency.
- * Revisions prevent lost updates; a durable revision history is a separate
- * migration and is not claimed here.
+ * Revisions prevent lost updates; the database captures immutable snapshots.
  */
 export async function updateEngineDraftRecord(input: {
-  organizationId: string;
+  workspaceId: string;
   userId: string;
   recordId: string;
   expectedRevision: number;
@@ -114,9 +121,9 @@ export async function updateEngineDraftRecord(input: {
     throw new EngineRecordError("INVALID", "Expected revision must be a positive integer.");
   }
   return prisma.$transaction(async (tx) => {
-    await checkMembership(tx, input.organizationId, input.userId, true);
+    await checkMembership(tx, input.workspaceId, input.userId, true);
     const record = await tx.engine_records.findFirst({
-      where: { id: input.recordId, organization_id: input.organizationId },
+      where: { id: input.recordId, workspace_id: input.workspaceId },
       select: { id: true, object_type_id: true, status: true, revision: true, schema_version: true },
     });
     if (!record) throw new EngineRecordError("NOT_FOUND", "Record not found.");
@@ -128,7 +135,7 @@ export async function updateEngineDraftRecord(input: {
     }
 
     const objectType = await tx.engine_object_types.findFirst({
-      where: { id: record.object_type_id, organization_id: input.organizationId, status: "active" },
+      where: { id: record.object_type_id, workspace_id: input.workspaceId, status: "active" },
       include: { engine_field_definitions: { where: { status: "active" } } },
     });
     if (!objectType) throw new EngineRecordError("NOT_FOUND", "Active object type not found.");
@@ -146,7 +153,7 @@ export async function updateEngineDraftRecord(input: {
     const changed = await tx.engine_records.updateMany({
       where: {
         id: record.id,
-        organization_id: input.organizationId,
+        workspace_id: input.workspaceId,
         object_type_id: objectType.id,
         status: "draft",
         revision: input.expectedRevision,
@@ -163,22 +170,22 @@ export async function updateEngineDraftRecord(input: {
       throw new EngineRecordError("CONFLICT", "Concurrent update detected.");
     }
     return tx.engine_records.findFirstOrThrow({
-      where: { id: record.id, organization_id: input.organizationId },
+      where: { id: record.id, workspace_id: input.workspaceId },
     });
   });
 }
 
 /** Returns the stored snapshots of a record, newest revision first. */
 export async function listEngineRecordHistory(input: {
-  organizationId: string;
+  workspaceId: string;
   userId: string;
   recordId: string;
   take?: number;
 }) {
   return prisma.$transaction(async (tx) => {
-    await checkMembership(tx, input.organizationId, input.userId, false);
+    await checkMembership(tx, input.workspaceId, input.userId, false);
     const record = await tx.engine_records.findFirst({
-      where: { id: input.recordId, organization_id: input.organizationId },
+      where: { id: input.recordId, workspace_id: input.workspaceId },
       select: { id: true },
     });
     if (!record) throw new EngineRecordError("NOT_FOUND", "Record not found.");
@@ -186,7 +193,7 @@ export async function listEngineRecordHistory(input: {
       ? Math.min(100, Math.max(1, Math.trunc(input.take!)))
       : 50;
     return tx.engine_record_revisions.findMany({
-      where: { organization_id: input.organizationId, record_id: record.id },
+      where: { workspace_id: input.workspaceId, record_id: record.id },
       orderBy: { revision: "desc" },
       take,
     });
