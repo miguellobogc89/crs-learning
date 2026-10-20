@@ -5,6 +5,7 @@ import {
 } from "./persistence.service";
 import { planConflictAwareImport } from "./import-plan";
 import { extractEngineCandidatesFromKnowledge } from "../import-ai-extraction.service";
+import { planRecordIdentityReview } from "../import-record-identity";
 import type { ValueConflictCandidate, ValueConflictAlternative } from "./validation";
 
 function storedAlternatives(value: unknown): ValueConflictAlternative[] {
@@ -95,8 +96,12 @@ export async function prepareConflictAwareKnowledgeImport(input: {
     accepted: extracted.accepted,
     conflicts,
   });
+  // A second review gate: exact-value matches may be duplicate entities.
+  // Keep the conflict-safe candidates as proposals; never auto-merge or persist.
+  const identityReview = planRecordIdentityReview(plan.ready);
   return {
     ...plan,
+    identityReview,
     conflictIssues: detected.issues,
     extractionIssues: extracted.issues,
     proposedCount: extracted.proposedCount,
