@@ -1,28 +1,22 @@
 /**
- * The knowledge importer is workspace-scoped; the initial Data Engine schema
- * is organization-scoped. Never infer a workspace from a user's primary org.
- *
- * This guard intentionally disables automatic writes until engine records
- * have a durable workspace scope and the permission model is migrated.
+ * Pure scope consistency check. This does NOT authorize a user:
+ * callers must separately verify active workspace membership and write access.
  */
 export type EngineIngestionScope = {
-  workspaceId: string;
-  workspaceOrganizationId: string | null;
-  engineOrganizationId: string;
+  sourceWorkspaceId: string;
+  targetWorkspaceId: string;
 };
 
 export type EngineIngestionScopeDecision =
-  | { allowed: false; reason: "PERSONAL_WORKSPACE" | "ORGANIZATION_MISMATCH" | "WORKSPACE_SCOPE_UNSUPPORTED" };
+  | { allowed: true }
+  | { allowed: false; reason: "WORKSPACE_MISMATCH" | "MISSING_WORKSPACE" };
 
-export function checkEngineIngestionScope(
-  scope: EngineIngestionScope,
-): EngineIngestionScopeDecision {
-  if (!scope.workspaceOrganizationId) {
-    return { allowed: false, reason: "PERSONAL_WORKSPACE" };
+export function checkEngineIngestionScope(scope: EngineIngestionScope): EngineIngestionScopeDecision {
+  if (!scope.sourceWorkspaceId || !scope.targetWorkspaceId) {
+    return { allowed: false, reason: "MISSING_WORKSPACE" };
   }
-  if (scope.workspaceOrganizationId !== scope.engineOrganizationId) {
-    return { allowed: false, reason: "ORGANIZATION_MISMATCH" };
+  if (scope.sourceWorkspaceId !== scope.targetWorkspaceId) {
+    return { allowed: false, reason: "WORKSPACE_MISMATCH" };
   }
-  // Even matching organization IDs do not isolate sibling workspaces.
-  return { allowed: false, reason: "WORKSPACE_SCOPE_UNSUPPORTED" };
+  return { allowed: true };
 }
