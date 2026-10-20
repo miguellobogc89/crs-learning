@@ -1,4 +1,4 @@
-import type { DiscoveryDocument, DiscoveryEvidence } from "./validation";
+import type { DiscoveryDocument, DiscoveryEvidence } from "../schema-discovery/validation";
 
 /**
  * Candidate value conflicts are not proven contradictions: identity, dates,
