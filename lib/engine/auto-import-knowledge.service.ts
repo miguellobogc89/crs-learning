@@ -7,6 +7,15 @@ import { discoverEngineSchemaFromKnowledge } from "@/lib/engine/schema-discovery
 import { validateEngineRecordValues } from "@/lib/engine/validation";
 
 type Row = { entity: string; values: Record<string, unknown>; evidence: string };
+const normalizeIdentity = (value: string) => value.normalize("NFKC").trim().replace(/\\s+/g, " ").toLocaleLowerCase("es");
+const normalizedSource = (value: string) => value.normalize("NFKC").toLocaleLowerCase("es").replace(/\\s+/g, " ");
+const literalSupported = (value: unknown, text: string) => {
+  if (value === null || typeof value === "boolean") return true;
+  const normalized = normalizedSource(text);
+  if (typeof value === "string") return normalized.includes(normalizedSource(value));
+  return (text.match(/-?\\d+(?:[.,]\\d+)*/g) ?? [])
+    .some(token => Number(token.replace(",", ".")) === value);
+};
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
 /**
@@ -57,7 +66,7 @@ export async function importKnowledgeIntoEngine(input: {
       "Return JSON object with rows array. Each row: entity (schema key), values (field-key to typed value), evidence (exact contiguous source quote).",
       "Use only supplied entity and field keys. Preserve decimals and nulls. Do not invent missing values.",
       "One row per real entity instance. For junction entities, one row per source line.",
-      "The evidence quote must contain enough literal information to support all non-null field values.",
+      "Evidence must be an exact source quote. For a line item, include the source line as evidence and use the surrounding source document to verify context.",
       "Never guess relationships, identifiers, tax rates or quantities. Return at most 150 rows.",
     ].join("\n"),
     input: JSON.stringify({ task: "Return a valid json object containing the extracted rows.", schema: proposal.entities.map(e => ({
@@ -99,19 +108,11 @@ export async function importKnowledgeIntoEngine(input: {
     if (!valid || Object.keys(values).length === 0) {
       issues.push("Registro " + (index + 1) + ": campos o tipos inválidos."); continue;
     }
-    // Require a literal textual anchor for all string/number values to prevent
-    // unsupported AI enrichment from becoming persisted facts.
-    const evidenceText = raw.evidence as string;
-    if (Object.values(values).some(value => {
-      if (value === null || typeof value === "boolean") return false;
-      const evidence = evidenceText.toLocaleLowerCase("es");
-      const literal = String(value).toLocaleLowerCase("es");
-      if (evidence.includes(literal)) return false;
-      if (typeof value !== "number") return true;
-      return !(evidenceText.match(/-?\\d+(?:[.,]\\d+)*/g) ?? [])
-        .some((token: string) => Number(token.replace(",", ".")) === value);
-    })) {
-      issues.push("Registro " + (index + 1) + ": valores sin evidencia literal."); continue;
+    // Verify every non-null value against the source document, not just a
+    // short line quote. The latter excludes valid line items whose context is
+    // in a heading. Do not accept values absent from the source entirely.
+    if (Object.values(values).some(value => !literalSupported(value, sourceText))) {
+      issues.push("Registro " + (index + 1) + ": valores sin evidencia documental."); continue;
     }
     extracted.push({ entity: entity.key, values, evidence: raw.evidence });
   }
@@ -163,6 +164,17 @@ export async function importKnowledgeIntoEngine(input: {
     }
   }
 
+  // Business identity is scoped to the workspace and entity. Reprocessing a
+  // document must reuse existing records even when the Knowledge file ID changes.
+  // Only strong identifiers are eligible for cross-document matching.
+  const identityField = (entity: string) =>
+    entity === "recipe" ? "code" : entity === "ingredient" ? "name" : null;
+  const definitionsByType = new Map<string, Awaited<ReturnType<typeof prisma.engine_field_definitions.findMany>>>();
+  for (const [key, type] of usable) {
+    definitionsByType.set(key, await prisma.engine_field_definitions.findMany({
+      where: { workspace_id: workspaceId, object_type_id: type.id, status: "active" },
+    }));
+  }
   for (const row of extracted) {
     const type = usable.get(row.entity);
     if (!type) continue;
@@ -171,16 +183,52 @@ export async function importKnowledgeIntoEngine(input: {
     })).digest("hex");
     const externalKey = "knowledge:" + identity;
     try {
+      const definitions = definitionsByType.get(row.entity) ?? [];
+      const validated = validateEngineRecordValues(row.values, definitions);
+      if (!validated.ok) { issues.push(row.entity + ": registro incompatible con el esquema."); continue; }
       const existing = await prisma.engine_records.findFirst({
         where: { workspace_id: workspaceId, object_type_id: type.id, external_key: externalKey },
         select: { id: true },
       });
       if (existing) { recordsReused++; continue; }
-      const definitions = await prisma.engine_field_definitions.findMany({
-        where: { workspace_id: workspaceId, object_type_id: type.id, status: "active" },
-      });
-      const validated = validateEngineRecordValues(row.values, definitions);
-      if (!validated.ok) { issues.push(row.entity + ": registro incompatible con el esquema."); continue; }
+
+      const identityKey = identityField(row.entity);
+      const identityValue = identityKey ? row.values[identityKey] : null;
+      if (identityKey && typeof identityValue === "string" && identityValue.trim()) {
+        const candidates = await prisma.engine_records.findMany({
+          where: { workspace_id: workspaceId, object_type_id: type.id },
+          select: { id: true, values_json: true },
+        });
+        const matches = candidates.filter(candidate => {
+          if (!isObject(candidate.values_json)) return false;
+          const stored = candidate.values_json[identityKey];
+          return typeof stored === "string" &&
+            normalizeIdentity(stored) === normalizeIdentity(identityValue);
+        });
+        if (matches.length === 1) {
+          const oldValues = matches[0].values_json;
+          const conflict = Object.entries(validated.values).some(([key, value]) =>
+            isObject(oldValues) && oldValues[key] !== undefined &&
+            JSON.stringify(oldValues[key]) !== JSON.stringify(value));
+          if (conflict) {
+            issues.push(row.entity + ": identidad existente con valores distintos; revisión necesaria (" + identityValue + ").");
+            continue;
+          }
+          recordsReused++;
+          continue;
+        }
+        if (matches.length > 1) {
+          issues.push(row.entity + ": identidad ambigua; revisión necesaria (" + identityValue + ").");
+          continue;
+        }
+      }
+
+      // A junction row without links to its two endpoints cannot be safely
+      // identified or used. Never create further orphaned line items.
+      if (row.entity === "recipe_ingredient") {
+        issues.push("recipe_ingredient: línea pendiente de vincular con receta e ingrediente.");
+        continue;
+      }
       await prisma.engine_records.create({
         data: { workspace_id: workspaceId, object_type_id: type.id,
           external_key: externalKey, status: "draft", schema_version: type.version,
@@ -189,19 +237,7 @@ export async function importKnowledgeIntoEngine(input: {
       });
       recordsCreated++;
     } catch (error) {
-      // Concurrent duplicate requests may race; report instead of aborting.
       issues.push(row.entity + ": " + (error instanceof Error ? error.message : "Error de inserción"));
     }
   }
 
-  return {
-    status: issues.length ? "completed_with_issues" : "completed",
-    typesCreated, fieldsCreated, recordsCreated, recordsReused,
-    recordsPending: parsed.rows.length - recordsCreated - recordsReused,
-    entitiesDiscovered: proposal.entities.length,
-    relationsDiscovered: proposal.relations.length,
-    issues: [...issues, ...proposal.warnings].slice(0, 100),
-    note: "Registros creados como borradores. Las relaciones detectadas todavía no están vinculadas.",
-    writesPerformed: typesCreated + fieldsCreated + recordsCreated > 0,
-  };
-}
