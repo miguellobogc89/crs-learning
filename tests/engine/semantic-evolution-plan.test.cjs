@@ -52,3 +52,34 @@ test("relationship proposals still require review", () => {
   assert.equal(result.at(-1).kind, "NEW_RELATION_REVIEW");
   assert.equal(result.at(-1).requiresApproval, true);
 });
+
+test("uncertain entity comparison is not a possible alias", () => {
+  const result = plan({ ...base, candidates: base.candidates.map(c => ({ ...c, decision: "UNCERTAIN" })) });
+  assert.equal(result[0].kind, "UNCERTAIN_ENTITY_MATCH");
+  assert.equal(result[0].target, "supply_item");
+});
+test("possible field alias is shown instead of new field", () => {
+  const result = plan({
+    ...base,
+    suggested: [{ kind: "NEW_FIELD", path: "entities.product.fields.product_name", reason: "New field", evidence: [] }],
+    candidates: [{
+      sourceEntity: "product", sourceField: "product_name",
+      targetEntity: "product", targetField: "name",
+      decision: "POSSIBLE_EQUIVALENCE", reason: "Same product name",
+    }],
+  });
+  assert.equal(result.at(-1).kind, "POSSIBLE_FIELD_ALIAS");
+  assert.equal(result.at(-1).target, "entities.product.fields.name");
+});
+test("uncertain field comparison remains unresolved", () => {
+  const result = plan({
+    ...base,
+    suggested: [{ kind: "NEW_FIELD", path: "entities.product.fields.product_name", reason: "New field", evidence: [] }],
+    candidates: [{
+      sourceEntity: "product", sourceField: "product_name",
+      targetEntity: "product", targetField: "name",
+      decision: "UNCERTAIN", reason: "Needs business check",
+    }],
+  });
+  assert.equal(result.at(-1).kind, "UNCERTAIN_FIELD_MATCH");
+});
