@@ -3,6 +3,7 @@
 
 import { NextResponse } from "next/server";
 import { resolveDuplicateSelection } from "@/lib/knowledge/import/pipeline/duplicate-selection";
+import { calculateKnowledgeFileHash } from "@/lib/knowledge/import/pipeline/detect-duplicates";
 
 import { auth } from "@/auth";
 import {
@@ -311,6 +312,7 @@ export async function POST(
       relative_path: string;
       mime_type: string | null;
       file_size: number;
+      content_hash: string;
       storage_path: string;
       status: string;
       processing_order: number;
@@ -371,6 +373,7 @@ export async function POST(
         relative_path: item.relativePath,
         mime_type: item.mimeType,
         file_size: item.fileSize,
+        content_hash: calculateKnowledgeFileHash(item.content),
         storage_path: storagePath,
         status: "extracted",
         processing_order: item.processingOrder,
