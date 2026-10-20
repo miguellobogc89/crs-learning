@@ -195,6 +195,7 @@ model users {
   course_request_votes                                                                         course_request_votes[]
   course_requests                                                                              course_requests[]
   courses                                                                                      courses[]
+  engine_value_conflicts                                                                       engine_value_conflicts[]
   engine_record_provenance                                                                     engine_record_provenance[]
   engine_record_revisions                                                                      engine_record_revisions[]
   engine_records_engine_records_created_by_user_idTousers                                      engine_records[]                   @relation("engine_records_created_by_user_idTousers")
@@ -1267,6 +1268,7 @@ model workspaces {
   engine_record_provenance engine_record_provenance[]
   engine_record_revisions  engine_record_revisions[]
   engine_records           engine_records[]
+  engine_value_conflicts   engine_value_conflicts[]
   knowledge_libraries      knowledge_libraries[]
   knowledge_teams          knowledge_teams[]
   user_resource_access     user_resource_access[]
@@ -1542,6 +1544,32 @@ model engine_object_types {
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model engine_value_conflicts {
+  id                  String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id        String     @db.Uuid
+  fingerprint         String
+  subject             String
+  attribute           String
+  context             String     @default("")
+  alternatives_json   Json
+  status              String     @default("pending_review")
+  scope               String     @default("affected_value_only")
+  detected_by         String     @default("ai")
+  resolved_value      String?
+  resolution_note     String?
+  resolved_by_user_id String?    @db.Uuid
+  resolved_at         DateTime?  @db.Timestamptz(6)
+  created_at          DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime   @default(now()) @db.Timestamptz(6)
+  workspaces          workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  users               users?     @relation(fields: [resolved_by_user_id], references: [id], onDelete: SetNull)
+
+  @@unique([workspace_id, fingerprint], map: "engine_value_conflicts_workspace_fingerprint_idx")
+  @@index([workspace_id, status, created_at(sort: Desc)], map: "engine_value_conflicts_workspace_status_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations.
+
 model engine_records {
   id                                             String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   object_type_id                                 String                     @db.Uuid
