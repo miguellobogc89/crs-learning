@@ -1264,8 +1264,6 @@ model workspaces {
   status                   String                     @default("active")
   created_at               DateTime                   @default(now()) @db.Timestamptz(6)
   updated_at               DateTime                   @default(now()) @db.Timestamptz(6)
-  relation_definitions_from engine_relation_definitions[] @relation("engine_relation_from")
-  relation_definitions_to   engine_relation_definitions[] @relation("engine_relation_to")
   engine_field_definitions engine_field_definitions[]
   engine_object_types      engine_object_types[]
   engine_record_provenance engine_record_provenance[]
@@ -1553,6 +1551,8 @@ model engine_relation_definitions {
 }
 
 model engine_object_types {
+  relation_definitions_from engine_relation_definitions[] @relation("engine_relation_from")
+  relation_definitions_to   engine_relation_definitions[] @relation("engine_relation_to")
   id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   key                      String
   name                     String
