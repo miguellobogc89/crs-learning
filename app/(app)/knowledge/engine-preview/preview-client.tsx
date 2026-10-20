@@ -16,6 +16,15 @@ type Preview = {
 
 type Extraction = {
   status: string;
+  identityPreview?: {
+    recipes: { id: string; name: string; evidenceText: string }[];
+    ingredients: { id: string; name: string; occurrences: number }[];
+    lines: { id: string; recipeId: string; ingredientId: string; quantity: number; unit: string; ivaPercent: number | null; evidenceText: string }[];
+    links: { fromLineId: string; ingredientId: string; recipeId: string; ingredientRecipeId: string | null; status: string; reason: string }[];
+    summary: { uniqueIngredients: number; reusedIngredients: number; proposedRecipeReferences: number; pendingReview: number };
+    identityVerified: boolean;
+    writesPerformed: boolean;
+  };
   recipes: { recipe: string; recipeEvidence: string; ingredients: {
     ingredient: string; quantity: number; unit: string; ivaPercent: number | null; evidenceText: string;
   }[] }[];
@@ -236,6 +245,22 @@ export function EnginePreviewClient({ files }: { files: { id: string; name: stri
               Extracción parcial: se han analizado {extraction.processedCharacters} de {extraction.totalCharacters} caracteres,
               o se ha alcanzado el límite de registros. La cobertura completa del documento aún no está verificada.
             </p>}
+            {extraction.identityPreview && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-slate-800">
+                <p className="font-semibold">Identidades y relaciones propuestas (sin guardar)</p>
+                <p className="mt-1">{extraction.identityPreview.summary.uniqueIngredients} ingredientes distintos · {extraction.identityPreview.summary.reusedIngredients} reutilizados · {extraction.identityPreview.summary.proposedRecipeReferences} referencias a recetas por confirmar</p>
+                <p className="mt-1 text-slate-600">Las coincidencias se basan en nombres normalizados. No son equivalencias aprobadas ni identificadores de base de datos.</p>
+                {extraction.identityPreview.links.filter(link => link.ingredientRecipeId).map(link => {
+                  const ingredient = extraction.identityPreview?.ingredients.find(item => item.id === link.ingredientId);
+                  const recipe = extraction.identityPreview?.recipes.find(item => item.id === link.ingredientRecipeId);
+                  return (
+                    <p key={link.fromLineId} className="mt-1">
+                      {ingredient?.name} → {recipe?.name} <span className="text-amber-800">(pendiente de aprobación)</span>
+                    </p>
+                  );
+                })}
+              </div>
+            )}
             {!extraction.recipes.length && <p className="text-sm text-slate-600">No se han validado recetas en esta extracción.</p>}
             {extraction.recipes.slice(0, 8).map((block, index) => (
               <div key={index} className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
