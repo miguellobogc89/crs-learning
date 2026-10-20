@@ -35,14 +35,32 @@ export type ProcessImportTextResult = {
 function containsStructuredTable(text: string): boolean {
   const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   if (/<table[\s>]/i.test(text)) return true;
-  let delimited = 0;
+
+  let delimitedRows = 0;
+  let structuredRows = 0;
   let numericRows = 0;
+
   for (const line of lines) {
-    const cells = line.split(/\s*\|\s*|\t|\s*;\s*/).filter(Boolean);
-    if (cells.length >= 3 && cells.some(cell => /[\p{L}]/u.test(cell))) delimited++;
-    if (/^(?:[-*]\s*)?[\p{L}][\p{L}\s.,()-]{2,70}\s+(?:\d+[.,]?\d*\s*(?:kg|g|l|ml|ud|uds|unidades?|€|%|x)\b|\d+[.,]\d{2}\s*€)/iu.test(line)) numericRows++;
+    if (line.length > 180) continue;
+    const cells = line.split(/\s*\|\s*|\t|\s*;\s*| {2,}/).filter(Boolean);
+    if (cells.length >= 3 && cells.some(cell => /[\p{L}]/u.test(cell))) {
+      delimitedRows++;
+    }
+
+    // OCR/PDF text often flattens tables into "name quantity", "quantity name",
+    // or one row per ingredient without retaining visual column separators.
+    const hasWords = /[\p{L}]{2,}/u.test(line);
+    const hasNumber = /(?:^|[^\p{L}\d])\d+(?:[.,]\d+)?(?:$|[^\p{L}\d])/u.test(line);
+    if (hasWords && hasNumber) {
+      numericRows++;
+      if (/^\s*(?:[-*]\s*)?(?:\d+(?:[.,]\d+)?\s*(?:kg|gr?|ml|l|uds?|unidades?|€|%)?\s+[\p{L}]|[\p{L}].*?\s+\d+(?:[.,]\d+)?(?:\s*(?:kg|gr?|ml|l|uds?|unidades?|€|%))?\s*$)/iu.test(line)) {
+        structuredRows++;
+      }
+    }
   }
-  return delimited >= 2 || numericRows >= 3;
+
+  return delimitedRows >= 2 || structuredRows >= 3 ||
+    (numericRows >= 5 && numericRows >= Math.ceil(lines.length * 0.3));
 }
 
 function cleanExtractedText(text: string): string {
