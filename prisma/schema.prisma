@@ -195,6 +195,7 @@ model users {
   course_request_votes                                                                         course_request_votes[]
   course_requests                                                                              course_requests[]
   courses                                                                                      courses[]
+  engine_record_revisions                                                                      engine_record_revisions[]
   engine_records_engine_records_created_by_user_idTousers                                      engine_records[]                   @relation("engine_records_created_by_user_idTousers")
   engine_records_engine_records_updated_by_user_idTousers                                      engine_records[]                   @relation("engine_records_updated_by_user_idTousers")
   knowledge_activity                                                                           knowledge_activity[]
@@ -1529,25 +1530,45 @@ model engine_object_types {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model engine_records {
-  id                                             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organization_id                                String              @db.Uuid
-  object_type_id                                 String              @db.Uuid
+  id                                             String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id                                String                    @db.Uuid
+  object_type_id                                 String                    @db.Uuid
   external_key                                   String?
-  status                                         String              @default("draft")
-  values_json                                    Json                @default("{}")
-  schema_version                                 Int                 @default(1)
-  revision                                       Int                 @default(1)
-  created_by_user_id                             String?             @db.Uuid
-  updated_by_user_id                             String?             @db.Uuid
-  created_at                                     DateTime            @default(now()) @db.Timestamptz(6)
-  updated_at                                     DateTime            @default(now()) @db.Timestamptz(6)
-  users_engine_records_created_by_user_idTousers users?              @relation("engine_records_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
-  engine_object_types                            engine_object_types @relation(fields: [organization_id, object_type_id], references: [organization_id, id], onUpdate: NoAction, map: "engine_records_object_fk")
-  users_engine_records_updated_by_user_idTousers users?              @relation("engine_records_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+  status                                         String                    @default("draft")
+  values_json                                    Json                      @default("{}")
+  schema_version                                 Int                       @default(1)
+  revision                                       Int                       @default(1)
+  created_by_user_id                             String?                   @db.Uuid
+  updated_by_user_id                             String?                   @db.Uuid
+  created_at                                     DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at                                     DateTime                  @default(now()) @db.Timestamptz(6)
+  engine_record_revisions                        engine_record_revisions[]
+  users_engine_records_created_by_user_idTousers users?                    @relation("engine_records_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  engine_object_types                            engine_object_types       @relation(fields: [organization_id, object_type_id], references: [organization_id, id], onUpdate: NoAction, map: "engine_records_object_fk")
+  users_engine_records_updated_by_user_idTousers users?                    @relation("engine_records_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
 
   @@unique([object_type_id, external_key], map: "engine_records_external_key_unique", where: raw("(external_key IS NOT NULL)"))
   @@unique([organization_id, id], map: "engine_records_org_id_unique")
   @@index([organization_id, created_at(sort: Desc)], map: "engine_records_org_created_idx")
   @@index([organization_id, object_type_id, status], map: "engine_records_org_type_status_idx")
   @@index([values_json], map: "engine_records_values_gin_idx", type: Gin)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model engine_record_revisions {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organization_id    String         @db.Uuid
+  record_id          String         @db.Uuid
+  object_type_id     String         @db.Uuid
+  revision           Int
+  schema_version     Int
+  status             String
+  values_json        Json
+  changed_by_user_id String?        @db.Uuid
+  recorded_at        DateTime       @default(now()) @db.Timestamptz(6)
+  users              users?         @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
+  engine_records     engine_records @relation(fields: [organization_id, record_id], references: [organization_id, id], onUpdate: NoAction, map: "engine_revision_record_fk")
+
+  @@unique([record_id, revision], map: "engine_revision_unique")
+  @@index([organization_id, record_id, revision(sort: Desc)], map: "engine_revision_org_record_idx")
 }
