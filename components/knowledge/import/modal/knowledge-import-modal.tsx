@@ -512,6 +512,23 @@ export function KnowledgeImportModal({
               />
             ) : null}
 
+            {Object.keys(knowledgeImport.tableDetection).length > 0 ? (
+              <div className="mb-3 shrink-0 rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3" role="status">
+                <p className="text-xs font-semibold text-blue-950">Detección de tablas · después de comprobar duplicados</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {knowledgeImport.fileProgress.filter(file => file.id in knowledgeImport.tableDetection).map(file => (
+                    <span key={file.id} className="inline-flex max-w-full items-center gap-2 rounded-lg border border-blue-100 bg-white px-3 py-1.5 text-xs">
+                      <span className="max-w-[240px] truncate text-slate-700">{file.name}</span>
+                      <strong className={knowledgeImport.tableDetection[file.id] ? "text-emerald-700" : "text-slate-500"}>
+                        {knowledgeImport.tableDetection[file.id] ? "Contiene tablas" : "Sin tablas detectadas"}
+                      </strong>
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] text-blue-700">Detección inicial sobre contenido extraído; no se crean tablas ni registros en Engine.</p>
+              </div>
+            ) : null}
+
             {knowledgeImport.duplicateNotice ? (
               <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
                 {knowledgeImport.duplicateNotice}
