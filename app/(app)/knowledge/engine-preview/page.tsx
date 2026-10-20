@@ -12,7 +12,7 @@ export default async function EnginePreviewPage() {
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
   const files = await prisma.knowledge_files.findMany({
     where: {
-      status: "ready",
+      status: { in: ["ready", "processed"] },
       knowledge_sources: knowledgeSourceReadWhere(session.user.id, activeWorkspace.id),
     },
     select: { id: true, file_name: true },
