@@ -12,7 +12,7 @@ export type EngineFieldType =
 
 export type EngineFieldDefinition = {
   key: string;
-  field_type: EngineFieldType;
+  field_type: string;
   is_required: boolean;
   status: string;
   configuration?: unknown;
@@ -20,13 +20,18 @@ export type EngineFieldDefinition = {
 
 export type EngineValidationIssue = {
   field: string;
-  code: "unknown_field" | "required" | "invalid_type" | "invalid_option";
+  code: "unknown_field" | "required" | "invalid_type" | "invalid_option" | "unsupported_type";
   message: string;
 };
 
 export type EngineValidationResult =
   | { ok: true; values: Record<string, unknown> }
   | { ok: false; issues: EngineValidationIssue[] };
+
+const SUPPORTED_FIELD_TYPES: ReadonlySet<string> = new Set<EngineFieldType>([
+  "text", "long_text", "integer", "decimal", "boolean", "date",
+  "datetime", "enum", "entity_reference", "record_reference", "json",
+]);
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -90,6 +95,10 @@ export function validateEngineRecordValues(
   }
 
   for (const field of activeFields.values()) {
+    if (!SUPPORTED_FIELD_TYPES.has(field.field_type)) {
+      issues.push({ field: field.key, code: "unsupported_type", message: "Unsupported field type." });
+      continue;
+    }
     const value = input[field.key];
     if (value === undefined || value === null || value === "") {
       if (field.is_required) {
