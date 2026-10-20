@@ -26,7 +26,7 @@ import type { UploadType } from "./types";
 type Props = {
   onCreateFolder: () => void;
   onUpload: (type: UploadType) => void;
-  onEngineTest: () => void;
+  onEngineTest?: () => void;
 };
 
 export function KnowledgeActions({
@@ -70,10 +70,10 @@ export function KnowledgeActions({
 
         <DropdownMenuSeparator className="my-1" />
 
-        <DropdownMenuItem onSelect={onEngineTest} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5">
+        {onEngineTest && <DropdownMenuItem onSelect={onEngineTest} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5">
           <FlaskConical className="size-icon-md shrink-0 text-muted-foreground" />
           <span className="text-body font-medium">Probar con Engine</span>
-        </DropdownMenuItem>
+        </DropdownMenuItem>}
 
         <DropdownMenuSeparator className="my-1" />
 
