@@ -2,6 +2,8 @@
 
 "use client";
 
+import { useEffect, useState } from "react";
+
 import {
   Check,
   CheckCircle2,
@@ -32,6 +34,102 @@ function SummaryMetric({
         {label}
       </span>
     </div>
+  );
+}
+
+type EngineDiscovery = {
+  status: string;
+  discoveredEntities?: Array<{ key: string; fields: Array<{ key: string; type: string }> }>;
+  discoveredRelations?: Array<{ key: string }>;
+  error?: string;
+};
+
+function EngineImportActivity({ result }: { result: ConfirmKnowledgeImportResult }) {
+  const documents = result.log.documents.filter(document => Boolean(document.knowledgeFileId));
+  const [activity, setActivity] = useState<Array<{
+    name: string;
+    status: "pending" | "analyzing" | "done" | "error";
+    entities: number;
+    relations: number;
+    error?: string;
+  }>>(() => documents.map(document => ({
+    name: document.fileName, status: "pending", entities: 0, relations: 0,
+  })));
+
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    async function run() {
+      for (const [index, document] of documents.entries()) {
+        if (cancelled) return;
+        setActivity(previous => previous.map((item, i) =>
+          i === index ? { ...item, status: "analyzing" } : item,
+        ));
+        try {
+          const response = await fetch("/api/engine/preview-discovery", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ knowledgeFileId: document.knowledgeFileId }),
+            signal: controller.signal,
+          });
+          const data = await response.json() as EngineDiscovery;
+          if (!response.ok || data.status === "INVALID_PROPOSAL" ||
+              data.status === "INVALID_SEMANTIC_REVIEW") {
+            throw new Error(data.error ?? "No se ha podido validar la estructura propuesta.");
+          }
+          if (!cancelled) setActivity(previous => previous.map((item, i) =>
+            i === index ? {
+              ...item, status: "done",
+              entities: data.discoveredEntities?.length ?? 0,
+              relations: data.discoveredRelations?.length ?? 0,
+            } : item,
+          ));
+        } catch (error) {
+          if (cancelled) return;
+          setActivity(previous => previous.map((item, i) =>
+            i === index ? {
+              ...item, status: "error",
+              error: error instanceof Error ? error.message : "Error de análisis",
+            } : item,
+          ));
+        }
+      }
+    }
+    void run();
+    return () => { cancelled = true; controller.abort(); };
+    // The committed document list is immutable for this completed import.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result.importId]);
+
+  if (documents.length === 0) return null;
+  const finished = activity.filter(item => item.status === "done" || item.status === "error").length;
+  return (
+    <section className="rounded-xl border border-blue-200 bg-blue-50/50 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-[13px] font-semibold text-blue-950">Engine · Análisis de estructuras</h4>
+        <span className="text-[11px] tabular-nums text-blue-700">{finished}/{documents.length} archivos</span>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-blue-100">
+        <div className="h-full bg-blue-600 transition-all" style={{ width: `${documents.length ? finished / documents.length * 100 : 0}%` }} />
+      </div>
+      <div className="mt-3 space-y-2">
+        {activity.map((item, index) => (
+          <div key={documents[index]?.knowledgeFileId ?? index} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-xs">
+            <span className="max-w-[50%] truncate font-medium text-slate-800">{item.name}</span>
+            <span className={item.status === "error" ? "text-amber-700" : "text-blue-700"}>
+              {item.status === "pending" ? "Pendiente" :
+               item.status === "analyzing" ? "Descubriendo entidades y relaciones…" :
+               item.status === "error" ? (item.error ?? "Análisis no disponible") :
+               `${item.entities} entidades · ${item.relations} relaciones propuestas`}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[11px] leading-5 text-blue-800">
+        Esta fase descubre estructuras y comprueba coincidencias existentes.
+        Todavía no crea tipos ni inserta registros en Engine.
+      </p>
+    </section>
   );
 }
 
@@ -106,6 +204,7 @@ export function KnowledgeImportCompletedStep({
       </div>
 
       <div className="mt-6 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
+        <EngineImportActivity result={result} />
         {log.articles.length > 0 ? (
           <section>
             <h4 className="mb-2.5 text-[12px] font-semibold text-slate-900">
