@@ -1,7 +1,7 @@
 // lib/services/knowledge-library.service.ts
 
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { knowledgeLibraryReadWhere } from "@/lib/knowledge/access-control";
 
 const libraryInclude = {
@@ -39,6 +39,52 @@ const libraryInclude = {
   },
 } as const;
 
+/**
+ * The knowledge layout and page can render concurrently. Both may try to
+ * bootstrap the same root library; a unique-key race must be harmless.
+ */
+async function createOrFindRootKnowledgeLibrary(
+  userId: string,
+  workspaceId: string,
+) {
+  const where = {
+    owner_user_id: userId,
+    workspace_id: workspaceId,
+    parent_id: null,
+  };
+
+  const existing = await prisma.knowledge_libraries.findFirst({
+    where,
+    orderBy: { created_at: "asc" },
+  });
+  if (existing) return existing;
+
+  try {
+    return await prisma.knowledge_libraries.create({
+      data: {
+        owner_user_id: userId,
+        workspace_id: workspaceId,
+        name: "Mi biblioteca",
+        parent_id: null,
+        position: 0,
+      },
+    });
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== "P2002") {
+      throw error;
+    }
+
+    // Another concurrent request may have created the same root library.
+    const concurrent = await prisma.knowledge_libraries.findFirst({
+      where,
+      orderBy: { created_at: "asc" },
+    });
+    if (concurrent) return concurrent;
+    throw error;
+  }
+}
+
 export async function listKnowledgeLibraries(
   userId: string,
   workspaceId: string,
@@ -64,17 +110,18 @@ export async function listKnowledgeLibraries(
   );
 
   if (ownedLibraries.length === 0) {
-    const library = await prisma.knowledge_libraries.create({
-      data: {
-        owner_user_id: userId,
-        workspace_id: workspaceId,
-        name: "Mi biblioteca",
-        position: 0,
-      },
+    await createOrFindRootKnowledgeLibrary(userId, workspaceId);
+    // Reload with the same permission rules, rather than returning a
+    // separately-created row with different filtering semantics.
+    libraries = await prisma.knowledge_libraries.findMany({
+      where: knowledgeLibraryReadWhere(userId, workspaceId),
       include: libraryInclude,
+      orderBy: [
+        { parent_id: "asc" },
+        { position: "asc" },
+        { created_at: "asc" },
+      ],
     });
-
-    libraries = [library, ...libraries];
   }
 
   return libraries.map((library) => {
@@ -101,27 +148,7 @@ export async function ensureRootKnowledgeLibrary(
   userId: string,
   workspaceId: string,
 ) {
-  const existing =
-    await prisma.knowledge_libraries.findFirst({
-      where: {
-        owner_user_id: userId,
-        workspace_id: workspaceId,
-        parent_id: null,
-      },
-    });
-
-  if (existing) {
-    return existing;
-  }
-
-  return prisma.knowledge_libraries.create({
-    data: {
-      owner_user_id: userId,
-      workspace_id: workspaceId,
-      name: "Mi biblioteca",
-      parent_id: null,
-    },
-  });
+  return createOrFindRootKnowledgeLibrary(userId, workspaceId);
 }
 
 type KnowledgeStatusClient = Pick<
