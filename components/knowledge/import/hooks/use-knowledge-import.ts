@@ -128,6 +128,8 @@ export function useKnowledgeImport({
       null,
     );
 
+  const [tableDetection, setTableDetection] = useState<Record<string, boolean>>({});
+
   const [error, setError] =
     useState<string | null>(null);
   const [duplicateNotice, setDuplicateNotice] = useState<string | null>(null);
@@ -594,6 +596,12 @@ export function useKnowledgeImport({
           return;
         }
 
+        setTableDetection(Object.fromEntries(
+          (analysisResult.textExtraction.files ?? [])
+            .filter(file => file.status === "text_ready" && typeof file.hasTables === "boolean")
+            .map(file => [file.id, Boolean(file.hasTables)]),
+        ));
+
         const duplicateFiles =
           analysisResult.extraction
             .duplicateFiles;
@@ -883,6 +891,7 @@ export function useKnowledgeImport({
       setError(null);
       setImportReview(null);
       setDuplicateNotice(null);
+      setTableDetection({});
       setIsAnalyzing(false);
       setIsConfirming(false);
 
@@ -972,6 +981,7 @@ export function useKnowledgeImport({
     ]);
 
   return {
+    tableDetection,
     duplicateNotice,
     allFilesDuplicate: isAllDuplicateReview(importReview),
     step: visibleStep,
