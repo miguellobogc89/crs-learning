@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { isDeepStrictEqual } from "node:util";
 import { prisma } from "@/lib/prisma";
 import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { validateEngineRecordValues } from "./validation";
@@ -18,7 +19,8 @@ export async function persistReviewedKnowledgeObservation(input: {
   candidate: EngineImportCandidate;
   approved: true;
 }) {
-  if (!input.workspaceId || !input.userId || input.approved !== true) {
+  if (!input.workspaceId || !input.userId || input.approved !== true ||
+      !input.candidate || typeof input.candidate.documentId !== "string") {
     throw new Error("Explicit approval and workspace identity required.");
   }
   const { workspaceId, userId, candidate } = input;
@@ -114,7 +116,7 @@ export async function persistReviewedKnowledgeObservation(input: {
     if (existing) {
       // A retry is safe only if the original draft and evidence still match.
       if (existing.status !== "draft" || existing.revision !== 1 ||
-          JSON.stringify(existing.values_json) !== JSON.stringify(validated.values)) {
+          !isDeepStrictEqual(existing.values_json, validated.values)) {
         throw new Error("Existing observation was modified; manual review required.");
       }
       const provenance = await tx.engine_record_provenance.findFirst({
