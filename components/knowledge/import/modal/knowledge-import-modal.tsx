@@ -488,7 +488,7 @@ export function KnowledgeImportModal({
             }
           />
 
-          <div className="min-h-0 flex-1 overflow-hidden px-6 py-5">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
             {isWaitingToStart ? (
               <KnowledgeImportProcessingStep
                 phase="uploading"
