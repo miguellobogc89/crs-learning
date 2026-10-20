@@ -2,12 +2,15 @@
 
 "use client";
 
+import Link from "next/link";
+
 import {
   Archive,
   ChevronDown,
   FileUp,
   FolderPlus,
   FolderUp,
+  FlaskConical,
   Plus,
 } from "lucide-react";
 
@@ -62,6 +65,15 @@ export function KnowledgeActions({
           <span className="text-body font-medium">
             Nueva carpeta
           </span>
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator className="my-1" />
+
+        <DropdownMenuItem asChild className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5">
+          <Link href="/knowledge/engine-preview">
+            <FlaskConical className="size-icon-md shrink-0 text-muted-foreground" />
+            <span className="text-body font-medium">Analizar con Engine (prueba)</span>
+          </Link>
         </DropdownMenuItem>
 
         <DropdownMenuSeparator className="my-1" />
