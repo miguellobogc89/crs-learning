@@ -85,7 +85,7 @@ export async function extractEngineCandidatesFromKnowledge(input: {
     model: getKnowledgeImportModel(),
     instructions: ENGINE_EXTRACTION_INSTRUCTIONS +
       "\nReturn a JSON object with a candidates array. Each candidate must contain objectTypeId, documentId, fieldKey, evidenceText and values.",
-    input: buildEngineExtractionInput({
+    input: "Return a JSON object containing a candidates array.\n" + buildEngineExtractionInput({
       documents: files.map((file) => ({ id: file.id, extractedText: file.extracted_text })),
       objectTypes: definitions.map((objectType) => ({
         id: objectType.id,
