@@ -1,6 +1,8 @@
 // lib/knowledge/import/confirm-import.ts
 
 import type { Prisma } from "@prisma/client";
+import { calculateKnowledgeFileHash } from "@/lib/knowledge/import/pipeline/detect-duplicates";
+import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
 
 import { prisma } from "@/lib/prisma";
 import { analyzeKnowledgeSource } from "@/lib/services/knowledge-analysis.service";
@@ -33,6 +35,8 @@ type ExistingKnowledgeFile = {
   id: string;
   file_name: string;
   file_size: number | null;
+  content_hash: string | null;
+  storage_path: string | null;
   knowledge_source_id: string;
   knowledge_sources: {
     id: string;
@@ -75,19 +79,18 @@ function parseStoredLog(
   return value as unknown as KnowledgeImportExecutionLog;
 }
 
-function normalizeFileName(fileName: string) {
-  return fileName
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLocaleLowerCase("es");
-}
-
-function getFileIdentity(
-  fileName: string,
-  fileSize: number | null,
-) {
-  return `${normalizeFileName(fileName)}::${fileSize ?? "null"}`;
+async function resolveContentHash(file: {
+  content_hash: string | null;
+  storage_path: string | null;
+}): Promise<string | null> {
+  if (file.content_hash) return file.content_hash;
+  if (!file.storage_path) return null;
+  try {
+    return calculateKnowledgeFileHash(await readKnowledgeFile(file.storage_path));
+  } catch {
+    // Unreadable legacy files must never be treated as confirmed duplicates.
+    return null;
+  }
 }
 
 function buildImportedContent(
@@ -290,6 +293,8 @@ export async function confirmKnowledgeImport({
           id: true,
           file_name: true,
           file_size: true,
+          content_hash: true,
+          storage_path: true,
           knowledge_source_id: true,
           knowledge_sources: {
             select: {
@@ -312,107 +317,73 @@ export async function confirmKnowledgeImport({
   );
 
   /*
-   * La deduplicación es determinista y se resuelve antes
-   * de abrir la transacción. No depende de action=create/update
-   * ni de que la IA haya reconocido el artículo correcto.
+   * Confirmación de duplicados por contenido real, nunca por nombre y tamaño.
+   * Los hashes de documentos antiguos se calculan solo si faltan.
    */
-  const existingFileByIdentity = new Map<
-    string,
-    ExistingKnowledgeFile
-  >();
-
+  const existingFileByHash = new Map<string, ExistingKnowledgeFile>();
   for (const file of existingKnowledgeFiles) {
-    const identity = getFileIdentity(
-      file.file_name,
-      file.file_size,
-    );
-
-    if (!existingFileByIdentity.has(identity)) {
-      existingFileByIdentity.set(identity, file);
+    const hash = await resolveContentHash(file);
+    if (hash && file.file_size !== null) {
+      const identity = `${file.file_size}:${hash}`;
+      if (!existingFileByHash.has(identity)) existingFileByHash.set(identity, file);
     }
   }
 
-  const acceptedImportFileIdByIdentity =
-    new Map<string, string>();
+  const acceptedImportFileIdByHash = new Map<string, string>();
+  const articlePlans = [];
+  for (const article of proposal.articles) {
+    const articleFiles = article.documentIds.map((documentId) => {
+      const file = importFilesById.get(documentId);
+      if (!file) throw new Error(`No se ha encontrado el documento ${documentId}`);
+      return file;
+    });
+    const filesToCreate: typeof articleFiles = [];
+    const skippedDocuments: KnowledgeImportSkippedDocumentLog[] = [];
 
-  const articlePlans = proposal.articles.map(
-    (article) => {
-      const articleFiles = article.documentIds.map(
-        (documentId) => {
-          const file = importFilesById.get(documentId);
-
-          if (!file) {
-            throw new Error(
-              `No se ha encontrado el documento ${documentId}`,
-            );
-          }
-
-          return file;
-        },
-      );
-
-      const filesToCreate = [] as typeof articleFiles;
-      const skippedDocuments:
-        KnowledgeImportSkippedDocumentLog[] = [];
-
-      for (const importFile of articleFiles) {
-        const identity = getFileIdentity(
-          importFile.file_name,
-          importFile.file_size,
-        );
-
-        const existingFile =
-          existingFileByIdentity.get(identity);
-
-        if (existingFile) {
-          skippedDocuments.push({
-            importFileId: importFile.id,
-            existingKnowledgeFileId:
-              existingFile.id,
-            fileName: importFile.file_name,
-            fileSize: importFile.file_size,
-            articleId:
-              existingFile.knowledge_sources.id,
-            articleTitle:
-              existingFile.knowledge_sources.title,
-            reason: "duplicate_name_and_size",
-          });
-          continue;
-        }
-
-        const acceptedImportFileId =
-          acceptedImportFileIdByIdentity.get(identity);
-
-        if (acceptedImportFileId) {
-          skippedDocuments.push({
-            importFileId: importFile.id,
-            existingKnowledgeFileId: null,
-            duplicateImportFileId:
-              acceptedImportFileId,
-            fileName: importFile.file_name,
-            fileSize: importFile.file_size,
-            articleId: article.existingArticleId,
-            articleTitle: article.title,
-            reason: "duplicate_in_import_batch",
-          });
-          continue;
-        }
-
-        acceptedImportFileIdByIdentity.set(
-          identity,
-          importFile.id,
-        );
-        filesToCreate.push(importFile);
+    for (const importFile of articleFiles) {
+      const hash = await resolveContentHash(importFile);
+      if (!hash) {
+        throw new Error(`No se puede verificar el contenido del documento ${importFile.file_name}`);
       }
+      const identity = `${importFile.file_size}:${hash}`;
+      const existingFile = existingFileByHash.get(identity);
+      if (existingFile) {
+        skippedDocuments.push({
+          importFileId: importFile.id,
+          existingKnowledgeFileId: existingFile.id,
+          fileName: importFile.file_name,
+          fileSize: importFile.file_size,
+          articleId: existingFile.knowledge_sources.id,
+          articleTitle: existingFile.knowledge_sources.title,
+          reason: "duplicate_name_and_size",
+        });
+        continue;
+      }
+      const acceptedImportFileId = acceptedImportFileIdByHash.get(identity);
+      if (acceptedImportFileId) {
+        skippedDocuments.push({
+          importFileId: importFile.id,
+          existingKnowledgeFileId: null,
+          duplicateImportFileId: acceptedImportFileId,
+          fileName: importFile.file_name,
+          fileSize: importFile.file_size,
+          articleId: article.existingArticleId,
+          articleTitle: article.title,
+          reason: "duplicate_in_import_batch",
+        });
+        continue;
+      }
+      acceptedImportFileIdByHash.set(identity, importFile.id);
+      filesToCreate.push(importFile);
+    }
 
-      return {
-        article,
-        filesToCreate,
-        skippedDocuments,
-        generatedContent: null as string | null,
-      };
-    },
-  );
+    articlePlans.push({
+      article,
+      filesToCreate,
+      skippedDocuments,
+      generatedContent: null as string | null,
+    });
+  }
 
   /*
    * Esta llamada usa OpenAI y antes se ejecutaba dentro de
@@ -759,6 +730,7 @@ export async function confirmKnowledgeImport({
                   file_name: importFile.file_name,
                   file_type: importFile.mime_type,
                   file_size: importFile.file_size,
+                  content_hash: importFile.content_hash ?? (await resolveContentHash(importFile)),
                   storage_path:
                     importFile.storage_path,
                   extracted_text:
