@@ -42,7 +42,7 @@ export async function previewMappedKnowledgeImport(input: {
   const [files, objectTypes] = await Promise.all([
     prisma.knowledge_files.findMany({
       where: {
-        id: { in: input.knowledgeFileIds }, status: "ready",
+        id: { in: input.knowledgeFileIds }, status: { in: ["ready", "processed"] },
         knowledge_sources: knowledgeSourceReadWhere(input.userId, input.workspaceId),
       },
       select: { id: true, extracted_text: true },
