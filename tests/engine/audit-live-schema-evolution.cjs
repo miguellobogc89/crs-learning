@@ -57,6 +57,7 @@ Module._extensions[".ts"] = (mod, filename) => {
       })) ?? [],
       suggestedChanges: result.comparison?.suggested ?? [],
       semantic: result.semantic ?? null,
+      reviewPlan: result.reviewPlan ?? [],
       writesPerformed: false,
       limitations: [
         "AI results require review and are not semantic proof.",
