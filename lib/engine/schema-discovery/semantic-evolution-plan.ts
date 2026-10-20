@@ -4,7 +4,7 @@ import type { ExistingSchemaSemanticCandidate } from "./existing-semantic-review
 
 export type SemanticEvolutionDecision = {
   kind: "REUSE_EXACT_KEY" | "POSSIBLE_ENTITY_ALIAS" | "NEW_ENTITY_REVIEW" |
-    "NEW_FIELD_REVIEW" | "NEW_RELATION_REVIEW" | "OTHER_SCHEMA_REVIEW";
+    "NEW_FIELD_REVIEW" | "NEW_RELATION_REVIEW" | "OTHER_SCHEMA_REVIEW" |\n    "UNCERTAIN_ENTITY_MATCH" | "POSSIBLE_FIELD_ALIAS" | "UNCERTAIN_FIELD_MATCH";
   source: string;
   target?: string;
   reason: string;
@@ -33,15 +33,15 @@ export function planSemanticSchemaEvolution(input: {
       });
       continue;
     }
-    const possible = input.candidates.filter(c =>
+    const comparisons = input.candidates.filter(c =>
       c.sourceEntity === entity.key && c.sourceField === null &&
       c.targetField === null && c.decision !== "DISTINCT");
-    if (possible.length) {
-      for (const candidate of possible) result.push({
-        kind: "POSSIBLE_ENTITY_ALIAS", source: entity.key,
-        target: candidate.targetEntity,
-        reason: candidate.reason,
-        requiresApproval: true,
+    if (comparisons.length) {
+      for (const candidate of comparisons) result.push({
+        kind: candidate.decision === "POSSIBLE_EQUIVALENCE"
+          ? "POSSIBLE_ENTITY_ALIAS" : "UNCERTAIN_ENTITY_MATCH",
+        source: entity.key, target: candidate.targetEntity,
+        reason: candidate.reason, requiresApproval: true,
       });
     } else {
       result.push({
@@ -53,6 +53,22 @@ export function planSemanticSchemaEvolution(input: {
   }
   for (const suggestion of input.suggested) {
     if (suggestion.kind === "NEW_ENTITY") continue;
+    if (suggestion.kind === "NEW_FIELD") {
+      const matching = input.candidates.filter(candidate =>
+        candidate.sourceField !== null && candidate.targetField !== null &&
+        candidate.decision !== "DISTINCT" &&
+        suggestion.path === `entities.${candidate.sourceEntity}.fields.${candidate.sourceField}`);
+      if (matching.length) {
+        for (const candidate of matching) result.push({
+          kind: candidate.decision === "POSSIBLE_EQUIVALENCE"
+            ? "POSSIBLE_FIELD_ALIAS" : "UNCERTAIN_FIELD_MATCH",
+          source: suggestion.path,
+          target: `entities.${candidate.targetEntity}.fields.${candidate.targetField}`,
+          reason: candidate.reason, requiresApproval: true,
+        });
+        continue;
+      }
+    }
     result.push({
       kind: suggestion.kind === "NEW_FIELD" ? "NEW_FIELD_REVIEW"
         : suggestion.kind === "NEW_RELATION" ? "NEW_RELATION_REVIEW"
