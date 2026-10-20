@@ -54,7 +54,18 @@ if (!workspaceId || !userId || knowledgeFileIds.length < 1 ||
         workspaceId, userId, knowledgeFileIds,
       });
       const after = await listPendingValueConflicts({ workspaceId, userId, take: 100 });
-      assert.notEqual(result.status, "INVALID_CONFLICT_REVIEW", "AI conflict proposal invalid");
+      if (result.status === "INVALID_CONFLICT_REVIEW") {
+        console.error("Conflict detection rejected the model proposal:");
+        console.error(JSON.stringify({
+          status: result.status,
+          conflictIssues: result.conflictIssues,
+          detectedConflictCount: result.conflicts.length,
+          previousPendingConflicts: before.length,
+          note: "No Engine records were created; previously stored pending conflicts remain in Neon.",
+        }, null, 2));
+        process.exitCode = 1;
+        return;
+      }
       assert.ok(after.length >= before.length, "Previously pending conflicts disappeared");
       assert.ok(result.conflicts.length >= before.length,
         "Existing pending conflicts were omitted from import plan");
