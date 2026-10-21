@@ -115,6 +115,7 @@ export function planEngineUpsert(
   }
   const ids = new Set<string>();
   const actionable = new Set<string>();
+  const seenIdentities = new Set<string>();
   for (const observation of manifest.observations) {
     if (!observation.localId || ids.has(observation.localId)) throw new Error("Duplicate observation ID.");
     ids.add(observation.localId);
@@ -124,6 +125,17 @@ export function planEngineUpsert(
         Object.keys(observation.values).some(key => !entity.fields.some(field => field.key === key))) {
       throw new Error("Invalid observation.");
     }
+    const identity = entity.identityFields.length &&
+      entity.identityFields.every(key => observation.values[key] !== undefined &&
+        observation.values[key] !== null && observation.values[key] !== "")
+      ? JSON.stringify([entity.key, ...entity.identityFields.map(key => normalize(observation.values[key]))])
+      : null;
+    if (identity && seenIdentities.has(identity)) {
+      operations.push({ action: "review", localId: observation.localId,
+        entityKey: entity.key, reason: "Repeated identity within import batch." });
+      continue;
+    }
+    if (identity) seenIdentities.add(identity);
     const stored = types.get(entity.key);
     if (!stored) {
       operations.push({ action: "create", localId: observation.localId,
