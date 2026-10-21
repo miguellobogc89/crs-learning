@@ -80,6 +80,20 @@ export function buildPreviewSchema(input: {
       description: typeof rel.reason === "string" ? rel.reason : "Relación propuesta",
       evidence: ev(rel.evidence) });
   }
+  // A direct many-to-many relation is redundant when a documented
+  // intermediary already connects the same endpoints (in either direction).
+  // Keep the two concrete relations, rather than a duplicate shortcut.
+  const hasEdge = (a: string, b: string) => relations.some(r =>
+    (r.fromEntity === a && r.toEntity === b) || (r.fromEntity === b && r.toEntity === a));
+  const intermediary = (a: string, b: string) => entities.some(e =>
+    e.key !== a && e.key !== b && rows.some(row => resolve(String(row.entity)) === e.key) &&
+    hasEdge(a, e.key) && hasEdge(e.key, b));
+  for (let i = relations.length - 1; i >= 0; i--) {
+    const relation = relations[i];
+    if (relation.cardinality === "many_to_many" &&
+        intermediary(relation.fromEntity, relation.toEntity))
+      relations.splice(i, 1);
+  }
   // Existing workspace relations are candidates, not document facts. Only
   // stage-4 evidence-backed relationships may enter the preview.
   return { entities, relations, warnings: ["Esquema construido a partir de las fases previas y los registros; revisar propuestas y evidencias."] };
