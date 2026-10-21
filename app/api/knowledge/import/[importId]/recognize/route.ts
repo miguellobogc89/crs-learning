@@ -32,10 +32,27 @@ export async function POST(_request: Request, context: Context) {
     const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     const delimitedLines = lines.filter(line => /\t|\s\|\s|;/.test(line)).length;
     const numericLines = lines.filter(line => /\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|ud|%)(?:\s|$)/i.test(line)).length;
-    const headings = lines.filter(line => line.length < 90 && (
-      /^[A-ZÁÉÍÓÚÜÑ\d\s()\-.,/]{4,}$/.test(line) ||
-      /^(?:\d+(?:\.\d+)*[.)]?\s+)?[\p{Lu}][\p{L}\s-]{3,50}:$/u.test(line)
-    )).length;
+    // A heading is a section boundary, not simply an uppercase ingredient name.
+    // Favor short standalone labels with a following block of content.
+    const quantityPattern = /\\d+(?:[.,]\\d+)?\\s*(?:kg|g|ml|l|ud|%)(?:\\s|$)/i;
+    const headingCandidates = lines.flatMap((line, index) => {
+      const next = lines[index + 1] ?? "";
+      const isShort = line.length >= 4 && line.length <= 65;
+      const hasQuantity = quantityPattern.test(line);
+      const looksLikeHeading = /:$/.test(line) ||
+        (/^[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\\s\\-()]{3,}$/.test(line) &&
+         !/\\d/.test(line) && line.split(/\\s+/).length <= 7);
+      const followingContent = next.length > 0 && next !== line;
+      return isShort && !hasQuantity && looksLikeHeading && followingContent
+        ? [{ line: index + 1, text: line }] : [];
+    });
+    // Require surrounding evidence; these are candidates, not validated sections.
+    const sectionExamples = headingCandidates.slice(0, 5);
+    const quantityExamples = lines.filter(line => quantityPattern.test(line)).slice(0, 5);
+    const delimitedExamples = lines.filter(line => /\\t|\\s\\|\\s|;/.test(line)).slice(0, 3);
+    // Stage 2 is intentionally a deterministic, preliminary candidate pass.
+    // It does not infer a relational schema or invoke the model.
+    const conceptCandidates = headingCandidates.slice(0, 8).map(item => item.text);
     return {
       id: file.id,
       fileName: file.file_name,
@@ -43,7 +60,11 @@ export async function POST(_request: Request, context: Context) {
       lines: lines.length,
       delimitedLines,
       numericLines,
-      headings,
+      headings: headingCandidates.length,
+      sectionExamples,
+      quantityExamples,
+      delimitedExamples,
+      conceptCandidates,
       hasStructuredEvidence: delimitedLines + numericLines >= 3,
       status: text.trim() ? "completed" as const : "error" as const,
       error: text.trim() ? null : "No hay texto extraído para reconocer el documento",
@@ -55,5 +76,6 @@ export async function POST(_request: Request, context: Context) {
     files,
     writesPerformed: false,
     nextStagesExecuted: false,
+    conceptStage: "preliminary_candidates_only",
   });
 }

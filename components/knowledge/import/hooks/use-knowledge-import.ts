@@ -136,6 +136,10 @@ export function useKnowledgeImport({
     delimitedLines: number;
     numericLines: number;
     headings: number;
+    sectionExamples: Array<{ line: number; text: string }>;
+    quantityExamples: string[];
+    delimitedExamples: string[];
+    conceptCandidates: string[];
     error: string | null;
   }>>({});
 
@@ -678,7 +682,11 @@ export function useKnowledgeImport({
               status: "completed" | "error";
               sourceChars: number; lines: number;
               delimitedLines: number; numericLines: number;
-              headings: number; error: string | null;
+              headings: number;
+    sectionExamples: Array<{ line: number; text: string }>;
+    quantityExamples: string[];
+    delimitedExamples: string[];
+    conceptCandidates: string[]; error: string | null;
             }>;
           } = await response.json();
           if (!response.ok || !result.files) {

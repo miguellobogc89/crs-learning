@@ -567,8 +567,8 @@ export function KnowledgeImportModal({
                   const stages: Array<{ title: string; state: "done" | "active" | "waiting" | "error"; detail: string }> = [
                     { title: "Documento recibido", state: "done", detail: "Archivo recibido para la prueba" },
                     { title: "Extracción de texto",
-                      state: extracting ? "active" : "done",
-                      detail: extracting ? "Extrayendo texto" : "Texto preparado para reconocimiento" },
+                      state: recognized ? "done" : extracting ? "active" : "done",
+                      detail: recognized ? "Extracción finalizada" : extracting ? "Extrayendo texto" : "Texto preparado para reconocimiento" },
                     { title: "Reconocimiento de estructura",
                       state: recognized?.status === "error" ? "error" : recognized ? "done" :
                         extracting ? "waiting" : "active",
@@ -576,6 +576,13 @@ export function KnowledgeImportModal({
                         recognized ? `${recognized.lines} líneas · ${recognized.headings} encabezados · ${recognized.delimitedLines} filas delimitadas · ${recognized.numericLines} líneas con cantidades` :
                         "Identificando secciones y patrones del documento" },
                   ];
+                  stages.push({
+                    title: "Identificación preliminar de conceptos",
+                    state: recognized?.status === "error" ? "waiting" : recognized ? "done" : "waiting",
+                    detail: recognized
+                      ? `${recognized.conceptCandidates.length} candidatos encontrados · sin diseñar esquema ni crear registros`
+                      : "Pendiente del reconocimiento",
+                  });
                   const errorMessages = [recognized?.error, knowledgeImport.error].filter(
                     (message): message is string => Boolean(message),
                   );
@@ -631,6 +638,30 @@ export function KnowledgeImportModal({
                               </li>
                             ))}
                           </ol>
+                          {recognized?.status === "completed" ? (
+                            <div className="mt-4 space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                              <p className="text-xs font-semibold text-slate-700">Evidencias detectadas</p>
+                              <p className="text-[11px] text-slate-500">Muestras literales del texto extraído. Son candidatos, no datos validados.</p>
+                              <div>
+                                <p className="text-[11px] font-semibold text-slate-700">Posibles secciones</p>
+                                {recognized.sectionExamples.length ? recognized.sectionExamples.map(item => (
+                                  <p key={item.line} className="mt-1 text-[11px] text-slate-600">Línea {item.line}: {item.text}</p>
+                                )) : <p className="text-[11px] text-slate-500">No se identificaron con suficiente evidencia.</p>}
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-semibold text-slate-700">Líneas con cantidades</p>
+                                {recognized.quantityExamples.map((line, index) => (
+                                  <p key={index} className="mt-1 break-words text-[11px] text-slate-600">{line}</p>
+                                ))}
+                              </div>
+                              <div>
+                                <p className="text-[11px] font-semibold text-slate-700">Candidatos a conceptos (fase 2 preliminar)</p>
+                                <p className="mt-1 text-[11px] text-slate-600">
+                                  {recognized.conceptCandidates.length ? recognized.conceptCandidates.join(" · ") : "Sin candidatos suficientemente claros"}
+                                </p>
+                              </div>
+                            </div>
+                          ) : null}
                           {errorMessages.length ? (
                             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-3" role="alert">
                               <p className="flex items-center gap-2 text-xs font-semibold text-amber-900">
