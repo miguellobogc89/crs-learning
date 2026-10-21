@@ -50,7 +50,7 @@ export function EngineStressTest() {
           {check.pass ? "✓" : "✕"} {check.name}
         </p>)}
       </div>}
-      {result.status === "invalid_schema" && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">La IA devolvió un esquema con errores de validación. Se muestran sus entidades y relaciones para diagnosticarlo; no se ha puntuado ni importado.</p>}
+      {result.status === "invalid_schema" && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">La IA devolvió un esquema con errores de validación. La puntuación es orientativa; no se ha importado.</p>}
       {result.issues.length > 0 && <details><summary>Problemas de validación ({result.issues.length})</summary>
         <pre className="overflow-x-auto text-xs">{JSON.stringify(result.issues, null, 2)}</pre></details>}
       <details><summary>Entidades descubiertas ({result.entities.length})</summary>

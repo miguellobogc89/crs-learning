@@ -14,11 +14,11 @@ export function evaluateStressSchema(proposal: SchemaDiscoveryProposal) {
   const label = (e: typeof entities[number]) => [e.key, e.name, e.description].join(" ").toLowerCase();
   const find = (regex: RegExp) => entities.filter(e => regex.test(label(e)));
   const product = find(/producto|product|material|art[ií]culo/);
-  const recipe = find(/receta|recipe|f[oó]rmula/)[0];
+  const recipe = find(/receta|recipe|f[oó]rmula/).find(e => !/component|componente|line/.test(label(e)));
   const component = find(/componente|component|l[ií]nea.*receta|recipe.*line|ingrediente.*receta/)[0];
   const supplier = find(/proveedor|supplier/).find(e => !/oferta|offer/.test(label(e)));
-  const offer = find(/oferta|offer|cotizaci[oó]n|tarifa/)[0];
-  const tier = find(/tramo|tier|escal[oó]n|rapel|rappel|descuento.*volumen/)[0];
+  const offer = find(/oferta|offer|cotizaci[oó]n|tarifa/).find(e => !/tier|tramo|discount|descuento/.test(label(e)));
+  const tier = find(/tramo|tier|escal[oó]n|rapel|rappel|discount|descuento.*volumen/)[0];
   const fields = (e: typeof entities[number] | undefined) => e?.fields.map(f => f.key + " " + f.name).join(" ").toLowerCase() ?? "";
   const connected = (a: typeof entities[number] | undefined, b: typeof entities[number] | undefined) =>
     !!a && !!b && relations.some(r => (r.fromEntity === a.key && r.toEntity === b.key) ||

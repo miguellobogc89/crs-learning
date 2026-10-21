@@ -55,6 +55,8 @@ export async function POST(request: NextRequest) {
       proposal: normalized,
     });
     const score = validation.proposal ? evaluateStressSchema(validation.proposal) : null;
+    const diagnosticScore = !score && Array.isArray(raw.entities) && Array.isArray(raw.relations)
+      ? evaluateStressSchema({ entities: rawEntities, relations: rawRelations, warnings: [] } as any) : null;
     const inspectionEntities = (validation.proposal?.entities ?? rawEntities).map((e: any) => ({
       key: typeof e?.key === "string" ? e.key : "",
       name: typeof e?.name === "string" ? e.name : "",
@@ -68,7 +70,7 @@ export async function POST(request: NextRequest) {
     }));
     return NextResponse.json({
       status: validation.valid ? "evaluated" : "invalid_schema",
-      score,
+      score: score ?? diagnosticScore,
       issues: validation.issues,
       entities: inspectionEntities,
       relations: inspectionRelations,
