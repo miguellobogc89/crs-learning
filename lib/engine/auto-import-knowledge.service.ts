@@ -236,12 +236,17 @@ export async function importKnowledgeIntoEngine(input: {
   // Identity selection is conservative: only declared schema fields that are
   // plausible business identifiers. Junction rows without a verified compound
   // identity remain pending rather than creating orphan records.
+  // Identity selection must not depend on the AI choosing exactly "name".
+  // Only use semantically explicit identifiers, and never assume that a
+  // price, date, quantity or description identifies a record.
   const identityKeys = (fields: { key: string }[]) => {
     const keys = new Set(fields.map(field => field.key));
-    if (keys.has("external_id")) return ["external_id"];
-    if (keys.has("code")) return ["code"];
-    if (keys.has("sku")) return ["sku"];
-    if (keys.has("name")) return ["name"];
+    for (const key of ["external_id", "id_externo", "tax_id", "vat_number",
+      "nif", "cif", "code", "codigo", "sku", "reference", "referencia",
+      "product_name", "nombre_producto", "business_name", "nombre_comercial",
+      "name", "nombre", "title", "titulo"]) {
+      if (keys.has(key)) return [key];
+    }
     return [];
   };
   const manifest: ImportManifest = {
