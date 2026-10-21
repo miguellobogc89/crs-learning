@@ -782,6 +782,12 @@ export function useKnowledgeImport({
           } finally {
             setSemanticRunning(false);
           }
+          let relationResult: { files?: Array<{
+            id: string; status: "completed" | "error";
+            relations: Array<{ fromConcept: string; toConcept: string; cardinality: string; existingRelationKey: string; reason: string; evidence: string }>;
+            missingStructures: Array<{ name: string; reason: string; evidence: string }>;
+            uncertain: string[]; error: string | null;
+          }> } | null = null;
           if (isCurrentOperation() && semanticResult?.files?.some(file => file.status === "completed")) {
             setRelationsRunning(true);
             try {
@@ -800,6 +806,7 @@ export function useKnowledgeImport({
               }>; error?: string } = await response.json();
               if (!response.ok || !result.files)
                 throw new Error(result.error ?? "No se pudieron identificar las relaciones");
+              relationResult = result;
               if (isCurrentOperation()) {
                 setRelations(Object.fromEntries(result.files.map(file => {
                   const source = recognizedFiles.find(item => item.id === file.id);
@@ -825,7 +832,14 @@ export function useKnowledgeImport({
               const response = await fetch(
                 `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/preview-records`,
                 { method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ fileIds: recognizedFiles.map(file => file.id) }) },
+                  body: JSON.stringify({
+                    fileIds: recognizedFiles.map(file => file.id),
+                    priorDiscoveries: recognizedFiles.map(file => ({
+                      fileId: file.id,
+                      structures: semanticResult?.files?.find(item => item.id === file.id && item.status === "completed") ?? null,
+                      relationships: relationResult?.files?.find(item => item.id === file.id && item.status === "completed") ?? null,
+                    })),
+                  }) },
               );
               const result: { files?: Array<{
                 id: string; status: "completed" | "error";
