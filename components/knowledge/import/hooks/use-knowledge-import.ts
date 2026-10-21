@@ -146,6 +146,10 @@ export function useKnowledgeImport({
     quantityExamples: string[];
     delimitedExamples: string[];
     conceptCandidates: string[];
+    existingStructures: Array<{
+      id: string; key: string; name: string; description: string | null;
+      fields: Array<{ key: string; name: string; type: string }>;
+    }>;
     error: string | null;
   }>>({});
 
@@ -698,7 +702,11 @@ export function useKnowledgeImport({
     sectionExamples: Array<{ line: number; text: string }>;
     quantityExamples: string[];
     delimitedExamples: string[];
-    conceptCandidates: string[]; error: string | null;
+    conceptCandidates: string[];
+    existingStructures: Array<{
+      id: string; key: string; name: string; description: string | null;
+      fields: Array<{ key: string; name: string; type: string }>;
+    }>; error: string | null;
             }>;
           } = await response.json();
           if (!response.ok || !result.files) {

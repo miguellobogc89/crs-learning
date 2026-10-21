@@ -575,8 +575,10 @@ export function KnowledgeImportModal({
                     },
                     {
                       title: "Buscar estructuras existentes",
-                      state: "waiting",
-                      detail: "Siguiente prueba: consultar las tablas de Engine, sin modificarlas",
+                      state: recognized?.status === "completed" ? "done" : "waiting",
+                      detail: recognized?.status === "completed"
+                        ? `${recognized.existingStructures.length} estructuras activas encontradas en Engine · consulta de solo lectura`
+                        : "Consultar las estructuras existentes en Engine",
                     },
                     {
                       title: "Identificar estructuras nuevas",
@@ -644,6 +646,30 @@ export function KnowledgeImportModal({
                               </li>
                             ))}
                           </ol>
+                          {recognized?.status === "completed" ? (
+                            <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-semibold text-slate-800">Estructuras existentes en Engine</p>
+                              <p className="mt-1 text-[11px] text-slate-500">Consulta real del espacio de trabajo. No se ha decidido aún qué estructura corresponde al documento.</p>
+                              {recognized.existingStructures.length ? (
+                                <div className="mt-3 space-y-2">
+                                  {recognized.existingStructures.map(type => (
+                                    <details key={type.id} className="rounded-lg border border-slate-100 px-3 py-2">
+                                      <summary className="cursor-pointer text-xs font-medium text-slate-700">
+                                        {type.name} <span className="font-normal text-slate-400">({type.key}) · {type.fields.length} campos</span>
+                                      </summary>
+                                      <div className="mt-2 space-y-1">
+                                        {type.fields.map(field => (
+                                          <p key={field.key} className="text-[11px] text-slate-600">
+                                            {field.name} <span className="text-slate-400">· {field.key} · {field.type}</span>
+                                          </p>
+                                        ))}
+                                      </div>
+                                    </details>
+                                  ))}
+                                </div>
+                              ) : <p className="mt-2 text-xs text-slate-600">No existen estructuras activas. El siguiente paso deberá proponerlas, sin crearlas automáticamente.</p>}
+                            </div>
+                          ) : null}
                           {recognized?.status === "completed" ? (
                             <div className="mt-4 space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
                               <p className="text-xs font-semibold text-slate-700">Evidencias de clasificación</p>

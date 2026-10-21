@@ -28,6 +28,27 @@ export async function POST(_request: Request, context: Context) {
     },
   });
   if (!imported) return Response.json({ error: "Importación no encontrada" }, { status: 404 });
+  // Stage 2: inspect existing workspace structures, read-only.
+  // Do not claim semantic compatibility until a separate matching stage exists.
+  const existingTypes = await prisma.engine_object_types.findMany({
+    where: { workspace_id: activeWorkspace.id, status: "active" },
+    select: {
+      id: true, key: true, name: true, description: true,
+      engine_field_definitions: {
+        where: { status: "active" },
+        select: { key: true, name: true, field_type: true },
+        orderBy: { sort_order: "asc" },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+  const existingStructures = existingTypes.map(type => ({
+    id: type.id, key: type.key, name: type.name,
+    description: type.description,
+    fields: type.engine_field_definitions.map(field => ({
+      key: field.key, name: field.name, type: field.field_type,
+    })),
+  }));
   const files = imported.knowledge_import_files.map(file => {
     const text = file.extracted_text ?? "";
     const classification = classifyImportContent(text);
@@ -73,17 +94,19 @@ export async function POST(_request: Request, context: Context) {
       quantityExamples,
       delimitedExamples,
       conceptCandidates,
+      existingStructures,
       hasStructuredEvidence: delimitedLines + numericLines >= 3,
       status: text.trim() ? "completed" as const : "error" as const,
       error: text.trim() ? null : `No hay texto extraído (estado: ${file.status}, procesamiento: ${file.processing_status}). ${file.error_message ?? "Comprueba la fase de extracción."}`,
     };
   });
   return Response.json({
-    stage: "recognition",
+    stage: "existing_structure_lookup",
     status: files.every(file => file.status === "completed") ? "completed" : "completed_with_issues",
     files,
     writesPerformed: false,
     nextStagesExecuted: false,
+    existingStructuresFound: existingStructures.length,
     conceptStage: "preliminary_candidates_only",
   });
 }
