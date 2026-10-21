@@ -3,6 +3,7 @@ import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { analyzeStructuredDocument } from "@/lib/engine/ingestion/analyze-structured-document.service";
 import { executeEngineUpsertManifest } from "@/lib/engine/execute-upsert-manifest.service";
 import type { ImportManifest } from "@/lib/engine/upsert-manifest";
+import { selectIdentityFields } from "@/lib/engine/identity-fields";
 import { auditDiscoveredModel } from "@/lib/engine/schema-discovery/model-audit";
 import { planImportPreflight } from "@/lib/engine/ingestion/import-preflight";
 import { createNotification } from "@/lib/services/notification.service";
@@ -232,23 +233,8 @@ export async function importKnowledgeIntoEngine(input: {
     }
   }
 
-  // Translate extracted observations to the provider-neutral Engine contract.
-  // Identity selection is conservative: only declared schema fields that are
-  // plausible business identifiers. Junction rows without a verified compound
-  // identity remain pending rather than creating orphan records.
-  // Identity selection must not depend on the AI choosing exactly "name".
-  // Only use semantically explicit identifiers, and never assume that a
-  // price, date, quantity or description identifies a record.
-  const identityKeys = (fields: { key: string }[]) => {
-    const keys = new Set(fields.map(field => field.key));
-    for (const key of ["external_id", "id_externo", "tax_id", "vat_number",
-      "nif", "cif", "code", "codigo", "sku", "reference", "referencia",
-      "product_name", "nombre_producto", "business_name", "nombre_comercial",
-      "name", "nombre", "title", "titulo"]) {
-      if (keys.has(key)) return [key];
-    }
-    return [];
-  };
+  // Identity selection is a pure, independently testable operation.
+  // Missing/ambiguous identities remain pending rather than guessed.
   const manifest: ImportManifest = {
     version: 1, workspaceId,
     entities: proposal.entities.filter(entity => usable.has(entity.key)).map(entity => ({
@@ -256,7 +242,7 @@ export async function importKnowledgeIntoEngine(input: {
       fields: entity.fields.map(field => ({
         key: field.key, name: field.name, type: field.type,
       })),
-      identityFields: identityKeys(entity.fields),
+      identityFields: selectIdentityFields(entity.fields),
     })),
     observations: extracted.filter(row => usable.has(row.entity)).map(row => ({
       localId: "row_" + row.sourceIndex, entityKey: row.entity, values: row.values,
