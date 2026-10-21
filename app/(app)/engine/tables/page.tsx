@@ -2,6 +2,8 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { listEngineObjectTypes, listEngineRecords } from "@/lib/engine/records.service";
+import { listPendingEngineRelations, listApprovedEngineRelations } from "@/lib/engine/review-record-relation.service";
+import { reviewEngineRelationAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,12 @@ export default async function EngineTablesPage({
     objectTypeId: selected.id, take: 100,
   }) : [];
   const fields = selected?.engine_field_definitions ?? [];
+  const [pendingRelations, approvedRelations] = await Promise.all([
+    listPendingEngineRelations({ workspaceId: activeWorkspace.id, userId: session.user.id }),
+    listApprovedEngineRelations({ workspaceId: activeWorkspace.id, userId: session.user.id,
+      recordIds: records.map(record => record.id) }),
+  ]);
+  const canReview = activeWorkspace.role === "owner" || activeWorkspace.role === "admin";
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-6">
       <div>
@@ -104,6 +112,61 @@ export default async function EngineTablesPage({
           )}
         </section>
       </div>
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="text-lg font-semibold text-slate-900">
+          Relaciones aprobadas ({approvedRelations.length})
+        </h2>
+        <p className="mt-1 text-xs text-slate-500">Vínculos relacionados con los registros visibles.</p>
+        <div className="mt-3 space-y-2">
+          {approvedRelations.map(link => (
+            <div key={link.id} className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
+              <strong>{link.definition.name}</strong> · {link.from_record_id} → {link.to_record_id}
+            </div>
+          ))}
+          {!approvedRelations.length && <p className="text-sm text-slate-500">No hay relaciones aprobadas para estos registros.</p>}
+        </div>
+      </section>
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="text-lg font-semibold text-slate-900">
+          Relaciones pendientes de revisión ({pendingRelations.length})
+        </h2>
+        <p className="mt-1 text-xs text-slate-500">Revisa la evidencia antes de aprobar cada vínculo.</p>
+        <div className="mt-4 space-y-3">
+          {pendingRelations.map(proposal => (
+            <div key={proposal.id} className="rounded-lg border border-slate-200 p-4">
+              <p className="text-sm font-semibold text-slate-900">{proposal.definition.name}
+                <span className="ml-2 text-xs font-normal text-slate-500">{proposal.definition.cardinality}</span>
+              </p>
+              <p className="mt-2 break-words text-xs text-slate-600">
+                Origen: {JSON.stringify(proposal.from_record.values_json)}
+              </p>
+              <p className="mt-1 break-words text-xs text-slate-600">
+                Destino: {JSON.stringify(proposal.to_record.values_json)}
+              </p>
+              <blockquote className="mt-2 border-l-2 border-slate-300 pl-3 text-xs italic text-slate-600">
+                {proposal.evidence_text}
+              </blockquote>
+              {canReview && <div className="mt-3 flex gap-2">
+                <form action={reviewEngineRelationAction}>
+                  <input type="hidden" name="proposalId" value={proposal.id} />
+                  <button name="decision" value="approve" type="submit"
+                    className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white">
+                    Aprobar vínculo
+                  </button>
+                </form>
+                <form action={reviewEngineRelationAction}>
+                  <input type="hidden" name="proposalId" value={proposal.id} />
+                  <button name="decision" value="reject" type="submit"
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700">
+                    Rechazar
+                  </button>
+                </form>
+              </div>}
+            </div>
+          ))}
+          {!pendingRelations.length && <p className="text-sm text-slate-500">No hay propuestas pendientes.</p>}
+        </div>
+      </section>
     </main>
   );
 }
