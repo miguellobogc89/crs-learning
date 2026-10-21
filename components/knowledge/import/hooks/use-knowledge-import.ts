@@ -177,6 +177,7 @@ export function useKnowledgeImport({
       values: Record<string, string | number | boolean | null>;
       evidence: string; disposition: "candidate" | "pending"; reason: string }>;
     links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; evidence: string }>;
+    entities?: unknown[]; relations?: unknown[];
     unresolvedLinks: string[];
     issues: string[]; sourceChars: number; analyzedChars: number;
     partial: boolean; durationMs: number; error: string | null;
@@ -816,18 +817,15 @@ export function useKnowledgeImport({
               if (isCurrentOperation()) setRelationsRunning(false);
             }
           }
-          // Stage 5: preview records against only the schema keys verified in
-          // stage 3. No INSERT, schema creation or Knowledge confirmation.
-          const matchedFiles = semanticResult?.files?.filter(file => file.status === "completed") ?? [];
-          if (isCurrentOperation() && matchedFiles.length) {
+          // Stage 5: simulate the full discovered graph, including missing schema.
+          // No INSERT, schema creation or Knowledge confirmation.
+          if (isCurrentOperation() && recognizedFiles.length) {
             setRecordPreviewRunning(true);
             try {
-              const existingKeys = [...new Set(matchedFiles.flatMap(file =>
-                file.matches.map(match => match.existingKey)))];
               const response = await fetch(
                 `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/preview-records`,
                 { method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ fileIds: matchedFiles.map(file => file.id), existingKeys }) },
+                  body: JSON.stringify({ fileIds: recognizedFiles.map(file => file.id) }) },
               );
               const result: { files?: Array<{
                 id: string; status: "completed" | "error";
@@ -835,8 +833,9 @@ export function useKnowledgeImport({
                   values: Record<string, string | number | boolean | null>;
                   evidence: string; disposition: "candidate" | "pending"; reason: string }>;
                 links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; evidence: string }>;
-    unresolvedLinks: string[];
-    issues: string[]; sourceChars: number; analyzedChars: number;
+                entities?: unknown[]; relations?: unknown[];
+                unresolvedLinks: string[];
+                issues: string[]; sourceChars: number; analyzedChars: number;
                 partial: boolean; durationMs: number; error: string | null;
               }>; error?: string } = await response.json();
               if (!response.ok || !result.files)

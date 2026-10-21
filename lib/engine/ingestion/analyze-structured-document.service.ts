@@ -23,8 +23,11 @@ export async function analyzeStructuredDocument(input: {
   documentId: string;
   text: string;
   replayPayload?: unknown;
+  /** Preview-only context; never grants permission to mutate existing schema. */
+  existingSchema?: unknown;
+  sourceLimit?: number;
 }) {
-  const source = input.text.slice(0, 16000);
+  const source = input.text.slice(0, Math.min(60000, input.sourceLimit ?? 16000));
   const started = Date.now();
   const response = input.replayPayload === undefined ? await getOpenAIClient().responses.create({
     model: getKnowledgeImportModel(),
@@ -34,6 +37,10 @@ export async function analyzeStructuredDocument(input: {
       "Return an object with entities, relations, warnings AND rows AND links.",
       "Each row must contain entity, values, evidence.",
       "Rows must use only entity and field keys declared in entities.",
+      ...(input.existingSchema === undefined ? [] : [
+        "Existing schema is context, not a restriction: reuse compatible keys, propose missing entities, fields and relation definitions needed for a lossless representation. Never omit a record because its structure does not yet exist.",
+        "Extract records and concrete links across the entire document, including headings, table rows, association records and references to earlier sections. Schema relationships alone are not concrete links.",
+      ]),
       "Extract each real-world record once. Include junction records when supported.",
       "MANDATORY: every row must include evidence as a nonempty verbatim substring copied from the source text. Never omit evidence.",
       "Prefer a short source line that identifies the record; do not paraphrase or generate the evidence.",
@@ -45,6 +52,7 @@ export async function analyzeStructuredDocument(input: {
     ].join("\n"),
     input: JSON.stringify({
       documentId: input.documentId,
+      existingSchema: input.existingSchema,
       text: source,
       task: "Return JSON only: discover relational schema and extract records in one JSON object response.",
     }),
@@ -58,6 +66,8 @@ export async function analyzeStructuredDocument(input: {
   }) : null;
   if (response && (!response.output_text || response.output_text.length > 350000))
     throw new Error("Invalid or oversized structured analysis response.");
+  if (response && response.status && response.status !== "completed")
+    throw new Error("Incomplete structured analysis response: " + response.status);
   const parsed: unknown = response ? JSON.parse(response.output_text) : input.replayPayload;
   if (JSON.stringify(parsed).length > 350000)
     throw new Error("Oversized replay analysis.");

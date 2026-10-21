@@ -682,6 +682,12 @@ export function KnowledgeImportModal({
                                     "-- Identidades y duplicados: NO VALIDADOS",
                                     "-- Registros: " + preview.rows.length + " | Vínculos: " + (preview.links?.length ?? 0),
                                     "",
+                                    "-- ESTRUCTURAS Y CAMPOS (existentes, propuestos o incompatibles)",
+                                    ...(preview.entities ?? []).map(entity => "SCHEMA " + JSON.stringify(entity)),
+                                    "-- DEFINICIONES DE RELACIONES",
+                                    ...(preview.relations ?? []).map(relation => "RELATION " + JSON.stringify(relation)),
+                                    "-- Cobertura de registros: " + (preview.partial ? "requiere revisión" : "sin recorte de documento; requiere validar exhaustividad"),
+                                    "",
                                     ...preview.rows.flatMap(row => [
                                       "-- INSERT CANDIDATO " + row.localId + " | " + row.entityKey,
                                       "ENTITY " + row.entityKey + " " + JSON.stringify(row.values),
