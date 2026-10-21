@@ -6,6 +6,8 @@ import type { ImportManifest } from "@/lib/engine/upsert-manifest";
 import { selectIdentityFields } from "@/lib/engine/identity-fields";
 import { auditDiscoveredModel } from "@/lib/engine/schema-discovery/model-audit";
 import { stabilizeDiscoveredSchema } from "@/lib/engine/schema-discovery/stabilize-schema";
+import { compareDiscoveredStructures } from "@/lib/engine/schema-discovery/compare-structures";
+import { decideSchemaCreation } from "@/lib/engine/schema-discovery/decide-schema-creation";
 import { planImportPreflight } from "@/lib/engine/ingestion/import-preflight";
 import { createNotification } from "@/lib/services/notification.service";
 
@@ -56,7 +58,9 @@ export async function importKnowledgeIntoEngine(input: {
   // auditing or writing. Never rename when the match is ambiguous.
   const activeTypes = await prisma.engine_object_types.findMany({
     where: { workspace_id: workspaceId, status: "active" },
-    select: { key: true },
+    select: { key: true, engine_field_definitions: {
+      where: { status: "active" }, select: { key: true, field_type: true },
+    } },
   });
   const stabilized = analysis.schema.valid && analysis.schema.proposal
     ? stabilizeDiscoveredSchema(analysis.schema.proposal, activeTypes.map(type => type.key))
@@ -119,6 +123,17 @@ export async function importKnowledgeIntoEngine(input: {
   const proposal = discovery.proposal!;
   const sourceText = file.extracted_text.slice(0, 16000);
   const issues: string[] = [...analysis.issues, ...(audit?.warnings ?? [])];
+  const similarities = compareDiscoveredStructures(proposal, activeTypes.map(type => ({
+    key: type.key,
+    fields: type.engine_field_definitions.map(field => ({
+      key: field.key, type: field.field_type,
+    })),
+  })));
+  for (const match of similarities.filter(match => match.compatible &&
+    !activeTypes.some(type => type.key === match.proposedKey)))
+    issues.push("Posible esquema equivalente (revisión, sin fusión): " +
+      match.proposedKey + " / " + match.existingKey +
+      " [" + match.sharedDistinctiveFields.join(", ") + "].");
   for (const [from, to] of stabilized?.renamed ?? [])
     issues.push("Esquema reutilizado: " + from + " → " + to + ".");
   if (analysis.truncated) issues.push("El análisis está limitado a los primeros 16000 caracteres.");
@@ -167,11 +182,11 @@ export async function importKnowledgeIntoEngine(input: {
   const skippedEntities: { entity: string; reason: string; rows: number }[] = [];
   for (const entity of proposal.entities) {
     if (!extracted.some(row => row.entity === entity.key)) continue;
-    const possibleDuplicates = similarities.filter(match => match.proposedKey === entity.key &&
-      match.compatible && !activeTypes.some(type => type.key === entity.key));
-    if (possibleDuplicates.length) {
+    const schemaDecision = decideSchemaCreation(
+      entity.key, activeTypes.map(type => type.key), similarities);
+    if (schemaDecision.action === "review") {
       const reason = "Posible tabla duplicada; requiere revisión del esquema: " +
-        possibleDuplicates.map(match => match.existingKey).join(", ");
+        schemaDecision.candidates.join(", ");
       issues.push(entity.key + ": " + reason);
       skippedEntities.push({ entity: entity.key, reason,
         rows: extracted.filter(row => row.entity === entity.key).length });
