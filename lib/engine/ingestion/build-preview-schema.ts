@@ -5,9 +5,15 @@ type Obj = Record<string, unknown>;
 const obj = (v: unknown): v is Obj => !!v && typeof v === "object" && !Array.isArray(v);
 const key = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
   .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").replace(/^[^a-z]+/, "");
-const fieldType = (v: unknown): DiscoveredField["type"] =>
-  typeof v === "boolean" ? "boolean" : typeof v === "number" ?
-  (Number.isInteger(v) ? "integer" : "decimal") : "text";
+const fieldType = (v: unknown): DiscoveredField["type"] => {
+  if (typeof v === "boolean") return "boolean";
+  if (typeof v === "number") return Number.isInteger(v) ? "integer" : "decimal";
+  if (typeof v !== "string") return "text";
+  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(v) || /^\\d{2}\/\\d{2}\/\\d{4}$/.test(v)) return "date";
+  if (/^-?\\d+[.,]\\d+$/.test(v.trim())) return "decimal";
+  if (/^-?\\d+$/.test(v.trim())) return "integer";
+  return "text";
+};
 
 /** Builds review-only schema from stage 3/4 matches and extracted evidence.
  * No model discovery and no persistence. */
@@ -66,21 +72,16 @@ export function buildPreviewSchema(input: {
       existing.relations.find(r => r.key === rel.existingRelationKey &&
         r.fromEntity === fromEntity && r.toEntity === toEntity) : undefined;
     const relationKey = known?.key ?? key(fromEntity + "_to_" + toEntity);
-    if (!relationKey || relations.some(r => r.key === relationKey)) continue;
+    if (!relationKey || relations.some(r => r.key === relationKey ||
+      (r.fromEntity === fromEntity && r.toEntity === toEntity))) continue;
     const cardinality = rel.cardinality === "one_to_one" || rel.cardinality === "many_to_many" ?
       rel.cardinality : "one_to_many";
     relations.push({ key: relationKey, fromEntity, toEntity, cardinality,
       description: typeof rel.reason === "string" ? rel.reason : "Relación propuesta",
       evidence: ev(rel.evidence) });
   }
-  for (const known of existing.relations) {
-    if (relations.some(r => r.key === known.key) ||
-      !entities.some(e => e.key === known.fromEntity) || !entities.some(e => e.key === known.toEntity)) continue;
-    if (known.cardinality !== "one_to_one" && known.cardinality !== "one_to_many" &&
-      known.cardinality !== "many_to_many") continue;
-    relations.push({ ...known, cardinality: known.cardinality, description: "Relación existente (candidata)",
-      evidence: ev(text.slice(0, 120)) });
-  }
+  // Existing workspace relations are candidates, not document facts. Only
+  // stage-4 evidence-backed relationships may enter the preview.
   return { entities, relations, warnings: ["Esquema construido a partir de las fases previas y los registros; revisar propuestas y evidencias."] };
 }
 
@@ -93,7 +94,18 @@ export function normalizePreviewRows(rows: unknown[], proposal: SchemaDiscoveryP
   return rows.map(row => {
     if (!obj(row) || typeof row.entity !== "string" || !obj(row.values)) return row;
     const entity = byName.get(key(row.entity)) ?? key(row.entity);
-    const values = Object.fromEntries(Object.entries(row.values).map(([k, v]) => [key(k), v]));
+    const definition = proposal.entities.find(item => item.key === entity);
+    const values = Object.fromEntries(Object.entries(row.values).map(([k, v]) => {
+      const fieldKey = key(k);
+      const type = definition?.fields.find(field => field.key === fieldKey)?.type;
+      if (typeof v === "string" && (type === "integer" || type === "decimal") &&
+          /^-?\\d+(?:[.,]\\d+)?$/.test(v.trim())) {
+        const numeric = Number(v.replace(",", "."));
+        if (Number.isFinite(numeric) && (type !== "integer" || Number.isSafeInteger(numeric)))
+          return [fieldKey, numeric];
+      }
+      return [fieldKey, v];
+    }));
     return { ...row, entity, values };
   });
 }
