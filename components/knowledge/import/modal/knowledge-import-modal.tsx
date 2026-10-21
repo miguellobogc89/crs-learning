@@ -550,7 +550,7 @@ export function KnowledgeImportModal({
               <section className="space-y-3" aria-live="polite">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-semibold text-slate-900">
-                    {knowledgeImport.step === "completed" ? "Reconocimiento completado" : "Reconociendo documentos"}
+                    {knowledgeImport.step === "completed" ? "Revisión finalizada" : "Revisando documentos"}
                   </h3>
                   <span className="text-xs text-slate-500">
                     {knowledgeImport.step === "completed" ? "Prueba terminada · sin importar datos" :
@@ -565,24 +565,30 @@ export function KnowledgeImportModal({
                   const completed = knowledgeImport.step === "completed";
                   const extracting = knowledgeImport.processingPhase === "extracting";
                   const stages: Array<{ title: string; state: "done" | "active" | "waiting" | "error"; detail: string }> = [
-                    { title: "Documento recibido", state: "done", detail: "Archivo recibido para la prueba" },
-                    { title: "Extracción de texto",
-                      state: recognized ? "done" : extracting ? "active" : "done",
-                      detail: recognized ? "Extracción finalizada" : extracting ? "Extrayendo texto" : "Texto preparado para reconocimiento" },
-                    { title: "Reconocimiento de estructura",
-                      state: recognized?.status === "error" ? "error" : recognized ? "done" :
-                        extracting ? "waiting" : "active",
-                      detail: recognized?.status === "error" ? recognized.error ?? "Error" :
-                        recognized ? `${recognized.lines} líneas · ${recognized.headings} encabezados · ${recognized.delimitedLines} filas delimitadas · ${recognized.numericLines} líneas con cantidades` :
-                        "Identificando secciones y patrones del documento" },
+                    {
+                      title: "Revisar y clasificar el documento",
+                      state: recognized?.status === "error" ? "error" :
+                        recognized ? "done" : completed ? "error" : "active",
+                      detail: recognized?.status === "error" ? recognized.error ?? "Extracción no disponible" :
+                        recognized ? `Tipo: ${recognized.documentType.toUpperCase()} · ${recognized.structuredLines} líneas estructuradas · ${recognized.narrativeLines} narrativas · ${recognized.sourceChars} caracteres` :
+                        extracting ? "Extrayendo y revisando contenido" : "Comprobando el texto y los patrones",
+                    },
+                    {
+                      title: "Buscar estructuras existentes",
+                      state: "waiting",
+                      detail: "Siguiente prueba: consultar las tablas de Engine, sin modificarlas",
+                    },
+                    {
+                      title: "Identificar estructuras nuevas",
+                      state: "waiting",
+                      detail: "Pendiente: proponer tablas y campos que falten",
+                    },
+                    {
+                      title: "Identificar relaciones",
+                      state: "waiting",
+                      detail: "Pendiente: proponer relaciones sin crearlas",
+                    },
                   ];
-                  stages.push({
-                    title: "Identificación preliminar de conceptos",
-                    state: recognized?.status === "error" ? "waiting" : recognized ? "done" : "waiting",
-                    detail: recognized
-                      ? `${recognized.conceptCandidates.length} candidatos encontrados · sin diseñar esquema ni crear registros`
-                      : "Pendiente del reconocimiento",
-                  });
                   const errorMessages = [recognized?.error, knowledgeImport.error].filter(
                     (message): message is string => Boolean(message),
                   );
@@ -601,13 +607,13 @@ export function KnowledgeImportModal({
                               </span>
                             ) : null}
                             <span className="text-[11px] text-slate-500">
-                              {recognized?.status === "error" ? "Reconocimiento con errores" :
-                                completed ? "Prueba finalizada · sin importación" : "Reconociendo"}
+                              {recognized?.status === "error" ? "Revisión con errores" :
+                                completed ? "Prueba finalizada · sin importación" : "Revisando documento"}
                             </span>
                           </div>
                         </div>
                         {recognized?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
-                          completed ? <Check className="size-5 text-emerald-600" /> :
+                          completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
                           <Loader2 className="size-5 animate-spin text-blue-600" />}
                       </div>
                       <details className="group border-t border-slate-100" open>
@@ -640,7 +646,7 @@ export function KnowledgeImportModal({
                           </ol>
                           {recognized?.status === "completed" ? (
                             <div className="mt-4 space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
-                              <p className="text-xs font-semibold text-slate-700">Evidencias detectadas</p>
+                              <p className="text-xs font-semibold text-slate-700">Evidencias de clasificación</p>
                               <p className="text-[11px] text-slate-500">Muestras literales del texto extraído. Son candidatos, no datos validados.</p>
                               <div>
                                 <p className="text-[11px] font-semibold text-slate-700">Posibles secciones</p>

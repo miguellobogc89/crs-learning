@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { classifyImportContent } from "@/lib/knowledge/import/classify-content";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export const runtime = "nodejs";
@@ -22,13 +23,14 @@ export async function POST(_request: Request, context: Context) {
     },
     select: {
       knowledge_import_files: {
-        select: { id: true, file_name: true, extracted_text: true },
+        select: { id: true, file_name: true, extracted_text: true, status: true, processing_status: true, error_message: true },
       },
     },
   });
   if (!imported) return Response.json({ error: "Importación no encontrada" }, { status: 404 });
   const files = imported.knowledge_import_files.map(file => {
     const text = file.extracted_text ?? "";
+    const classification = classifyImportContent(text);
     const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     const delimitedLines = lines.filter(line => /\t|\s\|\s|;/.test(line)).length;
     const numericLines = lines.filter(line => /\d+(?:[.,]\d+)?\s*(?:kg|g|ml|l|ud|%)(?:\s|$)/i.test(line)).length;
@@ -57,6 +59,12 @@ export async function POST(_request: Request, context: Context) {
       id: file.id,
       fileName: file.file_name,
       sourceChars: text.length,
+      documentType: classification.kind === "tables" ? "tabla" : classification.kind === "mixed" ? "hibrido" : classification.kind === "information" ? "texto" : "indeterminado",
+      confidence: classification.confidence,
+      structuredLines: classification.structuredLines,
+      narrativeLines: classification.narrativeLines,
+      extractionStatus: file.status,
+      extractionProcessingStatus: file.processing_status,
       lines: lines.length,
       delimitedLines,
       numericLines,
@@ -67,7 +75,7 @@ export async function POST(_request: Request, context: Context) {
       conceptCandidates,
       hasStructuredEvidence: delimitedLines + numericLines >= 3,
       status: text.trim() ? "completed" as const : "error" as const,
-      error: text.trim() ? null : "No hay texto extraído para reconocer el documento",
+      error: text.trim() ? null : `No hay texto extraído (estado: ${file.status}, procesamiento: ${file.processing_status}). ${file.error_message ?? "Comprueba la fase de extracción."}`,
     };
   });
   return Response.json({

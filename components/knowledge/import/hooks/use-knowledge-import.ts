@@ -136,6 +136,12 @@ export function useKnowledgeImport({
     delimitedLines: number;
     numericLines: number;
     headings: number;
+    documentType: "texto" | "tabla" | "hibrido" | "indeterminado";
+    confidence: "high" | "low";
+    structuredLines: number;
+    narrativeLines: number;
+    extractionStatus: string;
+    extractionProcessingStatus: string;
     sectionExamples: Array<{ line: number; text: string }>;
     quantityExamples: string[];
     delimitedExamples: string[];
@@ -683,6 +689,12 @@ export function useKnowledgeImport({
               sourceChars: number; lines: number;
               delimitedLines: number; numericLines: number;
               headings: number;
+    documentType: "texto" | "tabla" | "hibrido" | "indeterminado";
+    confidence: "high" | "low";
+    structuredLines: number;
+    narrativeLines: number;
+    extractionStatus: string;
+    extractionProcessingStatus: string;
     sectionExamples: Array<{ line: number; text: string }>;
     quantityExamples: string[];
     delimitedExamples: string[];
