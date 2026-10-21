@@ -93,7 +93,7 @@ export async function importKnowledgeIntoEngine(input: {
     if (Object.values(values).some(value => !literalSupported(value, sourceText))) {
       issues.push("Registro " + (index + 1) + ": valores sin evidencia documental."); continue;
     }
-    extracted.push({ entity: entity.key, values, evidence: raw.evidence, sourceIndex: index });
+    extracted.push({ entity: entity.key, values, evidence: raw.evidence, sourceIndex: raw.sourceIndex });
   }
 
   const reconciliationStartedAt = Date.now();
