@@ -1,0 +1,39 @@
+CASO DE PRUEBA CRS — DOCUMENTACIÓN COMERCIAL CONSOLIDADA (octubre 2026)
+
+Este documento contiene datos operativos de una heladería. Las etiquetas de los apartados no representan necesariamente tablas independientes.
+
+CATÁLOGO Y PRODUCCIÓN
+Producto LEC-001, leche entera, unidad litro, comprado a terceros.
+Producto AZU-001, azúcar blanco, unidad kg, comprado a terceros.
+Producto BAS-001, base blanca, unidad kg, fabricado en el obrador.
+Producto HEL-001, helado de vainilla, unidad kg, fabricado en el obrador.
+Producto HEL-002, helado de chocolate, unidad kg, fabricado en el obrador.
+Producto CAC-001, cacao puro, unidad kg, comprado a terceros.
+La base blanca se usa como ingrediente de helados, aunque también se fabrica mediante su propia receta.
+
+FÓRMULAS
+Receta RB-01, salida BAS-001, base blanca: posición 1 LEC-001 0,75 litros; posición 2 AZU-001 0,25 kg.
+Receta RV-01, salida HEL-001, helado de vainilla: posición 1 BAS-001 0,90 kg; posición 2 ARO-001 0,10 kg.
+Receta RC-01, salida HEL-002, helado de chocolate: posición 1 BAS-001 0,85 kg; posición 2 CAC-001 0,15 kg.
+Producto ARO-001, aroma de vainilla, unidad kg, comprado a terceros.
+La cantidad y unidad pertenecen a cada posición de receta, no al producto del catálogo.
+
+PROVEEDORES
+Proveedor Lácteos Sur SL, NIF B12345678, código interno PROV-01.
+Proveedor Distribuciones Atlántico SL, NIF B87654321, código interno PROV-02.
+El mismo producto LEC-001 puede ser suministrado por ambos proveedores.
+
+CONDICIONES COMERCIALES
+Oferta OF-LS-01 de PROV-01 para LEC-001, válida del 2026-10-01 al 2026-12-31, precio base 1,40 EUR por litro.
+Tramos de la oferta OF-LS-01: desde 10 litros, descuento 3%; desde 100 litros, descuento 8%; desde 500 litros, descuento 12%.
+Oferta OF-DA-01 de PROV-02 para LEC-001, válida del 2026-10-15 al 2026-11-30, precio base 1,35 EUR por litro.
+Tramos de la oferta OF-DA-01: desde 20 litros, descuento 2%; desde 200 litros, descuento 9%.
+Oferta OF-DA-02 de PROV-02 para AZU-001, válida del 2026-10-15 al 2026-11-30, precio base 0,90 EUR por kg.
+Tramo de la oferta OF-DA-02: desde 50 kg, descuento 5%.
+Los descuentos por volumen son tramos de una oferta concreta, no precios globales del producto ni propiedades permanentes del proveedor.
+
+ACTUALIZACIÓN Y CONFLICTO CONTROLADO
+El proveedor con NIF B12345678 ya existe en CRS como Lácteos Sur SL. Su NIF identifica la misma empresa aunque aparezca con distinta capitalización.
+Existe previamente en CRS el producto LEC-001 con el nombre leche entera.
+En un segundo documento figura PROV-01 con NIF B12345678 y razón social Lacteos Norte SL: esta discrepancia debe revisarse, sin detener la importación de los otros productos, recetas y ofertas independientes.
+La oferta OF-LS-01 no debe duplicarse si se vuelve a importar este documento.
