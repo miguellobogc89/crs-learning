@@ -267,6 +267,14 @@ export async function uploadKnowledgeImport(
     },
   );
 
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null);
+    const message = body && typeof body === "object" && "error" in body &&
+      typeof body.error === "string" ? body.error : "No se han podido subir los documentos";
+    const code = body && typeof body === "object" && "code" in body &&
+      typeof body.code === "string" ? body.code : null;
+    throw new Error(`${message} (HTTP ${response.status}${code ? ` · ${code}` : ""})`);
+  }
   return readImportResponse<KnowledgeImportUploadResult>(
     response,
     "No se han podido subir los documentos",

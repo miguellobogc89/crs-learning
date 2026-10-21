@@ -549,10 +549,13 @@ export async function POST(request: Request) {
         .catch(() => undefined);
     }
 
+    const diagnosticCode = importId
+      ? "UPLOAD_STORAGE_OR_DATABASE_FAILURE"
+      : "UPLOAD_PREPARATION_FAILURE";
     return NextResponse.json(
       {
-        error:
-          "No se ha podido completar la importación.",
+        error: "No se ha podido completar la subida del archivo. Consulta el registro del servidor para conocer la causa.",
+        code: diagnosticCode,
       },
       { status: 500 },
     );
