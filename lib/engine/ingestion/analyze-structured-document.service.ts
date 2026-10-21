@@ -1,4 +1,5 @@
 import { getKnowledgeImportModel, getOpenAIClient } from "@/lib/ai/openai";
+import { findPairEvidence } from "./pair-evidence";
 import { validateSchemaDiscovery } from "../schema-discovery/validation";
 import { SCHEMA_DISCOVERY_INSTRUCTIONS } from "../schema-discovery/discover.service";
 
@@ -110,16 +111,24 @@ export async function analyzeStructuredDocument(input: {
       }
       const from = payload.rows[link.fromRow as number] as Record<string, unknown> | undefined;
       const to = payload.rows[link.toRow as number] as Record<string, unknown> | undefined;
+      const exactQuote = typeof link.evidence === "string" && link.evidence.trim() &&
+        source.includes(link.evidence) ? link.evidence : null;
+      const recoveredQuote = !exactQuote && from && to &&
+        typeof from.values === "object" && from.values !== null && !Array.isArray(from.values) &&
+        typeof to.values === "object" && to.values !== null && !Array.isArray(to.values)
+        ? findPairEvidence(source, from.values as Record<string, unknown>,
+          to.values as Record<string, unknown>) : null;
+      const verifiedQuote = exactQuote || recoveredQuote;
       if (!from || !to || from.entity !== relation.fromEntity ||
-          to.entity !== relation.toEntity || typeof link.evidence !== "string" ||
-          !link.evidence.trim() || !source.includes(link.evidence)) {
+          to.entity !== relation.toEntity || !verifiedQuote) {
         issues.push("Link " + index + ": " +
           (!from || !to ? "row endpoint does not exist." :
             from.entity !== relation.fromEntity || to.entity !== relation.toEntity ? "endpoint entity does not match relation definition." :
             "evidence quote is absent or not an exact source substring.")); continue;
       }
+      if (recoveredQuote) issues.push("Link " + index + ": evidence recovered from an exact source line containing both endpoint anchors.");
       links.push({ fromRow: link.fromRow as number, toRow: link.toRow as number,
-        relationKey: relation.key, evidence: link.evidence });
+        relationKey: relation.key, evidence: verifiedQuote });
     }
   } else if (payload.links !== undefined) {
     issues.push("Invalid links payload.");
