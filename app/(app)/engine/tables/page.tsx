@@ -66,6 +66,7 @@ export default async function EngineTablesPage({
                   <table className="w-full min-w-[540px] border-collapse text-left text-sm">
                     <thead className="bg-slate-50 text-xs text-slate-500">
                       <tr>
+                        <th className="whitespace-nowrap px-4 py-3 font-semibold">ID</th>
                         {fields.map(field => <th key={field.id} className="whitespace-nowrap px-4 py-3 font-semibold">
                           {field.name}
                         </th>)}
@@ -77,6 +78,7 @@ export default async function EngineTablesPage({
                         const values = record.values_json && typeof record.values_json === "object" &&
                           !Array.isArray(record.values_json) ? record.values_json : {};
                         return <tr key={record.id} className="hover:bg-slate-50/70">
+                          <td className="max-w-[160px] truncate px-4 py-3 font-mono text-xs text-slate-500" title={record.id}>{record.id}</td>
                           {fields.map(field => {
                             const value = (values as Record<string, unknown>)[field.key];
                             return <td key={field.id} className="max-w-[320px] truncate px-4 py-3 text-slate-700"
@@ -87,7 +89,7 @@ export default async function EngineTablesPage({
                           <td className="px-4 py-3 text-xs text-slate-500">{record.status}</td>
                         </tr>;
                       })}
-                      {!records.length && <tr><td colSpan={fields.length + 1}
+                      {!records.length && <tr><td colSpan={fields.length + 2}
                         className="px-4 py-12 text-center text-sm text-slate-500">
                         Todavía no hay registros en esta tabla.
                       </td></tr>}
