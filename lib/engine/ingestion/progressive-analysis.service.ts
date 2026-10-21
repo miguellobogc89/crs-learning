@@ -72,10 +72,13 @@ export async function analyzeDocumentInSweeps(input: {
     details: { entities: validated.proposal.entities.length,
       relations: validated.proposal.relations.length } });
 
-  const rows: unknown[] = [];
-  const links: unknown[] = [];
-  for (const [index, chunk] of chunks.entries()) {
-    started = Date.now();
+  // Extract independent blocks with bounded concurrency, preserving document order.
+  // A failed block prevents all persistence: the final validator runs only after all succeed.
+  const batches: Array<{ rows: unknown[]; links: unknown[]; durationMs: number }> =
+    new Array(chunks.length);
+  const extractBlock = async (index: number) => {
+    const chunk = chunks[index];
+    const blockStarted = Date.now();
     let extracted: Record<string, unknown>;
     try {
       extracted = await askJson([
@@ -94,12 +97,10 @@ export async function analyzeDocumentInSweeps(input: {
     if (!Array.isArray(extracted.rows) || !Array.isArray(extracted.links) ||
         extracted.rows.length > 100 || extracted.links.length > 200)
       throw new Error("Engine extraction sweep " + (index + 1) + ": invalid batch.");
-    const offset = rows.length;
     for (const item of extracted.rows) {
       if (!item || typeof item !== "object" || Array.isArray(item) ||
           typeof item.evidence !== "string" || !chunk.includes(item.evidence))
         throw new Error("Engine extraction sweep " + (index + 1) + ": invalid row evidence.");
-      rows.push(item);
     }
     for (const item of extracted.links) {
       if (!item || typeof item !== "object" || Array.isArray(item) ||
@@ -107,11 +108,28 @@ export async function analyzeDocumentInSweeps(input: {
           item.fromRow < 0 || item.toRow < 0 ||
           item.fromRow >= extracted.rows.length || item.toRow >= extracted.rows.length)
         throw new Error("Engine extraction sweep " + (index + 1) + ": invalid link.");
-      links.push({ ...item, fromRow: item.fromRow + offset, toRow: item.toRow + offset });
     }
-    sweeps.push({ stage: "extraction", durationMs: Date.now() - started,
-      details: { block: index + 1, rows: extracted.rows.length,
-        links: extracted.links.length } });
+    batches[index] = { rows: extracted.rows, links: extracted.links,
+      durationMs: Date.now() - blockStarted };
+  };
+  for (let index = 0; index < chunks.length; index += 3) {
+    await Promise.all(chunks.slice(index, index + 3).map((_, offset) =>
+      extractBlock(index + offset)));
+  }
+
+  const rows: unknown[] = [];
+  const links: unknown[] = [];
+  for (const [index, batch] of batches.entries()) {
+    const offset = rows.length;
+    rows.push(...batch.rows);
+    links.push(...batch.links.map(item => {
+      const link = item as Record<string, unknown>;
+      return { ...link, fromRow: (link.fromRow as number) + offset,
+        toRow: (link.toRow as number) + offset };
+    }));
+    sweeps.push({ stage: "extraction", durationMs: batch.durationMs,
+      details: { block: index + 1, rows: batch.rows.length,
+        links: batch.links.length } });
   }
   if (rows.length > 150 || links.length > 300)
     throw new Error("Engine extraction exceeds safe batch limits.");
