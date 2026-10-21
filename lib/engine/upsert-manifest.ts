@@ -73,7 +73,7 @@ export type UpsertPlan = {
 const normalize = (value: unknown): string =>
   typeof value === "string"
     ? value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("es")
-    : JSON.stringify(value);
+    : JSON.stringify(value) ?? String(value);
 
 const validKey = (key: string) => /^[a-z][a-z0-9_]*$/.test(key) && key.length <= 80;
 
@@ -98,6 +98,7 @@ export function planEngineUpsert(
     if (!validKey(entity.key) || entities.has(entity.key) ||
         !entity.fields.length || entity.fields.some(field => !validKey(field.key)) ||
         new Set(entity.fields.map(field => field.key)).size !== entity.fields.length ||
+        new Set(entity.identityFields).size !== entity.identityFields.length ||
         entity.identityFields.some(key => !entity.fields.some(field => field.key === key))) {
       throw new Error("Invalid or duplicate entity definition.");
     }
@@ -114,13 +115,23 @@ export function planEngineUpsert(
     }
   }
   const ids = new Set<string>();
+  const identityOwners = new Map<string, string[]>();
+  for (const observation of manifest.observations) {
+    const entity = entities.get(observation.entityKey);
+    if (!entity?.identityFields.length) continue;
+    if (!entity.identityFields.every(key => observation.values?.[key] !== undefined &&
+      observation.values[key] !== null && observation.values[key] !== "")) continue;
+    const identity = JSON.stringify([entity.key, ...entity.identityFields.map(key =>
+      normalize(observation.values[key]))]);
+    identityOwners.set(identity, [...(identityOwners.get(identity) ?? []), observation.localId]);
+  }
   const actionable = new Set<string>();
-  const seenIdentities = new Set<string>();
   for (const observation of manifest.observations) {
     if (!observation.localId || ids.has(observation.localId)) throw new Error("Duplicate observation ID.");
     ids.add(observation.localId);
     const entity = entities.get(observation.entityKey);
-    if (!entity || !observation.source.sourceId || !observation.source.kind ||
+    if (!entity || !observation.source.sourceId ||
+        !["knowledge", "connector", "manual"].includes(observation.source.kind) ||
         !observation.values || Array.isArray(observation.values) ||
         Object.keys(observation.values).some(key => !entity.fields.some(field => field.key === key))) {
       throw new Error("Invalid observation.");
@@ -130,14 +141,18 @@ export function planEngineUpsert(
         observation.values[key] !== null && observation.values[key] !== "")
       ? JSON.stringify([entity.key, ...entity.identityFields.map(key => normalize(observation.values[key]))])
       : null;
-    if (identity && seenIdentities.has(identity)) {
+    if (identity && (identityOwners.get(identity)?.length ?? 0) > 1) {
       operations.push({ action: "review", localId: observation.localId,
         entityKey: entity.key, reason: "Repeated identity within import batch." });
       continue;
     }
-    if (identity) seenIdentities.add(identity);
     const stored = types.get(entity.key);
     if (!stored) {
+      if (!identity) {
+        operations.push({ action: "review", localId: observation.localId,
+          entityKey: entity.key, reason: "No verified identity key." });
+        continue;
+      }
       operations.push({ action: "create", localId: observation.localId,
         entityKey: entity.key, values: observation.values });
       actionable.add(observation.localId);
