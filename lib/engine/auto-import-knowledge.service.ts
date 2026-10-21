@@ -143,6 +143,7 @@ export async function importKnowledgeIntoEngine(input: {
   const reconciliationStartedAt = Date.now();
   let typesCreated = 0, fieldsCreated = 0;
   const usable = new Map<string, { id: string; version: number }>();
+  const skippedEntities: { entity: string; reason: string; rows: number }[] = [];
   for (const entity of proposal.entities) {
     if (!extracted.some(row => row.entity === entity.key)) continue;
     try {
@@ -184,7 +185,10 @@ export async function importKnowledgeIntoEngine(input: {
       if (result.created) typesCreated++;
       fieldsCreated += result.fieldsCreated;
     } catch (error) {
-      issues.push(entity.key + ": " + (error instanceof Error ? error.message : "No se pudo crear el tipo"));
+      const reason = error instanceof Error ? error.message : "No se pudo crear el tipo";
+      issues.push(entity.key + ": " + reason);
+      skippedEntities.push({ entity: entity.key, reason,
+        rows: extracted.filter(row => row.entity === entity.key).length });
     }
   }
 
@@ -263,12 +267,17 @@ export async function importKnowledgeIntoEngine(input: {
   const executionStartedAt = Date.now();
   let recordsCreated = 0, recordsReused = 0, relationsProposed = 0;
   let executionPending = 0;
+  let createdIds: string[] = [], reusedIds: string[] = [];
+  let pendingItems: { localId: string; reason: string }[] = [];
   if (manifest.observations.length) {
     const executed = await executeEngineUpsertManifest({ workspaceId, userId, manifest });
     recordsCreated = executed.created.length;
     recordsReused = executed.reused.length;
     relationsProposed = executed.relationsProposed;
     executionPending = executed.pending.length;
+    createdIds = executed.created;
+    reusedIds = executed.reused;
+    pendingItems = executed.pending;
     issues.push(...executed.pending.map(item => item.localId + ": " + item.reason));
   }
 
@@ -282,6 +291,12 @@ export async function importKnowledgeIntoEngine(input: {
     diagnostics: { ...extractionDiagnostics, validatedRows: extracted.length,
       manifestRows: manifest.observations.length, manifestLinks: manifest.links.length,
       executionPending, schemaTypesUsable: usable.size },
+    details: {
+      created: createdIds.map(id => ({ localId: id, entity: manifest.observations.find(row => row.localId === id)?.entityKey ?? "unknown" })),
+      reused: reusedIds.map(id => ({ localId: id, entity: manifest.observations.find(row => row.localId === id)?.entityKey ?? "unknown" })),
+      pending: pendingItems.map(item => ({ ...item, entity: manifest.observations.find(row => row.localId === item.localId)?.entityKey ?? "unknown" })),
+      skippedEntities,
+    },
     entitiesDiscovered: proposal.entities.length,
     relationsDiscovered: proposal.relations.length,
     relationsProposed, relationDefinitionsCreated,

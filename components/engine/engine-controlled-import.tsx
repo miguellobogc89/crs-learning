@@ -8,6 +8,10 @@ type ImportOutcome = {
   recordsCreated: number; recordsReused: number; recordsPending: number;
   relationDefinitionsCreated?: number; relationsProposed?: number;
   issues?: string[]; writesPerformed: boolean;
+  details?: { created: { localId: string; entity: string }[];
+    reused: { localId: string; entity: string }[];
+    pending: { localId: string; entity: string; reason: string }[];
+    skippedEntities: { entity: string; reason: string; rows: number }[] };
   diagnostics?: { acceptedRows: number; acceptedLinks: number; validatedRows: number;
     manifestRows: number; manifestLinks: number; executionPending: number; schemaTypesUsable: number };
 };
@@ -61,6 +65,20 @@ export function EngineControlledImport({ files }: { files: FileOption[] }) {
       </div>}
       {outcome.result.status === "no_records_imported" && <p className="font-medium text-amber-800">No se importó ningún registro. Revisa las incidencias y el diagnóstico antes de repetir.</p>}
       <p className="text-xs text-slate-500">{outcome.result.writesPerformed ? "Se han realizado escrituras." : "Sin escrituras de datos."} Las relaciones siguen pendientes de revisión.</p>
+      {outcome.result.details && <details open><summary>Detalle por tabla y registro</summary>
+        <div className="mt-2 space-y-2 text-xs">
+          {(["created", "reused"] as const).map(action => <div key={action}>
+            <strong>{action === "created" ? "Creados" : "Reutilizados"} ({outcome.result.details![action].length}): </strong>
+            {outcome.result.details![action].map(item => item.entity + " · " + item.localId).join(", ") || "Ninguno"}
+          </div>)}
+          {outcome.result.details.skippedEntities.map(item => <p key={item.entity} className="text-amber-800">
+            Tabla omitida: {item.entity} · {item.rows} filas · {item.reason}
+          </p>)}
+          {outcome.result.details.pending.map(item => <p key={item.localId} className="text-amber-800">
+            Pendiente: {item.entity} · {item.localId} · {item.reason}
+          </p>)}
+        </div>
+      </details>}
       {!!outcome.result.issues?.length && <details><summary>Incidencias ({outcome.result.issues.length})</summary>
         <pre className="max-h-72 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(outcome.result.issues, null, 2)}</pre>
       </details>}
