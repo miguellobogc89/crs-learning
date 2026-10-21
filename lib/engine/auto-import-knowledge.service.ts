@@ -5,6 +5,7 @@ import { executeEngineUpsertManifest } from "@/lib/engine/execute-upsert-manifes
 import type { ImportManifest } from "@/lib/engine/upsert-manifest";
 import { auditDiscoveredModel } from "@/lib/engine/schema-discovery/model-audit";
 import { planImportPreflight } from "@/lib/engine/ingestion/import-preflight";
+import { createNotification } from "@/lib/services/notification.service";
 
 type Row = { entity: string; values: Record<string, unknown>; evidence: string; sourceIndex: number };
 const normalizedSource = (value: string) => value.normalize("NFKC").toLocaleLowerCase("es").replace(/\s+/g, " ");
@@ -59,6 +60,34 @@ export async function importKnowledgeIntoEngine(input: {
     auditErrors: audit?.errors,
   });
   if (!preflight.safeToWrite) {
+    // Reuse the existing notification center. An unread review for the same
+    // document is reused to avoid flooding the administrator on retries.
+    const existingReview = await prisma.notifications.findFirst({
+      where: {
+        user_id: userId,
+        type: "engine_import_review",
+        entity_type: "knowledge_file",
+        entity_id: knowledgeFileId,
+        read_at: null,
+      },
+      select: { id: true },
+    });
+    if (!existingReview) {
+      await createNotification({
+        userId,
+        type: "engine_import_review",
+        title: "Engine: importación pendiente de revisión",
+        body: preflight.conflicts.map(conflict => conflict.reason).join("\n").slice(0, 4000),
+        entityType: "knowledge_file",
+        entityId: knowledgeFileId,
+        href: "/engine/tables",
+        metadata: {
+          workspaceId,
+          source: "engine_autonomous_preflight",
+          conflicts: preflight.conflicts,
+        },
+      });
+    }
     return {
       status: "review", typesCreated: 0, fieldsCreated: 0,
       recordsCreated: 0, recordsReused: 0, recordsPending: analysis.rows.length,
