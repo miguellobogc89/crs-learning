@@ -78,7 +78,8 @@ export async function POST(request: Request, context: Context) {
           existing: compactExisting,
         }),
         text: { format: { type: "json_object" } },
-        max_output_tokens: 1800,
+        reasoning: { effort: "low" },
+        max_output_tokens: 4000,
       }, { timeout: 60000, maxRetries: 1 });
       // Responses can finish with no visible output (e.g. reasoning budget)
       // or with a truncated JSON object. Distinguish those cases explicitly.
