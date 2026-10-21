@@ -7,6 +7,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
+    "test:engine:import-replay": "node --test tests/engine-import-replay.test.mjs",
     "test:engine:reconciler": "node --test tests/engine-reconciler.test.mjs tests/engine-identity.test.mjs tests/engine-pair-evidence.test.mjs tests/engine-table-pair-evidence.test.mjs tests/engine-schema-stability.test.mjs tests/engine-structure-comparison.test.mjs tests/engine-schema-decision.test.mjs tests/engine-progressive-analysis.test.mjs"
   },
   "dependencies": {
