@@ -4,7 +4,7 @@ import { analyzeStructuredDocument } from "@/lib/engine/ingestion/analyze-struct
 import { executeEngineUpsertManifest } from "@/lib/engine/execute-upsert-manifest.service";
 import type { ImportManifest } from "@/lib/engine/upsert-manifest";
 
-type Row = { entity: string; values: Record<string, unknown>; evidence: string };
+type Row = { entity: string; values: Record<string, unknown>; evidence: string; sourceIndex: number };
 const normalizedSource = (value: string) => value.normalize("NFKC").toLocaleLowerCase("es").replace(/\s+/g, " ");
 const literalSupported = (value: unknown, text: string) => {
   if (value === null || typeof value === "boolean") return true;
@@ -93,7 +93,7 @@ export async function importKnowledgeIntoEngine(input: {
     if (Object.values(values).some(value => !literalSupported(value, sourceText))) {
       issues.push("Registro " + (index + 1) + ": valores sin evidencia documental."); continue;
     }
-    extracted.push({ entity: entity.key, values, evidence: raw.evidence });
+    extracted.push({ entity: entity.key, values, evidence: raw.evidence, sourceIndex: index });
   }
 
   const reconciliationStartedAt = Date.now();
@@ -165,11 +165,17 @@ export async function importKnowledgeIntoEngine(input: {
       })),
       identityFields: identityKeys(entity.fields),
     })),
-    observations: extracted.filter(row => usable.has(row.entity)).map((row, index) => ({
-      localId: "row_" + index, entityKey: row.entity, values: row.values,
+    observations: extracted.filter(row => usable.has(row.entity)).map(row => ({
+      localId: "row_" + row.sourceIndex, entityKey: row.entity, values: row.values,
       source: { kind: "knowledge" as const, sourceId: knowledgeFileId, evidence: row.evidence },
     })),
-    links: [],
+    links: analysis.links.filter(link =>
+      extracted.some(row => row.sourceIndex === link.fromRow && usable.has(row.entity)) &&
+      extracted.some(row => row.sourceIndex === link.toRow && usable.has(row.entity)))
+      .map(link => ({ fromLocalId: "row_" + link.fromRow,
+        toLocalId: "row_" + link.toRow, relationKey: link.relationKey,
+        source: { kind: "knowledge" as const, sourceId: knowledgeFileId,
+          evidence: link.evidence } })),
   };
   const schemaMs = Date.now() - reconciliationStartedAt;
   const executionStartedAt = Date.now();
@@ -181,10 +187,8 @@ export async function importKnowledgeIntoEngine(input: {
     issues.push(...executed.pending.map(item => item.localId + ": " + item.reason));
   }
 
-  if (proposal.relations.length) {
-    issues.push(proposal.relations.length +
-      " relaciones detectadas; no se han creado vínculos sin verificación de extremos.");
-  }
+  if (proposal.relations.length && !manifest.links.length)
+    issues.push("Relaciones de esquema detectadas, sin vínculos concretos verificables.");
   return {
     status: issues.length ? "completed_with_issues" : "completed",
     typesCreated, fieldsCreated, recordsCreated, recordsReused,
