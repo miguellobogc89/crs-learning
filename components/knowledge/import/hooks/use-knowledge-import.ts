@@ -176,6 +176,8 @@ export function useKnowledgeImport({
     rows: Array<{ localId: string; entityKey: string;
       values: Record<string, string | number | boolean | null>;
       evidence: string; disposition: "candidate" | "pending"; reason: string }>;
+    links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; evidence: string }>;
+    unresolvedLinks: string[];
     issues: string[]; sourceChars: number; analyzedChars: number;
     partial: boolean; durationMs: number; error: string | null;
   }>>({});
@@ -832,7 +834,9 @@ export function useKnowledgeImport({
                 rows: Array<{ localId: string; entityKey: string;
                   values: Record<string, string | number | boolean | null>;
                   evidence: string; disposition: "candidate" | "pending"; reason: string }>;
-                issues: string[]; sourceChars: number; analyzedChars: number;
+                links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; evidence: string }>;
+    unresolvedLinks: string[];
+    issues: string[]; sourceChars: number; analyzedChars: number;
                 partial: boolean; durationMs: number; error: string | null;
               }>; error?: string } = await response.json();
               if (!response.ok || !result.files)
@@ -845,7 +849,7 @@ export function useKnowledgeImport({
               if (isCurrentOperation()) {
                 const message = previewError instanceof Error ? previewError.message : String(previewError);
                 setRecordPreview(Object.fromEntries(recognizedFiles.map(file => [
-                  file.fileName, { status: "error" as const, rows: [], issues: [],
+                  file.fileName, { status: "error" as const, rows: [], links: [], unresolvedLinks: [], issues: [],
                     sourceChars: 0, analyzedChars: 0, partial: true, durationMs: 0, error: message },
                 ])));
               }

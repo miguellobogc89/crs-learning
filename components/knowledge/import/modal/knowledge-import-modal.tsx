@@ -604,7 +604,8 @@ export function KnowledgeImportModal({
                     },
                     {
                       title: "Extraer registros · simulación",
-                      state: preview?.status === "error" ? "error" :
+                      state: preview?.status === "error" || (preview?.status === "completed" &&
+                        (preview.rows.some(row => row.disposition === "pending") || preview.unresolvedLinks.length > 0 || preview.issues.length > 0)) ? "error" :
                         preview?.status === "completed" ? "done" :
                         semantic?.status === "completed" ? "active" : "waiting",
                       detail: preview?.status === "error" ? preview.error ?? "Error de extracción" :
