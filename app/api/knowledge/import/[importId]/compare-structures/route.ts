@@ -78,9 +78,27 @@ export async function POST(request: Request, context: Context) {
           existing: compactExisting,
         }),
         text: { format: { type: "json_object" } },
-        max_output_tokens: 450,
+        max_output_tokens: 1800,
       }, { timeout: 18000, maxRetries: 0 });
-      const parsed: unknown = JSON.parse(response.output_text ?? "{}");
+      // Responses can finish with no visible output (e.g. reasoning budget)
+      // or with a truncated JSON object. Distinguish those cases explicitly.
+      const output = response.output_text?.trim() ?? "";
+      if (response.status === "incomplete") {
+        const reason = response.incomplete_details?.reason ?? "unknown";
+        throw new Error(`Respuesta de IA incompleta (${reason}; ${output.length} caracteres). No se ha analizado el JSON.`);
+      }
+      if (response.status !== "completed") {
+        throw new Error(`La IA no completó la respuesta (estado: ${response.status}).`);
+      }
+      if (!output) {
+        throw new Error("La IA completó la petición sin texto JSON. Revisa el modelo configurado y el consumo de tokens.");
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(output);
+      } catch {
+        throw new Error(`La IA devolvió JSON inválido o truncado (${output.length} caracteres). No se ha aplicado ninguna propuesta.`);
+      }
       if (!object(parsed)) throw new Error("Respuesta semántica no válida");
       const keys = new Set(types.map(type => type.key));
       const matches: Match[] = (Array.isArray(parsed.matches) ? parsed.matches : [])
