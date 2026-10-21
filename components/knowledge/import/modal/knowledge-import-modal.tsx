@@ -9,6 +9,8 @@ import {
   useState,
 } from "react";
 
+import { AlertCircle, Check, ChevronDown, Circle, FileText, Loader2, ScrollText } from "lucide-react";
+
 import {
   Dialog,
   DialogContent,
@@ -559,41 +561,108 @@ export function KnowledgeImportModal({
                 </div>
                 {(knowledgeImport.fileProgress.length ? knowledgeImport.fileProgress :
                   knowledgeImport.files.map((file, index) => ({ id: String(index), name: file.name, status: "pending" }))).map(file => {
-                  const engine = knowledgeImport.completionResult?.log.engineImports?.find(item =>
-                    item.fileName === file.name);
+                  const engine = knowledgeImport.completionResult?.log.engineImports?.find(item => item.fileName === file.name);
                   const stored = knowledgeImport.completionResult?.log.documents.find(item => item.fileName === file.name);
+                  const completed = knowledgeImport.step === "completed";
+                  const proposalReady = Boolean(knowledgeImport.proposal) || knowledgeImport.isConfirming || completed;
+                  const extracting = knowledgeImport.processingPhase === "extracting";
+                  const stages: Array<{ title: string; state: "done" | "active" | "waiting" | "error"; detail: string }> = [
+                    { title: "Documento recibido", state: "done", detail: "Archivo recibido por el servidor" },
+                    { title: "Extracción de texto", state: extracting ? "active" : proposalReady || knowledgeImport.processingPhase !== "uploading" ? "done" : "active",
+                      detail: extracting ? "Extrayendo contenido del archivo" : proposalReady ? "Extracción finalizada" : "Preparando la extracción" },
+                    { title: "Clasificación y destino",
+                      state: proposalReady ? "done" : extracting ? "waiting" : "active",
+                      detail: proposalReady ? "Clasificación realizada" :
+                        knowledgeImport.proposalProgress?.message ?? "Analizando el contenido" },
+                    { title: "Persistencia y Engine",
+                      state: engine?.status === "error" ? "error" : completed ? "done" :
+                        knowledgeImport.isConfirming ? "active" : "waiting",
+                      detail: engine?.status === "error" ? "El procesamiento de Engine ha fallado" :
+                        engine ? `Engine: ${engine.recordsCreated} registros creados · ${engine.recordsReused} reutilizados` :
+                        stored ? "Documento conservado" :
+                        knowledgeImport.isConfirming ? "Guardando y ejecutando Engine" : "Pendiente" },
+                  ];
+                  const errorMessages = [engine?.error, completed ? undefined : knowledgeImport.error].filter(
+                    (message): message is string => Boolean(message),
+                  );
                   return (
-                    <div key={file.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">{file.name}</span>
-                        {knowledgeImport.tableDetection[file.id] !== undefined ? (
-                          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700">
-                            {knowledgeImport.tableDetection[file.id] ? "Tablas detectadas" : "Sin tablas"}
-                          </span>
-                        ) : null}
-                        <span className="text-xs text-slate-500">
-                          {engine?.status === "error" ? "Error en Engine" :
-                           engine ? "Engine procesado" :
-                           stored ? "Documento guardado" :
-                           knowledgeImport.step === "completed" ? "Finalizado" : "En proceso"}
-                        </span>
+                    <article key={file.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                      <div className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5">
+                        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                          <FileText className="size-5" strokeWidth={1.8} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-900">{file.name}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            {knowledgeImport.tableDetection[file.id] !== undefined ? (
+                              <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                                {knowledgeImport.tableDetection[file.id] ? "Tablas detectadas" : "Sin tablas"}
+                              </span>
+                            ) : null}
+                            <span className="text-[11px] text-slate-500">
+                              {engine?.status === "error" ? "Engine requiere atención" :
+                                completed ? "Procesamiento finalizado" : "Procesando"}
+                            </span>
+                          </div>
+                        </div>
+                        {engine?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
+                          completed ? <Check className="size-5 text-emerald-600" /> :
+                          <Loader2 className="size-5 animate-spin text-blue-600" />}
                       </div>
-                      <details className="mt-3 border-t border-slate-100 pt-2">
-                        <summary className="cursor-pointer text-xs font-medium text-slate-700">Ver proceso y resultados</summary>
-                        <ol className="mt-3 space-y-2 text-xs text-slate-600">
-                          <li>1. Documento recibido {knowledgeImport.step !== "upload" ? "✓" : "·"}</li>
-                          <li>2. Extracción y análisis {knowledgeImport.processingPhase === "uploading" ? "·" : "✓"}</li>
-                          <li>3. Clasificación y destino {knowledgeImport.proposal ? "✓" : knowledgeImport.proposalProgress?.message ?? "Pendiente"}</li>
-                          <li>4. Persistencia y Engine {engine ? engine.status : stored ? "Documento guardado" : knowledgeImport.isConfirming ? "En proceso" : "Pendiente"}</li>
-                          {engine?.stages?.map((stage, index) => (
-                            <li key={index} className="ml-4">
-                              {stage.stage} · {(stage.durationMs / 1000).toFixed(1)} s · {Object.entries(stage.details).map(([key, value]) => `${key}: ${value}`).join(" · ")}
-                            </li>
-                          ))}
-                          {engine?.error ? <li className="text-amber-700">{engine.error}</li> : null}
-                        </ol>
+                      <details className="group border-t border-slate-100" open>
+                        <summary className="flex cursor-pointer list-none items-center justify-between bg-slate-50/60 px-5 py-3 text-xs font-semibold text-slate-700 [&::-webkit-details-marker]:hidden">
+                          <span className="flex items-center gap-2"><ScrollText className="size-4 text-slate-500" /> Registro del proceso</span>
+                          <ChevronDown className="size-4 text-slate-400 transition-transform group-open:rotate-180" />
+                        </summary>
+                        <div className="px-5 py-4">
+                          <ol className="space-y-4">
+                            {stages.map((stage, index) => (
+                              <li key={stage.title} className="flex items-start gap-3">
+                                <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${
+                                  stage.state === "done" ? "bg-emerald-50 text-emerald-600" :
+                                  stage.state === "error" ? "bg-amber-50 text-amber-600" :
+                                  stage.state === "active" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-400"
+                                }`}>
+                                  {stage.state === "done" ? <Check className="size-3.5" strokeWidth={2.5} /> :
+                                    stage.state === "error" ? <AlertCircle className="size-3.5" /> :
+                                    stage.state === "active" ? <Loader2 className="size-3.5 animate-spin" /> :
+                                    <Circle className="size-2.5" />}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className={`text-xs font-semibold ${stage.state === "waiting" ? "text-slate-400" : "text-slate-800"}`}>
+                                    {index + 1}. {stage.title}
+                                  </p>
+                                  <p className="mt-0.5 text-[11px] text-slate-500">{stage.detail}</p>
+                                </div>
+                              </li>
+                            ))}
+                          </ol>
+                          {engine?.stages?.length ? (
+                            <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 px-3 py-3">
+                              <p className="mb-2 text-xs font-semibold text-slate-700">Barridos de Engine</p>
+                              {engine.stages.map((stage, index) => (
+                                <p key={index} className="py-1 text-[11px] text-slate-600">
+                                  {stage.stage} · {(stage.durationMs / 1000).toFixed(1)} s · {Object.entries(stage.details).map(([key, value]) => `${key}: ${value}`).join(" · ")}
+                                </p>
+                              ))}
+                            </div>
+                          ) : null}
+                          {errorMessages.length ? (
+                            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-3" role="alert">
+                              <p className="flex items-center gap-2 text-xs font-semibold text-amber-900">
+                                <AlertCircle className="size-4" /> Registro de errores
+                              </p>
+                              {errorMessages.map((message, index) => (
+                                <p key={index} className="mt-2 break-words font-mono text-[11px] leading-relaxed text-amber-800">{message}</p>
+                              ))}
+                              <p className="mt-2 text-[11px] text-amber-700">
+                                El documento puede estar guardado aunque Engine no haya terminado.
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
                       </details>
-                    </div>
+                    </article>
                   );
                 })}
                 {knowledgeImport.error ? <p role="alert" className="text-sm text-red-700">{knowledgeImport.error}</p> : null}
