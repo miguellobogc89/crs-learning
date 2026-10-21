@@ -1687,6 +1687,7 @@ model engine_record_provenance {
 
 
 model engine_relation_proposals {
+  approved_relation engine_record_relations?
   id                     String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspace_id           String                      @db.Uuid
   relation_definition_id String                      @db.Uuid
@@ -1728,6 +1729,7 @@ model engine_record_relations {
   from_record engine_records @relation("engine_record_relation_from", fields: [workspace_id, from_record_id], references: [workspace_id, id], onDelete: Restrict)
   to_record engine_records @relation("engine_record_relation_to", fields: [workspace_id, to_record_id], references: [workspace_id, id], onDelete: Restrict)
   reviewer users? @relation("engine_record_relation_reviewer", fields: [reviewed_by_user_id], references: [id], onDelete: SetNull)
+  source_proposal engine_relation_proposals? @relation(fields: [source_proposal_id], references: [id], onDelete: Restrict)
 
   @@unique([workspace_id, relation_definition_id, from_record_id, to_record_id], map: "engine_record_relations_unique_pair")
   @@index([workspace_id, from_record_id], map: "engine_record_relations_from_idx")
