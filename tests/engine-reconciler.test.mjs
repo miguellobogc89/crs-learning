@@ -107,3 +107,19 @@ test("incompatible schema types fail before planning writes", () => {
     id: "type-1", key: "product", fields: [{ key: "name", type: "decimal" }], records: [],
   }]), /Incompatible field/);
 });
+
+test("duplicate links are planned only once", () => {
+  const link = { fromLocalId: "a", toLocalId: "b", relationKey: "related_to",
+    source: { kind: "knowledge", sourceId: "fixture", evidence: "source" } };
+  const plan = planEngineUpsert(manifest([entity()], [
+    observation("a", { name: "Mango" }), observation("b", { name: "Lemon" }),
+  ], [link, { ...link }]), existing([]));
+  assert.equal(plan.summary.link, 1);
+});
+test("invalid link endpoints fail before returning a plan", () => {
+  const link = { fromLocalId: "a", toLocalId: "missing", relationKey: "related_to",
+    source: { kind: "knowledge", sourceId: "fixture", evidence: "source" } };
+  assert.throws(() => planEngineUpsert(manifest([entity()], [
+    observation("a", { name: "Mango" }),
+  ], [link]), existing([])), /Invalid link endpoints/);
+});

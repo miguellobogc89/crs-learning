@@ -188,9 +188,13 @@ export function planEngineUpsert(
       actionable.add(observation.localId);
     }
   }
+  const plannedLinks = new Set<string>();
   for (const link of manifest.links) {
     if (!ids.has(link.fromLocalId) || !ids.has(link.toLocalId) || !validKey(link.relationKey))
       throw new Error("Invalid link endpoints.");
+    const identity = JSON.stringify([link.fromLocalId, link.toLocalId, link.relationKey]);
+    if (plannedLinks.has(identity)) continue;
+    plannedLinks.add(identity);
     if (actionable.has(link.fromLocalId) && actionable.has(link.toLocalId))
       operations.push({ action: "link", fromLocalId: link.fromLocalId,
         toLocalId: link.toLocalId, relationKey: link.relationKey });
