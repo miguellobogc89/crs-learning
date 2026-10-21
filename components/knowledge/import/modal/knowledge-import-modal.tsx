@@ -603,14 +603,14 @@ export function KnowledgeImportModal({
                         "Pendiente: proponer relaciones sin crearlas",
                     },
                     {
-                      title: "Extraer registros · simulación",
+                      title: "Extraer registros y resolver referencias · simulación",
                       state: preview?.status === "error" || (preview?.status === "completed" &&
                         (preview.rows.some(row => row.disposition === "pending") || preview.unresolvedLinks.length > 0 || preview.issues.length > 0)) ? "error" :
                         preview?.status === "completed" ? "done" :
                         semantic?.status === "completed" ? "active" : "waiting",
                       detail: preview?.status === "error" ? preview.error ?? "Error de extracción" :
                         preview?.status === "completed"
-                          ? `${preview.rows.length} candidatos · ${preview.issues.length} incidencias · ${preview.analyzedChars}/${preview.sourceChars} caracteres revisados`
+                          ? `${preview.rows.length} candidatos · ${preview.links?.length ?? 0} vínculos · ${preview.unresolvedLinks?.length ?? 0} referencias pendientes · ${preview.issues.length} incidencias · ${preview.analyzedChars}/${preview.sourceChars} caracteres revisados`
                           : "Preparar candidatos con evidencia, sin INSERT ni UPSERT",
                     },
                   ];
@@ -669,152 +669,56 @@ export function KnowledgeImportModal({
                               </li>
                             ))}
                           </ol>
-                          {recognized?.status === "completed" ? (
-                            <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-semibold text-slate-800">Estructuras existentes en Engine</p>
-                              <p className="mt-1 text-[11px] text-slate-500">Consulta real del espacio de trabajo. No se ha decidido aún qué estructura corresponde al documento.</p>
-                              {recognized.existingStructures.length ? (
-                                <div className="mt-3 space-y-2">
-                                  {recognized.existingStructures.map(type => (
-                                    <details key={type.id} className="rounded-lg border border-slate-100 px-3 py-2">
-                                      <summary className="cursor-pointer text-xs font-medium text-slate-700">
-                                        {type.name} <span className="font-normal text-slate-400">({type.key}) · {type.fields.length} campos</span>
-                                      </summary>
-                                      <div className="mt-2 space-y-1">
-                                        {type.fields.map(field => (
-                                          <p key={field.key} className="text-[11px] text-slate-600">
-                                            {field.name} <span className="text-slate-400">· {field.key} · {field.type}</span>
-                                          </p>
-                                        ))}
-                                      </div>
-                                    </details>
-                                  ))}
-                                </div>
-                              ) : <p className="mt-2 text-xs text-slate-600">No existen estructuras activas. El siguiente paso deberá proponerlas, sin crearlas automáticamente.</p>}
-                            </div>
-                          ) : null}
-                          {semantic?.status === "completed" ? (
-                            <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-semibold text-slate-800">Comparación semántica · equivalencias existentes</p>
-                              <p className="text-[11px] text-slate-500">La IA propone equivalencias, no las confirma. Ninguna estructura ha sido creada o modificada.</p>
-                              <div>
-                                <p className="text-xs font-semibold text-emerald-700">Estructuras que podrían reutilizarse ({semantic.matches.length})</p>
-                                {semantic.matches.length ? semantic.matches.map((match, index) => (
-                                  <p key={index} className="mt-2 text-[11px] text-slate-700">
-                                    <strong>{match.concept}</strong> → {match.existingKey} · {match.reason}
-                                    <span className="block text-slate-500">Evidencia: {match.evidence}</span>
-                                  </p>
-                                )) : <p className="mt-1 text-[11px] text-slate-500">Sin equivalencias verificables.</p>}
-                              </div>
-                              <div className="hidden">
-                                <p className="text-xs font-semibold text-slate-800">Posibles estructuras nuevas ({semantic.missing.length})</p>
-                                {semantic.missing.length ? semantic.missing.map((item, index) => (
-                                  <p key={index} className="mt-2 text-[11px] text-slate-700">
-                                    <strong>{item.suggestedName || item.concept}</strong> · {item.reason}
-                                    <span className="block text-slate-500">Campos sugeridos: {item.fields.join(", ") || "Por determinar"}</span>
-                                    <span className="block text-slate-500">Evidencia: {item.evidence}</span>
-                                  </p>
-                                )) : <p className="mt-1 text-[11px] text-slate-500">No se han propuesto estructuras nuevas.</p>}
-                              </div>
-                              {semantic.uncertain.length ? (
-                                <p className="text-[11px] text-amber-700">Por revisar: {semantic.uncertain.join(" · ")}</p>
-                              ) : null}
-                            </div>
-                          ) : null}
                           {preview?.status === "completed" ? (
-                            <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-semibold text-slate-800">Vista previa de registros · sin guardar</p>
-                              <p className="text-[11px] text-slate-500">
-                                Se han analizado {preview.analyzedChars} de {preview.sourceChars} caracteres.
-                                {preview.partial ? " Prueba parcial: aún no se ha procesado todo el documento." : " Documento completo."}
-                                {" "}No se han comprobado identidades ni duplicados. Ningún registro se ha insertado.
-                              </p>
-                              {preview.rows.length ? (
-                                <div className="space-y-2">
-                                  {preview.rows.map(row => (
-                                    <details key={row.localId} className="rounded-lg border border-slate-100 px-3 py-2">
-                                      <summary className="cursor-pointer text-xs text-slate-700">
-                                        <strong>{row.entityKey}</strong> · {Object.entries(row.values).slice(0, 3).map(([key, value]) => `${key}: ${String(value)}`).join(" · ")}
-                                      </summary>
-                                      <div className="mt-2 space-y-1 text-[11px] text-slate-600">
-                                        {Object.entries(row.values).map(([key, value]) => (
-                                          <p key={key}><strong>{key}:</strong> {String(value)}</p>
-                                        ))}
-                                        <p className="text-slate-500">Evidencia: {row.evidence}</p>
-                                        <p className="text-amber-700">{row.reason}</p>
-                                      </div>
-                                    </details>
-                                  ))}
-                                </div>
-                              ) : <p className="text-[11px] text-slate-500">No hay registros verificables en la muestra.</p>}
-                              {preview.issues.length ? (
-                                <div className="rounded-lg bg-amber-50 p-3">
-                                  <p className="text-xs font-semibold text-amber-800">Incidencias de extracción</p>
-                                  {preview.issues.map((issue, index) => (
-                                    <p key={index} className="mt-1 text-[11px] text-amber-700">{issue}</p>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : null}
-                          {relations?.status === "completed" ? (
-                            <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-semibold text-slate-800">Relaciones identificadas ({relations.relations.length})</p>
-                              <p className="text-[11px] text-slate-500">Hipótesis basadas en el documento. No se ha creado ninguna relación ni estructura.</p>
-                              {relations.relations.length ? relations.relations.map((relation, index) => (
-                                <div key={index} className="text-[11px] text-slate-700">
-                                  <strong>{relation.fromConcept} → {relation.toConcept}</strong>
-                                  <span className="text-slate-500"> · {relation.cardinality}</span>
-                                  <p>{relation.reason}</p>
-                                  {relation.existingRelationKey ? <p className="text-emerald-700">Relación existente: {relation.existingRelationKey}</p> : null}
-                                  <p className="text-slate-500">Evidencia: {relation.evidence}</p>
-                                </div>
-                              )) : <p className="text-[11px] text-slate-500">No se identificaron relaciones verificables.</p>}
-                              <p className="text-xs font-semibold text-slate-800">Estructuras potencialmente necesarias ({relations.missingStructures.length})</p>
-                              {relations.missingStructures.map((item, index) => (
-                                <p key={index} className="text-[11px] text-slate-700">
-                                  <strong>{item.name}</strong> · {item.reason}
-                                  <span className="block text-slate-500">Evidencia: {item.evidence}</span>
-                                </p>
-                              ))}
-                              {relations.uncertain.length ? <p className="text-[11px] text-amber-700">Por revisar: {relations.uncertain.join(" · ")}</p> : null}
-                            </div>
-                          ) : null}
-                          {recognized?.status === "completed" ? (
-                            <div className="mt-4 space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
-                              <p className="text-xs font-semibold text-slate-700">Evidencias de clasificación</p>
-                              <p className="text-[11px] text-slate-500">Muestras literales del texto extraído. Son candidatos, no datos validados.</p>
-                              <div>
-                                <p className="text-[11px] font-semibold text-slate-700">Posibles secciones</p>
-                                {recognized.sectionExamples.length ? recognized.sectionExamples.map(item => (
-                                  <p key={item.line} className="mt-1 text-[11px] text-slate-600">Línea {item.line}: {item.text}</p>
-                                )) : <p className="text-[11px] text-slate-500">No se identificaron con suficiente evidencia.</p>}
-                              </div>
-                              <div>
-                                <p className="text-[11px] font-semibold text-slate-700">Líneas con cantidades</p>
-                                {recognized.quantityExamples.map((line, index) => (
-                                  <p key={index} className="mt-1 break-words text-[11px] text-slate-600">{line}</p>
-                                ))}
-                              </div>
-                              <div>
-                                <p className="text-[11px] font-semibold text-slate-700">Candidatos a conceptos (fase 2 preliminar)</p>
-                                <p className="mt-1 text-[11px] text-slate-600">
-                                  {recognized.conceptCandidates.length ? recognized.conceptCandidates.join(" · ") : "Sin candidatos suficientemente claros"}
-                                </p>
-                              </div>
+                            <div className="mt-4 flex flex-wrap items-center gap-3">
+                              <button type="button"
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                onClick={() => {
+                                  const lines = [
+                                    "-- CRS Engine | Propuesta de INSERT (TXT, NO EJECUTABLE)",
+                                    "-- Archivo: " + file.name,
+                                    "-- Solo simulación: NO se han creado registros ni relaciones.",
+                                    "-- Cobertura: " + preview.analyzedChars + "/" + preview.sourceChars + " caracteres",
+                                    "-- Identidades y duplicados: NO VALIDADOS",
+                                    "-- Registros: " + preview.rows.length + " | Vínculos: " + (preview.links?.length ?? 0),
+                                    "",
+                                    ...preview.rows.flatMap(row => [
+                                      "-- INSERT CANDIDATO " + row.localId + " | " + row.entityKey,
+                                      "ENTITY " + row.entityKey + " " + JSON.stringify(row.values),
+                                      "-- Estado: " + row.disposition + " | " + row.reason,
+                                      "-- Evidencia: " + row.evidence,
+                                      "",
+                                    ]),
+                                    "-- REFERENCIAS PROPUESTAS",
+                                    ...(preview.links ?? []).map(link =>
+                                      "LINK " + link.fromLocalId + " -> " + link.toLocalId + " VIA " + link.relationKey +
+                                      " | evidencia: " + link.evidence),
+                                    "",
+                                    "-- REFERENCIAS PENDIENTES",
+                                    ...(preview.unresolvedLinks ?? []).map(issue => "-- " + issue),
+                                    "-- INCIDENCIAS",
+                                    ...preview.issues.map(issue => "-- " + issue),
+                                    "",
+                                    "-- Este archivo NO es SQL ejecutable. No ejecutar INSERT/UPSERT hasta validar identidades, duplicados y referencias.",
+                                  ];
+                                  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+                                  const url = URL.createObjectURL(blob);
+                                  const link = document.createElement("a");
+                                  link.href = url;
+                                  link.download = "crs-insert-preview-" + file.name.replace(/[^a-zA-Z0-9._-]/g, "_") + ".txt";
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  link.remove();
+                                  URL.revokeObjectURL(url);
+                                }}>
+                                Descargar TXT de propuesta de INSERT
+                              </button>
+                              <p className="text-[11px] text-slate-500">Vista previa parcial, sin escrituras ni SQL ejecutable.</p>
                             </div>
                           ) : null}
                           {errorMessages.length ? (
-                            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-3" role="alert">
-                              <p className="flex items-center gap-2 text-xs font-semibold text-amber-900">
-                                <AlertCircle className="size-4" /> Registro de errores
-                              </p>
-                              {errorMessages.map((message, index) => (
-                                <p key={index} className="mt-2 break-words font-mono text-[11px] leading-relaxed text-amber-800">{message}</p>
-                              ))}
-                              <p className="mt-2 text-[11px] text-amber-700">
-                                Prueba aislada: no se han creado artículos, tablas ni registros de Engine.
-                              </p>
+                            <div className="mt-3 text-[11px] text-amber-700" role="alert">
+                              {errorMessages.join(" · ")}
                             </div>
                           ) : null}
                         </div>
