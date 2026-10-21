@@ -1,3 +1,4 @@
+import { classifyImportContent } from "./classify-content";
 ﻿// lib/knowledge/import/generate-proposal.ts
 import {
   getKnowledgeImportModel,
@@ -710,6 +711,9 @@ export async function generateKnowledgeImportProposal({
     const proposal: KnowledgeImportProposal = {
       ...generatedProposal,
       documentAnalyses,
+      contentClassification: Object.fromEntries(
+        documents.map(document => [document.id, classifyImportContent(document.text)]),
+      ),
     };
 
     await onProgress?.({

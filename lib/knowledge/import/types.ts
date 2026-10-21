@@ -1,3 +1,4 @@
+import type { ImportContentClassification } from "./classify-content";
 // lib/knowledge/import/types.ts
 
 export type KnowledgeImportDocumentInput = {
@@ -129,6 +130,7 @@ export type KnowledgeImportWarning = {
 };
 
 export type KnowledgeImportProposal = {
+  contentClassification?: Record<string, ImportContentClassification>;
   title: string;
   description: string;
 
