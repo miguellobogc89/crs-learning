@@ -169,6 +169,7 @@ model user_lesson_progress {
 }
 
 model users {
+  record_relations_reviewed engine_record_relations[] @relation("engine_record_relation_reviewer")
   relation_proposals_reviewed engine_relation_proposals[] @relation("engine_relation_reviewed_by")
   relation_proposals_created engine_relation_proposals[] @relation("engine_relation_proposed_by")
   id                                                                                           String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -326,6 +327,7 @@ model knowledge_sources {
 }
 
 model knowledge_files {
+  engine_record_relations engine_record_relations[]
   engine_relation_proposals engine_relation_proposals[]
   id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   knowledge_source_id      String                     @db.Uuid
@@ -1532,6 +1534,7 @@ model engine_field_definitions {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model engine_relation_definitions {
   engine_relation_proposals engine_relation_proposals[]
+  engine_record_relations engine_record_relations[]
   id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspace_id        String              @db.Uuid
   key                 String
@@ -1604,6 +1607,8 @@ model engine_value_conflicts {
 /// This table contains check constraints and requires additional setup for migrations.
 
 model engine_records {
+  record_relations_to engine_record_relations[] @relation("engine_record_relation_to")
+  record_relations_from engine_record_relations[] @relation("engine_record_relation_from")
   relation_proposals_to engine_relation_proposals[] @relation("engine_relation_proposal_to")
   relation_proposals_from engine_relation_proposals[] @relation("engine_relation_proposal_from")
   id                                             String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -1706,4 +1711,25 @@ model engine_relation_proposals {
   @@index([workspace_id, status, created_at(sort: Desc)], map: "engine_relation_proposals_pending_idx")
   @@index([workspace_id, from_record_id], map: "engine_relation_proposals_from_idx")
   @@index([workspace_id, to_record_id], map: "engine_relation_proposals_to_idx")
+}
+
+model engine_record_relations {
+  id                     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id           String @db.Uuid
+  relation_definition_id String @db.Uuid
+  from_record_id         String @db.Uuid
+  to_record_id           String @db.Uuid
+  source_proposal_id     String? @unique @db.Uuid
+  reviewed_by_user_id    String? @db.Uuid
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+
+  workspace workspaces @relation(fields: [workspace_id], references: [id], onDelete: Restrict)
+  definition engine_relation_definitions @relation(fields: [workspace_id, relation_definition_id], references: [workspace_id, id], onDelete: Restrict)
+  from_record engine_records @relation("engine_record_relation_from", fields: [workspace_id, from_record_id], references: [workspace_id, id], onDelete: Restrict)
+  to_record engine_records @relation("engine_record_relation_to", fields: [workspace_id, to_record_id], references: [workspace_id, id], onDelete: Restrict)
+  reviewer users? @relation("engine_record_relation_reviewer", fields: [reviewed_by_user_id], references: [id], onDelete: SetNull)
+
+  @@unique([workspace_id, relation_definition_id, from_record_id, to_record_id], map: "engine_record_relations_unique_pair")
+  @@index([workspace_id, from_record_id], map: "engine_record_relations_from_idx")
+  @@index([workspace_id, to_record_id], map: "engine_record_relations_to_idx")
 }
