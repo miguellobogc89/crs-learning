@@ -1,0 +1,109 @@
+import Link from "next/link";
+import { auth } from "@/auth";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
+import { listEngineObjectTypes, listEngineRecords } from "@/lib/engine/records.service";
+
+export const dynamic = "force-dynamic";
+
+export default async function EngineTablesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string }>;
+}) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return <main className="p-8 text-sm text-slate-600">Inicia sesión para consultar Engine.</main>;
+  }
+  const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
+  const types = await listEngineObjectTypes(activeWorkspace.id, session.user.id);
+  const params = await searchParams;
+  const selected = types.find(type => type.id === params.type) ?? types[0];
+  const records = selected ? await listEngineRecords({
+    workspaceId: activeWorkspace.id, userId: session.user.id,
+    objectTypeId: selected.id, take: 100,
+  }) : [];
+  const fields = selected?.engine_field_definitions ?? [];
+  return (
+    <main className="mx-auto max-w-7xl space-y-6 p-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Tablas de Engine</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Vista de consulta de los tipos y registros del espacio de trabajo. No modifica datos.
+        </p>
+      </div>
+      <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="rounded-xl border border-slate-200 bg-white p-3">
+          <h2 className="px-3 pb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Entidades ({types.length})
+          </h2>
+          <nav className="space-y-1">
+            {types.map(type => (
+              <Link key={type.id} href={`/engine/tables?type=${type.id}`}
+                className={`block rounded-lg px-3 py-2 text-sm ${selected?.id === type.id
+                  ? "bg-slate-900 font-semibold text-white"
+                  : "text-slate-700 hover:bg-slate-100"}`}>
+                {type.name}
+                <span className="ml-2 text-xs opacity-60">{type.key}</span>
+              </Link>
+            ))}
+          </nav>
+        </aside>
+        <section className="min-w-0 rounded-xl border border-slate-200 bg-white">
+          {selected ? (
+            <>
+              <div className="border-b border-slate-200 px-5 py-4">
+                <h2 className="text-lg font-semibold text-slate-900">{selected.name}</h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  {fields.length} campos · {records.length} registros mostrados (máximo 100)
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[540px] border-collapse text-left text-sm">
+                  <thead className="bg-slate-50 text-xs text-slate-500">
+                    <tr>
+                      {fields.map(field => (
+                        <th key={field.id} className="whitespace-nowrap px-4 py-3 font-semibold">
+                          {field.name}
+                        </th>
+                      ))}
+                      <th className="px-4 py-3 font-semibold">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {records.map(record => {
+                      const values = record.values_json && typeof record.values_json === "object" &&
+                        !Array.isArray(record.values_json) ? record.values_json : {};
+                      return (
+                        <tr key={record.id} className="hover:bg-slate-50/70">
+                          {fields.map(field => {
+                            const value = (values as Record<string, unknown>)[field.key];
+                            return <td key={field.id} className="max-w-[320px] truncate px-4 py-3 text-slate-700"
+                              title={value === undefined ? "" : String(value)}>
+                              {value === undefined || value === null ? "—" :
+                                typeof value === "object" ? JSON.stringify(value) : String(value)}
+                            </td>;
+                          })}
+                          <td className="px-4 py-3 text-xs text-slate-500">{record.status}</td>
+                        </tr>
+                      );
+                    })}
+                    {records.length === 0 && (
+                      <tr><td colSpan={fields.length + 1}
+                        className="px-4 py-12 text-center text-sm text-slate-500">
+                        Todavía no hay registros en esta entidad.
+                      </td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="p-12 text-center text-sm text-slate-500">
+              Todavía no hay tipos de entidad en Engine.
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
