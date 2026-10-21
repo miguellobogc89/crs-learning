@@ -274,6 +274,16 @@ export type KnowledgeImportExecutionLog = {
   documents: KnowledgeImportCreatedDocumentLog[];
   skippedDocuments: KnowledgeImportSkippedDocumentLog[];
 
+  engineImports?: Array<{
+    knowledgeFileId: string;
+    fileName: string;
+    status: "completed" | "completed_with_issues" | "no_records_imported" | "error";
+    recordsCreated: number;
+    recordsReused: number;
+    error?: string;
+    stages?: Array<{ stage: string; durationMs: number; details: Record<string, number | boolean> }>;
+  }>;
+
   proposalSnapshot: KnowledgeImportProposal;
 };
 

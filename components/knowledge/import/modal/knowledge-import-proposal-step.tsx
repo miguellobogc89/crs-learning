@@ -206,7 +206,7 @@ export function KnowledgeImportProposalStep({
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
           <p className="text-[12px] font-semibold text-slate-900">Clasificación y destino recomendado</p>
           <p className="mt-1 text-[11px] text-slate-500">
-            Detección local sin IA. El destino es una recomendación: esta versión todavía confirma los documentos mediante el flujo de Knowledge.
+            Los documentos estructurados con clasificación fiable se enviarán a Engine sin crear artículos. Los casos dudosos se conservan en Knowledge para revisión.
           </p>
           <div className="mt-2 space-y-1">
             {proposal.documentAnalyses.map(document => {

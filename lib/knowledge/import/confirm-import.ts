@@ -1,3 +1,4 @@
+import { importKnowledgeIntoEngine } from "@/lib/engine/auto-import-knowledge.service";
 // lib/knowledge/import/confirm-import.ts
 
 import type { Prisma } from "@prisma/client";
@@ -329,6 +330,14 @@ export async function confirmKnowledgeImport({
     }
   }
 
+  // Structured-only files keep a provenance container, not a Knowledge article.
+  // Uncertain classifications remain in the ordinary Knowledge flow.
+  const engineOnlyFiles = knowledgeImport.knowledge_import_files.filter(
+    file => proposal.recommendedRoutes?.[file.id]?.destination === "engine" &&
+      proposal.contentClassification?.[file.id]?.confidence === "high",
+  );
+  const engineOnlyIds = new Set(engineOnlyFiles.map(file => file.id));
+
   const acceptedImportFileIdByHash = new Map<string, string>();
   const articlePlans: Array<{
     article: (typeof proposal.articles)[number];
@@ -337,7 +346,7 @@ export async function confirmKnowledgeImport({
     generatedContent: string | null;
   }> = [];
   for (const article of proposal.articles) {
-    const articleFiles = article.documentIds.map((documentId) => {
+    const articleFiles = article.documentIds.filter(documentId => !engineOnlyIds.has(documentId)).map((documentId) => {
       const file = importFilesById.get(documentId);
       if (!file) throw new Error(`No se ha encontrado el documento ${documentId}`);
       return file;
@@ -389,6 +398,36 @@ export async function confirmKnowledgeImport({
       generatedContent: null as string | null,
     });
   }
+  // Detect duplicates for Engine-only sources using the same content identity
+  // as Knowledge documents, including files already accepted in this import.
+  const engineSourcePlans: Array<{
+    file: (typeof knowledgeImport.knowledge_import_files)[number];
+    hash: string;
+  }> = [];
+  const skippedEngineSources: KnowledgeImportSkippedDocumentLog[] = [];
+  for (const file of engineOnlyFiles) {
+    const hash = await resolveContentHash(file);
+    if (!hash) throw new Error(`No se puede verificar el contenido del documento ${file.file_name}`);
+    const identity = `${file.file_size}:${hash}`;
+    const existing = existingFileByHash.get(identity);
+    const accepted = acceptedImportFileIdByHash.get(identity);
+    if (existing || accepted) {
+      skippedEngineSources.push({
+        importFileId: file.id,
+        existingKnowledgeFileId: existing?.id ?? null,
+        duplicateImportFileId: accepted ?? undefined,
+        fileName: file.file_name,
+        fileSize: file.file_size,
+        articleId: existing?.knowledge_sources.id ?? null,
+        articleTitle: existing?.knowledge_sources.title ?? file.file_name,
+        reason: existing ? "duplicate_name_and_size" : "duplicate_in_import_batch",
+      });
+      continue;
+    }
+    acceptedImportFileIdByHash.set(identity, file.id);
+    engineSourcePlans.push({ file, hash });
+  }
+
 
   /*
    * Esta llamada usa OpenAI y antes se ejecutaba dentro de
@@ -799,6 +838,53 @@ export async function confirmKnowledgeImport({
           });
         }
 
+        // Persist original structured documents under a non-article source.
+        // knowledge_files currently requires a knowledge_source_id FK.
+        // This container preserves access control and Engine provenance without
+        // publishing an article or generating narrative content.
+        skippedDocuments.push(...skippedEngineSources);
+        for (const { file, hash } of engineSourcePlans) {
+          const source = await tx.knowledge_sources.create({
+            data: {
+              owner_user_id: knowledgeImport.owner_user_id,
+              title: file.file_name,
+              description: "Documento fuente para datos estructurados de Engine",
+              visibility: "private",
+              content: "",
+              status: "published",
+              knowledge_type: "engine_source",
+              library_id: knowledgeImport.library_id,
+              created_by_user_id: userId,
+              updated_by_user_id: userId,
+              company_id: knowledgeImport.company_id,
+            },
+            select: { id: true, title: true },
+          });
+          const stored = await tx.knowledge_files.create({
+            data: {
+              knowledge_source_id: source.id,
+              file_name: file.file_name,
+              file_type: file.mime_type,
+              file_size: file.file_size,
+              content_hash: hash,
+              storage_path: file.storage_path,
+              extracted_text: file.extracted_text,
+              status: "ready",
+              uploaded_by_user_id: userId,
+            },
+          });
+          createdDocuments.push({
+            importFileId: file.id,
+            knowledgeFileId: stored.id,
+            fileName: file.file_name,
+            fileSize: file.file_size,
+            articleId: null,
+            articleTitle: "",
+            extractedCharacters: file.extracted_text.length,
+            storagePath: file.storage_path,
+          });
+        }
+
         const completedAt = new Date();
 
         const executionLog:
@@ -909,6 +995,49 @@ export async function confirmKnowledgeImport({
         } as unknown as Prisma.InputJsonValue,
       },
     });
+
+    // Run Engine on the newly persisted structured sources. Failure must not
+    // roll back the original PDF or pretend that Knowledge confirmation failed.
+    const engineImports: NonNullable<KnowledgeImportExecutionLog["engineImports"]> = [];
+    for (const document of result.documents.filter(document => document.articleId === null)) {
+      try {
+        const imported = await importKnowledgeIntoEngine({
+          workspaceId, userId, knowledgeFileId: document.knowledgeFileId,
+        });
+        engineImports.push({
+          knowledgeFileId: document.knowledgeFileId,
+          fileName: document.fileName,
+          status: imported.status,
+          recordsCreated: imported.recordsCreated,
+          recordsReused: imported.recordsReused,
+          stages: imported.sweeps,
+        });
+      } catch (error) {
+        console.error("Engine source import failed", {
+          knowledgeFileId: document.knowledgeFileId, error,
+        });
+        engineImports.push({
+          knowledgeFileId: document.knowledgeFileId,
+          fileName: document.fileName,
+          status: "error",
+          recordsCreated: 0,
+          recordsReused: 0,
+          error: error instanceof Error ? error.message.slice(0, 400) : "Error desconocido",
+        });
+      }
+    }
+    if (engineImports.length) {
+      result.engineImports = engineImports;
+      try {
+        await prisma.knowledge_imports.update({
+          where: { id: importId },
+          data: { execution_log_json: result as unknown as Prisma.InputJsonValue },
+        });
+      } catch (error) {
+        // Confirmation has already committed; never reset a completed import.
+        console.error("Could not persist Engine import diagnostics", error);
+      }
+    }
 
     const changedArticleIds = new Set(
       result.articles
