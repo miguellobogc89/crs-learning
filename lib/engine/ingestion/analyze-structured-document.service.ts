@@ -49,6 +49,12 @@ export async function analyzeStructuredDocument(input: {
       task: "Return JSON only: discover relational schema and extract records in one JSON object response.",
     }),
     text: { format: { type: "json_object" } },
+  }, {
+    // This request discovers schema and extracts records in one model pass.
+    // The SDK default timeout is too short for some long documents.
+    // Avoid automatic retries that could exceed the route time budget.
+    timeout: 240_000,
+    maxRetries: 0,
   }) : null;
   if (response && (!response.output_text || response.output_text.length > 350000))
     throw new Error("Invalid or oversized structured analysis response.");
