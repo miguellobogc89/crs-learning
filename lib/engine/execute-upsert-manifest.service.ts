@@ -62,6 +62,14 @@ export async function executeEngineUpsertManifest(input: {
       }
     }
 
+    for (const link of manifest.links) {
+      if (link.source.kind !== "knowledge") continue;
+      const file = fileById.get(link.source.sourceId);
+      if (!file || !link.source.evidence ||
+          !file.extracted_text.includes(link.source.evidence)) {
+        throw new Error("Relation evidence not found in authorized Knowledge file.");
+      }
+    }
     const types = await tx.engine_object_types.findMany({
       where: { workspace_id: workspaceId, status: "active",
         key: { in: manifest.entities.map(entity => entity.key) } },
@@ -94,16 +102,13 @@ export async function executeEngineUpsertManifest(input: {
     const reused: string[] = [];
     const pending: { localId: string; reason: string }[] = [];
     const resolved = new Map<string, string>();
+    let relationsProposed = 0;
     for (const operation of plan.operations) {
       if (operation.action === "review") {
         pending.push({ localId: operation.localId, reason: operation.reason });
         continue;
       }
-      if (operation.action === "link") {
-        pending.push({ localId: operation.fromLocalId,
-          reason: "Relationship requires approved relation workflow: " + operation.relationKey });
-        continue;
-      }
+      if (operation.action === "link") continue;
       if (operation.action === "reuse") {
         resolved.set(operation.localId, operation.recordId);
         reused.push(operation.localId);
@@ -159,6 +164,63 @@ export async function executeEngineUpsertManifest(input: {
       if (prior) reused.push(operation.localId);
       else created.push(operation.localId);
     }
+    // Persist evidence-backed link proposals, never approved links.
+    // Relation definitions must already exist and match the endpoint types.
+    const relationKeys = [...new Set(manifest.links.map(link => link.relationKey))];
+    const definitions = relationKeys.length ? await tx.engine_relation_definitions.findMany({
+      where: { workspace_id: workspaceId, status: "active",
+        key: { in: relationKeys } },
+    }) : [];
+    const definitionByKey = new Map(definitions.map(item => [item.key, item]));
+    for (const operation of plan.operations) {
+      if (operation.action !== "link") continue;
+      const sourceLink = manifest.links.find(link =>
+        link.fromLocalId === operation.fromLocalId &&
+        link.toLocalId === operation.toLocalId &&
+        link.relationKey === operation.relationKey);
+      const definition = definitionByKey.get(operation.relationKey);
+      const fromId = resolved.get(operation.fromLocalId);
+      const toId = resolved.get(operation.toLocalId);
+      const document = sourceLink?.source.kind === "knowledge"
+        ? fileById.get(sourceLink.source.sourceId) : undefined;
+      if (!definition || !fromId || !toId || !document || !sourceLink?.source.evidence) {
+        pending.push({ localId: operation.fromLocalId,
+          reason: "Relation definition, resolved endpoint or verified document missing." });
+        continue;
+      }
+      const from = await tx.engine_records.findFirst({
+        where: { workspace_id: workspaceId, id: fromId },
+        select: { object_type_id: true, status: true },
+      });
+      const to = await tx.engine_records.findFirst({
+        where: { workspace_id: workspaceId, id: toId },
+        select: { object_type_id: true, status: true },
+      });
+      if (!from || !to || fromId === toId || from.status === "archived" ||
+          to.status === "archived" || from.object_type_id !== definition.from_object_type_id ||
+          to.object_type_id !== definition.to_object_type_id) {
+        pending.push({ localId: operation.fromLocalId,
+          reason: "Relation endpoint types or statuses do not match definition." });
+        continue;
+      }
+      const key = { workspace_id: workspaceId, relation_definition_id: definition.id,
+        from_record_id: fromId, to_record_id: toId, document_id: document.id,
+        evidence_text: sourceLink.source.evidence };
+      const existingProposal = await tx.engine_relation_proposals.findFirst({
+        where: key, select: { id: true, status: true },
+      });
+      if (existingProposal) {
+        if (existingProposal.status !== "pending_review") pending.push({
+          localId: operation.fromLocalId,
+          reason: "Previously reviewed relation cannot be reopened automatically.",
+        });
+        continue;
+      }
+      await tx.engine_relation_proposals.create({
+        data: { ...key, status: "pending_review", proposed_by_user_id: userId },
+      });
+      relationsProposed++;
+    }
     // Store traceable document evidence for both new and reused records.
     // The record and its provenance commit or roll back together.
     for (const observation of manifest.observations) {
@@ -188,7 +250,7 @@ export async function executeEngineUpsertManifest(input: {
       });
     }
     return { status: pending.length ? "completed_with_issues" : "completed",
-      created, reused, pending, resolvedCount: resolved.size,
+      created, reused, pending, relationsProposed, resolvedCount: resolved.size,
       writesPerformed: created.length > 0 };
   });
 }
