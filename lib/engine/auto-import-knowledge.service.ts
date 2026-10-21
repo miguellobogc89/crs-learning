@@ -4,6 +4,7 @@ import { analyzeStructuredDocument } from "@/lib/engine/ingestion/analyze-struct
 import { executeEngineUpsertManifest } from "@/lib/engine/execute-upsert-manifest.service";
 import type { ImportManifest } from "@/lib/engine/upsert-manifest";
 import { auditDiscoveredModel } from "@/lib/engine/schema-discovery/model-audit";
+import { planImportPreflight } from "@/lib/engine/ingestion/import-preflight";
 
 type Row = { entity: string; values: Record<string, unknown>; evidence: string; sourceIndex: number };
 const normalizedSource = (value: string) => value.normalize("NFKC").toLocaleLowerCase("es").replace(/\s+/g, " ");
@@ -47,24 +48,29 @@ export async function importKnowledgeIntoEngine(input: {
     workspaceId, documentId: knowledgeFileId, text: file.extracted_text,
   });
   const discovery = analysis.schema;
-  if (!discovery.valid || !discovery.proposal) {
-    return { status: "review", typesCreated: 0, fieldsCreated: 0,
-      recordsCreated: 0, recordsReused: 0, recordsPending: 0,
-      issues: ["No se ha podido validar el esquema descubierto.",
-        ...discovery.issues.map(issue => issue.path + ": " + issue.code)],
-      writesPerformed: false, timings: { analysisMs: analysis.modelMs,
-        totalMs: Date.now() - startedAt } };
-  }
-  const proposal = discovery.proposal;
-  const audit = auditDiscoveredModel(proposal, analysis.rows, analysis.links);
-  if (!audit.valid) {
-    return { status: "review", typesCreated: 0, fieldsCreated: 0,
+  const audit = discovery.valid && discovery.proposal
+    ? auditDiscoveredModel(discovery.proposal, analysis.rows, analysis.links)
+    : null;
+  const preflight = planImportPreflight({
+    documentId: knowledgeFileId,
+    truncated: analysis.truncated,
+    schemaValid: discovery.valid && !!discovery.proposal,
+    schemaIssues: discovery.issues.map(issue => issue.path + ": " + issue.code),
+    auditErrors: audit?.errors,
+  });
+  if (!preflight.safeToWrite) {
+    return {
+      status: "review", typesCreated: 0, fieldsCreated: 0,
       recordsCreated: 0, recordsReused: 0, recordsPending: analysis.rows.length,
-      issues: audit.errors, writesPerformed: false,
-      timings: { analysisMs: analysis.modelMs, totalMs: Date.now() - startedAt } };
+      issues: preflight.conflicts.map(conflict => conflict.reason),
+      conflicts: preflight.conflicts,
+      writesPerformed: false,
+      timings: { analysisMs: analysis.modelMs, totalMs: Date.now() - startedAt },
+    };
   }
+  const proposal = discovery.proposal!;
   const sourceText = file.extracted_text.slice(0, 16000);
-  const issues: string[] = [...analysis.issues, ...audit.warnings];
+  const issues: string[] = [...analysis.issues, ...(audit?.warnings ?? [])];
   if (analysis.truncated) issues.push("El análisis está limitado a los primeros 16000 caracteres.");
   const extracted: Row[] = [];
   const parsed = { rows: analysis.rows };
