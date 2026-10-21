@@ -103,6 +103,7 @@ export async function importKnowledgeIntoEngine(input: {
   if (analysis.truncated) issues.push("El análisis está limitado a los primeros 16000 caracteres.");
   const extracted: Row[] = [];
   const parsed = { rows: analysis.rows };
+  const extractionDiagnostics = { acceptedRows: analysis.rows.length, acceptedLinks: analysis.links.length };
   const entityByKey = new Map(proposal.entities.map(entity => [entity.key, entity]));
   for (const [index, raw] of parsed.rows.entries()) {
     if (!isObject(raw) || typeof raw.entity !== "string" ||
@@ -261,20 +262,26 @@ export async function importKnowledgeIntoEngine(input: {
   const schemaMs = Date.now() - reconciliationStartedAt;
   const executionStartedAt = Date.now();
   let recordsCreated = 0, recordsReused = 0, relationsProposed = 0;
+  let executionPending = 0;
   if (manifest.observations.length) {
     const executed = await executeEngineUpsertManifest({ workspaceId, userId, manifest });
     recordsCreated = executed.created.length;
     recordsReused = executed.reused.length;
     relationsProposed = executed.relationsProposed;
+    executionPending = executed.pending.length;
     issues.push(...executed.pending.map(item => item.localId + ": " + item.reason));
   }
 
   if (proposal.relations.length && !manifest.links.length)
     issues.push("Relaciones de esquema detectadas, sin vínculos concretos verificables.");
   return {
-    status: issues.length ? "completed_with_issues" : "completed",
+    status: recordsCreated + recordsReused === 0 ? "no_records_imported" :
+      issues.length ? "completed_with_issues" : "completed",
     typesCreated, fieldsCreated, recordsCreated, recordsReused,
-    recordsPending: parsed.rows.length - recordsCreated - recordsReused,
+    recordsPending: Math.max(0, analysis.rows.length - recordsCreated - recordsReused),
+    diagnostics: { ...extractionDiagnostics, validatedRows: extracted.length,
+      manifestRows: manifest.observations.length, manifestLinks: manifest.links.length,
+      executionPending, schemaTypesUsable: usable.size },
     entitiesDiscovered: proposal.entities.length,
     relationsDiscovered: proposal.relations.length,
     relationsProposed, relationDefinitionsCreated,

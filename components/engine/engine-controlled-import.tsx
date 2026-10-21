@@ -8,6 +8,8 @@ type ImportOutcome = {
   recordsCreated: number; recordsReused: number; recordsPending: number;
   relationDefinitionsCreated?: number; relationsProposed?: number;
   issues?: string[]; writesPerformed: boolean;
+  diagnostics?: { acceptedRows: number; acceptedLinks: number; validatedRows: number;
+    manifestRows: number; manifestLinks: number; executionPending: number; schemaTypesUsable: number };
 };
 export function EngineControlledImport({ files }: { files: FileOption[] }) {
   const [fileId, setFileId] = useState("");
@@ -59,6 +61,10 @@ export function EngineControlledImport({ files }: { files: FileOption[] }) {
         <p>Registros pendientes: {outcome.result.recordsPending}</p>
         <p>Vínculos propuestos: {outcome.result.relationsProposed ?? 0}</p>
       </div>
+      {outcome.result.diagnostics && <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
+        Diagnóstico: {outcome.result.diagnostics.acceptedRows} filas extraídas · {outcome.result.diagnostics.validatedRows} validadas · {outcome.result.diagnostics.manifestRows} enviadas al reconciliador · {outcome.result.diagnostics.schemaTypesUsable} tipos utilizables · {outcome.result.diagnostics.acceptedLinks} enlaces extraídos · {outcome.result.diagnostics.manifestLinks} enlaces enviados · {outcome.result.diagnostics.executionPending} operaciones pendientes.
+      </div>}
+      {outcome.result.status === "no_records_imported" && <p className="font-medium text-amber-800">No se importó ningún registro. Revisa las incidencias y el diagnóstico antes de repetir.</p>}
       <p className="text-xs text-slate-500">{outcome.result.writesPerformed ? "Se han realizado escrituras." : "Sin escrituras de datos."} Las relaciones siguen pendientes de revisión.</p>
       {!!outcome.result.issues?.length && <details><summary>Incidencias ({outcome.result.issues.length})</summary>
         <pre className="max-h-72 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(outcome.result.issues, null, 2)}</pre>

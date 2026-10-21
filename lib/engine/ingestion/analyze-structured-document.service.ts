@@ -70,7 +70,10 @@ export async function analyzeStructuredDocument(input: {
         typeof row.values !== "object" || Array.isArray(row.values) ||
         typeof row.evidence !== "string" || row.evidence.length < 3 ||
         !source.includes(row.evidence)) {
-      issues.push("Row " + index + ": invalid evidence or values."); continue;
+      issues.push("Row " + index + ": " +
+        (typeof row.evidence !== "string" || row.evidence.length < 3 ? "missing evidence quote." :
+          !source.includes(row.evidence) ? "evidence quote is not an exact source substring." :
+          "invalid entity or values object.")); continue;
     }
     const entity = entityByKey.get(row.entity);
     if (!entity || !Object.keys(row.values).length ||
@@ -96,7 +99,10 @@ export async function analyzeStructuredDocument(input: {
       if (!from || !to || from.entity !== relation.fromEntity ||
           to.entity !== relation.toEntity || typeof link.evidence !== "string" ||
           !link.evidence.trim() || !source.includes(link.evidence)) {
-        issues.push("Link " + index + ": unsupported endpoints or evidence."); continue;
+        issues.push("Link " + index + ": " +
+          (!from || !to ? "row endpoint does not exist." :
+            from.entity !== relation.fromEntity || to.entity !== relation.toEntity ? "endpoint entity does not match relation definition." :
+            "evidence quote is absent or not an exact source substring.")); continue;
       }
       links.push({ fromRow: link.fromRow as number, toRow: link.toRow as number,
         relationKey: relation.key, evidence: link.evidence });
