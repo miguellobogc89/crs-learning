@@ -582,12 +582,12 @@ export function KnowledgeImportModal({
                         : "Consultar las estructuras existentes en Engine",
                     },
                     {
-                      title: "Comparar estructuras e identificar las que faltan",
+                      title: "Comparar con estructuras existentes",
                       state: semantic?.status === "error" ? "error" : semantic ? "done" :
                         recognized?.status === "completed" ? "active" : "waiting",
                       detail: semantic?.status === "error" ? semantic.error ?? "Error de comparación" :
-                        semantic ? `${semantic.matches.length} estructuras reutilizables · ${semantic.missing.length} conceptos sin estructura propuesta` :
-                        "Comparando conceptos del documento con las estructuras existentes",
+                        semantic ? `${semantic.matches.length} posibles equivalencias · sin proponer estructuras nuevas` :
+                        "Buscando equivalencias con estructuras existentes (operación breve)",
                     },
                     {
                       title: "Identificar relaciones",
@@ -676,7 +676,7 @@ export function KnowledgeImportModal({
                           ) : null}
                           {semantic?.status === "completed" ? (
                             <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-3">
-                              <p className="text-xs font-semibold text-slate-800">Comparación semántica · propuesta sin guardar</p>
+                              <p className="text-xs font-semibold text-slate-800">Comparación semántica · equivalencias existentes</p>
                               <p className="text-[11px] text-slate-500">La IA propone equivalencias, no las confirma. Ninguna estructura ha sido creada o modificada.</p>
                               <div>
                                 <p className="text-xs font-semibold text-emerald-700">Estructuras que podrían reutilizarse ({semantic.matches.length})</p>
@@ -687,7 +687,7 @@ export function KnowledgeImportModal({
                                   </p>
                                 )) : <p className="mt-1 text-[11px] text-slate-500">Sin equivalencias verificables.</p>}
                               </div>
-                              <div>
+                              <div className="hidden">
                                 <p className="text-xs font-semibold text-slate-800">Posibles estructuras nuevas ({semantic.missing.length})</p>
                                 {semantic.missing.length ? semantic.missing.map((item, index) => (
                                   <p key={index} className="mt-2 text-[11px] text-slate-700">

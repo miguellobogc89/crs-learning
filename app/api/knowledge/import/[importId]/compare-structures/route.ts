@@ -50,24 +50,36 @@ export async function POST(request: Request, context: Context) {
   }));
   const results = [];
   for (const file of files) {
-    const sample = buildSchemaOverview(file.extracted_text, 2600);
+    // Micro-stage 3A: match existing schemas ONLY. No missing-schema design.
+    // Use a small distributed document sample and compact schema signatures.
+    const sample = buildSchemaOverview(file.extracted_text, 1100);
+    const compactExisting = existing.map(type => ({
+      key: type.key, name: type.name,
+      fields: type.fields.slice(0, 6).map(field => field.key),
+    }));
+    const started = Date.now();
     try {
       const response = await getOpenAIClient().responses.create({
         model: getKnowledgeImportModel(),
         instructions: [
-          "You are comparing an untrusted business document with existing database schemas.",
-          "Do NOT create schemas, rows, or relations. Return JSON only.",
-          "Identify business entity CONCEPTS, not section headings or individual products.",
-          "First determine which concepts match an existing schema semantically.",
-          "Then identify genuinely missing concepts. Never propose duplicates of an existing schema.",
-          "Use only existing keys from input. Provide an EXACT short evidence quote from document for each decision.",
-          "If evidence is insufficient, put the concept in uncertain, not missing.",
-          "Return {matches:[{concept,existingKey,reason,evidence}],missing:[{concept,suggestedName,fields,reason,evidence}],uncertain:[string]}.",
-          "Maximum 8 matches, 6 missing, 8 uncertain; concise reasons and fields.",
+          "Return a JSON object only.",
+          "Micro-task: match business entity types in the document to existing database types.",
+          "Do not design new tables, fields, relations or records.",
+          "A flavor or product name is a record, NOT an entity type.",
+          "Use an existingKey from the supplied list, and an exact short evidence quote from the document.",
+          "If unsure, omit the match.",
+          "Return JSON {matches:[{concept,existingKey,reason,evidence}],missing:[],uncertain:[]}.",
+          "Maximum 4 matches. Reasons under 12 words. No additional explanation.",
         ].join("\n"),
-        input: JSON.stringify({ format: "json", task: "Return a valid json object with matches, missing and uncertain arrays.", document: sample, existing }),
+        input: JSON.stringify({
+          format: "json",
+          task: "Return a compact JSON object matching only existing schemas.",
+          document: sample,
+          existing: compactExisting,
+        }),
         text: { format: { type: "json_object" } },
-      }, { timeout: 25000, maxRetries: 0 });
+        max_output_tokens: 450,
+      }, { timeout: 18000, maxRetries: 0 });
       const parsed: unknown = JSON.parse(response.output_text ?? "{}");
       if (!object(parsed)) throw new Error("Respuesta semántica no válida");
       const keys = new Set(types.map(type => type.key));
@@ -84,13 +96,13 @@ export async function POST(request: Request, context: Context) {
           reason: string(item.reason), evidence: string(item.evidence),
         })).filter(item => item.concept && item.evidence && sample.includes(item.evidence) &&
           !matches.some(match => match.concept.toLowerCase() === item.concept.toLowerCase()));
-      results.push({ id: file.id, status: "completed", matches, missing,
+      results.push({ id: file.id, status: "completed", durationMs: Date.now() - started, matches, missing,
         uncertain: (Array.isArray(parsed.uncertain) ? parsed.uncertain : []).map(value => string(value)).filter(Boolean).slice(0, 8),
         error: null });
     } catch (error) {
-      results.push({ id: file.id, status: "error", matches: [] as Match[], missing: [] as Missing[],
+      results.push({ id: file.id, status: "error", durationMs: Date.now() - started, matches: [] as Match[], missing: [] as Missing[],
         uncertain: [] as string[], error: error instanceof Error ? error.message : String(error) });
     }
   }
-  return Response.json({ files: results, writesPerformed: false });
+  return Response.json({ files: results, writesPerformed: false, stage: "match_existing_only", missingStructureAnalysisExecuted: false });
 }
