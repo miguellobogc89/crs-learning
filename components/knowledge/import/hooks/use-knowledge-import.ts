@@ -287,11 +287,6 @@ export function useKnowledgeImport({
             nextFiles,
           );
 
-        // One-step import: extraction -> proposal -> persistence, no user confirmation.
-        if (analysisResult.textExtraction.successfulFiles > 0) {
-          await continueSharedImport(uploadResult.importId);
-        }
-
         if (
           duplicateFiles.length > 0
         ) {
@@ -657,6 +652,11 @@ export function useKnowledgeImport({
             isAnalyzing: false,
           },
         );
+
+        // One-step import: extraction -> proposal -> persistence, no user confirmation.
+        if (analysisResult.textExtraction.successfulFiles > 0) {
+          await continueSharedImport(uploadResult.importId);
+        }
 
         if (
           duplicateFiles.length > 0
