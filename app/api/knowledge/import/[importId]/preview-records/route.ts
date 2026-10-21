@@ -148,26 +148,12 @@ export async function POST(request: Request, context: Context) {
       payload = { ...previous! };
       if (stage === 6) {
         if (!Array.isArray(payload.rows) || !Array.isArray(payload.relations)) throw new Error("Registros o relaciones inválidos.");
-        const response = await getOpenAIClient().responses.create({
-          model: getKnowledgeImportModel(),
-          instructions: [
-            "Return a JSON object with only a links array.",
-            "Resolve concrete record-to-record links using the rows and relation definitions provided.",
-            "Each link: fromRow, toRow (zero-based indices), relationKey, evidence.",
-            "Evidence MUST be an exact contiguous quote from the original document proving the pair.",
-            "Never invent pairs or links. Omit unproven links. At most 300 links.",
-          ].join("\n"),
-          input: JSON.stringify({ text: file.extracted_text, rows: payload.rows, relations: payload.relations,
-            previousRelationships: priorContext?.relationships ?? null, task: "Resolve record links only. JSON." }),
-          text: { format: { type: "json_object" } },
-        }, { timeout: 90000, maxRetries: 0 });
-        if (response.status !== "completed" || !response.output_text || response.output_text.length > 150000)
-          throw new Error("Resolución de referencias incompleta.");
-        const linked: unknown = JSON.parse(response.output_text);
-        if (!isObject(linked) || !Array.isArray(linked.links)) throw new Error("Respuesta de vínculos inválida.");
+        // First resolve exact identifiers/names using the tested production reconciler.
+        // Do not make an unconditional AI request: uncertain relations stay pending
+        // for review rather than delaying or inventing links.
         payload.links = reconcilePreviewLinks(file.extracted_text,
           { entities: payload.entities as never, relations: payload.relations as never, warnings: payload.warnings as never },
-          payload.rows, linked.links);
+          payload.rows, []);
         results.push({ id: file.id, status: "completed", payload, count: (payload.links as unknown[]).length,
           durationMs: Date.now() - started, error: null });
         continue;
