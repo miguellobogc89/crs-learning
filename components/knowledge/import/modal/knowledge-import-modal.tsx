@@ -566,6 +566,7 @@ export function KnowledgeImportModal({
                   const semantic = knowledgeImport.semantic[file.name];
                   const relations = knowledgeImport.relations[file.name];
                   const preview = knowledgeImport.recordPreview[file.name];
+                  const simulation = knowledgeImport.simulationStages[file.name] ?? {};
                   const extracting = knowledgeImport.processingPhase === "extracting";
                   const stages: Array<{ title: string; state: "done" | "active" | "waiting" | "error"; detail: string }> = [
                     {
@@ -602,17 +603,28 @@ export function KnowledgeImportModal({
                         semantic?.status === "completed" ? "Analizando relaciones entre entidades" :
                         "Pendiente: proponer relaciones sin crearlas",
                     },
-                    {
-                      title: "Extraer registros y resolver referencias · simulación",
-                      state: preview?.status === "error" || (preview?.status === "completed" &&
-                        (preview.rows.some(row => row.disposition === "pending") || preview.unresolvedLinks.length > 0 || preview.issues.length > 0)) ? "error" :
-                        preview?.status === "completed" ? "done" :
-                        semantic?.status === "completed" ? "active" : "waiting",
-                      detail: preview?.status === "error" ? preview.error ?? "Error de extracción" :
-                        preview?.status === "completed"
-                          ? `${preview.rows.length} candidatos · ${preview.links?.length ?? 0} vínculos · ${preview.unresolvedLinks?.length ?? 0} referencias pendientes · ${preview.issues.length} incidencias · ${preview.analyzedChars}/${preview.sourceChars} caracteres revisados`
-                          : "Preparar candidatos con evidencia, sin INSERT ni UPSERT",
-                    },
+                    ...([
+                      ["Extraer registros", 5, "Extraer candidatos a partir de las estructuras descubiertas"],
+                      ["Resolver referencias", 6, "Vincular registros mediante relaciones identificadas"],
+                      ["Validar resultados", 7, "Verificar esquema, registros y evidencia"],
+                      ["Generar simulación", 8, "Preparar manifiesto sin ejecutar INSERT ni UPSERT"],
+                    ] as const).map(([title, number, pending]) => {
+                      const result = simulation[number];
+                      const priorDone = number === 5 ? relations?.status === "completed" :
+                        simulation[number - 1]?.status === "completed";
+                      return {
+                        title,
+                        state: result?.status === "error" ? "error" as const :
+                          result?.status === "completed" ? "done" as const :
+                          priorDone ? "active" as const : "waiting" as const,
+                        detail: result?.status === "error" ? result.error ?? "Error de fase" :
+                          result?.status === "completed" ?
+                            number === 8 && preview?.status === "completed"
+                              ? `${preview.rows.length} candidatos · ${preview.links.length} vínculos · ${preview.unresolvedLinks.length} referencias pendientes · ${preview.issues.length} incidencias`
+                              : `${result.count} elementos · ${(result.durationMs / 1000).toFixed(1)} s`
+                            : pending,
+                      };
+                    }),
                   ];
                   const errorMessages = [recognized?.error, semantic?.error, relations?.error, preview?.error, knowledgeImport.error].filter(
                     (message): message is string => Boolean(message),
