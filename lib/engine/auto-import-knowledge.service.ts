@@ -5,6 +5,7 @@ import { executeEngineUpsertManifest } from "@/lib/engine/execute-upsert-manifes
 import type { ImportManifest } from "@/lib/engine/upsert-manifest";
 import { selectIdentityFields } from "@/lib/engine/identity-fields";
 import { auditDiscoveredModel } from "@/lib/engine/schema-discovery/model-audit";
+import { stabilizeDiscoveredSchema } from "@/lib/engine/schema-discovery/stabilize-schema";
 import { planImportPreflight } from "@/lib/engine/ingestion/import-preflight";
 import { createNotification } from "@/lib/services/notification.service";
 
@@ -51,7 +52,22 @@ export async function importKnowledgeIntoEngine(input: {
     workspaceId, documentId: knowledgeFileId, text: file.extracted_text,
     replayPayload: input.replayPayload,
   });
-  const discovery = analysis.schema;
+  // Align known equivalent keys with the active workspace schema before
+  // auditing or writing. Never rename when the match is ambiguous.
+  const activeTypes = await prisma.engine_object_types.findMany({
+    where: { workspace_id: workspaceId, status: "active" },
+    select: { key: true },
+  });
+  const stabilized = analysis.schema.valid && analysis.schema.proposal
+    ? stabilizeDiscoveredSchema(analysis.schema.proposal, activeTypes.map(type => type.key))
+    : null;
+  const discovery = stabilized
+    ? { ...analysis.schema, proposal: stabilized.proposal }
+    : analysis.schema;
+  if (stabilized?.renamed.size) {
+    for (const row of analysis.rows)
+      row.entity = stabilized.renamed.get(row.entity) ?? row.entity;
+  }
   const audit = discovery.valid && discovery.proposal
     ? auditDiscoveredModel(discovery.proposal, analysis.rows, analysis.links)
     : null;
@@ -103,6 +119,8 @@ export async function importKnowledgeIntoEngine(input: {
   const proposal = discovery.proposal!;
   const sourceText = file.extracted_text.slice(0, 16000);
   const issues: string[] = [...analysis.issues, ...(audit?.warnings ?? [])];
+  for (const [from, to] of stabilized?.renamed ?? [])
+    issues.push("Esquema reutilizado: " + from + " → " + to + ".");
   if (analysis.truncated) issues.push("El análisis está limitado a los primeros 16000 caracteres.");
   const extracted: Row[] = [];
   const parsed = { rows: analysis.rows };
