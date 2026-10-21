@@ -46,8 +46,8 @@ const STEPS: StepConfig[] = [
   },
   {
     id: "proposal",
-    label: "Propuesta",
-    description: "Organización",
+    label: "Incorporación",
+    description: "Guardado y Engine",
     icon: FolderTree,
   },
   {

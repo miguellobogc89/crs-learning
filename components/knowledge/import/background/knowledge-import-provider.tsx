@@ -452,13 +452,29 @@ export function KnowledgeImportProvider({
 
           updateImport(importId, {
             step: "proposal",
-            status: "proposal_ready",
-            proposal:
-              proposalResult.proposal,
-            proposalProgress: null,
+            phase: "generating_proposal",
+            status: "confirming",
+            proposal: proposalResult.proposal,
+            proposalProgress: {
+              step: "saving_proposal",
+              progressPercentage: 100,
+              message: "Guardando documentos y procesando datos",
+            },
             isAnalyzing: false,
+            isConfirming: true,
             error: null,
           });
+          const result = await confirmKnowledgeImport(importId);
+          setTasks(currentTasks => currentTasks.map(task =>
+            task.importId === importId ? {
+              ...task, step: "completed", status: "completed",
+              completionResult: result, isAnalyzing: false,
+              isConfirming: false, proposalProgress: null,
+              completedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(), error: null,
+            } : task,
+          ));
+          router.refresh();
         } catch (caughtError) {
           updateImport(importId, {
             error:

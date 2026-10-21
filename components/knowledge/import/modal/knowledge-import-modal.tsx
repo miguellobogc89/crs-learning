@@ -17,13 +17,9 @@ import {
 import { useKnowledgeImport } from "../hooks/use-knowledge-import";
 import { KnowledgeImportModalHeader } from "./knowledge-import-modal-header";
 import { KnowledgeImportModalProgress } from "./knowledge-import-modal-progress";
-import { KnowledgeImportModalFooter } from "./knowledge-import-modal-footer";
 import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
 import { KnowledgeImportProcessingStep } from "./knowledge-import-processing-step";
-import { KnowledgeImportProposalStep } from "./knowledge-import-proposal-step";
-import { KnowledgeImportCompletedStep } from "./knowledge-import-completed-step";
 import { KnowledgeImportCloseGuard } from "./knowledge-import-close-guard";
-import { KnowledgeImportLoadingOverlay } from "./knowledge-import-loading-overlay";
 
 import type {
   KnowledgeImportModalProps,
@@ -512,23 +508,6 @@ export function KnowledgeImportModal({
               />
             ) : null}
 
-            {Object.keys(knowledgeImport.tableDetection).length > 0 ? (
-              <div className="mb-3 shrink-0 rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3" role="status">
-                <p className="text-xs font-semibold text-blue-950">Detección de tablas · después de comprobar duplicados</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {knowledgeImport.fileProgress.filter(file => file.id in knowledgeImport.tableDetection).map(file => (
-                    <span key={file.id} className="inline-flex max-w-full items-center gap-2 rounded-lg border border-blue-100 bg-white px-3 py-1.5 text-xs">
-                      <span className="max-w-[240px] truncate text-slate-700">{file.name}</span>
-                      <strong className={knowledgeImport.tableDetection[file.id] ? "text-emerald-700" : "text-slate-500"}>
-                        {knowledgeImport.tableDetection[file.id] ? "Contiene tablas" : "Sin tablas detectadas"}
-                      </strong>
-                    </span>
-                  ))}
-                </div>
-                <p className="mt-2 text-[11px] text-blue-700">Detección inicial sobre contenido extraído. Tras incorporar el documento, Engine creará los tipos y registros verificables.</p>
-              </div>
-            ) : null}
-
             {knowledgeImport.duplicateNotice ? (
               <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
                 {knowledgeImport.duplicateNotice}
@@ -565,148 +544,70 @@ export function KnowledgeImportModal({
               />
             ) : null}
 
-            {!isWaitingToStart &&
-            knowledgeImport.step ===
-              "analyzing" ? (
-              <KnowledgeImportProcessingStep
-                phase={
-                  knowledgeImport.processingPhase
-                }
-                files={
-                  knowledgeImport.fileProgress
-                }
-                summary={{
-                  ...knowledgeImport.progressSummary,
-                  duplicateFiles:
-                    duplicateFileCount,
-                }}
-                proposalProgress={
-                  knowledgeImport.proposalProgress
-                }
-              />
-            ) : null}
-
-            {knowledgeImport.step ===
-              "proposal" &&
-            knowledgeImport.proposal ? (
-              knowledgeImport.isConfirming ? (
-                <KnowledgeImportLoadingOverlay />
-              ) : (
-                <KnowledgeImportProposalStep
-                  proposal={
-                    knowledgeImport.proposal
-                  }
-                  isConfirming={
-                    knowledgeImport.isConfirming
-                  }
-                  error={
-                    knowledgeImport.error
-                  }
-                  onBack={
-                    knowledgeImport.goBackToUpload
-                  }
-                  onConfirm={
-                    knowledgeImport.confirmProposal
-                  }
-                />
-              )
-            ) : null}
-
-            {knowledgeImport.step ===
-              "completed" &&
-            knowledgeImport.completionResult ? (
-              <KnowledgeImportCompletedStep
-                tableFileNames={knowledgeImport.fileProgress.filter(file => knowledgeImport.tableDetection[file.id] === true).map(file => file.name)}
-                result={
-                  knowledgeImport.completionResult
-                }
-                onClose={() => {
-                  knowledgeImport.finishActiveImport();
-
-                  startedSelectionKeyRef.current =
-                    null;
-
-                  onOpenChange(false);
-                }}
-              />
+            {!isWaitingToStart && knowledgeImport.step !== "upload" ? (
+              <section className="space-y-3" aria-live="polite">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-semibold text-slate-900">
+                    {knowledgeImport.step === "completed" ? "Resultado de la importación" : "Procesando documentos"}
+                  </h3>
+                  <span className="text-xs text-slate-500">
+                    {knowledgeImport.step === "completed" ? "Finalizado" :
+                      knowledgeImport.isConfirming ? "Guardando e importando en Engine" :
+                      knowledgeImport.proposalProgress?.message ??
+                      (knowledgeImport.processingPhase === "extracting" ? "Extrayendo texto" : "Analizando")}
+                  </span>
+                </div>
+                {(knowledgeImport.fileProgress.length ? knowledgeImport.fileProgress :
+                  knowledgeImport.files.map((file, index) => ({ id: String(index), name: file.name, status: "pending" }))).map(file => {
+                  const engine = knowledgeImport.completionResult?.log.engineImports?.find(item =>
+                    item.fileName === file.name);
+                  const stored = knowledgeImport.completionResult?.log.documents.find(item => item.fileName === file.name);
+                  return (
+                    <div key={file.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">{file.name}</span>
+                        {knowledgeImport.tableDetection[file.id] !== undefined ? (
+                          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700">
+                            {knowledgeImport.tableDetection[file.id] ? "Tablas detectadas" : "Sin tablas"}
+                          </span>
+                        ) : null}
+                        <span className="text-xs text-slate-500">
+                          {engine?.status === "error" ? "Error en Engine" :
+                           engine ? "Engine procesado" :
+                           stored ? "Documento guardado" :
+                           knowledgeImport.step === "completed" ? "Finalizado" : "En proceso"}
+                        </span>
+                      </div>
+                      <details className="mt-3 border-t border-slate-100 pt-2">
+                        <summary className="cursor-pointer text-xs font-medium text-slate-700">Ver proceso y resultados</summary>
+                        <ol className="mt-3 space-y-2 text-xs text-slate-600">
+                          <li>1. Documento recibido {knowledgeImport.step !== "upload" ? "✓" : "·"}</li>
+                          <li>2. Extracción y análisis {knowledgeImport.processingPhase === "uploading" ? "·" : "✓"}</li>
+                          <li>3. Clasificación y destino {knowledgeImport.proposal ? "✓" : knowledgeImport.proposalProgress?.message ?? "Pendiente"}</li>
+                          <li>4. Persistencia y Engine {engine ? engine.status : stored ? "Documento guardado" : knowledgeImport.isConfirming ? "En proceso" : "Pendiente"}</li>
+                          {engine?.stages?.map((stage, index) => (
+                            <li key={index} className="ml-4">
+                              {stage.stage} · {(stage.durationMs / 1000).toFixed(1)} s · {Object.entries(stage.details).map(([key, value]) => `${key}: ${value}`).join(" · ")}
+                            </li>
+                          ))}
+                          {engine?.error ? <li className="text-amber-700">{engine.error}</li> : null}
+                        </ol>
+                      </details>
+                    </div>
+                  );
+                })}
+                {knowledgeImport.error ? <p role="alert" className="text-sm text-red-700">{knowledgeImport.error}</p> : null}
+              </section>
             ) : null}
           </div>
 
-          {!isWaitingToStart ? (
-            <KnowledgeImportModalFooter
-              allFilesDuplicate={knowledgeImport.allFilesDuplicate}
-              step={
-                knowledgeImport.step
-              }
-              fileCount={
-                knowledgeImport
-                  .progressSummary
-                  .totalFiles ||
-                knowledgeImport.files.length
-              }
-              validFileCount={
-                knowledgeImport
-                  .progressSummary
-                  .completedFiles
-              }
-              duplicateFileCount={
-                duplicateFileCount
-              }
-              failedFileCount={
-                knowledgeImport
-                  .progressSummary
-                  .failedFiles
-              }
-              isAnalyzing={
-                knowledgeImport.isAnalyzing
-              }
-              isConfirming={
-                knowledgeImport.isConfirming
-              }
-              canContinue={
-                knowledgeImport.canContinue
-              }
-              canContinueInBackground={
-                knowledgeImport.canContinueInBackground
-              }
-              onCancel={
-                requestClose
-              }
-              onBack={
-                knowledgeImport.goBackToUpload
-              }
-              onAnalyze={
-                knowledgeImport.analyzeDocuments
-              }
-              onContinueAnalysis={
-                knowledgeImport.continueWithValidDocuments
-              }
-              onContinueInBackground={() => {
-                const started =
-                  knowledgeImport.continueInBackground();
-
-                if (!started) {
-                  return;
-                }
-
-                startedSelectionKeyRef.current =
-                  null;
-
-                onOpenChange(false);
-              }}
-              onConfirm={
-                knowledgeImport.confirmProposal
-              }
-              onClose={() => {
-                knowledgeImport.finishActiveImport();
-
-                startedSelectionKeyRef.current =
-                  null;
-
-                onOpenChange(false);
-              }}
-            />
-          ) : null}
+          <div className="flex shrink-0 justify-end border-t border-slate-100 px-6 py-4">
+            {knowledgeImport.step === "completed" || knowledgeImport.allFilesDuplicate ? (
+              <button type="button" onClick={requestClose} className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white">Finalizar</button>
+            ) : (
+              <button type="button" onClick={requestClose} className="rounded-lg border border-slate-200 px-5 py-2 text-sm text-slate-700">Cerrar</button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
