@@ -22,9 +22,19 @@ export async function POST(request: NextRequest) {
   catch { return NextResponse.json({ error: "Solicitud JSON inválida." }, { status: 400 }); }
   if (!payload || typeof payload !== "object" || Array.isArray(payload))
     return NextResponse.json({ error: "Solicitud inválida." }, { status: 400 });
-  const { knowledgeFileId } = payload as Record<string, unknown>;
+  const { knowledgeFileId, analysisSnapshot } = payload as Record<string, unknown>;
   if (typeof knowledgeFileId !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(knowledgeFileId))
     return NextResponse.json({ error: "Selecciona un documento válido." }, { status: 400 });
+  let replayPayload: unknown;
+  if (analysisSnapshot !== undefined) {
+    if (!analysisSnapshot || typeof analysisSnapshot !== "object" || Array.isArray(analysisSnapshot))
+      return NextResponse.json({ error: "Snapshot inválido." }, { status: 400 });
+    const snapshot = analysisSnapshot as Record<string, unknown>;
+    if (snapshot.version !== 1 || snapshot.knowledgeFileId !== knowledgeFileId ||
+        !snapshot.payload || JSON.stringify(snapshot.payload).length > 350000)
+      return NextResponse.json({ error: "El snapshot no corresponde al documento seleccionado." }, { status: 400 });
+    replayPayload = snapshot.payload;
+  }
   const file = await prisma.knowledge_files.findFirst({
     where: { id: knowledgeFileId, status: { in: ["ready", "processed"] },
       knowledge_sources: knowledgeSourceReadWhere(session.user.id, activeWorkspace.id) },
@@ -34,6 +44,7 @@ export async function POST(request: NextRequest) {
   try {
     const result = await importKnowledgeIntoEngine({
       workspaceId: activeWorkspace.id, userId: session.user.id, knowledgeFileId: file.id,
+      replayPayload,
     });
     return NextResponse.json({ fileName: file.file_name, result },
       { headers: { "Cache-Control": "no-store" } });

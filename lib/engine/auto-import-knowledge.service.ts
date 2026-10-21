@@ -25,6 +25,7 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
  */
 export async function importKnowledgeIntoEngine(input: {
   workspaceId: string; userId: string; knowledgeFileId: string;
+  replayPayload?: unknown;
 }) {
   const { workspaceId, userId, knowledgeFileId } = input;
   const file = await prisma.knowledge_files.findFirst({
@@ -47,6 +48,7 @@ export async function importKnowledgeIntoEngine(input: {
   const startedAt = Date.now();
   const analysis = await analyzeStructuredDocument({
     workspaceId, documentId: knowledgeFileId, text: file.extracted_text,
+    replayPayload: input.replayPayload,
   });
   const discovery = analysis.schema;
   const audit = discovery.valid && discovery.proposal
@@ -291,6 +293,8 @@ export async function importKnowledgeIntoEngine(input: {
     diagnostics: { ...extractionDiagnostics, validatedRows: extracted.length,
       manifestRows: manifest.observations.length, manifestLinks: manifest.links.length,
       executionPending, schemaTypesUsable: usable.size },
+    analysisSnapshot: { version: 1, knowledgeFileId, payload: analysis.replayPayload },
+    analysisMode: input.replayPayload === undefined ? "ai" : "replay",
     details: {
       created: createdIds.map(id => ({ localId: id, entity: manifest.observations.find(row => row.localId === id)?.entityKey ?? "unknown" })),
       reused: reusedIds.map(id => ({ localId: id, entity: manifest.observations.find(row => row.localId === id)?.entityKey ?? "unknown" })),

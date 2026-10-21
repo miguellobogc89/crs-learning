@@ -20,10 +20,11 @@ export async function analyzeStructuredDocument(input: {
   workspaceId: string;
   documentId: string;
   text: string;
+  replayPayload?: unknown;
 }) {
   const source = input.text.slice(0, 16000);
   const started = Date.now();
-  const response = await getOpenAIClient().responses.create({
+  const response = input.replayPayload === undefined ? await getOpenAIClient().responses.create({
     model: getKnowledgeImportModel(),
     instructions: [
       SCHEMA_DISCOVERY_INSTRUCTIONS,
@@ -46,10 +47,12 @@ export async function analyzeStructuredDocument(input: {
       task: "Return JSON only: discover relational schema and extract records in one JSON object response.",
     }),
     text: { format: { type: "json_object" } },
-  });
-  if (!response.output_text || response.output_text.length > 350000)
+  }) : null;
+  if (response && (!response.output_text || response.output_text.length > 350000))
     throw new Error("Invalid or oversized structured analysis response.");
-  const parsed: unknown = JSON.parse(response.output_text);
+  const parsed: unknown = response ? JSON.parse(response.output_text) : input.replayPayload;
+  if (JSON.stringify(parsed).length > 350000)
+    throw new Error("Oversized replay analysis.");
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
     throw new Error("Invalid structured analysis shape.");
   const payload = parsed as Record<string, unknown>;
@@ -121,6 +124,6 @@ export async function analyzeStructuredDocument(input: {
   } else if (payload.links !== undefined) {
     issues.push("Invalid links payload.");
   }
-  return { schema, rows, links, issues, modelMs: Date.now() - started,
+  return { schema, rows, links, issues, replayPayload: parsed, modelMs: Date.now() - started,
     sourceChars: source.length, truncated: input.text.length > source.length };
 }
