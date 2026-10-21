@@ -8,6 +8,7 @@ export type ExtractedRow = {
   entity: string;
   values: Record<string, unknown>;
   evidence: string;
+  sourceIndex: number;
 };
 
 /**
@@ -76,7 +77,7 @@ export async function analyzeStructuredDocument(input: {
       issues.push("Row " + index + ": unknown entity or field."); continue;
     }
     rows.push({ entity: row.entity, values: row.values as Record<string, unknown>,
-      evidence: row.evidence });
+      evidence: row.evidence, sourceIndex: index });
   }
   const links: ExtractedLink[] = [];
   if (Array.isArray(payload.links) && payload.links.length <= 300 && schema.proposal) {
