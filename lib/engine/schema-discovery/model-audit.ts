@@ -20,7 +20,7 @@ export function auditDiscoveredModel(
   const types = new Map(schema.entities.map(entity => [entity.key, entity]));
   const relations = new Map(schema.relations.map(relation => [relation.key, relation]));
   const normalize = (value: unknown) => typeof value === "string"
-    ? value.normalize("NFKC").trim().replace(/\\s+/g, " ").toLocaleLowerCase("es")
+    ? value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("es")
     : JSON.stringify(value);
 
   for (const [i, row] of rows.entries()) {
