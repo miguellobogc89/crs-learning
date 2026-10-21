@@ -747,7 +747,7 @@ export function useKnowledgeImport({
             matches: Array<{ concept: string; existingKey: string; reason: string; evidence: string }>;
             missing: Array<{ concept: string; suggestedName: string; fields: string[]; reason: string; evidence: string }>;
             uncertain: string[]; error: string | null;
-          }>; error?: string };
+          }>; error?: string } | null = null;
           try {
             const comparison = await fetch(
               `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/compare-structures`,
