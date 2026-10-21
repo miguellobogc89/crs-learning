@@ -550,39 +550,33 @@ export function KnowledgeImportModal({
               <section className="space-y-3" aria-live="polite">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-semibold text-slate-900">
-                    {knowledgeImport.step === "completed" ? "Resultado de la importación" : "Procesando documentos"}
+                    {knowledgeImport.step === "completed" ? "Reconocimiento completado" : "Reconociendo documentos"}
                   </h3>
                   <span className="text-xs text-slate-500">
-                    {knowledgeImport.step === "completed" ? "Finalizado" :
-                      knowledgeImport.isConfirming ? "Guardando e importando en Engine" :
+                    {knowledgeImport.step === "completed" ? "Prueba terminada · sin importar datos" :
+                      knowledgeImport.isConfirming ? "Reconociendo estructura" :
                       knowledgeImport.proposalProgress?.message ??
                       (knowledgeImport.processingPhase === "extracting" ? "Extrayendo texto" : "Analizando")}
                   </span>
                 </div>
                 {(knowledgeImport.fileProgress.length ? knowledgeImport.fileProgress :
                   knowledgeImport.files.map((file, index) => ({ id: String(index), name: file.name, status: "pending" }))).map(file => {
-                  const engine = knowledgeImport.completionResult?.log.engineImports?.find(item => item.fileName === file.name);
-                  const stored = knowledgeImport.completionResult?.log.documents.find(item => item.fileName === file.name);
+                  const recognized = knowledgeImport.recognition[file.name];
                   const completed = knowledgeImport.step === "completed";
-                  const proposalReady = Boolean(knowledgeImport.proposal) || knowledgeImport.isConfirming || completed;
                   const extracting = knowledgeImport.processingPhase === "extracting";
                   const stages: Array<{ title: string; state: "done" | "active" | "waiting" | "error"; detail: string }> = [
-                    { title: "Documento recibido", state: "done", detail: "Archivo recibido por el servidor" },
-                    { title: "Extracción de texto", state: extracting ? "active" : proposalReady || knowledgeImport.processingPhase !== "uploading" ? "done" : "active",
-                      detail: extracting ? "Extrayendo contenido del archivo" : proposalReady ? "Extracción finalizada" : "Preparando la extracción" },
-                    { title: "Clasificación y destino",
-                      state: proposalReady ? "done" : extracting ? "waiting" : "active",
-                      detail: proposalReady ? "Clasificación realizada" :
-                        knowledgeImport.proposalProgress?.message ?? "Analizando el contenido" },
-                    { title: "Persistencia y Engine",
-                      state: engine?.status === "error" ? "error" : completed ? "done" :
-                        knowledgeImport.isConfirming ? "active" : "waiting",
-                      detail: engine?.status === "error" ? "El procesamiento de Engine ha fallado" :
-                        engine ? `Engine: ${engine.recordsCreated} registros creados · ${engine.recordsReused} reutilizados` :
-                        stored ? "Documento conservado" :
-                        knowledgeImport.isConfirming ? "Guardando y ejecutando Engine" : "Pendiente" },
+                    { title: "Documento recibido", state: "done", detail: "Archivo recibido para la prueba" },
+                    { title: "Extracción de texto",
+                      state: extracting ? "active" : "done",
+                      detail: extracting ? "Extrayendo texto" : "Texto preparado para reconocimiento" },
+                    { title: "Reconocimiento de estructura",
+                      state: recognized?.status === "error" ? "error" : recognized ? "done" :
+                        extracting ? "waiting" : "active",
+                      detail: recognized?.status === "error" ? recognized.error ?? "Error" :
+                        recognized ? `${recognized.lines} líneas · ${recognized.headings} encabezados · ${recognized.delimitedLines} filas delimitadas · ${recognized.numericLines} líneas con cantidades` :
+                        "Identificando secciones y patrones del documento" },
                   ];
-                  const errorMessages = [engine?.error, completed ? undefined : knowledgeImport.error].filter(
+                  const errorMessages = [recognized?.error, knowledgeImport.error].filter(
                     (message): message is string => Boolean(message),
                   );
                   return (
@@ -600,12 +594,12 @@ export function KnowledgeImportModal({
                               </span>
                             ) : null}
                             <span className="text-[11px] text-slate-500">
-                              {engine?.status === "error" ? "Engine requiere atención" :
-                                completed ? "Procesamiento finalizado" : "Procesando"}
+                              {recognized?.status === "error" ? "Reconocimiento con errores" :
+                                completed ? "Prueba finalizada · sin importación" : "Reconociendo"}
                             </span>
                           </div>
                         </div>
-                        {engine?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
+                        {recognized?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
                           completed ? <Check className="size-5 text-emerald-600" /> :
                           <Loader2 className="size-5 animate-spin text-blue-600" />}
                       </div>
@@ -637,16 +631,6 @@ export function KnowledgeImportModal({
                               </li>
                             ))}
                           </ol>
-                          {engine?.stages?.length ? (
-                            <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 px-3 py-3">
-                              <p className="mb-2 text-xs font-semibold text-slate-700">Barridos de Engine</p>
-                              {engine.stages.map((stage, index) => (
-                                <p key={index} className="py-1 text-[11px] text-slate-600">
-                                  {stage.stage} · {(stage.durationMs / 1000).toFixed(1)} s · {Object.entries(stage.details).map(([key, value]) => `${key}: ${value}`).join(" · ")}
-                                </p>
-                              ))}
-                            </div>
-                          ) : null}
                           {errorMessages.length ? (
                             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-3" role="alert">
                               <p className="flex items-center gap-2 text-xs font-semibold text-amber-900">
@@ -656,7 +640,7 @@ export function KnowledgeImportModal({
                                 <p key={index} className="mt-2 break-words font-mono text-[11px] leading-relaxed text-amber-800">{message}</p>
                               ))}
                               <p className="mt-2 text-[11px] text-amber-700">
-                                El documento puede estar guardado aunque Engine no haya terminado.
+                                Prueba aislada: no se han creado artículos, tablas ni registros de Engine.
                               </p>
                             </div>
                           ) : null}

@@ -129,6 +129,17 @@ export function useKnowledgeImport({
     );
 
   const [tableDetection, setTableDetection] = useState<Record<string, boolean>>({});
+  const [recognition, setRecognition] = useState<Record<string, {
+    status: "completed" | "error";
+    sourceChars: number;
+    lines: number;
+    delimitedLines: number;
+    numericLines: number;
+    headings: number;
+    error: string | null;
+  }>>({});
+
+
 
   const [error, setError] =
     useState<string | null>(null);
@@ -653,9 +664,35 @@ export function useKnowledgeImport({
           },
         );
 
-        // One-step import: extraction -> proposal -> persistence, no user confirmation.
+        // Isolated recognition trial: stop after the first stage.
+        // Never call proposal generation, confirmation, or Engine persistence.
         if (analysisResult.textExtraction.successfulFiles > 0) {
-          await continueSharedImport(uploadResult.importId);
+          const response = await fetch(
+            `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/recognize`,
+            { method: "POST" },
+          );
+          const result: {
+            error?: string;
+            files?: Array<{
+              id: string; fileName: string;
+              status: "completed" | "error";
+              sourceChars: number; lines: number;
+              delimitedLines: number; numericLines: number;
+              headings: number; error: string | null;
+            }>;
+          } = await response.json();
+          if (!response.ok || !result.files) {
+            throw new Error(result.error ?? "Error al reconocer el documento");
+          }
+          setRecognition(Object.fromEntries(result.files.map(file => [file.fileName, file])));
+          updateImport(uploadResult.importId, {
+            step: "completed",
+            status: "completed",
+            isAnalyzing: false,
+            isConfirming: false,
+            error: null,
+          });
+          setStep("completed");
         }
 
         if (
@@ -776,7 +813,6 @@ export function useKnowledgeImport({
     }, [
       context,
       context.libraryId,
-      continueSharedImport,
       importReview,
       registerImport,
       selectedDocuments,
@@ -898,6 +934,7 @@ export function useKnowledgeImport({
       setImportReview(null);
       setDuplicateNotice(null);
       setTableDetection({});
+      setRecognition({});
       setIsAnalyzing(false);
       setIsConfirming(false);
 
@@ -987,6 +1024,7 @@ export function useKnowledgeImport({
     ]);
 
   return {
+    recognition,
     tableDetection,
     duplicateNotice,
     allFilesDuplicate: isAllDuplicateReview(importReview),

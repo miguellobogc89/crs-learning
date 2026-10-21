@@ -46,14 +46,14 @@ const STEPS: StepConfig[] = [
   },
   {
     id: "proposal",
-    label: "Incorporación",
-    description: "Guardado y Engine",
+    label: "Reconocimiento",
+    description: "Primera prueba",
     icon: FolderTree,
   },
   {
     id: "completed",
     label: "Resultado",
-    description: "Incorporación",
+    description: "Sin guardar en Knowledge",
     icon: Sparkles,
   },
 ];
