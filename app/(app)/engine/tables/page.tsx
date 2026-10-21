@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { SchemaDiscoveryPreview } from "@/components/engine/schema-discovery-preview";
 import { EngineStressTest } from "@/components/engine/engine-stress-test";
+import { EngineControlledImport } from "@/components/engine/engine-controlled-import";
 import { auth } from "@/auth";
 import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { AppPageHeader } from "@/components/app/layouts/app-page-header";
@@ -60,6 +61,7 @@ export default async function EngineTablesPage({
         {view === "tables" ? (
           <div className="space-y-5 pt-4">
             {canReview && <EngineStressTest />}
+            {canReview && <EngineControlledImport files={knowledgeFiles.map(file => ({ id: file.id, name: file.file_name }))} />}
             {canReview && <SchemaDiscoveryPreview files={knowledgeFiles.map(file => ({ id: file.id, name: file.file_name }))} />}
             <p className="text-sm text-slate-500">
               Registros de {selected?.name ?? "las tablas"} en {activeWorkspace.name}.
