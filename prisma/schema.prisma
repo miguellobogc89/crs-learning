@@ -327,7 +327,6 @@ model knowledge_sources {
 }
 
 model knowledge_files {
-  engine_record_relations engine_record_relations[]
   engine_relation_proposals engine_relation_proposals[]
   id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   knowledge_source_id      String                     @db.Uuid
@@ -1259,6 +1258,7 @@ model workspace_members {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model workspaces {
+  engine_record_relations engine_record_relations[]
   engine_relation_proposals engine_relation_proposals[]
   id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   owner_user_id            String?                    @db.Uuid
