@@ -1,10 +1,9 @@
-import { createHash } from "node:crypto";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getKnowledgeImportModel, getOpenAIClient } from "@/lib/ai/openai";
 import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { discoverEngineSchemaFromKnowledge } from "@/lib/engine/schema-discovery/discover.service";
-import { validateEngineRecordValues } from "@/lib/engine/validation";
+import { executeEngineUpsertManifest } from "@/lib/engine/execute-upsert-manifest.service";
+import type { ImportManifest } from "@/lib/engine/upsert-manifest";
 
 type Row = { entity: string; values: Record<string, unknown>; evidence: string };
 const normalizeIdentity = (value: string) => value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
@@ -117,7 +116,7 @@ export async function importKnowledgeIntoEngine(input: {
     extracted.push({ entity: entity.key, values, evidence: raw.evidence });
   }
 
-  let typesCreated = 0, fieldsCreated = 0, recordsCreated = 0, recordsReused = 0;
+  let typesCreated = 0, fieldsCreated = 0;
   const usable = new Map<string, { id: string; version: number }>();
   for (const entity of proposal.entities) {
     if (!extracted.some(row => row.entity === entity.key)) continue;
@@ -164,81 +163,39 @@ export async function importKnowledgeIntoEngine(input: {
     }
   }
 
-  // Business identity is scoped to the workspace and entity. Reprocessing a
-  // document must reuse existing records even when the Knowledge file ID changes.
-  // Only strong identifiers are eligible for cross-document matching.
-  const identityField = (entity: string) =>
-    entity === "recipe" ? "code" : entity === "ingredient" ? "name" : null;
-  const definitionsByType = new Map<string, Awaited<ReturnType<typeof prisma.engine_field_definitions.findMany>>>();
-  for (const [key, type] of usable) {
-    definitionsByType.set(key, await prisma.engine_field_definitions.findMany({
-      where: { workspace_id: workspaceId, object_type_id: type.id, status: "active" },
-    }));
-  }
-  for (const row of extracted) {
-    const type = usable.get(row.entity);
-    if (!type) continue;
-    const identity = createHash("sha256").update(JSON.stringify({
-      documentId: knowledgeFileId, entity: row.entity, evidence: row.evidence, values: row.values,
-    })).digest("hex");
-    const externalKey = "knowledge:" + identity;
-    try {
-      const definitions = definitionsByType.get(row.entity) ?? [];
-      const validated = validateEngineRecordValues(row.values, definitions);
-      if (!validated.ok) { issues.push(row.entity + ": registro incompatible con el esquema."); continue; }
-      const existing = await prisma.engine_records.findFirst({
-        where: { workspace_id: workspaceId, object_type_id: type.id, external_key: externalKey },
-        select: { id: true },
-      });
-      if (existing) { recordsReused++; continue; }
-
-      const identityKey = identityField(row.entity);
-      const identityValue = identityKey ? row.values[identityKey] : null;
-      if (identityKey && typeof identityValue === "string" && identityValue.trim()) {
-        const candidates = await prisma.engine_records.findMany({
-          where: { workspace_id: workspaceId, object_type_id: type.id },
-          select: { id: true, values_json: true },
-        });
-        const matches = candidates.filter(candidate => {
-          if (!isObject(candidate.values_json)) return false;
-          const stored = candidate.values_json[identityKey];
-          return typeof stored === "string" &&
-            normalizeIdentity(stored) === normalizeIdentity(identityValue);
-        });
-        if (matches.length === 1) {
-          const oldValues = matches[0].values_json;
-          const conflict = Object.entries(validated.values).some(([key, value]) =>
-            isObject(oldValues) && oldValues[key] !== undefined &&
-            JSON.stringify(oldValues[key]) !== JSON.stringify(value));
-          if (conflict) {
-            issues.push(row.entity + ": identidad existente con valores distintos; revisión necesaria (" + identityValue + ").");
-            continue;
-          }
-          recordsReused++;
-          continue;
-        }
-        if (matches.length > 1) {
-          issues.push(row.entity + ": identidad ambigua; revisión necesaria (" + identityValue + ").");
-          continue;
-        }
-      }
-
-      // A junction row without links to its two endpoints cannot be safely
-      // identified or used. Never create further orphaned line items.
-      if (row.entity === "recipe_ingredient") {
-        issues.push("recipe_ingredient: línea pendiente de vincular con receta e ingrediente.");
-        continue;
-      }
-      await prisma.engine_records.create({
-        data: { workspace_id: workspaceId, object_type_id: type.id,
-          external_key: externalKey, status: "draft", schema_version: type.version,
-          values_json: validated.values as Prisma.InputJsonObject,
-          created_by_user_id: userId, updated_by_user_id: userId },
-      });
-      recordsCreated++;
-    } catch (error) {
-      issues.push(row.entity + ": " + (error instanceof Error ? error.message : "Error de inserción"));
-    }
+  // Translate extracted observations to the provider-neutral Engine contract.
+  // Identity selection is conservative: only declared schema fields that are
+  // plausible business identifiers. Junction rows without a verified compound
+  // identity remain pending rather than creating orphan records.
+  const identityKeys = (fields: { key: string }[]) => {
+    const keys = new Set(fields.map(field => field.key));
+    if (keys.has("external_id")) return ["external_id"];
+    if (keys.has("code")) return ["code"];
+    if (keys.has("sku")) return ["sku"];
+    if (keys.has("name")) return ["name"];
+    return [];
+  };
+  const manifest: ImportManifest = {
+    version: 1, workspaceId,
+    entities: proposal.entities.filter(entity => usable.has(entity.key)).map(entity => ({
+      key: entity.key, name: entity.name,
+      fields: entity.fields.map(field => ({
+        key: field.key, name: field.name, type: field.type,
+      })),
+      identityFields: identityKeys(entity.fields),
+    })),
+    observations: extracted.filter(row => usable.has(row.entity)).map((row, index) => ({
+      localId: "row_" + index, entityKey: row.entity, values: row.values,
+      source: { kind: "knowledge" as const, sourceId: knowledgeFileId, evidence: row.evidence },
+    })),
+    links: [],
+  };
+  let recordsCreated = 0, recordsReused = 0;
+  if (manifest.observations.length) {
+    const executed = await executeEngineUpsertManifest({ workspaceId, userId, manifest });
+    recordsCreated = executed.created.length;
+    recordsReused = executed.reused.length;
+    issues.push(...executed.pending.map(item => item.localId + ": " + item.reason));
   }
 
   return {
