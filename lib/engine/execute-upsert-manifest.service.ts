@@ -116,6 +116,10 @@ export async function executeEngineUpsertManifest(input: {
         workspaceId, type.id, identity.map(normalize),
       ])).digest("hex");
       // Unique external key prevents identical concurrent inserts.
+      const prior = await tx.engine_records.findFirst({
+        where: { workspace_id: workspaceId, object_type_id: type.id, external_key: key },
+        select: { id: true },
+      });
       const row = await tx.engine_records.upsert({
         where: { object_type_id_external_key: { object_type_id: type.id, external_key: key } },
         create: { workspace_id: workspaceId, object_type_id: type.id,
@@ -131,7 +135,8 @@ export async function executeEngineUpsertManifest(input: {
         throw new Error("Concurrent identity conflict; transaction rolled back.");
       }
       resolved.set(operation.localId, row.id);
-      created.push(operation.localId);
+      if (prior) reused.push(operation.localId);
+      else created.push(operation.localId);
     }
     return { status: pending.length ? "completed_with_issues" : "completed",
       created, reused, pending, resolvedCount: resolved.size,
