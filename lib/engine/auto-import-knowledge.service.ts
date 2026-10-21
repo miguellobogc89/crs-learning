@@ -144,6 +144,44 @@ export async function importKnowledgeIntoEngine(input: {
     }
   }
 
+  // Register evidence-validated relation TYPES only when both endpoint
+  // entity definitions are usable. Never approve a record-level link here.
+  let relationDefinitionsCreated = 0;
+  for (const relation of proposal.relations) {
+    const from = usable.get(relation.fromEntity);
+    const to = usable.get(relation.toEntity);
+    if (!from || !to) continue;
+    try {
+      const created = await prisma.$transaction(async tx => {
+        const prior = await tx.engine_relation_definitions.findUnique({
+          where: { workspace_id_key: { workspace_id: workspaceId, key: relation.key } },
+        });
+        if (prior) {
+          if (prior.status !== "active" ||
+              prior.from_object_type_id !== from.id ||
+              prior.to_object_type_id !== to.id ||
+              prior.cardinality !== relation.cardinality) {
+            throw new Error("Existing relation definition is incompatible.");
+          }
+          return false;
+        }
+        await tx.engine_relation_definitions.create({
+          data: { workspace_id: workspaceId, key: relation.key,
+            name: relation.key.replace(/_/g, " "),
+            description: relation.description || null,
+            from_object_type_id: from.id, to_object_type_id: to.id,
+            cardinality: relation.cardinality,
+            created_by_user_id: userId },
+        });
+        return true;
+      });
+      if (created) relationDefinitionsCreated++;
+    } catch (error) {
+      issues.push("Relación " + relation.key + ": " +
+        (error instanceof Error ? error.message : "No se pudo registrar."));
+    }
+  }
+
   // Translate extracted observations to the provider-neutral Engine contract.
   // Identity selection is conservative: only declared schema fields that are
   // plausible business identifiers. Junction rows without a verified compound
@@ -196,12 +234,12 @@ export async function importKnowledgeIntoEngine(input: {
     recordsPending: parsed.rows.length - recordsCreated - recordsReused,
     entitiesDiscovered: proposal.entities.length,
     relationsDiscovered: proposal.relations.length,
-    relationsProposed,
+    relationsProposed, relationDefinitionsCreated,
     issues: [...issues, ...proposal.warnings].slice(0, 100),
     note: "Los registros ambiguos y las relaciones no aprobadas quedan pendientes de revisión.",
     timings: { analysisMs: analysis.modelMs, schemaMs,
       executionMs: Date.now() - executionStartedAt,
       totalMs: Date.now() - startedAt },
-    writesPerformed: typesCreated + fieldsCreated + recordsCreated > 0,
+    writesPerformed: typesCreated + fieldsCreated + recordsCreated + relationDefinitionsCreated + relationsProposed > 0,
   };
 }
