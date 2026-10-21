@@ -77,10 +77,19 @@ export async function analyzeDocumentInSweeps(input: {
   let started = Date.now();
   let proposal: Record<string, unknown>;
   try {
-    proposal = await askJson(SCHEMA_DISCOVERY_INSTRUCTIONS +
-      "\nDiscover the canonical schema only. No rows. Output entities, relations, warnings.", {
-      documentId: input.documentId, text: buildSchemaOverview(source),
-    });
+    try {
+      proposal = await askJson(SCHEMA_DISCOVERY_INSTRUCTIONS +
+        "\nDiscover the canonical schema only. No rows. Output entities, relations, warnings.", {
+        documentId: input.documentId, text: buildSchemaOverview(source, 4000),
+      });
+    } catch (firstError) {
+      // One smaller retry on model timeout, never an unbounded retry loop.
+      if (!/timed out|timeout/i.test(String(firstError))) throw firstError;
+      proposal = await askJson(SCHEMA_DISCOVERY_INSTRUCTIONS +
+        "\nDiscover the canonical schema only. No rows. Output entities, relations, warnings.", {
+        documentId: input.documentId, text: buildSchemaOverview(source, 1800),
+      });
+    }
   } catch (error) {
     throw new Error("Engine schema sweep failed: " + String(error));
   }

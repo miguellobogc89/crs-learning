@@ -210,7 +210,7 @@ export function KnowledgeImportCompletedStep({
 
           <div className="min-w-0">
             <h3 className="text-[18px] font-semibold tracking-[-0.02em] text-slate-950">
-              Incorporación completada
+              {log.engineImports?.some(item => item.status === "error") ? "Documento guardado · Engine pendiente" : "Incorporación completada"}
             </h3>
 
             <p className="mt-1 text-[12px] leading-5 text-slate-500">
