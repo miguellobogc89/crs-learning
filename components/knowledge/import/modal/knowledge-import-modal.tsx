@@ -564,6 +564,7 @@ export function KnowledgeImportModal({
                   const recognized = knowledgeImport.recognition[file.name];
                   const completed = knowledgeImport.step === "completed";
                   const semantic = knowledgeImport.semantic[file.name];
+                  const relations = knowledgeImport.relations[file.name];
                   const extracting = knowledgeImport.processingPhase === "extracting";
                   const stages: Array<{ title: string; state: "done" | "active" | "waiting" | "error"; detail: string }> = [
                     {
@@ -591,11 +592,17 @@ export function KnowledgeImportModal({
                     },
                     {
                       title: "Identificar relaciones",
-                      state: "waiting",
-                      detail: "Pendiente: proponer relaciones sin crearlas",
+                      state: relations?.status === "error" ? "error" :
+                        relations?.status === "completed" ? "done" :
+                        semantic?.status === "completed" ? "active" : "waiting",
+                      detail: relations?.status === "error" ? relations.error ?? "Error identificando relaciones" :
+                        relations?.status === "completed" ?
+                          `${relations.relations.length} relaciones identificadas · ${relations.missingStructures.length} estructuras propuestas · sin cambios en Engine` :
+                        semantic?.status === "completed" ? "Analizando relaciones entre entidades" :
+                        "Pendiente: proponer relaciones sin crearlas",
                     },
                   ];
-                  const errorMessages = [recognized?.error, semantic?.error, knowledgeImport.error].filter(
+                  const errorMessages = [recognized?.error, semantic?.error, relations?.error, knowledgeImport.error].filter(
                     (message): message is string => Boolean(message),
                   );
                   return (
@@ -613,12 +620,12 @@ export function KnowledgeImportModal({
                               </span>
                             ) : null}
                             <span className="text-[11px] text-slate-500">
-                              {recognized?.status === "error" || semantic?.status === "error" ? "Revisión con errores" :
+                              {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" ? "Revisión con errores" :
                                 completed ? "Prueba finalizada · sin importación" : "Revisando documento"}
                             </span>
                           </div>
                         </div>
-                        {recognized?.status === "error" || semantic?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
+                        {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
                           completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
                           <Loader2 className="size-5 animate-spin text-blue-600" />}
                       </div>
@@ -700,6 +707,29 @@ export function KnowledgeImportModal({
                               {semantic.uncertain.length ? (
                                 <p className="text-[11px] text-amber-700">Por revisar: {semantic.uncertain.join(" · ")}</p>
                               ) : null}
+                            </div>
+                          ) : null}
+                          {relations?.status === "completed" ? (
+                            <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-semibold text-slate-800">Relaciones identificadas ({relations.relations.length})</p>
+                              <p className="text-[11px] text-slate-500">Hipótesis basadas en el documento. No se ha creado ninguna relación ni estructura.</p>
+                              {relations.relations.length ? relations.relations.map((relation, index) => (
+                                <div key={index} className="text-[11px] text-slate-700">
+                                  <strong>{relation.fromConcept} → {relation.toConcept}</strong>
+                                  <span className="text-slate-500"> · {relation.cardinality}</span>
+                                  <p>{relation.reason}</p>
+                                  {relation.existingRelationKey ? <p className="text-emerald-700">Relación existente: {relation.existingRelationKey}</p> : null}
+                                  <p className="text-slate-500">Evidencia: {relation.evidence}</p>
+                                </div>
+                              )) : <p className="text-[11px] text-slate-500">No se identificaron relaciones verificables.</p>}
+                              <p className="text-xs font-semibold text-slate-800">Estructuras potencialmente necesarias ({relations.missingStructures.length})</p>
+                              {relations.missingStructures.map((item, index) => (
+                                <p key={index} className="text-[11px] text-slate-700">
+                                  <strong>{item.name}</strong> · {item.reason}
+                                  <span className="block text-slate-500">Evidencia: {item.evidence}</span>
+                                </p>
+                              ))}
+                              {relations.uncertain.length ? <p className="text-[11px] text-amber-700">Por revisar: {relations.uncertain.join(" · ")}</p> : null}
                             </div>
                           ) : null}
                           {recognized?.status === "completed" ? (
