@@ -43,7 +43,7 @@ export function reconcilePreviewLinks(source: string, proposal: SchemaDiscoveryP
     const passage = source.slice(start, end);
     if (!passage.includes(a.evidence) || !passage.includes(b.evidence)) return null;
     // Reject passages spanning a different order or invoice heading.
-    const headings = passage.match(/(?:Pedido|Order|Factura|Invoice)\\s+[A-Z0-9-]+/gi) ?? [];
+    const headings = passage.match(/(?:Pedido|Order|Factura|Invoice)\s+[A-Z0-9-]+/gi) ?? [];
     if (new Set(headings.map(h => h.toLowerCase())).size > 1) return null;
     return passage;
   };
