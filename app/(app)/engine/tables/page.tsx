@@ -35,11 +35,7 @@ export default async function EngineTablesPage({
   const [pendingRelations, approvedRelations] = view === "relations"
     ? await Promise.all([
       listPendingEngineRelations({ workspaceId: activeWorkspace.id, userId: session.user.id }),
-      // The relations view is workspace-wide, not limited to a selected table.
-      listApprovedEngineRelations({ workspaceId: activeWorkspace.id, userId: session.user.id,
-        recordIds: (await Promise.all(types.map(async type =>
-          (await listEngineRecords({ workspaceId: activeWorkspace.id, userId: session.user.id,
-            objectTypeId: type.id, take: 100 })).map(record => record.id)))).flat().slice(0, 100) }),
+      listApprovedEngineRelations({ workspaceId: activeWorkspace.id, userId: session.user.id }),
     ])
     : [[], []];
 
