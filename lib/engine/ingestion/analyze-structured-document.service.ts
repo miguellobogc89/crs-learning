@@ -41,7 +41,7 @@ export async function analyzeStructuredDocument(input: {
     input: JSON.stringify({
       documentId: input.documentId,
       text: source,
-      task: "Discover relational schema and extract records in one response.",
+      task: "Return JSON only: discover relational schema and extract records in one JSON object response.",
     }),
     text: { format: { type: "json_object" } },
   });
