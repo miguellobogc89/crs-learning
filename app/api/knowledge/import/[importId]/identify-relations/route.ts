@@ -81,6 +81,7 @@ export async function POST(request: Request, context: Context) {
           "existingRelationKey must be an existing key or empty string. Maximum 8 relations and 5 missing structures.",
         ].join("\n"),
         input: JSON.stringify({
+          format: "json",
           document: sample,
           existingTypes: types.map(type => ({
             key: type.key, name: type.name,
