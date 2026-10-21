@@ -155,6 +155,15 @@ export function useKnowledgeImport({
 
 
 
+  const [semantic, setSemantic] = useState<Record<string, {
+    status: "completed" | "error";
+    matches: Array<{ concept: string; existingKey: string; reason: string; evidence: string }>;
+    missing: Array<{ concept: string; suggestedName: string; fields: string[]; reason: string; evidence: string }>;
+    uncertain: string[];
+    error: string | null;
+  }>>({});
+  const [semanticRunning, setSemanticRunning] = useState(false);
+
   const [error, setError] =
     useState<string | null>(null);
   const [duplicateNotice, setDuplicateNotice] = useState<string | null>(null);
@@ -724,6 +733,34 @@ export function useKnowledgeImport({
             throw new Error("No se ha reconocido ningún archivo con extracción de texto confirmada.");
           }
           setRecognition(Object.fromEntries(recognizedFiles.map(file => [file.fileName, file])));
+          setSemanticRunning(true);
+          let semanticResult: { files?: Array<{
+            id: string; status: "completed" | "error";
+            matches: Array<{ concept: string; existingKey: string; reason: string; evidence: string }>;
+            missing: Array<{ concept: string; suggestedName: string; fields: string[]; reason: string; evidence: string }>;
+            uncertain: string[]; error: string | null;
+          }>; error?: string };
+          try {
+            const comparison = await fetch(
+              `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/compare-structures`,
+              { method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fileIds: recognizedFiles.map(file => file.id) }) },
+            );
+            semanticResult = await comparison.json();
+            if (!comparison.ok || !semanticResult.files)
+              throw new Error(semanticResult.error ?? "No se pudo comparar la estructura");
+            setSemantic(Object.fromEntries(semanticResult.files.map(file => {
+              const source = recognizedFiles.find(item => item.id === file.id);
+              return [source?.fileName ?? file.id, file];
+            })));
+          } catch (comparisonError) {
+            const message = comparisonError instanceof Error ? comparisonError.message : String(comparisonError);
+            setSemantic(Object.fromEntries(recognizedFiles.map(file => [
+              file.fileName, { status: "error" as const, matches: [], missing: [], uncertain: [], error: message },
+            ])));
+          } finally {
+            setSemanticRunning(false);
+          }
           updateImport(uploadResult.importId, {
             step: "completed",
             status: "completed",
@@ -974,6 +1011,8 @@ export function useKnowledgeImport({
       setDuplicateNotice(null);
       setTableDetection({});
       setRecognition({});
+      setSemantic({});
+      setSemanticRunning(false);
       setIsAnalyzing(false);
       setIsConfirming(false);
 
@@ -1064,6 +1103,8 @@ export function useKnowledgeImport({
 
   return {
     recognition,
+    semantic,
+    semanticRunning,
     tableDetection,
     duplicateNotice,
     allFilesDuplicate: isAllDuplicateReview(importReview),

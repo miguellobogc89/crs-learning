@@ -563,6 +563,7 @@ export function KnowledgeImportModal({
                   knowledgeImport.files.map((file, index) => ({ id: String(index), name: file.name, status: "pending" }))).map(file => {
                   const recognized = knowledgeImport.recognition[file.name];
                   const completed = knowledgeImport.step === "completed";
+                  const semantic = knowledgeImport.semantic[file.name];
                   const extracting = knowledgeImport.processingPhase === "extracting";
                   const stages: Array<{ title: string; state: "done" | "active" | "waiting" | "error"; detail: string }> = [
                     {
@@ -581,9 +582,12 @@ export function KnowledgeImportModal({
                         : "Consultar las estructuras existentes en Engine",
                     },
                     {
-                      title: "Identificar estructuras nuevas",
-                      state: "waiting",
-                      detail: "Pendiente: proponer tablas y campos que falten",
+                      title: "Comparar estructuras e identificar las que faltan",
+                      state: semantic?.status === "error" ? "error" : semantic ? "done" :
+                        recognized?.status === "completed" ? "active" : "waiting",
+                      detail: semantic?.status === "error" ? semantic.error ?? "Error de comparación" :
+                        semantic ? `${semantic.matches.length} estructuras reutilizables · ${semantic.missing.length} conceptos sin estructura propuesta` :
+                        "Comparando conceptos del documento con las estructuras existentes",
                     },
                     {
                       title: "Identificar relaciones",
@@ -591,7 +595,7 @@ export function KnowledgeImportModal({
                       detail: "Pendiente: proponer relaciones sin crearlas",
                     },
                   ];
-                  const errorMessages = [recognized?.error, knowledgeImport.error].filter(
+                  const errorMessages = [recognized?.error, semantic?.error, knowledgeImport.error].filter(
                     (message): message is string => Boolean(message),
                   );
                   return (
@@ -609,12 +613,12 @@ export function KnowledgeImportModal({
                               </span>
                             ) : null}
                             <span className="text-[11px] text-slate-500">
-                              {recognized?.status === "error" ? "Revisión con errores" :
+                              {recognized?.status === "error" || semantic?.status === "error" ? "Revisión con errores" :
                                 completed ? "Prueba finalizada · sin importación" : "Revisando documento"}
                             </span>
                           </div>
                         </div>
-                        {recognized?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
+                        {recognized?.status === "error" || semantic?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
                           completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
                           <Loader2 className="size-5 animate-spin text-blue-600" />}
                       </div>
@@ -668,6 +672,34 @@ export function KnowledgeImportModal({
                                   ))}
                                 </div>
                               ) : <p className="mt-2 text-xs text-slate-600">No existen estructuras activas. El siguiente paso deberá proponerlas, sin crearlas automáticamente.</p>}
+                            </div>
+                          ) : null}
+                          {semantic?.status === "completed" ? (
+                            <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-semibold text-slate-800">Comparación semántica · propuesta sin guardar</p>
+                              <p className="text-[11px] text-slate-500">La IA propone equivalencias, no las confirma. Ninguna estructura ha sido creada o modificada.</p>
+                              <div>
+                                <p className="text-xs font-semibold text-emerald-700">Estructuras que podrían reutilizarse ({semantic.matches.length})</p>
+                                {semantic.matches.length ? semantic.matches.map((match, index) => (
+                                  <p key={index} className="mt-2 text-[11px] text-slate-700">
+                                    <strong>{match.concept}</strong> → {match.existingKey} · {match.reason}
+                                    <span className="block text-slate-500">Evidencia: {match.evidence}</span>
+                                  </p>
+                                )) : <p className="mt-1 text-[11px] text-slate-500">Sin equivalencias verificables.</p>}
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-slate-800">Posibles estructuras nuevas ({semantic.missing.length})</p>
+                                {semantic.missing.length ? semantic.missing.map((item, index) => (
+                                  <p key={index} className="mt-2 text-[11px] text-slate-700">
+                                    <strong>{item.suggestedName || item.concept}</strong> · {item.reason}
+                                    <span className="block text-slate-500">Campos sugeridos: {item.fields.join(", ") || "Por determinar"}</span>
+                                    <span className="block text-slate-500">Evidencia: {item.evidence}</span>
+                                  </p>
+                                )) : <p className="mt-1 text-[11px] text-slate-500">No se han propuesto estructuras nuevas.</p>}
+                              </div>
+                              {semantic.uncertain.length ? (
+                                <p className="text-[11px] text-amber-700">Por revisar: {semantic.uncertain.join(" · ")}</p>
+                              ) : null}
                             </div>
                           ) : null}
                           {recognized?.status === "completed" ? (
