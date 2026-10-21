@@ -183,6 +183,9 @@ export function useKnowledgeImport({
     partial: boolean; durationMs: number; error: string | null;
   }>>({});
   const [recordPreviewRunning, setRecordPreviewRunning] = useState(false);
+  const [simulationStages, setSimulationStages] = useState<Record<string, Record<number, {
+    status: "completed" | "error"; count: number; durationMs: number; error: string | null;
+  }>>>({});
 
 
   const [error, setError] =
@@ -824,40 +827,63 @@ export function useKnowledgeImport({
               if (isCurrentOperation()) setRelationsRunning(false);
             }
           }
-          // Stage 5: simulate the full discovered graph, including missing schema.
-          // No INSERT, schema creation or Knowledge confirmation.
+
+          // Stages 5–8 are separate requests. Each reuses the preceding result,
+          // and only stage 8 produces the final read-only manifest.
           if (isCurrentOperation() && recognizedFiles.length) {
             setRecordPreviewRunning(true);
+            setSimulationStages({});
             try {
-              const response = await fetch(
-                `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/preview-records`,
-                { method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    fileIds: recognizedFiles.map(file => file.id),
-                    priorDiscoveries: recognizedFiles.map(file => ({
-                      fileId: file.id,
-                      structures: semanticResult?.files?.find(item => item.id === file.id && item.status === "completed") ?? null,
-                      relationships: relationResult?.files?.find(item => item.id === file.id && item.status === "completed") ?? null,
-                    })),
-                  }) },
-              );
-              const result: { files?: Array<{
-                id: string; status: "completed" | "error";
-                rows: Array<{ localId: string; entityKey: string;
-                  values: Record<string, string | number | boolean | null>;
-                  evidence: string; disposition: "candidate" | "pending"; reason: string }>;
-                links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; evidence: string }>;
-                entities?: unknown[]; relations?: unknown[];
-                unresolvedLinks: string[];
-                issues: string[]; sourceChars: number; analyzedChars: number;
-                partial: boolean; durationMs: number; error: string | null;
-              }>; error?: string } = await response.json();
-              if (!response.ok || !result.files)
-                throw new Error(result.error ?? "No se pudo preparar la vista previa de registros");
-              if (isCurrentOperation()) setRecordPreview(Object.fromEntries(result.files.map(file => {
-                const source = recognizedFiles.find(item => item.id === file.id);
-                return [source?.fileName ?? file.id, file];
-              })));
+              const priorDiscoveries = recognizedFiles.map(file => ({
+                fileId: file.id,
+                structures: semanticResult?.files?.find(item => item.id === file.id && item.status === "completed") ?? null,
+                relationships: relationResult?.files?.find(item => item.id === file.id && item.status === "completed") ?? null,
+              }));
+              let drafts: Array<{ id: string; payload: Record<string, unknown> }> = [];
+              for (const stage of [5, 6, 7, 8]) {
+                if (!isCurrentOperation()) return;
+                const response = await fetch(
+                  `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/preview-records`,
+                  { method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ stage, fileIds: recognizedFiles.map(file => file.id), priorDiscoveries, drafts }) },
+                );
+                const result: { files?: Array<{
+                  id: string; status: "completed" | "error"; payload?: Record<string, unknown>;
+                  count?: number; durationMs: number; error: string | null;
+                  rows: Array<{ localId: string; entityKey: string;
+                    values: Record<string, string | number | boolean | null>;
+                    evidence: string; disposition: "candidate" | "pending"; reason: string }>;
+                  links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; evidence: string }>;
+                  entities?: unknown[]; relations?: unknown[];
+                  unresolvedLinks: string[]; issues: string[]; sourceChars: number; analyzedChars: number;
+                  partial: boolean;
+                }>; error?: string } = await response.json();
+                if (!response.ok || !result.files)
+                  throw new Error(result.error ?? `No se pudo completar la fase ${stage}`);
+                if (!isCurrentOperation()) return;
+                setSimulationStages(previous => {
+                  const updated = { ...previous };
+                  for (const file of result.files ?? []) {
+                    const source = recognizedFiles.find(item => item.id === file.id);
+                    const name = source?.fileName ?? file.id;
+                    updated[name] = { ...updated[name], [stage]: {
+                      status: file.status, count: file.count ?? 0,
+                      durationMs: file.durationMs, error: file.error,
+                    } };
+                  }
+                  return updated;
+                });
+                const failed = result.files.find(file => file.status !== "completed");
+                if (failed) throw new Error(`Fase ${stage}: ${failed.error ?? "Error de procesamiento"}`);
+                if (stage < 8) {
+                  drafts = result.files.map(file => ({ id: file.id, payload: file.payload ?? {} }));
+                } else {
+                  setRecordPreview(Object.fromEntries(result.files.map(file => {
+                    const source = recognizedFiles.find(item => item.id === file.id);
+                    return [source?.fileName ?? file.id, file];
+                  })));
+                }
+              }
             } catch (previewError) {
               if (isCurrentOperation()) {
                 const message = previewError instanceof Error ? previewError.message : String(previewError);
@@ -1127,6 +1153,7 @@ export function useKnowledgeImport({
       setRelationsRunning(false);
       setRecordPreview({});
       setRecordPreviewRunning(false);
+      setSimulationStages({});
       setIsAnalyzing(false);
       setIsConfirming(false);
 
@@ -1223,6 +1250,7 @@ export function useKnowledgeImport({
     relationsRunning,
     recordPreview,
     recordPreviewRunning,
+    simulationStages,
     tableDetection,
     duplicateNotice,
     allFilesDuplicate: isAllDuplicateReview(importReview),
