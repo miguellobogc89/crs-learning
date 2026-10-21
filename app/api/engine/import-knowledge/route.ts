@@ -27,9 +27,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("Engine automatic import failed", error);
+    const message = error instanceof Error ? error.message : "";
+    const stage = /^Engine (recognition|schema sweep|extraction sweep|extraction|verification)/.test(message)
+      ? message.replace(/Error:\\s*/g, "").slice(0, 300)
+      : null;
     return NextResponse.json({
-      error: error instanceof Error && /permisos|administrador/i.test(error.message)
-        ? error.message : "No se ha podido completar la importación estructurada. Consulta los registros.",
+      error: /permisos|administrador/i.test(message) ? message :
+        stage ?? "No se ha podido completar la importación estructurada. Consulta los registros.",
     }, { status: 422 });
   }
 }

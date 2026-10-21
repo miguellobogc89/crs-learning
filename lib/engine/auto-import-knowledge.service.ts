@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { analyzeStructuredDocument } from "@/lib/engine/ingestion/analyze-structured-document.service";
+import { analyzeDocumentInSweeps } from "@/lib/engine/ingestion/progressive-analysis.service";
 import { executeEngineUpsertManifest } from "@/lib/engine/execute-upsert-manifest.service";
 import type { ImportManifest } from "@/lib/engine/upsert-manifest";
 import { selectIdentityFields } from "@/lib/engine/identity-fields";
@@ -50,10 +51,12 @@ export async function importKnowledgeIntoEngine(input: {
   }
 
   const startedAt = Date.now();
-  const analysis = await analyzeStructuredDocument({
+  const analysis = await (input.replayPayload === undefined
+    ? analyzeDocumentInSweeps({ workspaceId, documentId: knowledgeFileId, text: file.extracted_text })
+    : analyzeStructuredDocument({
     workspaceId, documentId: knowledgeFileId, text: file.extracted_text,
     replayPayload: input.replayPayload,
-  });
+  }));
   // Align known equivalent keys with the active workspace schema before
   // auditing or writing. Never rename when the match is ambiguous.
   const activeTypes = await prisma.engine_object_types.findMany({
@@ -118,6 +121,7 @@ export async function importKnowledgeIntoEngine(input: {
       conflicts: preflight.conflicts,
       writesPerformed: false,
       timings: { analysisMs: analysis.modelMs, totalMs: Date.now() - startedAt },
+      sweeps: "sweeps" in analysis ? analysis.sweeps : [],
     };
   }
   const proposal = discovery.proposal!;
@@ -328,7 +332,8 @@ export async function importKnowledgeIntoEngine(input: {
       manifestRows: manifest.observations.length, manifestLinks: manifest.links.length,
       executionPending, schemaTypesUsable: usable.size },
     analysisSnapshot: { version: 1, knowledgeFileId, payload: analysis.replayPayload },
-    analysisMode: input.replayPayload === undefined ? "ai" : "replay",
+    analysisMode: input.replayPayload === undefined ? "progressive" : "replay",
+    sweeps: "sweeps" in analysis ? analysis.sweeps : [],
     details: {
       created: createdIds.map(id => ({ localId: id, entity: manifest.observations.find(row => row.localId === id)?.entityKey ?? "unknown" })),
       reused: reusedIds.map(id => ({ localId: id, entity: manifest.observations.find(row => row.localId === id)?.entityKey ?? "unknown" })),
