@@ -65,7 +65,7 @@ export async function POST(request: Request, context: Context) {
           "Return {matches:[{concept,existingKey,reason,evidence}],missing:[{concept,suggestedName,fields,reason,evidence}],uncertain:[string]}.",
           "Maximum 8 matches, 6 missing, 8 uncertain; concise reasons and fields.",
         ].join("\n"),
-        input: JSON.stringify({ document: sample, existing }),
+        input: JSON.stringify({ format: "json", task: "Return a valid json object with matches, missing and uncertain arrays.", document: sample, existing }),
         text: { format: { type: "json_object" } },
       }, { timeout: 25000, maxRetries: 0 });
       const parsed: unknown = JSON.parse(response.output_text ?? "{}");
