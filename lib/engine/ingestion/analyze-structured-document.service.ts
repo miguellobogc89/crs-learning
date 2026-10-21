@@ -1,5 +1,6 @@
 import { getKnowledgeImportModel, getOpenAIClient } from "@/lib/ai/openai";
 import { findPairEvidence } from "./pair-evidence";
+import { findAdjacentTablePairEvidence } from "./table-pair-evidence";
 import { validateSchemaDiscovery } from "../schema-discovery/validation";
 import { SCHEMA_DISCOVERY_INSTRUCTIONS } from "../schema-discovery/discover.service";
 
@@ -118,7 +119,12 @@ export async function analyzeStructuredDocument(input: {
         typeof to.values === "object" && to.values !== null && !Array.isArray(to.values)
         ? findPairEvidence(source, from.values as Record<string, unknown>,
           to.values as Record<string, unknown>) : null;
-      const verifiedQuote = exactQuote || recoveredQuote;
+      const tableQuote = !exactQuote && !recoveredQuote && from && to &&
+        typeof from.values === "object" && from.values !== null && !Array.isArray(from.values) &&
+        typeof to.values === "object" && to.values !== null && !Array.isArray(to.values)
+        ? findAdjacentTablePairEvidence(source, from.values as Record<string, unknown>,
+          to.values as Record<string, unknown>) : null;
+      const verifiedQuote = exactQuote || recoveredQuote || tableQuote;
       if (!from || !to || from.entity !== relation.fromEntity ||
           to.entity !== relation.toEntity || !verifiedQuote) {
         issues.push("Link " + index + ": " +
@@ -127,6 +133,7 @@ export async function analyzeStructuredDocument(input: {
             "evidence quote is absent or not an exact source substring.")); continue;
       }
       if (recoveredQuote) issues.push("Link " + index + ": evidence recovered from an exact source line containing both endpoint anchors.");
+      if (tableQuote) issues.push("Link " + index + ": evidence recovered from adjacent heading and delimited table row.");
       links.push({ fromRow: link.fromRow as number, toRow: link.toRow as number,
         relationKey: relation.key, evidence: verifiedQuote });
     }

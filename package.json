@@ -7,7 +7,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "test:engine:reconciler": "node --test tests/engine-reconciler.test.mjs tests/engine-identity.test.mjs tests/engine-pair-evidence.test.mjs"
+    "test:engine:reconciler": "node --test tests/engine-reconciler.test.mjs tests/engine-identity.test.mjs tests/engine-pair-evidence.test.mjs tests/engine-table-pair-evidence.test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
