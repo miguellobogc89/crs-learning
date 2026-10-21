@@ -204,20 +204,21 @@ export function KnowledgeImportProposalStep({
 
       {proposal.contentClassification ? (
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-[12px] font-semibold text-slate-900">Clasificación preliminar de documentos</p>
+          <p className="text-[12px] font-semibold text-slate-900">Clasificación y destino recomendado</p>
           <p className="mt-1 text-[11px] text-slate-500">
-            Detección local sin IA. La clasificación es orientativa y todavía no cambia el destino de la importación.
+            Detección local sin IA. El destino es una recomendación: esta versión todavía confirma los documentos mediante el flujo de Knowledge.
           </p>
           <div className="mt-2 space-y-1">
             {proposal.documentAnalyses.map(document => {
               const result = proposal.contentClassification?.[document.documentId];
+              const route = proposal.recommendedRoutes?.[document.documentId];
               const label = result?.kind === "tables" ? "Datos estructurados"
                 : result?.kind === "information" ? "Información"
                 : result?.kind === "mixed" ? "Mixto" : "Revisión necesaria";
               return (
                 <div key={document.documentId} className="flex justify-between gap-3 text-[11px]">
                   <span className="truncate text-slate-600">{document.documentName}</span>
-                  <span className="shrink-0 font-medium text-slate-800">{label}</span>
+                  <span className="shrink-0 font-medium text-slate-800">{label} · {route?.destination === "engine" ? "Engine" : route?.destination === "knowledge" ? "Knowledge" : route?.destination === "both" ? "Ambos" : "Revisión"}</span>
                 </div>
               );
             })}

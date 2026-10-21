@@ -1,3 +1,4 @@
+import type { ImportRoute } from "./recommend-route";
 import type { ImportContentClassification } from "./classify-content";
 // lib/knowledge/import/types.ts
 
@@ -131,6 +132,7 @@ export type KnowledgeImportWarning = {
 
 export type KnowledgeImportProposal = {
   contentClassification?: Record<string, ImportContentClassification>;
+  recommendedRoutes?: Record<string, ImportRoute>;
   title: string;
   description: string;
 

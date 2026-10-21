@@ -1,3 +1,4 @@
+import { recommendImportRoute } from "./recommend-route";
 import { classifyImportContent } from "./classify-content";
 ﻿// lib/knowledge/import/generate-proposal.ts
 import {
@@ -621,6 +622,13 @@ export async function generateKnowledgeImportProposal({
       ),
     }));
 
+  const contentClassification = Object.fromEntries(
+    documents.map(document => [document.id, classifyImportContent(document.text)]),
+  );
+  const recommendedRoutes = Object.fromEntries(
+    documents.map(document => [document.id, recommendImportRoute(contentClassification[document.id])]),
+  );
+
   await onProgress?.({
     step: "preparing",
     progressPercentage: 8,
@@ -711,9 +719,8 @@ export async function generateKnowledgeImportProposal({
     const proposal: KnowledgeImportProposal = {
       ...generatedProposal,
       documentAnalyses,
-      contentClassification: Object.fromEntries(
-        documents.map(document => [document.id, classifyImportContent(document.text)]),
-      ),
+      contentClassification,
+      recommendedRoutes,
     };
 
     await onProgress?.({
