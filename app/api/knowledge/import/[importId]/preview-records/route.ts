@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { getKnowledgeImportModel, getOpenAIClient } from "@/lib/ai/openai";
 import { buildPreviewSchema, normalizePreviewRows } from "@/lib/engine/ingestion/build-preview-schema";
+import { reconcilePreviewLinks } from "@/lib/engine/ingestion/reconcile-preview-links";
 import { analyzeStructuredDocument } from "@/lib/engine/ingestion/analyze-structured-document.service";
 import { buildSimulationManifest } from "@/lib/engine/ingestion/simulation-manifest";
 import { prisma } from "@/lib/prisma";
@@ -164,8 +165,10 @@ export async function POST(request: Request, context: Context) {
           throw new Error("Resolución de referencias incompleta.");
         const linked: unknown = JSON.parse(response.output_text);
         if (!isObject(linked) || !Array.isArray(linked.links)) throw new Error("Respuesta de vínculos inválida.");
-        payload.links = linked.links;
-        results.push({ id: file.id, status: "completed", payload, count: linked.links.length,
+        payload.links = reconcilePreviewLinks(file.extracted_text,
+          { entities: payload.entities as never, relations: payload.relations as never, warnings: payload.warnings as never },
+          payload.rows, linked.links);
+        results.push({ id: file.id, status: "completed", payload, count: (payload.links as unknown[]).length,
           durationMs: Date.now() - started, error: null });
         continue;
       }
