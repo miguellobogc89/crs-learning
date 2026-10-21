@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { validateEngineRecordValues } from "./validation";
 import {
   planEngineUpsert,
@@ -38,6 +39,27 @@ export async function executeEngineUpsertManifest(input: {
     if (!workspace || (workspace.owner_user_id !== userId &&
         !["owner", "admin"].includes(workspace.workspace_members[0]?.role ?? ""))) {
       throw new Error("Workspace administrator required.");
+    }
+
+    // Verify every Knowledge source inside the same authorized transaction.
+    // A caller cannot forge another workspace's document provenance.
+    const knowledgeIds = [...new Set(manifest.observations
+      .filter(item => item.source.kind === "knowledge")
+      .map(item => item.source.sourceId))];
+    const files = knowledgeIds.length ? await tx.knowledge_files.findMany({
+      where: { id: { in: knowledgeIds }, status: { in: ["ready", "processed"] },
+        knowledge_sources: knowledgeSourceReadWhere(userId, workspaceId) },
+      select: { id: true, knowledge_source_id: true, extracted_text: true },
+    }) : [];
+    if (files.length !== knowledgeIds.length) throw new Error("Knowledge evidence inaccessible.");
+    const fileById = new Map(files.map(file => [file.id, file]));
+    for (const observation of manifest.observations) {
+      if (observation.source.kind !== "knowledge") continue;
+      const file = fileById.get(observation.source.sourceId);
+      if (!file || !observation.source.evidence ||
+          !file.extracted_text.includes(observation.source.evidence)) {
+        throw new Error("Evidence quote not found in authorized Knowledge file.");
+      }
     }
 
     const types = await tx.engine_object_types.findMany({
@@ -136,6 +158,34 @@ export async function executeEngineUpsertManifest(input: {
       resolved.set(operation.localId, row.id);
       if (prior) reused.push(operation.localId);
       else created.push(operation.localId);
+    }
+    // Store traceable document evidence for both new and reused records.
+    // The record and its provenance commit or roll back together.
+    for (const observation of manifest.observations) {
+      if (observation.source.kind !== "knowledge") continue;
+      const recordId = resolved.get(observation.localId);
+      const file = fileById.get(observation.source.sourceId);
+      if (!recordId || !file) continue;
+      const record = await tx.engine_records.findFirst({
+        where: { id: recordId, workspace_id: workspaceId },
+        select: { revision: true },
+      });
+      if (!record) throw new Error("Resolved record no longer exists.");
+      const evidence = observation.source.evidence!;
+      const previous = await tx.engine_record_provenance.findFirst({
+        where: { workspace_id: workspaceId, record_id: recordId,
+          revision: record.revision, knowledge_file_id: file.id,
+          evidence_text: evidence, origin_type: "document" },
+        select: { id: true },
+      });
+      if (!previous) await tx.engine_record_provenance.create({
+        data: { workspace_id: workspaceId, record_id: recordId,
+          revision: record.revision, knowledge_file_id: file.id,
+          knowledge_source_id: file.knowledge_source_id,
+          source_locator: observation.source.locator ?? null,
+          evidence_text: evidence, origin_type: "document",
+          created_by_user_id: userId },
+      });
     }
     return { status: pending.length ? "completed_with_issues" : "completed",
       created, reused, pending, resolvedCount: resolved.size,
