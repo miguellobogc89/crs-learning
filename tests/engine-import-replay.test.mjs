@@ -63,3 +63,42 @@ test("missing evidence prevents linking",()=>{
   const links=replay(rows);
   assert.equal(links.filter(l=>l.toRow===idx||l.fromRow===idx).length,0);
 });
+
+const schemaFilename = new URL("../lib/engine/ingestion/build-preview-schema.ts",import.meta.url);
+const schemaJs = ts.transpileModule(fs.readFileSync(schemaFilename,"utf8"),{
+  compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}
+}).outputText;
+const schemaExports = {};
+new Function("exports","require",schemaJs)(schemaExports,require);
+const { buildPreviewSchema, normalizePreviewRows } = schemaExports;
+test("schema infers dates, decimal amounts and integer quantities from text",()=>{
+  const rows=[{entity:"transaction",evidence:"05/10/2026 12.50 40 REF-40",values:{
+    date:"05/10/2026",total:"12.50",units:"40",code:"REF-40"}}];
+  const proposed=buildPreviewSchema({documentId:"test",text:rows[0].evidence,
+    existing:{entities:[],relations:[]},prior:null,rows});
+  const fields=Object.fromEntries(proposed.entities[0].fields.map(f=>[f.key,f.type]));
+  assert.deepEqual(fields,{date:"date",total:"decimal",units:"integer",code:"text"});
+  const normalized=normalizePreviewRows(rows,proposed);
+  assert.equal(normalized[0].values.total,12.5);
+  assert.equal(normalized[0].values.units,40);
+  assert.equal(normalized[0].values.date,"05/10/2026");
+});
+test("removes redundant many-to-many shortcut when a record-bearing intermediary exists",()=>{
+  const rows=["order","order_line","product"].map(entity=>({entity,values:{name:entity},evidence:entity}));
+  const relations=[
+    ["order","order_line","one_to_many"],
+    ["product","order_line","one_to_many"],
+    ["order","product","many_to_many"],
+  ].map(([fromConcept,toConcept,cardinality])=>({fromConcept,toConcept,cardinality,evidence:fromConcept}));
+  const proposed=buildPreviewSchema({documentId:"test",text:"order order_line product",
+    existing:{entities:[],relations:[]},prior:{structures:null,relationships:{relations}},rows});
+  assert.equal(proposed.relations.length,2);
+  assert.ok(!proposed.relations.some(r=>r.fromEntity==="order"&&r.toEntity==="product"));
+});
+test("keeps direct many-to-many when no documented intermediary exists",()=>{
+  const rows=["author","book"].map(entity=>({entity,values:{name:entity},evidence:entity}));
+  const proposed=buildPreviewSchema({documentId:"test",text:"author book",
+    existing:{entities:[],relations:[]},prior:{structures:null,relationships:{relations:[
+      {fromConcept:"author",toConcept:"book",cardinality:"many_to_many",evidence:"author"}]}},rows});
+  assert.equal(proposed.relations.length,1);
+});
