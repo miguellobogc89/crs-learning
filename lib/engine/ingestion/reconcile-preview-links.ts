@@ -5,63 +5,59 @@ type Link = { fromRow: number; toRow: number; relationKey: string; evidence: str
 const obj = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const norm = (v: unknown) => typeof v === "string" || typeof v === "number" ?
-  String(v).trim().toLocaleLowerCase() : "";
-const referenceKeys = ["order_code", "product_code", "customer_code", "business_name", "product_name",
-  "supplier_code", "supplier_name", "invoice_code", "code", "name"];
-/** Recover only explicit foreign-key matches backed by a contiguous source passage.
- * This never creates schema, and never infers links from proximity alone. */
+  String(v).normalize("NFKC").trim().toLocaleLowerCase() : "";
+const identifier = (field: string) => /(^|_)(code|id|ref|sku)$/.test(field);
+const descriptor = (field: string) => /(^|_)(name|title|label)$/.test(field);
+const base = (field: string) => field.replace(/^(recipient|customer|business|client|item|product|article|order|invoice|supplier)_/, "");
+/** Matches only explicit shared identifiers or meaningful names, never numeric amounts. */
+const matches = (from: Row, to: Row) => {
+  for (const [leftKey, leftValue] of Object.entries(from.values)) {
+    for (const [rightKey, rightValue] of Object.entries(to.values)) {
+      const left = norm(leftValue), right = norm(rightValue);
+      if (!left || left !== right || left.length < 3) continue;
+      if (identifier(leftKey) && identifier(rightKey) &&
+          (base(leftKey) === base(rightKey) || leftKey === "code" || rightKey === "code" ||
+            leftKey === "ref" || rightKey === "ref")) return true;
+      if (descriptor(leftKey) && descriptor(rightKey)) return true;
+    }
+  }
+  return false;
+};
+const evidenceFor = (source: string, from: Row, to: Row): string | null => {
+  if (!source.includes(from.evidence) || !source.includes(to.evidence)) return null;
+  // A source-backed parent section can contain the child evidence verbatim.
+  if (from.evidence.includes(to.evidence) && from.evidence.length <= 1200) return from.evidence;
+  if (to.evidence.includes(from.evidence) && to.evidence.length <= 1200) return to.evidence;
+  // Repeated product names may occur in multiple lines; anchor the link to the
+  // specific line's evidence when it contains the shared identifying name.
+  if (to.evidence.length <= 300 &&
+      Object.values(from.values).some(value => norm(value).length >= 4 &&
+        to.evidence.toLocaleLowerCase().includes(norm(value)))) return to.evidence;
+  if (from.evidence.length <= 300 &&
+      Object.values(to.values).some(value => norm(value).length >= 4 &&
+        from.evidence.toLocaleLowerCase().includes(norm(value)))) return from.evidence;
+  return null;
+};
+/** Reconcile links only when endpoints share an explicit identity and the source
+ * contains a contiguous proof. AI suggestions cannot bypass this check. */
 export function reconcilePreviewLinks(source: string, proposal: SchemaDiscoveryProposal,
-  rawRows: unknown[], rawLinks: unknown[]): Link[] {
+  rawRows: unknown[], _rawLinks: unknown[]): Link[] {
   const rows: Array<Row | null> = rawRows.map(v =>
     obj(v) && typeof v.entity === "string" && obj(v.values) &&
     typeof v.evidence === "string" ? v as Row : null);
-  const links: Link[] = rawLinks.filter(obj).filter(v =>
-    Number.isSafeInteger(v.fromRow) && Number.isSafeInteger(v.toRow) &&
-    typeof v.relationKey === "string" && typeof v.evidence === "string") as Link[];
-  const signatures = new Set(links.map(l => l.fromRow + ":" + l.toRow + ":" + l.relationKey));
-  const anchor = (a: Row, b: Row): boolean => {
-    for (const [ka, va] of Object.entries(a.values)) {
-      for (const [kb, vb] of Object.entries(b.values)) {
-        if (!referenceKeys.includes(ka) && !referenceKeys.includes(kb)) continue;
-        if (ka === kb && ka === "name") continue;
-        const x = norm(va), y = norm(vb);
-        if (x && x === y && x.length >= 3 &&
-          (ka.endsWith("_code") || kb.endsWith("_code") ||
-            ka.endsWith("_name") || kb.endsWith("_name") ||
-            (ka === "code" && kb.endsWith("_code")) ||
-            (kb === "code" && ka.endsWith("_code")))) return true;
-      }
-    }
-    return false;
-  };
-  // Require the exact child evidence to be within a clearly scoped parent section.
-  const scopedEvidence = (a: Row, b: Row): string | null => {
-    const first = source.indexOf(a.evidence), second = source.indexOf(b.evidence);
-    if (first < 0 || second < 0) return null;
-    const start = Math.min(first, second), end = Math.max(first + a.evidence.length, second + b.evidence.length);
-    if (end - start > 650) return null;
-    const passage = source.slice(start, end);
-    if (!passage.includes(a.evidence) || !passage.includes(b.evidence)) return null;
-    // Reject passages spanning a different order or invoice heading.
-    const headings = passage.match(/(?:Pedido|Order|Factura|Invoice)\s+[A-Z0-9-]+/gi) ?? [];
-    if (new Set(headings.map(h => h.toLowerCase())).size > 1) return null;
-    return passage;
-  };
+  const links: Link[] = [];
   for (const relation of proposal.relations) {
     for (let i = 0; i < rows.length; i++) {
       const from = rows[i];
       if (!from || from.entity !== relation.fromEntity) continue;
       for (let j = 0; j < rows.length; j++) {
         const to = rows[j];
-        if (!to || to.entity !== relation.toEntity || i === j || !anchor(from, to)) continue;
-        const signature = i + ":" + j + ":" + relation.key;
-        if (signatures.has(signature)) continue;
-        const evidence = scopedEvidence(from, to);
-        if (!evidence) continue;
-        links.push({ fromRow: i, toRow: j, relationKey: relation.key, evidence });
-        signatures.add(signature);
+        if (!to || to.entity !== relation.toEntity || i === j || !matches(from, to)) continue;
+        const evidence = evidenceFor(source, from, to);
+        if (evidence) links.push({ fromRow: i, toRow: j, relationKey: relation.key, evidence });
+        if (links.length >= 300) return links;
       }
     }
   }
-  return links.slice(0, 300);
+  return links;
 }
