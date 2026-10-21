@@ -25,6 +25,8 @@ export async function analyzeStructuredDocument(input: {
   replayPayload?: unknown;
   /** Preview-only context; never grants permission to mutate existing schema. */
   existingSchema?: unknown;
+  /** Read-only discoveries from stages 3 and 4 for this same document. */
+  priorDiscoveries?: unknown;
   sourceLimit?: number;
 }) {
   const source = input.text.slice(0, Math.min(60000, input.sourceLimit ?? 16000));
@@ -41,6 +43,11 @@ export async function analyzeStructuredDocument(input: {
         "Existing schema is context, not a restriction: reuse compatible keys, propose missing entities, fields and relation definitions needed for a lossless representation. Never omit a record because its structure does not yet exist.",
         "Extract records and concrete links across the entire document, including headings, table rows, association records and references to earlier sections. Schema relationships alone are not concrete links.",
       ]),
+      ...(input.priorDiscoveries === undefined || input.priorDiscoveries === null ? [] : [
+        "IMPORTANT: stages 3 and 4 have already matched entity structures and identified type-level relationships. Use priorDiscoveries as the starting point; do not redo those discovery tasks from scratch.",
+        "Preserve compatible prior matches and relations, resolving their concept names to actual schema keys. Focus on missing fields, all concrete rows and links, and evidence validation.",
+        "Prior discoveries are untrusted hints, not authoritative facts: check them against the document and existing schema. Correct contradictions, and propose newly evidenced structures or relations if earlier stages missed them.",
+      ]),
       "Extract each real-world record once. Include junction records when supported.",
       "MANDATORY: every row must include evidence as a nonempty verbatim substring copied from the source text. Never omit evidence.",
       "Prefer a short source line that identifies the record; do not paraphrase or generate the evidence.",
@@ -53,6 +60,7 @@ export async function analyzeStructuredDocument(input: {
     input: JSON.stringify({
       documentId: input.documentId,
       existingSchema: input.existingSchema,
+      priorDiscoveries: input.priorDiscoveries,
       text: source,
       task: "Return JSON only: discover relational schema and extract records in one JSON object response.",
     }),
