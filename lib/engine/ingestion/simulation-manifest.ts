@@ -45,7 +45,26 @@ export function buildSimulationManifest(input: {
         return typeof value === "string" && value.trim().length > 0 &&
           input.text.normalize("NFKC").toLowerCase().includes(value.normalize("NFKC").toLowerCase());
       });
-    if (!valid) { issues.push("Registro row_" + row.sourceIndex + ": valores, campos o evidencia no verificables"); return []; }
+    if (!valid) {
+      const failures = values.filter(([fieldKey, value]) => {
+        const field = entity?.fields.find(item => item.key === fieldKey);
+        if (!field) return true;
+        if (value === null) return false;
+        if (field.type === "boolean") return typeof value !== "boolean";
+        if (field.type === "integer" || field.type === "decimal") {
+          if (typeof value !== "number" || !Number.isFinite(value) ||
+              (field.type === "integer" && !Number.isSafeInteger(value))) return true;
+          return !(input.text.match(/-?\\d+(?:[.,]\\d+)*/g) ?? [])
+            .some(token => Number(token.replace(",", ".")) === value);
+        }
+        return typeof value !== "string" || !value.trim() ||
+          !input.text.normalize("NFKC").toLowerCase().includes(value.normalize("NFKC").toLowerCase());
+      }).map(([key]) => key);
+      issues.push("Registro row_" + row.sourceIndex + ": " +
+        (!entity ? "entidad desconocida" : !input.text.includes(row.evidence) ?
+          "evidencia no encontrada" : "campos sin respaldo: " + failures.join(", ")));
+      return [];
+    }
     const conflict = entity.fields.some(field => field.disposition === "conflict");
     const proposed = entity.disposition === "proposed" || entity.fields.some(field => field.disposition === "proposed");
     return [{ localId: "row_" + row.sourceIndex, entityKey: row.entity,
