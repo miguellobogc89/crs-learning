@@ -179,11 +179,12 @@ export async function importKnowledgeIntoEngine(input: {
   };
   const schemaMs = Date.now() - reconciliationStartedAt;
   const executionStartedAt = Date.now();
-  let recordsCreated = 0, recordsReused = 0;
+  let recordsCreated = 0, recordsReused = 0, relationsProposed = 0;
   if (manifest.observations.length) {
     const executed = await executeEngineUpsertManifest({ workspaceId, userId, manifest });
     recordsCreated = executed.created.length;
     recordsReused = executed.reused.length;
+    relationsProposed = executed.relationsProposed;
     issues.push(...executed.pending.map(item => item.localId + ": " + item.reason));
   }
 
@@ -195,6 +196,7 @@ export async function importKnowledgeIntoEngine(input: {
     recordsPending: parsed.rows.length - recordsCreated - recordsReused,
     entitiesDiscovered: proposal.entities.length,
     relationsDiscovered: proposal.relations.length,
+    relationsProposed,
     issues: [...issues, ...proposal.warnings].slice(0, 100),
     note: "Los registros ambiguos y las relaciones no aprobadas quedan pendientes de revisión.",
     timings: { analysisMs: analysis.modelMs, schemaMs,
