@@ -70,7 +70,7 @@ function EngineImportActivity({ result, tableFileNames }: { result: ConfirmKnowl
     let cancelled = false;
     const controller = new AbortController();
     async function run() {
-      for (const [index, document] of documents.entries()) {
+      async function processDocument(document: typeof documents[number], index: number) {
         if (cancelled) return;
         setActivity(previous => previous.map((item, i) =>
           i === index ? { ...item, status: "analyzing" } : item,
@@ -104,6 +104,13 @@ function EngineImportActivity({ result, tableFileNames }: { result: ConfirmKnowl
             } : item,
           ));
         }
+      }
+      // Limit concurrency so several files do not wait on sequential model calls.
+      // Each file still has its own isolated request and status.
+      for (let offset = 0; offset < documents.length; offset += 3) {
+        if (cancelled) break;
+        await Promise.all(documents.slice(offset, offset + 3).map((document, i) =>
+          processDocument(document, offset + i)));
       }
     }
     void run();
@@ -145,8 +152,8 @@ function EngineImportActivity({ result, tableFileNames }: { result: ConfirmKnowl
         ))}
       </div>
       <p className="mt-3 text-[11px] leading-5 text-blue-800">
-        Esta fase descubre estructuras y comprueba coincidencias existentes.
-        Todavía no crea tipos ni inserta registros en Engine.
+        Engine crea o reutiliza registros en borrador cuando hay identidad suficiente.
+        Los conflictos y relaciones no verificadas quedan pendientes de revisión.
       </p>
     </section>
   );
