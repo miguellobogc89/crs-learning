@@ -28,6 +28,8 @@ export async function POST(request: Request, context: Context) {
   const body: unknown = await request.json().catch(() => ({}));
   const requested = isObject(body) && Array.isArray(body.fileIds)
     ? body.fileIds.filter((v): v is string => typeof v === "string") : [];
+  const priorDiscoveries = isObject(body) && Array.isArray(body.priorDiscoveries)
+    ? body.priorDiscoveries.slice(0, 50) : [];
   const files = imported.knowledge_import_files.filter(file =>
     requested.includes(file.id) && file.extracted_text.trim());
   if (!files.length) return Response.json({ error: "No hay documentos extraídos para preparar registros" }, { status: 409 });
@@ -65,8 +67,19 @@ export async function POST(request: Request, context: Context) {
           fields: type.engine_field_definitions.map(field => ({ key: field.key, type: field.field_type })) })),
         relations: relationDefs,
       };
+      // Earlier stages are hints only: never treat their suggestions as authorized schema changes.
+      // Bind each hint to the same authorized import file; cap its serialized size.
+      const prior = priorDiscoveries.find(item => isObject(item) && item.fileId === file.id);
+      const discovered = isObject(prior) ? {
+        structures: isObject(prior.structures) && prior.structures.id === file.id && prior.structures.status === "completed"
+          ? prior.structures : null,
+        relationships: isObject(prior.relationships) && prior.relationships.id === file.id && prior.relationships.status === "completed"
+          ? prior.relationships : null,
+      } : null;
+      const priorContext = discovered && JSON.stringify(discovered).length <= 20000 ? discovered : null;
       const analysis = await analyzeStructuredDocument({ workspaceId: activeWorkspace.id,
-        documentId: file.id, text: file.extracted_text, sourceLimit: 60000, existingSchema: existing });
+        documentId: file.id, text: file.extracted_text, sourceLimit: 60000,
+        existingSchema: existing, priorDiscoveries: priorContext });
       if (!analysis.schema.valid || !analysis.schema.proposal || analysis.truncated)
         throw new Error("Esquema de simulación inválido: " + JSON.stringify(analysis.schema.issues));
       const manifest = buildSimulationManifest({ proposal: analysis.schema.proposal,
