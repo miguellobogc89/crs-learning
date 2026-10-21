@@ -167,6 +167,16 @@ export async function importKnowledgeIntoEngine(input: {
   const skippedEntities: { entity: string; reason: string; rows: number }[] = [];
   for (const entity of proposal.entities) {
     if (!extracted.some(row => row.entity === entity.key)) continue;
+    const possibleDuplicates = similarities.filter(match => match.proposedKey === entity.key &&
+      match.compatible && !activeTypes.some(type => type.key === entity.key));
+    if (possibleDuplicates.length) {
+      const reason = "Posible tabla duplicada; requiere revisión del esquema: " +
+        possibleDuplicates.map(match => match.existingKey).join(", ");
+      issues.push(entity.key + ": " + reason);
+      skippedEntities.push({ entity: entity.key, reason,
+        rows: extracted.filter(row => row.entity === entity.key).length });
+      continue;
+    }
     try {
       const result = await prisma.$transaction(async tx => {
         const existing = await tx.engine_object_types.findUnique({
