@@ -103,6 +103,7 @@ export async function executeEngineUpsertManifest(input: {
     const pending: { localId: string; reason: string }[] = [];
     const resolved = new Map<string, string>();
     let relationsProposed = 0;
+    let provenanceCreated = 0;
     for (const operation of plan.operations) {
       if (operation.action === "review") {
         pending.push({ localId: operation.localId, reason: operation.reason });
@@ -240,17 +241,20 @@ export async function executeEngineUpsertManifest(input: {
           evidence_text: evidence, origin_type: "document" },
         select: { id: true },
       });
-      if (!previous) await tx.engine_record_provenance.create({
+      if (!previous) {
+        await tx.engine_record_provenance.create({
         data: { workspace_id: workspaceId, record_id: recordId,
           revision: record.revision, knowledge_file_id: file.id,
           knowledge_source_id: file.knowledge_source_id,
           source_locator: observation.source.locator ?? null,
           evidence_text: evidence, origin_type: "document",
           created_by_user_id: userId },
-      });
+        });
+        provenanceCreated++;
+      }
     }
     return { status: pending.length ? "completed_with_issues" : "completed",
       created, reused, pending, relationsProposed, resolvedCount: resolved.size,
-      writesPerformed: created.length > 0 };
+      writesPerformed: created.length > 0 || relationsProposed > 0 || provenanceCreated > 0 };
   });
 }
