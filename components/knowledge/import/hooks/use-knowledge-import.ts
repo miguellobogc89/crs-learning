@@ -171,6 +171,16 @@ export function useKnowledgeImport({
     error: string | null;
   }>>({});
   const [relationsRunning, setRelationsRunning] = useState(false);
+  const [recordPreview, setRecordPreview] = useState<Record<string, {
+    status: "completed" | "error";
+    rows: Array<{ localId: string; entityKey: string;
+      values: Record<string, string | number | boolean | null>;
+      evidence: string; disposition: "candidate" | "pending"; reason: string }>;
+    issues: string[]; sourceChars: number; analyzedChars: number;
+    partial: boolean; durationMs: number; error: string | null;
+  }>>({});
+  const [recordPreviewRunning, setRecordPreviewRunning] = useState(false);
+
 
   const [error, setError] =
     useState<string | null>(null);
@@ -804,6 +814,45 @@ export function useKnowledgeImport({
               if (isCurrentOperation()) setRelationsRunning(false);
             }
           }
+          // Stage 5: preview records against only the schema keys verified in
+          // stage 3. No INSERT, schema creation or Knowledge confirmation.
+          const matchedFiles = semanticResult?.files?.filter(file => file.status === "completed") ?? [];
+          if (isCurrentOperation() && matchedFiles.length) {
+            setRecordPreviewRunning(true);
+            try {
+              const existingKeys = [...new Set(matchedFiles.flatMap(file =>
+                file.matches.map(match => match.existingKey)))];
+              const response = await fetch(
+                `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/preview-records`,
+                { method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ fileIds: matchedFiles.map(file => file.id), existingKeys }) },
+              );
+              const result: { files?: Array<{
+                id: string; status: "completed" | "error";
+                rows: Array<{ localId: string; entityKey: string;
+                  values: Record<string, string | number | boolean | null>;
+                  evidence: string; disposition: "candidate" | "pending"; reason: string }>;
+                issues: string[]; sourceChars: number; analyzedChars: number;
+                partial: boolean; durationMs: number; error: string | null;
+              }>; error?: string } = await response.json();
+              if (!response.ok || !result.files)
+                throw new Error(result.error ?? "No se pudo preparar la vista previa de registros");
+              if (isCurrentOperation()) setRecordPreview(Object.fromEntries(result.files.map(file => {
+                const source = recognizedFiles.find(item => item.id === file.id);
+                return [source?.fileName ?? file.id, file];
+              })));
+            } catch (previewError) {
+              if (isCurrentOperation()) {
+                const message = previewError instanceof Error ? previewError.message : String(previewError);
+                setRecordPreview(Object.fromEntries(recognizedFiles.map(file => [
+                  file.fileName, { status: "error" as const, rows: [], issues: [],
+                    sourceChars: 0, analyzedChars: 0, partial: true, durationMs: 0, error: message },
+                ])));
+              }
+            } finally {
+              if (isCurrentOperation()) setRecordPreviewRunning(false);
+            }
+          }
           if (!isCurrentOperation()) return;
           updateImport(uploadResult.importId, {
             step: "completed",
@@ -1059,6 +1108,8 @@ export function useKnowledgeImport({
       setSemanticRunning(false);
       setRelations({});
       setRelationsRunning(false);
+      setRecordPreview({});
+      setRecordPreviewRunning(false);
       setIsAnalyzing(false);
       setIsConfirming(false);
 
@@ -1153,6 +1204,8 @@ export function useKnowledgeImport({
     semanticRunning,
     relations,
     relationsRunning,
+    recordPreview,
+    recordPreviewRunning,
     tableDetection,
     duplicateNotice,
     allFilesDuplicate: isAllDuplicateReview(importReview),

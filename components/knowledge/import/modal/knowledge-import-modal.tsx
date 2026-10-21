@@ -565,6 +565,7 @@ export function KnowledgeImportModal({
                   const completed = knowledgeImport.step === "completed";
                   const semantic = knowledgeImport.semantic[file.name];
                   const relations = knowledgeImport.relations[file.name];
+                  const preview = knowledgeImport.recordPreview[file.name];
                   const extracting = knowledgeImport.processingPhase === "extracting";
                   const stages: Array<{ title: string; state: "done" | "active" | "waiting" | "error"; detail: string }> = [
                     {
@@ -601,8 +602,18 @@ export function KnowledgeImportModal({
                         semantic?.status === "completed" ? "Analizando relaciones entre entidades" :
                         "Pendiente: proponer relaciones sin crearlas",
                     },
+                    {
+                      title: "Extraer registros · simulación",
+                      state: preview?.status === "error" ? "error" :
+                        preview?.status === "completed" ? "done" :
+                        semantic?.status === "completed" ? "active" : "waiting",
+                      detail: preview?.status === "error" ? preview.error ?? "Error de extracción" :
+                        preview?.status === "completed"
+                          ? `${preview.rows.length} candidatos · ${preview.issues.length} incidencias · ${preview.analyzedChars}/${preview.sourceChars} caracteres revisados`
+                          : "Preparar candidatos con evidencia, sin INSERT ni UPSERT",
+                    },
                   ];
-                  const errorMessages = [recognized?.error, semantic?.error, relations?.error, knowledgeImport.error].filter(
+                  const errorMessages = [recognized?.error, semantic?.error, relations?.error, preview?.error, knowledgeImport.error].filter(
                     (message): message is string => Boolean(message),
                   );
                   return (
@@ -620,12 +631,12 @@ export function KnowledgeImportModal({
                               </span>
                             ) : null}
                             <span className="text-[11px] text-slate-500">
-                              {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" ? "Revisión con errores" :
+                              {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? "Revisión con errores" :
                                 completed ? "Prueba finalizada · sin importación" : "Revisando documento"}
                             </span>
                           </div>
                         </div>
-                        {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
+                        {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
                           completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
                           <Loader2 className="size-5 animate-spin text-blue-600" />}
                       </div>
@@ -706,6 +717,42 @@ export function KnowledgeImportModal({
                               </div>
                               {semantic.uncertain.length ? (
                                 <p className="text-[11px] text-amber-700">Por revisar: {semantic.uncertain.join(" · ")}</p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {preview?.status === "completed" ? (
+                            <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+                              <p className="text-xs font-semibold text-slate-800">Vista previa de registros · sin guardar</p>
+                              <p className="text-[11px] text-slate-500">
+                                Se han analizado {preview.analyzedChars} de {preview.sourceChars} caracteres.
+                                {preview.partial ? " Prueba parcial: aún no se ha procesado todo el documento." : " Documento completo."}
+                                {" "}No se han comprobado identidades ni duplicados. Ningún registro se ha insertado.
+                              </p>
+                              {preview.rows.length ? (
+                                <div className="space-y-2">
+                                  {preview.rows.map(row => (
+                                    <details key={row.localId} className="rounded-lg border border-slate-100 px-3 py-2">
+                                      <summary className="cursor-pointer text-xs text-slate-700">
+                                        <strong>{row.entityKey}</strong> · {Object.entries(row.values).slice(0, 3).map(([key, value]) => `${key}: ${String(value)}`).join(" · ")}
+                                      </summary>
+                                      <div className="mt-2 space-y-1 text-[11px] text-slate-600">
+                                        {Object.entries(row.values).map(([key, value]) => (
+                                          <p key={key}><strong>{key}:</strong> {String(value)}</p>
+                                        ))}
+                                        <p className="text-slate-500">Evidencia: {row.evidence}</p>
+                                        <p className="text-amber-700">{row.reason}</p>
+                                      </div>
+                                    </details>
+                                  ))}
+                                </div>
+                              ) : <p className="text-[11px] text-slate-500">No hay registros verificables en la muestra.</p>}
+                              {preview.issues.length ? (
+                                <div className="rounded-lg bg-amber-50 p-3">
+                                  <p className="text-xs font-semibold text-amber-800">Incidencias de extracción</p>
+                                  {preview.issues.map((issue, index) => (
+                                    <p key={index} className="mt-1 text-[11px] text-amber-700">{issue}</p>
+                                  ))}
+                                </div>
                               ) : null}
                             </div>
                           ) : null}
