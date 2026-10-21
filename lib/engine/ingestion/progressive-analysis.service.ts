@@ -22,6 +22,29 @@ export function splitEngineDocument(source: string, target = 4000): string[] {
   return chunks;
 }
 
+/**
+ * Sample from across the document instead of assuming all entity definitions
+ * appear in the first pages. Preserve verbatim quotes for evidence checks.
+ */
+export function buildSchemaOverview(source: string, budget = 8000): string {
+  if (source.length <= budget) return source;
+  const lines = source.split("\n");
+  const segments = Math.min(8, Math.max(2, Math.ceil(source.length / budget)));
+  const perSegment = Math.floor(budget / segments);
+  const result: string[] = [];
+  for (let index = 0; index < segments; index++) {
+    const start = Math.floor(index * lines.length / segments);
+    const end = Math.floor((index + 1) * lines.length / segments);
+    let selected = "";
+    for (const line of lines.slice(start, end)) {
+      if (selected.length + line.length + 1 > perSegment) break;
+      selected += (selected ? "\n" : "") + line;
+    }
+    if (selected) result.push(selected);
+  }
+  return result.join("\n");
+}
+
 async function askJson(instructions: string, input: unknown): Promise<Record<string, unknown>> {
   const response = await getOpenAIClient().responses.create({
     model: getKnowledgeImportModel(),
@@ -40,6 +63,7 @@ async function askJson(instructions: string, input: unknown): Promise<Record<str
 export async function analyzeDocumentInSweeps(input: {
   workspaceId: string; documentId: string; text: string;
 }) {
+  const wallStarted = Date.now();
   const source = input.text.slice(0, 16000);
   const sweeps: EngineSweep[] = [];
   const chunks = splitEngineDocument(source);
@@ -55,7 +79,7 @@ export async function analyzeDocumentInSweeps(input: {
   try {
     proposal = await askJson(SCHEMA_DISCOVERY_INSTRUCTIONS +
       "\nDiscover the canonical schema only. No rows. Output entities, relations, warnings.", {
-      documentId: input.documentId, text: source.slice(0, 8000),
+      documentId: input.documentId, text: buildSchemaOverview(source),
     });
   } catch (error) {
     throw new Error("Engine schema sweep failed: " + String(error));
@@ -140,5 +164,5 @@ export async function analyzeDocumentInSweeps(input: {
   sweeps.push({ stage: "verification", durationMs: Date.now() - started,
     details: { acceptedRows: analysis.rows.length,
       acceptedLinks: analysis.links.length, schemaValid: analysis.schema.valid } });
-  return { ...analysis, modelMs: sweeps.reduce((n, sweep) => n + sweep.durationMs, 0), sweeps };
+  return { ...analysis, modelMs: Date.now() - wallStarted, sweeps };
 }
