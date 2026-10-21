@@ -712,7 +712,18 @@ export function useKnowledgeImport({
           if (!response.ok || !result.files) {
             throw new Error(result.error ?? "Error al reconocer el documento");
           }
-          setRecognition(Object.fromEntries(result.files.map(file => [file.fileName, file])));
+          // Match only files confirmed by text extraction; ignore uploaded
+          // duplicates and stale rows with the same display name.
+          const extractedIds = new Set(
+            (analysisResult.textExtraction.files ?? [])
+              .filter(file => file.status === "text_ready")
+              .map(file => file.id),
+          );
+          const recognizedFiles = result.files.filter(file => extractedIds.has(file.id));
+          if (recognizedFiles.length === 0) {
+            throw new Error("No se ha reconocido ningún archivo con extracción de texto confirmada.");
+          }
+          setRecognition(Object.fromEntries(recognizedFiles.map(file => [file.fileName, file])));
           updateImport(uploadResult.importId, {
             step: "completed",
             status: "completed",
