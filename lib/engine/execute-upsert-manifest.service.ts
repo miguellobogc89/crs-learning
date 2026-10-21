@@ -115,18 +115,17 @@ export async function executeEngineUpsertManifest(input: {
       const key = "upsert:" + createHash("sha256").update(JSON.stringify([
         workspaceId, type.id, identity.map(normalize),
       ])).digest("hex");
-      // Unique external key prevents identical concurrent inserts.
+      // Unique external key prevents identical concurrent inserts; a concurrent
+      // conflict rolls back this transaction and can be safely retried.
       const prior = await tx.engine_records.findFirst({
         where: { workspace_id: workspaceId, object_type_id: type.id, external_key: key },
-        select: { id: true },
+        select: { id: true, values_json: true },
       });
-      const row = await tx.engine_records.upsert({
-        where: { object_type_id_external_key: { object_type_id: type.id, external_key: key } },
-        create: { workspace_id: workspaceId, object_type_id: type.id,
+      const row = prior ?? await tx.engine_records.create({
+        data: { workspace_id: workspaceId, object_type_id: type.id,
           external_key: key, status: "draft", schema_version: type.schema_version,
           values_json: checked.values as Prisma.InputJsonObject,
           created_by_user_id: userId, updated_by_user_id: userId },
-        update: {},
         select: { id: true, values_json: true },
       });
       if (!isObject(row.values_json) || Object.entries(checked.values).some(([field, value]) =>
