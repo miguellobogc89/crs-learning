@@ -47,7 +47,7 @@ const row = (localId, entityKey, values) => ({
   localId, entityKey, values, source: sourceRef,
 });
 const manifest = observations => ({
-  version: 1, workspaceId, entities, observations, links: [],
+  version: 1, workspaceId, entities: structuredClone(entities), observations, links: [],
 });
 const tests = [
   ["Reuse existing recipe and ingredient", () => {
