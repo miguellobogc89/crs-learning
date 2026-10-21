@@ -34,15 +34,15 @@ export async function listPendingEngineRelations(input: { workspaceId: string; u
 }
 
 export async function listApprovedEngineRelations(input: {
-  workspaceId: string; userId: string; recordIds: string[];
+  workspaceId: string; userId: string; recordIds?: string[];
 }) {
-  if (input.recordIds.length > 100) throw new Error("Too many record IDs.");
+  if ((input.recordIds?.length ?? 0) > 100) throw new Error("Too many record IDs.");
   return prisma.$transaction(async tx => {
     await authorize(tx, input.workspaceId, input.userId, false);
     return tx.engine_record_relations.findMany({
       where: { workspace_id: input.workspaceId,
-        OR: [{ from_record_id: { in: input.recordIds } },
-          { to_record_id: { in: input.recordIds } }] },
+        ...(input.recordIds ? { OR: [{ from_record_id: { in: input.recordIds } },
+          { to_record_id: { in: input.recordIds } }] } : {}) },
       include: { definition: { select: { key: true, name: true, cardinality: true } } },
       take: 500,
     });
