@@ -19,6 +19,25 @@ import type {
   KnowledgeImportSkippedDocumentLog,
 } from "./types";
 
+type EngineImportStatus = NonNullable<KnowledgeImportExecutionLog["engineImports"]>[number]["status"];
+type EngineImportStage = NonNullable<NonNullable<KnowledgeImportExecutionLog["engineImports"]>[number]["stages"]>[number];
+
+function isEngineImportStatus(value: string): value is EngineImportStatus {
+  return value === "completed" || value === "completed_with_issues" ||
+    value === "no_records_imported" || value === "error";
+}
+
+function isEngineImportStage(value: unknown): value is EngineImportStage {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const stage = value as Record<string, unknown>;
+  if (typeof stage.stage !== "string" || typeof stage.durationMs !== "number" ||
+      !Number.isFinite(stage.durationMs) || !stage.details ||
+      typeof stage.details !== "object" || Array.isArray(stage.details)) return false;
+  return Object.values(stage.details).every(detail =>
+    typeof detail === "boolean" ||
+    (typeof detail === "number" && Number.isFinite(detail)));
+}
+
 type ConfirmKnowledgeImportInput = {
   importId: string;
   userId: string;
@@ -1007,10 +1026,12 @@ export async function confirmKnowledgeImport({
         engineImports.push({
           knowledgeFileId: document.knowledgeFileId,
           fileName: document.fileName,
-          status: imported.status,
+          status: isEngineImportStatus(imported.status) ? imported.status : "error",
           recordsCreated: imported.recordsCreated,
           recordsReused: imported.recordsReused,
-          stages: imported.sweeps,
+          stages: Array.isArray(imported.sweeps)
+            ? imported.sweeps.filter(isEngineImportStage)
+            : [],
         });
       } catch (error) {
         console.error("Engine source import failed", {
