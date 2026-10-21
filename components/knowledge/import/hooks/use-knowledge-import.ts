@@ -765,8 +765,8 @@ export function useKnowledgeImport({
                 body: JSON.stringify({ fileIds: recognizedFiles.map(file => file.id) }) },
             );
             semanticResult = await comparison.json();
-            if (!comparison.ok || !semanticResult.files)
-              throw new Error(semanticResult.error ?? "No se pudo comparar la estructura");
+            if (!comparison.ok || !semanticResult?.files)
+              throw new Error(semanticResult?.error ?? "No se pudo comparar la estructura");
             setSemantic(Object.fromEntries(semanticResult.files.map(file => {
               const source = recognizedFiles.find(item => item.id === file.id);
               return [source?.fileName ?? file.id, file];
