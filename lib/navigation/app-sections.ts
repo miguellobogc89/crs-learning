@@ -5,6 +5,7 @@ import {
   Home,
   Inbox,
   Library,
+  Table2,
   Settings,
   UserRound,
 } from "lucide-react";
@@ -19,6 +20,11 @@ export const APP_SECTIONS = {
     label: "Conocimiento",
     href: "/knowledge",
     icon: Library,
+  },
+  tables: {
+    label: "Tablas",
+    href: "/engine/tables",
+    icon: Table2,
   },
   courses: {
     label: "Academy",
