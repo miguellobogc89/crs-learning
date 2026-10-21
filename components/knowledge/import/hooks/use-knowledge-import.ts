@@ -163,6 +163,14 @@ export function useKnowledgeImport({
     error: string | null;
   }>>({});
   const [semanticRunning, setSemanticRunning] = useState(false);
+  const [relations, setRelations] = useState<Record<string, {
+    status: "completed" | "error";
+    relations: Array<{ fromConcept: string; toConcept: string; cardinality: string; existingRelationKey: string; reason: string; evidence: string }>;
+    missingStructures: Array<{ name: string; reason: string; evidence: string }>;
+    uncertain: string[];
+    error: string | null;
+  }>>({});
+  const [relationsRunning, setRelationsRunning] = useState(false);
 
   const [error, setError] =
     useState<string | null>(null);
@@ -761,6 +769,42 @@ export function useKnowledgeImport({
           } finally {
             setSemanticRunning(false);
           }
+          if (isCurrentOperation() && semanticResult?.files?.some(file => file.status === "completed")) {
+            setRelationsRunning(true);
+            try {
+              const eligibleIds = semanticResult.files
+                .filter(file => file.status === "completed").map(file => file.id);
+              const response = await fetch(
+                `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/identify-relations`,
+                { method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ fileIds: eligibleIds }) },
+              );
+              const result: { files?: Array<{
+                id: string; status: "completed" | "error";
+                relations: Array<{ fromConcept: string; toConcept: string; cardinality: string; existingRelationKey: string; reason: string; evidence: string }>;
+                missingStructures: Array<{ name: string; reason: string; evidence: string }>;
+                uncertain: string[]; error: string | null;
+              }>; error?: string } = await response.json();
+              if (!response.ok || !result.files)
+                throw new Error(result.error ?? "No se pudieron identificar las relaciones");
+              if (isCurrentOperation()) {
+                setRelations(Object.fromEntries(result.files.map(file => {
+                  const source = recognizedFiles.find(item => item.id === file.id);
+                  return [source?.fileName ?? file.id, file];
+                })));
+              }
+            } catch (relationError) {
+              if (isCurrentOperation()) {
+                const message = relationError instanceof Error ? relationError.message : String(relationError);
+                setRelations(Object.fromEntries(recognizedFiles.map(file => [
+                  file.fileName, { status: "error" as const, relations: [], missingStructures: [], uncertain: [], error: message },
+                ])));
+              }
+            } finally {
+              if (isCurrentOperation()) setRelationsRunning(false);
+            }
+          }
+          if (!isCurrentOperation()) return;
           updateImport(uploadResult.importId, {
             step: "completed",
             status: "completed",
@@ -1013,6 +1057,8 @@ export function useKnowledgeImport({
       setRecognition({});
       setSemantic({});
       setSemanticRunning(false);
+      setRelations({});
+      setRelationsRunning(false);
       setIsAnalyzing(false);
       setIsConfirming(false);
 
@@ -1105,6 +1151,8 @@ export function useKnowledgeImport({
     recognition,
     semantic,
     semanticRunning,
+    relations,
+    relationsRunning,
     tableDetection,
     duplicateNotice,
     allFilesDuplicate: isAllDuplicateReview(importReview),
