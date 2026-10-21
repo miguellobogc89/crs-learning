@@ -96,6 +96,7 @@ export async function importKnowledgeIntoEngine(input: {
     extracted.push({ entity: entity.key, values, evidence: raw.evidence });
   }
 
+  const reconciliationStartedAt = Date.now();
   let typesCreated = 0, fieldsCreated = 0;
   const usable = new Map<string, { id: string; version: number }>();
   for (const entity of proposal.entities) {
@@ -170,6 +171,8 @@ export async function importKnowledgeIntoEngine(input: {
     })),
     links: [],
   };
+  const schemaMs = Date.now() - reconciliationStartedAt;
+  const executionStartedAt = Date.now();
   let recordsCreated = 0, recordsReused = 0;
   if (manifest.observations.length) {
     const executed = await executeEngineUpsertManifest({ workspaceId, userId, manifest });
@@ -178,6 +181,10 @@ export async function importKnowledgeIntoEngine(input: {
     issues.push(...executed.pending.map(item => item.localId + ": " + item.reason));
   }
 
+  if (proposal.relations.length) {
+    issues.push(proposal.relations.length +
+      " relaciones detectadas; no se han creado vínculos sin verificación de extremos.");
+  }
   return {
     status: issues.length ? "completed_with_issues" : "completed",
     typesCreated, fieldsCreated, recordsCreated, recordsReused,
@@ -186,7 +193,9 @@ export async function importKnowledgeIntoEngine(input: {
     relationsDiscovered: proposal.relations.length,
     issues: [...issues, ...proposal.warnings].slice(0, 100),
     note: "Los registros ambiguos y las relaciones no aprobadas quedan pendientes de revisión.",
-    timings: { analysisMs: analysis.modelMs, totalMs: Date.now() - startedAt },
+    timings: { analysisMs: analysis.modelMs, schemaMs,
+      executionMs: Date.now() - executionStartedAt,
+      totalMs: Date.now() - startedAt },
     writesPerformed: typesCreated + fieldsCreated + recordsCreated > 0,
   };
 }
