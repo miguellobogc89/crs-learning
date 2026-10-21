@@ -3,6 +3,7 @@ import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { analyzeStructuredDocument } from "@/lib/engine/ingestion/analyze-structured-document.service";
 import { executeEngineUpsertManifest } from "@/lib/engine/execute-upsert-manifest.service";
 import type { ImportManifest } from "@/lib/engine/upsert-manifest";
+import { auditDiscoveredModel } from "@/lib/engine/schema-discovery/model-audit";
 
 type Row = { entity: string; values: Record<string, unknown>; evidence: string; sourceIndex: number };
 const normalizedSource = (value: string) => value.normalize("NFKC").toLocaleLowerCase("es").replace(/\s+/g, " ");
@@ -55,8 +56,15 @@ export async function importKnowledgeIntoEngine(input: {
         totalMs: Date.now() - startedAt } };
   }
   const proposal = discovery.proposal;
+  const audit = auditDiscoveredModel(proposal, analysis.rows, analysis.links);
+  if (!audit.valid) {
+    return { status: "review", typesCreated: 0, fieldsCreated: 0,
+      recordsCreated: 0, recordsReused: 0, recordsPending: analysis.rows.length,
+      issues: audit.errors, writesPerformed: false,
+      timings: { analysisMs: analysis.modelMs, totalMs: Date.now() - startedAt } };
+  }
   const sourceText = file.extracted_text.slice(0, 16000);
-  const issues: string[] = [...analysis.issues];
+  const issues: string[] = [...analysis.issues, ...audit.warnings];
   if (analysis.truncated) issues.push("El análisis está limitado a los primeros 16000 caracteres.");
   const extracted: Row[] = [];
   const parsed = { rows: analysis.rows };
