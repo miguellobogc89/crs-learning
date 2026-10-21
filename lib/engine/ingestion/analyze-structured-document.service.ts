@@ -3,7 +3,8 @@ import { validateSchemaDiscovery } from "../schema-discovery/validation";
 import { SCHEMA_DISCOVERY_INSTRUCTIONS } from "../schema-discovery/discover.service";
 
 export type ExtractedLink = { fromRow: number; toRow: number; relationKey: string; evidence: string };
-\nexport type ExtractedRow = {
+
+export type ExtractedRow = {
   entity: string;
   values: Record<string, unknown>;
   evidence: string;
