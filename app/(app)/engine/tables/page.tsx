@@ -1,16 +1,18 @@
 import Link from "next/link";
+import { prisma } from "@/lib/prisma";
+import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
 import { auth } from "@/auth";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { listEngineObjectTypes, listEngineRecords } from "@/lib/engine/records.service";
 import { listPendingEngineRelations, listApprovedEngineRelations } from "@/lib/engine/review-record-relation.service";
-import { reviewEngineRelationAction } from "./actions";
+import { reviewEngineRelationAction, analyzeEngineRelationsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function EngineTablesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; importStatus?: string; proposed?: string; issues?: string }>;
 }) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -31,6 +33,13 @@ export default async function EngineTablesPage({
       recordIds: records.map(record => record.id) }),
   ]);
   const canReview = activeWorkspace.role === "owner" || activeWorkspace.role === "admin";
+  const sourceFiles = canReview ? await prisma.knowledge_files.findMany({
+    where: { status: { in: ["ready", "processed"] },
+      extracted_text: { not: "" },
+      knowledge_sources: knowledgeSourceReadWhere(session.user.id, activeWorkspace.id) },
+    select: { id: true, file_name: true, created_at: true },
+    orderBy: { created_at: "desc" }, take: 50,
+  }) : [];
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-6">
       <div>
@@ -39,6 +48,29 @@ export default async function EngineTablesPage({
           Vista de consulta de los tipos y registros del espacio de trabajo. No modifica datos.
         </p>
       </div>
+      {canReview && <section className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="text-lg font-semibold text-slate-900">Analizar relaciones de un documento existente</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Reanaliza un archivo de Knowledge ya procesado. Puede reutilizar registros y proponer vínculos
+          con evidencia documental, pero nunca aprueba relaciones automáticamente.
+        </p>
+        {params.importStatus && <p className="mt-3 text-sm text-slate-700">
+          Análisis: {params.importStatus} · Relaciones propuestas: {params.proposed ?? "0"} ·
+          Incidencias: {params.issues ?? "0"}
+        </p>}
+        {sourceFiles.length ? <form action={analyzeEngineRelationsAction} className="mt-4 flex flex-wrap gap-2">
+          <select name="knowledgeFileId" required defaultValue=""
+            className="min-w-[220px] flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+            <option value="" disabled>Selecciona un documento procesado</option>
+            {sourceFiles.map(file => <option key={file.id} value={file.id}>{file.file_name}</option>)}
+          </select>
+          <button type="submit" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white">
+            Analizar relaciones
+          </button>
+        </form> : <p className="mt-3 text-sm text-slate-500">
+          No hay archivos de Knowledge procesados y accesibles en este espacio de trabajo.
+        </p>}
+      </section>}
       <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="rounded-xl border border-slate-200 bg-white p-3">
           <h2 className="px-3 pb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
