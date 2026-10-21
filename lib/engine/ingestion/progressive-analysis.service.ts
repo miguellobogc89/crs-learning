@@ -24,8 +24,10 @@ export function splitEngineDocument(source: string, target = 4000): string[] {
 
 async function askJson(instructions: string, input: unknown): Promise<Record<string, unknown>> {
   const response = await getOpenAIClient().responses.create({
-    model: getKnowledgeImportModel(), instructions,
-    input: JSON.stringify(input), text: { format: { type: "json_object" } },
+    model: getKnowledgeImportModel(),
+    instructions: "Return a valid JSON object only. No Markdown.\n" + instructions,
+    input: JSON.stringify({ format: "json", ...((input && typeof input === "object" && !Array.isArray(input)) ? input : { data: input }) }),
+    text: { format: { type: "json_object" } },
   }, { timeout: 45000, maxRetries: 0 });
   if (!response.output_text || response.output_text.length > 150000)
     throw new Error("Empty or oversized Engine sweep response.");
