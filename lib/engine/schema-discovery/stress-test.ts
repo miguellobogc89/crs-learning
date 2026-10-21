@@ -11,13 +11,13 @@ CONTEXTO CRS: Ya existen LEC-001 y el proveedor B12345678 como Lácteos Sur SL. 
 export function evaluateStressSchema(proposal: SchemaDiscoveryProposal) {
   const entities = proposal.entities;
   const relations = proposal.relations;
-  const label = (e: typeof entities[number]) => [e.key, e.name, e.description].join(" ").toLowerCase();
+  const label = (e: typeof entities[number]) => [e.key, e.name].join(" ").toLowerCase();
   const find = (regex: RegExp) => entities.filter(e => regex.test(label(e)));
-  const product = find(/producto|product|material|art[ií]culo/);
-  const recipe = find(/receta|recipe|f[oó]rmula/).find(e => !/component|componente|line/.test(label(e)));
+  const product = find(/producto|product|material|art[ií]culo/).filter(e => !/offer|oferta|component|componente|tier|tramo/.test(label(e)));
+  const recipe = find(/receta|recipe|f[oó]rmula/).find(e => !/component|componente|line|l[ií]nea/.test(label(e)));
   const component = find(/componente|component|l[ií]nea.*receta|recipe.*line|ingrediente.*receta/)[0];
-  const supplier = find(/proveedor|supplier/).find(e => !/oferta|offer/.test(label(e)));
-  const offer = find(/oferta|offer|cotizaci[oó]n|tarifa/).find(e => !/tier|tramo|discount|descuento/.test(label(e)));
+  const supplier = find(/proveedor|supplier/).find(e => !/oferta|offer|tier|tramo/.test(label(e)));
+  const offer = find(/oferta|offer|cotizaci[oó]n|tarifa/).find(e => !/tier|tramo|discount|descuento|rapel|rappel/.test(label(e)));
   const tier = find(/tramo|tier|escal[oó]n|rapel|rappel|discount|descuento.*volumen/)[0];
   const fields = (e: typeof entities[number] | undefined) => e?.fields.map(f => f.key + " " + f.name).join(" ").toLowerCase() ?? "";
   const connected = (a: typeof entities[number] | undefined, b: typeof entities[number] | undefined) =>
