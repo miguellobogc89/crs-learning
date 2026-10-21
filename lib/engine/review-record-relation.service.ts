@@ -61,7 +61,7 @@ export async function reviewEngineRelation(input: {
       !["approve", "reject"].includes(input.decision)) throw new Error("Invalid review request.");
   return prisma.$transaction(async tx => {
     await authorize(tx, input.workspaceId, input.userId, true);
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"engine_relations:" + input.workspaceId}))`;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${"engine_relations:" + input.workspaceId}))`;
     const proposal = await tx.engine_relation_proposals.findFirst({
       where: { id: input.proposalId, workspace_id: input.workspaceId },
     });
