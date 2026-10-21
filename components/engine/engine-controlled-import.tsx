@@ -13,17 +13,16 @@ type ImportOutcome = {
 };
 export function EngineControlledImport({ files }: { files: FileOption[] }) {
   const [fileId, setFileId] = useState("");
-  const [confirmed, setConfirmed] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [outcome, setOutcome] = useState<{ fileName: string; result: ImportOutcome } | null>(null);
   async function run() {
-    if (!fileId || !confirmed || running) return;
+    if (!fileId || running) return;
     setRunning(true); setError(""); setOutcome(null);
     try {
       const response = await fetch("/api/engine/controlled-import", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ knowledgeFileId: fileId, confirmation: "IMPORTAR_EN_TABLAS_ACTUALES" }),
+        body: JSON.stringify({ knowledgeFileId: fileId }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Error al importar.");
@@ -37,16 +36,12 @@ export function EngineControlledImport({ files }: { files: FileOption[] }) {
       <p className="text-xs text-slate-600">Utiliza las tablas existentes del espacio de trabajo. Crea tipos, campos y registros borrador; reutiliza coincidencias y deja los vínculos como propuestas pendientes. No borra datos ni aprueba relaciones automáticamente.</p>
     </div>
     <label className="block text-sm font-medium text-slate-800" htmlFor="engine-import-file">Documento de Knowledge</label>
-    <select id="engine-import-file" value={fileId} onChange={e => { setFileId(e.target.value); setConfirmed(false); setOutcome(null); }}
+    <select id="engine-import-file" value={fileId} onChange={e => { setFileId(e.target.value); setOutcome(null); }}
       className="w-full rounded-lg border border-slate-300 p-2 text-sm">
       <option value="">Selecciona un documento</option>
       {files.map(file => <option key={file.id} value={file.id}>{file.name}</option>)}
     </select>
-    <label className="flex items-start gap-2 text-sm text-slate-700">
-      <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1" />
-      Confirmo que quiero escribir datos de prueba en las tablas actuales de este espacio de trabajo.
-    </label>
-    <button type="button" disabled={!fileId || !confirmed || running} onClick={run}
+    <button type="button" disabled={!fileId || running} onClick={run}
       className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
       {running ? "Importando..." : "Importar documento seleccionado"}
     </button>

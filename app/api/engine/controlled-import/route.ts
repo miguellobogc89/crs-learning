@@ -22,10 +22,9 @@ export async function POST(request: NextRequest) {
   catch { return NextResponse.json({ error: "Solicitud JSON inválida." }, { status: 400 }); }
   if (!payload || typeof payload !== "object" || Array.isArray(payload))
     return NextResponse.json({ error: "Solicitud inválida." }, { status: 400 });
-  const { knowledgeFileId, confirmation } = payload as Record<string, unknown>;
-  if (typeof knowledgeFileId !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(knowledgeFileId) ||
-      confirmation !== "IMPORTAR_EN_TABLAS_ACTUALES")
-    return NextResponse.json({ error: "Selecciona un documento y confirma la importación." }, { status: 400 });
+  const { knowledgeFileId } = payload as Record<string, unknown>;
+  if (typeof knowledgeFileId !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(knowledgeFileId))
+    return NextResponse.json({ error: "Selecciona un documento válido." }, { status: 400 });
   const file = await prisma.knowledge_files.findFirst({
     where: { id: knowledgeFileId, status: { in: ["ready", "processed"] },
       knowledge_sources: knowledgeSourceReadWhere(session.user.id, activeWorkspace.id) },
