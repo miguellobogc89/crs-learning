@@ -27,6 +27,7 @@ export async function analyzeStructuredDocument(input: {
     model: getKnowledgeImportModel(),
     instructions: [
       SCHEMA_DISCOVERY_INSTRUCTIONS,
+      "Return a valid JSON object only. The response must be JSON, without Markdown or explanatory text.",
       "Return an object with entities, relations, warnings AND rows AND links.",
       "Each row must contain entity, values, evidence.",
       "Rows must use only entity and field keys declared in entities.",
