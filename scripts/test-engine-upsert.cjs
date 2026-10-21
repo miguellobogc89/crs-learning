@@ -96,6 +96,57 @@ const tests = [
       row("a", "ingredient", { name: "Sal", password: "bad" }),
     ]), existing), /Invalid observation/);
   }],
+  ["New type requests schema review instead of executing schema", () => {
+    const p = planEngineUpsert(manifest([row("a", "ingredient", { name: "Comino" })]),
+      existing.filter(t => t.key !== "ingredient"));
+    assert(p.operations.some(op => op.action === "create_type"));
+    assert.equal(p.summary.create, 1);
+    assert.equal(p.writesPerformed, false);
+  }],
+  ["Reject incompatible field types", () => {
+    const m = manifest([row("a", "ingredient", { name: "Sal" })]);
+    m.entities[1] = { ...m.entities[1],
+      fields: [{ key: "name", name: "Name", type: "integer" }] };
+    assert.throws(() => planEngineUpsert(m, existing), /Incompatible field/);
+  }],
+  ["Reject repeated entity keys", () => {
+    const m = manifest([]);
+    m.entities.push(m.entities[0]);
+    assert.throws(() => planEngineUpsert(m, existing), /Invalid or duplicate entity/);
+  }],
+  ["Reject duplicate local IDs", () => {
+    assert.throws(() => planEngineUpsert(manifest([
+      row("a", "recipe", { code: "R-002" }),
+      row("a", "ingredient", { name: "Sal" }),
+    ]), existing), /Duplicate observation ID/);
+  }],
+  ["Reject dangling link endpoint", () => {
+    const m = manifest([row("a", "ingredient", { name: "Comino" })]);
+    m.links = [{ fromLocalId: "a", toLocalId: "missing",
+      relationKey: "uses", source: sourceRef }];
+    assert.throws(() => planEngineUpsert(m, existing), /Invalid link endpoints/);
+  }],
+  ["Hold link when one endpoint is conflicted", () => {
+    const m = manifest([
+      row("a", "recipe", { code: "R-001", name: "Conflict" }),
+      row("b", "ingredient", { name: "Comino" }),
+    ]);
+    m.links = [{ fromLocalId: "a", toLocalId: "b",
+      relationKey: "uses", source: sourceRef }];
+    assert.equal(planEngineUpsert(m, existing).summary.link, 0);
+  }],
+  ["New field requires explicit schema operation", () => {
+    const m = manifest([row("a", "ingredient", { name: "Comino" })]);
+    m.entities[1] = { ...m.entities[1], fields: [
+      ...m.entities[1].fields, { key: "category", name: "Category", type: "text" },
+    ] };
+    const p = planEngineUpsert(m, existing);
+    assert(p.operations.some(op => op.action === "add_field"));
+  }],
+  ["Identical input produces identical plan", () => {
+    const m = manifest([row("a", "ingredient", { name: "Comino" })]);
+    assert.deepEqual(planEngineUpsert(m, existing), planEngineUpsert(m, existing));
+  }],
   ["Plan links only when endpoints are actionable", () => {
     const m = manifest([
       row("a", "recipe", { code: "R-001", name: "Sopa" }),
