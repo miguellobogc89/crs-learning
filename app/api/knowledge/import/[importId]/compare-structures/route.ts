@@ -6,7 +6,7 @@ import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 90;
+export const maxDuration = 300;
 type Context = { params: Promise<{ importId: string }> };
 type Match = { concept: string; existingKey: string; reason: string; evidence: string };
 type Missing = { concept: string; suggestedName: string; fields: string[]; reason: string; evidence: string };
@@ -79,7 +79,7 @@ export async function POST(request: Request, context: Context) {
         }),
         text: { format: { type: "json_object" } },
         max_output_tokens: 1800,
-      }, { timeout: 18000, maxRetries: 0 });
+      }, { timeout: 60000, maxRetries: 1 });
       // Responses can finish with no visible output (e.g. reasoning budget)
       // or with a truncated JSON object. Distinguish those cases explicitly.
       const output = response.output_text?.trim() ?? "";
