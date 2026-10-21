@@ -9,9 +9,9 @@ const fieldType = (v: unknown): DiscoveredField["type"] => {
   if (typeof v === "boolean") return "boolean";
   if (typeof v === "number") return Number.isInteger(v) ? "integer" : "decimal";
   if (typeof v !== "string") return "text";
-  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(v) || /^\\d{2}\/\\d{2}\/\\d{4}$/.test(v)) return "date";
-  if (/^-?\\d+[.,]\\d+$/.test(v.trim())) return "decimal";
-  if (/^-?\\d+$/.test(v.trim())) return "integer";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v) || /^\d{2}\/\d{2}\/\d{4}$/.test(v)) return "date";
+  if (/^-?\d+[.,]\d+$/.test(v.trim())) return "decimal";
+  if (/^-?\d+$/.test(v.trim())) return "integer";
   return "text";
 };
 
@@ -113,7 +113,7 @@ export function normalizePreviewRows(rows: unknown[], proposal: SchemaDiscoveryP
       const fieldKey = key(k);
       const type = definition?.fields.find(field => field.key === fieldKey)?.type;
       if (typeof v === "string" && (type === "integer" || type === "decimal") &&
-          /^-?\\d+(?:[.,]\\d+)?$/.test(v.trim())) {
+          /^-?\d+(?:[.,]\d+)?$/.test(v.trim())) {
         const numeric = Number(v.replace(",", "."));
         if (Number.isFinite(numeric) && (type !== "integer" || Number.isSafeInteger(numeric)))
           return [fieldKey, numeric];
