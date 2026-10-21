@@ -85,7 +85,11 @@ export function buildPreviewSchema(input: {
 }
 
 export function normalizePreviewRows(rows: unknown[], proposal: SchemaDiscoveryProposal) {
-  const byName = new Map(proposal.entities.flatMap(e => [[key(e.key), e.key], [key(e.name), e.key]]));
+  const byName = new Map<string, string>();
+  for (const entity of proposal.entities) {
+    byName.set(key(entity.key), entity.key);
+    byName.set(key(entity.name), entity.key);
+  }
   return rows.map(row => {
     if (!obj(row) || typeof row.entity !== "string" || !obj(row.values)) return row;
     const entity = byName.get(key(row.entity)) ?? key(row.entity);
