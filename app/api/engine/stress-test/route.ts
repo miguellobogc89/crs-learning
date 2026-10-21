@@ -32,21 +32,50 @@ export async function POST(request: NextRequest) {
     });
     if (!response.output_text || response.output_text.length > 250000)
       throw new Error("Invalid model response.");
+    const rawProposal: unknown = JSON.parse(response.output_text);
+    const raw = rawProposal && typeof rawProposal === "object" && !Array.isArray(rawProposal)
+      ? rawProposal as Record<string, unknown> : {};
+    const rawEntities = Array.isArray(raw.entities) ? raw.entities.slice(0, 50) : [];
+    const rawRelations = Array.isArray(raw.relations) ? raw.relations.slice(0, 200) : [];
+    const normalized = { ...raw, relations: rawRelations.map((relation: unknown) => {
+      if (!relation || typeof relation !== "object" || Array.isArray(relation)) return relation;
+      const item = relation as Record<string, unknown>;
+      const cardinality = typeof item.cardinality === "string" ? item.cardinality.trim().toLowerCase().replace(/[\\s-]+/g, "_") : item.cardinality;
+      const aliases: Record<string, string> = {
+        "1:1": "one_to_one", "1:many": "one_to_many", "1:n": "one_to_many",
+        "one_to_n": "one_to_many", "one_to_multiple": "one_to_many",
+        "n:m": "many_to_many", "m:n": "many_to_many", "many_to_n": "many_to_many",
+        "one_to_many": "one_to_many", "one_to_one": "one_to_one", "many_to_many": "many_to_many",
+      };
+      return { ...item, cardinality: typeof cardinality === "string" ? aliases[cardinality] ?? cardinality : cardinality };
+    }) };
     const validation = validateSchemaDiscovery({
       workspaceId: activeWorkspace.id,
       documents: [{ id: documentId, workspaceId: activeWorkspace.id, extractedText: STRESS_DOCUMENT }],
-      proposal: JSON.parse(response.output_text),
+      proposal: normalized,
     });
     const score = validation.proposal ? evaluateStressSchema(validation.proposal) : null;
+    const inspectionEntities = (validation.proposal?.entities ?? rawEntities).map((e: any) => ({
+      key: typeof e?.key === "string" ? e.key : "",
+      name: typeof e?.name === "string" ? e.name : "",
+      fields: Array.isArray(e?.fields) ? e.fields.slice(0, 100).map((f: any) => typeof f?.key === "string" ? f.key : "") : [],
+    }));
+    const inspectionRelations = (validation.proposal?.relations ?? rawRelations).map((r: any) => ({
+      key: typeof r?.key === "string" ? r.key : "",
+      from: typeof r?.fromEntity === "string" ? r.fromEntity : "",
+      to: typeof r?.toEntity === "string" ? r.toEntity : "",
+      cardinality: typeof r?.cardinality === "string" ? r.cardinality : null,
+    }));
     return NextResponse.json({
       status: validation.valid ? "evaluated" : "invalid_schema",
       score,
       issues: validation.issues,
-      entities: validation.proposal?.entities.map(e => ({ key: e.key, name: e.name, fields: e.fields.map(f => f.key) })) ?? [],
-      relations: validation.proposal?.relations.map(r => ({ key: r.key, from: r.fromEntity, to: r.toEntity })) ?? [],
+      entities: inspectionEntities,
+      relations: inspectionRelations,
       warnings: validation.proposal?.warnings ?? [],
       durationMs: Date.now() - started,
       writesPerformed: false,
+      diagnosticOnly: !validation.valid,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[engine-stress-test]", error);
