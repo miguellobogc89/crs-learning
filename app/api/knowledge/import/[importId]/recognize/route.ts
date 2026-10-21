@@ -40,7 +40,7 @@ export async function POST(_request: Request, context: Context) {
       const isShort = line.length >= 4 && line.length <= 65;
       const hasQuantity = quantityPattern.test(line);
       const looksLikeHeading = /:$/.test(line) ||
-        (/^[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\\s\\-()]{3,}$/.test(line) &&
+        (/^[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ\\s()-]{3,}$/.test(line) &&
          !/\\d/.test(line) && line.split(/\\s+/).length <= 7);
       const followingContent = next.length > 0 && next !== line;
       return isShort && !hasQuantity && looksLikeHeading && followingContent
