@@ -11,7 +11,7 @@ const STEPS = [
 ] as const;
 
 export function KnowledgeImportModalProgress({ currentStep }: { currentStep: KnowledgeImportModalStep }) {
-  const active = Math.max(0, STEPS.findIndex(step => step.id === currentStep));
+  const active = STEPS.findIndex(step => step.id === currentStep);
   const index = active < 0 ? 3 : active;
   return (
     <nav aria-label="Progreso de importación" className="shrink-0 border-b border-slate-100 bg-white px-7 py-5">
