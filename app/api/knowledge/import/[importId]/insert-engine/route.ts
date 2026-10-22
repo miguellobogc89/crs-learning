@@ -4,6 +4,9 @@ import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { validateInsertPlan, type InsertPlan } from "@/lib/engine/ingestion/validate-insert-plan";
 import { verifyInsertPlan } from "@/lib/engine/ingestion/signed-insert-plan";
 import { Prisma } from "@prisma/client";
+import { loadEngineReconciliationSnapshot } from "@/lib/engine/ingestion/load-reconciliation-snapshot";
+import { discoverIdentityRules } from "@/lib/engine/ingestion/discover-identity-rules";
+import { reconcileEngineImport } from "@/lib/engine/ingestion/reconcile-engine-import";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,8 +56,93 @@ export async function POST(request: Request, context: Context) {
         tx.engine_records.count({ where: { workspace_id: ws } }),
         tx.engine_relation_definitions.count({ where: { workspace_id: ws } }),
       ]);
-      if (types || records || relations)
-        throw new Error("Engine ya contiene datos. La inserción incremental necesita reconciliación de identidades; no se aplicó ningún cambio.");
+      if (types || records || relations) {
+        // Never trust a browser preview for writes: recompute identity, schema,
+        // values and links from the locked workspace inside this transaction.
+        const { snapshot, identityRules } = await loadEngineReconciliationSnapshot(ws, tx);
+        const discovery = discoverIdentityRules(plan, snapshot, identityRules);
+        const reconciliation = reconcileEngineImport(plan, snapshot, discovery.rules);
+        if (!reconciliation.ready)
+          throw new Error("Reconciliación incremental bloqueada: " + reconciliation.blockers.join(" · "));
+        // This first incremental writer supports only existing compatible
+        // definitions; schema evolution requires its own reviewed migration.
+        if (reconciliation.entities.some(item => item.action !== "reuse") ||
+            reconciliation.relations.some(item => item.action !== "reuse"))
+          throw new Error("Hay estructuras o relaciones nuevas: requieren una migración de esquema.");
+        const newRows = reconciliation.rows.filter(row => row.action === "create");
+        const newLinks = reconciliation.links.filter(link => link.action === "create");
+        if (!newRows.length && !newLinks.length)
+          return { structures: 0, fields: 0, relationDefinitions: 0, records: 0,
+            links: 0, reusedRecords: reconciliation.rows.length, reusedLinks: reconciliation.links.length };
+        // Create a real, workspace-linked document source for provenance.
+        const provenanceSource = await tx.knowledge_sources.create({ data: {
+          owner_user_id: session.user.id,
+          created_by_user_id: session.user.id,
+          updated_by_user_id: session.user.id,
+          library_id: imported!.library_id,
+          title: source.file_name,
+          content: source.extracted_text,
+          status: "draft",
+          knowledge_type: "document",
+        } });
+        const provenanceFile = await tx.knowledge_files.create({ data: {
+          knowledge_source_id: provenanceSource.id,
+          file_name: source.file_name,
+          file_type: source.mime_type,
+          file_size: source.file_size,
+          storage_path: source.storage_path,
+          content_hash: source.content_hash,
+          extracted_text: source.extracted_text,
+          status: "text_ready",
+          uploaded_by_user_id: session.user.id,
+        } });
+        const typeIds = new Map(snapshot.entities.map(entity => [entity.key, entity.id]));
+        const relationIds = new Map(snapshot.relations.map(relation => [relation.key, relation.id]));
+        const planRows = new Map(plan.rows.map(row => [row.localId, row]));
+        const rowIds = new Map<string, string>();
+        for (const decision of reconciliation.rows) {
+          if (decision.action === "reuse" && decision.existingId)
+            rowIds.set(decision.localId, decision.existingId);
+          if (decision.action !== "create") continue;
+          const row = planRows.get(decision.localId);
+          const objectTypeId = typeIds.get(decision.entityKey);
+          if (!row || !objectTypeId) throw new Error("Registro sin estructura: " + decision.localId);
+          const values = row.values as Prisma.InputJsonValue;
+          const created = await tx.engine_records.create({ data: {
+            workspace_id: ws, object_type_id: objectTypeId, values_json: values,
+            status: "draft", revision: 1,
+            created_by_user_id: session.user.id, updated_by_user_id: session.user.id,
+          } });
+          rowIds.set(decision.localId, created.id);
+          await tx.engine_record_revisions.createMany({
+            data: [{ workspace_id: ws, record_id: created.id, object_type_id: objectTypeId,
+              revision: 1, schema_version: 1, status: "draft", values_json: values,
+              changed_by_user_id: session.user.id }],
+            skipDuplicates: true,
+          });
+          await tx.engine_record_provenance.create({ data: {
+            workspace_id: ws, record_id: created.id, revision: 1,
+            source_locator: "import:" + importId + "/file:" + body.fileId + "/" + decision.localId,
+            evidence_text: row.evidence, origin_type: "document",
+            knowledge_source_id: provenanceSource.id, knowledge_file_id: provenanceFile.id,
+            created_by_user_id: session.user.id,
+          } });
+        }
+        for (const link of newLinks) {
+          const from = rowIds.get(link.fromLocalId);
+          const to = rowIds.get(link.toLocalId);
+          const relationId = relationIds.get(link.relationKey);
+          if (!from || !to || !relationId) throw new Error("Vínculo sin extremos resueltos");
+          await tx.engine_record_relations.create({ data: {
+            workspace_id: ws, relation_definition_id: relationId,
+            from_record_id: from, to_record_id: to,
+          } });
+        }
+        return { structures: 0, fields: 0, relationDefinitions: 0,
+          records: newRows.length, links: newLinks.length,
+          reusedRecords: reconciliation.rows.length - newRows.length,
+          reusedLinks: reconciliation.links.length - newLinks.length };
+      }
       // Provenance for a document requires a real knowledge_file_id (or
       // knowledge_source_id), not the staging knowledge_import_files UUID.
       // Materialize a linked source and file inside the same transaction so
