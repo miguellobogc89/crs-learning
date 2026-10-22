@@ -680,7 +680,8 @@ export function useKnowledgeImport({
                     existingStructures: [], error: message,
                   },
                 }));
-                updateQueuedFile(file.id, "error", message);
+                // The source text is valid and can still produce Knowledge articles.
+                updateQueuedFile(file.id, "completed");
               }
             },
           },
@@ -694,16 +695,16 @@ export function useKnowledgeImport({
         setFileProgress(finalizedFiles);
         setProgressSummary(finalizedSummary);
 
-        if (recognizedCount > 0 && lastMap) {
-          setGlobalMap(lastMap);
-          setStep("completed");
+        // Document inventory is a preliminary step, not the end of Knowledge import.
+        // A failed classification must not discard successfully extracted source text.
+        if (analysisResult.textExtraction.successfulFiles > 0) {
+          if (lastMap) setGlobalMap(lastMap);
+          setStep("analyzing");
           updateImport(uploadResult.importId, {
-            step: "completed", status: "completed", files: finalizedFiles,
+            step: "analyzing", status: "text_ready", files: finalizedFiles,
             summary: finalizedSummary, isAnalyzing: false, isConfirming: false,
             error: recognitionFailures.length ? recognitionFailures.join(" · ") : null,
           });
-        } else if (analysisResult.textExtraction.successfulFiles > 0) {
-          throw new Error(recognitionFailures.join(" · ") || "No se ha reconocido ningún documento");
         }
 
         if (
