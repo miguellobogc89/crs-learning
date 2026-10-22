@@ -22,6 +22,7 @@ import { KnowledgeImportModalProgress } from "./knowledge-import-modal-progress"
 import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
 import { KnowledgeImportProcessingStep } from "./knowledge-import-processing-step";
 import { KnowledgeImportCloseGuard } from "./knowledge-import-close-guard";
+import { EngineConflictReview } from "./engine-conflict-review";
 
 import type {
   KnowledgeImportModalProps,
@@ -656,7 +657,7 @@ export function KnowledgeImportModal({
                           completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
                           <Loader2 className="size-5 animate-spin text-blue-600" />}
                       </div>
-                      <details className="group border-t border-slate-100" open>
+                      <details className="group border-t border-slate-100" open={!(reconciliation && !reconciliation.ready)}>
                         <summary className="flex cursor-pointer list-none items-center justify-between bg-slate-50/60 px-5 py-3 text-xs font-semibold text-slate-700 [&::-webkit-details-marker]:hidden">
                           <span className="flex items-center gap-2"><ScrollText className="size-4 text-slate-500" /> Registro del proceso</span>
                           <ChevronDown className="size-4 text-slate-400 transition-transform group-open:rotate-180" />
@@ -686,6 +687,14 @@ export function KnowledgeImportModal({
                           </ol>
                           {preview?.status === "completed" ? (
                             <div className="mt-4 space-y-3">
+                              {reconciliation && !reconciliation.ready ? (
+                                <EngineConflictReview
+                                  fileId={file.id}
+                                  rows={reconciliation.rows}
+                                  candidates={preview.rows}
+                                  blockers={reconciliation.blockers}
+                                />
+                              ) : null}
                               {reconciliation ? (
                                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
                                   <p className="font-semibold">Reconciliación con Engine · solo lectura</p>
@@ -790,7 +799,7 @@ export function KnowledgeImportModal({
                                 </div>
                               ) : null}
                               </div>
-                              <p className="text-[11px] text-slate-500">El TXT es solo una simulación; el botón de inserción ejecuta una transacción real únicamente en Engine vacío.</p>
+                              <p className="text-[11px] text-slate-500">El TXT es solo una simulación. La inserción escribe únicamente tras una confirmación explícita y una validación de Engine.</p>
                             </div>
                           ) : null}
                           {errorMessages.length ? (
