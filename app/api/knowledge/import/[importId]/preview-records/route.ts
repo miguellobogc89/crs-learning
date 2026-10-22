@@ -6,6 +6,7 @@ import { analyzeStructuredDocument } from "@/lib/engine/ingestion/analyze-struct
 import { buildSimulationManifest } from "@/lib/engine/ingestion/simulation-manifest";
 import { signInsertPlan } from "@/lib/engine/ingestion/signed-insert-plan";
 import { reconcileEngineImport } from "@/lib/engine/ingestion/reconcile-engine-import";
+import { discoverIdentityRules } from "@/lib/engine/ingestion/discover-identity-rules";
 import { loadEngineReconciliationSnapshot } from "@/lib/engine/ingestion/load-reconciliation-snapshot";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
@@ -189,13 +190,17 @@ export async function POST(request: Request, context: Context) {
         entities: manifest.entities, relations: manifest.relations, rows: manifest.rows,
         links: manifest.links, unresolvedLinks: manifest.unresolvedLinks, issues: blockingIssues,
       });
-      const reconciliation = incremental && (incremental.snapshot.entities.length || incremental.snapshot.records.length)
-        ? reconcileEngineImport({
-          entities: manifest.entities, relations: manifest.relations, rows: manifest.rows,
-          links: manifest.links, unresolvedLinks: manifest.unresolvedLinks, issues: blockingIssues,
-        }, incremental.snapshot, incremental.identityRules)
+      const reconciliationPlan = {
+        entities: manifest.entities, relations: manifest.relations, rows: manifest.rows,
+        links: manifest.links, unresolvedLinks: manifest.unresolvedLinks, issues: blockingIssues,
+      };
+      const identityDiscovery = incremental && (incremental.snapshot.entities.length || incremental.snapshot.records.length)
+        ? discoverIdentityRules(reconciliationPlan, incremental.snapshot, incremental.identityRules)
         : null;
-      results.push({ id: file.id, status: "completed", ...manifest, signature, reconciliation, manifestIssues: blockingIssues, issues,
+      const reconciliation = incremental && identityDiscovery
+        ? reconcileEngineImport(reconciliationPlan, incremental.snapshot, identityDiscovery.rules)
+        : null;
+      results.push({ id: file.id, status: "completed", ...manifest, signature, reconciliation, identityDiscovery, manifestIssues: blockingIssues, issues,
         sourceChars: file.extracted_text.length, analyzedChars: analysis.sourceChars,
         partial, durationMs: Date.now() - started, error: null });
     } catch (error) {
