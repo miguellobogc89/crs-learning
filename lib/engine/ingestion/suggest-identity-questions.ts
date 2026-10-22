@@ -70,10 +70,13 @@ export function suggestIdentityQuestions(plan: Pick<InsertPlan, "rows">): Identi
       if (a.entityKey !== b.entityKey || !candidateMatch(a.displayName, b.displayName)) continue;
       // Verified fiscal identity is resolved without asking the user.
       if (sameVerifiedIdentity(a.values, b.values)) continue;
+      // A similar name is not an ambiguity on its own. Ask only when both
+      // records contain explicit, different fiscal identifiers: actual evidence
+      // that contradicts the apparent name match.
+      // Missing identifiers, punctuation, OCR spelling and formatting differences
+      // must never create questions. This does not automatically merge records.
       const conflictingIds = contradictoryFiscalIdentity(a.values, b.values);
-      // Identical normalized legal names are not useful review questions.
-      // Do not merge them here: the insert validator still owns identity resolution.
-      if (normalized(a.displayName).join(" ") === normalized(b.displayName).join(" ") && !conflictingIds) continue;
+      if (!conflictingIds) continue;
       questions.push({
         id: `identity:${a.localId}:${b.localId}`,
         entityKey: a.entityKey, leftLocalId: a.localId, rightLocalId: b.localId,
