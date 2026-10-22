@@ -1265,6 +1265,8 @@ export function useKnowledgeImport({
       throw new Error("No hay una simulación firmada disponible.");
     if (preview.unresolvedLinks.length || (preview.manifestIssues?.length ?? 0) > 0 || preview.rows.some(row => row.disposition !== "candidate"))
       throw new Error("La simulación tiene elementos pendientes y no puede insertarse.");
+    if (preview.reconciliation && !preview.reconciliation.ready)
+      throw new Error("La reconciliación incremental tiene bloqueos; repite la simulación.");
     const plan: InsertPlan = {
       entities: preview.entities as InsertPlan["entities"],
       relations: preview.relations as InsertPlan["relations"],
@@ -1282,7 +1284,8 @@ export function useKnowledgeImport({
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? result.blockers?.join(" · ") ?? "No se pudo insertar");
-      const message = `Insertados: ${result.structures} estructuras, ${result.records} registros y ${result.links} vínculos`;
+      const message = `Insertados: ${result.structures} estructuras, ${result.records} registros y ${result.links} vínculos` +
+        (typeof result.reusedRecords === "number" ? ` · Reutilizados: ${result.reusedRecords} registros y ${result.reusedLinks} vínculos` : "");
       setEngineInsertResult(current => ({ ...current, [fileName]: message }));
       toast.success(message);
       return result;
