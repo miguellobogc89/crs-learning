@@ -80,6 +80,7 @@ export function buildPreviewSchema(input: {
       description: typeof rel.reason === "string" ? rel.reason : "Relación propuesta",
       evidence: ev(rel.evidence) });
   }
+  const inferredRelationKeys = new Set<string>();
   // Infer relationships from source-backed shared identifiers, independently of
   // domain vocabulary (orders, recipes, invoices, etc.). A unique identity on
   // one side and repeated references on the other suggest one-to-many.
@@ -116,6 +117,7 @@ export function buildPreviewSchema(input: {
       if (!witness) continue;
       const relationKey = key(parent + "_to_" + child);
       if (relations.some(rel => rel.key === relationKey)) continue;
+      inferredRelationKeys.add(relationKey);
       relations.push({ key: relationKey, fromEntity: parent, toEntity: child,
         cardinality: "one_to_many",
         description: "Referencia documental compartida: " + field,
@@ -127,6 +129,9 @@ export function buildPreviewSchema(input: {
   // its endpoints when both of its source-backed relationships are available.
   for (let i = relations.length - 1; i >= 0; i--) {
     const direct = relations[i];
+    // A directly evidenced identifier edge must never be discarded in favor of
+    // an AI-proposed shortcut: otherwise triangles erase the junction edges.
+    if (inferredRelationKeys.has(direct.key)) continue;
     const junction = entities.some(entity => {
       const mid = entity.key;
       if (mid === direct.fromEntity || mid === direct.toEntity) return false;
