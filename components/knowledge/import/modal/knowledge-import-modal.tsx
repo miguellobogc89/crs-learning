@@ -568,6 +568,7 @@ export function KnowledgeImportModal({
                   const preview = knowledgeImport.recordPreview[file.name];
                   const simulation = knowledgeImport.simulationStages[file.name] ?? {};
                    const reconciliation = preview?.reconciliation;
+                   const identityDiscovery = preview?.identityDiscovery;
                    const decisions = new Map(reconciliation?.rows.map(row => [row.localId, row]) ?? []);
                   const extracting = knowledgeImport.processingPhase === "extracting";
                   const stages: Array<{ title: string; state: "done" | "active" | "waiting" | "error"; detail: string }> = [
@@ -688,6 +689,15 @@ export function KnowledgeImportModal({
                               {reconciliation ? (
                                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
                                   <p className="font-semibold">Reconciliación con Engine · solo lectura</p>
+                                  {identityDiscovery ? (
+                                    <div className="mt-2 space-y-1">
+                                      {identityDiscovery.proposals.map(item => (
+                                        <p key={item.entityKey}>
+                                          <span className="font-semibold">{item.entityKey}</span> · {item.keys.join(" + ") || "sin clave"} · {item.status === "validated" ? "validada para simulación" : "revisar"} · {item.reason}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  ) : null}
                                   <p className="mt-1">{reconciliation.totals.reuse} reutilizar · {reconciliation.totals.create} crear · {reconciliation.totals.extend} ampliar · {reconciliation.totals.review} revisar (estructuras, registros y vínculos)</p>
                                   <p className="mt-1">{reconciliation.ready ? "Sin bloqueos de reconciliación" : "Pendiente de revisión: " + (reconciliation.blockers.length || reconciliation.totals.review) + " elementos"}</p>
                                   <div className="mt-2 max-h-44 space-y-1 overflow-y-auto">
@@ -711,6 +721,7 @@ export function KnowledgeImportModal({
                                     "-- Identidades: " + (reconciliation ? "reconciliación conservadora; revisar claves y bloqueos" : "NO VALIDADAS"),
                                     ...(reconciliation ? [
                                       "-- RECONCILIACIÓN CON ENGINE (SIN ESCRITURAS)",
+                                      ...((identityDiscovery?.proposals ?? []).map(item => "IDENTITY_PROPOSAL " + JSON.stringify(item))),
                                       "RECONCILIATION_SUMMARY " + JSON.stringify({ ready: reconciliation.ready, totals: reconciliation.totals }),
                                       ...reconciliation.entities.map(item => "SCHEMA_DECISION " + JSON.stringify(item)),
                                       ...reconciliation.relations.map(item => "RELATION_DECISION " + JSON.stringify(item)),
