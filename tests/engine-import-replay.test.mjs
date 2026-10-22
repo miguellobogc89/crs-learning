@@ -151,9 +151,9 @@ test("empty Engine discovers both missing junction edges from extracted identifi
   ]}};
   const schema=buildPreviewSchema({documentId:"test",text:document,existing:{entities:[],relations:[]},prior,rows});
   assert.deepEqual(schema.relations.map(r=>r.key).sort(),[
-    "customer_to_order","order_line_to_product","order_to_order_line"
+    "customer_to_order","product_to_order_line","order_to_order_line"
   ].sort());
   const links=reconcilePreviewLinks(document,schema,normalizePreviewRows(rows,schema),[]);
   assert.equal(links.filter(l=>l.relationKey==="order_to_order_line").length,3);
-  assert.equal(links.filter(l=>l.relationKey==="order_line_to_product").length,3);
+  assert.equal(links.filter(l=>l.relationKey==="product_to_order_line").length,3);
 });
