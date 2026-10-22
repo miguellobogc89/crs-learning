@@ -1259,7 +1259,7 @@ export function useKnowledgeImport({
       sharedTask?.importId,
     ]);
 
-  const insertIntoEngine = useCallback(async (fileName: string, conflictAnswers: Record<string, { kind: "keep" | "incoming" | "omit" | "custom"; note?: string }> = {}) => {
+  const insertIntoEngine = useCallback(async (fileName: string, conflictAnswers: Record<string, { kind: "keep" | "incoming" | "omit" | "custom"; note?: string }> = {}, identityAnswers: Record<string, "same" | "different" | "unsure"> = {}) => {
     const preview = recordPreview[fileName];
     if (!importId || !preview?.id || preview.status !== "completed" || !preview.signature)
       throw new Error("No hay una simulación firmada disponible.");
@@ -1280,7 +1280,7 @@ export function useKnowledgeImport({
     try {
       const response = await fetch(`/api/knowledge/import/${encodeURIComponent(importId)}/insert-engine`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileId: preview.id, signature: preview.signature, plan, confirm: true, conflictAnswers }),
+        body: JSON.stringify({ fileId: preview.id, signature: preview.signature, plan, confirm: true, conflictAnswers, identityAnswers }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? result.blockers?.join(" · ") ?? "No se pudo insertar");
