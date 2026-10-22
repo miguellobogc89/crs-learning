@@ -25,7 +25,7 @@ export function KnowledgeImportModalProgress({
   validationReady?: boolean;
 }) {
   // Visual milestones derived from real ingestion results, not invented backend phases.
-  const index = currentStep === "completed" ? 4
+  const index = currentStep === "completed" ? 1
     : currentStep === "proposal" || currentStep === "analysis_result" ? 3
     : currentStep === "upload" ? 0
     : validationReady ? 3
@@ -48,6 +48,7 @@ export function KnowledgeImportModalProgress({
           const Icon = step.icon;
           const completed = position < index;
           const current = position === index;
+          const connectorActive = position === index - 1 && currentStep !== "completed";
           return (
             <div key={step.id} className="flex min-w-0 flex-1 items-start last:flex-none">
               <div className="flex w-[60px] shrink-0 flex-col items-center gap-2 sm:w-[112px]">
@@ -61,8 +62,8 @@ export function KnowledgeImportModalProgress({
                   {SEGMENTS.map(segment => (
                     <span
                       key={segment}
-                      className={`h-full min-w-0 flex-1 rounded-[2px] ${completed ? "bg-[#6AA9F8]" : "bg-slate-300"} ${current && currentStep !== "completed" ? "crs-animated-segment" : ""}`}
-                      style={current && currentStep !== "completed" ? {
+                      className={`h-full min-w-0 flex-1 rounded-[2px] ${completed ? "bg-[#6AA9F8]" : "bg-slate-300"} ${connectorActive ? "crs-animated-segment" : ""}`}
+                      style={connectorActive ? {
                         animation: "crs-segment-step 3.6s steps(1, end) infinite",
                         animationDelay: `${segment * 0.22}s`,
                       } : undefined}
