@@ -799,7 +799,12 @@ export function KnowledgeImportModal({
                                       preview.rows.some(row => row.disposition !== "candidate")}
                                     className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
                                     onClick={async () => {
-                                      if (!window.confirm("¿Insertar las estructuras, registros y vínculos en Engine? Esta operación escribe en la base de datos.")) return;
+                                      const answers = conflictAnswers[file.id] ?? {};
+                                      const changes = Object.values(answers);
+                                      const summary = changes.length
+                                        ? `Decisiones revisadas: ${changes.filter(item => item.kind === "keep").length} mantener, ${changes.filter(item => item.kind === "incoming").length} actualizar, ${changes.filter(item => item.kind === "omit").length} omitir. Se crearán los demás registros y vínculos válidos.\n\n`
+                                        : "";
+                                      if (!window.confirm(summary + "¿Confirmas la inserción en Engine? Las actualizaciones crearán una nueva revisión; los registros omitidos no se modificarán.")) return;
                                       try { await knowledgeImport.insertIntoEngine(file.name, conflictAnswers[file.id] ?? {}); }
                                       catch (error) { window.alert(error instanceof Error ? error.message : String(error)); }
                                     }}>
