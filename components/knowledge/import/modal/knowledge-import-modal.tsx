@@ -823,7 +823,7 @@ export function KnowledgeImportModal({
                         </div>
                         {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
                           completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
-                          <span className="text-xs font-semibold text-slate-500">{semantic || relations || Object.keys(simulation).length > 0 ? `${stages.filter(stage => stage.state === "done").length}/8` : "Lectura"}</span>}
+                          <Loader2 className="size-5 animate-spin text-[#0A58FF]" aria-label="Leyendo documento" />}
                       </div>
                       {(semantic || relations || Object.keys(simulation).length > 0) && !(reconciliation && !reconciliation.ready) ? <ImportFileProgress completed={stages.filter(stage => stage.state === "done").length} active={!completed && !stages.some(stage => stage.state === "error")} /> : null}
                       {(semantic || relations || Object.keys(simulation).length > 0) ? (
