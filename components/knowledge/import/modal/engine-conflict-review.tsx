@@ -74,9 +74,9 @@ export function EngineConflictReview({
                 <select id={fileId + row.localId} value={answer?.kind ?? ""} onChange={event => {
                   const kind = event.target.value as Decision["kind"] | "";
                   setAnswers((() => {
-                    const next = { ...current };
+                    const next = { ...answers };
                     if (!kind) delete next[row.localId];
-                    else next[row.localId] = { kind, note: current[row.localId]?.note ?? "" };
+                    else next[row.localId] = { kind, note: answers[row.localId]?.note ?? "" };
                     return next;
                   })());
                 }} className="w-full rounded-md border border-slate-300 bg-white p-2">
