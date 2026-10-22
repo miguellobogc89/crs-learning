@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import type { InsertPlan } from "@/lib/engine/ingestion/validate-insert-plan";
 
 import {
   useBackgroundImports,
@@ -172,7 +173,7 @@ export function useKnowledgeImport({
   }>>({});
   const [relationsRunning, setRelationsRunning] = useState(false);
   const [recordPreview, setRecordPreview] = useState<Record<string, {
-    status: "completed" | "error";
+    status: "completed" | "error"; id: string; signature?: string;
     rows: Array<{ localId: string; entityKey: string;
       values: Record<string, string | number | boolean | null>;
       evidence: string; disposition: "candidate" | "pending"; reason: string }>;
@@ -183,6 +184,8 @@ export function useKnowledgeImport({
     partial: boolean; durationMs: number; error: string | null;
   }>>({});
   const [recordPreviewRunning, setRecordPreviewRunning] = useState(false);
+  const [engineInsertRunning, setEngineInsertRunning] = useState(false);
+  const [engineInsertResult, setEngineInsertResult] = useState<Record<string, string>>({});
   const [simulationStages, setSimulationStages] = useState<Record<string, Record<number, {
     status: "completed" | "error"; count: number; durationMs: number; error: string | null;
   }>>>({});
@@ -1242,6 +1245,38 @@ export function useKnowledgeImport({
       sharedTask?.importId,
     ]);
 
+  const insertIntoEngine = useCallback(async (fileName: string) => {
+    const preview = recordPreview[fileName];
+    if (!importId || !preview || preview.status !== "completed" || !preview.signature)
+      throw new Error("No hay una simulación firmada disponible.");
+    if (preview.partial || preview.unresolvedLinks.length || preview.rows.some(row => row.disposition !== "candidate"))
+      throw new Error("La simulación tiene elementos pendientes y no puede insertarse.");
+    const plan: InsertPlan = {
+      entities: preview.entities as InsertPlan["entities"],
+      relations: preview.relations as InsertPlan["relations"],
+      rows: preview.rows, links: preview.links,
+      unresolvedLinks: preview.unresolvedLinks,
+      // Only server-generated manifest issues are signed; stage 8 appends analysis warnings
+      // to the display issues. The signature requires the original manifest issues.
+      issues: [],
+    };
+    setEngineInsertRunning(true);
+    try {
+      const response = await fetch(`/api/knowledge/import/${encodeURIComponent(importId)}/insert-engine`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId: preview.id, signature: preview.signature, plan, confirm: true }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? result.blockers?.join(" · ") ?? "No se pudo insertar");
+      const message = `Insertados: ${result.structures} estructuras, ${result.records} registros y ${result.links} vínculos`;
+      setEngineInsertResult(current => ({ ...current, [fileName]: message }));
+      toast.success(message);
+      return result;
+    } finally {
+      setEngineInsertRunning(false);
+    }
+  }, [recordPreview, importId]);
+
   return {
     recognition,
     semantic,
@@ -1250,6 +1285,9 @@ export function useKnowledgeImport({
     relationsRunning,
     recordPreview,
     recordPreviewRunning,
+    engineInsertRunning,
+    engineInsertResult,
+    insertIntoEngine,
     simulationStages,
     tableDetection,
     duplicateNotice,
