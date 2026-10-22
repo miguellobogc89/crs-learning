@@ -93,11 +93,16 @@ export async function POST(request: Request, context: Context) {
           created_by_user_id: session.user.id, updated_by_user_id: session.user.id,
         } });
         rowIds.set(row.localId, record.id);
-        await tx.engine_record_revisions.create({ data: {
-          workspace_id: ws, record_id: record.id, object_type_id: objectTypeId,
-          revision: 1, schema_version: 1, status: "draft",
-          values_json: values, changed_by_user_id: session.user.id,
-        } });
+        // The database may already create revision 1 through an INSERT trigger.
+        // Preserve that revision rather than inserting the same (record_id, revision) twice.
+        await tx.engine_record_revisions.createMany({
+          data: [{
+            workspace_id: ws, record_id: record.id, object_type_id: objectTypeId,
+            revision: 1, schema_version: 1, status: "draft",
+            values_json: values, changed_by_user_id: session.user.id,
+          }],
+          skipDuplicates: true,
+        });
         await tx.engine_record_provenance.create({ data: {
           workspace_id: ws, record_id: record.id, revision: 1,
           source_locator: "import:" + importId + "/file:" + body.fileId + "/" + row.localId,
