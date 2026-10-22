@@ -14,20 +14,24 @@ type Candidate = {
   values: Record<string, string | number | boolean | null>;
   evidence: string;
 };
-type Decision = { kind: "keep" | "incoming" | "omit" | "custom"; note: string };
+export type Decision = { kind: "keep" | "incoming" | "omit" | "custom"; note: string };
 
 export function EngineConflictReview({
   fileId,
   rows,
   candidates,
   blockers,
+  answers,
+  onAnswersChange,
 }: {
   fileId: string;
   rows: Row[];
   candidates: Candidate[];
   blockers: string[];
+  answers: Record<string, Decision>;
+  onAnswersChange: (next: Record<string, Decision>) => void;
 }) {
-  const [answers, setAnswers] = useState<Record<string, Decision>>({});
+  const setAnswers = onAnswersChange;
   const [expanded, setExpanded] = useState<string | null>(null);
   const pending = rows.filter(row => row.action === "review" || row.action === "extend");
   const resolved = pending.filter(row => Boolean(answers[row.localId])).length;
@@ -69,12 +73,12 @@ export function EngineConflictReview({
                 <label className="block font-medium text-slate-700" htmlFor={fileId + row.localId}>Decisión</label>
                 <select id={fileId + row.localId} value={answer?.kind ?? ""} onChange={event => {
                   const kind = event.target.value as Decision["kind"] | "";
-                  setAnswers(current => {
+                  setAnswers((() => {
                     const next = { ...current };
                     if (!kind) delete next[row.localId];
                     else next[row.localId] = { kind, note: current[row.localId]?.note ?? "" };
                     return next;
-                  });
+                  })());
                 }} className="w-full rounded-md border border-slate-300 bg-white p-2">
                   <option value="">Seleccionar una respuesta</option>
                   <option value="keep">Mantener el registro actual</option>
@@ -84,13 +88,13 @@ export function EngineConflictReview({
                 </select>
                 {answer?.kind === "custom" ? (
                   <textarea aria-label="Aclaración del conflicto" value={answer.note}
-                    onChange={event => setAnswers(current => ({
-                      ...current, [row.localId]: { kind: "custom", note: event.target.value },
-                    }))}
+                    onChange={event => setAnswers({
+                      ...answers, [row.localId]: { kind: "custom", note: event.target.value },
+                    })}
                     placeholder="Explica cómo debe resolverse" rows={3}
                     className="w-full rounded-md border border-slate-300 p-2" />
                 ) : null}
-                <p className="text-amber-800">Decisión provisional: la escritura seguirá bloqueada hasta validar y firmar un plan actualizado.</p>
+                <p className="text-amber-800">La decisión se aplicará únicamente al confirmar la inserción y tras validar el plan en el servidor.</p>
               </div>
             ) : null}
           </div>
@@ -102,7 +106,7 @@ export function EngineConflictReview({
         <p key={index} className="text-xs text-amber-800">{blocker}</p>
       ))}
       <p className="text-xs text-slate-600">
-        {resolved} decisiones provisionales registradas. No se aplicarán automáticamente ni se omitirá ningún dato hasta implementar la validación del plan de resolución.
+        {resolved} decisiones provisionales registradas. Se validarán de nuevo en el servidor antes de confirmar la escritura.
       </p>
     </section>
   );
