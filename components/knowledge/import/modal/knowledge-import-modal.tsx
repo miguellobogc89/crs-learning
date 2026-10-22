@@ -9,8 +9,6 @@ import {
   useState,
 } from "react";
 
-import { AlertCircle, Check, Copy, ChevronDown, Circle, FileText, FileSpreadsheet, FileArchive, Loader2, ScrollText } from "lucide-react";
-
 import {
   Dialog,
   DialogContent,
@@ -19,12 +17,13 @@ import {
 import { useKnowledgeImport } from "../hooks/use-knowledge-import";
 import { KnowledgeImportModalHeader } from "./knowledge-import-modal-header";
 import { KnowledgeImportModalProgress } from "./knowledge-import-modal-progress";
+import { KnowledgeImportModalFooter } from "./knowledge-import-modal-footer";
 import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
 import { KnowledgeImportProcessingStep } from "./knowledge-import-processing-step";
+import { KnowledgeImportProposalStep } from "./knowledge-import-proposal-step";
+import { KnowledgeImportCompletedStep } from "./knowledge-import-completed-step";
 import { KnowledgeImportCloseGuard } from "./knowledge-import-close-guard";
-import { EngineConflictReview, type Decision } from "./engine-conflict-review";
-import { EngineIdentityReview, type IdentityAnswer } from "./engine-identity-review";
-import { suggestIdentityQuestions } from "@/lib/engine/ingestion/suggest-identity-questions";
+import { KnowledgeImportLoadingOverlay } from "./knowledge-import-loading-overlay";
 
 import type {
   KnowledgeImportModalProps,
@@ -35,36 +34,6 @@ import type {
   KnowledgeImportReviewResult,
 } from "../knowledge-import-review";
 import { getKnowledgeImportReviewMessage, isAllDuplicateReview } from "../knowledge-import-review";
-
-function ImportFileProgress({ completed, active }: { completed: number; active: boolean }) {
-  const [display, setDisplay] = useState(0);
-  useEffect(() => {
-    const target = Math.round(completed / 8 * 100);
-    setDisplay(value => Math.max(value, target));
-  }, [completed]);
-  useEffect(() => {
-    if (!active || completed >= 8) return;
-    const timer = window.setInterval(() => {
-      setDisplay(value => Math.min(value + 1, Math.min(99, Math.floor((completed + 1) / 8 * 100) - 1)));
-    }, 2000);
-    return () => window.clearInterval(timer);
-  }, [active, completed]);
-  const percentage = completed === 8 ? 100 : display;
-  return (
-    <div className="mx-5 mb-3">
-      <style>{`@keyframes crs-bar-flash { from { transform: translateX(-130%); } to { transform: translateX(650%); } }`}</style>
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[11px] font-medium text-slate-500">Progreso del análisis</span>
-        <span className="text-sm font-extrabold tabular-nums text-black">{percentage}%</span>
-      </div>
-      <div className="h-3.5 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Progreso visual del análisis" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage}>
-        <div className="relative h-full overflow-hidden rounded-full bg-[#0A58FF] transition-[width] duration-700" style={{ width: `${percentage}%` }}>
-          {active && percentage > 0 ? <div className="absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/80 to-transparent" style={{ animation: "crs-bar-flash 2s linear infinite" }} /> : null}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function getFilesSelectionKey(
   files: File[] | undefined,
@@ -304,10 +273,6 @@ export function KnowledgeImportModal({
   selectedFiles,
   resumeImportId,
 }: KnowledgeImportModalProps) {
-  const [conflictAnswers, setConflictAnswers] = useState<Record<string, Record<string, Decision>>>({});
-  const [identityAnswers, setIdentityAnswers] = useState<Record<string, Record<string, IdentityAnswer>>>({});
-  const [reviewFileIndex, setReviewFileIndex] = useState(0);
-
   const [
     closeGuardOpen,
     setCloseGuardOpen,
@@ -488,55 +453,6 @@ export function KnowledgeImportModal({
     onOpenChange(false);
   }
 
-  const currentFiles = knowledgeImport.fileProgress.length
-    ? knowledgeImport.fileProgress
-    : knowledgeImport.files.map((file, index) => ({ id: String(index), name: file.name, status: "pending" }));
-  const actionable = currentFiles.filter(file => {
-    const preview = knowledgeImport.recordPreview[file.name];
-    return preview?.status === "completed" && Boolean(preview.signature) && !knowledgeImport.engineInsertResult[file.name];
-  });
-  const currentFile = actionable[reviewFileIndex] ?? actionable[0] ?? null;
-  const currentPreview = currentFile ? knowledgeImport.recordPreview[currentFile.name] : null;
-  const currentReconciliation = currentPreview?.reconciliation;
-  const identityQuestions = currentPreview ? suggestIdentityQuestions({ rows: currentPreview.rows }) : [];
-  const currentIdentityAnswers = currentFile ? identityAnswers[currentFile.id] ?? {} : {};
-  const identitiesNeedReview = identityQuestions.some(question => !["same", "different"].includes(currentIdentityAnswers[question.id] ?? ""));
-  const currentAnswers = currentFile ? conflictAnswers[currentFile.id] ?? {} : {};
-  const reviewRows = currentReconciliation?.rows.filter(row => row.action === "review" || row.action === "extend") ?? [];
-  const needsReview = reviewRows.length > 0;
-  const identityReviewComplete = !identitiesNeedReview;
-  const [showInsertIssues, setShowInsertIssues] = useState(false);
-  const [mapCopied, setMapCopied] = useState(false);
-  const insertIssues = [
-    ...(currentPreview?.manifestIssues ?? []),
-    ...(currentPreview?.unresolvedLinks ?? []).map(item => `Relación sin resolver: ${item}`),
-    ...(currentPreview?.rows ?? []).filter(row => row.disposition !== "candidate")
-      .map(row => `Registro pendiente: ${row.localId}`),
-    ...(currentReconciliation?.blockers ?? []),
-  ].map(issue => String(issue));
-
-  const nextReviewAvailable = actionable.length > 1 && reviewFileIndex < actionable.length - 1;
-  const readyToInsert = Boolean(currentFile && currentPreview && !identitiesNeedReview &&
-    (currentPreview.manifestIssues?.length ?? 0) === 0 &&
-    currentPreview.unresolvedLinks.length === 0 &&
-    currentPreview.rows.every(row => row.disposition === "candidate") &&
-    (!currentReconciliation || currentReconciliation.ready ||
-      (needsReview && currentReconciliation.entities.every(item => item.action === "reuse") &&
-        currentReconciliation.relations.every(item => item.action === "reuse") &&
-        reviewRows.every(row => ["keep", "incoming", "omit"].includes(currentAnswers[row.localId]?.kind ?? "")) &&
-        currentReconciliation.blockers.every(blocker =>
-          blocker.startsWith("Valores contradictorios:") ||
-          blocker.startsWith("Actualización de registro pendiente de aprobación:") ||
-          blocker.startsWith("Vínculo pendiente:")))));
-  async function confirmEngineInsert() {
-    if (!currentFile || !readyToInsert) return;
-    const changes = Object.values(currentAnswers);
-    const message = `Vas a guardar los datos en Engine.\n\n${changes.filter(item => item.kind === "keep").length} mantener · ${changes.filter(item => item.kind === "incoming").length} actualizar · ${changes.filter(item => item.kind === "omit").length} omitir.\n\n¿Confirmas?`;
-    if (!window.confirm(message)) return;
-    try { await knowledgeImport.insertIntoEngine(currentFile.name, currentAnswers, currentIdentityAnswers); }
-    catch (error) { window.alert(error instanceof Error ? error.message : String(error)); }
-  }
-
   return (
     <>
       <Dialog
@@ -550,10 +466,10 @@ export function KnowledgeImportModal({
         <DialogContent
           showCloseButton
           style={{
-            width: "min(1280px, 96vw)",
-            maxWidth: "96vw",
-            height: "min(900px, 94vh)",
-            maxHeight: "94vh",
+            width: "900px",
+            maxWidth: "92vw",
+            height: "680px",
+            maxHeight: "88vh",
           }}
           className="flex flex-col gap-0 overflow-hidden p-0"
         >
@@ -567,12 +483,9 @@ export function KnowledgeImportModal({
                 ? "analyzing"
                 : knowledgeImport.step
             }
-            mapReady={Object.values(knowledgeImport.relations).some(file => file.status === "completed")}
-            recordsReady={Object.values(knowledgeImport.simulationStages).some(stages => stages[5]?.status === "completed")}
-            validationReady={Object.values(knowledgeImport.simulationStages).some(stages => stages[7]?.status === "completed")}
           />
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
+          <div className="min-h-0 flex-1 overflow-hidden px-6 py-5">
             {isWaitingToStart ? (
               <KnowledgeImportProcessingStep
                 phase="uploading"
@@ -632,374 +545,147 @@ export function KnowledgeImportModal({
               />
             ) : null}
 
-            {!isWaitingToStart && knowledgeImport.step !== "upload" ? (
-              <section className="space-y-3" aria-live="polite">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-slate-900">
-                    {knowledgeImport.step === "completed" ? "Lectura documental finalizada" : "Leyendo documentación"}
-                  </h3>
-                  <span className="text-xs text-slate-500">
-                    {knowledgeImport.step === "completed" ? "Primera fase terminada · sin crear registros" :
-                      knowledgeImport.isConfirming ? "Reconociendo estructura" :
-                      knowledgeImport.proposalProgress?.message ??
-                      (knowledgeImport.processingPhase === "extracting" ? "Extrayendo texto" : "Analizando")}
-                  </span>
-                </div>
-                {knowledgeImport.globalMap ? (() => {
-                  const map = knowledgeImport.globalMap as {
-                    status?: string;
-                    summary?: { filesProcessed?: number; documentsIdentified?: number;
-                      byType?: Array<{ type: string; count: number }>;
-                      byCategory?: Array<{ category: string; count: number }> };
-                    files?: Array<{ fileId: string; fileName: string }>;
-                  };
-                  return (
-                    <section className="rounded-xl border border-slate-200 bg-slate-50 p-4" aria-label="Inventario documental acumulado">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h4 className="text-sm font-semibold text-slate-900">Mapa documental · cola incremental</h4>
-                        <button type="button"
-                          className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0A58FF] hover:bg-blue-50"
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard.writeText(JSON.stringify(knowledgeImport.globalMap, null, 2));
-                              setMapCopied(true);
-                              window.setTimeout(() => setMapCopied(false), 2500);
-                            } catch { setMapCopied(false); }
-                          }}>
-                          <Copy className="size-3.5" />
-                          {mapCopied ? "Copiado" : "Copiar inventario JSON"}
-                        </button>
-                      </div>
-                      <p className="mt-2 text-xs text-slate-600">
-                        {map.summary?.filesProcessed ?? 0} archivos analizados · {map.summary?.documentsIdentified ?? 0} documentos identificados.
-                        {map.status === "in_progress" ? " Analizando siguiente archivo de la cola…" : ""}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {(map.summary?.byCategory ?? []).map(item => (
-                          <span key={item.category} className="rounded-lg border bg-white px-3 py-2 text-xs">
-                            <strong>{item.count}</strong> · {item.category}
-                          </span>
-                        ))}
-                      </div>
-                      <p className="mt-2 text-[11px] text-slate-500">
-                        Inventario provisional; los detalles y las relaciones se analizarán en fases posteriores.
-                      </p>
-                    </section>
-                  );
-                })() : null}
-                {(knowledgeImport.fileProgress.length ? knowledgeImport.fileProgress :
-                  knowledgeImport.files.map((file, index) => ({ id: String(index), name: file.name, status: "pending" }))).map(file => {
-                  const recognized = knowledgeImport.recognition[file.name];
-                  const completed = knowledgeImport.step === "completed";
-                  // Only the actual current queue item may show a spinner.
-                  // All other items are waiting, even when the batch is active.
-                  const queued = knowledgeImport.fileProgress.length
-                    ? knowledgeImport.fileProgress
-                    : knowledgeImport.files.map((item, index) => ({ id: String(index), name: item.name, status: "pending" }));
-                  const isWorking = (status: string) =>
-                    ["uploading", "processing", "text_processing", "extracting", "analyzing"].includes(status);
-                  const firstPending = queued.find(item =>
-                    !knowledgeImport.recognition[item.name] &&
-                    !["error", "failed", "cancelled"].includes(item.status));
-                  const activeQueueItem = queued.find(item => isWorking(item.status)) ?? firstPending;
-                  const isActiveFile = !completed && !recognized && activeQueueItem?.id === file.id;
-                  const semantic = knowledgeImport.semantic[file.name];
-                  const relations = knowledgeImport.relations[file.name];
-                  const preview = knowledgeImport.recordPreview[file.name];
-                  const simulation = knowledgeImport.simulationStages[file.name] ?? {};
-                   const reconciliation = preview?.reconciliation;
-                   const identityDiscovery = preview?.identityDiscovery;
-                   const decisions = new Map(reconciliation?.rows.map(row => [row.localId, row]) ?? []);
-                  const extracting = knowledgeImport.processingPhase === "extracting";
-                  const stages: Array<{ title: string; state: "done" | "active" | "waiting" | "error"; detail: string }> = [
-                    {
-                      title: "Revisar y clasificar el documento",
-                      state: recognized?.status === "error" ? "error" :
-                        recognized ? "done" : completed ? "error" : "active",
-                      detail: recognized?.status === "error" ? recognized.error ?? "Extracción no disponible" :
-                        recognized ? `Tipo: ${recognized.documentType.toUpperCase()} · ${recognized.structuredLines} líneas estructuradas · ${recognized.narrativeLines} narrativas · ${recognized.sourceChars} caracteres` :
-                        extracting ? "Extrayendo y revisando contenido" : "Comprobando el texto y los patrones",
-                    },
-                    {
-                      title: "Buscar estructuras existentes",
-                      state: recognized?.status === "completed" ? "done" : "waiting",
-                      detail: recognized?.status === "completed"
-                        ? `${recognized.existingStructures.length} estructuras activas encontradas en Engine · consulta de solo lectura`
-                        : "Consultar las estructuras existentes en Engine",
-                    },
-                    {
-                      title: "Comparar con estructuras existentes",
-                      state: semantic?.status === "error" ? "error" : semantic ? "done" :
-                        recognized?.status === "completed" ? "active" : "waiting",
-                      detail: semantic?.status === "error" ? semantic.error ?? "Error de comparación" :
-                        semantic ? `${semantic.matches.length} posibles equivalencias · sin proponer estructuras nuevas` :
-                        "Buscando equivalencias con estructuras existentes (operación breve)",
-                    },
-                    {
-                      title: "Identificar relaciones",
-                      state: relations?.status === "error" ? "error" :
-                        relations?.status === "completed" ? "done" :
-                        semantic?.status === "completed" ? "active" : "waiting",
-                      detail: relations?.status === "error" ? relations.error ?? "Error identificando relaciones" :
-                        relations?.status === "completed" ?
-                          `${relations.relations.length} relaciones identificadas · ${relations.missingStructures.length} estructuras propuestas · sin cambios en Engine` :
-                        semantic?.status === "completed" ? "Analizando relaciones entre entidades" :
-                        "Pendiente: proponer relaciones sin crearlas",
-                    },
-                    ...([
-                      ["Extraer registros", 5, "Extraer candidatos a partir de las estructuras descubiertas"],
-                      ["Resolver referencias", 6, "Vincular registros mediante relaciones identificadas"],
-                      ["Validar resultados", 7, "Verificar esquema, registros y evidencia"],
-                      ["Generar simulación", 8, "Preparar manifiesto sin ejecutar INSERT ni UPSERT"],
-                    ] as const).map(([title, number, pending]) => {
-                      const result = simulation[number];
-                      const priorDone = number === 5 ? relations?.status === "completed" :
-                        simulation[number - 1]?.status === "completed";
-                      return {
-                        title,
-                        state: result?.status === "error" ? "error" as const :
-                          result?.status === "completed" ? "done" as const :
-                          priorDone ? "active" as const : "waiting" as const,
-                        detail: result?.status === "error" ? result.error ?? "Error de fase" :
-                          result?.status === "completed" ?
-                            number === 8 && preview?.status === "completed"
-                              ? `${preview.rows.length} candidatos · ${preview.links.length} vínculos · ${reconciliation ? `${reconciliation.totals.reuse} reutilizaciones · ${reconciliation.totals.create} creaciones · ${reconciliation.totals.review} revisiones (incluye esquemas y vínculos)` : "sin reconciliación"} · ${preview.issues.length} incidencias`
-                              : `${result.count} elementos · ${(result.durationMs / 1000).toFixed(1)} s`
-                            : pending,
-                      };
-                    }),
-                  ];
-                  const errorMessages = [recognized?.error, semantic?.error, relations?.error, preview?.error, knowledgeImport.error].filter(
-                    (message): message is string => Boolean(message),
-                  );
-                  return (
-                    <article key={file.id} className="overflow-hidden rounded-2xl bg-white">
-                      <div className={reconciliation && !reconciliation.ready ? "hidden" : "flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5"}>
-                        <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${/\.pdf$/i.test(file.name) ? "bg-rose-50 text-rose-600" : /\.(xlsx?|csv)$/i.test(file.name) ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}>
-                          { /\.pdf$/i.test(file.name) ? <span className="relative inline-flex"><FileText className="size-6" strokeWidth={1.8} /><span className="absolute -bottom-1 -right-2 rounded-sm bg-rose-600 px-0.5 text-[7px] font-bold leading-3 text-white">PDF</span></span> : /\.(xlsx?|csv)$/i.test(file.name) ? <FileSpreadsheet className="size-6" strokeWidth={1.8} /> : /\.(zip|rar)$/i.test(file.name) ? <FileArchive className="size-6" strokeWidth={1.8} /> : <FileText className="size-6" strokeWidth={1.8} /> }
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-slate-900">{file.name}</p>
-                          <div className="mt-1 flex flex-wrap items-center gap-2">
-                            {knowledgeImport.tableDetection[file.id] !== undefined ? (
-                              <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-                                {knowledgeImport.tableDetection[file.id] ? "Tablas detectadas" : "Sin tablas"}
-                              </span>
-                            ) : null}
-                            <span className="text-[11px] text-slate-500">
-                              {file.status === "error" || recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? "Revisión con errores" :
-                                recognized?.status === "completed" ? "Documento identificado" : isActiveFile ? "Leyendo documento" : "En cola"}
-                            </span>
-                          </div>
-                        </div>
-                        {file.status === "error" || recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
-                          completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
-                          isActiveFile ? <Loader2 className="size-5 animate-spin text-[#0A58FF]" aria-label="Leyendo documento" /> : <Circle className="size-5 text-slate-300" aria-label="En cola" />}
-                      </div>
-                      {(semantic || relations || Object.keys(simulation).length > 0) && !(reconciliation && !reconciliation.ready) ? <ImportFileProgress completed={stages.filter(stage => stage.state === "done").length} active={!completed && !stages.some(stage => stage.state === "error")} /> : null}
-                      {(semantic || relations || Object.keys(simulation).length > 0) ? (
-                      <details className="group border-t border-slate-100" open={Boolean(reconciliation && !reconciliation.ready)}>
-                        <summary className={reconciliation && !reconciliation.ready ? "hidden" : "flex cursor-pointer list-none items-center justify-between bg-slate-50/60 px-5 py-3 text-xs font-semibold text-slate-700 [&::-webkit-details-marker]:hidden"}>
-                          <span className="flex items-center gap-2"><ScrollText className="size-4 text-slate-500" /> Registro del proceso</span>
-                          <ChevronDown className="size-4 text-slate-400 transition-transform group-open:rotate-180" />
-                        </summary>
-                        <div className="px-5 py-4">
-                          <details className={reconciliation && !reconciliation.ready ? "hidden" : ""} open={!(reconciliation && !reconciliation.ready)}>
-                            <summary className="mb-3 cursor-pointer text-xs font-semibold text-slate-600">8 fases de análisis · {reconciliation && !reconciliation.ready ? "ver detalle" : "detalle"}</summary>
-                          <ol className="space-y-4">
-                            {stages.map((stage, index) => (
-                              <li key={stage.title} className="flex items-start gap-3">
-                                <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${
-                                  stage.state === "done" ? "bg-emerald-50 text-emerald-600" :
-                                  stage.state === "error" ? "bg-amber-50 text-amber-600" :
-                                  stage.state === "active" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-400"
-                                }`}>
-                                  {stage.state === "done" ? <Check className="size-3.5" strokeWidth={2.5} /> :
-                                    stage.state === "error" ? <AlertCircle className="size-3.5" /> :
-                                    stage.state === "active" ? <Loader2 className="size-3.5 animate-spin" /> :
-                                    <Circle className="size-2.5" />}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <p className={`text-xs font-semibold ${stage.state === "waiting" ? "text-slate-400" : "text-slate-800"}`}>
-                                    {index + 1}. {stage.title}
-                                  </p>
-                                  <p className="mt-0.5 text-[11px] text-slate-500">{stage.detail}</p>
-                                </div>
-                              </li>
-                            ))}
-                          </ol>
-                          </details>
-                          {preview?.status === "completed" ? (
-                            <div className="mt-4 space-y-3">
-                              {preview.rows.length && suggestIdentityQuestions({ rows: preview.rows }).length > 0 ? (
-                                <EngineIdentityReview
-                                  key={file.id}
-                                  questions={suggestIdentityQuestions({ rows: preview.rows })}
-                                  answers={identityAnswers[file.id] ?? {}}
-                                  onAnswersChange={next => setIdentityAnswers(current => ({ ...current, [file.id]: next }))}
-                                />
-                              ) : null}
-                              {reconciliation && !reconciliation.ready ? (
-                                <EngineConflictReview
-                                  fileId={file.id}
-                                  rows={reconciliation.rows}
-                                  candidates={preview.rows}
-                                  blockers={reconciliation.blockers}
-                                  answers={conflictAnswers[file.id] ?? {}}
-                                  onAnswersChange={next => setConflictAnswers(current => ({ ...current, [file.id]: next }))}
-                                />
-                              ) : null}
-                              {reconciliation ? (
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                                  <p className="font-semibold">Reconciliación con Engine · solo lectura</p>
-                                  {identityDiscovery ? (
-                                    <div className="mt-2 space-y-1">
-                                      {identityDiscovery.proposals.map(item => (
-                                        <p key={item.entityKey}>
-                                          <span className="font-semibold">{item.entityKey}</span> · {item.keys.join(" + ") || "sin clave"} · {item.status === "validated" ? "validada para simulación" : "revisar"} · {item.reason}
-                                        </p>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                  <p className="mt-1">{reconciliation.totals.reuse} reutilizar · {reconciliation.totals.create} crear · {reconciliation.totals.extend} ampliar · {reconciliation.totals.review} revisar (estructuras, registros y vínculos)</p>
-                                  <p className="mt-1">{reconciliation.ready ? "Sin bloqueos de reconciliación" : "Pendiente de revisión: " + (reconciliation.blockers.length || reconciliation.totals.review) + " elementos"}</p>
-                                  <div className="mt-2 max-h-44 space-y-1 overflow-y-auto">
-                                    {reconciliation.rows.map(row => (
-                                      <p key={row.localId} className="break-words">
-                                        <span className="font-semibold">{row.action.toUpperCase()}</span> · {row.entityKey} / {row.localId} · {row.reason}
-                                      </p>
-                                    ))}
-                                  </div>
-                                </div>
-                              ) : null}
-                              <div className="flex flex-wrap items-center gap-3">
-                              <button type="button"
-                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                                onClick={() => {
-                                  const lines = [
-                                    "-- CRS Engine | Simulación de INSERT / UPSERT (TXT, NO EJECUTABLE)",
-                                    "-- Archivo: " + file.name,
-                                    "-- Solo simulación: NO se han creado registros ni relaciones.",
-                                    "-- Cobertura: " + preview.analyzedChars + "/" + preview.sourceChars + " caracteres",
-                                    "-- Identidades: " + (reconciliation ? "reconciliación conservadora; revisar claves y bloqueos" : "NO VALIDADAS"),
-                                    ...(reconciliation ? [
-                                      "-- RECONCILIACIÓN CON ENGINE (SIN ESCRITURAS)",
-                                      ...((identityDiscovery?.proposals ?? []).map(item => "IDENTITY_PROPOSAL " + JSON.stringify(item))),
-                                      "RECONCILIATION_SUMMARY " + JSON.stringify({ ready: reconciliation.ready, totals: reconciliation.totals }),
-                                      ...reconciliation.entities.map(item => "SCHEMA_DECISION " + JSON.stringify(item)),
-                                      ...reconciliation.relations.map(item => "RELATION_DECISION " + JSON.stringify(item)),
-                                      ...reconciliation.rows.map(item => "ROW_DECISION " + JSON.stringify(item)),
-                                      ...reconciliation.links.map(item => "LINK_DECISION " + JSON.stringify(item)),
-                                      ...reconciliation.blockers.map(item => "-- BLOQUEO: " + item),
-                                    ] : []),
-                                    "-- Registros: " + preview.rows.length + " | Vínculos: " + (preview.links?.length ?? 0),
-                                    "",
-                                    "-- ESTRUCTURAS Y CAMPOS (existentes, propuestos o incompatibles)",
-                                    ...(preview.entities ?? []).map(entity => "SCHEMA " + JSON.stringify(entity)),
-                                    "-- DEFINICIONES DE RELACIONES",
-                                    ...(preview.relations ?? []).map(relation => "RELATION " + JSON.stringify(relation)),
-                                    "-- Cobertura de registros: " + (preview.partial ? "requiere revisión" : "sin recorte de documento; requiere validar exhaustividad"),
-                                    "",
-                                    ...preview.rows.flatMap(row => [
-                                      "-- " + (decisions.get(row.localId)?.action.toUpperCase() ?? "INSERT CANDIDATO") + " " + row.localId + " | " + row.entityKey,
-                                      "ENTITY " + row.entityKey + " " + JSON.stringify(row.values),
-                                      "-- Estado: " + row.disposition + " | " + row.reason,
-                                      "-- Evidencia: " + row.evidence,
-                                      "",
-                                    ]),
-                                    "-- REFERENCIAS PROPUESTAS",
-                                    ...(preview.links ?? []).map(link =>
-                                      "LINK " + link.fromLocalId + " -> " + link.toLocalId + " VIA " + link.relationKey +
-                                      " | evidencia: " + link.evidence),
-                                    "",
-                                    "-- REFERENCIAS PENDIENTES",
-                                    ...(preview.unresolvedLinks ?? []).map(issue => "-- " + issue),
-                                    "-- INCIDENCIAS",
-                                    ...preview.issues.map(issue => "-- " + issue),
-                                    "",
-                                    "-- Este archivo NO es SQL ejecutable. No ejecutar INSERT/UPSERT hasta validar identidades, duplicados y referencias.",
-                                  ];
-                                  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
-                                  const url = URL.createObjectURL(blob);
-                                  const link = document.createElement("a");
-                                  link.href = url;
-                                  link.download = "crs-insert-preview-" + file.name.replace(/[^a-zA-Z0-9._-]/g, "_") + ".txt";
-                                  document.body.appendChild(link);
-                                  link.click();
-                                  link.remove();
-                                  URL.revokeObjectURL(url);
-                                }}>
-                                Descargar TXT de simulación
-                              </button>
-                              {preview.signature && preview.status === "completed" ? (
-                                <div className="mt-3 space-y-2">
-                                  {knowledgeImport.engineInsertResult[file.name] ? (
-                                    <p className="text-xs font-medium text-emerald-700">{knowledgeImport.engineInsertResult[file.name]}</p>
-                                  ) : (
-                                    <p className="text-[11px] text-slate-500">{reconciliation ? (reconciliation.ready ? "Inserción incremental disponible: se reutilizan los registros existentes y se crean únicamente los nuevos." : "La reconciliación tiene bloqueos; no se puede insertar.") : "Primera inserción en Engine vacío."}</p>
-                                  )}
-                                </div>
-                              ) : null}
-                              </div>
-                              <p className="text-[11px] text-slate-500">El TXT es solo una simulación. La inserción escribe únicamente tras una confirmación explícita y una validación de Engine.</p>
-                            </div>
-                          ) : null}
-                          {errorMessages.length ? (
-                            <div className="mt-3 text-[11px] text-amber-700" role="alert">
-                              {errorMessages.join(" · ")}
-                            </div>
-                          ) : null}
-                        </div>
-                      </details>
-                      ) : null}
-                    </article>
-                  );
-                })}
-                {knowledgeImport.error ? <p role="alert" className="text-sm text-red-700">{knowledgeImport.error}</p> : null}
-              </section>
+            {!isWaitingToStart &&
+            knowledgeImport.step ===
+              "analyzing" ? (
+              <KnowledgeImportProcessingStep
+                phase={
+                  knowledgeImport.processingPhase
+                }
+                files={
+                  knowledgeImport.fileProgress
+                }
+                summary={{
+                  ...knowledgeImport.progressSummary,
+                  duplicateFiles:
+                    duplicateFileCount,
+                }}
+                proposalProgress={
+                  knowledgeImport.proposalProgress
+                }
+              />
+            ) : null}
+
+            {knowledgeImport.step ===
+              "proposal" &&
+            knowledgeImport.proposal ? (
+              knowledgeImport.isConfirming ? (
+                <KnowledgeImportLoadingOverlay />
+              ) : (
+                <KnowledgeImportProposalStep
+                  proposal={
+                    knowledgeImport.proposal
+                  }
+                  isConfirming={
+                    knowledgeImport.isConfirming
+                  }
+                  error={
+                    knowledgeImport.error
+                  }
+                  onBack={
+                    knowledgeImport.goBackToUpload
+                  }
+                  onConfirm={
+                    knowledgeImport.confirmProposal
+                  }
+                />
+              )
+            ) : null}
+
+            {knowledgeImport.step ===
+              "completed" &&
+            knowledgeImport.completionResult ? (
+              <KnowledgeImportCompletedStep
+                result={
+                  knowledgeImport.completionResult
+                }
+                onClose={() => {
+                  knowledgeImport.finishActiveImport();
+
+                  startedSelectionKeyRef.current =
+                    null;
+
+                  onOpenChange(false);
+                }}
+              />
             ) : null}
           </div>
 
-          {showInsertIssues && knowledgeImport.step === "completed" && (
-            <div role="alert" className="max-h-44 shrink-0 overflow-y-auto border-t border-amber-200 bg-amber-50 px-6 py-3 text-sm">
-              <p className="font-semibold text-amber-900">La inserción sigue bloqueada. No se ha guardado ningún registro.</p>
-              {insertIssues.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-900">
-                {insertIssues.slice(0, 30).map((issue, index) => <li key={index}>{issue}</li>)}
-              </ul> : <p className="mt-1 text-amber-900">La propuesta no cumple todas las validaciones de Engine. Revisa la simulación antes de intentar guardar.</p>}
-            </div>
-          )}
-          <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 px-6 py-4">
-            <button type="button" onClick={requestClose} className="rounded-lg border border-slate-200 px-5 py-2 text-sm text-slate-700">Cancelar</button>
-            {knowledgeImport.step === "completed" && !knowledgeImport.allFilesDuplicate && currentFile ? (
-              <>
-                {actionable.length > 1 ? (
-                  <span className="self-center text-xs text-slate-500">Documento {Math.min(reviewFileIndex + 1, actionable.length)} de {actionable.length}</span>
-                ) : null}
-                {nextReviewAvailable ? (
-                  <button type="button" disabled={!identityReviewComplete} onClick={() => setReviewFileIndex(index => index + 1)}
-                    className="rounded-lg bg-[#0A58FF] px-5 py-2 text-sm font-semibold text-white disabled:opacity-40">
-                    Continuar revisión
-                  </button>
-                ) : readyToInsert ? (
-                  <button type="button" disabled={knowledgeImport.engineInsertRunning} onClick={confirmEngineInsert}
-                    className="rounded-lg bg-[#0A58FF] px-6 py-2 text-sm font-semibold text-white disabled:opacity-40">
-                    {knowledgeImport.engineInsertRunning ? "Guardando..." : "Guardar en Engine"}
-                  </button>
-                ) : identityReviewComplete ? (
-                  <button type="button" onClick={() => setShowInsertIssues(value => !value)}
-                    className="rounded-lg bg-[#0A58FF] px-5 py-2 text-sm font-semibold text-white">
-                    Revisar incidencias
-                  </button>
-                ) : (
-                  <button type="button" disabled className="rounded-lg bg-[#0A58FF] px-5 py-2 text-sm font-semibold text-white opacity-40">
-                    Responde las preguntas para continuar
-                  </button>
-                )}
-              </>
-            ) : knowledgeImport.step === "completed" && !currentFile ? (
-              <button type="button" onClick={requestClose} className="rounded-lg bg-[#0A58FF] px-5 py-2 text-sm font-semibold text-white">Finalizar</button>
-            ) : null}
-          </div>
+          {!isWaitingToStart ? (
+            <KnowledgeImportModalFooter
+              allFilesDuplicate={knowledgeImport.allFilesDuplicate}
+              step={
+                knowledgeImport.step
+              }
+              fileCount={
+                knowledgeImport
+                  .progressSummary
+                  .totalFiles ||
+                knowledgeImport.files.length
+              }
+              validFileCount={
+                knowledgeImport
+                  .progressSummary
+                  .completedFiles
+              }
+              duplicateFileCount={
+                duplicateFileCount
+              }
+              failedFileCount={
+                knowledgeImport
+                  .progressSummary
+                  .failedFiles
+              }
+              isAnalyzing={
+                knowledgeImport.isAnalyzing
+              }
+              isConfirming={
+                knowledgeImport.isConfirming
+              }
+              canContinue={
+                knowledgeImport.canContinue
+              }
+              canContinueInBackground={
+                knowledgeImport.canContinueInBackground
+              }
+              onCancel={
+                requestClose
+              }
+              onBack={
+                knowledgeImport.goBackToUpload
+              }
+              onAnalyze={
+                knowledgeImport.analyzeDocuments
+              }
+              onContinueAnalysis={
+                knowledgeImport.continueWithValidDocuments
+              }
+              onContinueInBackground={() => {
+                const started =
+                  knowledgeImport.continueInBackground();
+
+                if (!started) {
+                  return;
+                }
+
+                startedSelectionKeyRef.current =
+                  null;
+
+                onOpenChange(false);
+              }}
+              onConfirm={
+                knowledgeImport.confirmProposal
+              }
+              onClose={() => {
+                knowledgeImport.finishActiveImport();
+
+                startedSelectionKeyRef.current =
+                  null;
+
+                onOpenChange(false);
+              }}
+            />
+          ) : null}
         </DialogContent>
       </Dialog>
 
