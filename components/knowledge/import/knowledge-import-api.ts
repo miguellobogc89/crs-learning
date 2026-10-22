@@ -78,7 +78,7 @@ type ExtractTextResponse = {
   successfulFiles: number;
   failedFiles: number;
   totalCharacters: number;
-  files?: Array<{ id: string; name: string; hasTables?: boolean; status: string }>;
+  files?: Array<{ id: string; name: string; hasTables?: boolean; status: "text_ready" | "text_error"; characters: number; error?: string }>;
 };
 
 type CancelKnowledgeImportResponse = {
