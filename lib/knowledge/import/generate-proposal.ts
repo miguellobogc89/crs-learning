@@ -1,5 +1,3 @@
-import { recommendImportRoute } from "./recommend-route";
-import { classifyImportContent } from "./classify-content";
 ﻿// lib/knowledge/import/generate-proposal.ts
 import {
   getKnowledgeImportModel,
@@ -622,13 +620,6 @@ export async function generateKnowledgeImportProposal({
       ),
     }));
 
-  const contentClassification = Object.fromEntries(
-    documents.map(document => [document.id, classifyImportContent(document.text)]),
-  );
-  const recommendedRoutes = Object.fromEntries(
-    documents.map(document => [document.id, recommendImportRoute(contentClassification[document.id])]),
-  );
-
   await onProgress?.({
     step: "preparing",
     progressPercentage: 8,
@@ -653,68 +644,6 @@ export async function generateKnowledgeImportProposal({
   });
 
   try {
-    // Fast path: a confidently structured-only batch needs no Knowledge article
-    // analysis or global article proposal. Engine will discover its own schema.
-    const structuredOnly = documents.length > 0 && documents.every(document =>
-      recommendedRoutes[document.id]?.destination === "engine" &&
-      contentClassification[document.id]?.confidence === "high",
-    );
-    if (structuredOnly) {
-      const proposal: KnowledgeImportProposal = {
-        title: "Importación de datos estructurados",
-        description: "Los documentos se conservarán como fuentes de Engine, sin generar artículos de Knowledge.",
-        summary: {
-          totalDocuments: documents.length,
-          totalFolders: 0,
-          totalArticles: 0,
-          totalWarnings: 0,
-        },
-        folders: [],
-        articles: [],
-        warnings: [],
-        documentAnalyses: documents.map(document => ({
-          documentId: document.id,
-          documentName: document.name,
-          title: document.name,
-          summary: "Fuente de datos estructurados",
-          documentType: "reference" as const,
-          topics: [],
-          entities: [],
-          keywords: [],
-          organizationAreas: [],
-          versionLabel: null,
-          likelyCurrentVersion: true,
-          suggestedArticleTitle: document.name,
-          suggestedFolderPath: [],
-          relatedDocumentIds: [],
-        })),
-        contentClassification,
-        recommendedRoutes,
-      };
-      if (await isImportCancelled(importId)) {
-        throw new Error("La importación ha sido cancelada");
-      }
-      await prisma.knowledge_imports.updateMany({
-        where: {
-          id: importId,
-          status: { not: "cancelled" },
-          processing_status: { not: "cancelled" },
-        },
-        data: {
-          status: "proposal_ready",
-          proposal_json: proposal,
-          error_message: null,
-          updated_at: new Date(),
-        },
-      });
-      await onProgress?.({
-        step: "completed",
-        progressPercentage: 100,
-        message: "Documento estructurado: listo para Engine sin generar artículos",
-      });
-      return { importId, status: "proposal_ready", proposal };
-    }
-
     const documentAnalyses =
       await analyzeKnowledgeDocuments(
         documents,
@@ -778,31 +707,16 @@ export async function generateKnowledgeImportProposal({
         "Validando la estructura propuesta",
     });
 
-    // Do not propose Knowledge articles for documents routed exclusively to Engine.
-    // Mixed and uncertain documents retain their Knowledge proposal.
-    const engineOnlyIds = new Set(documents.filter(document =>
-      recommendedRoutes[document.id]?.destination === "engine" &&
-      contentClassification[document.id]?.confidence === "high",
-    ).map(document => document.id));
-    const knowledgeArticles = generatedProposal.articles.map(article => {
-      const retainedIds = article.documentIds.filter(id => !engineOnlyIds.has(id));
-      return {
-        ...article,
-        documentIds: retainedIds,
-        documentNames: article.documentNames.filter((_, index) =>
-          !engineOnlyIds.has(article.documentIds[index])),
-      };
-    }).filter(article => article.documentIds.length > 0);
+    // Preserve the light document inventory alongside the Knowledge proposal.
+    const storedInventory = knowledgeImport.proposal_json &&
+      typeof knowledgeImport.proposal_json === "object" &&
+      !Array.isArray(knowledgeImport.proposal_json)
+        ? (knowledgeImport.proposal_json as Record<string, unknown>).globalImportMap
+        : null;
     const proposal: KnowledgeImportProposal = {
       ...generatedProposal,
-      articles: knowledgeArticles,
-      summary: {
-        ...generatedProposal.summary,
-        totalArticles: knowledgeArticles.length,
-      },
       documentAnalyses,
-      contentClassification,
-      recommendedRoutes,
+      ...(storedInventory ? { globalImportMap: storedInventory } : {}),
     };
 
     await onProgress?.({
