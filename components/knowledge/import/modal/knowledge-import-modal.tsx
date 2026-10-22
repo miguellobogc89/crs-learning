@@ -787,12 +787,12 @@ export function KnowledgeImportModal({
                               </span>
                             ) : null}
                             <span className="text-[11px] text-slate-500">
-                              {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? "Revisión con errores" :
+                              {file.status === "error" || recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? "Revisión con errores" :
                                 recognized?.status === "completed" ? "Documento identificado" : isActiveFile ? "Leyendo documento" : "En cola"}
                             </span>
                           </div>
                         </div>
-                        {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
+                        {file.status === "error" || recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
                           completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
                           isActiveFile ? <Loader2 className="size-5 animate-spin text-[#0A58FF]" aria-label="Leyendo documento" /> : <Circle className="size-5 text-slate-300" aria-label="En cola" />}
                       </div>
