@@ -183,7 +183,7 @@ export async function POST(request: Request, context: Context) {
         entities: manifest.entities, relations: manifest.relations, rows: manifest.rows,
         links: manifest.links, unresolvedLinks: manifest.unresolvedLinks, issues: manifest.issues,
       });
-      results.push({ id: file.id, status: "completed", ...manifest, signature, issues,
+      results.push({ id: file.id, status: "completed", ...manifest, signature, manifestIssues: manifest.issues, issues,
         sourceChars: file.extracted_text.length, analyzedChars: analysis.sourceChars,
         partial, durationMs: Date.now() - started, error: null });
     } catch (error) {
