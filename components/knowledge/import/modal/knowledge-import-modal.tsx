@@ -34,6 +34,36 @@ import type {
 } from "../knowledge-import-review";
 import { getKnowledgeImportReviewMessage, isAllDuplicateReview } from "../knowledge-import-review";
 
+function ImportFileProgress({ completed, active }: { completed: number; active: boolean }) {
+  const [display, setDisplay] = useState(0);
+  useEffect(() => {
+    const target = Math.round(completed / 8 * 100);
+    setDisplay(value => Math.max(value, target));
+  }, [completed]);
+  useEffect(() => {
+    if (!active || completed >= 8) return;
+    const timer = window.setInterval(() => {
+      setDisplay(value => Math.min(value + 1, Math.min(99, Math.floor((completed + 1) / 8 * 100) - 1)));
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [active, completed]);
+  const percentage = completed === 8 ? 100 : display;
+  return (
+    <div className="mx-5 mb-3">
+      <style>{`@keyframes crs-bar-flash { from { transform: translateX(-130%); } to { transform: translateX(650%); } }`}</style>
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-[11px] font-medium text-slate-500">Progreso del análisis</span>
+        <span className="text-sm font-extrabold tabular-nums text-black">{percentage}%</span>
+      </div>
+      <div className="h-3.5 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Progreso visual del análisis" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percentage}>
+        <div className="relative h-full overflow-hidden rounded-full bg-[#0A58FF] transition-[width] duration-700" style={{ width: `${percentage}%` }}>
+          {active && percentage > 0 ? <div className="absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/80 to-transparent" style={{ animation: "crs-bar-flash 2s linear infinite" }} /> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function getFilesSelectionKey(
   files: File[] | undefined,
 ) {
@@ -672,7 +702,7 @@ export function KnowledgeImportModal({
                   return (
                     <article key={file.id} className="overflow-hidden rounded-2xl bg-white">
                       <div className={reconciliation && !reconciliation.ready ? "hidden" : "flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5"}>
-                        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                        <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${/\\.pdf$/i.test(file.name) ? "bg-rose-50 text-rose-600" : /\\.(xlsx?|csv)$/i.test(file.name) ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}>
                           { /\.(xlsx?|csv)$/i.test(file.name) ? <FileSpreadsheet className="size-6" strokeWidth={1.8} /> : /\.(zip|rar)$/i.test(file.name) ? <FileArchive className="size-6" strokeWidth={1.8} /> : <FileText className="size-6" strokeWidth={1.8} /> }
                         </div>
                         <div className="min-w-0 flex-1">
@@ -691,13 +721,9 @@ export function KnowledgeImportModal({
                         </div>
                         {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
                           completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
-                          <span className="text-xs font-bold uppercase text-blue-600">{file.name.split(".").pop()?.slice(0, 4)}</span>}
+                          <span className="text-xs font-semibold text-slate-500">{stages.filter(stage => stage.state === "done").length}/8</span>}
                       </div>
-                      <div className={reconciliation && !reconciliation.ready ? "hidden" : "relative mx-5 mb-3 h-3 overflow-hidden rounded-full bg-slate-100"} role="progressbar" aria-label="Fases completadas" aria-valuemin={0} aria-valuemax={8} aria-valuenow={stages.filter(stage => stage.state === "done").length}>
-                        <div className="relative h-full overflow-hidden rounded-full bg-[#0A58FF] transition-all duration-700" style={{ width: `${stages.filter(stage => stage.state === "done").length / 8 * 100}%` }}>
-                          <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/50 to-transparent" />
-                        </div>
-                      </div>
+                      {!(reconciliation && !reconciliation.ready) ? <ImportFileProgress completed={stages.filter(stage => stage.state === "done").length} active={!completed && !stages.some(stage => stage.state === "error")} /> : null}
                       <details className="group border-t border-slate-100" open={Boolean(reconciliation && !reconciliation.ready)}>
                         <summary className={reconciliation && !reconciliation.ready ? "hidden" : "flex cursor-pointer list-none items-center justify-between bg-slate-50/60 px-5 py-3 text-xs font-semibold text-slate-700 [&::-webkit-details-marker]:hidden"}>
                           <span className="flex items-center gap-2"><ScrollText className="size-4 text-slate-500" /> Registro del proceso</span>
