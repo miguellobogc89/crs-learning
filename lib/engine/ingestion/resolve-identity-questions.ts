@@ -34,7 +34,7 @@ export function resolveIdentityQuestions(plan: InsertPlan, answers: IdentityAnsw
     const id = root(row.localId);
     groups.set(id, [...(groups.get(id) ?? []), row]);
   }
-  const rows = [];
+  const rows: InsertPlan["rows"] = [];
   for (const group of groups.values()) {
     if (group.length === 1) { rows.push(group[0]); continue; }
     // A confirmed identity is not permission to overwrite conflicting attributes.
