@@ -46,7 +46,8 @@ export async function POST(request: Request, context: Context) {
     const result = await prisma.$transaction(async tx => {
       // First E2E only: do not merge, overwrite or infer identity against existing data.
       // Serializing writes per workspace avoids two simultaneous empty-workspace imports.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${ws}))`;
+      const lock = await tx.$queryRaw<Array<{ acquired: boolean }>>`SELECT pg_try_advisory_xact_lock(hashtext(${ws})) AS acquired`;
+      if (!lock[0]?.acquired) throw new Error("Ya hay una inserción en curso en este workspace.");
       const [types, records, relations] = await Promise.all([
         tx.engine_object_types.count({ where: { workspace_id: ws } }),
         tx.engine_records.count({ where: { workspace_id: ws } }),
