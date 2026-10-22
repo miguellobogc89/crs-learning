@@ -5,6 +5,8 @@ import { reconcilePreviewLinks } from "@/lib/engine/ingestion/reconcile-preview-
 import { analyzeStructuredDocument } from "@/lib/engine/ingestion/analyze-structured-document.service";
 import { buildSimulationManifest } from "@/lib/engine/ingestion/simulation-manifest";
 import { signInsertPlan } from "@/lib/engine/ingestion/signed-insert-plan";
+import { reconcileEngineImport } from "@/lib/engine/ingestion/reconcile-engine-import";
+import { loadEngineReconciliationSnapshot } from "@/lib/engine/ingestion/load-reconciliation-snapshot";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
@@ -62,6 +64,9 @@ export async function POST(request: Request, context: Context) {
   const stage = isObject(body) && typeof body.stage === "number" ? body.stage : 5;
   if (![5, 6, 7, 8].includes(stage)) return Response.json({ error: "Fase inválida" }, { status: 400 });
   const drafts = isObject(body) && Array.isArray(body.drafts) ? body.drafts : [];
+  // Load existing records only for the final simulation; no write path is changed.
+  const incremental = stage === 8
+    ? await loadEngineReconciliationSnapshot(activeWorkspace.id) : null;
   const results = [];
   for (const file of files) {
     const started = Date.now();
@@ -184,7 +189,13 @@ export async function POST(request: Request, context: Context) {
         entities: manifest.entities, relations: manifest.relations, rows: manifest.rows,
         links: manifest.links, unresolvedLinks: manifest.unresolvedLinks, issues: blockingIssues,
       });
-      results.push({ id: file.id, status: "completed", ...manifest, signature, manifestIssues: blockingIssues, issues,
+      const reconciliation = incremental && (incremental.snapshot.entities.length || incremental.snapshot.records.length)
+        ? reconcileEngineImport({
+          entities: manifest.entities, relations: manifest.relations, rows: manifest.rows,
+          links: manifest.links, unresolvedLinks: manifest.unresolvedLinks, issues: blockingIssues,
+        }, incremental.snapshot, incremental.identityRules)
+        : null;
+      results.push({ id: file.id, status: "completed", ...manifest, signature, reconciliation, manifestIssues: blockingIssues, issues,
         sourceChars: file.extracted_text.length, analyzedChars: analysis.sourceChars,
         partial, durationMs: Date.now() - started, error: null });
     } catch (error) {
