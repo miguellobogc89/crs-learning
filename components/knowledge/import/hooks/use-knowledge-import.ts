@@ -179,6 +179,7 @@ export function useKnowledgeImport({
       evidence: string; disposition: "candidate" | "pending"; reason: string }>;
     links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; evidence: string }>;
     entities?: unknown[]; relations?: unknown[];
+    identityDiscovery?: { proposals: Array<{ entityKey: string; keys: string[]; status: "validated" | "review"; reason: string }> } | null;
     reconciliation?: { writesPerformed: false; ready: boolean; blockers: string[];
       entities: Array<{ key: string; action: string; reason: string }>;
       relations: Array<{ key: string; action: string; reason: string }>;
@@ -864,6 +865,7 @@ export function useKnowledgeImport({
                     evidence: string; disposition: "candidate" | "pending"; reason: string }>;
                   links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; evidence: string }>;
                   entities?: unknown[]; relations?: unknown[];
+    identityDiscovery?: { proposals: Array<{ entityKey: string; keys: string[]; status: "validated" | "review"; reason: string }> } | null;
     reconciliation?: { writesPerformed: false; ready: boolean; blockers: string[];
       entities: Array<{ key: string; action: string; reason: string }>;
       relations: Array<{ key: string; action: string; reason: string }>;
