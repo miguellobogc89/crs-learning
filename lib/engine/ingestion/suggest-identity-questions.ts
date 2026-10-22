@@ -71,6 +71,9 @@ export function suggestIdentityQuestions(plan: Pick<InsertPlan, "rows">): Identi
       // Verified fiscal identity is resolved without asking the user.
       if (sameVerifiedIdentity(a.values, b.values)) continue;
       const conflictingIds = contradictoryFiscalIdentity(a.values, b.values);
+      // Identical normalized legal names are not useful review questions.
+      // Do not merge them here: the insert validator still owns identity resolution.
+      if (normalized(a.displayName).join(" ") === normalized(b.displayName).join(" ") && !conflictingIds) continue;
       questions.push({
         id: `identity:${a.localId}:${b.localId}`,
         entityKey: a.entityKey, leftLocalId: a.localId, rightLocalId: b.localId,
