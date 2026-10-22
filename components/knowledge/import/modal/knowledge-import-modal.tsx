@@ -670,27 +670,12 @@ export function KnowledgeImportModal({
                     <section className="rounded-xl border border-slate-200 bg-slate-50 p-4" aria-label="Resumen global de archivos">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <h4 className="text-sm font-semibold text-slate-900">Visión global de la selección</h4>
-                        <button type="button" disabled={knowledgeImport.step !== "completed"}
+                        <button type="button" disabled={knowledgeImport.step !== "completed" || !knowledgeImport.globalMap}
                           className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0A58FF] hover:bg-blue-50 disabled:opacity-40"
                           onClick={async () => {
-                            const snapshot = {
-                              format: "crs-import-map", version: 1, stage: "document_reading", status: "preliminary",
-                              files: Object.entries(knowledgeImport.recognition).map(([name, result]) => ({
-                                fileId: knowledgeImport.fileProgress.find(file => file.name === name)?.id ?? null, fileName: name, status: result.status,
-                                documentType: result.documentType, confidence: result.confidence,
-                                sourceChars: result.sourceChars, structuredLines: result.structuredLines,
-                                narrativeLines: result.narrativeLines, sectionExamples: result.sectionExamples,
-                                quantityExamples: result.quantityExamples, delimitedExamples: result.delimitedExamples,
-                                conceptCandidates: result.conceptCandidates, error: result.error,
-                              })),
-                              sharedConcepts: shared.map(([concept, files]) => ({
-                                concept, sourceFiles: [...files], verified: false,
-                              })),
-                              relations: [],
-                              evidenceStatus: "preliminary; source text stored separately in import records",
-                            };
+                            if (!knowledgeImport.globalMap) return;
                             try {
-                              await navigator.clipboard.writeText(JSON.stringify(snapshot, null, 2));
+                              await navigator.clipboard.writeText(JSON.stringify(knowledgeImport.globalMap, null, 2));
                               setMapCopied(true);
                               window.setTimeout(() => setMapCopied(false), 2500);
                             } catch {
@@ -698,7 +683,7 @@ export function KnowledgeImportModal({
                             }
                           }}>
                           <Copy className="size-3.5" />
-                          {mapCopied ? "Copiado" : "Copiar mapa JSON"}
+                          {mapCopied ? "Copiado" : "Copiar mapa global JSON"}
                         </button>
                       </div>
                       <p className="mt-1 text-xs text-slate-600">
