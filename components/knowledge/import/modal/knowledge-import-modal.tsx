@@ -676,7 +676,7 @@ export function KnowledgeImportModal({
                             const snapshot = {
                               format: "crs-import-map", version: 1, stage: "document_reading", status: "preliminary",
                               files: Object.entries(knowledgeImport.recognition).map(([name, result]) => ({
-                                fileId: result.id, fileName: name, status: result.status,
+                                fileId: knowledgeImport.fileProgress.find(file => file.name === name)?.id ?? null, fileName: name, status: result.status,
                                 documentType: result.documentType, confidence: result.confidence,
                                 sourceChars: result.sourceChars, structuredLines: result.structuredLines,
                                 narrativeLines: result.narrativeLines, sectionExamples: result.sectionExamples,
