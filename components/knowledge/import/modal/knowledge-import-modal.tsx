@@ -731,7 +731,28 @@ export function KnowledgeImportModal({
                                 }}>
                                 Descargar TXT de propuesta de INSERT
                               </button>
-                              <p className="text-[11px] text-slate-500">Vista previa parcial, sin escrituras ni SQL ejecutable.</p>
+                              {preview.signature && preview.status === "completed" ? (
+                                <div className="mt-3 space-y-2">
+                                  <button type="button"
+                                    disabled={knowledgeImport.engineInsertRunning || Boolean(knowledgeImport.engineInsertResult[file.name]) ||
+                                      preview.partial || preview.unresolvedLinks.length > 0 ||
+                                      preview.rows.some(row => row.disposition !== "candidate")}
+                                    className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                                    onClick={async () => {
+                                      if (!window.confirm("¿Insertar las estructuras, registros y vínculos en Engine? Esta operación escribe en la base de datos.")) return;
+                                      try { await knowledgeImport.insertIntoEngine(file.name); }
+                                      catch (error) { window.alert(error instanceof Error ? error.message : String(error)); }
+                                    }}>
+                                    {knowledgeImport.engineInsertRunning ? "Insertando..." : "Insertar en Engine"}
+                                  </button>
+                                  {knowledgeImport.engineInsertResult[file.name] ? (
+                                    <p className="text-xs font-medium text-emerald-700">{knowledgeImport.engineInsertResult[file.name]}</p>
+                                  ) : (
+                                    <p className="text-[11px] text-slate-500">Solo primera inserción en Engine vacío. Si hay datos previos, se bloqueará sin modificar nada.</p>
+                                  )}
+                                </div>
+                              ) : null}
+                              <p className="text-[11px] text-slate-500">El TXT es solo una simulación; el botón de inserción ejecuta una transacción real.</p>
                             </div>
                           ) : null}
                           {errorMessages.length ? (
