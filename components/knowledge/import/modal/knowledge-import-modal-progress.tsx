@@ -15,6 +15,7 @@ export function KnowledgeImportModalProgress({ currentStep }: { currentStep: Kno
   const index = active < 0 ? 3 : active;
   return (
     <nav aria-label="Progreso de importación" className="shrink-0 border-b border-slate-100 bg-white px-7 py-5">
+      <style>{`@keyframes crs-step-fill { 0% { transform: scaleX(0); } 95% { transform: scaleX(1); } 100% { transform: scaleX(0); } }`}</style>
       <div className="mx-auto flex max-w-[780px] items-start">
         {STEPS.map((step, position) => {
           const Icon = step.icon;
@@ -31,7 +32,7 @@ export function KnowledgeImportModalProgress({ currentStep }: { currentStep: Kno
               {position < STEPS.length - 1 ? (
                 <div className="relative mx-3 mt-[19px] h-[7px] min-w-4 flex-1 overflow-hidden rounded-full bg-[repeating-linear-gradient(90deg,#CBD5E1_0px,#CBD5E1_12px,transparent_12px,transparent_20px)]">
                   <div className={`absolute inset-y-0 left-0 rounded-full bg-[#0A58FF] transition-all duration-700 ${position < index ? "w-full" : position === index ? "w-0" : "w-0"}`} />
-                  {position === index && currentStep !== "completed" ? <div className="absolute inset-y-0 w-1/3 animate-[pulse_1.3s_ease-in-out_infinite] rounded-full bg-[#0A58FF]/80" /> : null}
+                  {position === index && currentStep !== "completed" ? <div className="absolute inset-0 origin-left rounded-full bg-[#0A58FF]" style={{ animation: "crs-step-fill 2.8s linear infinite" }} /> : null}
                 </div>
               ) : null}
             </div>
