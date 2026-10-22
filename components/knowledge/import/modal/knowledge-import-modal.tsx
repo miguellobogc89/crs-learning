@@ -645,70 +645,44 @@ export function KnowledgeImportModal({
                       (knowledgeImport.processingPhase === "extracting" ? "Extrayendo texto" : "Analizando")}
                   </span>
                 </div>
-                {Object.keys(knowledgeImport.recognition).length > 0 ? (() => {
-                  const recognizedFiles = Object.entries(knowledgeImport.recognition)
-                    .filter(([, result]) => result.status === "completed");
-                  const types = [
-                    { key: "tabla", label: "Tablas" },
-                    { key: "texto", label: "Textos" },
-                    { key: "hibrido", label: "Híbridos" },
-                    { key: "indeterminado", label: "Sin clasificar" },
-                  ] as const;
-                  const concepts = new Map<string, Set<string>>();
-                  for (const [name, result] of recognizedFiles) {
-                    for (const candidate of result.conceptCandidates) {
-                      const key = candidate.trim().toLocaleLowerCase("es");
-                      if (!key) continue;
-                      if (!concepts.has(key)) concepts.set(key, new Set());
-                      concepts.get(key)!.add(name);
-                    }
-                  }
-                  const shared = [...concepts.entries()]
-                    .filter(([, files]) => files.size > 1)
-                    .sort((a, b) => b[1].size - a[1].size);
+                {knowledgeImport.globalMap ? (() => {
+                  const map = knowledgeImport.globalMap as {
+                    status?: string;
+                    summary?: { filesProcessed?: number; documentsIdentified?: number;
+                      byType?: Array<{ type: string; count: number }>;
+                      byCategory?: Array<{ category: string; count: number }> };
+                    files?: Array<{ fileId: string; fileName: string }>;
+                  };
                   return (
-                    <section className="rounded-xl border border-slate-200 bg-slate-50 p-4" aria-label="Resumen global de archivos">
+                    <section className="rounded-xl border border-slate-200 bg-slate-50 p-4" aria-label="Inventario documental acumulado">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h4 className="text-sm font-semibold text-slate-900">Visión global de la selección</h4>
-                        <button type="button" disabled={knowledgeImport.step !== "completed" || !knowledgeImport.globalMap}
-                          className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0A58FF] hover:bg-blue-50 disabled:opacity-40"
+                        <h4 className="text-sm font-semibold text-slate-900">Mapa documental · cola incremental</h4>
+                        <button type="button"
+                          className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0A58FF] hover:bg-blue-50"
                           onClick={async () => {
-                            if (!knowledgeImport.globalMap) return;
                             try {
                               await navigator.clipboard.writeText(JSON.stringify(knowledgeImport.globalMap, null, 2));
                               setMapCopied(true);
                               window.setTimeout(() => setMapCopied(false), 2500);
-                            } catch {
-                              setMapCopied(false);
-                            }
+                            } catch { setMapCopied(false); }
                           }}>
                           <Copy className="size-3.5" />
-                          {mapCopied ? "Copiado" : "Copiar mapa global JSON"}
+                          {mapCopied ? "Copiado" : "Copiar inventario JSON"}
                         </button>
                       </div>
-                      <p className="mt-1 text-xs text-slate-600">
-                        {recognizedFiles.length} de {knowledgeImport.files.length} archivos reconocidos.
-                        Clasificación basada en el contenido extraído, no en la extensión.
+                      <p className="mt-2 text-xs text-slate-600">
+                        {map.summary?.filesProcessed ?? 0} archivos analizados · {map.summary?.documentsIdentified ?? 0} documentos identificados.
+                        {map.status === "in_progress" ? " Analizando siguiente archivo de la cola…" : ""}
                       </p>
-                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {types.map(type => (
-                          <div key={type.key} className="rounded-lg border bg-white px-3 py-2">
-                            <div className="text-lg font-bold tabular-nums">
-                              {recognizedFiles.filter(([, file]) => file.documentType === type.key).length}
-                            </div>
-                            <div className="text-xs text-slate-600">{type.label}</div>
-                          </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {(map.summary?.byCategory ?? []).map(item => (
+                          <span key={item.category} className="rounded-lg border bg-white px-3 py-2 text-xs">
+                            <strong>{item.count}</strong> · {item.category}
+                          </span>
                         ))}
                       </div>
-                      <p className="mt-3 text-xs text-slate-700">
-                        <strong>Conceptos presentes en varios archivos:</strong>{" "}
-                        {shared.length
-                          ? shared.slice(0, 8).map(([concept, files]) => `${concept} (${files.size})`).join(" · ")
-                          : "Ninguna coincidencia literal detectada"}
-                      </p>
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        Las coincidencias son indicios, no relaciones validadas. Los contratos y procedimientos
-                        todavía no se distinguen como categorías semánticas independientes.
+                      <p className="mt-2 text-[11px] text-slate-500">
+                        Inventario provisional; los detalles y las relaciones se analizarán en fases posteriores.
                       </p>
                     </section>
                   );
