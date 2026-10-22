@@ -15,7 +15,7 @@ export type IdentityRules = Record<string, string[]>;
 export type ReconciliationDecision = "reuse" | "create" | "extend" | "review";
 export type ReconciledRow = {
   localId: string; entityKey: string; action: ReconciliationDecision;
-  existingId?: string; reason: string;
+  existingId?: string; existingValues?: Record<string, unknown>; reason: string;
 };
 export type ReconciledLink = {
   fromLocalId: string; toLocalId: string; relationKey: string;
@@ -108,13 +108,13 @@ export function reconcileEngineImport(
     if (conflicts.length) {
       blockers.push("Valores contradictorios: " + row.localId);
       return { localId: row.localId, entityKey: row.entityKey, action: "review",
-        existingId: old.id, reason: "Conflicto en: " + conflicts.map(([key]) => key).join(", ") };
+        existingId: old.id, existingValues: old.values, reason: "Conflicto en: " + conflicts.map(([key]) => key).join(", ") };
     }
     const additions = Object.entries(row.values).some(([key, value]) =>
       value !== null && (old.values[key] === null || old.values[key] === undefined));
     return { localId: row.localId, entityKey: row.entityKey,
       action: additions ? "extend" : "reuse", existingId: old.id,
-      reason: additions ? "Campos vacíos completables; requiere validación" : "Identidad y valores compatibles" };
+      existingValues: old.values, reason: additions ? "Campos vacíos completables; requiere validación" : "Identidad y valores compatibles" };
   });
   // An extension is visible in preview but cannot be applied without a
   // separately validated update plan and provenance/revision handling.
