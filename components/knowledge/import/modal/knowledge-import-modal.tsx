@@ -566,7 +566,9 @@ export function KnowledgeImportModal({
                 ? "analyzing"
                 : knowledgeImport.step
             }
-            mapReady={Object.values(knowledgeImport.recognition).some(file => file.status === "completed")}
+            mapReady={Object.values(knowledgeImport.relations).some(file => file.status === "completed")}
+            recordsReady={Object.values(knowledgeImport.simulationStages).some(stages => stages[5]?.status === "completed")}
+            validationReady={Object.values(knowledgeImport.simulationStages).some(stages => stages[7]?.status === "completed")}
           />
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
