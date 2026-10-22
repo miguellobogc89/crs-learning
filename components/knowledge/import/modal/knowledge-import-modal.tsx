@@ -702,7 +702,7 @@ export function KnowledgeImportModal({
                   return (
                     <article key={file.id} className="overflow-hidden rounded-2xl bg-white">
                       <div className={reconciliation && !reconciliation.ready ? "hidden" : "flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5"}>
-                        <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${/\\.pdf$/i.test(file.name) ? "bg-rose-50 text-rose-600" : /\\.(xlsx?|csv)$/i.test(file.name) ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}>
+                        <div className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${/\.pdf$/i.test(file.name) ? "bg-rose-50 text-rose-600" : /\.(xlsx?|csv)$/i.test(file.name) ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}>
                           { /\.(xlsx?|csv)$/i.test(file.name) ? <FileSpreadsheet className="size-6" strokeWidth={1.8} /> : /\.(zip|rar)$/i.test(file.name) ? <FileArchive className="size-6" strokeWidth={1.8} /> : <FileText className="size-6" strokeWidth={1.8} /> }
                         </div>
                         <div className="min-w-0 flex-1">
