@@ -1,3 +1,4 @@
+import { suggestIdentityQuestions } from "@/lib/engine/ingestion/suggest-identity-questions";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
@@ -32,6 +33,7 @@ export async function POST(request: Request, context: Context) {
   const plan = body.plan;
   if (!verifyInsertPlan(activeWorkspace.id, importId, body.fileId, plan, body.signature))
     return Response.json({ error: "La propuesta ha cambiado. Repite la simulación." }, { status: 409 });
+  if (suggestIdentityQuestions(plan).length > 0) return Response.json({ error: "Identidades pendientes de revisión" }, { status: 409 });
   const validation = validateInsertPlan(plan);
   if (!validation.ready) return Response.json({ error: "INSERT bloqueado", blockers: validation.blockers }, { status: 409 });
   const imported = await prisma.knowledge_imports.findFirst({
