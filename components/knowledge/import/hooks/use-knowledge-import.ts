@@ -1259,14 +1259,14 @@ export function useKnowledgeImport({
       sharedTask?.importId,
     ]);
 
-  const insertIntoEngine = useCallback(async (fileName: string) => {
+  const insertIntoEngine = useCallback(async (fileName: string, conflictAnswers: Record<string, { kind: "keep" | "incoming" | "omit" | "custom"; note?: string }> = {}) => {
     const preview = recordPreview[fileName];
     if (!importId || !preview?.id || preview.status !== "completed" || !preview.signature)
       throw new Error("No hay una simulación firmada disponible.");
     if (preview.unresolvedLinks.length || (preview.manifestIssues?.length ?? 0) > 0 || preview.rows.some(row => row.disposition !== "candidate"))
       throw new Error("La simulación tiene elementos pendientes y no puede insertarse.");
-    if (preview.reconciliation && !preview.reconciliation.ready)
-      throw new Error("La reconciliación incremental tiene bloqueos; repite la simulación.");
+    if (preview.reconciliation && !preview.reconciliation.ready && !Object.keys(conflictAnswers).length)
+      throw new Error("La reconciliación incremental tiene bloqueos; resuelve los conflictos.");
     const plan: InsertPlan = {
       entities: preview.entities as InsertPlan["entities"],
       relations: preview.relations as InsertPlan["relations"],
@@ -1280,17 +1280,19 @@ export function useKnowledgeImport({
     try {
       const response = await fetch(`/api/knowledge/import/${encodeURIComponent(importId)}/insert-engine`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileId: preview.id, signature: preview.signature, plan, confirm: true }),
+        body: JSON.stringify({ fileId: preview.id, signature: preview.signature, plan, confirm: true, conflictAnswers }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? result.blockers?.join(" · ") ?? "No se pudo insertar");
-      const nothingInserted = result.structures === 0 && result.records === 0 && result.links === 0;
+      const nothingInserted = result.structures === 0 && result.records === 0 && result.links === 0 && !result.updatedRecords;
       const message = nothingInserted
         ? "Todos los registros y relaciones ya existen en Engine. No se ha insertado ningún dato."
         : `Insertados: ${result.structures} estructuras, ${result.records} registros y ${result.links} vínculos` +
           (typeof result.reusedRecords === "number" ? ` · Reutilizados: ${result.reusedRecords} registros y ${result.reusedLinks} vínculos` : "");
-      setEngineInsertResult(current => ({ ...current, [fileName]: message }));
-      toast.success(message);
+      const fullMessage = message + (result.updatedRecords ? ` · Actualizados: ${result.updatedRecords} registros` : "") +
+        (result.omittedRecords ? ` · Omitidos: ${result.omittedRecords} registros` : "");
+      setEngineInsertResult(current => ({ ...current, [fileName]: fullMessage }));
+      toast.success(fullMessage);
       return result;
     } finally {
       setEngineInsertRunning(false);
