@@ -21,7 +21,7 @@ test("incremental insert only creates missing records and missing links", () => 
   assert.match(route, /reconciliation\.rows\.filter\(row => row\.action === "create" &&/);
   assert.match(route, /const newLinks = reconciliation\.links\.filter\(link => \{/);
   assert.match(route, /decision\.existingId && \(decision\.action === "reuse"/);
-  assert.match(route, /if \(decision\.action !== "create"\) continue/);
+  assert.match(route, /if \(decision\.action !== "create" \|\| resolution\?\.omitted\.has\(decision\.localId\)\) continue/);
   assert.match(route, /if \(!newRows\.length && !newLinks\.length && !resolution\?\.updates\.size\)/);
 });
 test("incremental insert refuses schema changes and preserves source provenance", () => {
