@@ -180,8 +180,15 @@ export async function POST(request: Request, context: Context) {
       }
       const manifest = buildSimulationManifest({ proposal: analysis.schema.proposal,
         rows: analysis.rows, links: analysis.links, text: file.extracted_text, existing });
-      const blockingIssues = [...analysis.issues, ...manifest.issues];
-      const issues = [...blockingIssues, ...analysis.schema.proposal.warnings];
+      // Generic schema-build notice is informational, not a data conflict.
+      // Keep it visible but do not sign it as a write blocker.
+      const informationalIssues = analysis.issues.filter(issue =>
+        issue === "Esquema construido a partir de las fases previas y los registros; revisar propuestas y evidencias.");
+      const blockingIssues = [
+        ...analysis.issues.filter(issue => !informationalIssues.includes(issue)),
+        ...manifest.issues,
+      ];
+      const issues = [...blockingIssues, ...informationalIssues, ...analysis.schema.proposal.warnings];
       const partial = issues.length > 0 || manifest.unresolvedLinks.length > 0 ||
         analysis.rows.length >= 150 || analysis.links.length >= 300;
       if (analysis.rows.length >= 150 || analysis.links.length >= 300)
