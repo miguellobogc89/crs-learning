@@ -179,6 +179,12 @@ export function useKnowledgeImport({
       evidence: string; disposition: "candidate" | "pending"; reason: string }>;
     links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; evidence: string }>;
     entities?: unknown[]; relations?: unknown[];
+    reconciliation?: { writesPerformed: false; ready: boolean; blockers: string[];
+      entities: Array<{ key: string; action: string; reason: string }>;
+      relations: Array<{ key: string; action: string; reason: string }>;
+      rows: Array<{ localId: string; entityKey: string; action: string; existingId?: string; reason: string }>;
+      links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; action: string; reason: string }>;
+      totals: { reuse: number; create: number; extend: number; review: number } } | null;
     unresolvedLinks: string[];
     issues: string[]; sourceChars: number; analyzedChars: number;
     partial: boolean; durationMs: number; error: string | null;
@@ -858,6 +864,12 @@ export function useKnowledgeImport({
                     evidence: string; disposition: "candidate" | "pending"; reason: string }>;
                   links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; evidence: string }>;
                   entities?: unknown[]; relations?: unknown[];
+    reconciliation?: { writesPerformed: false; ready: boolean; blockers: string[];
+      entities: Array<{ key: string; action: string; reason: string }>;
+      relations: Array<{ key: string; action: string; reason: string }>;
+      rows: Array<{ localId: string; entityKey: string; action: string; existingId?: string; reason: string }>;
+      links: Array<{ fromLocalId: string; toLocalId: string; relationKey: string; action: string; reason: string }>;
+      totals: { reuse: number; create: number; extend: number; review: number } } | null;
                   unresolvedLinks: string[]; issues: string[]; sourceChars: number; analyzedChars: number;
                   partial: boolean;
                 }>; error?: string } = await response.json();
