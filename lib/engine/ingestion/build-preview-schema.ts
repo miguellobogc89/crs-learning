@@ -101,8 +101,6 @@ export function buildPreviewSchema(input: {
   for (let i = 0; i < entityKeys.length; i++) for (let j = i + 1; j < entityKeys.length; j++) {
     const a = entityKeys[i], b = entityKeys[j];
     const left = grouped.get(a) ?? [], right = grouped.get(b) ?? [];
-    if (relations.some(rel => (rel.fromEntity === a && rel.toEntity === b) ||
-      (rel.fromEntity === b && rel.toEntity === a))) continue;
     const leftFields = new Set(left.flatMap(row => obj(row.values) ? Object.keys(row.values) : []));
     const common = [...leftFields].filter(field => identityField(field) &&
       right.some(row => obj(row.values) && field in row.values));
