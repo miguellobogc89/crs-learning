@@ -22,7 +22,7 @@ import { KnowledgeImportModalProgress } from "./knowledge-import-modal-progress"
 import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
 import { KnowledgeImportProcessingStep } from "./knowledge-import-processing-step";
 import { KnowledgeImportCloseGuard } from "./knowledge-import-close-guard";
-import { EngineConflictReview } from "./engine-conflict-review";
+import { EngineConflictReview, type Decision } from "./engine-conflict-review";
 
 import type {
   KnowledgeImportModalProps,
@@ -272,6 +272,8 @@ export function KnowledgeImportModal({
   selectedFiles,
   resumeImportId,
 }: KnowledgeImportModalProps) {
+  const [conflictAnswers, setConflictAnswers] = useState<Record<string, Record<string, Decision>>>({});
+
   const [
     closeGuardOpen,
     setCloseGuardOpen,
@@ -696,6 +698,8 @@ export function KnowledgeImportModal({
                                   rows={reconciliation.rows}
                                   candidates={preview.rows}
                                   blockers={reconciliation.blockers}
+                                  answers={conflictAnswers[file.id] ?? {}}
+                                  onAnswersChange={next => setConflictAnswers(current => ({ ...current, [file.id]: next }))}
                                 />
                               ) : null}
                               {reconciliation ? (
@@ -783,13 +787,20 @@ export function KnowledgeImportModal({
                               {preview.signature && preview.status === "completed" ? (
                                 <div className="mt-3 space-y-2">
                                   <button type="button"
-                                    disabled={(Boolean(reconciliation) && !reconciliation?.ready) || knowledgeImport.engineInsertRunning || Boolean(knowledgeImport.engineInsertResult[file.name]) ||
+                                    disabled={(Boolean(reconciliation) && !reconciliation?.ready && (
+                                      reconciliation.entities.some(item => item.action !== "reuse") ||
+                                      reconciliation.relations.some(item => item.action !== "reuse") ||
+                                      reconciliation.rows.filter(row => row.action === "review" || row.action === "extend").some(row =>
+                                        !["keep", "incoming", "omit"].includes(conflictAnswers[file.id]?.[row.localId]?.kind ?? "")) ||
+                                      reconciliation.blockers.some(blocker => !blocker.startsWith("Valores contradictorios:") &&
+                                        !blocker.startsWith("Actualización de registro pendiente de aprobación:") &&
+                                        !blocker.startsWith("Vínculo pendiente:")))) || knowledgeImport.engineInsertRunning || Boolean(knowledgeImport.engineInsertResult[file.name]) ||
                                       (preview.manifestIssues?.length ?? 0) > 0 || preview.unresolvedLinks.length > 0 ||
                                       preview.rows.some(row => row.disposition !== "candidate")}
                                     className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
                                     onClick={async () => {
                                       if (!window.confirm("¿Insertar las estructuras, registros y vínculos en Engine? Esta operación escribe en la base de datos.")) return;
-                                      try { await knowledgeImport.insertIntoEngine(file.name); }
+                                      try { await knowledgeImport.insertIntoEngine(file.name, conflictAnswers[file.id] ?? {}); }
                                       catch (error) { window.alert(error instanceof Error ? error.message : String(error)); }
                                     }}>
                                     {knowledgeImport.engineInsertRunning ? "Insertando..." : "Insertar en Engine"}
