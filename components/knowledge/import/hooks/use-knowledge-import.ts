@@ -767,6 +767,19 @@ export function useKnowledgeImport({
             throw new Error("No se ha reconocido ningún archivo con extracción de texto confirmada.");
           }
           setRecognition(Object.fromEntries(recognizedFiles.map(file => [file.fileName, file])));
+          // Prueba C · primera fase aislada: detenerse tras leer y clasificar
+          // TODOS los archivos. No ejecutar comparación, relaciones ni fases
+          // 5–8 hasta que exista una transición explícita al mapa de datos.
+          if (!isCurrentOperation()) return;
+          updateImport(uploadResult.importId, {
+            step: "completed",
+            status: "completed",
+            isAnalyzing: false,
+            isConfirming: false,
+            error: null,
+          });
+          setStep("completed");
+          return;
           setSemanticRunning(true);
           let semanticResult: { files?: Array<{
             id: string; status: "completed" | "error";
