@@ -42,6 +42,6 @@ test("generic schema notice remains visible but is excluded from signed blockers
   const preview = fs.readFileSync(fileURLToPath(new URL("../app/api/knowledge/import/[importId]/preview-records/route.ts", import.meta.url)), "utf8");
   assert.match(preview, /const informationalIssues = analysis\.issues\.filter/);
   assert.match(preview, /const blockingIssues = \[/);
-  assert.match(preview, /\.\.\.analysis\.issues\.filter\(issue => !informationalIssues\.includes\(issue\)\)/);
+  assert.match(preview, /\.\.\.analysis\.issues\.filter\(issue => issue !== "Esquema construido/);
   assert.match(preview, /\.\.\.manifest\.issues/);
 });
