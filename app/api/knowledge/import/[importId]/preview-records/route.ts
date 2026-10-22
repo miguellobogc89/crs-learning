@@ -174,16 +174,17 @@ export async function POST(request: Request, context: Context) {
       }
       const manifest = buildSimulationManifest({ proposal: analysis.schema.proposal,
         rows: analysis.rows, links: analysis.links, text: file.extracted_text, existing });
-      const issues = [...analysis.issues, ...manifest.issues, ...analysis.schema.proposal.warnings];
+      const blockingIssues = [...analysis.issues, ...manifest.issues];
+      const issues = [...blockingIssues, ...analysis.schema.proposal.warnings];
       const partial = issues.length > 0 || manifest.unresolvedLinks.length > 0 ||
         analysis.rows.length >= 150 || analysis.links.length >= 300;
       if (analysis.rows.length >= 150 || analysis.links.length >= 300)
         issues.push("Se alcanzó el límite de extracción; revisar cobertura.");
       const signature = signInsertPlan(activeWorkspace.id, importId, file.id, {
         entities: manifest.entities, relations: manifest.relations, rows: manifest.rows,
-        links: manifest.links, unresolvedLinks: manifest.unresolvedLinks, issues: manifest.issues,
+        links: manifest.links, unresolvedLinks: manifest.unresolvedLinks, issues: blockingIssues,
       });
-      results.push({ id: file.id, status: "completed", ...manifest, signature, manifestIssues: manifest.issues, issues,
+      results.push({ id: file.id, status: "completed", ...manifest, signature, manifestIssues: blockingIssues, issues,
         sourceChars: file.extracted_text.length, analyzedChars: analysis.sourceChars,
         partial, durationMs: Date.now() - started, error: null });
     } catch (error) {
