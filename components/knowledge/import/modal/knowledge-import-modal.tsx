@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 
-import { AlertCircle, Check, ChevronDown, Circle, FileText, FileSpreadsheet, FileArchive, Loader2, ScrollText } from "lucide-react";
+import { AlertCircle, Check, Copy, ChevronDown, Circle, FileText, FileSpreadsheet, FileArchive, Loader2, ScrollText } from "lucide-react";
 
 import {
   Dialog,
@@ -506,6 +506,7 @@ export function KnowledgeImportModal({
   const needsReview = reviewRows.length > 0;
   const identityReviewComplete = !identitiesNeedReview;
   const [showInsertIssues, setShowInsertIssues] = useState(false);
+  const [mapCopied, setMapCopied] = useState(false);
   const insertIssues = [
     ...(currentPreview?.manifestIssues ?? []),
     ...(currentPreview?.unresolvedLinks ?? []).map(item => `Relación sin resolver: ${item}`),
@@ -667,7 +668,39 @@ export function KnowledgeImportModal({
                     .sort((a, b) => b[1].size - a[1].size);
                   return (
                     <section className="rounded-xl border border-slate-200 bg-slate-50 p-4" aria-label="Resumen global de archivos">
-                      <h4 className="text-sm font-semibold text-slate-900">Visión global de la selección</h4>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h4 className="text-sm font-semibold text-slate-900">Visión global de la selección</h4>
+                        <button type="button" disabled={knowledgeImport.step !== "completed"}
+                          className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#0A58FF] hover:bg-blue-50 disabled:opacity-40"
+                          onClick={async () => {
+                            const snapshot = {
+                              format: "crs-import-map", version: 1, stage: "document_reading", status: "preliminary",
+                              files: Object.entries(knowledgeImport.recognition).map(([name, result]) => ({
+                                fileId: result.id, fileName: name, status: result.status,
+                                documentType: result.documentType, confidence: result.confidence,
+                                sourceChars: result.sourceChars, structuredLines: result.structuredLines,
+                                narrativeLines: result.narrativeLines, sectionExamples: result.sectionExamples,
+                                quantityExamples: result.quantityExamples, delimitedExamples: result.delimitedExamples,
+                                conceptCandidates: result.conceptCandidates, error: result.error,
+                              })),
+                              sharedConcepts: shared.map(([concept, files]) => ({
+                                concept, sourceFiles: [...files], verified: false,
+                              })),
+                              relations: [],
+                              evidenceStatus: "preliminary; source text stored separately in import records",
+                            };
+                            try {
+                              await navigator.clipboard.writeText(JSON.stringify(snapshot, null, 2));
+                              setMapCopied(true);
+                              window.setTimeout(() => setMapCopied(false), 2500);
+                            } catch {
+                              setMapCopied(false);
+                            }
+                          }}>
+                          <Copy className="size-3.5" />
+                          {mapCopied ? "Copiado" : "Copiar mapa JSON"}
+                        </button>
+                      </div>
                       <p className="mt-1 text-xs text-slate-600">
                         {recognizedFiles.length} de {knowledgeImport.files.length} archivos reconocidos.
                         Clasificación basada en el contenido extraído, no en la extensión.
