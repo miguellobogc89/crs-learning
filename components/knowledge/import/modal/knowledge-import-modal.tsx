@@ -457,6 +457,40 @@ export function KnowledgeImportModal({
     onOpenChange(false);
   }
 
+  const currentFiles = knowledgeImport.fileProgress.length
+    ? knowledgeImport.fileProgress
+    : knowledgeImport.files.map((file, index) => ({ id: String(index), name: file.name, status: "pending" }));
+  const actionable = currentFiles.filter(file => {
+    const preview = knowledgeImport.recordPreview[file.name];
+    return preview?.status === "completed" && Boolean(preview.signature) && !knowledgeImport.engineInsertResult[file.name];
+  });
+  const currentFile = actionable.length === 1 ? actionable[0] : null;
+  const currentPreview = currentFile ? knowledgeImport.recordPreview[currentFile.name] : null;
+  const currentReconciliation = currentPreview?.reconciliation;
+  const currentAnswers = currentFile ? conflictAnswers[currentFile.id] ?? {} : {};
+  const reviewRows = currentReconciliation?.rows.filter(row => row.action === "review" || row.action === "extend") ?? [];
+  const needsReview = reviewRows.length > 0;
+  const readyToInsert = Boolean(currentFile && currentPreview &&
+    (currentPreview.manifestIssues?.length ?? 0) === 0 &&
+    currentPreview.unresolvedLinks.length === 0 &&
+    currentPreview.rows.every(row => row.disposition === "candidate") &&
+    (!currentReconciliation || currentReconciliation.ready ||
+      (needsReview && currentReconciliation.entities.every(item => item.action === "reuse") &&
+        currentReconciliation.relations.every(item => item.action === "reuse") &&
+        reviewRows.every(row => ["keep", "incoming", "omit"].includes(currentAnswers[row.localId]?.kind ?? "")) &&
+        currentReconciliation.blockers.every(blocker =>
+          blocker.startsWith("Valores contradictorios:") ||
+          blocker.startsWith("Actualización de registro pendiente de aprobación:") ||
+          blocker.startsWith("Vínculo pendiente:")))));
+  async function confirmEngineInsert() {
+    if (!currentFile || !readyToInsert) return;
+    const changes = Object.values(currentAnswers);
+    const message = `Vas a guardar los datos en Engine.\n\n${changes.filter(item => item.kind === "keep").length} mantener · ${changes.filter(item => item.kind === "incoming").length} actualizar · ${changes.filter(item => item.kind === "omit").length} omitir.\n\n¿Confirmas?`;
+    if (!window.confirm(message)) return;
+    try { await knowledgeImport.insertIntoEngine(currentFile.name, currentAnswers); }
+    catch (error) { window.alert(error instanceof Error ? error.message : String(error)); }
+  }
+
   return (
     <>
       <Dialog
@@ -664,7 +698,7 @@ export function KnowledgeImportModal({
                           <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/50 to-transparent" />
                         </div>
                       </div>
-                      <details className="group border-t border-slate-100">
+                      <details className="group border-t border-slate-100" open={Boolean(reconciliation && !reconciliation.ready)}>
                         <summary className="flex cursor-pointer list-none items-center justify-between bg-slate-50/60 px-5 py-3 text-xs font-semibold text-slate-700 [&::-webkit-details-marker]:hidden">
                           <span className="flex items-center gap-2"><ScrollText className="size-4 text-slate-500" /> Registro del proceso</span>
                           <ChevronDown className="size-4 text-slate-400 transition-transform group-open:rotate-180" />
@@ -791,30 +825,6 @@ export function KnowledgeImportModal({
                               </button>
                               {preview.signature && preview.status === "completed" ? (
                                 <div className="mt-3 space-y-2">
-                                  <button type="button"
-                                    disabled={(Boolean(reconciliation) && !reconciliation?.ready && (
-                                      reconciliation?.entities.some(item => item.action !== "reuse") ||
-                                      reconciliation?.relations.some(item => item.action !== "reuse") ||
-                                      reconciliation?.rows.filter(row => row.action === "review" || row.action === "extend").some(row =>
-                                        !["keep", "incoming", "omit"].includes(conflictAnswers[file.id]?.[row.localId]?.kind ?? "")) ||
-                                      reconciliation?.blockers.some(blocker => !blocker.startsWith("Valores contradictorios:") &&
-                                        !blocker.startsWith("Actualización de registro pendiente de aprobación:") &&
-                                        !blocker.startsWith("Vínculo pendiente:")))) || knowledgeImport.engineInsertRunning || Boolean(knowledgeImport.engineInsertResult[file.name]) ||
-                                      (preview.manifestIssues?.length ?? 0) > 0 || preview.unresolvedLinks.length > 0 ||
-                                      preview.rows.some(row => row.disposition !== "candidate")}
-                                    className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                                    onClick={async () => {
-                                      const answers = conflictAnswers[file.id] ?? {};
-                                      const changes = Object.values(answers);
-                                      const summary = changes.length
-                                        ? `Decisiones revisadas: ${changes.filter(item => item.kind === "keep").length} mantener, ${changes.filter(item => item.kind === "incoming").length} actualizar, ${changes.filter(item => item.kind === "omit").length} omitir. Se crearán los demás registros y vínculos válidos.\n\n`
-                                        : "";
-                                      if (!window.confirm(summary + "¿Confirmas la inserción en Engine? Las actualizaciones crearán una nueva revisión; los registros omitidos no se modificarán.")) return;
-                                      try { await knowledgeImport.insertIntoEngine(file.name, conflictAnswers[file.id] ?? {}); }
-                                      catch (error) { window.alert(error instanceof Error ? error.message : String(error)); }
-                                    }}>
-                                    {knowledgeImport.engineInsertRunning ? "Insertando..." : "Insertar en Engine"}
-                                  </button>
                                   {knowledgeImport.engineInsertResult[file.name] ? (
                                     <p className="text-xs font-medium text-emerald-700">{knowledgeImport.engineInsertResult[file.name]}</p>
                                   ) : (
@@ -841,12 +851,17 @@ export function KnowledgeImportModal({
             ) : null}
           </div>
 
-          <div className="flex shrink-0 justify-end border-t border-slate-100 px-6 py-4">
-            {knowledgeImport.step === "completed" || knowledgeImport.allFilesDuplicate ? (
-              <button type="button" onClick={requestClose} className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white">Finalizar</button>
-            ) : (
-              <button type="button" onClick={requestClose} className="rounded-lg border border-slate-200 px-5 py-2 text-sm text-slate-700">Cerrar</button>
-            )}
+          <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 px-6 py-4">
+            <button type="button" onClick={requestClose} className="rounded-lg border border-slate-200 px-5 py-2 text-sm text-slate-700">Cancelar</button>
+            {knowledgeImport.step === "completed" && !knowledgeImport.allFilesDuplicate && currentFile ? (
+              <button type="button" disabled={!readyToInsert || knowledgeImport.engineInsertRunning}
+                onClick={confirmEngineInsert}
+                className="rounded-lg bg-[#0A58FF] px-6 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
+                {knowledgeImport.engineInsertRunning ? "Guardando..." : needsReview ? "Finalizar y guardar" : "Guardar en Engine"}
+              </button>
+            ) : knowledgeImport.step === "completed" && !currentFile ? (
+              <button type="button" onClick={requestClose} className="rounded-lg bg-[#0A58FF] px-5 py-2 text-sm font-semibold text-white">Finalizar</button>
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>
