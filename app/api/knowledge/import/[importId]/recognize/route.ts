@@ -81,6 +81,10 @@ export async function POST(request: Request, context: Context) {
   const lines = text.split(/\r?\n/);
   // Keep original line numbers stable. If oversized, fail explicitly rather than silently skipping pages.
   if (text.length > 110000) return Response.json({ error: "Documento demasiado largo para el inventario rápido; requiere fragmentación por páginas." }, { status: 422 });
+  // Reuse earlier semantic category names when they fit, instead of creating
+  // "luz" and "electricidad" as separate categories across PDFs.
+  const previousMap = readMap(imported.proposal_json, importId);
+  const previousCategories = previousMap.summary.byCategory.map(item => item.category);
   const numbered = lines.map((line, i) => `${i + 1}: ${line}`).join("\n");
   let documents: InventoryDocument[];
   try {
@@ -98,8 +102,8 @@ Para cada documento devuelve: type (factura, contrato, procedimiento, receta, in
 Los límites son números de línea del texto proporcionado. Un documento puede contener muchas tablas.
 No inventes documentos, categorías, números o relaciones. Si hay duda, utiliza sin clasificar y confidence low.
 Incluye todos los documentos encontrados, incluso si hay varias facturas dentro de un PDF.
-El nombre del archivo solo es contexto, no prueba. No extraigas filas, importes, tablas ni entidades.` },
-        { role: "user", content: `Inventario JSON del archivo ${file.file_name}. Texto completo con líneas numeradas:\n${numbered}` },
+El nombre del archivo solo es contexto, no prueba. No extraigas filas, importes, tablas ni entidades.\nSi una categoría anterior coincide semánticamente con una categoría del archivo actual, reutiliza exactamente su nombre.` },
+        { role: "user", content: `Categorías usadas en archivos anteriores (reutilízalas solo cuando correspondan): ${JSON.stringify(previousCategories)}\nInventario JSON del archivo ${file.file_name}. Texto completo con líneas numeradas:\n${numbered}` },
       ],
     });
     const answer = completion.choices[0]?.message?.content;
@@ -118,7 +122,7 @@ El nombre del archivo solo es contexto, no prueba. No extraigas filas, importes,
     status: "completed", documentIds: documents.map(doc => doc.id),
   };
   const map = appendInventoryFile(readMap(previous, importId), fileResult, documents);
-  const eligible = imported.knowledge_import_files.filter(item => item.extracted_text?.trim());
+  const eligible = imported.knowledge_import_files.filter(item => item.status !== "uploaded");
   map.status = map.files.filter(item => item.status === "completed").length >= eligible.length ? "completed" : "in_progress";
   await prisma.knowledge_imports.update({
     where: { id: importId }, data: { proposal_json: { ...previous, globalImportMap: map } },
