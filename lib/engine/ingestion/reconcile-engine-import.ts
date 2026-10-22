@@ -70,7 +70,7 @@ export function reconcileEngineImport(
     return { key: relation.key, action: "reuse" as const, reason: "Definición compatible" };
   });
   const seen = new Map<string, string>();
-  const rows: ReconciledRow[] = plan.rows.map(row => {
+  const rows: ReconciledRow[] = plan.rows.map<ReconciledRow>(row => {
     const keys = identityRules[row.entityKey];
     const entity = entities.find(item => item.key === row.entityKey);
     if (entity?.action === "review" || !entity) return {
@@ -120,7 +120,7 @@ export function reconcileEngineImport(
   for (const row of rows) if (row.action === "extend")
     blockers.push("Actualización de registro pendiente de aprobación: " + row.localId);
   const rowByLocalId = new Map(rows.map(row => [row.localId, row]));
-  const links: ReconciledLink[] = plan.links.map(link => {
+  const links: ReconciledLink[] = plan.links.map<ReconciledLink>(link => {
     const from = rowByLocalId.get(link.fromLocalId), to = rowByLocalId.get(link.toLocalId);
     const rel = relations.find(item => item.key === link.relationKey);
     if (!from || !to || from.action === "review" || to.action === "review" || rel?.action === "review" || !rel)
