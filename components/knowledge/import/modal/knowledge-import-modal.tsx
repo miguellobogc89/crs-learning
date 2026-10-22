@@ -567,6 +567,8 @@ export function KnowledgeImportModal({
                   const relations = knowledgeImport.relations[file.name];
                   const preview = knowledgeImport.recordPreview[file.name];
                   const simulation = knowledgeImport.simulationStages[file.name] ?? {};
+                   const reconciliation = preview?.reconciliation;
+                   const decisions = new Map(reconciliation?.rows.map(row => [row.localId, row]) ?? []);
                   const extracting = knowledgeImport.processingPhase === "extracting";
                   const stages: Array<{ title: string; state: "done" | "active" | "waiting" | "error"; detail: string }> = [
                     {
@@ -620,7 +622,7 @@ export function KnowledgeImportModal({
                         detail: result?.status === "error" ? result.error ?? "Error de fase" :
                           result?.status === "completed" ?
                             number === 8 && preview?.status === "completed"
-                              ? `${preview.rows.length} candidatos · ${preview.links.length} vínculos · ${preview.unresolvedLinks.length} referencias pendientes · ${preview.issues.length} incidencias`
+                              ? `${preview.rows.length} candidatos · ${preview.links.length} vínculos · ${reconciliation ? `${reconciliation.totals.reuse} reutilizaciones · ${reconciliation.totals.create} creaciones · ${reconciliation.totals.review} revisiones (incluye esquemas y vínculos)` : "sin reconciliación"} · ${preview.issues.length} incidencias`
                               : `${result.count} elementos · ${(result.durationMs / 1000).toFixed(1)} s`
                             : pending,
                       };
@@ -682,16 +684,40 @@ export function KnowledgeImportModal({
                             ))}
                           </ol>
                           {preview?.status === "completed" ? (
-                            <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <div className="mt-4 space-y-3">
+                              {reconciliation ? (
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                                  <p className="font-semibold">Reconciliación con Engine · solo lectura</p>
+                                  <p className="mt-1">{reconciliation.totals.reuse} reutilizar · {reconciliation.totals.create} crear · {reconciliation.totals.extend} ampliar · {reconciliation.totals.review} revisar (estructuras, registros y vínculos)</p>
+                                  <p className="mt-1">{reconciliation.ready ? "Sin bloqueos de reconciliación" : "Pendiente de revisión: " + (reconciliation.blockers.length || reconciliation.totals.review) + " elementos"}</p>
+                                  <div className="mt-2 max-h-44 space-y-1 overflow-y-auto">
+                                    {reconciliation.rows.map(row => (
+                                      <p key={row.localId} className="break-words">
+                                        <span className="font-semibold">{row.action.toUpperCase()}</span> · {row.entityKey} / {row.localId} · {row.reason}
+                                      </p>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                              <div className="flex flex-wrap items-center gap-3">
                               <button type="button"
                                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                                 onClick={() => {
                                   const lines = [
-                                    "-- CRS Engine | Propuesta de INSERT (TXT, NO EJECUTABLE)",
+                                    "-- CRS Engine | Simulación de INSERT / UPSERT (TXT, NO EJECUTABLE)",
                                     "-- Archivo: " + file.name,
                                     "-- Solo simulación: NO se han creado registros ni relaciones.",
                                     "-- Cobertura: " + preview.analyzedChars + "/" + preview.sourceChars + " caracteres",
-                                    "-- Identidades y duplicados: NO VALIDADOS",
+                                    "-- Identidades: " + (reconciliation ? "reconciliación conservadora; revisar claves y bloqueos" : "NO VALIDADAS"),
+                                    ...(reconciliation ? [
+                                      "-- RECONCILIACIÓN CON ENGINE (SIN ESCRITURAS)",
+                                      "RECONCILIATION_SUMMARY " + JSON.stringify({ ready: reconciliation.ready, totals: reconciliation.totals }),
+                                      ...reconciliation.entities.map(item => "SCHEMA_DECISION " + JSON.stringify(item)),
+                                      ...reconciliation.relations.map(item => "RELATION_DECISION " + JSON.stringify(item)),
+                                      ...reconciliation.rows.map(item => "ROW_DECISION " + JSON.stringify(item)),
+                                      ...reconciliation.links.map(item => "LINK_DECISION " + JSON.stringify(item)),
+                                      ...reconciliation.blockers.map(item => "-- BLOQUEO: " + item),
+                                    ] : []),
                                     "-- Registros: " + preview.rows.length + " | Vínculos: " + (preview.links?.length ?? 0),
                                     "",
                                     "-- ESTRUCTURAS Y CAMPOS (existentes, propuestos o incompatibles)",
@@ -701,7 +727,7 @@ export function KnowledgeImportModal({
                                     "-- Cobertura de registros: " + (preview.partial ? "requiere revisión" : "sin recorte de documento; requiere validar exhaustividad"),
                                     "",
                                     ...preview.rows.flatMap(row => [
-                                      "-- INSERT CANDIDATO " + row.localId + " | " + row.entityKey,
+                                      "-- " + (decisions.get(row.localId)?.action.toUpperCase() ?? "INSERT CANDIDATO") + " " + row.localId + " | " + row.entityKey,
                                       "ENTITY " + row.entityKey + " " + JSON.stringify(row.values),
                                       "-- Estado: " + row.disposition + " | " + row.reason,
                                       "-- Evidencia: " + row.evidence,
@@ -729,12 +755,12 @@ export function KnowledgeImportModal({
                                   link.remove();
                                   URL.revokeObjectURL(url);
                                 }}>
-                                Descargar TXT de propuesta de INSERT
+                                Descargar TXT de simulación
                               </button>
                               {preview.signature && preview.status === "completed" ? (
                                 <div className="mt-3 space-y-2">
                                   <button type="button"
-                                    disabled={knowledgeImport.engineInsertRunning || Boolean(knowledgeImport.engineInsertResult[file.name]) ||
+                                    disabled={Boolean(reconciliation) || knowledgeImport.engineInsertRunning || Boolean(knowledgeImport.engineInsertResult[file.name]) ||
                                       (preview.manifestIssues?.length ?? 0) > 0 || preview.unresolvedLinks.length > 0 ||
                                       preview.rows.some(row => row.disposition !== "candidate")}
                                     className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
@@ -748,11 +774,12 @@ export function KnowledgeImportModal({
                                   {knowledgeImport.engineInsertResult[file.name] ? (
                                     <p className="text-xs font-medium text-emerald-700">{knowledgeImport.engineInsertResult[file.name]}</p>
                                   ) : (
-                                    <p className="text-[11px] text-slate-500">Solo primera inserción en Engine vacío. Si hay datos previos, se bloqueará sin modificar nada.</p>
+                                    <p className="text-[11px] text-slate-500">{reconciliation ? "UPSERT todavía no habilitado: solo simulación, sin cambios en Engine." : "Solo primera inserción en Engine vacío. Si hay datos previos, se bloqueará sin modificar nada."}</p>
                                   )}
                                 </div>
                               ) : null}
-                              <p className="text-[11px] text-slate-500">El TXT es solo una simulación; el botón de inserción ejecuta una transacción real.</p>
+                              </div>
+                              <p className="text-[11px] text-slate-500">El TXT es solo una simulación; el botón de inserción ejecuta una transacción real únicamente en Engine vacío.</p>
                             </div>
                           ) : null}
                           {errorMessages.length ? (
