@@ -771,7 +771,7 @@ export function KnowledgeImportModal({
                               {preview.signature && preview.status === "completed" ? (
                                 <div className="mt-3 space-y-2">
                                   <button type="button"
-                                    disabled={Boolean(reconciliation) || knowledgeImport.engineInsertRunning || Boolean(knowledgeImport.engineInsertResult[file.name]) ||
+                                    disabled={(Boolean(reconciliation) && !reconciliation?.ready) || knowledgeImport.engineInsertRunning || Boolean(knowledgeImport.engineInsertResult[file.name]) ||
                                       (preview.manifestIssues?.length ?? 0) > 0 || preview.unresolvedLinks.length > 0 ||
                                       preview.rows.some(row => row.disposition !== "candidate")}
                                     className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
@@ -785,7 +785,7 @@ export function KnowledgeImportModal({
                                   {knowledgeImport.engineInsertResult[file.name] ? (
                                     <p className="text-xs font-medium text-emerald-700">{knowledgeImport.engineInsertResult[file.name]}</p>
                                   ) : (
-                                    <p className="text-[11px] text-slate-500">{reconciliation ? "UPSERT todavía no habilitado: solo simulación, sin cambios en Engine." : "Solo primera inserción en Engine vacío. Si hay datos previos, se bloqueará sin modificar nada."}</p>
+                                    <p className="text-[11px] text-slate-500">{reconciliation ? (reconciliation.ready ? "Inserción incremental disponible: se reutilizan los registros existentes y se crean únicamente los nuevos." : "La reconciliación tiene bloqueos; no se puede insertar.") : "Primera inserción en Engine vacío."}</p>
                                   )}
                                 </div>
                               ) : null}
