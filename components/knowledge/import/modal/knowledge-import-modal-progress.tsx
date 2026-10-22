@@ -1,80 +1,189 @@
+// components/knowledge/import/modal/knowledge-import-modal-progress.tsx
+
 "use client";
 
-import { Check, FileStack, Network, ScanSearch, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  Check,
+  FileStack,
+  FolderTree,
+  ScanSearch,
+  Sparkles,
+} from "lucide-react";
+
+import { cn } from "@/lib/utils";
+
 import type { KnowledgeImportModalStep } from "./knowledge-import-modal.types";
 
-const STEPS = [
-  { id: "upload", label: "Documentación preparada", icon: FileStack },
-  { id: "data-map", label: "Construcción del mapa de datos", icon: Network },
-  { id: "analysis", label: "Análisis de registros", icon: ScanSearch },
-  { id: "validation", label: "Validación", icon: ShieldCheck },
-  { id: "completed", label: "Resultado", icon: Sparkles },
-] as const;
+type Props = {
+  currentStep: KnowledgeImportModalStep;
+};
 
-const SEGMENTS = Array.from({ length: 12 }, (_, index) => index);
+type VisibleStep =
+  | "upload"
+  | "analyzing"
+  | "proposal"
+  | "completed";
+
+type StepConfig = {
+  id: VisibleStep;
+  label: string;
+  description: string;
+  icon: typeof FileStack;
+};
+
+const STEPS: StepConfig[] = [
+  {
+    id: "upload",
+    label: "Documentos",
+    description: "Selección",
+    icon: FileStack,
+  },
+  {
+    id: "analyzing",
+    label: "Análisis",
+    description: "Revisión inteligente",
+    icon: ScanSearch,
+  },
+  {
+    id: "proposal",
+    label: "Propuesta",
+    description: "Organización",
+    icon: FolderTree,
+  },
+  {
+    id: "completed",
+    label: "Resultado",
+    description: "Incorporación",
+    icon: Sparkles,
+  },
+];
+
+function normalizeStep(
+  step: KnowledgeImportModalStep,
+): VisibleStep {
+  if (step === "upload") {
+    return "upload";
+  }
+
+  if (step === "analyzing") {
+    return "analyzing";
+  }
+
+  if (step === "proposal") {
+    return "proposal";
+  }
+
+  return "completed";
+}
 
 export function KnowledgeImportModalProgress({
   currentStep,
-  mapReady = false,
-  recordsReady = false,
-  validationReady = false,
-}: {
-  currentStep: KnowledgeImportModalStep;
-  mapReady?: boolean;
-  recordsReady?: boolean;
-  validationReady?: boolean;
-}) {
-  // Visual milestones derived from real ingestion results, not invented backend phases.
-  const index = currentStep === "completed" ? 1
-    : currentStep === "proposal" || currentStep === "analysis_result" ? 3
-    : currentStep === "upload" ? 0
-    : validationReady ? 3
-    : recordsReady ? 3
-    : mapReady ? 2
-    : 1;
+}: Props) {
+  const normalizedStep =
+    normalizeStep(currentStep);
+
+  const activeStepIndex =
+    STEPS.findIndex(
+      (step) =>
+        step.id === normalizedStep,
+    );
 
   return (
-    <nav aria-label="Progreso de importación" className="shrink-0 border-b border-slate-100 bg-white px-5 py-5 sm:px-7">
-      <style>{`@keyframes crs-segment-step {
-        0%, 8% { background-color: #CBD5E1; }
-        9%, 78% { background-color: #6AA9F8; }
-        79%, 100% { background-color: #CBD5E1; }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .crs-animated-segment { animation: none !important; }
-      }`}</style>
-      <div className="mx-auto flex max-w-[980px] items-start">
-        {STEPS.map((step, position) => {
-          const Icon = step.icon;
-          const completed = position < index;
-          const current = position === index;
-          const connectorActive = position === index - 1 && currentStep !== "completed";
-          return (
-            <div key={step.id} className="flex min-w-0 flex-1 items-start last:flex-none">
-              <div className="flex w-[60px] shrink-0 flex-col items-center gap-2 sm:w-[112px]">
-                <span className={`flex size-10 items-center justify-center rounded-2xl border shadow-[inset_0_2px_2px_rgba(255,255,255,.8),0_4px_9px_rgba(30,64,175,.12)] transition-colors sm:size-11 ${completed ? "border-[#0A58FF] bg-gradient-to-br from-[#68B1FF] to-[#0A58FF] text-white" : current ? "border-blue-300 bg-gradient-to-br from-white via-blue-100 to-blue-200 text-[#0A58FF]" : "border-slate-200 bg-gradient-to-br from-white to-slate-100 text-slate-400"}`}>
-                  {completed ? <Check className="size-5" strokeWidth={3} /> : <Icon className="size-5 drop-shadow-sm" strokeWidth={2.2} />}
-                </span>
-                <span className={`text-center text-[10px] font-semibold leading-tight sm:text-[11px] ${current || completed ? "text-slate-900" : "text-slate-400"}`}>{step.label}</span>
-              </div>
-              {position < STEPS.length - 1 ? (
-                <div className="mx-1 mt-[17px] flex h-[7px] min-w-2 flex-1 gap-[3px] sm:mx-2 sm:mt-[19px]" aria-hidden="true">
-                  {SEGMENTS.map(segment => (
-                    <span
-                      key={segment}
-                      className={`h-full min-w-0 flex-1 rounded-[2px] ${completed ? "bg-[#6AA9F8]" : "bg-slate-300"} ${connectorActive ? "crs-animated-segment" : ""}`}
-                      style={connectorActive ? {
-                        animation: "crs-segment-step 3.6s steps(1, end) infinite",
-                        animationDelay: `${segment * 0.22}s`,
-                      } : undefined}
+    <div className="shrink-0 border-b border-slate-100 bg-white px-8 py-4">
+      <div className="relative mx-auto grid max-w-[760px] grid-cols-4">
+        <div
+          aria-hidden="true"
+          className="absolute left-[12.5%] right-[12.5%] top-[17px] h-px bg-slate-200"
+        />
+
+        <div
+          aria-hidden="true"
+          className="absolute left-[12.5%] top-[17px] h-px bg-emerald-500 transition-[width] duration-500"
+          style={{
+            width:
+              activeStepIndex === 0
+                ? "0%"
+                : activeStepIndex === 1
+                  ? "25%"
+                  : activeStepIndex === 2
+                    ? "50%"
+                    : "75%",
+          }}
+        />
+
+        {STEPS.map(
+          (step, index) => {
+            const Icon = step.icon;
+
+            const isActive =
+              index ===
+              activeStepIndex;
+
+            const isCompleted =
+              index <
+              activeStepIndex;
+
+            return (
+              <div
+                key={step.id}
+                className="relative z-10 flex min-w-0 flex-col items-center text-center"
+              >
+                <div
+                  className={cn(
+                    "flex size-[34px] items-center justify-center rounded-full border bg-white transition-all duration-300",
+                    isActive &&
+                      "border-[#0A58FF] bg-[#0A58FF] text-white ring-[5px] ring-[#0A58FF]/10",
+                    isCompleted &&
+                      "border-emerald-500 bg-emerald-500 text-white",
+                    !isActive &&
+                      !isCompleted &&
+                      "border-slate-200 text-slate-400",
+                  )}
+                >
+                  {isCompleted ? (
+                    <Check
+                      className="size-4"
+                      strokeWidth={2.6}
                     />
-                  ))}
+                  ) : (
+                    <Icon
+                      className="size-4"
+                      strokeWidth={2}
+                    />
+                  )}
                 </div>
-              ) : null}
-            </div>
-          );
-        })}
+
+                <div className="mt-2 min-w-0">
+                  <p
+                    className={cn(
+                      "truncate text-[11px] font-semibold",
+                      isActive ||
+                        isCompleted
+                        ? "text-slate-950"
+                        : "text-slate-400",
+                    )}
+                  >
+                    {step.label}
+                  </p>
+
+                  <p
+                    className={cn(
+                      "mt-0.5 hidden truncate text-[10px] sm:block",
+                      isActive
+                        ? "text-slate-500"
+                        : "text-slate-400",
+                    )}
+                  >
+                    {
+                      step.description
+                    }
+                  </p>
+                </div>
+              </div>
+            );
+          },
+        )}
       </div>
-    </nav>
+    </div>
   );
 }
