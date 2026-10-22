@@ -788,11 +788,11 @@ export function KnowledgeImportModal({
                                 <div className="mt-3 space-y-2">
                                   <button type="button"
                                     disabled={(Boolean(reconciliation) && !reconciliation?.ready && (
-                                      reconciliation.entities.some(item => item.action !== "reuse") ||
-                                      reconciliation.relations.some(item => item.action !== "reuse") ||
-                                      reconciliation.rows.filter(row => row.action === "review" || row.action === "extend").some(row =>
+                                      reconciliation?.entities.some(item => item.action !== "reuse") ||
+                                      reconciliation?.relations.some(item => item.action !== "reuse") ||
+                                      reconciliation?.rows.filter(row => row.action === "review" || row.action === "extend").some(row =>
                                         !["keep", "incoming", "omit"].includes(conflictAnswers[file.id]?.[row.localId]?.kind ?? "")) ||
-                                      reconciliation.blockers.some(blocker => !blocker.startsWith("Valores contradictorios:") &&
+                                      reconciliation?.blockers.some(blocker => !blocker.startsWith("Valores contradictorios:") &&
                                         !blocker.startsWith("Actualización de registro pendiente de aprobación:") &&
                                         !blocker.startsWith("Vínculo pendiente:")))) || knowledgeImport.engineInsertRunning || Boolean(knowledgeImport.engineInsertResult[file.name]) ||
                                       (preview.manifestIssues?.length ?? 0) > 0 || preview.unresolvedLinks.length > 0 ||
