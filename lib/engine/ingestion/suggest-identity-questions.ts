@@ -8,6 +8,8 @@ export type IdentityQuestion = {
   rightLocalId: string;
   leftName: string;
   rightName: string;
+  leftEvidence: string;
+  rightEvidence: string;
   question: string;
 };
 
@@ -43,6 +45,7 @@ export function suggestIdentityQuestions(plan: InsertPlan): IdentityQuestion[] {
         id: `identity:${a.localId}:${b.localId}`,
         entityKey: a.entityKey, leftLocalId: a.localId, rightLocalId: b.localId,
         leftName: a.displayName, rightName: b.displayName,
+        leftEvidence: a.evidence.slice(0, 240), rightEvidence: b.evidence.slice(0, 240),
         question: `¿«${a.displayName}» y «${b.displayName}» son la misma entidad?`,
       });
       if (questions.length >= 25) return questions;
