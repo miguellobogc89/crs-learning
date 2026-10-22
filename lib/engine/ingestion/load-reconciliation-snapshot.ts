@@ -1,28 +1,29 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import type { EngineSnapshot, IdentityRules } from "./reconcile-engine-import";
 
 /** Read-only, workspace-scoped snapshot. Identity keys come only from
  * explicitly configured unique Engine fields, never from guessed names. */
-export async function loadEngineReconciliationSnapshot(workspaceId: string):
+export async function loadEngineReconciliationSnapshot(workspaceId: string, db: Prisma.TransactionClient = prisma):
   Promise<{ snapshot: EngineSnapshot; identityRules: IdentityRules }> {
   const [types, definitions, records, links] = await Promise.all([
-    prisma.engine_object_types.findMany({
+    db.engine_object_types.findMany({
       where: { workspace_id: workspaceId, status: "active" },
       select: { id: true, key: true, engine_field_definitions: {
         where: { status: "active" },
         select: { key: true, field_type: true, is_unique: true },
       } },
     }),
-    prisma.engine_relation_definitions.findMany({
+    db.engine_relation_definitions.findMany({
       where: { workspace_id: workspaceId, status: "active" },
       select: { id: true, key: true, from_object_type_id: true,
         to_object_type_id: true, cardinality: true },
     }),
-    prisma.engine_records.findMany({
+    db.engine_records.findMany({
       where: { workspace_id: workspaceId },
       select: { id: true, object_type_id: true, values_json: true },
     }),
-    prisma.engine_record_relations.findMany({
+    db.engine_record_relations.findMany({
       where: { workspace_id: workspaceId },
       select: { relation_definition_id: true, from_record_id: true, to_record_id: true },
     }),
