@@ -123,7 +123,7 @@ export async function POST(request: Request, context: Context) {
         for (const decision of reconciliation.rows) {
           if (decision.existingId && (decision.action === "reuse" || resolution?.kept.has(decision.localId) || resolution?.updates.has(decision.localId)))
             rowIds.set(decision.localId, decision.existingId);
-          if (decision.action !== "create") continue;
+          if (decision.action !== "create" || resolution?.omitted.has(decision.localId)) continue;
           const row = planRows.get(decision.localId);
           const objectTypeId = typeIds.get(decision.entityKey);
           if (!row || !objectTypeId) throw new Error("Registro sin estructura: " + decision.localId);
