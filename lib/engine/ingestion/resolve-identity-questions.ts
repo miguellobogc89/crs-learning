@@ -1,5 +1,5 @@
 import type { InsertPlan } from "./validate-insert-plan";
-import { suggestIdentityQuestions } from "./suggest-identity-questions";
+import { suggestIdentityQuestions, verifiedIdentityPairs } from "./suggest-identity-questions";
 
 export type IdentityAnswer = "same" | "different" | "unsure";
 export type IdentityAnswers = Record<string, IdentityAnswer>;
@@ -18,7 +18,7 @@ export function resolveIdentityQuestions(plan: InsertPlan, answers: IdentityAnsw
     return p === id ? id : root(p);
   };
   const different = questions.filter(q => answers[q.id] === "different");
-  for (const q of questions.filter(q => answers[q.id] === "same")) {
+  for (const q of [...verifiedIdentityPairs(plan), ...questions.filter(q => answers[q.id] === "same")]) {
     const a = root(q.leftLocalId), b = root(q.rightLocalId);
     if (a === b) continue;
     if (different.some(d => (root(d.leftLocalId) === a && root(d.rightLocalId) === b) ||
@@ -47,7 +47,7 @@ export function resolveIdentityQuestions(plan: InsertPlan, answers: IdentityAnsw
       if (values[key] === undefined || values[key] === null || values[key] === "") {
         values[key] = value; continue;
       }
-      if (key === "name" || key === "nombre" || key === "razon_social" || key === "legal_name") continue;
+      if (["name", "nombre", "razon_social", "legal_name", "company_name", "business_name"].includes(key)) continue;
       if (String(values[key]).normalize("NFKC").trim().toLowerCase() !== String(value).normalize("NFKC").trim().toLowerCase())
         throw new Error("Misma entidad, pero hay datos diferentes en " + key + ". Se necesita revisión antes de fusionar.");
     }
