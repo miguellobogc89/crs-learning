@@ -4,6 +4,7 @@ import { buildPreviewSchema, normalizePreviewRows } from "@/lib/engine/ingestion
 import { reconcilePreviewLinks } from "@/lib/engine/ingestion/reconcile-preview-links";
 import { analyzeStructuredDocument } from "@/lib/engine/ingestion/analyze-structured-document.service";
 import { buildSimulationManifest } from "@/lib/engine/ingestion/simulation-manifest";
+import { signInsertPlan } from "@/lib/engine/ingestion/signed-insert-plan";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
@@ -178,7 +179,11 @@ export async function POST(request: Request, context: Context) {
         analysis.rows.length >= 150 || analysis.links.length >= 300;
       if (analysis.rows.length >= 150 || analysis.links.length >= 300)
         issues.push("Se alcanzó el límite de extracción; revisar cobertura.");
-      results.push({ id: file.id, status: "completed", ...manifest, issues,
+      const signature = signInsertPlan(activeWorkspace.id, importId, file.id, {
+        entities: manifest.entities, relations: manifest.relations, rows: manifest.rows,
+        links: manifest.links, unresolvedLinks: manifest.unresolvedLinks, issues: manifest.issues,
+      });
+      results.push({ id: file.id, status: "completed", ...manifest, signature, issues,
         sourceChars: file.extracted_text.length, analyzedChars: analysis.sourceChars,
         partial, durationMs: Date.now() - started, error: null });
     } catch (error) {
