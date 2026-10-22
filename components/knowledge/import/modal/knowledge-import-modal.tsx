@@ -501,7 +501,7 @@ export function KnowledgeImportModal({
     const preview = knowledgeImport.recordPreview[file.name];
     return preview?.status === "completed" && Boolean(preview.signature) && !knowledgeImport.engineInsertResult[file.name];
   });
-  const currentFile = actionable.length === 1 ? actionable[0] : null;
+  const currentFile = actionable[reviewFileIndex] ?? actionable[0] ?? null;
   const currentPreview = currentFile ? knowledgeImport.recordPreview[currentFile.name] : null;
   const currentReconciliation = currentPreview?.reconciliation;
   const identityQuestions = currentPreview ? suggestIdentityQuestions({ rows: currentPreview.rows }) : [];
@@ -510,6 +510,8 @@ export function KnowledgeImportModal({
   const currentAnswers = currentFile ? conflictAnswers[currentFile.id] ?? {} : {};
   const reviewRows = currentReconciliation?.rows.filter(row => row.action === "review" || row.action === "extend") ?? [];
   const needsReview = reviewRows.length > 0;
+  const identityReviewComplete = !identitiesNeedReview;
+  const nextReviewAvailable = actionable.length > 1 && reviewFileIndex < actionable.length - 1;
   const readyToInsert = Boolean(currentFile && currentPreview && !identitiesNeedReview &&
     (currentPreview.manifestIssues?.length ?? 0) === 0 &&
     currentPreview.unresolvedLinks.length === 0 &&
@@ -908,11 +910,31 @@ export function KnowledgeImportModal({
           <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 px-6 py-4">
             <button type="button" onClick={requestClose} className="rounded-lg border border-slate-200 px-5 py-2 text-sm text-slate-700">Cancelar</button>
             {knowledgeImport.step === "completed" && !knowledgeImport.allFilesDuplicate && currentFile ? (
-              <button type="button" disabled={!readyToInsert || knowledgeImport.engineInsertRunning}
-                onClick={confirmEngineInsert}
-                className="rounded-lg bg-[#0A58FF] px-6 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
-                {knowledgeImport.engineInsertRunning ? "Guardando..." : identitiesNeedReview ? "Identidades pendientes" : needsReview ? "Finalizar y guardar" : "Guardar en Engine"}
-              </button>
+              <>
+                {actionable.length > 1 ? (
+                  <span className="self-center text-xs text-slate-500">Documento {Math.min(reviewFileIndex + 1, actionable.length)} de {actionable.length}</span>
+                ) : null}
+                {nextReviewAvailable ? (
+                  <button type="button" disabled={!identityReviewComplete} onClick={() => setReviewFileIndex(index => index + 1)}
+                    className="rounded-lg bg-[#0A58FF] px-5 py-2 text-sm font-semibold text-white disabled:opacity-40">
+                    Continuar revisión
+                  </button>
+                ) : readyToInsert ? (
+                  <button type="button" disabled={knowledgeImport.engineInsertRunning} onClick={confirmEngineInsert}
+                    className="rounded-lg bg-[#0A58FF] px-6 py-2 text-sm font-semibold text-white disabled:opacity-40">
+                    {knowledgeImport.engineInsertRunning ? "Guardando..." : "Guardar en Engine"}
+                  </button>
+                ) : identityReviewComplete ? (
+                  <button type="button" onClick={() => window.alert("Revisión completada, pero la inserción sigue bloqueada por validaciones pendientes. Consulta las incidencias de la simulación. No se han guardado datos.")}
+                    className="rounded-lg bg-[#0A58FF] px-5 py-2 text-sm font-semibold text-white">
+                    Revisar incidencias
+                  </button>
+                ) : (
+                  <button type="button" disabled className="rounded-lg bg-[#0A58FF] px-5 py-2 text-sm font-semibold text-white opacity-40">
+                    Responde las preguntas para continuar
+                  </button>
+                )}
+              </>
             ) : knowledgeImport.step === "completed" && !currentFile ? (
               <button type="button" onClick={requestClose} className="rounded-lg bg-[#0A58FF] px-5 py-2 text-sm font-semibold text-white">Finalizar</button>
             ) : null}
