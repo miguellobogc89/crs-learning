@@ -691,6 +691,18 @@ export function KnowledgeImportModal({
                   knowledgeImport.files.map((file, index) => ({ id: String(index), name: file.name, status: "pending" }))).map(file => {
                   const recognized = knowledgeImport.recognition[file.name];
                   const completed = knowledgeImport.step === "completed";
+                  // Only the actual current queue item may show a spinner.
+                  // All other items are waiting, even when the batch is active.
+                  const queued = knowledgeImport.fileProgress.length
+                    ? knowledgeImport.fileProgress
+                    : knowledgeImport.files.map((item, index) => ({ id: String(index), name: item.name, status: "pending" }));
+                  const isWorking = (status: string) =>
+                    ["uploading", "processing", "text_processing", "extracting", "analyzing"].includes(status);
+                  const firstPending = queued.find(item =>
+                    !knowledgeImport.recognition[item.name] &&
+                    !["error", "failed", "cancelled"].includes(item.status));
+                  const activeQueueItem = queued.find(item => isWorking(item.status)) ?? firstPending;
+                  const isActiveFile = !completed && !recognized && activeQueueItem?.id === file.id;
                   const semantic = knowledgeImport.semantic[file.name];
                   const relations = knowledgeImport.relations[file.name];
                   const preview = knowledgeImport.recordPreview[file.name];
@@ -776,13 +788,13 @@ export function KnowledgeImportModal({
                             ) : null}
                             <span className="text-[11px] text-slate-500">
                               {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? "Revisión con errores" :
-                                completed ? "Lectura completada" : "Leyendo documento"}
+                                recognized?.status === "completed" ? "Documento identificado" : isActiveFile ? "Leyendo documento" : "En cola"}
                             </span>
                           </div>
                         </div>
                         {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
                           completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
-                          <Loader2 className="size-5 animate-spin text-[#0A58FF]" aria-label="Leyendo documento" />}
+                          isActiveFile ? <Loader2 className="size-5 animate-spin text-[#0A58FF]" aria-label="Leyendo documento" /> : <Circle className="size-5 text-slate-300" aria-label="En cola" />}
                       </div>
                       {(semantic || relations || Object.keys(simulation).length > 0) && !(reconciliation && !reconciliation.ready) ? <ImportFileProgress completed={stages.filter(stage => stage.state === "done").length} active={!completed && !stages.some(stage => stage.state === "error")} /> : null}
                       {(semantic || relations || Object.keys(simulation).length > 0) ? (
