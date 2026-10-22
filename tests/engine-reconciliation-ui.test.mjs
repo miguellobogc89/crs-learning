@@ -7,7 +7,7 @@ test("stage 8 returns the workspace reconciliation result", () => {
   const route = read("app/api/knowledge/import/[importId]/preview-records/route.ts");
   assert.match(route, /loadEngineReconciliationSnapshot\(activeWorkspace\.id\)/);
   assert.match(route, /reconcileEngineImport\(/);
-  assert.match(route, /signature, reconciliation, manifestIssues/);
+  assert.match(route, /signature, reconciliation, identityDiscovery, manifestIssues/);
 });
 test("client preserves reconciliation result and exposes decisions", () => {
   const hook = read("components/knowledge/import/hooks/use-knowledge-import.ts");
