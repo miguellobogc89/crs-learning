@@ -28,8 +28,6 @@ import {
   createInitialImportFiles,
   createInitialImportSummary,
   createSummaryFromAnalysisSnapshot,
-  finalizeImportAnalysis,
-  finalizeImportFiles,
   markFilesUploaded,
   markFilesUploading,
 } from "@/components/knowledge/import/utils/progress";
