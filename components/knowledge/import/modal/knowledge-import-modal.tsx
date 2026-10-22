@@ -735,7 +735,7 @@ export function KnowledgeImportModal({
                                 <div className="mt-3 space-y-2">
                                   <button type="button"
                                     disabled={knowledgeImport.engineInsertRunning || Boolean(knowledgeImport.engineInsertResult[file.name]) ||
-                                      preview.partial || preview.unresolvedLinks.length > 0 ||
+                                      (preview.manifestIssues?.length ?? 0) > 0 || preview.unresolvedLinks.length > 0 ||
                                       preview.rows.some(row => row.disposition !== "candidate")}
                                     className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
                                     onClick={async () => {
