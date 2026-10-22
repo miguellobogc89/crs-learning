@@ -512,6 +512,15 @@ export function KnowledgeImportModal({
   const reviewRows = currentReconciliation?.rows.filter(row => row.action === "review" || row.action === "extend") ?? [];
   const needsReview = reviewRows.length > 0;
   const identityReviewComplete = !identitiesNeedReview;
+  const [showInsertIssues, setShowInsertIssues] = useState(false);
+  const insertIssues = [
+    ...(currentPreview?.manifestIssues ?? []),
+    ...(currentPreview?.unresolvedLinks ?? []).map(item => `Relación sin resolver: ${item}`),
+    ...(currentPreview?.rows ?? []).filter(row => row.disposition !== "candidate")
+      .map(row => `Registro pendiente: ${row.localId}`),
+    ...(currentReconciliation?.blockers ?? []),
+  ].map(issue => String(issue));
+
   const nextReviewAvailable = actionable.length > 1 && reviewFileIndex < actionable.length - 1;
   const readyToInsert = Boolean(currentFile && currentPreview && !identitiesNeedReview &&
     (currentPreview.manifestIssues?.length ?? 0) === 0 &&
@@ -908,6 +917,14 @@ export function KnowledgeImportModal({
             ) : null}
           </div>
 
+          {showInsertIssues && knowledgeImport.step === "completed" && (
+            <div role="alert" className="max-h-44 shrink-0 overflow-y-auto border-t border-amber-200 bg-amber-50 px-6 py-3 text-sm">
+              <p className="font-semibold text-amber-900">La inserción sigue bloqueada. No se ha guardado ningún registro.</p>
+              {insertIssues.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-900">
+                {insertIssues.slice(0, 30).map((issue, index) => <li key={index}>{issue}</li>)}
+              </ul> : <p className="mt-1 text-amber-900">La propuesta no cumple todas las validaciones de Engine. Revisa la simulación antes de intentar guardar.</p>}
+            </div>
+          )}
           <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 px-6 py-4">
             <button type="button" onClick={requestClose} className="rounded-lg border border-slate-200 px-5 py-2 text-sm text-slate-700">Cancelar</button>
             {knowledgeImport.step === "completed" && !knowledgeImport.allFilesDuplicate && currentFile ? (
@@ -926,7 +943,7 @@ export function KnowledgeImportModal({
                     {knowledgeImport.engineInsertRunning ? "Guardando..." : "Guardar en Engine"}
                   </button>
                 ) : identityReviewComplete ? (
-                  <button type="button" onClick={() => window.alert("Revisión completada, pero la inserción sigue bloqueada por validaciones pendientes. Consulta las incidencias de la simulación. No se han guardado datos.")}
+                  <button type="button" onClick={() => setShowInsertIssues(value => !value)}
                     className="rounded-lg bg-[#0A58FF] px-5 py-2 text-sm font-semibold text-white">
                     Revisar incidencias
                   </button>
