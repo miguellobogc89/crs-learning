@@ -33,7 +33,7 @@ function candidateMatch(a: string, b: string): boolean {
   // Require a distinctive shared token, plus substantial overlap.
   return common.length > 0 && common.length / Math.min(aa.length, bb.length) >= 0.75;
 }
-export function suggestIdentityQuestions(plan: InsertPlan): IdentityQuestion[] {
+export function suggestIdentityQuestions(plan: Pick<InsertPlan, "rows">): IdentityQuestion[] {
   const rows = plan.rows.map(row => ({ ...row, displayName: nameOf(row.values) }))
     .filter((row): row is typeof row & { displayName: string } => row.displayName !== null);
   const questions: IdentityQuestion[] = [];
