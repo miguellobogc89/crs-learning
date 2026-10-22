@@ -14,9 +14,9 @@ export type IdentityQuestion = {
 const NAME_KEYS = ["name", "nombre", "razon_social", "legal_name", "company_name", "business_name"];
 const NOISE = new Set(["sl", "sa", "slu", "srl", "sociedad", "limitada", "anonima", "empresa", "compania", "company", "the", "de", "del", "la", "el", "los", "las", "y"]);
 function normalized(value: string): string[] {
-  return value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "")
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("es").replace(/[^a-z0-9]+/g, " ")
-    .split(/\\s+/).filter(token => token.length > 1 && !NOISE.has(token));
+    .split(/\s+/).filter(token => token.length > 1 && !NOISE.has(token));
 }
 function nameOf(values: Record<string, unknown>): string | null {
   for (const key of NAME_KEYS) if (typeof values[key] === "string" && (values[key] as string).trim())
