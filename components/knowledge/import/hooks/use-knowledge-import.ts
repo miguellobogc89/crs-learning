@@ -130,6 +130,7 @@ export function useKnowledgeImport({
     );
 
   const [tableDetection, setTableDetection] = useState<Record<string, boolean>>({});
+  const [globalMap, setGlobalMap] = useState<Record<string, unknown> | null>(null);
   const [recognition, setRecognition] = useState<Record<string, {
     status: "completed" | "error";
     sourceChars: number;
@@ -730,6 +731,7 @@ export function useKnowledgeImport({
           );
           const result: {
             error?: string;
+            map?: Record<string, unknown>;
             files?: Array<{
               id: string; fileName: string;
               status: "completed" | "error";
@@ -767,6 +769,7 @@ export function useKnowledgeImport({
             throw new Error("No se ha reconocido ningún archivo con extracción de texto confirmada.");
           }
           setRecognition(Object.fromEntries(recognizedFiles.map(file => [file.fileName, file])));
+          setGlobalMap(result.map ?? null);
           // Prueba C · primera fase aislada: detenerse tras leer y clasificar
           // TODOS los archivos. No ejecutar comparación, relaciones ni fases
           // 5–8 hasta que exista una transición explícita al mapa de datos.
@@ -1024,6 +1027,7 @@ export function useKnowledgeImport({
       setDuplicateNotice(null);
       setTableDetection({});
       setRecognition({});
+      setGlobalMap(null);
       setSemantic({});
       setSemanticRunning(false);
       setRelations({});
@@ -1160,6 +1164,7 @@ export function useKnowledgeImport({
   }, [recordPreview, importId]);
 
   return {
+    globalMap,
     recognition,
     semantic,
     semanticRunning,
