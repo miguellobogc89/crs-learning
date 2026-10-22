@@ -566,6 +566,7 @@ export function KnowledgeImportModal({
                 ? "analyzing"
                 : knowledgeImport.step
             }
+            mapReady={Object.values(knowledgeImport.recognition).some(file => file.status === "completed")}
           />
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
