@@ -115,6 +115,7 @@ async function isImportCancelled(
 
 export async function processImportText(
   importId: string,
+  fileId?: string,
 ): Promise<ProcessImportTextResult> {
   const knowledgeImport =
     await prisma.knowledge_imports.findUnique({
@@ -164,10 +165,15 @@ export async function processImportText(
     );
   }
 
+  // In queued mode the caller selects exactly one file, so extraction
+  // and semantic recognition can complete before the next file begins.
+  if (fileId && !allFiles.some((file) => file.id === fileId)) {
+    throw new Error("El archivo no pertenece a esta cola de extracción");
+  }
   const filesToProcess = allFiles.filter(
     (file) =>
-      file.processing_status !== "completed" ||
-      file.status !== "text_ready",
+      (!fileId || file.id === fileId) &&
+      (file.processing_status !== "completed" || file.status !== "text_ready"),
   );
 
   const alreadyCompletedFiles = allFiles.filter(
@@ -176,26 +182,29 @@ export async function processImportText(
       file.status === "text_ready",
   );
 
+  const previouslyFailedFiles = allFiles.filter(file =>
+    file.status === "text_error" && (!fileId || file.id !== fileId));
+
   if (filesToProcess.length === 0) {
     return {
       importId,
-      status: "text_ready",
-      processingStatus: "completed",
+      status: alreadyCompletedFiles.length ? "text_ready" : "text_error",
+      processingStatus: alreadyCompletedFiles.length ? "completed" : "error",
       totalFiles: allFiles.length,
       successfulFiles: alreadyCompletedFiles.length,
-      failedFiles: 0,
+      failedFiles: previouslyFailedFiles.length,
       totalCharacters: allFiles.reduce(
         (total, file) =>
           total + (file.extracted_text?.length ?? 0),
         0,
       ),
-      files: allFiles.map(
+      files: allFiles.filter(file => !fileId || file.id === fileId).map(
         (file): ImportTextFileResult => ({
           id: file.id,
           name: file.file_name,
           relativePath: file.relative_path,
           processingOrder: file.processing_order,
-          status: "text_ready",
+          status: file.status === "text_ready" ? "text_ready" : "text_error",
           characters: file.extracted_text?.length ?? 0,
           hasTables: containsStructuredTable(file.extracted_text ?? ""),
         }),
@@ -220,7 +229,7 @@ export async function processImportText(
       status: "text_processing",
       processing_status: "processing",
       completed_files: alreadyCompletedFiles.length,
-      failed_files: 0,
+      failed_files: previouslyFailedFiles.length,
       current_file_id: null,
       processing_started_at: processingStartedAt,
       processing_completed_at: null,
@@ -232,7 +241,7 @@ export async function processImportText(
   const results: ImportTextFileResult[] = [];
 
   let successfulFiles = alreadyCompletedFiles.length;
-  let failedFiles = 0;
+  let failedFiles = previouslyFailedFiles.length;
 
   let totalCharacters = alreadyCompletedFiles.reduce(
     (total, file) =>
