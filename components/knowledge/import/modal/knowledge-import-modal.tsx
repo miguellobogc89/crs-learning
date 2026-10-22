@@ -306,6 +306,7 @@ export function KnowledgeImportModal({
 }: KnowledgeImportModalProps) {
   const [conflictAnswers, setConflictAnswers] = useState<Record<string, Record<string, Decision>>>({});
   const [identityAnswers, setIdentityAnswers] = useState<Record<string, Record<string, IdentityAnswer>>>({});
+  const [reviewFileIndex, setReviewFileIndex] = useState(0);
   const [approvedLargeSelection, setApprovedLargeSelection] = useState<string | null>(null);
 
   const [
