@@ -80,6 +80,66 @@ export function buildPreviewSchema(input: {
       description: typeof rel.reason === "string" ? rel.reason : "Relación propuesta",
       evidence: ev(rel.evidence) });
   }
+  // Infer relationships from source-backed shared identifiers, independently of
+  // domain vocabulary (orders, recipes, invoices, etc.). A unique identity on
+  // one side and repeated references on the other suggest one-to-many.
+  const grouped = new Map<string, Obj[]>();
+  for (const row of rows) {
+    if (typeof row.entity !== "string" || !obj(row.values)) continue;
+    const entityKey = resolve(row.entity);
+    grouped.set(entityKey, [...(grouped.get(entityKey) ?? []), row]);
+  }
+  const identityField = (name: string) =>
+    /(^|_)(id|code|codigo|number|numero|ref|referencia|sku)(_|$)/.test(name);
+  const scalar = (value: unknown) => typeof value === "string" || typeof value === "number"
+    ? String(value).normalize("NFKC").trim().toLowerCase() : "";
+  const uniqueValues = (items: Obj[], field: string) => {
+    const values = items.map(row => obj(row.values) ? scalar(row.values[field]) : "").filter(Boolean);
+    return values.length > 0 && new Set(values).size === values.length;
+  };
+  const entityKeys = [...grouped.keys()];
+  for (let i = 0; i < entityKeys.length; i++) for (let j = i + 1; j < entityKeys.length; j++) {
+    const a = entityKeys[i], b = entityKeys[j];
+    const left = grouped.get(a) ?? [], right = grouped.get(b) ?? [];
+    if (relations.some(rel => (rel.fromEntity === a && rel.toEntity === b) ||
+      (rel.fromEntity === b && rel.toEntity === a))) continue;
+    const leftFields = new Set(left.flatMap(row => obj(row.values) ? Object.keys(row.values) : []));
+    const common = [...leftFields].filter(field => identityField(field) &&
+      right.some(row => obj(row.values) && field in row.values));
+    for (const field of common) {
+      const lUnique = uniqueValues(left, field), rUnique = uniqueValues(right, field);
+      if (lUnique === rUnique) continue;
+      const parent = lUnique ? a : b, child = lUnique ? b : a;
+      const parents = lUnique ? left : right, children = lUnique ? right : left;
+      const ids = new Set(parents.map(row => obj(row.values) ? scalar(row.values[field]) : ""));
+      const matched = children.filter(row => obj(row.values) && ids.has(scalar(row.values[field])));
+      if (!matched.length) continue;
+      const witness = matched.find(row => typeof row.evidence === "string" && text.includes(row.evidence));
+      if (!witness) continue;
+      const relationKey = key(parent + "_to_" + child);
+      if (relations.some(rel => rel.key === relationKey)) continue;
+      relations.push({ key: relationKey, fromEntity: parent, toEntity: child,
+        cardinality: "one_to_many",
+        description: "Referencia documental compartida: " + field,
+        evidence: ev(witness.evidence) });
+      break;
+    }
+  }
+  // A document-supported junction entity supersedes a direct shortcut between
+  // its endpoints when both of its source-backed relationships are available.
+  for (let i = relations.length - 1; i >= 0; i--) {
+    const direct = relations[i];
+    const junction = entities.some(entity => {
+      const mid = entity.key;
+      if (mid === direct.fromEntity || mid === direct.toEntity) return false;
+      const edges = relations.filter(rel => rel !== direct);
+      return edges.some(rel => (rel.fromEntity === direct.fromEntity && rel.toEntity === mid) ||
+        (rel.toEntity === direct.fromEntity && rel.fromEntity === mid)) &&
+        edges.some(rel => (rel.fromEntity === direct.toEntity && rel.toEntity === mid) ||
+        (rel.toEntity === direct.toEntity && rel.fromEntity === mid));
+    });
+    if (junction) relations.splice(i, 1);
+  }
   // A direct many-to-many relation is redundant when a documented
   // intermediary already connects the same endpoints (in either direction).
   // Keep the two concrete relations, rather than a duplicate shortcut.
