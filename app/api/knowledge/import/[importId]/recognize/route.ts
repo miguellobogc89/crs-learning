@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { buildImportMap } from "@/lib/knowledge/import/build-import-map";
 import { classifyImportContent } from "@/lib/knowledge/import/classify-content";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
@@ -22,6 +23,7 @@ export async function POST(_request: Request, context: Context) {
       knowledge_libraries: { workspace_id: activeWorkspace.id },
     },
     select: {
+      proposal_json: true,
       knowledge_import_files: {
         select: { id: true, file_name: true, extracted_text: true, status: true, processing_status: true, error_message: true },
       },
@@ -100,8 +102,17 @@ export async function POST(_request: Request, context: Context) {
       error: text.trim() ? null : `No hay texto extraído (estado: ${file.status}, procesamiento: ${file.processing_status}). ${file.error_message ?? "Comprueba la fase de extracción."}`,
     };
   });
+  const map = buildImportMap(importId, imported.knowledge_import_files);
+  const previous = imported.proposal_json;
+  const proposalData = previous && typeof previous === "object" && !Array.isArray(previous)
+    ? previous as Record<string, unknown> : {};
+  await prisma.knowledge_imports.update({
+    where: { id: importId },
+    data: { proposal_json: { ...proposalData, globalImportMap: map } },
+  });
   return Response.json({
-    stage: "existing_structure_lookup",
+    map,
+    stage: "global_map",
     status: files.every(file => file.status === "completed") ? "completed" : "completed_with_issues",
     files,
     writesPerformed: false,
