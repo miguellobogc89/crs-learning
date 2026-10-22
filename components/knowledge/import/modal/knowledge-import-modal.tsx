@@ -635,10 +635,10 @@ export function KnowledgeImportModal({
               <section className="space-y-3" aria-live="polite">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-semibold text-slate-900">
-                    {knowledgeImport.step === "completed" ? "Revisión finalizada" : "Revisando documentos"}
+                    {knowledgeImport.step === "completed" ? "Lectura documental finalizada" : "Leyendo documentación"}
                   </h3>
                   <span className="text-xs text-slate-500">
-                    {knowledgeImport.step === "completed" ? "Prueba terminada · sin importar datos" :
+                    {knowledgeImport.step === "completed" ? "Primera fase terminada · sin crear registros" :
                       knowledgeImport.isConfirming ? "Reconociendo estructura" :
                       knowledgeImport.proposalProgress?.message ??
                       (knowledgeImport.processingPhase === "extracting" ? "Extrayendo texto" : "Analizando")}
@@ -784,15 +784,16 @@ export function KnowledgeImportModal({
                             ) : null}
                             <span className="text-[11px] text-slate-500">
                               {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? "Revisión con errores" :
-                                completed ? "Análisis completado" : "Revisando documento"}
+                                completed ? "Lectura completada" : "Leyendo documento"}
                             </span>
                           </div>
                         </div>
                         {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? <AlertCircle className="size-5 text-amber-600" /> :
                           completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
-                          <span className="text-xs font-semibold text-slate-500">{stages.filter(stage => stage.state === "done").length}/8</span>}
+                          <span className="text-xs font-semibold text-slate-500">{semantic || relations || Object.keys(simulation).length > 0 ? `${stages.filter(stage => stage.state === "done").length}/8` : "Lectura"}</span>}
                       </div>
-                      {!(reconciliation && !reconciliation.ready) ? <ImportFileProgress completed={stages.filter(stage => stage.state === "done").length} active={!completed && !stages.some(stage => stage.state === "error")} /> : null}
+                      {(semantic || relations || Object.keys(simulation).length > 0) && !(reconciliation && !reconciliation.ready) ? <ImportFileProgress completed={stages.filter(stage => stage.state === "done").length} active={!completed && !stages.some(stage => stage.state === "error")} /> : null}
+                      {(semantic || relations || Object.keys(simulation).length > 0) ? (
                       <details className="group border-t border-slate-100" open={Boolean(reconciliation && !reconciliation.ready)}>
                         <summary className={reconciliation && !reconciliation.ready ? "hidden" : "flex cursor-pointer list-none items-center justify-between bg-slate-50/60 px-5 py-3 text-xs font-semibold text-slate-700 [&::-webkit-details-marker]:hidden"}>
                           <span className="flex items-center gap-2"><ScrollText className="size-4 text-slate-500" /> Registro del proceso</span>
@@ -824,6 +825,7 @@ export function KnowledgeImportModal({
                             ))}
                           </ol>
                           </details>
+                      ) : null}
                           {preview?.status === "completed" ? (
                             <div className="mt-4 space-y-3">
                               {preview.rows.length && suggestIdentityQuestions({ rows: preview.rows }).length > 0 ? (
