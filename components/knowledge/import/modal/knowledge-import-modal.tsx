@@ -825,7 +825,6 @@ export function KnowledgeImportModal({
                             ))}
                           </ol>
                           </details>
-                      ) : null}
                           {preview?.status === "completed" ? (
                             <div className="mt-4 space-y-3">
                               {preview.rows.length && suggestIdentityQuestions({ rows: preview.rows }).length > 0 ? (
@@ -948,6 +947,7 @@ export function KnowledgeImportModal({
                           ) : null}
                         </div>
                       </details>
+                      ) : null}
                     </article>
                   );
                 })}
