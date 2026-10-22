@@ -1284,8 +1284,11 @@ export function useKnowledgeImport({
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? result.blockers?.join(" · ") ?? "No se pudo insertar");
-      const message = `Insertados: ${result.structures} estructuras, ${result.records} registros y ${result.links} vínculos` +
-        (typeof result.reusedRecords === "number" ? ` · Reutilizados: ${result.reusedRecords} registros y ${result.reusedLinks} vínculos` : "");
+      const nothingInserted = result.structures === 0 && result.records === 0 && result.links === 0;
+      const message = nothingInserted
+        ? "Todos los registros y relaciones ya existen en Engine. No se ha insertado ningún dato."
+        : `Insertados: ${result.structures} estructuras, ${result.records} registros y ${result.links} vínculos` +
+          (typeof result.reusedRecords === "number" ? ` · Reutilizados: ${result.reusedRecords} registros y ${result.reusedLinks} vínculos` : "");
       setEngineInsertResult(current => ({ ...current, [fileName]: message }));
       toast.success(message);
       return result;
