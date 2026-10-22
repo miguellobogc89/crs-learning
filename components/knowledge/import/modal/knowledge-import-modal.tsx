@@ -501,7 +501,8 @@ export function KnowledgeImportModal({
   const currentPreview = currentFile ? knowledgeImport.recordPreview[currentFile.name] : null;
   const currentReconciliation = currentPreview?.reconciliation;
   const identityQuestions = currentPreview ? suggestIdentityQuestions({ rows: currentPreview.rows }) : [];
-  const identitiesNeedReview = identityQuestions.length > 0;
+  const currentIdentityAnswers = currentFile ? identityAnswers[currentFile.id] ?? {} : {};
+  const identitiesNeedReview = identityQuestions.some(question => !["same", "different"].includes(currentIdentityAnswers[question.id] ?? ""));
   const currentAnswers = currentFile ? conflictAnswers[currentFile.id] ?? {} : {};
   const reviewRows = currentReconciliation?.rows.filter(row => row.action === "review" || row.action === "extend") ?? [];
   const needsReview = reviewRows.length > 0;
@@ -522,7 +523,7 @@ export function KnowledgeImportModal({
     const changes = Object.values(currentAnswers);
     const message = `Vas a guardar los datos en Engine.\n\n${changes.filter(item => item.kind === "keep").length} mantener · ${changes.filter(item => item.kind === "incoming").length} actualizar · ${changes.filter(item => item.kind === "omit").length} omitir.\n\n¿Confirmas?`;
     if (!window.confirm(message)) return;
-    try { await knowledgeImport.insertIntoEngine(currentFile.name, currentAnswers); }
+    try { await knowledgeImport.insertIntoEngine(currentFile.name, currentAnswers, currentIdentityAnswers); }
     catch (error) { window.alert(error instanceof Error ? error.message : String(error)); }
   }
 
