@@ -125,3 +125,35 @@ test("links labelled recipient businesses to five orders, never the issuing comp
     ["Taller Norte","P-1002"],["Taller Norte","P-1005"],["Obras Vega","P-1004"],
   ]);
 });
+
+test("empty Engine discovers both missing junction edges from extracted identifiers",()=>{
+  const document = [
+    "Destinatario: Ferretería Sol | Código cliente: C-01",
+    "Pedido P-1001 | 05/10/2026",
+    "A-10 Tornillo M6 0.25 40 10.00",
+    "A-20 Arandela M6 0.10 40 4.00",
+    "Pedido P-1002 | 06/10/2026",
+    "A-10 Tornillo M6 0.25 80 20.00",
+  ].join("\\n");
+  const rows = [
+    {entity:"customer",values:{customer_code:"C-01",customer_name:"Ferretería Sol"},evidence:"Destinatario: Ferretería Sol | Código cliente: C-01"},
+    {entity:"product",values:{product_ref:"A-10",article:"Tornillo M6"},evidence:"A-10 Tornillo M6 0.25 40 10.00"},
+    {entity:"product",values:{product_ref:"A-20",article:"Arandela M6"},evidence:"A-20 Arandela M6 0.10 40 4.00"},
+    {entity:"order",values:{order_number:"P-1001",customer_code:"C-01"},evidence:"Pedido P-1001 | 05/10/2026\\nA-10 Tornillo M6 0.25 40 10.00\\nA-20 Arandela M6 0.10 40 4.00"},
+    {entity:"order",values:{order_number:"P-1002",customer_code:"C-01"},evidence:"Pedido P-1002 | 06/10/2026\\nA-10 Tornillo M6 0.25 80 20.00"},
+    {entity:"order_line",values:{order_number:"P-1001",product_ref:"A-10"},evidence:"A-10 Tornillo M6 0.25 40 10.00"},
+    {entity:"order_line",values:{order_number:"P-1001",product_ref:"A-20"},evidence:"A-20 Arandela M6 0.10 40 4.00"},
+    {entity:"order_line",values:{order_number:"P-1002",product_ref:"A-10"},evidence:"A-10 Tornillo M6 0.25 80 20.00"},
+  ];
+  const prior = {structures:null,relationships:{relations:[
+    {fromConcept:"customer",toConcept:"order",cardinality:"one_to_many",evidence:rows[0].evidence},
+    {fromConcept:"order",toConcept:"product",cardinality:"one_to_many",evidence:rows[3].evidence},
+  ]}};
+  const schema=buildPreviewSchema({documentId:"test",text:document,existing:{entities:[],relations:[]},prior,rows});
+  assert.deepEqual(schema.relations.map(r=>r.key).sort(),[
+    "customer_to_order","order_line_to_product","order_to_order_line"
+  ].sort());
+  const links=reconcilePreviewLinks(document,schema,normalizePreviewRows(rows,schema),[]);
+  assert.equal(links.filter(l=>l.relationKey==="order_to_order_line").length,3);
+  assert.equal(links.filter(l=>l.relationKey==="order_line_to_product").length,3);
+});
