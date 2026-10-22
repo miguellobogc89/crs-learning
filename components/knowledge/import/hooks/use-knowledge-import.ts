@@ -722,69 +722,56 @@ export function useKnowledgeImport({
           },
         );
 
-        // Isolated recognition trial: stop after the first stage.
-        // Never call proposal generation, confirmation, or Engine persistence.
+        // Queue: process one extracted PDF at a time, updating the persisted
+        // cumulative map after each success. No Engine or Knowledge writes.
         if (analysisResult.textExtraction.successfulFiles > 0) {
-          const response = await fetch(
-            `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/recognize`,
-            { method: "POST" },
-          );
-          const result: {
-            error?: string;
-            map?: Record<string, unknown>;
-            files?: Array<{
-              id: string; fileName: string;
-              status: "completed" | "error";
-              sourceChars: number; lines: number;
-              delimitedLines: number; numericLines: number;
-              headings: number;
-    documentType: "texto" | "tabla" | "hibrido" | "indeterminado";
-    confidence: "high" | "low";
-    structuredLines: number;
-    narrativeLines: number;
-    extractionStatus: string;
-    extractionProcessingStatus: string;
-    sectionExamples: Array<{ line: number; text: string }>;
-    quantityExamples: string[];
-    delimitedExamples: string[];
-    conceptCandidates: string[];
-    existingStructures: Array<{
-      id: string; key: string; name: string; description: string | null;
-      fields: Array<{ key: string; name: string; type: string }>;
-    }>; error: string | null;
-            }>;
-          } = await response.json();
-          if (!response.ok || !result.files) {
-            throw new Error(result.error ?? "Error al reconocer el documento");
-          }
-          // Match only files confirmed by text extraction; ignore uploaded
-          // duplicates and stale rows with the same display name.
           const extractedIds = new Set(
             (analysisResult.textExtraction.files ?? [])
               .filter(file => file.status === "text_ready")
               .map(file => file.id),
           );
-          const recognizedFiles = result.files.filter(file => extractedIds.has(file.id));
-          if (recognizedFiles.length === 0) {
-            throw new Error("No se ha reconocido ningún archivo con extracción de texto confirmada.");
+          const queuedFiles = (analysisResult.textExtraction.files ?? [])
+            .filter(file => extractedIds.has(file.id));
+          if (!queuedFiles.length) throw new Error("No hay archivos con texto listo para reconocer.");
+          let lastMap: Record<string, unknown> | null = null;
+          const failures: string[] = [];
+          for (let i = 0; i < queuedFiles.length; i++) {
+            if (!isCurrentOperation()) return;
+            const queued = queuedFiles[i];
+            const response = await fetch(
+              `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/recognize`,
+              { method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fileId: queued.id }) },
+            );
+            const result: { error?: string; map?: Record<string, unknown>;
+              file?: { fileId: string; fileName: string; sourceChars: number; status: string };
+              documents?: Array<{ type: string; category: string }> } = await response.json();
+            if (!response.ok || !result.map || !result.file) {
+              failures.push(`${queued.name ?? queued.id}: ${result.error ?? "No reconocido"}`);
+              continue;
+            }
+            lastMap = result.map;
+            setGlobalMap(result.map);
+            const recognized = {
+              id: result.file.fileId, fileName: result.file.fileName,
+              status: "completed" as const, sourceChars: result.file.sourceChars,
+              documentType: "texto" as const, confidence: "high" as const,
+              structuredLines: 0, narrativeLines: 0, lines: 0,
+              delimitedLines: 0, numericLines: 0, headings: 0,
+              extractionStatus: "completed", extractionProcessingStatus: "completed",
+              sectionExamples: [], quantityExamples: [], delimitedExamples: [],
+              conceptCandidates: [], existingStructures: [], error: null,
+            };
+            setRecognition(previous => ({ ...previous, [result.file!.fileName]: recognized }));
           }
-          setRecognition(Object.fromEntries(recognizedFiles.map(file => [file.fileName, file])));
-          setGlobalMap(result.map ?? null);
-          // Prueba C · primera fase aislada: detenerse tras leer y clasificar
-          // TODOS los archivos. No ejecutar comparación, relaciones ni fases
-          // 5–8 hasta que exista una transición explícita al mapa de datos.
+          if (!lastMap) throw new Error(failures.join(" · ") || "No se reconoció ningún archivo.");
           if (!isCurrentOperation()) return;
           updateImport(uploadResult.importId, {
-            step: "completed",
-            status: "completed",
-            isAnalyzing: false,
-            isConfirming: false,
-            error: null,
+            step: "completed", status: failures.length ? "completed_with_issues" : "completed",
+            isAnalyzing: false, isConfirming: false,
+            error: failures.length ? failures.join(" · ") : null,
           });
           setStep("completed");
-          // El bloque de construcción de registros queda pendiente de una
-          // transición explícita que consuma el futuro mapa global.
-
         }
 
         if (
