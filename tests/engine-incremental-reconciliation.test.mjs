@@ -95,3 +95,12 @@ test("reuses an existing link rather than creating a duplicate", () => {
   assert.equal(result.ready, true);
   assert.equal(result.links[0].action, "reuse");
 });
+
+test("original manifest blockers are never cleared by reconciliation", () => {
+  const p = plan(); p.issues.push("Evidencia insuficiente");
+  p.unresolvedLinks.push("vinculo pendiente");
+  const result = reconcileEngineImport(p, snapshot(), { cliente: ["codigo"] });
+  assert.equal(result.ready, false);
+  assert.ok(result.blockers.some(item => item.includes("Evidencia insuficiente")));
+  assert.ok(result.blockers.some(item => item.includes("Relaciones sin resolver")));
+});
