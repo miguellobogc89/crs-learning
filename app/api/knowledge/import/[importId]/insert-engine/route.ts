@@ -7,12 +7,13 @@ import { Prisma } from "@prisma/client";
 import { loadEngineReconciliationSnapshot } from "@/lib/engine/ingestion/load-reconciliation-snapshot";
 import { discoverIdentityRules } from "@/lib/engine/ingestion/discover-identity-rules";
 import { reconcileEngineImport } from "@/lib/engine/ingestion/reconcile-engine-import";
+import { resolveImportConflicts, type ConflictAnswers } from "@/lib/engine/ingestion/resolve-import-conflicts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 type Context = { params: Promise<{ importId: string }> };
-type Payload = { fileId?: string; signature?: string; plan?: InsertPlan; confirm?: boolean };
+type Payload = { fileId?: string; signature?: string; plan?: InsertPlan; confirm?: boolean; conflictAnswers?: ConflictAnswers };
 const asObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
@@ -62,16 +63,24 @@ export async function POST(request: Request, context: Context) {
         const { snapshot, identityRules } = await loadEngineReconciliationSnapshot(ws, tx);
         const discovery = discoverIdentityRules(plan, snapshot, identityRules);
         const reconciliation = reconcileEngineImport(plan, snapshot, discovery.rules);
-        if (!reconciliation.ready)
+        const hasConflicts = reconciliation.rows.some(row => row.action === "review" || row.action === "extend");
+        if (!reconciliation.ready && !hasConflicts)
           throw new Error("Reconciliación incremental bloqueada: " + reconciliation.blockers.join(" · "));
+        const resolution = hasConflicts
+          ? resolveImportConflicts(plan, snapshot, reconciliation, body.conflictAnswers ?? {})
+          : null;
+        if (!hasConflicts && body.conflictAnswers && Object.keys(body.conflictAnswers).length)
+          throw new Error("No hay conflictos que resolver.");
+        if (hasConflicts && !resolution) throw new Error("Faltan decisiones de conflictos.");
         // This first incremental writer supports only existing compatible
         // definitions; schema evolution requires its own reviewed migration.
         if (reconciliation.entities.some(item => item.action !== "reuse") ||
             reconciliation.relations.some(item => item.action !== "reuse"))
           throw new Error("Hay estructuras o relaciones nuevas: requieren una migración de esquema.");
-        const newRows = reconciliation.rows.filter(row => row.action === "create");
-        const newLinks = reconciliation.links.filter(link => link.action === "create");
-        if (!newRows.length && !newLinks.length)
+        const newRows = reconciliation.rows.filter(row => row.action === "create" && !resolution?.omitted.has(row.localId));
+        const newLinks = reconciliation.links.filter(link => link.action === "create" &&
+          !resolution?.omitted.has(link.fromLocalId) && !resolution?.omitted.has(link.toLocalId));
+        if (!newRows.length && !newLinks.length && !resolution?.updates.size)
           return { structures: 0, fields: 0, relationDefinitions: 0, records: 0,
             links: 0, reusedRecords: reconciliation.rows.length, reusedLinks: reconciliation.links.length };
         // Create a real, workspace-linked document source for provenance.
@@ -101,7 +110,7 @@ export async function POST(request: Request, context: Context) {
         const planRows = new Map(plan.rows.map(row => [row.localId, row]));
         const rowIds = new Map<string, string>();
         for (const decision of reconciliation.rows) {
-          if (decision.action === "reuse" && decision.existingId)
+          if (decision.existingId && (decision.action === "reuse" || resolution?.kept.has(decision.localId) || resolution?.updates.has(decision.localId)))
             rowIds.set(decision.localId, decision.existingId);
           if (decision.action !== "create") continue;
           const row = planRows.get(decision.localId);
@@ -128,6 +137,34 @@ export async function POST(request: Request, context: Context) {
             created_by_user_id: session.user.id,
           } });
         }
+        // Update only explicitly approved fields, preserving old values and revisions.
+        for (const [localId, change] of resolution?.updates ?? []) {
+          const existing = await tx.engine_records.findFirst({
+            where: { id: change.existingId, workspace_id: ws },
+            select: { id: true, object_type_id: true, revision: true },
+          });
+          if (!existing) throw new Error("Registro actualizado no encontrado: " + localId);
+          const nextRevision = existing.revision + 1;
+          await tx.engine_records.update({
+            where: { id: existing.id },
+            data: { values_json: change.values as Prisma.InputJsonValue, revision: nextRevision,
+              updated_by_user_id: session.user.id },
+          });
+          await tx.engine_record_revisions.createMany({
+            data: [{ workspace_id: ws, record_id: existing.id, object_type_id: existing.object_type_id,
+              revision: nextRevision, schema_version: 1, status: "draft",
+              values_json: change.values as Prisma.InputJsonValue,
+              changed_by_user_id: session.user.id }],
+            skipDuplicates: true,
+          });
+          await tx.engine_record_provenance.create({ data: {
+            workspace_id: ws, record_id: existing.id, revision: nextRevision,
+            source_locator: "import:" + importId + "/file:" + body.fileId + "/" + localId,
+            evidence_text: change.evidence, origin_type: "document",
+            knowledge_source_id: provenanceSource.id, knowledge_file_id: provenanceFile.id,
+            created_by_user_id: session.user.id,
+          } });
+        }
         for (const link of newLinks) {
           const from = rowIds.get(link.fromLocalId);
           const to = rowIds.get(link.toLocalId);
@@ -140,8 +177,10 @@ export async function POST(request: Request, context: Context) {
         }
         return { structures: 0, fields: 0, relationDefinitions: 0,
           records: newRows.length, links: newLinks.length,
-          reusedRecords: reconciliation.rows.length - newRows.length,
-          reusedLinks: reconciliation.links.length - newLinks.length };
+          updatedRecords: resolution?.updates.size ?? 0,
+          omittedRecords: resolution?.omitted.size ?? 0,
+          reusedRecords: reconciliation.rows.filter(row => row.action === "reuse" || resolution?.kept.has(row.localId)).length,
+          reusedLinks: reconciliation.links.filter(link => link.action === "reuse" && !resolution?.omitted.has(link.fromLocalId) && !resolution?.omitted.has(link.toLocalId)).length };
       }
       // Provenance for a document requires a real knowledge_file_id (or
       // knowledge_source_id), not the staging knowledge_import_files UUID.
