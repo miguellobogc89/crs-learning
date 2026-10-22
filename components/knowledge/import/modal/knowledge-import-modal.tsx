@@ -306,6 +306,7 @@ export function KnowledgeImportModal({
 }: KnowledgeImportModalProps) {
   const [conflictAnswers, setConflictAnswers] = useState<Record<string, Record<string, Decision>>>({});
   const [identityAnswers, setIdentityAnswers] = useState<Record<string, Record<string, IdentityAnswer>>>({});
+  const [approvedLargeSelection, setApprovedLargeSelection] = useState<string | null>(null);
 
   const [
     closeGuardOpen,
@@ -334,10 +335,11 @@ export function KnowledgeImportModal({
       resumeImportId,
     });
 
-  const selectionKey =
-    getFilesSelectionKey(
-      selectedFiles,
-    );
+  const selectionKey = getFilesSelectionKey(knowledgeImport.files);
+  const largeFiles = knowledgeImport.files.filter(file =>
+    /\\.pdf$/i.test(file.name) && file.size >= 1024 * 1024 ||
+    file.size >= 10 * 1024 * 1024);
+  const needsLargeFileApproval = largeFiles.length > 0 && approvedLargeSelection !== selectionKey;
 
   const isWaitingToStart =
     open &&
@@ -383,6 +385,7 @@ export function KnowledgeImportModal({
     if (
       !open ||
       !selectionKey ||
+      needsLargeFileApproval ||
       knowledgeImport.importReview ||
       knowledgeImport.step !== "upload" ||
       knowledgeImport.files.length === 0 ||
@@ -399,6 +402,7 @@ export function KnowledgeImportModal({
   }, [
     open,
     selectionKey,
+    needsLargeFileApproval,
     knowledgeImport.importReview,
     knowledgeImport.step,
     knowledgeImport.files.length,
@@ -599,6 +603,16 @@ export function KnowledgeImportModal({
               />
             ) : null}
 
+            {!isWaitingToStart && knowledgeImport.step === "upload" && needsLargeFileApproval && !knowledgeImport.importReview ? (
+              <section role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-slate-800">
+                <p className="font-semibold text-amber-900">Este documento podría requerir un análisis largo</p>
+                <p className="mt-2">Hemos detectado {largeFiles.length} archivo(s) de tamaño considerable. CRS limita la extracción de registros por simulación para evitar esperas y resultados incompletos.</p>
+                <p className="mt-2">Para obtener resultados más ágiles y completos, recomendamos dividir los PDF extensos en bloques de unas 20–30 páginas y procesarlos por separado.</p>
+                <p className="mt-2 text-xs text-amber-800">Esta comprobación se basa en el tamaño del archivo, no en el número de páginas. Puedes continuar, pero el análisis podría detenerse si supera el límite de registros.</p>
+                <button type="button" onClick={() => setApprovedLargeSelection(selectionKey)}
+                  className="mt-4 rounded-lg bg-[#0A58FF] px-4 py-2 text-sm font-semibold text-white">Analizar de todas formas</button>
+              </section>
+            ) : null}
             {!isWaitingToStart &&
             knowledgeImport.step ===
               "upload" &&
