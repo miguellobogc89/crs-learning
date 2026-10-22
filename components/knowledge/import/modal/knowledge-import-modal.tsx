@@ -658,6 +658,57 @@ export function KnowledgeImportModal({
                       (knowledgeImport.processingPhase === "extracting" ? "Extrayendo texto" : "Analizando")}
                   </span>
                 </div>
+                {Object.keys(knowledgeImport.recognition).length > 0 ? (() => {
+                  const recognizedFiles = Object.entries(knowledgeImport.recognition)
+                    .filter(([, result]) => result.status === "completed");
+                  const types = [
+                    { key: "tabla", label: "Tablas" },
+                    { key: "texto", label: "Textos" },
+                    { key: "hibrido", label: "Híbridos" },
+                    { key: "indeterminado", label: "Sin clasificar" },
+                  ] as const;
+                  const concepts = new Map<string, Set<string>>();
+                  for (const [name, result] of recognizedFiles) {
+                    for (const candidate of result.conceptCandidates) {
+                      const key = candidate.trim().toLocaleLowerCase("es");
+                      if (!key) continue;
+                      if (!concepts.has(key)) concepts.set(key, new Set());
+                      concepts.get(key)!.add(name);
+                    }
+                  }
+                  const shared = [...concepts.entries()]
+                    .filter(([, files]) => files.size > 1)
+                    .sort((a, b) => b[1].size - a[1].size);
+                  return (
+                    <section className="rounded-xl border border-slate-200 bg-slate-50 p-4" aria-label="Resumen global de archivos">
+                      <h4 className="text-sm font-semibold text-slate-900">Visión global de la selección</h4>
+                      <p className="mt-1 text-xs text-slate-600">
+                        {recognizedFiles.length} de {knowledgeImport.files.length} archivos reconocidos.
+                        Clasificación basada en el contenido extraído, no en la extensión.
+                      </p>
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {types.map(type => (
+                          <div key={type.key} className="rounded-lg border bg-white px-3 py-2">
+                            <div className="text-lg font-bold tabular-nums">
+                              {recognizedFiles.filter(([, file]) => file.documentType === type.key).length}
+                            </div>
+                            <div className="text-xs text-slate-600">{type.label}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-3 text-xs text-slate-700">
+                        <strong>Conceptos presentes en varios archivos:</strong>{" "}
+                        {shared.length
+                          ? shared.slice(0, 8).map(([concept, files]) => `${concept} (${files.size})`).join(" · ")
+                          : "Ninguna coincidencia literal detectada"}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Las coincidencias son indicios, no relaciones validadas. Los contratos y procedimientos
+                        todavía no se distinguen como categorías semánticas independientes.
+                      </p>
+                    </section>
+                  );
+                })() : null}
                 {(knowledgeImport.fileProgress.length ? knowledgeImport.fileProgress :
                   knowledgeImport.files.map((file, index) => ({ id: String(index), name: file.name, status: "pending" }))).map(file => {
                   const recognized = knowledgeImport.recognition[file.name];
