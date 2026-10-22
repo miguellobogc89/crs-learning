@@ -562,216 +562,150 @@ export function useKnowledgeImport({
           "preparing",
         );
 
-        const analysisResult =
-          await runKnowledgeImportAnalysis(
-            uploadResult.importId,
-            {
-              onStageChange:
-                (stage) => {
-                  if (
-                    !isCurrentOperation()
-                  ) {
-                    return;
-                  }
+        let lastMap: Record<string, unknown> | null = null;
+        const recognitionFailures: string[] = [];
+        let recognizedCount = 0;
 
-                  if (
-                    stage ===
-                    "analyzing"
-                  ) {
-                    setProcessingPhase(
-                      "preparing",
-                    );
+        // The complete unit of work is ONE file:
+        // extract text -> identify all logical documents -> persist JSON.
+        // The next file cannot start until these steps finish.
+        const updateQueuedFile = (
+          fileId: string,
+          status: KnowledgeImportFlowFile["status"],
+          error?: string,
+        ) => {
+          const files = latestFileProgressRef.current.map(item =>
+            item.id === fileId ? { ...item, status, error } : item);
+          latestFileProgressRef.current = files;
+          setFileProgress(files);
+          const summary = createSummaryFromAnalysisSnapshot(files);
+          setProgressSummary(summary);
+          updateImport(uploadResult.importId, { files, summary });
+        };
 
-                    updateImport(
-                      uploadResult.importId,
-                      {
-                        phase:
-                          "preparing",
-                        status:
-                          "analyzing",
-                        isAnalyzing:
-                          true,
-                      },
-                    );
-
-                    return;
-                  }
-
-                  setProcessingPhase(
-                    "extracting",
-                  );
-
-                  updateImport(
-                    uploadResult.importId,
-                    {
-                      phase:
-                        "extracting",
-                      status:
-                        "extracting_text",
-                      isAnalyzing:
-                        true,
-                    },
-                  );
-                },
-
-              onAnalysisReady:
-                (analysis) => {
-                  if (
-                    !isCurrentOperation()
-                  ) {
-                    return;
-                  }
-
-                  const analyzedFiles =
-                    createFilesFromAnalysisSnapshot(
-                      analysis.files,
-                    );
-
-                  setFileProgress(
-                    analyzedFiles,
-                  );
-
-                  latestFileProgressRef.current =
-                    analyzedFiles;
-
-                  const analyzedSummary =
-                    createSummaryFromAnalysisSnapshot(
-                      analyzedFiles,
-                    );
-
-                  setProgressSummary(
-                    analyzedSummary,
-                  );
-
-                  updateImport(
-                    uploadResult.importId,
-                    {
-                      files:
-                        analyzedFiles,
-                      summary:
-                        analyzedSummary,
-                      status:
-                        analysis.status,
-                      error: null,
-                    },
-                  );
-                },
-            },
-          );
-
-        if (
-          !isCurrentOperation()
-        ) {
-          return;
-        }
-
-        setTableDetection(Object.fromEntries(
-          (analysisResult.textExtraction.files ?? [])
-            .filter(file => file.status === "text_ready" && typeof file.hasTables === "boolean")
-            .map(file => [file.id, Boolean(file.hasTables)]),
-        ));
-
-        const duplicateFiles =
-          analysisResult.extraction
-            .duplicateFiles;
-
-        const finalizedFiles =
-          finalizeImportFiles(
-            latestFileProgressRef.current,
-            analysisResult
-              .textExtraction
-              .successfulFiles,
-            analysisResult
-              .textExtraction
-              .failedFiles,
-          );
-
-        const finalizedSummary =
-          finalizeImportAnalysis(
-            finalizedFiles,
-            analysisResult
-              .textExtraction
-              .successfulFiles,
-            analysisResult
-              .textExtraction
-              .failedFiles,
-          );
-
-        latestFileProgressRef.current =
-          finalizedFiles;
-
-        setFileProgress(
-          finalizedFiles,
-        );
-
-        setProgressSummary(
-          finalizedSummary,
-        );
-
-        updateImport(
+        const analysisResult = await runKnowledgeImportAnalysis(
           uploadResult.importId,
           {
-            files: finalizedFiles,
-            summary:
-              finalizedSummary,
-            status:
-              analysisResult
-                .textExtraction
-                .status,
-            isAnalyzing: false,
+            onStageChange: stage => {
+              if (!isCurrentOperation()) return;
+              setProcessingPhase(stage === "analyzing" ? "preparing" : "extracting");
+              updateImport(uploadResult.importId, {
+                phase: stage === "analyzing" ? "preparing" : "extracting",
+                status: stage === "analyzing" ? "analyzing" : "extracting_text",
+                isAnalyzing: true,
+              });
+            },
+
+            onAnalysisReady: analysis => {
+              if (!isCurrentOperation()) return;
+              const files = createFilesFromAnalysisSnapshot(analysis.files);
+              latestFileProgressRef.current = files;
+              setFileProgress(files);
+              const summary = createSummaryFromAnalysisSnapshot(files);
+              setProgressSummary(summary);
+              updateImport(uploadResult.importId, {
+                files, summary, status: analysis.status, error: null,
+              });
+            },
+
+            onFileStart: file => {
+              if (!isCurrentOperation()) return;
+              updateQueuedFile(file.id, "processing");
+            },
+
+            onFileExtracted: async (file, extracted) => {
+              if (!isCurrentOperation()) return;
+              if (extracted.status !== "text_ready") {
+                const message = extracted.error ?? "No se pudo extraer el texto";
+                recognitionFailures.push(`${file.name}: ${message}`);
+                updateQueuedFile(file.id, "error", message);
+                return;
+              }
+              if (typeof extracted.hasTables === "boolean") {
+                setTableDetection(prev => ({ ...prev, [file.id]: extracted.hasTables! }));
+              }
+              try {
+                const response = await fetch(
+                  `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/recognize`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ fileId: file.id }),
+                  },
+                );
+                const result: {
+                  error?: string;
+                  map?: Record<string, unknown>;
+                  file?: { fileId: string; fileName: string; sourceChars: number; status: string };
+                } = await response.json();
+                if (!response.ok || !result.map || !result.file) {
+                  throw new Error(result.error ?? "La IA no devolvió el inventario");
+                }
+                if (!isCurrentOperation()) return;
+                lastMap = result.map;
+                recognizedCount++;
+                setGlobalMap(result.map);
+                setRecognition(prev => ({
+                  ...prev,
+                  [file.name]: {
+                    status: "completed",
+                    sourceChars: result.file!.sourceChars,
+                    documentType: "indeterminado",
+                    confidence: "high",
+                    structuredLines: 0, narrativeLines: 0, lines: 0,
+                    delimitedLines: 0, numericLines: 0, headings: 0,
+                    extractionStatus: "text_ready",
+                    extractionProcessingStatus: "completed",
+                    sectionExamples: [], quantityExamples: [],
+                    delimitedExamples: [], conceptCandidates: [],
+                    existingStructures: [], error: null,
+                  },
+                }));
+                updateQueuedFile(file.id, "completed");
+              } catch (error) {
+                if (!isCurrentOperation()) return;
+                const message = error instanceof Error ? error.message : "Error de reconocimiento";
+                recognitionFailures.push(`${file.name}: ${message}`);
+                setRecognition(prev => ({
+                  ...prev,
+                  [file.name]: {
+                    status: "error",
+                    sourceChars: extracted.characters,
+                    documentType: "indeterminado",
+                    confidence: "low",
+                    structuredLines: 0, narrativeLines: 0, lines: 0,
+                    delimitedLines: 0, numericLines: 0, headings: 0,
+                    extractionStatus: "text_ready",
+                    extractionProcessingStatus: "completed",
+                    sectionExamples: [], quantityExamples: [],
+                    delimitedExamples: [], conceptCandidates: [],
+                    existingStructures: [], error: message,
+                  },
+                }));
+                updateQueuedFile(file.id, "error", message);
+              }
+            },
           },
         );
 
-        // Queue: process one extracted PDF at a time, updating the persisted
-        // cumulative map after each success. No Engine or Knowledge writes.
-        if (analysisResult.textExtraction.successfulFiles > 0) {
-          const extractedIds = new Set(
-            (analysisResult.textExtraction.files ?? [])
-              .filter(file => file.status === "text_ready")
-              .map(file => file.id),
-          );
-          const queuedFiles = (analysisResult.textExtraction.files ?? [])
-            .filter(file => extractedIds.has(file.id));
-          if (!queuedFiles.length) throw new Error("No hay archivos con texto listo para reconocer.");
-          let lastMap: Record<string, unknown> | null = null;
-          const failures: string[] = [];
-          for (let i = 0; i < queuedFiles.length; i++) {
-            if (!isCurrentOperation()) return;
-            const queued = queuedFiles[i];
-            const response = await fetch(
-              `/api/knowledge/import/${encodeURIComponent(uploadResult.importId)}/recognize`,
-              { method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ fileId: queued.id }) },
-            );
-            const result: { error?: string; map?: Record<string, unknown>;
-              file?: { fileId: string; fileName: string; sourceChars: number; status: string };
-              documents?: Array<{ type: string; category: string }> } = await response.json();
-            if (!response.ok || !result.map || !result.file) {
-              failures.push(`${queued.name ?? queued.id}: ${result.error ?? "No reconocido"}`);
-              continue;
-            }
-            lastMap = result.map;
-            setGlobalMap(result.map);
-            const recognized = {
-              id: result.file.fileId, fileName: result.file.fileName,
-              status: "completed" as const, sourceChars: result.file.sourceChars,
-              documentType: "texto" as const, confidence: "high" as const,
-              structuredLines: 0, narrativeLines: 0, lines: 0,
-              delimitedLines: 0, numericLines: 0, headings: 0,
-              extractionStatus: "completed", extractionProcessingStatus: "completed",
-              sectionExamples: [], quantityExamples: [], delimitedExamples: [],
-              conceptCandidates: [], existingStructures: [], error: null,
-            };
-            setRecognition(previous => ({ ...previous, [result.file!.fileName]: recognized }));
-          }
-          if (!lastMap) throw new Error(failures.join(" · ") || "No se reconoció ningún archivo.");
-          if (!isCurrentOperation()) return;
-          updateImport(uploadResult.importId, {
-            step: "completed", status: "completed",
-            isAnalyzing: false, isConfirming: false,
-            error: failures.length ? failures.join(" · ") : null,
-          });
+        if (!isCurrentOperation()) return;
+
+        const duplicateFiles = analysisResult.extraction.duplicateFiles;
+        const finalizedFiles = latestFileProgressRef.current;
+        const finalizedSummary = createSummaryFromAnalysisSnapshot(finalizedFiles);
+        setFileProgress(finalizedFiles);
+        setProgressSummary(finalizedSummary);
+
+        if (recognizedCount > 0 && lastMap) {
+          setGlobalMap(lastMap);
           setStep("completed");
+          updateImport(uploadResult.importId, {
+            step: "completed", status: "completed", files: finalizedFiles,
+            summary: finalizedSummary, isAnalyzing: false, isConfirming: false,
+            error: recognitionFailures.length ? recognitionFailures.join(" · ") : null,
+          });
+        } else if (analysisResult.textExtraction.successfulFiles > 0) {
+          throw new Error(recognitionFailures.join(" · ") || "No se ha reconocido ningún documento");
         }
 
         if (
