@@ -173,7 +173,7 @@ export function useKnowledgeImport({
   }>>({});
   const [relationsRunning, setRelationsRunning] = useState(false);
   const [recordPreview, setRecordPreview] = useState<Record<string, {
-    status: "completed" | "error"; id: string; signature?: string; manifestIssues?: string[];
+    status: "completed" | "error"; id?: string; signature?: string; manifestIssues?: string[];
     rows: Array<{ localId: string; entityKey: string;
       values: Record<string, string | number | boolean | null>;
       evidence: string; disposition: "candidate" | "pending"; reason: string }>;
@@ -1247,9 +1247,9 @@ export function useKnowledgeImport({
 
   const insertIntoEngine = useCallback(async (fileName: string) => {
     const preview = recordPreview[fileName];
-    if (!importId || !preview || preview.status !== "completed" || !preview.signature)
+    if (!importId || !preview?.id || preview.status !== "completed" || !preview.signature)
       throw new Error("No hay una simulación firmada disponible.");
-    if (preview.partial || preview.unresolvedLinks.length || preview.rows.some(row => row.disposition !== "candidate"))
+    if (preview.unresolvedLinks.length || (preview.manifestIssues?.length ?? 0) > 0 || preview.rows.some(row => row.disposition !== "candidate"))
       throw new Error("La simulación tiene elementos pendientes y no puede insertarse.");
     const plan: InsertPlan = {
       entities: preview.entities as InsertPlan["entities"],
