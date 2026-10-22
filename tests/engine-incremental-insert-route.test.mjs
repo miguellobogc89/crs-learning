@@ -13,16 +13,16 @@ test("incremental insert rechecks reconciliation within the locked transaction",
   const reconcile = route.indexOf("reconcileEngineImport(plan, snapshot, discovery.rules)");
   const write = route.indexOf("const provenanceSource = await tx.knowledge_sources.create", read);
   assert.ok(lock >= 0 && lock < read && read < discover && discover < reconcile && reconcile < write);
-  assert.match(route, /if \(!reconciliation\.ready\)/);
+  assert.match(route, /if \(!reconciliation\.ready && !hasConflicts\)/);
   assert.match(route, /isolationLevel: Prisma\.TransactionIsolationLevel\.Serializable/);
   assert.match(snapshot, /db: Prisma\.TransactionClient = prisma/);
 });
 test("incremental insert only creates missing records and missing links", () => {
-  assert.match(route, /reconciliation\.rows\.filter\(row => row\.action === "create"\)/);
-  assert.match(route, /reconciliation\.links\.filter\(link => link\.action === "create"\)/);
-  assert.match(route, /if \(decision\.action === "reuse" && decision\.existingId\)/);
+  assert.match(route, /reconciliation\.rows\.filter\(row => row\.action === "create" &&/);
+  assert.match(route, /reconciliation\.links\.filter\(link => link\.action === "create" &&/);
+  assert.match(route, /decision\.existingId && \(decision\.action === "reuse"/);
   assert.match(route, /if \(decision\.action !== "create"\) continue/);
-  assert.match(route, /if \(!newRows\.length && !newLinks\.length\)/);
+  assert.match(route, /if \(!newRows\.length && !newLinks\.length && !resolution\?\.updates\.size\)/);
 });
 test("incremental insert refuses schema changes and preserves source provenance", () => {
   assert.match(route, /reconciliation\.entities\.some\(item => item\.action !== "reuse"\)/);
@@ -44,4 +44,15 @@ test("generic schema notice remains visible but is excluded from signed blockers
   assert.match(preview, /const blockingIssues = \[/);
   assert.match(preview, /\.\.\.analysis\.issues\.filter\(issue => issue !== "Esquema construido/);
   assert.match(preview, /\.\.\.manifest\.issues/);
+});
+
+test("conflict resolutions are checked server-side and revisions preserve provenance", () => {
+  const resolver = fs.readFileSync(fileURLToPath(new URL("../lib/engine/ingestion/resolve-import-conflicts.ts", import.meta.url)), "utf8");
+  assert.match(route, /resolveImportConflicts\(plan, snapshot, reconciliation, body\.conflictAnswers/);
+  assert.match(resolver, /keys\.length !== pending\.length/);
+  assert.match(resolver, /answer\.kind === "omit"/);
+  assert.match(resolver, /!omitted\.has\(link\.fromLocalId\)/);
+  assert.match(route, /for \(const \[localId, change\] of resolution\?\.updates/);
+  assert.match(route, /tx\.engine_record_revisions\.createMany/);
+  assert.match(route, /tx\.engine_record_provenance\.create/);
 });
