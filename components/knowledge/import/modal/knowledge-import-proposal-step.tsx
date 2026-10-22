@@ -202,30 +202,6 @@ export function KnowledgeImportProposalStep({
         </div>
       </div>
 
-      {proposal.contentClassification ? (
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-[12px] font-semibold text-slate-900">Clasificación y destino recomendado</p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            Los documentos estructurados con clasificación fiable se enviarán a Engine sin crear artículos. Los casos dudosos se conservan en Knowledge para revisión.
-          </p>
-          <div className="mt-2 space-y-1">
-            {proposal.documentAnalyses.map(document => {
-              const result = proposal.contentClassification?.[document.documentId];
-              const route = proposal.recommendedRoutes?.[document.documentId];
-              const label = result?.kind === "tables" ? "Datos estructurados"
-                : result?.kind === "information" ? "Información"
-                : result?.kind === "mixed" ? "Mixto" : "Revisión necesaria";
-              return (
-                <div key={document.documentId} className="flex justify-between gap-3 text-[11px]">
-                  <span className="truncate text-slate-600">{document.documentName}</span>
-                  <span className="shrink-0 font-medium text-slate-800">{label} · {route?.destination === "engine" ? "Engine" : route?.destination === "knowledge" ? "Knowledge" : route?.destination === "both" ? "Ambos" : "Revisión"}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
       <div className="mt-5 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
         {proposal.folders.length >
         0 ? (
