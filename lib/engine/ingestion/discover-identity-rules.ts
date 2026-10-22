@@ -44,7 +44,13 @@ export function discoverIdentityRules(
     const validSingles = candidates.filter(key =>
       incoming.length > 0 && existing.length > 0 &&
       uniqueAndComplete(incoming, [key]) && uniqueAndComplete(existing, [key]));
-    // A unique foreign-key-looking field in a multi-identifier entity is not\n    // sufficient to identify its records (e.g. article reference in order lines).\n    // Require a single identifier candidate, or one whose name identifies this entity.\n    const ownIdentifier = (key: string) => key === "id" || key === "uuid" ||\n      key === entity.key || key.startsWith(entity.key + "_") || key.endsWith("_" + entity.key);\n    const safeSingles = candidates.length === 1 ? validSingles : validSingles.filter(ownIdentifier);\n    if (safeSingles.length === 1) {
+    // A unique foreign-key-looking field in a multi-identifier entity is not
+    // sufficient to identify its records (e.g. article reference in order lines).
+    // Require a single identifier candidate, or one whose name identifies this entity.
+    const ownIdentifier = (key: string) => key === "id" || key === "uuid" ||
+      key === entity.key || key.startsWith(entity.key + "_") || key.endsWith("_" + entity.key);
+    const safeSingles = candidates.length === 1 ? validSingles : validSingles.filter(ownIdentifier);
+    if (safeSingles.length === 1) {
       const keys = [safeSingles[0]];
       rules[entity.key] = keys;
       proposals.push({ entityKey: entity.key, keys, status: "validated",
