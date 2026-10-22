@@ -57,10 +57,18 @@ export function discoverIdentityRules(
         reason: "Identificador inferido y unicidad comprobada en documento y Engine; solo simulación" });
       continue;
     }
-    // Composite identifiers are suggested, never silently promoted. For example,
-    // repeated article lines may be legitimate and require a line number.
-    const composite = candidates.length >= 2 ? candidates.slice(0, 2) : candidates;
-    proposals.push({ entityKey: entity.key, keys: validSingles.length > 1 ? validSingles : composite,
+    // Occam: use the smallest complete, collision-free composite supported by
+    // both the incoming document and the existing workspace. It remains a
+    // provisional simulation rule, never a database uniqueness constraint.
+    const composite = candidates.length === 2 ? candidates : [];
+    if (composite.length === 2 && incoming.length && existing.length &&
+        uniqueAndComplete(incoming, composite) && uniqueAndComplete(existing, composite)) {
+      rules[entity.key] = composite;
+      proposals.push({ entityKey: entity.key, keys: composite, status: "validated",
+        reason: "Clave compuesta mínima sin colisiones en documento ni Engine; hipótesis revisable si aparecen nuevos casos" });
+      continue;
+    }
+    proposals.push({ entityKey: entity.key, keys: validSingles.length > 1 ? validSingles : (composite.length ? composite : candidates),
       status: "review", reason: !existing.length
         ? "Sin historial en Engine para validar identidad"
         : validSingles.length > 1
