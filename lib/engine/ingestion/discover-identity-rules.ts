@@ -44,8 +44,8 @@ export function discoverIdentityRules(
     const validSingles = candidates.filter(key =>
       incoming.length > 0 && existing.length > 0 &&
       uniqueAndComplete(incoming, [key]) && uniqueAndComplete(existing, [key]));
-    if (validSingles.length === 1) {
-      const keys = [validSingles[0]];
+    // A unique foreign-key-looking field in a multi-identifier entity is not\n    // sufficient to identify its records (e.g. article reference in order lines).\n    // Require a single identifier candidate, or one whose name identifies this entity.\n    const ownIdentifier = (key: string) => key === "id" || key === "uuid" ||\n      key === entity.key || key.startsWith(entity.key + "_") || key.endsWith("_" + entity.key);\n    const safeSingles = candidates.length === 1 ? validSingles : validSingles.filter(ownIdentifier);\n    if (safeSingles.length === 1) {
+      const keys = [safeSingles[0]];
       rules[entity.key] = keys;
       proposals.push({ entityKey: entity.key, keys, status: "validated",
         reason: "Identificador inferido y unicidad comprobada en documento y Engine; solo simulación" });
