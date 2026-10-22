@@ -162,6 +162,16 @@ type RunKnowledgeImportAnalysisOptions = {
   onAnalysisReady?: (
     analysis: AnalyzeImportResponse,
   ) => void;
+
+  // Process each file as a complete unit: extract -> recognize -> persist,
+  // and only then move to the next file.
+  onFileStart?: (file: AnalyzeImportFlowFile, position: number, total: number) => void;
+  onFileExtracted?: (
+    file: AnalyzeImportFlowFile,
+    result: NonNullable<ExtractTextResponse["files"]>[number],
+    position: number,
+    total: number,
+  ) => Promise<void>;
 };
 
 export type KnowledgeImportAnalysisResult = {
@@ -299,11 +309,14 @@ async function analyzeImport(
 
 async function extractImportText(
   importId: string,
+  fileId?: string,
 ) {
   const response = await fetch(
     `/api/knowledge/import/${importId}/extract-text`,
     {
       method: "POST",
+      headers: fileId ? { "Content-Type": "application/json" } : undefined,
+      body: fileId ? JSON.stringify({ fileId }) : undefined,
     },
   );
 
@@ -567,68 +580,51 @@ export async function runKnowledgeImportAnalysis(
   options: RunKnowledgeImportAnalysisOptions = {},
 ): Promise<KnowledgeImportAnalysisResult> {
   options.onStageChange?.("analyzing");
+  const extraction = await analyzeImport(importId);
+  options.onAnalysisReady?.(extraction);
 
-  const extraction =
-    await analyzeImport(importId);
-
-  options.onAnalysisReady?.(
-    extraction,
-  );
-
-  /*
-   * Si no hay documentos aceptados, no iniciamos
-   * la extracción de texto ni llamamos a la IA.
-   */
   if (extraction.fileCount === 0) {
     return {
       importId,
       extraction,
       textExtraction: {
-        importId,
-        status: "text_ready",
-        processingStatus: "completed",
-        totalFiles: 0,
-        successfulFiles: 0,
-        failedFiles: 0,
-        totalCharacters: 0,
+        importId, status: "text_ready", processingStatus: "completed",
+        totalFiles: 0, successfulFiles: 0, failedFiles: 0, totalCharacters: 0,
+        files: [],
       },
     };
   }
 
-  options.onStageChange?.(
-    "extracting_text",
-  );
+  options.onStageChange?.("extracting_text");
+  const queue = extraction.files.filter(file => file.status === "ready")
+    .sort((a, b) => (a.processingOrder ?? 0) - (b.processingOrder ?? 0));
+  const results: NonNullable<ExtractTextResponse["files"]> = [];
 
-  const stopPolling =
-    startProgressPolling(
-      importId,
-      options.onProgress,
-    );
-
-  let textExtraction: ExtractTextResponse;
-
-  try {
-    textExtraction =
-      await extractImportText(importId);
-
-    const finalProgress =
-      await getKnowledgeImportProgress(
-        importId,
-      ).catch(() => null);
-
-    if (finalProgress) {
-      options.onProgress?.(
-        finalProgress,
-      );
-    }
-  } finally {
-    stopPolling();
+  // Sequential, awaited iteration. Recognition happens inside onFileExtracted
+  // before the next extraction request is made.
+  for (let index = 0; index < queue.length; index++) {
+    const file = queue[index];
+    options.onFileStart?.(file, index + 1, queue.length);
+    const response = await extractImportText(importId, file.id);
+    const extracted = response.files?.find(item => item.id === file.id);
+    if (!extracted) throw new Error(`La extracción de ${file.name} no devolvió un resultado de archivo`);
+    results.push(extracted);
+    await options.onFileExtracted?.(file, extracted, index + 1, queue.length);
   }
 
+  const successfulFiles = results.filter(file => file.status === "text_ready").length;
+  const failedFiles = results.length - successfulFiles;
   return {
-    importId,
-    extraction,
-    textExtraction,
+    importId, extraction,
+    textExtraction: {
+      importId,
+      status: successfulFiles ? "text_ready" : "text_error",
+      processingStatus: successfulFiles ? "completed" : "error",
+      totalFiles: queue.length, successfulFiles, failedFiles,
+      totalCharacters: results.reduce((sum, file) =>
+        sum + (file.status === "text_ready" ? (file.characters ?? 0) : 0), 0),
+      files: results,
+    },
   };
 }
 
