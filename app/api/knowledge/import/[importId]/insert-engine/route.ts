@@ -78,8 +78,19 @@ export async function POST(request: Request, context: Context) {
             reconciliation.relations.some(item => item.action !== "reuse"))
           throw new Error("Hay estructuras o relaciones nuevas: requieren una migración de esquema.");
         const newRows = reconciliation.rows.filter(row => row.action === "create" && !resolution?.omitted.has(row.localId));
-        const newLinks = reconciliation.links.filter(link => link.action === "create" &&
-          !resolution?.omitted.has(link.fromLocalId) && !resolution?.omitted.has(link.toLocalId));
+        const existingRowIds = new Map(reconciliation.rows.filter(row => row.existingId)
+          .map(row => [row.localId, row.existingId!]));
+        // A link marked "review" solely because of a row conflict becomes
+        // eligible once that row is explicitly resolved.
+        const newLinks = reconciliation.links.filter(link => {
+          if (resolution?.omitted.has(link.fromLocalId) || resolution?.omitted.has(link.toLocalId))
+            return false;
+          if (link.action === "reuse") return false;
+          const from = existingRowIds.get(link.fromLocalId);
+          const to = existingRowIds.get(link.toLocalId);
+          return !(from && to && snapshot.links.some(item =>
+            item.relationKey === link.relationKey && item.fromId === from && item.toId === to));
+        });
         if (!newRows.length && !newLinks.length && !resolution?.updates.size)
           return { structures: 0, fields: 0, relationDefinitions: 0, records: 0,
             links: 0, reusedRecords: reconciliation.rows.length, reusedLinks: reconciliation.links.length };
