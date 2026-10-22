@@ -32,12 +32,26 @@ export function validateInsertPlan(plan: InsertPlan): { ready: boolean; blockers
       if (field.disposition === "conflict") blockers.push("Campo incompatible: " + entity.key + "." + field.key);
     }
   }
+  const validFieldTypes = new Set(["text", "integer", "decimal", "boolean", "date", "datetime", "json"]);
+  for (const entity of plan.entities) {
+    if (entity.disposition === "conflict") blockers.push("Estructura incompatible: " + entity.key);
+    for (const field of entity.fields) {
+      if (!/^[a-z][a-z0-9_]*$/.test(field.key))
+        blockers.push("Clave de campo inválida: " + entity.key + "." + field.key);
+      if (!validFieldTypes.has(field.type))
+        blockers.push("Tipo de campo no permitido: " + entity.key + "." + field.key);
+    }
+  }
   for (const relation of plan.relations) {
     if (relationKeys.has(relation.key)) blockers.push("Relación duplicada: " + relation.key);
     relationKeys.add(relation.key);
     if (!entityMap.has(relation.fromEntity) || !entityMap.has(relation.toEntity))
       blockers.push("Relación con estructura desconocida: " + relation.key);
     if (relation.disposition === "conflict") blockers.push("Relación incompatible: " + relation.key);
+    if (!/^[a-z][a-z0-9_]*$/.test(relation.key))
+      blockers.push("Clave de relación inválida: " + relation.key);
+    if (!["one_to_one", "one_to_many", "many_to_one", "many_to_many"].includes(relation.cardinality))
+      blockers.push("Cardinalidad inválida: " + relation.key);
   }
   for (const row of plan.rows) {
     if (rowIds.has(row.localId)) blockers.push("Identificador local duplicado: " + row.localId);
@@ -46,9 +60,23 @@ export function validateInsertPlan(plan: InsertPlan): { ready: boolean; blockers
     if (!entity) { blockers.push("Registro sin estructura: " + row.localId); continue; }
     if (row.disposition !== "candidate") blockers.push("Registro pendiente: " + row.localId);
     if (!row.evidence?.trim()) blockers.push("Registro sin evidencia: " + row.localId);
+    if (!row.values || typeof row.values !== "object" || Array.isArray(row.values)) {
+      blockers.push("Valores inválidos: " + row.localId); continue;
+    }
     for (const field of Object.keys(row.values)) {
-      if (!entity.fields.some(item => item.key === field))
+      const definition = entity.fields.find(item => item.key === field);
+      if (!definition) {
         blockers.push("Campo no declarado: " + row.localId + "." + field);
+        continue;
+      }
+      const value = row.values[field];
+      if (value === null) continue;
+      const valid = definition.type === "integer" ? typeof value === "number" && Number.isSafeInteger(value) :
+        definition.type === "decimal" ? typeof value === "number" && Number.isFinite(value) :
+        definition.type === "boolean" ? typeof value === "boolean" :
+        definition.type === "json" ? typeof value === "object" :
+        typeof value === "string" && value.trim().length > 0;
+      if (!valid) blockers.push("Valor incompatible: " + row.localId + "." + field);
     }
   }
   const links = new Set<string>();
