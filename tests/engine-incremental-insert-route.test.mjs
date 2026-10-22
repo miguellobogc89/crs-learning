@@ -1,0 +1,33 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const route = fs.readFileSync(fileURLToPath(new URL("../app/api/knowledge/import/[importId]/insert-engine/route.ts", import.meta.url)), "utf8");
+const snapshot = fs.readFileSync(fileURLToPath(new URL("../lib/engine/ingestion/load-reconciliation-snapshot.ts", import.meta.url)), "utf8");
+
+test("incremental insert rechecks reconciliation within the locked transaction", () => {
+  const lock = route.indexOf("pg_try_advisory_xact_lock");
+  const read = route.indexOf("loadEngineReconciliationSnapshot(ws, tx)");
+  const discover = route.indexOf("discoverIdentityRules(plan, snapshot, identityRules)");
+  const reconcile = route.indexOf("reconcileEngineImport(plan, snapshot, discovery.rules)");
+  const write = route.indexOf("const provenanceSource = await tx.knowledge_sources.create", read);
+  assert.ok(lock >= 0 && lock < read && read < discover && discover < reconcile && reconcile < write);
+  assert.match(route, /if \(!reconciliation\.ready\)/);
+  assert.match(route, /isolationLevel: Prisma\.TransactionIsolationLevel\.Serializable/);
+  assert.match(snapshot, /db: Prisma\.TransactionClient = prisma/);
+});
+test("incremental insert only creates missing records and missing links", () => {
+  assert.match(route, /reconciliation\.rows\.filter\(row => row\.action === "create"\)/);
+  assert.match(route, /reconciliation\.links\.filter\(link => link\.action === "create"\)/);
+  assert.match(route, /if \(decision\.action === "reuse" && decision\.existingId\)/);
+  assert.match(route, /if \(decision\.action !== "create"\) continue/);
+  assert.match(route, /if \(!newRows\.length && !newLinks\.length\)/);
+});
+test("incremental insert refuses schema changes and preserves source provenance", () => {
+  assert.match(route, /reconciliation\.entities\.some\(item => item\.action !== "reuse"\)/);
+  assert.match(route, /reconciliation\.relations\.some\(item => item\.action !== "reuse"\)/);
+  assert.match(route, /tx\.engine_record_provenance\.create/);
+  assert.match(route, /verifyInsertPlan/);
+  assert.match(route, /validateInsertPlan/);
+});
