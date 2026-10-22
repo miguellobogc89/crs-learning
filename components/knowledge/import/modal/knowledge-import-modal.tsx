@@ -671,7 +671,7 @@ export function KnowledgeImportModal({
                   );
                   return (
                     <article key={file.id} className="overflow-hidden rounded-2xl bg-white">
-                      <div className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5">
+                      <div className={reconciliation && !reconciliation.ready ? "hidden" : "flex flex-wrap items-center gap-3 px-4 py-4 sm:px-5"}>
                         <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
                           { /\.(xlsx?|csv)$/i.test(file.name) ? <FileSpreadsheet className="size-6" strokeWidth={1.8} /> : /\.(zip|rar)$/i.test(file.name) ? <FileArchive className="size-6" strokeWidth={1.8} /> : <FileText className="size-6" strokeWidth={1.8} /> }
                         </div>
@@ -685,7 +685,7 @@ export function KnowledgeImportModal({
                             ) : null}
                             <span className="text-[11px] text-slate-500">
                               {recognized?.status === "error" || semantic?.status === "error" || relations?.status === "error" || preview?.status === "error" ? "Revisión con errores" :
-                                completed ? "Prueba finalizada · sin importación" : "Revisando documento"}
+                                completed ? "Análisis completado" : "Revisando documento"}
                             </span>
                           </div>
                         </div>
@@ -693,18 +693,18 @@ export function KnowledgeImportModal({
                           completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
                           <span className="text-xs font-bold uppercase text-blue-600">{file.name.split(".").pop()?.slice(0, 4)}</span>}
                       </div>
-                      <div className="relative mx-5 mb-3 h-3 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Fases completadas" aria-valuemin={0} aria-valuemax={8} aria-valuenow={stages.filter(stage => stage.state === "done").length}>
+                      <div className={reconciliation && !reconciliation.ready ? "hidden" : "relative mx-5 mb-3 h-3 overflow-hidden rounded-full bg-slate-100"} role="progressbar" aria-label="Fases completadas" aria-valuemin={0} aria-valuemax={8} aria-valuenow={stages.filter(stage => stage.state === "done").length}>
                         <div className="relative h-full overflow-hidden rounded-full bg-[#0A58FF] transition-all duration-700" style={{ width: `${stages.filter(stage => stage.state === "done").length / 8 * 100}%` }}>
                           <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-white/50 to-transparent" />
                         </div>
                       </div>
                       <details className="group border-t border-slate-100" open={Boolean(reconciliation && !reconciliation.ready)}>
-                        <summary className="flex cursor-pointer list-none items-center justify-between bg-slate-50/60 px-5 py-3 text-xs font-semibold text-slate-700 [&::-webkit-details-marker]:hidden">
+                        <summary className={reconciliation && !reconciliation.ready ? "hidden" : "flex cursor-pointer list-none items-center justify-between bg-slate-50/60 px-5 py-3 text-xs font-semibold text-slate-700 [&::-webkit-details-marker]:hidden"}>
                           <span className="flex items-center gap-2"><ScrollText className="size-4 text-slate-500" /> Registro del proceso</span>
                           <ChevronDown className="size-4 text-slate-400 transition-transform group-open:rotate-180" />
                         </summary>
                         <div className="px-5 py-4">
-                          <details open={!(reconciliation && !reconciliation.ready)}>
+                          <details className={reconciliation && !reconciliation.ready ? "hidden" : ""} open={!(reconciliation && !reconciliation.ready)}>
                             <summary className="mb-3 cursor-pointer text-xs font-semibold text-slate-600">8 fases de análisis · {reconciliation && !reconciliation.ready ? "ver detalle" : "detalle"}</summary>
                           <ol className="space-y-4">
                             {stages.map((stage, index) => (
