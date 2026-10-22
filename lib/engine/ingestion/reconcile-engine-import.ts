@@ -1,3 +1,4 @@
+import { suggestIdentityQuestions, type IdentityQuestion } from "./suggest-identity-questions";
 import type { InsertPlan } from "./validate-insert-plan";
 
 /**
@@ -26,6 +27,7 @@ export type ReconciliationPreview = {
   entities: Array<{ key: string; action: "reuse" | "create" | "review"; reason: string }>;
   relations: Array<{ key: string; action: "reuse" | "create" | "review"; reason: string }>;
   rows: ReconciledRow[]; links: ReconciledLink[];
+  identityQuestions: IdentityQuestion[];
   totals: { reuse: number; create: number; extend: number; review: number };
 };
 const canonical = (v: unknown): string | null => {
@@ -142,5 +144,5 @@ export function reconcileEngineImport(
     review: all.filter(item => item.action === "review").length,
   };
   return { writesPerformed: false, ready: blockers.length === 0 && totals.review === 0,
-    blockers, entities, relations, rows, links, totals };
+    blockers, entities, relations, rows, links, identityQuestions: suggestIdentityQuestions(plan), totals };
 }
