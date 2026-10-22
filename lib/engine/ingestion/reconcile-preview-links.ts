@@ -25,6 +25,19 @@ const matches = (from: Row, to: Row) => {
   }
   return false;
 };
+/** Resolve a named identity when a labelled evidence fragment is contained in
+ * a parent record. A generic heading cannot establish this relationship. */
+const labelledIdentity = (from: Row, to: Row): boolean => {
+  if (!to.evidence.includes(from.evidence)) return false;
+  const identities = Object.entries(from.values)
+    .filter(([field, value]) => (identifier(field) || descriptor(field)) && norm(value).length >= 3)
+    .map(([, value]) => norm(value));
+  if (!identities.length) return false;
+  return from.evidence.split(/[|\n]/).some(part => {
+    const labelled = part.match(/^\s*[^:\n|]{2,60}:\s*(.+?)\s*$/);
+    return labelled !== null && identities.includes(norm(labelled[1]));
+  });
+};
 const evidenceFor = (source: string, from: Row, to: Row): string | null => {
   if (!source.includes(from.evidence) || !source.includes(to.evidence)) return null;
   // A source-backed parent section can contain the child evidence verbatim.
@@ -54,7 +67,7 @@ export function reconcilePreviewLinks(source: string, proposal: SchemaDiscoveryP
       if (!from || from.entity !== relation.fromEntity) continue;
       for (let j = 0; j < rows.length; j++) {
         const to = rows[j];
-        if (!to || to.entity !== relation.toEntity || i === j || !matches(from, to)) continue;
+        if (!to || to.entity !== relation.toEntity || i === j || !(matches(from, to) || labelledIdentity(from, to))) continue;
         const evidence = evidenceFor(source, from, to);
         if (evidence) links.push({ fromRow: i, toRow: j, relationKey: relation.key, evidence });
         if (links.length >= 300) return links;
