@@ -37,10 +37,10 @@ test("infers customer code after validating both datasets", () => {
   assert.deepEqual(d.rules.cliente, ["codigo_cliente"]);
   assert.equal(d.proposals.find(p => p.entityKey === "cliente").status, "validated");
 });
-test("does not silently promote composite order-line identity", () => {
+test("infers minimal composite order-line identity without collisions", () => {
   const d = discoverIdentityRules(plan(), snapshot(), {});
-  assert.equal(d.rules.linea_pedido, undefined);
-  assert.equal(d.proposals.find(p => p.entityKey === "linea_pedido").status, "review");
+  assert.deepEqual(d.rules.linea_pedido, ["numero_pedido", "referencia"]);
+  assert.equal(d.proposals.find(p => p.entityKey === "linea_pedido").status, "validated");
 });
 test("duplicate existing customer identifiers block inference", () => {
   const s = snapshot(); s.records.push({ entityKey: "cliente", values: { codigo_cliente: "C-01" } });
@@ -60,4 +60,22 @@ test("without historical records a suggested key is not validated", () => {
 test("explicit unique Engine rule remains authoritative", () => {
   const d = discoverIdentityRules(plan(), snapshot(), { cliente: ["codigo_cliente"] });
   assert.deepEqual(d.rules.cliente, ["codigo_cliente"]);
+});
+
+test("repeated article inside the same order blocks composite identity", () => {
+  const p = plan();
+  p.rows.push({ entityKey: "linea_pedido", values: { numero_pedido: "P-6", referencia: "A-1" } });
+  const d = discoverIdentityRules(p, snapshot(), {});
+  assert.equal(d.rules.linea_pedido, undefined);
+  assert.equal(d.proposals.find(x => x.entityKey === "linea_pedido").status, "review");
+});
+test("historical collision blocks composite identity", () => {
+  const s = snapshot();
+  s.records.push({ entityKey: "linea_pedido", values: { numero_pedido: "P-1", referencia: "A-1" } });
+  assert.equal(discoverIdentityRules(plan(), s, {}).rules.linea_pedido, undefined);
+});
+test("incomplete composite identity stays pending", () => {
+  const p = plan();
+  delete p.rows[3].values.referencia;
+  assert.equal(discoverIdentityRules(p, snapshot(), {}).rules.linea_pedido, undefined);
 });
