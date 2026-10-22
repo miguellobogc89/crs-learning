@@ -337,7 +337,7 @@ export function KnowledgeImportModal({
 
   const selectionKey = getFilesSelectionKey(knowledgeImport.files);
   const largeFiles = knowledgeImport.files.filter(file =>
-    /\\.pdf$/i.test(file.name) && file.size >= 1024 * 1024 ||
+    /\.pdf$/i.test(file.name) && file.size >= 1024 * 1024 ||
     file.size >= 10 * 1024 * 1024);
   const needsLargeFileApproval = largeFiles.length > 0 && approvedLargeSelection !== selectionKey;
 
