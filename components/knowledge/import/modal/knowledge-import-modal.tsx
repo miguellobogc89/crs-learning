@@ -657,12 +657,14 @@ export function KnowledgeImportModal({
                           completed && recognized?.status === "completed" ? <Check className="size-5 text-emerald-600" /> :
                           <Loader2 className="size-5 animate-spin text-blue-600" />}
                       </div>
-                      <details className="group border-t border-slate-100" open={!(reconciliation && !reconciliation.ready)}>
+                      <details className="group border-t border-slate-100" open>
                         <summary className="flex cursor-pointer list-none items-center justify-between bg-slate-50/60 px-5 py-3 text-xs font-semibold text-slate-700 [&::-webkit-details-marker]:hidden">
                           <span className="flex items-center gap-2"><ScrollText className="size-4 text-slate-500" /> Registro del proceso</span>
                           <ChevronDown className="size-4 text-slate-400 transition-transform group-open:rotate-180" />
                         </summary>
                         <div className="px-5 py-4">
+                          <details open={!(reconciliation && !reconciliation.ready)}>
+                            <summary className="mb-3 cursor-pointer text-xs font-semibold text-slate-600">8 fases de análisis · {reconciliation && !reconciliation.ready ? "ver detalle" : "detalle"}</summary>
                           <ol className="space-y-4">
                             {stages.map((stage, index) => (
                               <li key={stage.title} className="flex items-start gap-3">
@@ -685,6 +687,7 @@ export function KnowledgeImportModal({
                               </li>
                             ))}
                           </ol>
+                          </details>
                           {preview?.status === "completed" ? (
                             <div className="mt-4 space-y-3">
                               {reconciliation && !reconciliation.ready ? (
