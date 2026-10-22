@@ -121,3 +121,21 @@ export async function POST(_request: Request, context: Context) {
     conceptStage: "preliminary_candidates_only",
   });
 }
+
+/** Read the stored snapshot without re-running extraction or classification. */
+export async function GET(_request: Request, context: Context) {
+  const session = await auth();
+  if (!session?.user?.id) return Response.json({ error: "No autorizado" }, { status: 401 });
+  const { importId } = await context.params;
+  const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
+  const imported = await prisma.knowledge_imports.findFirst({
+    where: { id: importId, owner_user_id: session.user.id, knowledge_libraries: { workspace_id: activeWorkspace.id } },
+    select: { proposal_json: true },
+  });
+  if (!imported) return Response.json({ error: "Importación no encontrada" }, { status: 404 });
+  const payload = imported.proposal_json;
+  const map = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? (payload as Record<string, unknown>).globalImportMap : null;
+  if (!map) return Response.json({ error: "Mapa global todavía no construido" }, { status: 404 });
+  return Response.json({ map });
+}
