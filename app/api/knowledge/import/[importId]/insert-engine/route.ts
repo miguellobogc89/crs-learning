@@ -33,8 +33,8 @@ export async function POST(request: Request, context: Context) {
   const imported = await prisma.knowledge_imports.findFirst({
     where: { id: importId, owner_user_id: session.user.id,
       knowledge_libraries: { workspace_id: activeWorkspace.id } },
-    select: { knowledge_import_files: { where: { id: body.fileId, status: "text_ready" },
-      select: { id: true, extracted_text: true } } },
+    select: { library_id: true, knowledge_import_files: { where: { id: body.fileId, status: "text_ready" },
+      select: { id: true, file_name: true, mime_type: true, file_size: true, storage_path: true, content_hash: true, extracted_text: true } } },
   });
   const source = imported?.knowledge_import_files[0];
   if (!source) return Response.json({ error: "Documento no disponible" }, { status: 404 });
@@ -55,6 +55,31 @@ export async function POST(request: Request, context: Context) {
       ]);
       if (types || records || relations)
         throw new Error("Engine ya contiene datos. La inserción incremental necesita reconciliación de identidades; no se aplicó ningún cambio.");
+      // Provenance for a document requires a real knowledge_file_id (or
+      // knowledge_source_id), not the staging knowledge_import_files UUID.
+      // Materialize a linked source and file inside the same transaction so
+      // failed imports leave neither orphaned provenance nor source copies.
+      const provenanceSource = await tx.knowledge_sources.create({ data: {
+        owner_user_id: session.user.id,
+        created_by_user_id: session.user.id,
+        updated_by_user_id: session.user.id,
+        library_id: imported!.library_id,
+        title: source.file_name,
+        content: source.extracted_text,
+        status: "draft",
+        knowledge_type: "document",
+      } });
+      const provenanceFile = await tx.knowledge_files.create({ data: {
+        knowledge_source_id: provenanceSource.id,
+        file_name: source.file_name,
+        file_type: source.mime_type,
+        file_size: source.file_size,
+        storage_path: source.storage_path,
+        content_hash: source.content_hash,
+        extracted_text: source.extracted_text,
+        status: "text_ready",
+        uploaded_by_user_id: session.user.id,
+      } });
       const entityIds = new Map<string, string>();
       for (const entity of plan.entities) {
         const created = await tx.engine_object_types.create({ data: {
@@ -107,6 +132,7 @@ export async function POST(request: Request, context: Context) {
           workspace_id: ws, record_id: record.id, revision: 1,
           source_locator: "import:" + importId + "/file:" + body.fileId + "/" + row.localId,
           evidence_text: row.evidence, origin_type: "document",
+          knowledge_source_id: provenanceSource.id, knowledge_file_id: provenanceFile.id,
           created_by_user_id: session.user.id,
         } });
       }
