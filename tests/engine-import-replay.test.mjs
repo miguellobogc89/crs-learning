@@ -102,3 +102,26 @@ test("keeps direct many-to-many when no documented intermediary exists",()=>{
       {fromConcept:"author",toConcept:"book",cardinality:"many_to_many",evidence:"author"}]}},rows});
   assert.equal(proposed.relations.length,1);
 });
+
+test("links labelled recipient businesses to five orders, never the issuing company",()=>{
+  const recipients=[
+    ["Ferretería Sol","C-01"],["Taller Norte","C-02"],["Obras Vega","C-03"],
+  ];
+  const issuer={entity:"business",values:{name:"Comercial Albor"},
+    evidence:"Comercial Albor - Copias de pedidos"};
+  const companies=recipients.map(([name,code])=>({entity:"business",values:{name},
+    evidence:`Destinatario: ${name} | Código cliente: ${code}`}));
+  const orders=[["P-1001",0],["P-1002",1],["P-1003",0],["P-1004",2],["P-1005",1]]
+    .map(([number,recipient])=>({entity:"order",values:{order_number:number},
+      evidence:`Pedido ${number}\\n${companies[recipient].evidence}\\nTOTAL 10.00`}));
+  const rows=[issuer,...companies,...orders];
+  const document=rows.map(row=>row.evidence).join("\\n");
+  const relation={key:"business_to_order",fromEntity:"business",toEntity:"order"};
+  const links=reconcilePreviewLinks(document,{entities:[],relations:[relation],warnings:[]},rows,[]);
+  assert.equal(links.length,5);
+  assert.ok(links.every(link=>link.fromRow>0));
+  assert.deepEqual(links.map(link=>[rows[link.fromRow].values.name,rows[link.toRow].values.order_number]),[
+    ["Ferretería Sol","P-1001"],["Ferretería Sol","P-1003"],
+    ["Taller Norte","P-1002"],["Taller Norte","P-1005"],["Obras Vega","P-1004"],
+  ]);
+});
