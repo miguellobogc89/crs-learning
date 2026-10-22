@@ -6,7 +6,7 @@ const obj = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const norm = (v: unknown) => typeof v === "string" || typeof v === "number" ?
   String(v).normalize("NFKC").trim().toLocaleLowerCase() : "";
-const identifier = (field: string) => /(^|_)(code|id|ref|sku|number)$/.test(field);
+const identifier = (field: string) => /(^|_)(code|codigo|id|ref|referencia|sku|number|numero)(_|$)/.test(field);
 const descriptor = (field: string) => /(^|_)(name|title|label)$/.test(field);
 const base = (field: string) => field.replace(/^(recipient|customer|business|client|item|product|article|order|invoice|supplier)_/, "");
 /** Matches only explicit shared identifiers or meaningful names, never numeric amounts. */
@@ -16,7 +16,7 @@ const matches = (from: Row, to: Row) => {
       const left = norm(leftValue), right = norm(rightValue);
       if (!left || left !== right || left.length < 3) continue;
       if (identifier(leftKey) && identifier(rightKey) &&
-          (base(leftKey) === base(rightKey) || leftKey === "code" || rightKey === "code" ||
+          (leftKey === rightKey || base(leftKey) === base(rightKey) || leftKey === "code" || rightKey === "code" ||
             leftKey === "ref" || rightKey === "ref" ||
             (leftKey === "number" && rightKey.endsWith("_number")) ||
             (rightKey === "number" && leftKey.endsWith("_number")))) return true;
