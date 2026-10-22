@@ -1,4 +1,4 @@
-import { suggestIdentityQuestions } from "@/lib/engine/ingestion/suggest-identity-questions";
+import { resolveIdentityQuestions, type IdentityAnswers } from "@/lib/engine/ingestion/resolve-identity-questions";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 type Context = { params: Promise<{ importId: string }> };
-type Payload = { fileId?: string; signature?: string; plan?: InsertPlan; confirm?: boolean; conflictAnswers?: ConflictAnswers };
+type Payload = { fileId?: string; signature?: string; plan?: InsertPlan; confirm?: boolean; conflictAnswers?: ConflictAnswers; identityAnswers?: IdentityAnswers };
 const asObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
@@ -30,10 +30,10 @@ export async function POST(request: Request, context: Context) {
     !Array.isArray(body.plan.links) || !Array.isArray(body.plan.issues) ||
     !Array.isArray(body.plan.unresolvedLinks))
     return Response.json({ error: "Falta confirmación o propuesta válida" }, { status: 400 });
-  const plan = body.plan;
+  let plan = body.plan;
   if (!verifyInsertPlan(activeWorkspace.id, importId, body.fileId, plan, body.signature))
     return Response.json({ error: "La propuesta ha cambiado. Repite la simulación." }, { status: 409 });
-  if (suggestIdentityQuestions(plan).length > 0) return Response.json({ error: "Identidades pendientes de revisión" }, { status: 409 });
+
   const validation = validateInsertPlan(plan);
   if (!validation.ready) return Response.json({ error: "INSERT bloqueado", blockers: validation.blockers }, { status: 409 });
   const imported = await prisma.knowledge_imports.findFirst({
@@ -47,6 +47,14 @@ export async function POST(request: Request, context: Context) {
   if (plan.rows.some(row => !source.extracted_text.includes(row.evidence)) ||
       plan.links.some(link => !source.extracted_text.includes(link.evidence)))
     return Response.json({ error: "Evidencia documental inválida" }, { status: 409 });
+  try {
+    plan = resolveIdentityQuestions(plan, body.identityAnswers ?? {});
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Identidades inválidas" }, { status: 409 });
+  }
+  const resolvedValidation = validateInsertPlan(plan);
+  if (!resolvedValidation.ready)
+    return Response.json({ error: "La consolidación requiere revisión", blockers: resolvedValidation.blockers }, { status: 409 });
   const ws = activeWorkspace.id;
   try {
     const result = await prisma.$transaction(async tx => {
