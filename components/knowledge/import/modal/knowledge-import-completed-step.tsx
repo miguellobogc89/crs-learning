@@ -2,8 +2,6 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
-
 import {
   Check,
   CheckCircle2,
@@ -15,7 +13,6 @@ import type { ConfirmKnowledgeImportResult } from "@/lib/knowledge/import/types"
 type Props = {
   result: ConfirmKnowledgeImportResult;
   onClose: () => void;
-  tableFileNames?: string[];
 };
 
 function SummaryMetric({
@@ -38,162 +35,8 @@ function SummaryMetric({
   );
 }
 
-type EngineImportResult = {
-  status: string;
-  typesCreated?: number;
-  fieldsCreated?: number;
-  recordsCreated?: number;
-  recordsReused?: number;
-  recordsPending?: number;
-  relationsDiscovered?: number;
-  issues?: string[];
-  note?: string;
-  error?: string;
-  sweeps?: Array<{ stage: string; durationMs: number; details: Record<string, number | boolean> }>;
-};
-
-function EngineImportActivity({ result, tableFileNames }: { result: ConfirmKnowledgeImportResult; tableFileNames: string[] }) {
-  const selectedNames = new Set(tableFileNames);
-  const documents = result.log.documents.filter(document => Boolean(document.knowledgeFileId) && (selectedNames.has(document.fileName) || document.articleId === null));
-  const persisted = new Map((result.log.engineImports ?? []).map(item => [item.knowledgeFileId, item]));
-  const [activity, setActivity] = useState<Array<{
-    name: string;
-    status: "pending" | "analyzing" | "done" | "error";
-    types: number;
-    records: number;
-    reused: number;
-    issues: string[];
-    error?: string;
-    stages: Array<{ stage: string; durationMs: number; details: Record<string, number | boolean> }>;
-  }>>(() => documents.map(document => {
-    const saved = persisted.get(document.knowledgeFileId);
-    return {
-      name: document.fileName,
-      status: saved ? (saved.status === "error" ? "error" : "done") : "pending",
-      types: 0, records: saved?.recordsCreated ?? 0,
-      reused: saved?.recordsReused ?? 0,
-      issues: [], error: saved?.error, stages: saved?.stages ?? [],
-    };
-  }));
-
-  useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-    async function run() {
-      async function processDocument(document: typeof documents[number], index: number) {
-        if (cancelled || persisted.has(document.knowledgeFileId)) return;
-        setActivity(previous => previous.map((item, i) =>
-          i === index ? { ...item, status: "analyzing" } : item,
-        ));
-        try {
-          const response = await fetch("/api/engine/import-knowledge", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ knowledgeFileId: document.knowledgeFileId }),
-            signal: controller.signal,
-          });
-          const data = await response.json() as EngineImportResult;
-          if (!response.ok || data.status === "review") {
-            throw new Error(data.error ?? "No se ha podido validar la estructura propuesta.");
-          }
-          if (!cancelled) setActivity(previous => previous.map((item, i) =>
-            i === index ? {
-              ...item, status: "done",
-              types: data.typesCreated ?? 0,
-              records: data.recordsCreated ?? 0,
-              reused: data.recordsReused ?? 0,
-              issues: data.issues ?? [],
-              stages: data.sweeps ?? [],
-            } : item,
-          ));
-        } catch (error) {
-          if (cancelled) return;
-          setActivity(previous => previous.map((item, i) =>
-            i === index ? {
-              ...item, status: "error",
-              error: error instanceof Error ? error.message : "Error de análisis",
-            } : item,
-          ));
-        }
-      }
-      // Limit concurrency so several files do not wait on sequential model calls.
-      // Each file still has its own isolated request and status.
-      for (let offset = 0; offset < documents.length; offset += 3) {
-        if (cancelled) break;
-        await Promise.all(documents.slice(offset, offset + 3).map((document, i) =>
-          processDocument(document, offset + i)));
-      }
-    }
-    void run();
-    return () => { cancelled = true; controller.abort(); };
-    // The committed document list is immutable for this completed import.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result.importId]);
-
-  if (documents.length === 0) return null;
-  const finished = activity.filter(item => item.status === "done" || item.status === "error").length;
-  return (
-    <section className="rounded-xl border border-blue-200 bg-blue-50/50 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h4 className="text-[13px] font-semibold text-blue-950">Engine · Importación de datos</h4>
-        <span className="text-[11px] tabular-nums text-blue-700">{finished}/{documents.length} archivos</span>
-      </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-blue-100">
-        <div className="h-full bg-blue-600 transition-all" style={{ width: `${documents.length ? finished / documents.length * 100 : 0}%` }} />
-      </div>
-      <div className="mt-3 space-y-2">
-        {activity.map((item, index) => (
-          <div key={documents[index]?.knowledgeFileId ?? index} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-xs">
-            <span className="max-w-[50%] truncate font-medium text-slate-800">{item.name}</span>
-            <span className={item.status === "error" ? "text-amber-700" : "text-blue-700"}>
-              {item.status === "pending" ? "Pendiente" :
-               item.status === "analyzing" ? "Descubriendo estructura e insertando registros…" :
-               item.status === "error" ? (item.error ?? "Análisis no disponible") :
-               `${item.types} tipos creados · ${item.records} registros insertados · ${item.reused} reutilizados`}
-            </span>
-            {item.stages.length > 0 ? (
-              <details className="w-full border-t border-slate-100 pt-2 text-slate-600">
-                <summary className="cursor-pointer font-medium">Ver barridos del Engine ({item.stages.length})</summary>
-                <div className="mt-2 space-y-1.5">
-                  {item.stages.map((stage, i) => (
-                    <div key={i} className="flex flex-wrap items-start justify-between gap-2 rounded-md bg-slate-50 px-2.5 py-2">
-                      <span className="font-medium text-slate-800">
-                        {stage.stage === "recognition" ? "Reconocimiento" :
-                         stage.stage === "schema" ? "Descubrimiento de esquema" :
-                         stage.stage === "extraction" ? "Extracción" :
-                         stage.stage === "verification" ? "Verificación" : stage.stage}
-                      </span>
-                      <span className="tabular-nums">{(stage.durationMs / 1000).toFixed(1)} s</span>
-                      <div className="w-full text-[11px] text-slate-500">
-                        {Object.entries(stage.details).map(([key, value]) => `${key}: ${String(value)}`).join(" · ")}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            ) : null}
-            {item.issues.length > 0 ? (
-              <details className="w-full text-amber-800">
-                <summary className="cursor-pointer">{item.issues.length} avisos para revisar</summary>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {item.issues.map((issue, i) => <li key={i}>{issue}</li>)}
-                </ul>
-              </details>
-            ) : null}
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 text-[11px] leading-5 text-blue-800">
-        Engine crea o reutiliza registros en borrador cuando hay identidad suficiente.
-        Los conflictos y relaciones no verificadas quedan pendientes de revisión.
-      </p>
-    </section>
-  );
-}
-
 export function KnowledgeImportCompletedStep({
   result,
-  tableFileNames = [],
 }: Props) {
   const { log } = result;
 
@@ -210,7 +53,7 @@ export function KnowledgeImportCompletedStep({
 
           <div className="min-w-0">
             <h3 className="text-[18px] font-semibold tracking-[-0.02em] text-slate-950">
-              {log.engineImports?.some(item => item.status === "error") ? "Documento guardado · Engine pendiente" : "Incorporación completada"}
+              Incorporación completada
             </h3>
 
             <p className="mt-1 text-[12px] leading-5 text-slate-500">
@@ -263,7 +106,6 @@ export function KnowledgeImportCompletedStep({
       </div>
 
       <div className="mt-6 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
-        <EngineImportActivity result={result} tableFileNames={tableFileNames} />
         {log.articles.length > 0 ? (
           <section>
             <h4 className="mb-2.5 text-[12px] font-semibold text-slate-900">
