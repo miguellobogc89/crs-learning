@@ -767,7 +767,7 @@ export function useKnowledgeImport({
           if (!lastMap) throw new Error(failures.join(" · ") || "No se reconoció ningún archivo.");
           if (!isCurrentOperation()) return;
           updateImport(uploadResult.importId, {
-            step: "completed", status: failures.length ? "completed_with_issues" : "completed",
+            step: "completed", status: "completed",
             isAnalyzing: false, isConfirming: false,
             error: failures.length ? failures.join(" · ") : null,
           });
