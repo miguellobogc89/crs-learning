@@ -185,7 +185,7 @@ export async function POST(request: Request, context: Context) {
       const informationalIssues = analysis.issues.filter(issue =>
         issue === "Esquema construido a partir de las fases previas y los registros; revisar propuestas y evidencias.");
       const blockingIssues = [
-        ...analysis.issues.filter(issue => !informationalIssues.includes(issue)),
+        ...analysis.issues.filter(issue => issue !== "Esquema construido a partir de las fases previas y los registros; revisar propuestas y evidencias."),
         ...manifest.issues,
       ];
       const issues = [...blockingIssues, ...informationalIssues, ...analysis.schema.proposal.warnings];
