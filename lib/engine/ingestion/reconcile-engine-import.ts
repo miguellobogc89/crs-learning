@@ -42,7 +42,8 @@ const signature = (values: Record<string, unknown>, keys: string[]): string | nu
 export function reconcileEngineImport(
   plan: InsertPlan, snapshot: EngineSnapshot, identityRules: IdentityRules,
 ): ReconciliationPreview {
-  const blockers: string[] = [];
+  const blockers: string[] = [...plan.issues];
+  if (plan.unresolvedLinks.length) blockers.push("Relaciones sin resolver: " + plan.unresolvedLinks.length);
   const entities = plan.entities.map(entity => {
     const found = snapshot.entities.find(item => item.key === entity.key);
     if (!found) return { key: entity.key, action: "create" as const, reason: "Estructura nueva" };
