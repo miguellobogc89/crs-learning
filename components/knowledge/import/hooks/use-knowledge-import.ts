@@ -562,7 +562,6 @@ export function useKnowledgeImport({
 
         let lastMap: Record<string, unknown> | null = null;
         const recognitionFailures: string[] = [];
-        let recognizedCount = 0;
 
         // The complete unit of work is ONE file:
         // extract text -> identify all logical documents -> persist JSON.
@@ -641,7 +640,6 @@ export function useKnowledgeImport({
                 }
                 if (!isCurrentOperation()) return;
                 lastMap = result.map;
-                recognizedCount++;
                 setGlobalMap(result.map);
                 setRecognition(prev => ({
                   ...prev,
