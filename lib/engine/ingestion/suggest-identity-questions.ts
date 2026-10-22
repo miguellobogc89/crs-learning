@@ -1,0 +1,52 @@
+import type { InsertPlan } from "./validate-insert-plan";
+
+/** Read-only, conservative suggestions. Never merge entities from name similarity alone. */
+export type IdentityQuestion = {
+  id: string;
+  entityKey: string;
+  leftLocalId: string;
+  rightLocalId: string;
+  leftName: string;
+  rightName: string;
+  question: string;
+};
+
+const NAME_KEYS = ["name", "nombre", "razon_social", "legal_name", "company_name", "business_name"];
+const NOISE = new Set(["sl", "sa", "slu", "srl", "sociedad", "limitada", "anonima", "empresa", "compania", "company", "the", "de", "del", "la", "el", "los", "las", "y"]);
+function normalized(value: string): string[] {
+  return value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "")
+    .toLocaleLowerCase("es").replace(/[^a-z0-9]+/g, " ")
+    .split(/\\s+/).filter(token => token.length > 1 && !NOISE.has(token));
+}
+function nameOf(values: Record<string, unknown>): string | null {
+  for (const key of NAME_KEYS) if (typeof values[key] === "string" && (values[key] as string).trim())
+    return (values[key] as string).trim();
+  return null;
+}
+function candidateMatch(a: string, b: string): boolean {
+  const aa = normalized(a), bb = normalized(b);
+  if (!aa.length || !bb.length) return false;
+  if (aa.join(" ") === bb.join(" ")) return true;
+  const common = aa.filter(token => token.length >= 5 && bb.includes(token));
+  // Require a distinctive shared token, plus substantial overlap.
+  return common.length > 0 && common.length / Math.min(aa.length, bb.length) >= 0.75;
+}
+export function suggestIdentityQuestions(plan: InsertPlan): IdentityQuestion[] {
+  const rows = plan.rows.map(row => ({ ...row, displayName: nameOf(row.values) }))
+    .filter((row): row is typeof row & { displayName: string } => row.displayName !== null);
+  const questions: IdentityQuestion[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = i + 1; j < rows.length; j++) {
+      const a = rows[i], b = rows[j];
+      if (a.entityKey !== b.entityKey || !candidateMatch(a.displayName, b.displayName)) continue;
+      questions.push({
+        id: `identity:${a.localId}:${b.localId}`,
+        entityKey: a.entityKey, leftLocalId: a.localId, rightLocalId: b.localId,
+        leftName: a.displayName, rightName: b.displayName,
+        question: `¿«${a.displayName}» y «${b.displayName}» son la misma entidad?`,
+      });
+      if (questions.length >= 25) return questions;
+    }
+  }
+  return questions;
+}
