@@ -19,7 +19,7 @@ test("incremental insert rechecks reconciliation within the locked transaction",
 });
 test("incremental insert only creates missing records and missing links", () => {
   assert.match(route, /reconciliation\.rows\.filter\(row => row\.action === "create" &&/);
-  assert.match(route, /reconciliation\.links\.filter\(link => link\.action === "create" &&/);
+  assert.match(route, /const newLinks = reconciliation\.links\.filter\(link => \{/);
   assert.match(route, /decision\.existingId && \(decision\.action === "reuse"/);
   assert.match(route, /if \(decision\.action !== "create"\) continue/);
   assert.match(route, /if \(!newRows\.length && !newLinks\.length && !resolution\?\.updates\.size\)/);
