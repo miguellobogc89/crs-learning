@@ -1,22 +1,26 @@
 "use client";
 
-import { Check, FileStack, FolderTree, ScanSearch, Sparkles } from "lucide-react";
+import { Check, FileStack, FolderTree, ScanSearch, Sparkles, Network } from "lucide-react";
 import type { KnowledgeImportModalStep } from "./knowledge-import-modal.types";
 
 const STEPS = [
-  { id: "upload", label: "Documentos", icon: FileStack },
+  { id: "upload", label: "Documentación preparada", icon: FileStack },
+  { id: "data-map", label: "Construcción del mapa de datos", icon: Network },
   { id: "analyzing", label: "Análisis", icon: ScanSearch },
   { id: "proposal", label: "Reconocimiento", icon: FolderTree },
   { id: "completed", label: "Resultado", icon: Sparkles },
 ] as const;
 
-export function KnowledgeImportModalProgress({ currentStep }: { currentStep: KnowledgeImportModalStep }) {
-  const active = STEPS.findIndex(step => step.id === currentStep);
-  const index = active < 0 ? 3 : active;
+export function KnowledgeImportModalProgress({ currentStep, mapReady = false }: { currentStep: KnowledgeImportModalStep; mapReady?: boolean }) {
+  // The map stage is a visual subdivision of the existing analyzing state.
+  // It does not create a separate backend operation.
+  const visualStep = currentStep === "analyzing" && !mapReady ? "data-map" : currentStep;
+  const active = STEPS.findIndex(step => step.id === visualStep);
+  const index = active < 0 ? STEPS.length - 1 : active;
   return (
     <nav aria-label="Progreso de importación" className="shrink-0 border-b border-slate-100 bg-white px-7 py-5">
       <style>{`@keyframes crs-step-fill { 0% { transform: scaleX(0); } 95% { transform: scaleX(1); } 100% { transform: scaleX(0); } }`}</style>
-      <div className="mx-auto flex max-w-[780px] items-start">
+      <div className="mx-auto flex max-w-[980px] items-start">
         {STEPS.map((step, position) => {
           const Icon = step.icon;
           const completed = position < index;
