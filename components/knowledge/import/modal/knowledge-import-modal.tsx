@@ -23,6 +23,8 @@ import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
 import { KnowledgeImportProcessingStep } from "./knowledge-import-processing-step";
 import { KnowledgeImportCloseGuard } from "./knowledge-import-close-guard";
 import { EngineConflictReview, type Decision } from "./engine-conflict-review";
+import { EngineIdentityReview, type IdentityAnswer } from "./engine-identity-review";
+import { suggestIdentityQuestions } from "@/lib/engine/ingestion/suggest-identity-questions";
 
 import type {
   KnowledgeImportModalProps,
@@ -303,6 +305,7 @@ export function KnowledgeImportModal({
   resumeImportId,
 }: KnowledgeImportModalProps) {
   const [conflictAnswers, setConflictAnswers] = useState<Record<string, Record<string, Decision>>>({});
+  const [identityAnswers, setIdentityAnswers] = useState<Record<string, Record<string, IdentityAnswer>>>({});
 
   const [
     closeGuardOpen,
@@ -497,10 +500,12 @@ export function KnowledgeImportModal({
   const currentFile = actionable.length === 1 ? actionable[0] : null;
   const currentPreview = currentFile ? knowledgeImport.recordPreview[currentFile.name] : null;
   const currentReconciliation = currentPreview?.reconciliation;
+  const identityQuestions = currentPreview ? suggestIdentityQuestions({ rows: currentPreview.rows }) : [];
+  const identitiesNeedReview = identityQuestions.length > 0;
   const currentAnswers = currentFile ? conflictAnswers[currentFile.id] ?? {} : {};
   const reviewRows = currentReconciliation?.rows.filter(row => row.action === "review" || row.action === "extend") ?? [];
   const needsReview = reviewRows.length > 0;
-  const readyToInsert = Boolean(currentFile && currentPreview &&
+  const readyToInsert = Boolean(currentFile && currentPreview && !identitiesNeedReview &&
     (currentPreview.manifestIssues?.length ?? 0) === 0 &&
     currentPreview.unresolvedLinks.length === 0 &&
     currentPreview.rows.every(row => row.disposition === "candidate") &&
@@ -757,6 +762,14 @@ export function KnowledgeImportModal({
                           </details>
                           {preview?.status === "completed" ? (
                             <div className="mt-4 space-y-3">
+                              {preview.rows.length && suggestIdentityQuestions({ rows: preview.rows }).length > 0 ? (
+                                <EngineIdentityReview
+                                  key={file.id}
+                                  questions={suggestIdentityQuestions({ rows: preview.rows })}
+                                  answers={identityAnswers[file.id] ?? {}}
+                                  onAnswersChange={next => setIdentityAnswers(current => ({ ...current, [file.id]: next }))}
+                                />
+                              ) : null}
                               {reconciliation && !reconciliation.ready ? (
                                 <EngineConflictReview
                                   fileId={file.id}
@@ -883,7 +896,7 @@ export function KnowledgeImportModal({
               <button type="button" disabled={!readyToInsert || knowledgeImport.engineInsertRunning}
                 onClick={confirmEngineInsert}
                 className="rounded-lg bg-[#0A58FF] px-6 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
-                {knowledgeImport.engineInsertRunning ? "Guardando..." : needsReview ? "Finalizar y guardar" : "Guardar en Engine"}
+                {knowledgeImport.engineInsertRunning ? "Guardando..." : identitiesNeedReview ? "Identidades pendientes" : needsReview ? "Finalizar y guardar" : "Guardar en Engine"}
               </button>
             ) : knowledgeImport.step === "completed" && !currentFile ? (
               <button type="button" onClick={requestClose} className="rounded-lg bg-[#0A58FF] px-5 py-2 text-sm font-semibold text-white">Finalizar</button>
