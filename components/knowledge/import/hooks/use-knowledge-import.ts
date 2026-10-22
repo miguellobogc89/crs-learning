@@ -173,7 +173,7 @@ export function useKnowledgeImport({
   }>>({});
   const [relationsRunning, setRelationsRunning] = useState(false);
   const [recordPreview, setRecordPreview] = useState<Record<string, {
-    status: "completed" | "error"; id: string; signature?: string;
+    status: "completed" | "error"; id: string; signature?: string; manifestIssues?: string[];
     rows: Array<{ localId: string; entityKey: string;
       values: Record<string, string | number | boolean | null>;
       evidence: string; disposition: "candidate" | "pending"; reason: string }>;
@@ -1258,7 +1258,7 @@ export function useKnowledgeImport({
       unresolvedLinks: preview.unresolvedLinks,
       // Only server-generated manifest issues are signed; stage 8 appends analysis warnings
       // to the display issues. The signature requires the original manifest issues.
-      issues: [],
+      issues: preview.manifestIssues ?? [],
     };
     setEngineInsertRunning(true);
     try {
