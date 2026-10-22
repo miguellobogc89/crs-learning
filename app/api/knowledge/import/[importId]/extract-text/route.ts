@@ -18,7 +18,7 @@ type RouteContext = {
 };
 
 export async function POST(
-  _request: Request,
+  request: Request,
   context: RouteContext,
 ) {
   const session = await auth();
@@ -127,8 +127,19 @@ export async function POST(
     );
   }
 
+  // Optional fileId: advance a single queue item; no fileId retains the
+  // previous batch extraction behavior for other API consumers.
+  let fileId: string | undefined;
   try {
-    const result = await processImportText(importId);
+    const body: unknown = await request.json();
+    if (body && typeof body === "object" && !Array.isArray(body) &&
+      "fileId" in body && typeof body.fileId === "string") {
+      fileId = body.fileId;
+    }
+  } catch { /* Legacy callers send an empty request body. */ }
+
+  try {
+    const result = await processImportText(importId, fileId);
 
     return NextResponse.json(result);
   } catch (error) {
