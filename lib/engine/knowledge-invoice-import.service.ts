@@ -55,6 +55,61 @@ export function invoiceMissingFields(
   return Object.fromEntries(Object.entries(incoming).filter(([key]) =>
     before[key] === undefined || before[key] === null || before[key] === ""));
 }
+/**
+ * The DB may already capture a revision via its trigger when engine_records
+ * changes. Reuse and verify that snapshot instead of inserting it twice.
+ * For databases without that trigger, create it once (idempotently).
+ */
+async function ensureInvoiceRevisionSnapshot(
+  tx: Prisma.TransactionClient,
+  input: {
+    workspaceId: string;
+    recordId: string;
+    objectTypeId: string;
+    revision: number;
+    schemaVersion: number;
+    status: string;
+    values: Record<string, unknown>;
+    userId: string;
+  },
+) {
+  const where = {
+    workspace_id: input.workspaceId,
+    record_id: input.recordId,
+    revision: input.revision,
+  };
+  let snapshot = await tx.engine_record_revisions.findFirst({
+    where,
+    select: { values_json: true, schema_version: true, status: true },
+  });
+  if (!snapshot) {
+    // Only write if no revision exists; skipDuplicates covers concurrent
+    // trigger/insert scenarios without swallowing a mismatched snapshot.
+    await tx.engine_record_revisions.createMany({
+      data: [{
+        workspace_id: input.workspaceId,
+        record_id: input.recordId,
+        object_type_id: input.objectTypeId,
+        revision: input.revision,
+        schema_version: input.schemaVersion,
+        status: input.status,
+        values_json: input.values as Prisma.InputJsonObject,
+        changed_by_user_id: input.userId,
+      }],
+      skipDuplicates: true,
+    });
+    snapshot = await tx.engine_record_revisions.findFirst({
+      where,
+      select: { values_json: true, schema_version: true, status: true },
+    });
+  }
+  if (!snapshot || snapshot.schema_version !== input.schemaVersion ||
+      snapshot.status !== input.status ||
+      stableJson(snapshot.values_json) !== stableJson(input.values)) {
+    throw new Error("La revisión de Engine no coincide con el registro. Operación cancelada.");
+  }
+}
+
 const externalKeyForFile = (f: StagingFile) =>
   "invoice:" + sha256(f.content_hash || f.extracted_text);
 
@@ -548,11 +603,15 @@ export async function commitPreparedInvoices(
           updated_at: new Date() },
         select: { revision: true },
       });
-      await tx.engine_record_revisions.create({
-        data: { workspace_id: workspaceId, record_id: existing.id, object_type_id: local.id,
-          revision: updated.revision, schema_version: existing.schema_version,
-          status: existing.status, values_json: merged as Prisma.InputJsonObject,
-          changed_by_user_id: input.userId },
+      await ensureInvoiceRevisionSnapshot(tx, {
+        workspaceId,
+        recordId: existing.id,
+        objectTypeId: local.id,
+        revision: updated.revision,
+        schemaVersion: existing.schema_version,
+        status: existing.status,
+        values: merged,
+        userId: input.userId,
       });
       for (const key of keys) {
         const quote = doc.evidence[key];
@@ -587,16 +646,21 @@ export async function commitPreparedInvoices(
         status: "draft", revision: 1, schema_version: local.schema_version,
         created_by_user_id: input.userId, updated_by_user_id: input.userId },
     });
-    await tx.engine_record_revisions.create({
-      data: { workspace_id: workspaceId, record_id: created.id, object_type_id: local.id,
-        revision: 1, schema_version: local.schema_version, status: "draft",
-        values_json: doc.values as Prisma.InputJsonObject, changed_by_user_id: input.userId },
+    await ensureInvoiceRevisionSnapshot(tx, {
+      workspaceId,
+      recordId: created.id,
+      objectTypeId: local.id,
+      revision: created.revision,
+      schemaVersion: local.schema_version,
+      status: "draft",
+      values: doc.values,
+      userId: input.userId,
     });
     for (const [fieldKey, quote] of Object.entries(doc.evidence)) {
       const calc = doc.calculations?.[fieldKey];
       await tx.engine_record_provenance.create({
         data: {
-          workspace_id: workspaceId, record_id: created.id, revision: 1,
+          workspace_id: workspaceId, record_id: created.id, revision: created.revision,
           field_key: fieldKey,
           source_locator: "knowledge-import:" + input.importId + "/file:" + doc.fileId,
           knowledge_file_id: source.knowledgeFileId,
