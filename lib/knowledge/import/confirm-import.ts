@@ -268,6 +268,28 @@ export async function confirmKnowledgeImport({
     ),
   );
 
+  // Standalone documents are Knowledge sources, not artificial articles.
+  // Old proposals without routes retain their previous behaviour.
+  const assignedToArticles = new Set(proposal.articles.flatMap(article => article.documentIds));
+  const referenceFiles = Object.entries(proposal.documentRoutes ?? {})
+    .filter(([id, route]) => !route.articleCandidate && !assignedToArticles.has(id))
+    .map(([id]) => {
+      const file = importFilesById.get(id);
+      if (!file || file.status !== "text_ready") {
+        throw new Error(`El documento informativo ${id} no está disponible para guardar.`);
+      }
+      return file;
+    });
+  if (proposal.documentRoutes) {
+    for (const article of proposal.articles) {
+      for (const documentId of article.documentIds) {
+        if (!proposal.documentRoutes[documentId]?.articleCandidate) {
+          throw new Error(`No puede crearse un artículo para el documento no clasificado ${documentId}.`);
+        }
+      }
+    }
+  }
+
   const [existingFolders, existingKnowledgeFiles] =
     await Promise.all([
       prisma.knowledge_libraries.findMany({
@@ -389,6 +411,45 @@ export async function confirmKnowledgeImport({
       generatedContent: null as string | null,
     });
   }
+  // Deduplicate independent reference files against Knowledge and this batch
+  // BEFORE entering the database transaction (hashing may require Blob IO).
+  const referenceFilesToCreate: typeof referenceFiles = [];
+  const referenceSkippedDocuments: KnowledgeImportSkippedDocumentLog[] = [];
+  for (const importFile of referenceFiles) {
+    const hash = await resolveContentHash(importFile);
+    if (!hash) throw new Error(`No se puede verificar el contenido de ${importFile.file_name}`);
+    const identity = `${importFile.file_size}:${hash}`;
+    const existingFile = existingFileByHash.get(identity);
+    if (existingFile) {
+      referenceSkippedDocuments.push({
+        importFileId: importFile.id,
+        existingKnowledgeFileId: existingFile.id,
+        fileName: importFile.file_name,
+        fileSize: importFile.file_size,
+        articleId: existingFile.knowledge_sources.id,
+        articleTitle: existingFile.knowledge_sources.title,
+        reason: "duplicate_name_and_size",
+      });
+      continue;
+    }
+    const acceptedId = acceptedImportFileIdByHash.get(identity);
+    if (acceptedId) {
+      referenceSkippedDocuments.push({
+        importFileId: importFile.id,
+        existingKnowledgeFileId: null,
+        duplicateImportFileId: acceptedId,
+        fileName: importFile.file_name,
+        fileSize: importFile.file_size,
+        articleId: null,
+        articleTitle: importFile.file_name,
+        reason: "duplicate_in_import_batch",
+      });
+      continue;
+    }
+    acceptedImportFileIdByHash.set(identity, importFile.id);
+    referenceFilesToCreate.push(importFile);
+  }
+
   /*
    * Esta llamada usa OpenAI y antes se ejecutaba dentro de
    * prisma.$transaction(). Esa era la causa directa del P2028.
@@ -582,7 +643,54 @@ export async function confirmKnowledgeImport({
         const createdDocuments:
           KnowledgeImportCreatedDocumentLog[] = [];
         const skippedDocuments:
-          KnowledgeImportSkippedDocumentLog[] = [];
+          KnowledgeImportSkippedDocumentLog[] = [...referenceSkippedDocuments];
+
+        // An original file must be readable by the assistant without an article.
+        // The knowledge_sources row is a DOCUMENT, not a PROCEDURE or ARTICLE.
+        for (const importFile of referenceFilesToCreate) {
+          const route = proposal.documentRoutes?.[importFile.id];
+          const source = await tx.knowledge_sources.create({
+            data: {
+              owner_user_id: knowledgeImport.owner_user_id,
+              title: importFile.file_name,
+              description: route?.reason || "Documento informativo original",
+              visibility: "private",
+              content: importFile.extracted_text,
+              status: "published",
+              knowledge_type: "document",
+              library_id: knowledgeImport.library_id,
+              created_by_user_id: userId,
+              updated_by_user_id: userId,
+              summary: route?.reason || "Documento de consulta",
+              company_id: knowledgeImport.company_id,
+            },
+            select: { id: true, title: true },
+          });
+          const storedFile = await tx.knowledge_files.create({
+            data: {
+              knowledge_source_id: source.id,
+              file_name: importFile.file_name,
+              file_type: importFile.mime_type,
+              file_size: importFile.file_size,
+              content_hash: importFile.content_hash ?? (await resolveContentHash(importFile)),
+              storage_path: importFile.storage_path,
+              extracted_text: importFile.extracted_text,
+              status: "ready",
+              uploaded_by_user_id: userId,
+            },
+          });
+          createdDocuments.push({
+            importFileId: importFile.id,
+            knowledgeFileId: storedFile.id,
+            fileName: storedFile.file_name,
+            fileSize: storedFile.file_size,
+            articleId: null,
+            articleTitle: "",
+            sourceKind: "document",
+            extractedCharacters: importFile.extracted_text.length,
+            storagePath: importFile.storage_path,
+          });
+        }
 
         for (const plan of articlePlans) {
           const { article, filesToCreate } = plan;
@@ -745,6 +853,7 @@ export async function confirmKnowledgeImport({
               });
 
             articleDocumentLogs.push({
+              sourceKind: "article",
               importFileId: importFile.id,
               knowledgeFileId:
                 createdKnowledgeFile.id,
