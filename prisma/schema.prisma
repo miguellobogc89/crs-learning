@@ -169,9 +169,6 @@ model user_lesson_progress {
 }
 
 model users {
-  record_relations_reviewed engine_record_relations[] @relation("engine_record_relation_reviewer")
-  relation_proposals_reviewed engine_relation_proposals[] @relation("engine_relation_reviewed_by")
-  relation_proposals_created engine_relation_proposals[] @relation("engine_relation_proposed_by")
   id                                                                                           String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email                                                                                        String                             @unique
   name                                                                                         String?
@@ -198,11 +195,17 @@ model users {
   course_request_votes                                                                         course_request_votes[]
   course_requests                                                                              course_requests[]
   courses                                                                                      courses[]
-  engine_value_conflicts                                                                       engine_value_conflicts[]
+  engine_import_plans_engine_import_plans_created_by_user_idTousers                            engine_import_plans[]              @relation("engine_import_plans_created_by_user_idTousers")
+  engine_import_plans_engine_import_plans_reviewed_by_user_idTousers                           engine_import_plans[]              @relation("engine_import_plans_reviewed_by_user_idTousers")
   engine_record_provenance                                                                     engine_record_provenance[]
+  record_relations_reviewed                                                                    engine_record_relations[]          @relation("engine_record_relation_reviewer")
   engine_record_revisions                                                                      engine_record_revisions[]
   engine_records_engine_records_created_by_user_idTousers                                      engine_records[]                   @relation("engine_records_created_by_user_idTousers")
   engine_records_engine_records_updated_by_user_idTousers                                      engine_records[]                   @relation("engine_records_updated_by_user_idTousers")
+  engine_relation_definitions                                                                  engine_relation_definitions[]      @relation("engine_relation_creator")
+  relation_proposals_created                                                                   engine_relation_proposals[]        @relation("engine_relation_proposed_by")
+  relation_proposals_reviewed                                                                  engine_relation_proposals[]        @relation("engine_relation_reviewed_by")
+  engine_value_conflicts                                                                       engine_value_conflicts[]
   knowledge_activity                                                                           knowledge_activity[]
   knowledge_correction_requests_knowledge_correction_requests_assigned_to_user_idTousers       knowledge_correction_requests[]    @relation("knowledge_correction_requests_assigned_to_user_idTousers")
   knowledge_correction_requests_knowledge_correction_requests_requested_by_user_idTousers      knowledge_correction_requests[]    @relation("knowledge_correction_requests_requested_by_user_idTousers")
@@ -241,7 +244,6 @@ model users {
   workspaces                                                                                   workspaces[]
 
   @@index([company_id], map: "idx_users_company_id")
-  engine_relation_definitions engine_relation_definitions[] @relation("engine_relation_creator")
 }
 
 model sections {
@@ -327,23 +329,23 @@ model knowledge_sources {
 }
 
 model knowledge_files {
+  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  knowledge_source_id       String                      @db.Uuid
+  file_name                 String
+  file_type                 String?
+  file_size                 Int?
+  storage_path              String?
+  extracted_text            String                      @default("")
+  status                    String                      @default("uploaded")
+  created_at                DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime                    @default(now()) @db.Timestamptz(6)
+  uploaded_by_user_id       String?                     @db.Uuid
+  content_hash              String?
+  engine_record_provenance  engine_record_provenance[]
   engine_relation_proposals engine_relation_proposals[]
-  id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  knowledge_source_id      String                     @db.Uuid
-  file_name                String
-  file_type                String?
-  file_size                Int?
-  storage_path             String?
-  extracted_text           String                     @default("")
-  status                   String                     @default("uploaded")
-  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
-  updated_at               DateTime                   @default(now()) @db.Timestamptz(6)
-  uploaded_by_user_id      String?                    @db.Uuid
-  content_hash             String?
-  engine_record_provenance engine_record_provenance[]
-  knowledge_file_analysis  knowledge_file_analysis?
-  knowledge_sources        knowledge_sources          @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users                    users?                     @relation(fields: [uploaded_by_user_id], references: [id], onUpdate: NoAction)
+  knowledge_file_analysis   knowledge_file_analysis?
+  knowledge_sources         knowledge_sources           @relation(fields: [knowledge_source_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                     users?                      @relation(fields: [uploaded_by_user_id], references: [id], onUpdate: NoAction)
 
   @@index([knowledge_source_id], map: "idx_knowledge_files_knowledge_source_id")
   @@index([uploaded_by_user_id], map: "idx_knowledge_files_uploaded_by_user_id")
@@ -1258,38 +1260,40 @@ model workspace_members {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model workspaces {
-  engine_record_relations engine_record_relations[]
-  engine_relation_proposals engine_relation_proposals[]
-  id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  owner_user_id            String?                    @db.Uuid
-  organization_id          String?                    @db.Uuid
-  name                     String
-  slug                     String
-  description              String?
-  visibility               String                     @default("private")
-  status                   String                     @default("active")
-  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
-  updated_at               DateTime                   @default(now()) @db.Timestamptz(6)
-  engine_field_definitions engine_field_definitions[]
-  engine_object_types      engine_object_types[]
-  engine_record_provenance engine_record_provenance[]
-  engine_record_revisions  engine_record_revisions[]
-  engine_records           engine_records[]
-  engine_value_conflicts   engine_value_conflicts[]
-  knowledge_libraries      knowledge_libraries[]
-  knowledge_teams          knowledge_teams[]
-  user_resource_access     user_resource_access[]
-  workspace_invites        workspace_invites[]
-  workspace_members        workspace_members[]
-  organizations            organizations?             @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users                    users?                     @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                                String                              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  owner_user_id                     String?                             @db.Uuid
+  organization_id                   String?                             @db.Uuid
+  name                              String
+  slug                              String
+  description                       String?
+  visibility                        String                              @default("private")
+  status                            String                              @default("active")
+  created_at                        DateTime                            @default(now()) @db.Timestamptz(6)
+  updated_at                        DateTime                            @default(now()) @db.Timestamptz(6)
+  engine_field_definitions          engine_field_definitions[]
+  engine_import_plans               engine_import_plans[]
+  engine_object_types               engine_object_types[]
+  engine_record_provenance          engine_record_provenance[]
+  engine_record_relations           engine_record_relations[]
+  engine_record_revisions           engine_record_revisions[]
+  engine_records                    engine_records[]
+  engine_relation_definitions       engine_relation_definitions[]
+  engine_relation_proposals         engine_relation_proposals[]
+  engine_value_conflicts            engine_value_conflicts[]
+  engine_workspace_catalog_bindings engine_workspace_catalog_bindings[]
+  knowledge_libraries               knowledge_libraries[]
+  knowledge_teams                   knowledge_teams[]
+  user_resource_access              user_resource_access[]
+  workspace_invites                 workspace_invites[]
+  workspace_members                 workspace_members[]
+  organizations                     organizations?                      @relation(fields: [organization_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                             users?                              @relation(fields: [owner_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([organization_id, slug], map: "workspaces_organization_slug_unique", where: raw("(organization_id IS NOT NULL)"))
   @@unique([owner_user_id, slug], map: "workspaces_personal_slug_unique", where: raw("(owner_user_id IS NOT NULL)"))
   @@index([organization_id], map: "idx_workspaces_organization_id")
   @@index([owner_user_id], map: "idx_workspaces_owner_user_id")
   @@index([status], map: "idx_workspaces_status")
-  engine_relation_definitions engine_relation_definitions[]
 }
 
 model workspace_invites {
@@ -1533,24 +1537,24 @@ model engine_field_definitions {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model engine_relation_definitions {
+  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id              String                      @db.Uuid
+  key                       String
+  name                      String
+  description               String?
+  from_object_type_id       String                      @db.Uuid
+  to_object_type_id         String                      @db.Uuid
+  cardinality               String
+  status                    String                      @default("active")
+  created_by_user_id        String?                     @db.Uuid
+  created_at                DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at                DateTime                    @default(now()) @db.Timestamptz(6)
+  engine_record_relations   engine_record_relations[]
+  created_by                users?                      @relation("engine_relation_creator", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  from_object_type          engine_object_types         @relation("engine_relation_from", fields: [workspace_id, from_object_type_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_relation_definitions_from_fk")
+  to_object_type            engine_object_types         @relation("engine_relation_to", fields: [workspace_id, to_object_type_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_relation_definitions_to_fk")
+  workspaces                workspaces                  @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
   engine_relation_proposals engine_relation_proposals[]
-  engine_record_relations engine_record_relations[]
-  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspace_id        String              @db.Uuid
-  key                 String
-  name                String
-  description         String?
-  from_object_type_id String              @db.Uuid
-  to_object_type_id   String              @db.Uuid
-  cardinality         String
-  status              String              @default("active")
-  created_by_user_id  String?             @db.Uuid
-  created_at          DateTime            @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime            @default(now()) @db.Timestamptz(6)
-  workspaces          workspaces          @relation(fields: [workspace_id], references: [id], onDelete: Restrict)
-  from_object_type    engine_object_types @relation("engine_relation_from", fields: [workspace_id, from_object_type_id], references: [workspace_id, id], onDelete: Restrict)
-  to_object_type      engine_object_types @relation("engine_relation_to", fields: [workspace_id, to_object_type_id], references: [workspace_id, id], onDelete: Restrict)
-  created_by          users?              @relation("engine_relation_creator", fields: [created_by_user_id], references: [id], onDelete: SetNull)
 
   @@unique([workspace_id, key], map: "engine_relation_definitions_workspace_key_unique")
   @@unique([workspace_id, id], map: "engine_relation_definitions_workspace_id_unique")
@@ -1559,21 +1563,22 @@ model engine_relation_definitions {
 }
 
 model engine_object_types {
-  relation_definitions_from engine_relation_definitions[] @relation("engine_relation_from")
-  relation_definitions_to   engine_relation_definitions[] @relation("engine_relation_to")
-  id                       String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  key                      String
-  name                     String
-  description              String?
-  status                   String                     @default("active")
-  schema_version           Int                        @default(1)
-  settings                 Json                       @default("{}")
-  created_at               DateTime                   @default(now()) @db.Timestamptz(6)
-  updated_at               DateTime                   @default(now()) @db.Timestamptz(6)
-  workspace_id             String                     @db.Uuid
-  engine_field_definitions engine_field_definitions[]
-  workspaces               workspaces                 @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
-  engine_records           engine_records[]
+  id                                String                             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key                               String
+  name                              String
+  description                       String?
+  status                            String                             @default("active")
+  schema_version                    Int                                @default(1)
+  settings                          Json                               @default("{}")
+  created_at                        DateTime                           @default(now()) @db.Timestamptz(6)
+  updated_at                        DateTime                           @default(now()) @db.Timestamptz(6)
+  workspace_id                      String                             @db.Uuid
+  engine_field_definitions          engine_field_definitions[]
+  workspaces                        workspaces                         @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
+  engine_records                    engine_records[]
+  relation_definitions_from         engine_relation_definitions[]      @relation("engine_relation_from")
+  relation_definitions_to           engine_relation_definitions[]      @relation("engine_relation_to")
+  engine_workspace_catalog_bindings engine_workspace_catalog_bindings?
 
   @@unique([workspace_id, id], map: "engine_object_types_workspace_id_unique")
   @@unique([workspace_id, key], map: "engine_object_types_workspace_key_unique")
@@ -1597,38 +1602,36 @@ model engine_value_conflicts {
   resolved_at         DateTime?  @db.Timestamptz(6)
   created_at          DateTime   @default(now()) @db.Timestamptz(6)
   updated_at          DateTime   @default(now()) @db.Timestamptz(6)
-  workspaces          workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
-  users               users?     @relation(fields: [resolved_by_user_id], references: [id], onDelete: SetNull)
+  users               users?     @relation(fields: [resolved_by_user_id], references: [id], onUpdate: NoAction)
+  workspaces          workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([workspace_id, fingerprint], map: "engine_value_conflicts_workspace_fingerprint_idx")
   @@index([workspace_id, status, created_at(sort: Desc)], map: "engine_value_conflicts_workspace_status_idx")
 }
 
-/// This table contains check constraints and requires additional setup for migrations.
-
 model engine_records {
-  record_relations_to engine_record_relations[] @relation("engine_record_relation_to")
-  record_relations_from engine_record_relations[] @relation("engine_record_relation_from")
-  relation_proposals_to engine_relation_proposals[] @relation("engine_relation_proposal_to")
-  relation_proposals_from engine_relation_proposals[] @relation("engine_relation_proposal_from")
-  id                                             String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  object_type_id                                 String                     @db.Uuid
+  id                                             String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  object_type_id                                 String                      @db.Uuid
   external_key                                   String?
-  status                                         String                     @default("draft")
-  values_json                                    Json                       @default("{}")
-  schema_version                                 Int                        @default(1)
-  revision                                       Int                        @default(1)
-  created_by_user_id                             String?                    @db.Uuid
-  updated_by_user_id                             String?                    @db.Uuid
-  created_at                                     DateTime                   @default(now()) @db.Timestamptz(6)
-  updated_at                                     DateTime                   @default(now()) @db.Timestamptz(6)
-  workspace_id                                   String                     @db.Uuid
+  status                                         String                      @default("draft")
+  values_json                                    Json                        @default("{}")
+  schema_version                                 Int                         @default(1)
+  revision                                       Int                         @default(1)
+  created_by_user_id                             String?                     @db.Uuid
+  updated_by_user_id                             String?                     @db.Uuid
+  created_at                                     DateTime                    @default(now()) @db.Timestamptz(6)
+  updated_at                                     DateTime                    @default(now()) @db.Timestamptz(6)
+  workspace_id                                   String                      @db.Uuid
   engine_record_provenance                       engine_record_provenance[]
+  record_relations_from                          engine_record_relations[]   @relation("engine_record_relation_from")
+  record_relations_to                            engine_record_relations[]   @relation("engine_record_relation_to")
   engine_record_revisions                        engine_record_revisions[]
-  users_engine_records_created_by_user_idTousers users?                     @relation("engine_records_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
-  engine_object_types                            engine_object_types        @relation(fields: [workspace_id, object_type_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_records_object_fk")
-  users_engine_records_updated_by_user_idTousers users?                     @relation("engine_records_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
-  workspaces                                     workspaces                 @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
+  users_engine_records_created_by_user_idTousers users?                      @relation("engine_records_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  engine_object_types                            engine_object_types         @relation(fields: [workspace_id, object_type_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_records_object_fk")
+  users_engine_records_updated_by_user_idTousers users?                      @relation("engine_records_updated_by_user_idTousers", fields: [updated_by_user_id], references: [id], onUpdate: NoAction)
+  workspaces                                     workspaces                  @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
+  relation_proposals_from                        engine_relation_proposals[] @relation("engine_relation_proposal_from")
+  relation_proposals_to                          engine_relation_proposals[] @relation("engine_relation_proposal_to")
 
   @@unique([object_type_id, external_key], map: "engine_records_external_key_unique", where: raw("(external_key IS NOT NULL)"))
   @@unique([workspace_id, id], map: "engine_records_workspace_id_unique")
@@ -1685,9 +1688,7 @@ model engine_record_provenance {
   @@index([workspace_id, record_id, revision], map: "engine_provenance_workspace_record_idx")
 }
 
-
 model engine_relation_proposals {
-  approved_relation engine_record_relations?
   id                     String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspace_id           String                      @db.Uuid
   relation_definition_id String                      @db.Uuid
@@ -1700,13 +1701,14 @@ model engine_relation_proposals {
   reviewed_by_user_id    String?                     @db.Uuid
   reviewed_at            DateTime?                   @db.Timestamptz(6)
   created_at             DateTime                    @default(now()) @db.Timestamptz(6)
-  workspace              workspaces                  @relation(fields: [workspace_id], references: [id], onDelete: Restrict)
-  definition             engine_relation_definitions @relation(fields: [workspace_id, relation_definition_id], references: [workspace_id, id], onDelete: Restrict, map: "engine_relation_proposals_definition_fk")
-  from_record            engine_records              @relation("engine_relation_proposal_from", fields: [workspace_id, from_record_id], references: [workspace_id, id], onDelete: Restrict, map: "engine_relation_proposals_from_fk")
-  to_record              engine_records              @relation("engine_relation_proposal_to", fields: [workspace_id, to_record_id], references: [workspace_id, id], onDelete: Restrict, map: "engine_relation_proposals_to_fk")
-  document               knowledge_files             @relation(fields: [document_id], references: [id], onDelete: Restrict)
-  proposed_by            users?                      @relation("engine_relation_proposed_by", fields: [proposed_by_user_id], references: [id], onDelete: SetNull)
-  reviewed_by            users?                      @relation("engine_relation_reviewed_by", fields: [reviewed_by_user_id], references: [id], onDelete: SetNull)
+  approved_relation      engine_record_relations?
+  definition             engine_relation_definitions @relation(fields: [workspace_id, relation_definition_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_relation_proposals_definition_fk")
+  document               knowledge_files             @relation(fields: [document_id], references: [id], onUpdate: NoAction)
+  from_record            engine_records              @relation("engine_relation_proposal_from", fields: [workspace_id, from_record_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_relation_proposals_from_fk")
+  proposed_by            users?                      @relation("engine_relation_proposed_by", fields: [proposed_by_user_id], references: [id], onUpdate: NoAction)
+  reviewed_by            users?                      @relation("engine_relation_reviewed_by", fields: [reviewed_by_user_id], references: [id], onUpdate: NoAction)
+  to_record              engine_records              @relation("engine_relation_proposal_to", fields: [workspace_id, to_record_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_relation_proposals_to_fk")
+  workspace              workspaces                  @relation(fields: [workspace_id], references: [id], onUpdate: NoAction)
 
   @@unique([workspace_id, relation_definition_id, from_record_id, to_record_id, document_id, evidence_text], map: "engine_relation_proposals_unique_evidence")
   @@index([workspace_id, status, created_at(sort: Desc)], map: "engine_relation_proposals_pending_idx")
@@ -1715,23 +1717,161 @@ model engine_relation_proposals {
 }
 
 model engine_record_relations {
-  id                     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspace_id           String @db.Uuid
-  relation_definition_id String @db.Uuid
-  from_record_id         String @db.Uuid
-  to_record_id           String @db.Uuid
-  source_proposal_id     String? @unique @db.Uuid
-  reviewed_by_user_id    String? @db.Uuid
-  created_at             DateTime @default(now()) @db.Timestamptz(6)
-
-  workspace workspaces @relation(fields: [workspace_id], references: [id], onDelete: Restrict)
-  definition engine_relation_definitions @relation(fields: [workspace_id, relation_definition_id], references: [workspace_id, id], onDelete: Restrict)
-  from_record engine_records @relation("engine_record_relation_from", fields: [workspace_id, from_record_id], references: [workspace_id, id], onDelete: Restrict)
-  to_record engine_records @relation("engine_record_relation_to", fields: [workspace_id, to_record_id], references: [workspace_id, id], onDelete: Restrict)
-  reviewer users? @relation("engine_record_relation_reviewer", fields: [reviewed_by_user_id], references: [id], onDelete: SetNull)
-  source_proposal engine_relation_proposals? @relation(fields: [source_proposal_id], references: [id], onDelete: Restrict)
+  id                     String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id           String                      @db.Uuid
+  relation_definition_id String                      @db.Uuid
+  from_record_id         String                      @db.Uuid
+  to_record_id           String                      @db.Uuid
+  source_proposal_id     String?                     @unique @db.Uuid
+  reviewed_by_user_id    String?                     @db.Uuid
+  created_at             DateTime                    @default(now()) @db.Timestamptz(6)
+  definition             engine_relation_definitions @relation(fields: [workspace_id, relation_definition_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_record_relations_definition_fk")
+  from_record            engine_records              @relation("engine_record_relation_from", fields: [workspace_id, from_record_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_record_relations_from_fk")
+  source_proposal        engine_relation_proposals?  @relation(fields: [source_proposal_id], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "engine_record_relations_proposal_fk")
+  reviewer               users?                      @relation("engine_record_relation_reviewer", fields: [reviewed_by_user_id], references: [id], onUpdate: NoAction, map: "engine_record_relations_reviewer_fk")
+  to_record              engine_records              @relation("engine_record_relation_to", fields: [workspace_id, to_record_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_record_relations_to_fk")
+  workspace              workspaces                  @relation(fields: [workspace_id], references: [id], onUpdate: NoAction, map: "engine_record_relations_workspace_fk")
 
   @@unique([workspace_id, relation_definition_id, from_record_id, to_record_id], map: "engine_record_relations_unique_pair")
   @@index([workspace_id, from_record_id], map: "engine_record_relations_from_idx")
   @@index([workspace_id, to_record_id], map: "engine_record_relations_to_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model engine_catalog_fields {
+  id                           String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type_id                      String                       @db.Uuid
+  type_version                 Int
+  key                          String
+  name                         String
+  field_type                   String
+  description                  String?
+  is_required                  Boolean                      @default(false)
+  is_unique                    Boolean                      @default(false)
+  sort_order                   Int                          @default(0)
+  configuration                Json                         @default("{}")
+  status                       String                       @default("active")
+  created_at                   DateTime                     @default(now()) @db.Timestamptz(6)
+  engine_catalog_type_versions engine_catalog_type_versions @relation(fields: [type_id, type_version], references: [type_id, version], onUpdate: NoAction, map: "engine_catalog_fields_type_version_fk")
+
+  @@unique([type_id, type_version, key], map: "engine_catalog_fields_type_version_key_unique")
+  @@index([type_id, type_version, sort_order], map: "engine_catalog_fields_sort_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model engine_catalog_relations {
+  id                                                                               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key                                                                              String
+  version                                                                          Int                  @default(1)
+  name                                                                             String
+  description                                                                      String?
+  from_type_id                                                                     String               @db.Uuid
+  to_type_id                                                                       String               @db.Uuid
+  cardinality                                                                      String
+  status                                                                           String               @default("active")
+  created_at                                                                       DateTime             @default(now()) @db.Timestamptz(6)
+  engine_catalog_types_engine_catalog_relations_from_type_idToengine_catalog_types engine_catalog_types @relation("engine_catalog_relations_from_type_idToengine_catalog_types", fields: [from_type_id], references: [id], onUpdate: NoAction)
+  engine_catalog_types_engine_catalog_relations_to_type_idToengine_catalog_types   engine_catalog_types @relation("engine_catalog_relations_to_type_idToengine_catalog_types", fields: [to_type_id], references: [id], onUpdate: NoAction)
+
+  @@unique([key, version], map: "engine_catalog_relations_key_version_unique")
+  @@index([from_type_id], map: "engine_catalog_relations_from_idx")
+  @@index([to_type_id], map: "engine_catalog_relations_to_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model engine_catalog_type_versions {
+  type_id                           String                              @db.Uuid
+  version                           Int
+  status                            String                              @default("draft")
+  notes                             String?
+  created_at                        DateTime                            @default(now()) @db.Timestamptz(6)
+  published_at                      DateTime?                           @db.Timestamptz(6)
+  engine_catalog_fields             engine_catalog_fields[]
+  engine_catalog_types              engine_catalog_types                @relation(fields: [type_id], references: [id], onUpdate: NoAction)
+  engine_workspace_catalog_bindings engine_workspace_catalog_bindings[]
+
+  @@id([type_id, version])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model engine_catalog_types {
+  id                                                                                   String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key                                                                                  String                         @unique
+  name                                                                                 String
+  description                                                                          String?
+  status                                                                               String                         @default("active")
+  created_at                                                                           DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at                                                                           DateTime                       @default(now()) @db.Timestamptz(6)
+  engine_catalog_relations_engine_catalog_relations_from_type_idToengine_catalog_types engine_catalog_relations[]     @relation("engine_catalog_relations_from_type_idToengine_catalog_types")
+  engine_catalog_relations_engine_catalog_relations_to_type_idToengine_catalog_types   engine_catalog_relations[]     @relation("engine_catalog_relations_to_type_idToengine_catalog_types")
+  engine_catalog_type_versions                                                         engine_catalog_type_versions[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model engine_import_plans {
+  id                                                   String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id                                         String     @db.Uuid
+  created_by_user_id                                   String     @db.Uuid
+  reviewed_by_user_id                                  String?    @db.Uuid
+  status                                               String     @default("draft")
+  revision                                             Int        @default(1)
+  idempotency_key                                      String?
+  source_json                                          Json       @default("{}")
+  plan_json                                            Json       @default("{}")
+  review_json                                          Json       @default("{}")
+  result_json                                          Json?
+  plan_hash                                            String?
+  created_at                                           DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at                                           DateTime   @default(now()) @db.Timestamptz(6)
+  expires_at                                           DateTime?  @db.Timestamptz(6)
+  committed_at                                         DateTime?  @db.Timestamptz(6)
+  users_engine_import_plans_created_by_user_idTousers  users      @relation("engine_import_plans_created_by_user_idTousers", fields: [created_by_user_id], references: [id], onUpdate: NoAction)
+  users_engine_import_plans_reviewed_by_user_idTousers users?     @relation("engine_import_plans_reviewed_by_user_idTousers", fields: [reviewed_by_user_id], references: [id], onUpdate: NoAction)
+  workspaces                                           workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([workspace_id, id], map: "engine_import_plans_workspace_id_unique")
+  @@unique([workspace_id, idempotency_key], map: "engine_import_plans_workspace_key_unique")
+  @@index([expires_at], map: "engine_import_plans_expiry_idx", where: raw("(expires_at IS NOT NULL)"))
+  @@index([workspace_id, status, created_at(sort: Desc)], map: "engine_import_plans_workspace_status_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model engine_workspace_catalog_bindings {
+  id                                String                              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id                      String                              @db.Uuid
+  catalog_type_id                   String                              @db.Uuid
+  catalog_version                   Int
+  local_object_type_id              String?                             @db.Uuid
+  status                            String                              @default("active")
+  created_at                        DateTime                            @default(now()) @db.Timestamptz(6)
+  updated_at                        DateTime                            @default(now()) @db.Timestamptz(6)
+  engine_object_types               engine_object_types?                @relation(fields: [workspace_id, local_object_type_id], references: [workspace_id, id], onUpdate: NoAction, map: "engine_workspace_catalog_bindings_local_fk")
+  engine_catalog_type_versions      engine_catalog_type_versions        @relation(fields: [catalog_type_id, catalog_version], references: [type_id, version], onUpdate: NoAction, map: "engine_workspace_catalog_bindings_version_fk")
+  workspaces                        workspaces                          @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  engine_workspace_field_extensions engine_workspace_field_extensions[]
+
+  @@unique([workspace_id, local_object_type_id], map: "engine_workspace_catalog_bindings_workspace_local_unique")
+  @@unique([workspace_id, catalog_type_id], map: "engine_workspace_catalog_bindings_workspace_type_unique")
+  @@index([catalog_type_id, catalog_version], map: "engine_workspace_catalog_bindings_type_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model engine_workspace_field_extensions {
+  id                                String                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id                      String                            @db.Uuid
+  catalog_type_id                   String                            @db.Uuid
+  key                               String
+  name                              String
+  field_type                        String
+  description                       String?
+  is_required                       Boolean                           @default(false)
+  is_unique                         Boolean                           @default(false)
+  configuration                     Json                              @default("{}")
+  sort_order                        Int                               @default(0)
+  status                            String                            @default("active")
+  created_at                        DateTime                          @default(now()) @db.Timestamptz(6)
+  updated_at                        DateTime                          @default(now()) @db.Timestamptz(6)
+  engine_workspace_catalog_bindings engine_workspace_catalog_bindings @relation(fields: [workspace_id, catalog_type_id], references: [workspace_id, catalog_type_id], onDelete: Cascade, onUpdate: NoAction, map: "engine_workspace_field_extensions_binding_fk")
+
+  @@unique([workspace_id, catalog_type_id, key], map: "engine_workspace_field_extensions_key_unique")
 }
