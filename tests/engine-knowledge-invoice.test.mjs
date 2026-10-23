@@ -15,7 +15,7 @@ new Function("exports", "require", js)(exports, id => {
   if (id === "node:crypto") return require(id);
   return {};
 });
-const { invoiceFileIds, checkedInvoice, stableJson } = exports;
+const { invoiceFileIds, checkedInvoice, stableJson, invoiceMissingFields } = exports;
 
 function route(articleCandidate, structuredCandidate) {
   return { articleCandidate, structuredCandidate, knowledge: true };
@@ -136,4 +136,70 @@ test("advisory lock returns a Prisma-compatible integer instead of PostgreSQL vo
   const source = fs.readFileSync(filename, "utf8");
   assert.match(source, /SELECT 1::integer AS acquired\s+FROM pg_advisory_xact_lock\(hashtext\(/);
   assert.doesNotMatch(source, /SELECT pg_advisory_xact_lock\(/);
+});
+
+
+test("Spanish long-form date is accepted with literal evidence", () => {
+  const text = "Factura núm: OM4VAHJ0014748\n04 de Agosto de 2026\nTotal factura 38,00 €";
+  const data = checkedInvoice({
+    values: { invoice_number: "OM4VAHJ0014748", issue_date: "2026-08-04", total_amount: 38 },
+    evidence: {
+      invoice_number: "Factura núm: OM4VAHJ0014748",
+      issue_date: "04 de Agosto de 2026",
+      total_amount: "Total factura 38,00 €",
+    },
+  }, text, new Map([["invoice_number", "text"], ["issue_date", "date"], ["total_amount", "decimal"]]));
+  assert.equal(data.values.issue_date, "2026-08-04");
+});
+
+test("multiple validated tax rate rows can add up to global base and VAT", () => {
+  const quote = "DETALLE (€)\nIVA Base Imponible Cuota Total\n4% 138,00 5,52 143,52\n21% 7,52 1,58 9,10";
+  const text = "Nº Factura: A-V2026-00000974054\n" + quote + "\nTotal Factura 152,62";
+  const data = checkedInvoice({
+    values: { invoice_number: "A-V2026-00000974054",
+      net_amount: 145.52, tax_amount: 7.1, total_amount: 152.62 },
+    evidence: { invoice_number: "Nº Factura: A-V2026-00000974054",
+      net_amount: quote, tax_amount: quote, total_amount: "Total Factura 152,62" },
+    calculations: {
+      net_amount: { operation: "sum", operands: [138, 7.52] },
+      tax_amount: { operation: "sum", operands: [5.52, 1.58] },
+    },
+  }, text, new Map([["invoice_number", "text"], ["net_amount", "decimal"],
+    ["tax_amount", "decimal"], ["total_amount", "decimal"]]));
+  assert.equal(data.values.net_amount, 145.52);
+  assert.equal(data.values.tax_amount, 7.1);
+  assert.equal(data.calculations.tax_amount.operation, "sum");
+});
+
+test("unverifiable tax row calculations are rejected without rejecting verified invoice total", () => {
+  const quote = "DETALLE IVA 4% 138,00 5,52 21% 7,52 1,58";
+  const text = "Factura A-1\n" + quote + "\nTOTAL 152,62";
+  const data = checkedInvoice({
+    values: { invoice_number: "A-1", net_amount: 500,
+      total_amount: 152.62 },
+    evidence: { invoice_number: "Factura A-1", net_amount: quote,
+      total_amount: "TOTAL 152,62" },
+    calculations: { net_amount: { operation: "sum", operands: [138, 7.52] } },
+  }, text, new Map([["invoice_number", "text"], ["net_amount", "decimal"],
+    ["total_amount", "decimal"]]));
+  assert.equal("net_amount" in data.values, false);
+  assert.equal(data.values.total_amount, 152.62);
+});
+
+test("repeat import enriches only missing fields; established values are immutable", () => {
+  const existing = { invoice_number: "018-2026", total_amount: 955, tax_amount: 165.74 };
+  const incoming = { invoice_number: "018-2026", total_amount: 999,
+    tax_amount: 165.74, net_amount: 789.26, issue_date: "2026-02-12" };
+  assert.deepEqual(invoiceMissingFields(existing, incoming),
+    { net_amount: 789.26, issue_date: "2026-02-12" });
+  assert.deepEqual(invoiceMissingFields({ ...existing, net_amount: 789.26,
+    issue_date: "2026-02-12" }, incoming), {});
+});
+
+test("preflight no longer queries or blocks on already uploaded PDF hashes", () => {
+  const content = fs.readFileSync(
+    new URL("../lib/knowledge/import/pipeline/preflight.ts", import.meta.url), "utf8",
+  );
+  assert.match(content, /status: formats\[index\]\.supported/);
+  assert.doesNotMatch(content, /loadExistingKnowledgeDocuments\(/);
 });
