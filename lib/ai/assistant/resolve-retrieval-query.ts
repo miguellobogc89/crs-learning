@@ -1,5 +1,6 @@
 // lib/ai/assistant/resolve-retrieval-query.ts
 import OpenAI from "openai";
+import { getOpenAIModel } from "@/lib/ai/openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -36,7 +37,7 @@ export async function resolveRetrievalQuery({
     .join("\n\n");
 
   const response = await openai.responses.create({
-    model: "gpt-4.1-mini",
+    model: getOpenAIModel(),
 
     input: [
       {
