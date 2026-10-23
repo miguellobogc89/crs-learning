@@ -414,6 +414,7 @@ export async function confirmKnowledgeImport({
   // Deduplicate independent reference files against Knowledge and this batch
   // BEFORE entering the database transaction (hashing may require Blob IO).
   const referenceFilesToCreate: typeof referenceFiles = [];
+  const referenceContentHashById = new Map<string, string>();
   const referenceSkippedDocuments: KnowledgeImportSkippedDocumentLog[] = [];
   for (const importFile of referenceFiles) {
     const hash = await resolveContentHash(importFile);
@@ -447,6 +448,7 @@ export async function confirmKnowledgeImport({
       continue;
     }
     acceptedImportFileIdByHash.set(identity, importFile.id);
+    referenceContentHashById.set(importFile.id, hash);
     referenceFilesToCreate.push(importFile);
   }
 
@@ -672,7 +674,7 @@ export async function confirmKnowledgeImport({
               file_name: importFile.file_name,
               file_type: importFile.mime_type,
               file_size: importFile.file_size,
-              content_hash: importFile.content_hash ?? (await resolveContentHash(importFile)),
+              content_hash: referenceContentHashById.get(importFile.id) ?? importFile.content_hash,
               storage_path: importFile.storage_path,
               extracted_text: importFile.extracted_text,
               status: "ready",
