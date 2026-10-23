@@ -7,6 +7,7 @@ import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
 import { prisma } from "@/lib/prisma";
 import { analyzeKnowledgeSource } from "@/lib/services/knowledge-analysis.service";
 import { createKnowledgeStatusSnapshot } from "@/lib/services/knowledge-library.service";
+import { validatePreparedInvoicePlan, commitPreparedInvoices } from "@/lib/engine/knowledge-invoice-import.service";
 
 import { generateArticleContent } from "./generate-article-content";
 import type {
@@ -289,6 +290,11 @@ export async function confirmKnowledgeImport({
       }
     }
   }
+
+  const preparedInvoicePlan = await validatePreparedInvoicePlan({
+    importId, userId, workspaceId, proposal,
+    files: knowledgeImport.knowledge_import_files,
+  });
 
   const [existingFolders, existingKnowledgeFiles] =
     await Promise.all([
@@ -909,6 +915,15 @@ export async function confirmKnowledgeImport({
           });
         }
 
+        // Knowledge files, the invoice records and their provenance are atomic.
+        // No Engine write occurs until the user confirms the full proposal.
+        const engineImports = preparedInvoicePlan
+          ? await commitPreparedInvoices(tx, {
+              workspaceId, userId, importId,
+              prepared: preparedInvoicePlan, documents: createdDocuments,
+            })
+          : [];
+
         const completedAt = new Date();
 
         const executionLog:
@@ -965,6 +980,7 @@ export async function confirmKnowledgeImport({
           articles: processedArticles,
           documents: createdDocuments,
           skippedDocuments,
+          engineImports,
           proposalSnapshot: proposal,
         };
 
