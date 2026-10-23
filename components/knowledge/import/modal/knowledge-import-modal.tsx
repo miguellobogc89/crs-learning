@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { useKnowledgeImport } from "../hooks/use-knowledge-import";
+import type { InvoiceImportPreview } from "@/lib/engine/knowledge-invoice-import.service";
 import { KnowledgeImportModalHeader } from "./knowledge-import-modal-header";
 import { KnowledgeImportModalProgress } from "./knowledge-import-modal-progress";
 import { KnowledgeImportModalFooter } from "./knowledge-import-modal-footer";
@@ -300,6 +301,10 @@ export function KnowledgeImportModal({
       resumeImportId,
     });
 
+  const [invoicePreview, setInvoicePreview] = useState<InvoiceImportPreview | null>(null);
+  const [invoicePreviewLoading, setInvoicePreviewLoading] = useState(false);
+  const [invoicePreviewError, setInvoicePreviewError] = useState<string | null>(null);
+
   const selectionKey = getFilesSelectionKey(knowledgeImport.files);
 
   const isWaitingToStart =
@@ -367,6 +372,41 @@ export function KnowledgeImportModal({
     knowledgeImport.files.length,
     knowledgeImport.analyzeDocuments,
   ]);
+
+  // This is the only Engine preview for the import: it stores a reviewable
+  // catalog-backed plan, but never writes schemas or records.
+  useEffect(() => {
+    if (!open || knowledgeImport.step !== "proposal" ||
+        !knowledgeImport.proposal || !knowledgeImport.importId) {
+      setInvoicePreview(null);
+      setInvoicePreviewError(null);
+      setInvoicePreviewLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setInvoicePreview(null);
+    setInvoicePreviewError(null);
+    setInvoicePreviewLoading(true);
+    const run = async () => {
+      try {
+        const response = await fetch(
+          "/api/knowledge/import/" + encodeURIComponent(knowledgeImport.importId!) + "/engine-preview",
+          { method: "POST", signal: controller.signal },
+        );
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error ?? "No se pudo analizar Engine.");
+        if (!controller.signal.aborted) setInvoicePreview(payload as InvoiceImportPreview);
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          setInvoicePreviewError(cause instanceof Error ? cause.message : "No se pudo preparar Engine.");
+        }
+      } finally {
+        if (!controller.signal.aborted) setInvoicePreviewLoading(false);
+      }
+    };
+    void run();
+    return () => controller.abort();
+  }, [open, knowledgeImport.step, knowledgeImport.proposal, knowledgeImport.importId]);
 
   if (!context) {
     return null;
@@ -582,6 +622,9 @@ export function KnowledgeImportModal({
                   error={
                     knowledgeImport.error
                   }
+                  invoicePreview={invoicePreview}
+                  invoicePreviewLoading={invoicePreviewLoading}
+                  invoicePreviewError={invoicePreviewError}
                   onBack={
                     knowledgeImport.goBackToUpload
                   }
@@ -641,6 +684,9 @@ export function KnowledgeImportModal({
               }
               isConfirming={
                 knowledgeImport.isConfirming
+              }
+              canConfirm={
+                invoicePreview !== null && !invoicePreviewLoading && !invoicePreviewError
               }
               canContinue={
                 knowledgeImport.canContinue
