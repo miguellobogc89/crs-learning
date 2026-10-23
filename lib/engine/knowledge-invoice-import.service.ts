@@ -60,7 +60,7 @@ export function invoiceMissingFields(
  * changes. Reuse and verify that snapshot instead of inserting it twice.
  * For databases without that trigger, create it once (idempotently).
  */
-async function ensureInvoiceRevisionSnapshot(
+export async function ensureInvoiceRevisionSnapshot(
   tx: Prisma.TransactionClient,
   input: {
     workspaceId: string;
