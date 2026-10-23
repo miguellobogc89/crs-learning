@@ -387,8 +387,9 @@ export async function validatePreparedInvoicePlan(input: {
     const file = input.files.find(f => f.id === doc.fileId);
     if (!file || doc.externalKey !== externalKeyForFile(file))
       throw new Error("La factura cambió después del análisis.");
-    const checked = checkedInvoice({ values: doc.values, evidence: doc.evidence },
-      file.extracted_text, INVOICE_FIELDS);
+    const checked = checkedInvoice({
+      values: doc.values, evidence: doc.evidence, calculations: doc.calculations,
+    }, file.extracted_text, INVOICE_FIELDS);
     if (stableJson(checked.values) !== stableJson(doc.values))
       throw new Error("Los datos de la factura ya no superan la validación.");
   }
