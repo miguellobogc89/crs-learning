@@ -189,7 +189,7 @@ export function KnowledgeInfoSidebar() {
             const unassigned = item.files.filter(file =>
               file.assignedToArticle === false && !file.skippedAsDuplicate);
             return (
-              <details key={item.id}
+              <details key={item.id} defaultOpen={index === 0}
                 className="group rounded-xl border border-slate-200 bg-white">
                 <summary className="cursor-pointer list-none px-3 py-3 [&::-webkit-details-marker]:hidden">
                   <div className="flex items-start justify-between gap-2">
