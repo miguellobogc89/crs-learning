@@ -21,6 +21,7 @@ import type {
   GenerateKnowledgeImportProposalResult,
   KnowledgeImportDocumentAnalysis,
   KnowledgeImportDocumentInput,
+  KnowledgeImportDocumentRoute,
   KnowledgeImportProposal,
 } from "./types";
 
@@ -626,6 +627,48 @@ export async function generateKnowledgeImportProposal({
     message: `${documents.length} documentos preparados`,
   });
 
+  // The document inventory is the authoritative routing step. Do not
+  // allow legacy "every document must become an article" logic to bypass it.
+  const storedImportProposal = knowledgeImport.proposal_json &&
+    typeof knowledgeImport.proposal_json === "object" &&
+    !Array.isArray(knowledgeImport.proposal_json)
+      ? knowledgeImport.proposal_json as Record<string, unknown>
+      : null;
+  const inventoryValue = storedImportProposal?.globalImportMap;
+  const inventory = inventoryValue && typeof inventoryValue === "object" &&
+    !Array.isArray(inventoryValue)
+      ? inventoryValue as { documents?: Array<{ fileId?: string; routing?: KnowledgeImportDocumentRoute }> }
+      : null;
+
+  if (!Array.isArray(inventory?.documents)) {
+    throw new Error("Falta la clasificación de destinos. Vuelve a analizar los documentos antes de generar artículos.");
+  }
+
+  const documentRoutes: Record<string, KnowledgeImportDocumentRoute> = {};
+  for (const document of documents) {
+    const classified = inventory.documents.filter(item => item.fileId === document.id);
+    if (classified.length === 0 || classified.some(item =>
+      !item.routing || item.routing.knowledge !== true ||
+      typeof item.routing.articleCandidate !== "boolean" ||
+      typeof item.routing.structuredCandidate !== "boolean"
+    )) {
+      throw new Error(`El archivo "${document.name}" no tiene una clasificación válida. Repite el reconocimiento antes de continuar.`);
+    }
+    const routes = classified.map(item => item.routing!);
+    const structuredKeys = [...new Set(routes.flatMap(item => item.existingStructureKeys ?? []))];
+    const structuredFields = [...new Set(routes.flatMap(item => item.structuredFields ?? []))];
+    documentRoutes[document.id] = {
+      knowledge: true,
+      articleCandidate: routes.some(item => item.articleCandidate),
+      structuredCandidate: routes.some(item => item.structuredCandidate),
+      reason: routes.map(item => item.reason).filter(Boolean).join(" · ").slice(0, 600),
+      structuredFields,
+      existingArticleId: routes.find(item => item.articleCandidate && item.existingArticleId)?.existingArticleId ?? null,
+      existingStructureKeys: structuredKeys,
+    };
+  }
+  const articleDocuments = documents.filter(document => documentRoutes[document.id].articleCandidate);
+
   await prisma.knowledge_imports.updateMany({
     where: {
       id: importId,
@@ -645,8 +688,9 @@ export async function generateKnowledgeImportProposal({
 
   try {
     const documentAnalyses =
-      await analyzeKnowledgeDocuments(
-        documents,
+      articleDocuments.length > 0
+        ? await analyzeKnowledgeDocuments(
+        articleDocuments,
         {
           onProgress: async ({
             analyzedDocuments,
@@ -672,7 +716,8 @@ export async function generateKnowledgeImportProposal({
             });
           },
         },
-      );
+      )
+        : [];
 
     await onProgress?.({
       step: "reading_knowledge",
@@ -694,11 +739,20 @@ export async function generateKnowledgeImportProposal({
         "Definiendo carpetas y artí­culos",
     });
 
-    const generatedProposal =
-      await generateGlobalProposal(
-        documentAnalyses,
-        existingKnowledge,
-      );
+    const generatedProposal: GeneratedProposal =
+      articleDocuments.length > 0
+        ? await generateGlobalProposal(
+            documentAnalyses,
+            existingKnowledge,
+          )
+        : {
+            title: "Documentos de consulta",
+            description: "Los archivos se conservarán en Knowledge sin generar artículos innecesarios. Los candidatos a JSON no se insertarán automáticamente en Engine.",
+            summary: { totalDocuments: 0, totalFolders: 0, totalArticles: 0, totalWarnings: 0 },
+            folders: [],
+            articles: [],
+            warnings: [],
+          };
 
     await onProgress?.({
       step: "validating_structure",
@@ -707,16 +761,14 @@ export async function generateKnowledgeImportProposal({
         "Validando la estructura propuesta",
     });
 
-    // Preserve the light document inventory alongside the Knowledge proposal.
-    const storedInventory = knowledgeImport.proposal_json &&
-      typeof knowledgeImport.proposal_json === "object" &&
-      !Array.isArray(knowledgeImport.proposal_json)
-        ? (knowledgeImport.proposal_json as Record<string, unknown>).globalImportMap
-        : null;
+    // Preserve the original sources and their document-first routing decisions.
+    // "totalDocuments" counts ALL sources, not merely sources assigned to an article.
     const proposal: KnowledgeImportProposal = {
       ...generatedProposal,
+      summary: { ...generatedProposal.summary, totalDocuments: documents.length },
       documentAnalyses,
-      ...(storedInventory ? { globalImportMap: storedInventory } : {}),
+      documentRoutes,
+      ...(inventoryValue ? { globalImportMap: inventoryValue } : {}),
     };
 
     await onProgress?.({
