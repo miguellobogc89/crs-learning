@@ -84,7 +84,7 @@ const INVOICE_FIELDS = new Map<string, string>([
   ["total_amount", "decimal"], ["payment_terms", "text"], ["reference", "text"],
   ["notes", "long_text"],
 ]);
-function checkedInvoice(raw: unknown, text: string, fields: Map<string, string>) {
+export function checkedInvoice(raw: unknown, text: string, fields: Map<string, string>) {
   if (!isObject(raw) || !isObject(raw.values) || !isObject(raw.evidence))
     throw new Error("La extracción de factura no contiene un JSON verificable.");
   const values: InvoiceImportRow["values"] = {};
