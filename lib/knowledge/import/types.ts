@@ -296,6 +296,8 @@ export type KnowledgeImportExecutionLog = {
     fileName: string;
     status: "completed" | "completed_with_issues" | "no_records_imported" | "error";
     recordsCreated: number;
+    recordsUpdated?: number;
+    fieldsCompleted?: number;
     recordsReused: number;
     error?: string;
     stages?: Array<{ stage: string; durationMs: number; details: Record<string, number | boolean> }>;
