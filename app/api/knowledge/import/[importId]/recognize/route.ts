@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import OpenAI from "openai";
+import { getKnowledgeImportModel } from "@/lib/ai/openai";
 import { prisma } from "@/lib/prisma";
 import {
   appendInventoryFile, emptyImportInventory,
@@ -148,10 +149,9 @@ export async function POST(request: Request, context: Context) {
   const numbered = lines.map((line, i) => `${i + 1}: ${line}`).join("\n");
   let documents: InventoryDocument[];
   try {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 24000, maxRetries: 0 });
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 48000, maxRetries: 0 });
     const completion = await client.chat.completions.create({
-      model: process.env.CRS_IMPORT_INVENTORY_MODEL || "gpt-4o-mini",
-      temperature: 0,
+      model: getKnowledgeImportModel(),
       response_format: { type: "json_object" },
       max_completion_tokens: 3500,
       messages: [
