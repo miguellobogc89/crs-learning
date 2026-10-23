@@ -190,7 +190,8 @@ function validDate(value: string, quote: string) {
 const INVOICE_FIELDS = new Map<string, string>([
   ["invoice_number", "text"], ["issue_date", "date"], ["due_date", "date"],
   ["currency", "text"], ["net_amount", "decimal"], ["tax_amount", "decimal"],
-  ["total_amount", "decimal"], ["payment_terms", "text"], ["reference", "text"],
+  ["total_amount", "decimal"], ["payment_method", "text"], ["payment_terms", "text"],
+  ["reference", "text"],
   ["notes", "long_text"],
 ]);
 function checkedSum(
@@ -216,6 +217,12 @@ function checkedSum(
     return true;
   });
 }
+/** A settlement channel is not a payment deadline or a contractual term. */
+export function isInvoicePaymentMethodOnly(value: string): boolean {
+  const payment = norm(value);
+  return /^(?:transferencia(?: bancaria)?|transferencia inmediata|domiciliaci[oó]n(?: bancaria)?|cargo en cuenta|adeudo(?: directo)?|tarjeta(?: bancaria| de cr[eé]dito| de d[eé]bito)?|efectivo|met[aá]lico|bizum|cheque|paypal|tpv|pago con tarjeta)$/.test(payment);
+}
+
 export function checkedInvoice(raw: unknown, text: string, fields: Map<string, string>) {
   if (!isObject(raw) || !isObject(raw.values) || !isObject(raw.evidence))
     throw new Error("La extracción de factura no contiene un JSON verificable.");
@@ -243,7 +250,20 @@ export function checkedInvoice(raw: unknown, text: string, fields: Map<string, s
       values[key] = value;
     } else if ((fieldType === "text" || fieldType === "long_text") &&
         typeof value === "string" && value.trim().length > 0 && value.length <= 1000) {
-      if (key === "invoice_number" && !norm(quote).includes(norm(value))) continue;
+      if ((key === "invoice_number" || key === "payment_method" || key === "payment_terms") &&
+          !norm(quote).includes(norm(value))) continue;
+      // A payment channel is never a payment term. If the model placed it in
+      // payment_terms, safely relabel it when the catalog supports the method.
+      if (key === "payment_terms" && isInvoicePaymentMethodOnly(value)) {
+        if (fields.get("payment_method") === "text" &&
+            !Object.hasOwn(raw.values, "payment_method") &&
+            !Object.hasOwn(values, "payment_method")) {
+          values.payment_method = value.trim();
+          evidence.payment_method = quote;
+        }
+        continue;
+      }
+      if (key === "payment_method" && !isInvoicePaymentMethodOnly(value)) continue;
       values[key] = value.trim();
     } else continue;
     evidence[key] = quote;
@@ -262,6 +282,9 @@ async function extract(file: StagingFile, fields: Map<string, string>) {
       "Extrae UNA factura comercial. Usa solo las claves del catálogo incluido en el input.",
       "Cada valor debe tener una cita breve LITERAL del documento en evidence con la misma clave.",
       "Extrae número, fecha de emisión, base imponible, cuota de IVA y total, si constan.",
+      "DIFERENCIA ESTRICTAMENTE payment_method (transferencia, tarjeta, efectivo, domiciliación, etc.) de payment_terms (plazo, vencimiento, al contado, condiciones de pago).",
+      "La palabra TRANSFERENCIA indica payment_method, NUNCA payment_terms.",
+      "No rellenes payment_terms si el documento solo indica un medio de pago.",
       "La fecha puede estar escrita en español, por ejemplo 04 de Agosto de 2026; conviértela a YYYY-MM-DD.",
       "Base imponible puede aparecer como subtotal o base sujeta; cuota IVA como impuesto o cuota tributaria.",
       "Si la factura muestra bases o cuotas desglosadas por varios tipos de IVA sin suma explícita, puedes sumar únicamente esos componentes.",
@@ -284,7 +307,7 @@ async function extract(file: StagingFile, fields: Map<string, string>) {
   try { parsed = JSON.parse(response.output_text); }
   catch { throw new Error("JSON no válido para " + file.file_name); }
   const primary = checkedInvoice(parsed, file.extracted_text, fields);
-  const missing = ["issue_date", "net_amount", "tax_amount"].filter(key =>
+  const missing = ["issue_date", "net_amount", "tax_amount", "payment_method"].filter(key =>
     fields.has(key) && primary.values[key] === undefined);
   if (!missing.length) return primary;
   // Bounded second pass: models often overlook a date written in words or
@@ -301,6 +324,8 @@ async function extract(file: StagingFile, fields: Map<string, string>) {
         "usa calculations: {nombre_campo: {operation: 'sum', operands: [n1, n2]}}.",
         "Los operandos deben aparecer exactamente en la cita literal de evidence.",
         "Distingue total de factura y totales parciales de tickets o líneas.",
+        "payment_method es el medio utilizado (transferencia, tarjeta, etc.);",
+        "no etiquetes un medio de pago como payment_terms, que se reserva al plazo o vencimiento.",
         "Omite valores sin evidencia suficiente; no inventes ni estimes."
       ].join("\n"),
       input: JSON.stringify({
