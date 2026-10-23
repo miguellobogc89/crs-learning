@@ -1082,6 +1082,7 @@ export function useKnowledgeImport({
   }, [recordPreview, importId]);
 
   return {
+    importId,
     globalMap,
     recognition,
     semantic,
