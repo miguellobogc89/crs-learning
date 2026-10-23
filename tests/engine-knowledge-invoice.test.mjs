@@ -15,7 +15,7 @@ new Function("exports", "require", js)(exports, id => {
   if (id === "node:crypto") return require(id);
   return {};
 });
-const { invoiceFileIds, checkedInvoice, stableJson, invoiceMissingFields } = exports;
+const { invoiceFileIds, checkedInvoice, stableJson, invoiceMissingFields, ensureInvoiceRevisionSnapshot } = exports;
 
 function route(articleCandidate, structuredCandidate) {
   return { articleCandidate, structuredCandidate, knowledge: true };
@@ -208,4 +208,72 @@ test("preflight no longer queries or blocks on already uploaded PDF hashes", () 
   );
   assert.match(content, /status: formats\[index\]\.supported/);
   assert.doesNotMatch(content, /loadExistingKnowledgeDocuments\(/);
+});
+
+
+function revisionInput() {
+  return {
+    workspaceId: "ws",
+    recordId: "record",
+    objectTypeId: "invoice",
+    revision: 2,
+    schemaVersion: 1,
+    status: "draft",
+    values: { invoice_number: "A-1", total_amount: 121, net_amount: 100 },
+    userId: "user",
+  };
+}
+
+test("invoice enrichment reuses DB-created revision instead of inserting it twice", async () => {
+  const input = revisionInput();
+  let inserts = 0;
+  let reads = 0;
+  const tx = {
+    engine_record_revisions: {
+      findFirst: async () => {
+        reads++;
+        return { values_json: { total_amount: 121, net_amount: 100, invoice_number: "A-1" },
+          schema_version: 1, status: "draft" };
+      },
+      createMany: async () => { inserts++; return { count: 0 }; },
+    },
+  };
+  await ensureInvoiceRevisionSnapshot(tx, input);
+  assert.equal(reads, 1);
+  assert.equal(inserts, 0, "automatic database snapshot must not be duplicated");
+});
+
+test("invoice revision missing a DB trigger is safely inserted just once", async () => {
+  const input = revisionInput();
+  let stored;
+  let inserts = 0;
+  const tx = {
+    engine_record_revisions: {
+      findFirst: async () => stored ?? null,
+      createMany: async ({ data, skipDuplicates }) => {
+        assert.equal(skipDuplicates, true);
+        inserts++;
+        stored = { values_json: data[0].values_json,
+          schema_version: data[0].schema_version, status: data[0].status };
+        return { count: 1 };
+      },
+    },
+  };
+  await ensureInvoiceRevisionSnapshot(tx, input);
+  assert.equal(inserts, 1);
+  await ensureInvoiceRevisionSnapshot(tx, input);
+  assert.equal(inserts, 1, "second call must be idempotent");
+});
+
+test("invoice revision mismatch aborts rather than silently treating it as valid", async () => {
+  const input = revisionInput();
+  const tx = {
+    engine_record_revisions: {
+      findFirst: async () => ({
+        values_json: { invoice_number: "A-1", total_amount: 999 }, schema_version: 1, status: "draft",
+      }),
+      createMany: async () => { throw new Error("Must not overwrite existing revision"); },
+    },
+  };
+  await assert.rejects(ensureInvoiceRevisionSnapshot(tx, input), /no coincide/);
 });
