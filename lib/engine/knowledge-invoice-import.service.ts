@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { getKnowledgeImportModel, getOpenAIClient } from "@/lib/ai/openai";
 import { prisma } from "@/lib/prisma";
 import { validateEngineRecordValues } from "@/lib/engine/validation";
-import type { KnowledgeImportProposal, KnowledgeImportCreatedDocumentLog, KnowledgeImportExecutionLog } from "@/lib/knowledge/import/types";
+import type { KnowledgeImportProposal, KnowledgeImportCreatedDocumentLog, KnowledgeImportSkippedDocumentLog, KnowledgeImportExecutionLog } from "@/lib/knowledge/import/types";
 
 export type InvoiceImportRow = {
   fileId: string;
@@ -398,6 +398,7 @@ export async function commitPreparedInvoices(
     workspaceId: string; userId: string; importId: string;
     prepared: { planId: string; plan: InvoicePlan };
     documents: KnowledgeImportCreatedDocumentLog[];
+    skippedDocuments: KnowledgeImportSkippedDocumentLog[];
   },
 ): Promise<NonNullable<KnowledgeImportExecutionLog["engineImports"]>> {
   const plan = await tx.engine_import_plans.findFirst({
@@ -483,26 +484,98 @@ export async function commitPreparedInvoices(
     data: { workspace_id: workspaceId, catalog_type_id: catalog.id,
       catalog_version: input.prepared.plan.catalogVersion, local_object_type_id: local.id },
   });
-  const sourceById = new Map(input.documents.map(doc => [doc.importFileId, doc]));
+  // Knowledge may skip storing a PDF already present in this workspace.
+  // Reuse that exact original as the provenance of any newly recovered fields.
+  const sourceById = new Map(input.documents.map(doc => [
+    doc.importFileId, { knowledgeFileId: doc.knowledgeFileId, sourceId: doc.articleId },
+  ]));
+  const reuseIds = [...new Set(input.skippedDocuments
+    .map(item => item.existingKnowledgeFileId).filter((id): id is string => !!id))];
+  const reusedFiles = reuseIds.length ? await tx.knowledge_files.findMany({
+    where: {
+      id: { in: reuseIds },
+      knowledge_sources: {
+        owner_user_id: input.userId,
+        knowledge_libraries: { workspace_id: workspaceId },
+      },
+    },
+    select: { id: true, knowledge_source_id: true },
+  }) : [];
+  const reusedFileById = new Map(reusedFiles.map(file => [file.id, file]));
+  for (const skipped of input.skippedDocuments) {
+    if (skipped.existingKnowledgeFileId) {
+      const reused = reusedFileById.get(skipped.existingKnowledgeFileId);
+      if (reused) sourceById.set(skipped.importFileId, {
+        knowledgeFileId: reused.id, sourceId: reused.knowledge_source_id,
+      });
+    } else if (skipped.duplicateImportFileId) {
+      const withinBatch = sourceById.get(skipped.duplicateImportFileId);
+      if (withinBatch) sourceById.set(skipped.importFileId, withinBatch);
+    }
+  }
+
   const outcomes: NonNullable<KnowledgeImportExecutionLog["engineImports"]> = [];
   for (const doc of input.prepared.plan.documents) {
     const source = sourceById.get(doc.fileId);
-    if (!source || source.sourceKind !== "document") {
-      outcomes.push({ knowledgeFileId: source?.knowledgeFileId ?? "",
-        fileName: doc.fileName, status: "no_records_imported",
-        recordsCreated: 0, recordsReused: 0 });
-      continue;
-    }
     const existing = await tx.engine_records.findFirst({
       where: { workspace_id: workspaceId, object_type_id: local.id,
         external_key: doc.externalKey },
-      select: { id: true },
+      select: { id: true, status: true, values_json: true,
+        revision: true, schema_version: true },
     });
     if (existing) {
-      outcomes.push({ knowledgeFileId: source.knowledgeFileId, fileName: doc.fileName,
-        status: "completed", recordsCreated: 0, recordsReused: 1 });
+      const additions = invoiceMissingFields(existing.values_json, doc.values);
+      const keys = Object.keys(additions);
+      if (!keys.length) {
+        outcomes.push({
+          knowledgeFileId: source?.knowledgeFileId ?? "", fileName: doc.fileName,
+          status: "completed", recordsCreated: 0, recordsUpdated: 0,
+          recordsReused: 1,
+        });
+        continue;
+      }
+      if (!source) throw new Error("No hay PDF original verificable para completar la factura " + doc.fileName);
+      const merged = { ...(isObject(existing.values_json) ? existing.values_json : {}), ...additions };
+      const validation = validateEngineRecordValues(merged, local.engine_field_definitions);
+      if (!validation.ok) throw new Error("La factura completada no encaja en Engine: " + JSON.stringify(validation.issues));
+      const updated = await tx.engine_records.update({
+        where: { id: existing.id },
+        data: { values_json: merged as Prisma.InputJsonObject,
+          revision: { increment: 1 }, updated_by_user_id: input.userId,
+          updated_at: new Date() },
+        select: { revision: true },
+      });
+      await tx.engine_record_revisions.create({
+        data: { workspace_id: workspaceId, record_id: existing.id, object_type_id: local.id,
+          revision: updated.revision, schema_version: existing.schema_version,
+          status: existing.status, values_json: merged as Prisma.InputJsonObject,
+          changed_by_user_id: input.userId },
+      });
+      for (const key of keys) {
+        const quote = doc.evidence[key];
+        if (!quote) throw new Error("Falta evidencia para el campo nuevo " + key);
+        const calc = doc.calculations?.[key];
+        await tx.engine_record_provenance.create({
+          data: {
+            workspace_id: workspaceId, record_id: existing.id,
+            revision: updated.revision, field_key: key,
+            source_locator: "knowledge-import:" + input.importId + "/file:" + doc.fileId,
+            knowledge_file_id: source.knowledgeFileId,
+            knowledge_source_id: source.sourceId,
+            evidence_text: calc ? quote + " | suma: " + calc.operands.join(" + ") : quote,
+            origin_type: "document", created_by_user_id: input.userId,
+          },
+        });
+      }
+      outcomes.push({
+        knowledgeFileId: source.knowledgeFileId, fileName: doc.fileName,
+        status: "completed", recordsCreated: 0, recordsUpdated: 1,
+        recordsReused: 0, fieldsCompleted: keys.length,
+      });
       continue;
     }
+
+    if (!source) throw new Error("No hay PDF original verificable para crear la factura " + doc.fileName);
     const validation = validateEngineRecordValues(doc.values, local.engine_field_definitions);
     if (!validation.ok) throw new Error("Los campos de factura no encajan en Engine: " + JSON.stringify(validation.issues));
     const created = await tx.engine_records.create({
@@ -511,28 +584,27 @@ export async function commitPreparedInvoices(
         status: "draft", revision: 1, schema_version: local.schema_version,
         created_by_user_id: input.userId, updated_by_user_id: input.userId },
     });
-    await tx.engine_record_revisions.createMany({
-      data: [{ workspace_id: workspaceId, record_id: created.id, object_type_id: local.id,
+    await tx.engine_record_revisions.create({
+      data: { workspace_id: workspaceId, record_id: created.id, object_type_id: local.id,
         revision: 1, schema_version: local.schema_version, status: "draft",
-        values_json: doc.values as Prisma.InputJsonObject, changed_by_user_id: input.userId }],
-      skipDuplicates: true,
+        values_json: doc.values as Prisma.InputJsonObject, changed_by_user_id: input.userId },
     });
-    // Preserve exact provenance for every field (not one undifferentiated quote).
     for (const [fieldKey, quote] of Object.entries(doc.evidence)) {
+      const calc = doc.calculations?.[fieldKey];
       await tx.engine_record_provenance.create({
         data: {
           workspace_id: workspaceId, record_id: created.id, revision: 1,
           field_key: fieldKey,
           source_locator: "knowledge-import:" + input.importId + "/file:" + doc.fileId,
           knowledge_file_id: source.knowledgeFileId,
-          knowledge_source_id: source.articleId,
-          evidence_text: quote, origin_type: "document",
-          created_by_user_id: input.userId,
+          knowledge_source_id: source.sourceId,
+          evidence_text: calc ? quote + " | suma: " + calc.operands.join(" + ") : quote,
+          origin_type: "document", created_by_user_id: input.userId,
         },
       });
     }
     outcomes.push({ knowledgeFileId: source.knowledgeFileId, fileName: doc.fileName,
-      status: "completed", recordsCreated: 1, recordsReused: 0 });
+      status: "completed", recordsCreated: 1, recordsUpdated: 0, recordsReused: 0 });
   }
   await tx.engine_import_plans.update({
     where: { id: plan.id },
