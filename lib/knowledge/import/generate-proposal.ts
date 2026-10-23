@@ -4,6 +4,7 @@ import {
   getOpenAIClient,
 } from "@/lib/ai/openai";
 import { prisma } from "@/lib/prisma";
+import type { ImportInventory } from "./build-import-map";
 import { listKnowledgeStatus } from "@/lib/services/knowledge-library.service";
 
 import {
@@ -635,12 +636,22 @@ export async function generateKnowledgeImportProposal({
       ? knowledgeImport.proposal_json as Record<string, unknown>
       : null;
   const inventoryValue = storedImportProposal?.globalImportMap;
-  const inventory = inventoryValue && typeof inventoryValue === "object" &&
+  // Check the inventory envelope before retaining it as a typed proposal.
+  const envelope = inventoryValue && typeof inventoryValue === "object" &&
     !Array.isArray(inventoryValue)
-      ? inventoryValue as { documents?: Array<{ fileId?: string; routing?: KnowledgeImportDocumentRoute }> }
+      ? inventoryValue as Partial<ImportInventory>
+      : null;
+  const inventory: ImportInventory | null =
+    envelope?.format === "crs-import-map" &&
+    envelope.version === 3 &&
+    envelope.importId === importId &&
+    Array.isArray(envelope.files) &&
+    Array.isArray(envelope.documents) &&
+    envelope.summary !== undefined
+      ? envelope as ImportInventory
       : null;
 
-  if (!Array.isArray(inventory?.documents)) {
+  if (!inventory) {
     throw new Error("Falta la clasificación de destinos. Vuelve a analizar los documentos antes de generar artículos.");
   }
 
@@ -774,7 +785,7 @@ export async function generateKnowledgeImportProposal({
       summary: { ...generatedProposal.summary, totalDocuments: documents.length },
       documentAnalyses,
       documentRoutes,
-      ...(inventoryValue ? { globalImportMap: inventoryValue } : {}),
+      globalImportMap: inventory,
     };
 
     await onProgress?.({
