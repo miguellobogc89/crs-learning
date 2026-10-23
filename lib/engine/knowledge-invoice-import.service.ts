@@ -268,7 +268,7 @@ export async function previewKnowledgeInvoices(input: {
   const otherStructuredCandidates = Object.entries(proposal.documentRoutes ?? {})
     .filter(([id, route]) => route.structuredCandidate && !ids.includes(id)).length;
   if (!ids.length) return { status: "not_applicable", planId: null,
-    recordsToInsert: 0, recordsToReuse: 0, invoices: [], otherStructuredCandidates };
+    recordsToInsert: 0, recordsToUpdate: 0, recordsToReuse: 0, invoices: [], otherStructuredCandidates };
   if (ids.length > 12) throw new Error("Máximo 12 facturas por confirmación.");
   const ws = await prisma.workspaces.findFirst({
     where: { id: input.workspaceId, status: "active" },
@@ -297,17 +297,23 @@ export async function previewKnowledgeInvoices(input: {
     where: { workspace_id_key: { workspace_id: input.workspaceId, key: "invoice" } },
     select: { id: true },
   });
-  const priorKeys = local ? await prisma.engine_records.findMany({
+  const priorRecords = local ? await prisma.engine_records.findMany({
     where: { workspace_id: input.workspaceId, object_type_id: local.id },
-    select: { external_key: true },
+    select: { external_key: true, values_json: true },
   }) : [];
-  const existing = new Set(priorKeys.map(r => r.external_key));
+  const existing = new Map(priorRecords.filter(r => !!r.external_key)
+    .map(r => [r.external_key, r.values_json]));
   const rows: InvoiceImportRow[] = [];
   for (const file of files) {
     const extracted = await extract(file, fields);
     const externalKey = externalKeyForFile(file);
+    const previousValues = existing.get(externalKey);
+    const action: InvoiceImportRow["action"] = previousValues === undefined
+      ? "insert"
+      : Object.keys(invoiceMissingFields(previousValues, extracted.values)).length
+        ? "update" : "reuse";
     rows.push({ fileId: file.id, fileName: file.file_name, externalKey,
-      action: existing.has(externalKey) ? "reuse" : "insert", ...extracted });
+      action, ...extracted });
   }
   const body: InvoicePlan = {
     kind: "catalog_invoice_import_v1", catalogTypeId: catalog.id,
@@ -338,6 +344,7 @@ export async function previewKnowledgeInvoices(input: {
   return {
     status: "ready", planId: plan.id,
     recordsToInsert: rows.filter(r => r.action === "insert").length,
+    recordsToUpdate: rows.filter(r => r.action === "update").length,
     recordsToReuse: rows.filter(r => r.action === "reuse").length,
     invoices: rows.map(({ fileId, fileName, action, values }) =>
       ({ fileId, fileName, action, values })),
