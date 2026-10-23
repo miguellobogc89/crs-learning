@@ -2,10 +2,15 @@ name: Engine schema checks
 
 on:
   push:
-    branches: [engine]
+    branches: [engine, feature/knowledge-first-engine-manual]
     paths:
       - "prisma/**"
       - "lib/engine/**"
+      - "lib/knowledge/import/**"
+      - "components/knowledge/import/**"
+      - "app/api/knowledge/import/**"
+      - "app/(app)/engine/**"
+      - "tests/engine-knowledge-invoice.test.mjs"
       - "tests/engine/**"
       - "package.json"
       - "package-lock.json"
@@ -15,6 +20,11 @@ on:
     paths:
       - "prisma/**"
       - "lib/engine/**"
+      - "lib/knowledge/import/**"
+      - "components/knowledge/import/**"
+      - "app/api/knowledge/import/**"
+      - "app/(app)/engine/**"
+      - "tests/engine-knowledge-invoice.test.mjs"
       - "tests/engine/**"
       - "package.json"
       - "package-lock.json"
@@ -45,3 +55,5 @@ jobs:
         run: npx tsc --noEmit
       - name: Test relation definition planner
         run: node --test tests/engine/relation-definition-plan.test.cjs
+      - name: Test mixed knowledge and invoice import
+        run: npm run test:engine:knowledge-invoices
