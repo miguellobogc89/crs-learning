@@ -144,7 +144,7 @@ export function getKnowledgeTypeVisualStyle(
     ?.trim()
     .toLowerCase();
 
-  if (!normalizedType) {
+  if (!normalizedType || normalizedType === "document") {
     return FALLBACK_STYLE;
   }
 
