@@ -103,7 +103,8 @@ export async function GET() {
           const identified = inventoryDocuments.filter(doc => doc.fileId === file.id);
           const proposedForFile = proposedArticles.filter(article =>
             strings(article.documentIds).includes(file.id));
-          const storedForFile = executedDocuments.filter(doc => doc.importFileId === file.id);
+          const storedForFile = executedDocuments.filter(doc =>
+            doc.importFileId === file.id && doc.sourceKind !== "document");
           const skipped = skippedDocuments.find(doc => doc.importFileId === file.id);
           const articleTitles = item.status === "completed"
             ? [...new Set(storedForFile.map(doc => string(doc.articleTitle)).filter((value): value is string => Boolean(value)))]
