@@ -28,9 +28,18 @@ export function getOpenAI() {
   return getOpenAIClient();
 }
 
+/** General-purpose model for chat, retrieval and other assistant tasks. */
+export function getOpenAIModel() {
+  const model = process.env.OPENAI_MODEL?.trim();
+  if (!model) {
+    throw new Error("No se ha configurado OPENAI_MODEL");
+  }
+  return model;
+}
+
 export function getKnowledgeImportModel() {
   const model =
-    process.env.OPENAI_KNOWLEDGE_IMPORT_MODEL;
+    process.env.OPENAI_KNOWLEDGE_IMPORT_MODEL?.trim();
 
   if (!model) {
     throw new Error(
