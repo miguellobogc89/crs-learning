@@ -14,6 +14,7 @@ import { listAccessibleKnowledgeSpaces } from "@/lib/services/knowledge-space.se
 import { recordResourceAccess } from "@/lib/services/resource-access.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { resolveRetrievalQuery } from "@/lib/ai/assistant/resolve-retrieval-query";
+import { getOpenAIModel } from "@/lib/ai/openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -179,7 +180,7 @@ console.log("AI INPUT DEBUG", {
 
 
   const response = await openai.responses.create({
-    model: "gpt-4.1-mini",
+    model: getOpenAIModel(),
     input: [
       {
         role: "system",
@@ -253,7 +254,7 @@ const savedAssistantMessage =
       user_id: userId,
       role: "assistant",
       content: assistantMessage,
-      model: "gpt-4.1-mini",
+      model: getOpenAIModel(),
 
       tokens_input:
         response.usage?.input_tokens ?? null,
@@ -385,7 +386,7 @@ async function repairAnswerCitations({
 }) {
   const repairResponse =
     await openai.responses.create({
-      model: "gpt-4.1-mini",
+      model: getOpenAIModel(),
       input: [
         {
           role: "system",
