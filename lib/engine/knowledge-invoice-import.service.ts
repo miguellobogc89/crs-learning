@@ -36,6 +36,15 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 const norm = (s: string) =>
   s.normalize("NFKC").toLocaleLowerCase("es").replace(/\s+/g, " ").trim();
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+
+/** PostgreSQL jsonb may reorder object keys; equality and hashes must not depend on key order. */
+export function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, nested: unknown) =>
+    isObject(nested)
+      ? Object.fromEntries(Object.entries(nested).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))
+      : nested,
+  );
+}
 const externalKeyForFile = (f: StagingFile) =>
   "invoice:" + sha256(f.content_hash || f.extracted_text);
 
@@ -215,12 +224,12 @@ export async function previewKnowledgeInvoices(input: {
       idempotency_key: idempotencyKey, status: "ready",
       source_json: { importId: input.importId, fileIds: ids },
       plan_json: body as unknown as Prisma.InputJsonObject,
-      plan_hash: sha256(JSON.stringify(body)),
+      plan_hash: sha256(stableJson(body)),
       expires_at: new Date(Date.now() + 86400000) },
     update: { status: "ready", revision: { increment: 1 }, updated_at: new Date(),
       source_json: { importId: input.importId, fileIds: ids },
       plan_json: body as unknown as Prisma.InputJsonObject,
-      plan_hash: sha256(JSON.stringify(body)),
+      plan_hash: sha256(stableJson(body)),
       expires_at: new Date(Date.now() + 86400000) },
     select: { id: true },
   });
@@ -258,7 +267,7 @@ export async function validatePreparedInvoicePlan(input: {
       documentRows.length !== ids.length ||
       ids.some(id => !sourceFileIds.includes(id) ||
         !documentRows.some((row: unknown) => isObject(row) && row.fileId === id)) ||
-      sha256(JSON.stringify(data)) !== plan.plan_hash)
+      sha256(stableJson(data)) !== plan.plan_hash)
     throw new Error("La propuesta de Engine no coincide con los documentos.");
   for (const doc of documentRows) {
     if (!isObject(doc) || typeof doc.fileId !== "string" ||
@@ -269,7 +278,7 @@ export async function validatePreparedInvoicePlan(input: {
       throw new Error("La factura cambió después del análisis.");
     const checked = checkedInvoice({ values: doc.values, evidence: doc.evidence },
       file.extracted_text, INVOICE_FIELDS);
-    if (JSON.stringify(checked.values) !== JSON.stringify(doc.values))
+    if (stableJson(checked.values) !== stableJson(doc.values))
       throw new Error("Los datos de la factura ya no superan la validación.");
   }
   return { planId: plan.id, plan: data as unknown as InvoicePlan };
@@ -288,7 +297,7 @@ export async function commitPreparedInvoices(
   });
   if (!plan || plan.created_by_user_id !== input.userId ||
       (plan.expires_at && plan.expires_at <= new Date()) ||
-      plan.plan_hash !== sha256(JSON.stringify(input.prepared.plan))) {
+      plan.plan_hash !== sha256(stableJson(input.prepared.plan))) {
     throw new Error("La vista previa de Engine ha caducado o se ha modificado.");
   }
   // Preview permission is not sufficient: the commit rechecks membership.
