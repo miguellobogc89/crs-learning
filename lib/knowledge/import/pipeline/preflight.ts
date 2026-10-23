@@ -6,16 +6,7 @@ import {
   type KnowledgeDetectedFormat,
 } from "./detect-format";
 
-import {
-  calculateKnowledgeFileHash,
-  detectKnowledgeDuplicates,
-  type KnowledgeDuplicateCandidate,
-  type KnowledgeDuplicateResult,
-} from "./detect-duplicates";
-
-import {
-  loadExistingKnowledgeDocuments,
-} from "./load-existing-documents";
+import type { KnowledgeDuplicateResult } from "./detect-duplicates";
 
 export type KnowledgePreflightFile = {
   id: string;
@@ -63,98 +54,17 @@ export async function runKnowledgeImportPreflight(
     }),
   );
 
-  const candidates: KnowledgeDuplicateCandidate[] = [];
-
-  for (let index = 0; index < input.files.length; index++) {
-    const file = input.files[index];
-    const format = formats[index];
-
-    if (
-      !format.supported ||
-      format.kind !== "document"
-    ) {
-      continue;
-    }
-
-    candidates.push({
-      candidateId: file.id,
-      fileName: file.fileName,
-      fileSize: file.content.byteLength,
-      contentHash: calculateKnowledgeFileHash(
-        file.content,
-      ),
-    });
-  }
-
-  const existing = await loadExistingKnowledgeDocuments({
-    ownerUserId: input.ownerUserId,
-    workspaceId: input.workspaceId,
-    candidates,
-  });
-
-  const duplicateResults = detectKnowledgeDuplicates(
-    candidates,
-    existing.documents,
-  );
-
-  const duplicateByCandidateId = new Map(
-    duplicateResults.map((result) => [
-      result.candidate.candidateId,
-      result,
-    ]),
-  );
-
-  const files: KnowledgePreflightFileResult[] =
-    input.files.map((file, index) => {
-      const format = formats[index];
-
-      if (
-        !format.supported ||
-        format.kind !== "document"
-      ) {
-        return {
-          file,
-          format,
-          duplicate: null,
-          status: "unsupported",
-        };
-      }
-
-      const duplicate =
-        duplicateByCandidateId.get(file.id) ?? null;
-
-      if (
-        duplicate?.status ===
-          "duplicate-in-selection" ||
-        duplicate?.status ===
-          "duplicate-in-knowledge"
-      ) {
-        return {
-          file,
-          format,
-          duplicate,
-          status: "duplicate",
-        };
-      }
-
-      if (
-        duplicate?.status === "possible-duplicate"
-      ) {
-        return {
-          file,
-          format,
-          duplicate,
-          status: "possible-duplicate",
-        };
-      }
-
-      return {
-        file,
-        format,
-        duplicate,
-        status: "accepted",
-      };
-    });
+  // Discovery must analyze uploaded documents even if an identical PDF already
+  // exists in Knowledge. Deduplication belongs to the final commit stage, where
+  // we can decide whether to create, enrich or reuse an existing record.
+  // Unsupported formats remain blocked as an independent safety check.
+  const files: KnowledgePreflightFileResult[] = input.files.map((file, index) => ({
+    file,
+    format: formats[index],
+    duplicate: null,
+    status: formats[index].supported && formats[index].kind === "document"
+      ? "accepted" : "unsupported",
+  }));
 
   return {
     files,
@@ -171,7 +81,6 @@ export async function runKnowledgeImportPreflight(
       (file) =>
         file.status === "possible-duplicate",
     ),
-    unreadableExistingDocumentIds:
-      existing.unreadableDocumentIds,
+    unreadableExistingDocumentIds: [],
   };
 }
