@@ -921,6 +921,7 @@ export async function confirmKnowledgeImport({
           ? await commitPreparedInvoices(tx, {
               workspaceId, userId, importId,
               prepared: preparedInvoicePlan, documents: createdDocuments,
+              skippedDocuments,
             })
           : [];
 
