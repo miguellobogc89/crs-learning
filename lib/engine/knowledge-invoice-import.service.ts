@@ -466,17 +466,40 @@ export async function previewKnowledgeInvoices(input: {
     select: { id: true },
   });
   const priorRecords = local ? await prisma.engine_records.findMany({
-    where: { workspace_id: input.workspaceId, object_type_id: local.id },
-    select: { external_key: true, values_json: true },
+    where: {
+      workspace_id: input.workspaceId, object_type_id: local.id,
+      external_key: { in: files.map(externalKeyForFile) },
+    },
+    select: {
+      external_key: true, values_json: true,
+      engine_record_provenance: {
+        where: { field_key: { in: ["invoice_number", "total_amount"] } },
+        orderBy: { revision: "desc" },
+        select: { field_key: true, evidence_text: true },
+      },
+    },
   }) : [];
   const existing = new Map(priorRecords.filter(r => !!r.external_key)
-    .map(r => [r.external_key, r.values_json]));
+    .map(r => [r.external_key, {
+      values: r.values_json,
+      evidence: Object.fromEntries(r.engine_record_provenance
+        .filter(p => p.field_key && p.evidence_text)
+        .map(p => [p.field_key!, p.evidence_text!])),
+    }]));
   const rows: InvoiceImportRow[] = [];
   const deltaByFileId = new Map<string, ReturnType<typeof previewInvoiceFieldDelta>>();
   for (const file of files) {
-    const extracted = await extract(file, fields);
     const externalKey = externalKeyForFile(file);
-    const previousValues = existing.get(externalKey);
+    const prior = existing.get(externalKey);
+    const extracted = await extract(
+      file, fields,
+      version.engine_catalog_fields.map(f => ({
+        key: f.key, name: f.name, field_type: f.field_type,
+        description: f.description, is_required: f.is_required,
+      })),
+      prior ?? null,
+    );
+    const previousValues = prior?.values;
     const delta = previewInvoiceFieldDelta(previousValues, extracted);
     deltaByFileId.set(file.id, delta);
     const action: InvoiceImportRow["action"] = previousValues === undefined
