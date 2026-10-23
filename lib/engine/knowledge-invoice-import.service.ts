@@ -249,15 +249,18 @@ export async function validatePreparedInvoicePlan(input: {
     throw new Error("Primero debes completar la vista previa de facturas en Engine.");
   const source = plan.source_json;
   const data = plan.plan_json;
-  if (!isObject(source) || source.importId !== input.importId ||
-      !Array.isArray(source.fileIds) || !isObject(data) ||
-      data.kind !== "catalog_invoice_import_v1" || !Array.isArray(data.documents) ||
-      data.documents.length !== ids.length ||
-      ids.some(id => !source.fileIds.includes(id) ||
-        !data.documents.some((row: unknown) => isObject(row) && row.fileId === id)) ||
+  // Narrow JSON arrays before using them in callbacks (Prisma.JsonValue is a union).
+  const sourceFileIds = isObject(source) && Array.isArray(source.fileIds) ? source.fileIds : null;
+  const documentRows = isObject(data) && Array.isArray(data.documents) ? data.documents : null;
+  if (!sourceFileIds || !documentRows || !isObject(source) ||
+      source.importId !== input.importId || !isObject(data) ||
+      data.kind !== "catalog_invoice_import_v1" ||
+      documentRows.length !== ids.length ||
+      ids.some(id => !sourceFileIds.includes(id) ||
+        !documentRows.some((row: unknown) => isObject(row) && row.fileId === id)) ||
       sha256(JSON.stringify(data)) !== plan.plan_hash)
     throw new Error("La propuesta de Engine no coincide con los documentos.");
-  for (const doc of data.documents) {
+  for (const doc of documentRows) {
     if (!isObject(doc) || typeof doc.fileId !== "string" ||
         typeof doc.externalKey !== "string" || !isObject(doc.values) ||
         !isObject(doc.evidence)) throw new Error("Plan de facturas inválido.");
