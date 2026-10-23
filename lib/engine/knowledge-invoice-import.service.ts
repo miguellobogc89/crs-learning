@@ -217,13 +217,15 @@ function checkedSum(
     return true;
   });
 }
-/** A settlement channel is not a payment deadline or a contractual term. */
-export function isInvoicePaymentMethodOnly(value: string): boolean {
-  const payment = norm(value);
-  return /^(?:transferencia(?: bancaria)?|transferencia inmediata|domiciliaci[oó]n(?: bancaria)?|cargo en cuenta|adeudo(?: directo)?|tarjeta(?: bancaria| de cr[eé]dito| de d[eé]bito)?|efectivo|met[aá]lico|bizum|cheque|paypal|tpv|pago con tarjeta)$/.test(payment);
-}
-
-export function checkedInvoice(raw: unknown, text: string, fields: Map<string, string>) {
+/**
+ * Validates each extracted value against verbatim source evidence.
+ * Partial mode is used during extraction, before an independent recovery pass.
+ * Final plans and new inserts must still have a verifiable invoice identity.
+ */
+export function checkedInvoice(
+  raw: unknown, text: string, fields: Map<string, string>,
+  options: { allowPartial?: boolean } = {},
+) {
   if (!isObject(raw) || !isObject(raw.values) || !isObject(raw.evidence))
     throw new Error("La extracción de factura no contiene un JSON verificable.");
   const values: InvoiceImportRow["values"] = {};
@@ -250,25 +252,13 @@ export function checkedInvoice(raw: unknown, text: string, fields: Map<string, s
       values[key] = value;
     } else if ((fieldType === "text" || fieldType === "long_text") &&
         typeof value === "string" && value.trim().length > 0 && value.length <= 1000) {
-      if ((key === "invoice_number" || key === "payment_method" || key === "payment_terms") &&
-          !norm(quote).includes(norm(value))) continue;
-      // A payment channel is never a payment term. If the model placed it in
-      // payment_terms, safely relabel it when the catalog supports the method.
-      if (key === "payment_terms" && isInvoicePaymentMethodOnly(value)) {
-        if (fields.get("payment_method") === "text" &&
-            !Object.hasOwn(raw.values, "payment_method") &&
-            !Object.hasOwn(values, "payment_method")) {
-          values.payment_method = value.trim();
-          evidence.payment_method = quote;
-        }
-        continue;
-      }
-      if (key === "payment_method" && !isInvoicePaymentMethodOnly(value)) continue;
+      if (key === "invoice_number" && !norm(quote).includes(norm(value))) continue;
       values[key] = value.trim();
     } else continue;
     evidence[key] = quote;
   }
-  if (typeof values.invoice_number !== "string" || typeof values.total_amount !== "number")
+  if (!options.allowPartial &&
+      (typeof values.invoice_number !== "string" || typeof values.total_amount !== "number"))
     throw new Error("No se pudo verificar el número y el importe total de la factura.");
   return { values, evidence, ...(Object.keys(calculations).length ? { calculations } : {}) };
 }
