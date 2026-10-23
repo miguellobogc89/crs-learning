@@ -9,14 +9,16 @@ export type InvoiceImportRow = {
   fileId: string;
   fileName: string;
   externalKey: string;
-  action: "insert" | "reuse";
+  action: "insert" | "update" | "reuse";
   values: Record<string, string | number>;
   evidence: Record<string, string>;
+  calculations?: Record<string, { operation: "sum"; operands: number[] }>;
 };
 export type InvoiceImportPreview = {
   status: "ready" | "not_applicable";
   planId: string | null;
   recordsToInsert: number;
+  recordsToUpdate: number;
   recordsToReuse: number;
   invoices: Array<Pick<InvoiceImportRow, "fileId" | "fileName" | "action" | "values">>;
   otherStructuredCandidates: number;
@@ -44,6 +46,14 @@ export function stableJson(value: unknown): string {
       ? Object.fromEntries(Object.entries(nested).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))
       : nested,
   );
+}
+/** Existing trusted values always win; reanalysis only fills genuinely blank fields. */
+export function invoiceMissingFields(
+  existing: unknown, incoming: Record<string, string | number>,
+): Record<string, string | number> {
+  const before = isObject(existing) ? existing : {};
+  return Object.fromEntries(Object.entries(incoming).filter(([key]) =>
+    before[key] === undefined || before[key] === null || before[key] === ""));
 }
 const externalKeyForFile = (f: StagingFile) =>
   "invoice:" + sha256(f.content_hash || f.extracted_text);
@@ -84,8 +94,15 @@ function validDate(value: string, quote: string) {
   const date = new Date(value + "T00:00:00Z");
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return false;
   const [y, m, d] = value.split("-");
-  return [value, d + "-" + m + "-" + y, d + "/" + m + "/" + y, d + "." + m + "." + y]
-    .some(candidate => quote.includes(candidate));
+  const monthNames = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  const monthName = monthNames[Number(m) - 1];
+  const alternatives = [value, d + "-" + m + "-" + y,
+    d + "/" + m + "/" + y, d + "." + m + "." + y,
+    String(Number(d)) + "/" + m + "/" + y,
+    d + " de " + monthName + " de " + y,
+    String(Number(d)) + " de " + monthName + " de " + y];
+  return alternatives.some(candidate => norm(quote).includes(norm(candidate)));
 }
 const INVOICE_FIELDS = new Map<string, string>([
   ["invoice_number", "text"], ["issue_date", "date"], ["due_date", "date"],
@@ -93,11 +110,35 @@ const INVOICE_FIELDS = new Map<string, string>([
   ["total_amount", "decimal"], ["payment_terms", "text"], ["reference", "text"],
   ["notes", "long_text"],
 ]);
+function checkedSum(
+  field: string, amount: number, quote: string, calculation: unknown,
+) {
+  if ((field !== "net_amount" && field !== "tax_amount") ||
+      !isObject(calculation) || calculation.operation !== "sum" ||
+      !Array.isArray(calculation.operands) || calculation.operands.length < 2 ||
+      calculation.operands.length > 8 ||
+      !/(IVA|BASE|CUOTA|IMPUEST|DETALLE|SUBTOTAL)/i.test(quote)) return false;
+  const operands = calculation.operands.map(decimal);
+  if (operands.some(x => x === null)) return false;
+  const sum = (operands as number[]).reduce((x, y) => x + Math.round(y * 100), 0);
+  if (Math.abs(sum - Math.round(amount * 100)) > 1) return false;
+  // Count each quoted operand only once; repeating one number in calculations
+  // cannot be used to fabricate an amount.
+  const tokens = (quote.match(/-?\\d[\\d.,]*/g) ?? []).map(decimal);
+  const unused = [...tokens];
+  return operands.every(operand => {
+    const index = unused.findIndex(n => n !== null && Math.abs(n - operand!) < 0.005);
+    if (index < 0) return false;
+    unused.splice(index, 1);
+    return true;
+  });
+}
 export function checkedInvoice(raw: unknown, text: string, fields: Map<string, string>) {
   if (!isObject(raw) || !isObject(raw.values) || !isObject(raw.evidence))
     throw new Error("La extracción de factura no contiene un JSON verificable.");
   const values: InvoiceImportRow["values"] = {};
   const evidence: InvoiceImportRow["evidence"] = {};
+  const calculations: NonNullable<InvoiceImportRow["calculations"]> = {};
   const normalizedText = norm(text);
   for (const [key, value] of Object.entries(raw.values)) {
     const fieldType = fields.get(key);
@@ -106,7 +147,13 @@ export function checkedInvoice(raw: unknown, text: string, fields: Map<string, s
       quote.length > 500 || !normalizedText.includes(norm(quote))) continue;
     if (fieldType === "decimal") {
       const parsed = decimal(value);
-      if (parsed === null || !supportedDecimal(parsed, quote)) continue;
+      if (parsed === null) continue;
+      const calculation = isObject(raw.calculations) ? raw.calculations[key] : undefined;
+      const direct = supportedDecimal(parsed, quote);
+      if (!direct && !checkedSum(key, parsed, quote, calculation)) continue;
+      if (!direct && isObject(calculation) && Array.isArray(calculation.operands)) {
+        calculations[key] = { operation: "sum", operands: calculation.operands as number[] };
+      }
       values[key] = parsed;
     } else if (fieldType === "date") {
       if (typeof value !== "string" || !validDate(value, quote)) continue;
@@ -120,7 +167,7 @@ export function checkedInvoice(raw: unknown, text: string, fields: Map<string, s
   }
   if (typeof values.invoice_number !== "string" || typeof values.total_amount !== "number")
     throw new Error("No se pudo verificar el número y el importe total de la factura.");
-  return { values, evidence };
+  return { values, evidence, ...(Object.keys(calculations).length ? { calculations } : {}) };
 }
 async function extract(file: StagingFile, fields: Map<string, string>) {
   if (!file.extracted_text || file.extracted_text.length > 50000)
