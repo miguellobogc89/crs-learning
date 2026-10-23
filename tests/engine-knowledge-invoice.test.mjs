@@ -15,7 +15,7 @@ new Function("exports", "require", js)(exports, id => {
   if (id === "node:crypto") return require(id);
   return {};
 });
-const { invoiceFileIds, checkedInvoice, stableJson, invoiceMissingFields, ensureInvoiceRevisionSnapshot } = exports;
+const { invoiceFileIds, checkedInvoice, stableJson, invoiceMissingFields, ensureInvoiceRevisionSnapshot, isInvoicePaymentMethodOnly, previewInvoiceFieldDelta } = exports;
 
 function route(articleCandidate, structuredCandidate) {
   return { articleCandidate, structuredCandidate, knowledge: true };
@@ -276,4 +276,90 @@ test("invoice revision mismatch aborts rather than silently treating it as valid
     },
   };
   await assert.rejects(ensureInvoiceRevisionSnapshot(tx, input), /no coincide/);
+});
+
+test("a payment channel cannot pass as payment terms, even with literal evidence", () => {
+  const text = "FACTURA 018-2026\nDetalles de pago\nTRANSFERENCIA\nTOTAL EUROS 955,00";
+  const verified = checkedInvoice({
+    values: { invoice_number: "018-2026", total_amount: 955,
+      payment_terms: "TRANSFERENCIA" },
+    evidence: { invoice_number: "FACTURA 018-2026",
+      total_amount: "TOTAL EUROS 955,00", payment_terms: "TRANSFERENCIA" },
+  }, text, new Map([
+    ["invoice_number", "text"], ["total_amount", "decimal"],
+    ["payment_terms", "text"], ["payment_method", "text"],
+  ]));
+  assert.deepEqual(verified.values, {
+    invoice_number: "018-2026", total_amount: 955,
+    payment_method: "TRANSFERENCIA",
+  });
+  assert.equal(verified.evidence.payment_method, "TRANSFERENCIA");
+  assert.equal("payment_terms" in verified.values, false);
+  assert.equal(isInvoicePaymentMethodOnly("Transferencia bancaria"), true);
+});
+
+test("when payment_method is absent from an old catalog, reject rather than misfile the method", () => {
+  const text = "FACTURA A-1\nTRANSFERENCIA\nTOTAL 10,00";
+  const verified = checkedInvoice({
+    values: { invoice_number: "A-1", total_amount: 10,
+      payment_terms: "TRANSFERENCIA" },
+    evidence: { invoice_number: "FACTURA A-1", total_amount: "TOTAL 10,00",
+      payment_terms: "TRANSFERENCIA" },
+  }, text, new Map([
+    ["invoice_number", "text"], ["total_amount", "decimal"], ["payment_terms", "text"],
+  ]));
+  assert.equal("payment_terms" in verified.values, false);
+  assert.equal("payment_method" in verified.values, false);
+});
+
+test("payment terms refer to a deadline and remain separate from the payment method", () => {
+  const text = "FACTURA A-1\nCondiciones: 30 días\nForma de pago: transferencia\nTOTAL 10,00";
+  const verified = checkedInvoice({
+    values: { invoice_number: "A-1", total_amount: 10,
+      payment_terms: "30 días", payment_method: "transferencia" },
+    evidence: { invoice_number: "FACTURA A-1",
+      total_amount: "TOTAL 10,00", payment_terms: "30 días",
+      payment_method: "transferencia" },
+  }, text, new Map([
+    ["invoice_number", "text"], ["total_amount", "decimal"],
+    ["payment_terms", "text"], ["payment_method", "text"],
+  ]));
+  assert.equal(verified.values.payment_method, "transferencia");
+  assert.equal(verified.values.payment_terms, "30 días");
+});
+
+test("invoice preview lists only new fields with their source evidence", () => {
+  const delta = previewInvoiceFieldDelta({
+    invoice_number: "018-2026", total_amount: 955, payment_method: "TRANSFERENCIA",
+  }, { values: { invoice_number: "018-2026", total_amount: 955,
+      payment_method: "TRANSFERENCIA", payment_terms: "30 días" },
+    evidence: { payment_terms: "30 días" } });
+  assert.deepEqual(delta.addedFields, [{
+    field: "payment_terms", value: "30 días", evidence: "30 días",
+  }]);
+  assert.deepEqual(delta.conflictingFields, []);
+  assert.deepEqual(previewInvoiceFieldDelta({
+    invoice_number: "018-2026", total_amount: 955, payment_method: "TRANSFERENCIA",
+    payment_terms: "30 días",
+  }, { values: { invoice_number: "018-2026", total_amount: 955,
+    payment_method: "TRANSFERENCIA", payment_terms: "30 días" }, evidence: {} }).addedFields, []);
+});
+
+test("Neon catalog upgrade and Toldos correction are separately reviewable scripts", () => {
+  const catalog = fs.readFileSync(
+    new URL("../scripts/neon/20261023_invoice_payment_method_catalog_v2.sql", import.meta.url),
+    "utf8",
+  );
+  const correction = fs.readFileSync(
+    new URL("../scripts/neon/20261023_correct_toldos_payment_method.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(catalog, /engine_catalog_type_versions/);
+  assert.match(catalog, /payment_method/);
+  assert.match(catalog, /version = 1 AND status = 'published'/);
+  assert.doesNotMatch(catalog, /UPDATE public\.engine_records/);
+  assert.match(correction, /ce78ea49-f507-4d22-80fb-1f8ad9309100/);
+  assert.match(correction, /revision = revision \+ 1/);
+  assert.match(correction, /ON CONFLICT \(record_id, revision\) DO NOTHING/);
+  assert.match(correction, /payment_method/);
 });
