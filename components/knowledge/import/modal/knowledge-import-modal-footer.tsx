@@ -23,6 +23,7 @@ type Props = {
   failedFileCount: number;
   isAnalyzing: boolean;
   isConfirming: boolean;
+  canConfirm?: boolean;
   canContinue: boolean;
   canContinueInBackground: boolean;
   onCancel: () => void;
@@ -49,6 +50,7 @@ export function KnowledgeImportModalFooter({
   failedFileCount,
   isAnalyzing,
   isConfirming,
+  canConfirm = true,
   canContinue,
   canContinueInBackground,
   onCancel,
@@ -168,7 +170,7 @@ export function KnowledgeImportModalFooter({
 
             <Button
               type="button"
-              disabled={isConfirming}
+              disabled={isConfirming || !canConfirm}
               onClick={onConfirm}
               className={primaryButtonClassName}
             >
