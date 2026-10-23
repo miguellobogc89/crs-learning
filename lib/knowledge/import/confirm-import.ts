@@ -1005,6 +1005,9 @@ export async function confirmKnowledgeImport({
       },
     );
 
+    // Reporting and enrichment happen after the atomic Knowledge+Engine commit.
+    // An error here must never turn a completed import into a retryable one.
+    try {
     const afterSnapshot =
       await createKnowledgeStatusSnapshot(
         prisma,
@@ -1047,6 +1050,9 @@ export async function confirmKnowledgeImport({
     for (const articleId of changedArticleIds) {
       await analyzeKnowledgeSource(articleId);
     }
+    } catch (postCommitError) {
+      console.error("[knowledge-import] Post-commit enrichment failed; import remains completed.", postCommitError);
+    }
 
     return {
       success: true,
@@ -1060,14 +1066,9 @@ export async function confirmKnowledgeImport({
         ? error.message
         : "No se ha podido crear la estructura";
 
-    await prisma.knowledge_imports.update({
-      where: {
-        id: importId,
-      },
-      data: {
-        status: "proposal_ready",
-        error_message: errorMessage,
-      },
+    await prisma.knowledge_imports.updateMany({
+      where: { id: importId, status: "confirming" },
+      data: { status: "proposal_ready", error_message: errorMessage },
     });
 
     throw error;
