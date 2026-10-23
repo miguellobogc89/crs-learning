@@ -169,6 +169,12 @@ test("multiple validated tax rate rows can add up to global base and VAT", () =>
   assert.equal(data.values.net_amount, 145.52);
   assert.equal(data.values.tax_amount, 7.1);
   assert.equal(data.calculations.tax_amount.operation, "sum");
+  // A persisted JSON plan must pass the same validation at final confirmation.
+  const rechecked = checkedInvoice({
+    values: data.values, evidence: data.evidence, calculations: data.calculations,
+  }, text, new Map([["invoice_number", "text"], ["net_amount", "decimal"],
+    ["tax_amount", "decimal"], ["total_amount", "decimal"]]));
+  assert.deepEqual(rechecked.values, data.values);
 });
 
 test("unverifiable tax row calculations are rejected without rejecting verified invoice total", () => {
