@@ -392,7 +392,9 @@ export async function previewKnowledgeInvoices(input: {
   const catalog = await prisma.engine_catalog_types.findUnique({
     where: { key: "invoice" },
     include: { engine_catalog_type_versions: {
-      where: { version: 1, status: "published" },
+      where: { status: "published" },
+      orderBy: { version: "desc" },
+      take: 1,
       include: { engine_catalog_fields: { where: { status: "active" } } },
     } },
   });
@@ -400,6 +402,8 @@ export async function previewKnowledgeInvoices(input: {
   if (!catalog || catalog.status !== "active" || !version || !version.engine_catalog_fields.length)
     throw new Error("No existe el catálogo global de facturas en Neon.");
   const fields = new Map(version.engine_catalog_fields.map(f => [f.key, f.field_type]));
+  if (version.version < 2 || fields.get("payment_method") !== "text")
+    throw new Error("Falta publicar el catálogo de facturas v2 con payment_method en Neon.");
   const files = ids.map(id => imported.knowledge_import_files.find(f => f.id === id)!);
   if (files.some(f => f.status !== "text_ready"))
     throw new Error("Alguna factura no tiene el texto preparado.");
@@ -578,6 +582,28 @@ export async function commitPreparedInvoices(
       where: { id: created.id }, include: { engine_field_definitions: true },
     });
   }
+  // A workspace bound to v1 may be missing the new optional v2 field.
+  // Do not change existing field definitions or the local schema_version.
+  const missingDefinitions = definition.engine_catalog_fields.filter(f =>
+    !local!.engine_field_definitions.some(existing => existing.key === f.key));
+  if (missingDefinitions.length) {
+    if (missingDefinitions.some(f => f.key !== "payment_method" ||
+        f.field_type !== "text" || f.is_required || f.is_unique)) {
+      throw new Error("El catálogo nuevo requiere una migración de campos no compatible.");
+    }
+    await tx.engine_field_definitions.createMany({
+      data: missingDefinitions.map(f => ({
+        workspace_id: workspaceId, object_type_id: local!.id,
+        key: f.key, name: f.name, field_type: f.field_type,
+        sort_order: f.sort_order, is_required: false, is_unique: false,
+        configuration: f.configuration as Prisma.InputJsonObject,
+      })),
+      skipDuplicates: true,
+    });
+    local = await tx.engine_object_types.findUniqueOrThrow({
+      where: { id: local.id }, include: { engine_field_definitions: true },
+    });
+  }
   const localFields = new Map(local.engine_field_definitions
     .filter(f => f.status === "active").map(f => [f.key, f.field_type]));
   const catalogFields = new Map(definition.engine_catalog_fields.map(f => [f.key, f.field_type]));
@@ -593,12 +619,21 @@ export async function commitPreparedInvoices(
     } },
   });
   if (binding && (binding.local_object_type_id !== local.id ||
-      binding.catalog_version !== input.prepared.plan.catalogVersion))
+      binding.catalog_version > input.prepared.plan.catalogVersion))
     throw new Error("La versión de Factura del workspace necesita revisión.");
   if (!binding) await tx.engine_workspace_catalog_bindings.create({
     data: { workspace_id: workspaceId, catalog_type_id: catalog.id,
       catalog_version: input.prepared.plan.catalogVersion, local_object_type_id: local.id },
   });
+  else if (binding.catalog_version < input.prepared.plan.catalogVersion) {
+    // Only v1 -> v2 (the addition of an optional text field) is automatic.
+    if (binding.catalog_version !== 1 || input.prepared.plan.catalogVersion !== 2)
+      throw new Error("La actualización del catálogo necesita revisión.");
+    await tx.engine_workspace_catalog_bindings.update({
+      where: { id: binding.id },
+      data: { catalog_version: 2, updated_at: new Date() },
+    });
+  }
   // Knowledge may skip storing a PDF already present in this workspace.
   // Reuse that exact original as the provenance of any newly recovered fields.
   const sourceById = new Map(input.documents.map(doc => [
