@@ -39,6 +39,7 @@ export function KnowledgeImportCompletedStep({
   result,
 }: Props) {
   const { log } = result;
+  const referenceDocuments = log.documents.filter(document => document.sourceKind === "document");
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -106,6 +107,25 @@ export function KnowledgeImportCompletedStep({
       </div>
 
       <div className="mt-6 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
+        {referenceDocuments.length > 0 ? (
+          <section>
+            <h4 className="mb-2.5 text-[12px] font-semibold text-slate-900">
+              Documentos conservados para consulta ({referenceDocuments.length})
+            </h4>
+            <div className="space-y-2">
+              {referenceDocuments.map(document => (
+                <div key={document.knowledgeFileId} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="break-words text-[12px] font-semibold text-slate-900">
+                    {document.fileName}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Knowledge · Documento informativo, sin artículo generado
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {log.articles.length > 0 ? (
           <section>
             <h4 className="mb-2.5 text-[12px] font-semibold text-slate-900">
