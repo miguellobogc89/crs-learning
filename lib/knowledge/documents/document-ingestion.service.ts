@@ -2,8 +2,7 @@
 
 import { extractText } from "unpdf";
 
-import { getOpenAI } from "@/lib/ai/openai";
-import { AI_MODELS } from "@/lib/ai/models";
+import { getOpenAI, getKnowledgeImportModel } from "@/lib/ai/openai";
 
 export type ExtractionMethod =
   | "text"
@@ -228,7 +227,7 @@ async function extractPdfWithVision(
   const response =
     await client.responses.create({
       model:
-        AI_MODELS.KNOWLEDGE_ANALYSIS,
+        getKnowledgeImportModel(),
 
       input: [
         {
@@ -294,7 +293,7 @@ async function ingestImage(
   const response =
     await client.responses.create({
       model:
-        AI_MODELS.KNOWLEDGE_ANALYSIS,
+        getKnowledgeImportModel(),
 
       input: [
         {
