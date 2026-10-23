@@ -14,6 +14,7 @@ const libraryInclude = {
   knowledge_sources: {
     select: {
       id: true,
+      knowledge_type: true,
       _count: {
         select: {
           knowledge_files: true,
@@ -64,8 +65,9 @@ export async function listKnowledgeLibraries(
       ...library,
       is_shared:
         library.owner_user_id !== userId,
-      article_count:
-        library._count.knowledge_sources,
+      article_count: library.knowledge_sources.filter(
+        source => source.knowledge_type !== "document",
+      ).length,
       folder_count:
         library._count.other_knowledge_libraries,
       file_count: fileCount,
