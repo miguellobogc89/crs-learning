@@ -15,7 +15,7 @@ new Function("exports", "require", js)(exports, id => {
   if (id === "node:crypto") return require(id);
   return {};
 });
-const { invoiceFileIds, checkedInvoice } = exports;
+const { invoiceFileIds, checkedInvoice, stableJson } = exports;
 
 function route(articleCandidate, structuredCandidate) {
   return { articleCandidate, structuredCandidate, knowledge: true };
@@ -102,4 +102,32 @@ test("fabricated totals or absent invoice numbers block the final proposal", () 
     values: { invoice_number: "A-10", total_amount: 1500 },
     evidence: { invoice_number: "FACTURA A-10", total_amount: "TOTAL € 955,00" },
   }, "FACTURA A-10\nTOTAL € 955,00", fields), /verificar/);
+});
+
+test("invoice JSONB roundtrip keeps plan identity despite reordered object keys", () => {
+  const source = {
+    kind: "catalog_invoice_import_v1",
+    catalogTypeId: "catalog-invoice",
+    catalogVersion: 1,
+    documents: [{
+      fileId: "invoice-a", fileName: "factura.pdf", externalKey: "invoice:key",
+      action: "insert",
+      values: { invoice_number: "A-42", issue_date: "2026-10-23", total_amount: 121 },
+      evidence: { invoice_number: "Factura A-42", total_amount: "Total 121,00" },
+    }],
+  };
+  // Prisma reads JSONB objects back with key ordering that may differ from insertion order.
+  const fromDatabase = {
+    documents: [{ evidence: { total_amount: "Total 121,00", invoice_number: "Factura A-42" },
+      values: { total_amount: 121, issue_date: "2026-10-23", invoice_number: "A-42" },
+      action: "insert", externalKey: "invoice:key", fileName: "factura.pdf", fileId: "invoice-a" }],
+    catalogVersion: 1, kind: "catalog_invoice_import_v1", catalogTypeId: "catalog-invoice",
+  };
+  assert.notEqual(JSON.stringify(source), JSON.stringify(fromDatabase));
+  assert.equal(stableJson(source), stableJson(fromDatabase));
+  assert.notEqual(stableJson(source), stableJson({
+    ...fromDatabase,
+    documents: [{ ...fromDatabase.documents[0],
+      values: { ...fromDatabase.documents[0].values, total_amount: 999 } }],
+  }));
 });
