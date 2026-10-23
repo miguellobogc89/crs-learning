@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { getKnowledgeImportModel, getOpenAIClient } from "@/lib/ai/openai";
 import { prisma } from "@/lib/prisma";
+import { validateEngineRecordValues } from "@/lib/engine/validation";
 import type { KnowledgeImportProposal, KnowledgeImportCreatedDocumentLog, KnowledgeImportExecutionLog } from "@/lib/knowledge/import/types";
 
 export type InvoiceImportRow = {
@@ -375,6 +376,8 @@ export async function commitPreparedInvoices(
         status: "completed", recordsCreated: 0, recordsReused: 1 });
       continue;
     }
+    const validation = validateEngineRecordValues(doc.values, local.engine_field_definitions);
+    if (!validation.ok) throw new Error("Los campos de factura no encajan en Engine: " + JSON.stringify(validation.issues));
     const created = await tx.engine_records.create({
       data: { workspace_id: workspaceId, object_type_id: local.id,
         external_key: doc.externalKey, values_json: doc.values as Prisma.InputJsonObject,
@@ -387,13 +390,20 @@ export async function commitPreparedInvoices(
         values_json: doc.values as Prisma.InputJsonObject, changed_by_user_id: input.userId }],
       skipDuplicates: true,
     });
-    await tx.engine_record_provenance.create({
-      data: { workspace_id: workspaceId, record_id: created.id, revision: 1,
-        source_locator: "knowledge-import:" + input.importId + "/file:" + doc.fileId,
-        knowledge_file_id: source.knowledgeFileId, knowledge_source_id: source.articleId,
-        evidence_text: Object.values(doc.evidence).join(" | ").slice(0, 3000),
-        origin_type: "document", created_by_user_id: input.userId },
-    });
+    // Preserve exact provenance for every field (not one undifferentiated quote).
+    for (const [fieldKey, quote] of Object.entries(doc.evidence)) {
+      await tx.engine_record_provenance.create({
+        data: {
+          workspace_id: workspaceId, record_id: created.id, revision: 1,
+          field_key: fieldKey,
+          source_locator: "knowledge-import:" + input.importId + "/file:" + doc.fileId,
+          knowledge_file_id: source.knowledgeFileId,
+          knowledge_source_id: source.articleId,
+          evidence_text: quote, origin_type: "document",
+          created_by_user_id: input.userId,
+        },
+      });
+    }
     outcomes.push({ knowledgeFileId: source.knowledgeFileId, fileName: doc.fileName,
       status: "completed", recordsCreated: 1, recordsReused: 0 });
   }
