@@ -231,14 +231,14 @@ export function KnowledgeImportProposalStep({
           ) : invoicePreview && invoicePreview.invoices.length > 0 ? (
             <div className="mt-3 space-y-2">
               <p className="text-[11px] text-slate-600">
-                {invoicePreview.recordsToInsert} facturas nuevas · {invoicePreview.recordsToReuse} reutilizadas. Se insertarán al confirmar la propuesta completa.
+                {invoicePreview.recordsToInsert} nuevas · {invoicePreview.recordsToUpdate} por completar · {invoicePreview.recordsToReuse} sin datos nuevos. Se aplicarán los cambios únicamente al confirmar.
               </p>
               {invoicePreview.invoices.map(invoice => (
                 <div key={invoice.fileId} className="rounded-lg border border-slate-200 bg-white p-3">
                   <p className="text-[12px] font-semibold text-slate-900">
                     {invoice.fileName}
                     <span className="ml-2 font-normal text-blue-700">
-                      {invoice.action === "insert" ? "INSERT" : "REUSE"}
+                      {invoice.action === "insert" ? "INSERT" : invoice.action === "update" ? "UPDATE" : "REUSE"}
                     </span>
                   </p>
                   <p className="mt-1 text-[11px] text-slate-600">
@@ -264,7 +264,7 @@ export function KnowledgeImportProposalStep({
             </p>
           ) : null}
           <p className="mt-2 text-[10px] text-slate-500">
-            Knowledge y Engine se incorporarán juntos al confirmar; antes solo se guarda el plan de revisión.
+            Puedes analizar nuevamente los mismos PDF. Al confirmar solo se crearán registros nuevos o se completarán campos vacíos con evidencia; los demás se reutilizarán.
           </p>
         </section>
         {referenceDocuments.length > 0 ? (
