@@ -209,6 +209,33 @@ export function KnowledgeImportProposalStep({
       </div>
 
       <div className="mt-5 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
+        {referenceDocuments.length > 0 ? (
+          <section>
+            <div className="mb-2.5 flex items-center gap-2">
+              <FileText className="size-4 text-blue-600" />
+              <h4 className="text-[12px] font-semibold text-slate-900">Documentos informativos</h4>
+              <span className="text-[11px] text-slate-400">{referenceDocuments.length}</span>
+            </div>
+            <div className="space-y-2">
+              {referenceDocuments.map(([id, route]) => (
+                <div key={id} className="rounded-xl border border-slate-200 bg-white px-4 py-3.5">
+                  <p className="break-words text-[12px] font-semibold text-slate-900">
+                    {fileNames.get(id) ?? id}
+                  </p>
+                  <p className="mt-1 text-[10px] font-medium text-blue-700">
+                    Knowledge · {route.structuredCandidate ? "candidato a JSON" : "solo consulta"}
+                  </p>
+                  {route.reason ? (
+                    <p className="mt-2 text-[11px] leading-5 text-slate-600">{route.reason}</p>
+                  ) : null}
+                  {route.structuredFields.length > 0 ? (
+                    <p className="mt-1 text-[10px] text-slate-500">Campos posibles: {route.structuredFields.join(", ")}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {proposal.folders.length >
         0 ? (
           <section>
