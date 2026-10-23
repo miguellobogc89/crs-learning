@@ -1,10 +1,24 @@
 // lib/ai/models.ts
+import { getOpenAIModel, getKnowledgeImportModel } from "./openai";
+
+/**
+ * Resolve models on use, not at import time, so server runtime configuration
+ * is authoritative and missing environment variables fail explicitly.
+ */
 export const AI_MODELS = {
-  KNOWLEDGE_ANALYSIS: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
-
-  COURSE_GENERATION: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
-
-  TEST_GENERATION: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
-
-  CHAT: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
+  get KNOWLEDGE_ANALYSIS() {
+    return getOpenAIModel();
+  },
+  get COURSE_GENERATION() {
+    return getOpenAIModel();
+  },
+  get TEST_GENERATION() {
+    return getOpenAIModel();
+  },
+  get CHAT() {
+    return getOpenAIModel();
+  },
+  get KNOWLEDGE_IMPORT() {
+    return getKnowledgeImportModel();
+  },
 } as const;
