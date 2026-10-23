@@ -21,7 +21,19 @@ type HistoryFile = {
   status: string;
   processingStatus: string;
   error: string | null;
-  documents: Array<{ type: string; category: string }>;
+  documents: Array<{
+    type: string;
+    category: string;
+    routing: null | {
+      knowledge: true;
+      articleCandidate: boolean;
+      structuredCandidate: boolean;
+      reason: string;
+      structuredFields: string[];
+      existingArticleId: string | null;
+      existingStructureKeys: string[];
+    };
+  }>;
   articleTitles: string[];
   skippedAsDuplicate: boolean;
   assignedToArticle: boolean | null;
@@ -228,11 +240,48 @@ export function KnowledgeInfoSidebar() {
                         <p className={`mt-1 text-[10px] ${file.assignedToArticle === false ? "font-semibold text-amber-700" : "text-slate-500"}`}>
                           {getFileState(file)}
                         </p>
-                        {file.documents.map((document, idx) => (
-                          <p key={idx} className="mt-1 text-[10px] text-slate-600">
-                            {document.type} · {document.category}
-                          </p>
-                        ))}
+                        {file.documents.map((document, idx) => {
+                          const routing = document.routing;
+                          const destination = routing
+                            ? routing.articleCandidate && routing.structuredCandidate
+                              ? "Híbrido · artículo + JSON"
+                              : routing.articleCandidate
+                                ? "Candidato a artículo"
+                                : routing.structuredCandidate
+                                  ? "Candidato a JSON"
+                                  : "Solo informativo"
+                            : "Sin decisión de destino";
+                          return (
+                            <div key={idx} className="mt-2 rounded-md border border-slate-200 bg-white p-2">
+                              <p className="text-[10px] font-medium text-slate-700">
+                                {document.type} · {document.category}
+                              </p>
+                              <p className="mt-1 text-[10px] font-semibold text-blue-700">
+                                Knowledge · {destination}
+                              </p>
+                              {routing?.reason ? (
+                                <p className="mt-1 text-[10px] leading-4 text-slate-500">
+                                  {routing.reason}
+                                </p>
+                              ) : null}
+                              {routing?.structuredFields.length ? (
+                                <p className="mt-1 text-[10px] text-slate-500">
+                                  Campos: {routing.structuredFields.join(", ")}
+                                </p>
+                              ) : null}
+                              {routing?.existingArticleId ? (
+                                <p className="mt-1 text-[10px] text-slate-500">
+                                  Artículo existente: {routing.existingArticleId.slice(0, 8)}
+                                </p>
+                              ) : null}
+                              {routing?.existingStructureKeys.length ? (
+                                <p className="mt-1 text-[10px] text-slate-500">
+                                  Estructuras: {routing.existingStructureKeys.join(", ")}
+                                </p>
+                              ) : null}
+                            </div>
+                          );
+                        })}
                         {file.articleTitles.map((title, idx) => (
                           <p key={idx} className="mt-1 text-[10px] text-slate-600">
                             Artículo: {title}
