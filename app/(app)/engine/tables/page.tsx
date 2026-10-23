@@ -1,9 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { knowledgeSourceReadWhere } from "@/lib/knowledge/access-control";
-import { SchemaDiscoveryPreview } from "@/components/engine/schema-discovery-preview";
-import { EngineStressTest } from "@/components/engine/engine-stress-test";
-import { EngineControlledImport } from "@/components/engine/engine-controlled-import";
+import { KnowledgeUploadTrigger } from "@/components/knowledge/import/knowledge-upload-trigger";
 import { auth } from "@/auth";
 import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { AppPageHeader } from "@/components/app/layouts/app-page-header";
@@ -37,11 +34,10 @@ export default async function EngineTablesPage({
   }) : [];
   const fields = selected?.engine_field_definitions ?? [];
   const canReview = activeWorkspace.role === "owner" || activeWorkspace.role === "admin";
-  const knowledgeFiles = view === "tables" && canReview ? await prisma.knowledge_files.findMany({
-    where: { status: { in: ["ready", "processed"] }, extracted_text: { not: "" },
-      knowledge_sources: knowledgeSourceReadWhere(session.user.id, activeWorkspace.id) },
-    select: { id: true, file_name: true }, orderBy: { created_at: "desc" }, take: 50,
-  }) : [];
+  const importLibrary = view === "tables" && canReview ? await prisma.knowledge_libraries.findFirst({
+    where: { workspace_id: activeWorkspace.id, owner_user_id: session.user.id, parent_id: null },
+    select: { id: true }, orderBy: { created_at: "asc" },
+  }) : null;
   const [pendingRelations, approvedRelations] = view === "relations"
     ? await Promise.all([
       listPendingEngineRelations({ workspaceId: activeWorkspace.id, userId: session.user.id }),
@@ -60,9 +56,21 @@ export default async function EngineTablesPage({
       } contentClassName="overflow-y-auto pb-6">
         {view === "tables" ? (
           <div className="space-y-5 pt-4">
-            {canReview && <EngineStressTest />}
-            {canReview && <EngineControlledImport files={knowledgeFiles.map(file => ({ id: file.id, name: file.file_name }))} />}
-            {canReview && <SchemaDiscoveryPreview files={knowledgeFiles.map(file => ({ id: file.id, name: file.file_name }))} />}
+            {canReview && (
+              <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/40 px-5 py-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900">Importación documental</h2>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Un solo flujo: Knowledge clasifica, Engine verifica los registros y la confirmación final aplica los cambios.
+                  </p>
+                </div>
+                {importLibrary ? (
+                  <KnowledgeUploadTrigger context={{ origin: "root", libraryId: importLibrary.id }} label="Importar documentos" />
+                ) : (
+                  <span className="text-xs text-amber-700">Crea primero una biblioteca propia en Knowledge.</span>
+                )}
+              </section>
+            )}
             <p className="text-sm text-slate-500">
               Registros de {selected?.name ?? "las tablas"} en {activeWorkspace.name}.
               Consulta directa a la base de datos, sin análisis con IA.
