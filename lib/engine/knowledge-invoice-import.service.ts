@@ -175,10 +175,16 @@ async function extract(file: StagingFile, fields: Map<string, string>) {
   const response = await getOpenAIClient().responses.create({
     model: getKnowledgeImportModel(),
     instructions: [
-      "Devuelve solo un objeto JSON con values y evidence (diccionarios).",
+      "Devuelve solo un objeto JSON con values, evidence y opcionalmente calculations (diccionarios).",
       "Extrae UNA factura comercial. Usa solo las claves del catálogo incluido en el input.",
       "Cada valor debe tener una cita breve LITERAL del documento en evidence con la misma clave.",
-      "Importes como número decimal; fechas como YYYY-MM-DD; no inventes datos ni calcules ausentes.",
+      "Extrae número, fecha de emisión, base imponible, cuota de IVA y total, si constan.",
+      "La fecha puede estar escrita en español, por ejemplo 04 de Agosto de 2026; conviértela a YYYY-MM-DD.",
+      "Base imponible puede aparecer como subtotal o base sujeta; cuota IVA como impuesto o cuota tributaria.",
+      "Si la factura muestra bases o cuotas desglosadas por varios tipos de IVA sin suma explícita, puedes sumar únicamente esos componentes.",
+      "Para esas sumas, values tendrá el total numérico, evidence una cita LITERAL de las filas del desglose y calculations el campo con {operation: 'sum', operands: [cantidades originales]}.",
+      "No confundas totales de líneas con bases globales. Comprueba que base más IVA cuadra con el total.",
+      "Importes como número decimal; fechas como YYYY-MM-DD; nunca inventes cifras ni calcules sin desglose acreditado.",
       "No uses el nombre del archivo como evidencia.",
       "El número de factura y total deben estar presentes con citas verificables.",
       "Devuelve solo JSON válido, sin markdown."
@@ -194,7 +200,56 @@ async function extract(file: StagingFile, fields: Map<string, string>) {
   let parsed: unknown;
   try { parsed = JSON.parse(response.output_text); }
   catch { throw new Error("JSON no válido para " + file.file_name); }
-  return checkedInvoice(parsed, file.extracted_text, fields);
+  const primary = checkedInvoice(parsed, file.extracted_text, fields);
+  const missing = ["issue_date", "net_amount", "tax_amount"].filter(key =>
+    fields.has(key) && primary.values[key] === undefined);
+  if (!missing.length) return primary;
+  // Bounded second pass: models often overlook a date written in words or
+  // VAT bases split across table rows. No change may bypass source validation.
+  try {
+    const second = await getOpenAIClient().responses.create({
+      model: getKnowledgeImportModel(),
+      instructions: [
+        "Devuelve exclusivamente JSON con values, evidence y opcionalmente calculations.",
+        "Busca SOLO los campos ausentes indicados. No cambies los datos ya verificados.",
+        "Cita literalmente un único fragmento contiguo del texto original por campo.",
+        "Para fecha en palabras usa YYYY-MM-DD y la fecha original en evidence.",
+        "Si base imponible o IVA son suma de varios conceptos de la tabla tributaria,",
+        "usa calculations: {nombre_campo: {operation: 'sum', operands: [n1, n2]}}.",
+        "Los operandos deben aparecer exactamente en la cita literal de evidence.",
+        "Distingue total de factura y totales parciales de tickets o líneas.",
+        "Omite valores sin evidencia suficiente; no inventes ni estimes."
+      ].join("\n"),
+      input: JSON.stringify({
+        task: "Complete missing verified fields only.",
+        missing, verified: primary.values, text: file.extracted_text,
+      }),
+      text: { format: { type: "json_object" } },
+    }, { timeout: 120000, maxRetries: 0 });
+    if (second.status !== "completed" || !second.output_text || second.output_text.length > 18000)
+      return primary;
+    const raw: unknown = JSON.parse(second.output_text);
+    if (!isObject(raw) || !isObject(raw.values) || !isObject(raw.evidence)) return primary;
+    const additions = Object.fromEntries(missing
+      .filter(key => key in raw.values && key in raw.evidence)
+      .map(key => [key, raw.values[key]]));
+    const quotes = Object.fromEntries(missing
+      .filter(key => key in additions).map(key => [key, raw.evidence[key]]));
+    const calculations = isObject(raw.calculations)
+      ? Object.fromEntries(missing.filter(key => key in additions && key in raw.calculations)
+          .map(key => [key, raw.calculations[key]]))
+      : {};
+    return checkedInvoice({
+      values: { ...primary.values, ...additions },
+      evidence: { ...primary.evidence, ...quotes },
+      calculations: { ...primary.calculations, ...calculations },
+    }, file.extracted_text, fields);
+  } catch (error) {
+    console.warn("[engine-invoices] Unable to enrich missing invoice fields", {
+      file: file.file_name, error: error instanceof Error ? error.message : "unknown",
+    });
+    return primary;
+  }
 }
 export async function previewKnowledgeInvoices(input: {
   importId: string; userId: string; workspaceId: string;
