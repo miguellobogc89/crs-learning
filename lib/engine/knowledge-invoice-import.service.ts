@@ -124,7 +124,7 @@ function checkedSum(
   if (Math.abs(sum - Math.round(amount * 100)) > 1) return false;
   // Count each quoted operand only once; repeating one number in calculations
   // cannot be used to fabricate an amount.
-  const tokens = (quote.match(/-?\\d[\\d.,]*/g) ?? []).map(decimal);
+  const tokens = (quote.match(/-?\d[\d.,]*/g) ?? []).map(decimal);
   const unused = [...tokens];
   return operands.every(operand => {
     const index = unused.findIndex(n => n !== null && Math.abs(n - operand!) < 0.005);
