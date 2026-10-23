@@ -90,11 +90,13 @@ function getFileState(file: HistoryFile) {
   if (file.status === "text_error" || file.processingStatus === "error") {
     return "Error de lectura";
   }
+  const assessed = file.documents.length > 0 && file.documents.every(doc => doc.routing !== null);
+  const noArticleNeeded = assessed && file.documents.every(doc => !doc.routing?.articleCandidate);
   if (file.assignedToArticle === true) {
-    return "Asignado a artículo";
+    return noArticleNeeded ? "Artículo creado pese a no recomendarlo" : "Asignado a artículo";
   }
   if (file.assignedToArticle === false) {
-    return "Sin artículo asignado";
+    return noArticleNeeded ? "Sin artículo (correcto según clasificación)" : "Sin artículo asignado";
   }
   if (file.status === "text_ready") {
     return "Texto extraído";
@@ -199,7 +201,9 @@ export function KnowledgeInfoSidebar() {
             const state = getImportState(item);
             const StateIcon = state.icon;
             const unassigned = item.files.filter(file =>
-              file.assignedToArticle === false && !file.skippedAsDuplicate);
+              file.assignedToArticle === false && !file.skippedAsDuplicate &&
+              (!file.documents.length ||
+                file.documents.some(doc => doc.routing === null || doc.routing.articleCandidate)));
             return (
               <details key={item.id} defaultOpen={index === 0}
                 className="group rounded-xl border border-slate-200 bg-white">
@@ -237,7 +241,7 @@ export function KnowledgeInfoSidebar() {
                           <FileText className="mt-0.5 size-3.5 shrink-0 text-slate-400" />
                           <p className="min-w-0 break-all text-[11px] font-medium text-slate-800">{file.name}</p>
                         </div>
-                        <p className={`mt-1 text-[10px] ${file.assignedToArticle === false ? "font-semibold text-amber-700" : "text-slate-500"}`}>
+                        <p className={`mt-1 text-[10px] ${getFileState(file).includes("revisar") || getFileState(file).includes("pese") || getFileState(file) === "Sin artículo asignado" ? "font-semibold text-amber-700" : "text-slate-500"}`}>
                           {getFileState(file)}
                         </p>
                         {file.documents.map((document, idx) => {
