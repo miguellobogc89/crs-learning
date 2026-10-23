@@ -244,6 +244,34 @@ export function KnowledgeImportProposalStep({
                   <p className="mt-1 text-[11px] text-slate-600">
                     Nº {String(invoice.values.invoice_number ?? "—")} · Total {String(invoice.values.total_amount ?? "—")} · {String(invoice.values.issue_date ?? "Fecha no acreditada")}
                   </p>
+                  {invoice.action === "update" && invoice.addedFields.length > 0 ? (
+                    <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/60 p-2">
+                      <p className="text-[11px] font-medium text-emerald-900">
+                        Nuevos campos que se añadirán ({invoice.addedFields.length})
+                      </p>
+                      {invoice.addedFields.map(item => (
+                        <div key={item.field} className="mt-1.5 text-[11px] text-emerald-900">
+                          <span className="font-semibold">{item.field}:</span>{" "}
+                          {String(item.value)}
+                          <p className="mt-0.5 break-words text-[10px] text-emerald-800">
+                            Evidencia: «{item.evidence}»
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {invoice.conflictingFields.length > 0 ? (
+                    <details className="mt-2 text-[10px] text-amber-700">
+                      <summary className="cursor-pointer">
+                        {invoice.conflictingFields.length} diferencias detectadas (se conservarán los valores existentes)
+                      </summary>
+                      {invoice.conflictingFields.map(item => (
+                        <p key={item.field} className="mt-1 break-words">
+                          {item.field}: guardado {String(item.current)} · extraído {String(item.extracted)}
+                        </p>
+                      ))}
+                    </details>
+                  ) : null}
                   <details className="mt-2 text-[10px] text-slate-500">
                     <summary className="cursor-pointer">Ver campos extraídos</summary>
                     <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-[10px]">
