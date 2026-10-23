@@ -14,13 +14,20 @@ export type InvoiceImportRow = {
   evidence: Record<string, string>;
   calculations?: Record<string, { operation: "sum"; operands: number[] }>;
 };
+export type InvoicePreviewField = { field: string; value: string | number; evidence: string };
+export type InvoicePreviewConflict = {
+  field: string; current: string | number | boolean; extracted: string | number;
+};
 export type InvoiceImportPreview = {
   status: "ready" | "not_applicable";
   planId: string | null;
   recordsToInsert: number;
   recordsToUpdate: number;
   recordsToReuse: number;
-  invoices: Array<Pick<InvoiceImportRow, "fileId" | "fileName" | "action" | "values">>;
+  invoices: Array<Pick<InvoiceImportRow, "fileId" | "fileName" | "action" | "values"> & {
+    addedFields: InvoicePreviewField[];
+    conflictingFields: InvoicePreviewConflict[];
+  }>;
   otherStructuredCandidates: number;
 };
 type InvoicePlan = {
@@ -54,6 +61,27 @@ export function invoiceMissingFields(
   const before = isObject(existing) ? existing : {};
   return Object.fromEntries(Object.entries(incoming).filter(([key]) =>
     before[key] === undefined || before[key] === null || before[key] === ""));
+}
+
+/** Exact proposal delta: only absent fields can change; other discrepancies are not overwritten. */
+export function previewInvoiceFieldDelta(
+  existing: unknown, row: Pick<InvoiceImportRow, "values" | "evidence">,
+): { addedFields: InvoicePreviewField[]; conflictingFields: InvoicePreviewConflict[] } {
+  if (!isObject(existing)) return { addedFields: [], conflictingFields: [] };
+  const additions = invoiceMissingFields(existing, row.values);
+  const addedFields = Object.entries(additions).map(([field, value]) => ({
+    field, value, evidence: row.evidence[field] ?? "",
+  }));
+  const conflictingFields: InvoicePreviewConflict[] = [];
+  for (const [field, extracted] of Object.entries(row.values)) {
+    const current = existing[field];
+    if (current === undefined || current === null || current === "") continue;
+    if ((typeof current === "string" || typeof current === "number" || typeof current === "boolean") &&
+        stableJson(current) !== stableJson(extracted)) {
+      conflictingFields.push({ field, current, extracted });
+    }
+  }
+  return { addedFields, conflictingFields };
 }
 /**
  * The DB may already capture a revision via its trigger when engine_records
@@ -361,14 +389,16 @@ export async function previewKnowledgeInvoices(input: {
   const existing = new Map(priorRecords.filter(r => !!r.external_key)
     .map(r => [r.external_key, r.values_json]));
   const rows: InvoiceImportRow[] = [];
+  const deltaByFileId = new Map<string, ReturnType<typeof previewInvoiceFieldDelta>>();
   for (const file of files) {
     const extracted = await extract(file, fields);
     const externalKey = externalKeyForFile(file);
     const previousValues = existing.get(externalKey);
+    const delta = previewInvoiceFieldDelta(previousValues, extracted);
+    deltaByFileId.set(file.id, delta);
     const action: InvoiceImportRow["action"] = previousValues === undefined
       ? "insert"
-      : Object.keys(invoiceMissingFields(previousValues, extracted.values)).length
-        ? "update" : "reuse";
+      : delta.addedFields.length ? "update" : "reuse";
     rows.push({ fileId: file.id, fileName: file.file_name, externalKey,
       action, ...extracted });
   }
@@ -404,7 +434,9 @@ export async function previewKnowledgeInvoices(input: {
     recordsToUpdate: rows.filter(r => r.action === "update").length,
     recordsToReuse: rows.filter(r => r.action === "reuse").length,
     invoices: rows.map(({ fileId, fileName, action, values }) =>
-      ({ fileId, fileName, action, values })),
+      ({ fileId, fileName, action, values,
+         ...(deltaByFileId.get(fileId) ?? { addedFields: [], conflictingFields: [] }),
+      })),
     otherStructuredCandidates,
   };
 }
