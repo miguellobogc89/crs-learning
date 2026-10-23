@@ -280,9 +280,24 @@ export async function commitPreparedInvoices(
 ): Promise<NonNullable<KnowledgeImportExecutionLog["engineImports"]>> {
   const plan = await tx.engine_import_plans.findFirst({
     where: { id: input.prepared.planId, workspace_id: input.workspaceId, status: "ready" },
-    select: { id: true },
+    select: { id: true, plan_hash: true, created_by_user_id: true, expires_at: true },
   });
-  if (!plan) throw new Error("El plan de Engine ya no está pendiente.");
+  if (!plan || plan.created_by_user_id !== input.userId ||
+      (plan.expires_at && plan.expires_at <= new Date()) ||
+      plan.plan_hash !== sha256(JSON.stringify(input.prepared.plan))) {
+    throw new Error("La vista previa de Engine ha caducado o se ha modificado.");
+  }
+  // Preview permission is not sufficient: the commit rechecks membership.
+  const ws = await tx.workspaces.findFirst({
+    where: { id: input.workspaceId, status: "active" },
+    select: { owner_user_id: true, workspace_members: {
+      where: { user_id: input.userId, status: "active" }, select: { role: true },
+    } },
+  });
+  if (!ws || (ws.owner_user_id !== input.userId &&
+      !["owner", "admin"].includes(ws.workspace_members[0]?.role ?? ""))) {
+    throw new Error("Ya no tienes permisos para insertar en Engine.");
+  }
   const definition = await tx.engine_catalog_type_versions.findUnique({
     where: { type_id_version: {
       type_id: input.prepared.plan.catalogTypeId, version: input.prepared.plan.catalogVersion,
@@ -296,6 +311,8 @@ export async function commitPreparedInvoices(
       !catalog || catalog.key !== "invoice" || catalog.status !== "active")
     throw new Error("El catálogo de facturas ya no es válido.");
   const workspaceId = input.workspaceId;
+  // Prevent concurrent creation of the workspace invoice type or the same record.
+  await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${workspaceId}))`);
   let local = await tx.engine_object_types.findUnique({
     where: { workspace_id_key: { workspace_id: workspaceId, key: "invoice" } },
     include: { engine_field_definitions: true },
