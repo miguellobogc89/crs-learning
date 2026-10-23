@@ -132,6 +132,12 @@ export function KnowledgeImportProposalStep({
         article.action === "update",
     );
 
+  const linkedIds = new Set(proposal.articles.flatMap(a => a.documentIds));
+  const referenceDocuments = Object.entries(proposal.documentRoutes ?? {})
+    .filter(([id, route]) => !route.articleCandidate && !linkedIds.has(id));
+  const fileNames = new Map((proposal.globalImportMap?.files ?? [])
+    .map(file => [file.fileId, file.fileName] as const));
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {error ? (
