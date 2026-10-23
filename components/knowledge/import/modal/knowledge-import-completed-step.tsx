@@ -107,6 +107,22 @@ export function KnowledgeImportCompletedStep({
       </div>
 
       <div className="mt-6 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
+        {log.engineImports && log.engineImports.length > 0 ? (
+          <section className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
+            <h4 className="text-[12px] font-semibold text-slate-900">Engine · Facturas</h4>
+            <p className="mt-1 text-[11px] text-slate-700">
+              {log.engineImports.reduce((n, item) => n + item.recordsCreated, 0)} registros nuevos ·{" "}
+              {log.engineImports.reduce((n, item) => n + item.recordsReused, 0)} reutilizados
+            </p>
+            {log.engineImports.map((item, index) => (
+              <p key={item.knowledgeFileId + index} className="mt-2 text-[11px] text-slate-600">
+                {item.fileName}: {item.recordsCreated ? "1 factura creada" :
+                  item.recordsReused ? "Factura existente reutilizada" : "Sin cambios en Engine"}
+              </p>
+            ))}
+          </section>
+        ) : null}
+
         {referenceDocuments.length > 0 ? (
           <section>
             <h4 className="mb-2.5 text-[12px] font-semibold text-slate-900">
