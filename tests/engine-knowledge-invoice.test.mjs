@@ -15,7 +15,7 @@ new Function("exports", "require", js)(exports, id => {
   if (id === "node:crypto") return require(id);
   return {};
 });
-const { invoiceFileIds, checkedInvoice, stableJson, invoiceMissingFields, ensureInvoiceRevisionSnapshot, isInvoicePaymentMethodOnly, previewInvoiceFieldDelta } = exports;
+const { invoiceFileIds, checkedInvoice, stableJson, invoiceMissingFields, ensureInvoiceRevisionSnapshot, recoverInvoiceIdentity, previewInvoiceFieldDelta } = exports;
 
 function route(articleCandidate, structuredCandidate) {
   return { articleCandidate, structuredCandidate, knowledge: true };
@@ -278,54 +278,53 @@ test("invoice revision mismatch aborts rather than silently treating it as valid
   await assert.rejects(ensureInvoiceRevisionSnapshot(tx, input), /no coincide/);
 });
 
-test("a payment channel cannot pass as payment terms, even with literal evidence", () => {
-  const text = "FACTURA 018-2026\nDetalles de pago\nTRANSFERENCIA\nTOTAL EUROS 955,00";
+test("invoice field validation accepts catalog-defined methods without a closed list", () => {
+  const text = "Factura A-1\\nMétodo de pago: criptomonedas\\nTotal: 10,00";
   const verified = checkedInvoice({
-    values: { invoice_number: "018-2026", total_amount: 955,
-      payment_terms: "TRANSFERENCIA" },
-    evidence: { invoice_number: "FACTURA 018-2026",
-      total_amount: "TOTAL EUROS 955,00", payment_terms: "TRANSFERENCIA" },
+    values: { invoice_number: "A-1", total_amount: 10, payment_method: "criptomonedas" },
+    evidence: { invoice_number: "Factura A-1",
+      total_amount: "Total: 10,00", payment_method: "criptomonedas" },
   }, text, new Map([
-    ["invoice_number", "text"], ["total_amount", "decimal"],
-    ["payment_terms", "text"], ["payment_method", "text"],
+    ["invoice_number", "text"], ["total_amount", "decimal"], ["payment_method", "text"],
   ]));
-  assert.deepEqual(verified.values, {
-    invoice_number: "018-2026", total_amount: 955,
-    payment_method: "TRANSFERENCIA",
-  });
-  assert.equal(verified.evidence.payment_method, "TRANSFERENCIA");
-  assert.equal("payment_terms" in verified.values, false);
-  assert.equal(isInvoicePaymentMethodOnly("Transferencia bancaria"), true);
+  assert.equal(verified.values.payment_method, "criptomonedas");
 });
 
-test("when payment_method is absent from an old catalog, reject rather than misfile the method", () => {
-  const text = "FACTURA A-1\nTRANSFERENCIA\nTOTAL 10,00";
-  const verified = checkedInvoice({
-    values: { invoice_number: "A-1", total_amount: 10,
-      payment_terms: "TRANSFERENCIA" },
-    evidence: { invoice_number: "FACTURA A-1", total_amount: "TOTAL 10,00",
-      payment_terms: "TRANSFERENCIA" },
-  }, text, new Map([
-    ["invoice_number", "text"], ["total_amount", "decimal"], ["payment_terms", "text"],
-  ]));
-  assert.equal("payment_terms" in verified.values, false);
-  assert.equal("payment_method" in verified.values, false);
+test("first extraction pass can be partial without relaxing the final identity check", () => {
+  const text = "Factura A-1\\nTotal 10,00";
+  const proposed = {
+    values: { invoice_number: "A-1" },
+    evidence: { invoice_number: "Factura A-1" },
+  };
+  const fields = new Map([["invoice_number", "text"], ["total_amount", "decimal"]]);
+  const partial = checkedInvoice(proposed, text, fields, { allowPartial: true });
+  assert.deepEqual(partial.values, { invoice_number: "A-1" });
+  assert.throws(() => checkedInvoice(proposed, text, fields), /número y el importe total/);
 });
 
-test("payment terms refer to a deadline and remain separate from the payment method", () => {
-  const text = "FACTURA A-1\nCondiciones: 30 días\nForma de pago: transferencia\nTOTAL 10,00";
-  const verified = checkedInvoice({
-    values: { invoice_number: "A-1", total_amount: 10,
-      payment_terms: "30 días", payment_method: "transferencia" },
-    evidence: { invoice_number: "FACTURA A-1",
-      total_amount: "TOTAL 10,00", payment_terms: "30 días",
-      payment_method: "transferencia" },
-  }, text, new Map([
-    ["invoice_number", "text"], ["total_amount", "decimal"],
-    ["payment_terms", "text"], ["payment_method", "text"],
-  ]));
-  assert.equal(verified.values.payment_method, "transferencia");
-  assert.equal(verified.values.payment_terms, "30 días");
+test("re-upload reuses prior invoice number and total only with evidence in the PDF", () => {
+  const text = "Factura A-1\\nTotal 10,00\\nPago criptomonedas";
+  const fields = new Map([["invoice_number", "text"], ["total_amount", "decimal"],
+    ["payment_method", "text"]]);
+  const partial = checkedInvoice({
+    values: { payment_method: "criptomonedas" },
+    evidence: { payment_method: "criptomonedas" },
+  }, text, fields, { allowPartial: true });
+  const recovered = recoverInvoiceIdentity(partial, {
+    values: { invoice_number: "A-1", total_amount: 10 },
+    evidence: { invoice_number: "Factura A-1", total_amount: "Total 10,00" },
+  }, text, fields);
+  const complete = checkedInvoice({
+    values: recovered.values, evidence: recovered.evidence,
+  }, text, fields);
+  assert.deepEqual(complete.values,
+    { invoice_number: "A-1", total_amount: 10, payment_method: "criptomonedas" });
+  const unverified = recoverInvoiceIdentity(partial, {
+    values: { invoice_number: "A-1", total_amount: 10 },
+    evidence: { invoice_number: "Factura A-1", total_amount: "FAKE TOTAL 10,00" },
+  }, text, fields);
+  assert.equal("total_amount" in unverified.values, false,
+    "A prior value cannot be copied if its quote is absent from uploaded text");
 });
 
 test("invoice preview lists only new fields with their source evidence", () => {
