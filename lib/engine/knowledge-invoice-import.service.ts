@@ -262,7 +262,49 @@ export function checkedInvoice(
     throw new Error("No se pudo verificar el número y el importe total de la factura.");
   return { values, evidence, ...(Object.keys(calculations).length ? { calculations } : {}) };
 }
-async function extract(file: StagingFile, fields: Map<string, string>) {
+type PriorInvoiceIdentity = {
+  values: unknown;
+  evidence: Record<string, string>;
+};
+
+/**
+ * An identical file (same SHA-derived external key) already has a confirmed
+ * identity in Engine. Reuse the two original, source-backed identity fields
+ * rather than treating a model omission on re-analysis as a new defect.
+ * Re-check all historical quotes against the uploaded text: no blind copying.
+ */
+export function recoverInvoiceIdentity(
+  partial: ReturnType<typeof checkedInvoice>,
+  previous: PriorInvoiceIdentity | null,
+  text: string,
+  fields: Map<string, string>,
+) {
+  if (!previous || !isObject(previous.values)) return partial;
+  const values: Record<string, string | number> = { ...partial.values };
+  const evidence: Record<string, string> = { ...partial.evidence };
+  for (const key of ["invoice_number", "total_amount"]) {
+    if (values[key] !== undefined || typeof previous.evidence[key] !== "string") continue;
+    const stored = previous.values[key];
+    if (typeof stored !== "number" && typeof stored !== "string") continue;
+    values[key] = stored;
+    evidence[key] = previous.evidence[key];
+  }
+  return checkedInvoice({
+    values, evidence, calculations: partial.calculations,
+  }, text, fields, { allowPartial: true });
+}
+
+type CatalogInvoiceField = {
+  key: string; name: string; field_type: string;
+  description: string | null; is_required: boolean;
+};
+
+async function extract(
+  file: StagingFile,
+  fields: Map<string, string>,
+  catalogFields: CatalogInvoiceField[],
+  previous: PriorInvoiceIdentity | null,
+) {
   if (!file.extracted_text || file.extracted_text.length > 50000)
     throw new Error("Texto de factura ausente o demasiado grande: " + file.file_name);
   const response = await getOpenAIClient().responses.create({
@@ -272,9 +314,9 @@ async function extract(file: StagingFile, fields: Map<string, string>) {
       "Extrae UNA factura comercial. Usa solo las claves del catálogo incluido en el input.",
       "Cada valor debe tener una cita breve LITERAL del documento en evidence con la misma clave.",
       "Extrae número, fecha de emisión, base imponible, cuota de IVA y total, si constan.",
-      "DIFERENCIA ESTRICTAMENTE payment_method (transferencia, tarjeta, efectivo, domiciliación, etc.) de payment_terms (plazo, vencimiento, al contado, condiciones de pago).",
-      "La palabra TRANSFERENCIA indica payment_method, NUNCA payment_terms.",
-      "No rellenes payment_terms si el documento solo indica un medio de pago.",
+      "Usa el nombre y la descripción de cada campo del catálogo para decidir su significado.",
+      "No confundas dos campos diferentes por compartir palabras ni por la posición de su etiqueta.",
+      "Un medio de pago y un plazo de pago son conceptos distintos; asocia cada uno al campo descrito en el catálogo.",
       "La fecha puede estar escrita en español, por ejemplo 04 de Agosto de 2026; conviértela a YYYY-MM-DD.",
       "Base imponible puede aparecer como subtotal o base sujeta; cuota IVA como impuesto o cuota tributaria.",
       "Si la factura muestra bases o cuotas desglosadas por varios tipos de IVA sin suma explícita, puedes sumar únicamente esos componentes.",
@@ -287,7 +329,7 @@ async function extract(file: StagingFile, fields: Map<string, string>) {
     ].join("\n"),
     input: JSON.stringify({
       task: "Extract invoice fields to JSON values and evidence.",
-      fields: Object.fromEntries(fields), text: file.extracted_text,
+      fields: catalogFields, text: file.extracted_text,
     }),
     text: { format: { type: "json_object" } },
   }, { timeout: 120000, maxRetries: 0 });
@@ -296,10 +338,16 @@ async function extract(file: StagingFile, fields: Map<string, string>) {
   let parsed: unknown;
   try { parsed = JSON.parse(response.output_text); }
   catch { throw new Error("JSON no válido para " + file.file_name); }
-  const primary = checkedInvoice(parsed, file.extracted_text, fields);
-  const missing = ["issue_date", "net_amount", "tax_amount", "payment_method"].filter(key =>
-    fields.has(key) && primary.values[key] === undefined);
-  if (!missing.length) return primary;
+  // IMPORTANT: extraction can be incomplete even when the invoice is valid.
+  // Do not reject missing mandatory fields before the recovery attempt.
+  const first = checkedInvoice(parsed, file.extracted_text, fields, { allowPartial: true });
+  let verified = recoverInvoiceIdentity(first, previous, file.extracted_text, fields);
+  const core = ["invoice_number", "total_amount"];
+  const missing = [...new Set([...core, "issue_date", "net_amount", "tax_amount", "payment_method"])]
+    .filter(key => fields.has(key) && verified.values[key] === undefined);
+  if (!missing.length) return checkedInvoice({
+    values: verified.values, evidence: verified.evidence, calculations: verified.calculations,
+  }, file.extracted_text, fields);
   // Bounded second pass: models often overlook a date written in words or
   // VAT bases split across table rows. No change may bypass source validation.
   try {
@@ -314,20 +362,23 @@ async function extract(file: StagingFile, fields: Map<string, string>) {
         "usa calculations: {nombre_campo: {operation: 'sum', operands: [n1, n2]}}.",
         "Los operandos deben aparecer exactamente en la cita literal de evidence.",
         "Distingue total de factura y totales parciales de tickets o líneas.",
-        "payment_method es el medio utilizado (transferencia, tarjeta, etc.);",
-        "no etiquetes un medio de pago como payment_terms, que se reserva al plazo o vencimiento.",
+        "Cada campo tiene un significado propio definido en su nombre y descripción de catálogo.",
+        "No deduzcas un plazo de pago a partir de un medio de pago, ni al revés.",
         "Omite valores sin evidencia suficiente; no inventes ni estimes."
       ].join("\n"),
       input: JSON.stringify({
         task: "Complete missing verified fields only.",
-        missing, verified: primary.values, text: file.extracted_text,
+        missing, verified: verified.values,
+        fields: catalogFields.filter(field => missing.includes(field.key)),
+        text: file.extracted_text,
       }),
       text: { format: { type: "json_object" } },
     }, { timeout: 120000, maxRetries: 0 });
     if (second.status !== "completed" || !second.output_text || second.output_text.length > 18000)
-      return primary;
+      throw new Error("La segunda lectura no devolvió un resultado completo.");
     const raw: unknown = JSON.parse(second.output_text);
-    if (!isObject(raw) || !isObject(raw.values) || !isObject(raw.evidence)) return primary;
+    if (!isObject(raw) || !isObject(raw.values) || !isObject(raw.evidence))
+      throw new Error("La segunda lectura no devolvió valores y evidencias válidos.");
     const retryValues = raw.values;
     const retryEvidence = raw.evidence;
     const retryCalculations = isObject(raw.calculations) ? raw.calculations : {};
@@ -339,16 +390,29 @@ async function extract(file: StagingFile, fields: Map<string, string>) {
     const calculations = Object.fromEntries(missing
       .filter(key => key in additions && key in retryCalculations)
       .map(key => [key, retryCalculations[key]]));
-    return checkedInvoice({
-      values: { ...primary.values, ...additions },
-      evidence: { ...primary.evidence, ...quotes },
-      calculations: { ...primary.calculations, ...calculations },
-    }, file.extracted_text, fields);
+    const enriched = checkedInvoice({
+      values: { ...verified.values, ...additions },
+      evidence: { ...verified.evidence, ...quotes },
+      calculations: { ...verified.calculations, ...calculations },
+    }, file.extracted_text, fields, { allowPartial: true });
+    verified = recoverInvoiceIdentity(enriched, previous, file.extracted_text, fields);
   } catch (error) {
-    console.warn("[engine-invoices] Unable to enrich missing invoice fields", {
-      file: file.file_name, error: error instanceof Error ? error.message : "unknown",
+    // Optional fields are best effort. Missing essentials still fail below.
+    console.warn("[engine-invoices] Unable to complete extracted fields", {
+      file: file.file_name, missing,
+      error: error instanceof Error ? error.message : "unknown",
     });
-    return primary;
+  }
+  try {
+    return checkedInvoice({
+      values: verified.values, evidence: verified.evidence, calculations: verified.calculations,
+    }, file.extracted_text, fields);
+  } catch {
+    throw new Error(
+      "No se pudo verificar la identidad de " + file.file_name +
+      " tras dos lecturas; faltan " +
+      core.filter(key => verified.values[key] === undefined).join(", ") + ".",
+    );
   }
 }
 export async function previewKnowledgeInvoices(input: {
