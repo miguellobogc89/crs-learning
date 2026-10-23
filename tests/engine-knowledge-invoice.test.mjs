@@ -131,3 +131,9 @@ test("invoice JSONB roundtrip keeps plan identity despite reordered object keys"
       values: { ...fromDatabase.documents[0].values, total_amount: 999 } }],
   }));
 });
+
+test("advisory lock returns a Prisma-compatible integer instead of PostgreSQL void", () => {
+  const source = fs.readFileSync(filename, "utf8");
+  assert.match(source, /SELECT 1::integer AS acquired\s+FROM pg_advisory_xact_lock\(hashtext\(/);
+  assert.doesNotMatch(source, /SELECT pg_advisory_xact_lock\(/);
+});
