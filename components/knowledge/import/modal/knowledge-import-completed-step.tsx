@@ -40,6 +40,11 @@ export function KnowledgeImportCompletedStep({
 }: Props) {
   const { log } = result;
   const referenceDocuments = log.documents.filter(document => document.sourceKind === "document");
+  const createdRecords = (log.engineImports ?? []).reduce((n, item) => n + item.recordsCreated, 0);
+  const updatedRecords = (log.engineImports ?? []).reduce((n, item) => n + (item.recordsUpdated ?? 0), 0);
+  const noNewContent = log.summary.documentsCreated === 0 &&
+    log.summary.articlesCreated === 0 && log.summary.articlesUpdated === 0 &&
+    createdRecords === 0 && updatedRecords === 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -54,12 +59,11 @@ export function KnowledgeImportCompletedStep({
 
           <div className="min-w-0">
             <h3 className="text-[18px] font-semibold tracking-[-0.02em] text-slate-950">
-              Incorporación completada
+              {noNewContent ? "Sin novedades para incorporar" : "Incorporación completada"}
             </h3>
 
             <p className="mt-1 text-[12px] leading-5 text-slate-500">
-              La documentación se ha
-              incorporado a{" "}
+              {noNewContent ? "Se han analizado los documentos pero no contienen datos nuevos para " : "La documentación se ha incorporado a " }
               <strong className="font-semibold text-slate-800">
                 {
                   log.targetLibrary
@@ -111,13 +115,14 @@ export function KnowledgeImportCompletedStep({
           <section className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
             <h4 className="text-[12px] font-semibold text-slate-900">Engine · Facturas</h4>
             <p className="mt-1 text-[11px] text-slate-700">
-              {log.engineImports.reduce((n, item) => n + item.recordsCreated, 0)} registros nuevos ·{" "}
-              {log.engineImports.reduce((n, item) => n + item.recordsReused, 0)} reutilizados
+              {createdRecords} nuevos · {updatedRecords} completados ·{" "}
+              {log.engineImports.reduce((n, item) => n + item.recordsReused, 0)} sin cambios
             </p>
             {log.engineImports.map((item, index) => (
               <p key={item.knowledgeFileId + index} className="mt-2 text-[11px] text-slate-600">
-                {item.fileName}: {item.recordsCreated ? "1 factura creada" :
-                  item.recordsReused ? "Factura existente reutilizada" : "Sin cambios en Engine"}
+                {item.fileName}: {item.recordsCreated ? "Factura creada" :
+                  item.recordsUpdated ? `Factura completada (${item.fieldsCompleted ?? 0} campos nuevos)` :
+                  item.recordsReused ? "No hay datos nuevos que importar" : "Sin cambios en Engine"}
               </p>
             ))}
           </section>
