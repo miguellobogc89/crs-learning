@@ -130,7 +130,20 @@ export type KnowledgeImportWarning = {
   suggestedAction: string;
 };
 
+/** Document-first decision, independent of whether an article will be generated. */
+export type KnowledgeImportDocumentRoute = {
+  knowledge: true;
+  articleCandidate: boolean;
+  structuredCandidate: boolean;
+  reason: string;
+  structuredFields: string[];
+  existingArticleId: string | null;
+  existingStructureKeys: string[];
+};
+
 export type KnowledgeImportProposal = {
+  /** One entry per original file. Files without an article remain available in Knowledge. */
+  documentRoutes?: Record<string, KnowledgeImportDocumentRoute>;
   contentClassification?: Record<string, ImportContentClassification>;
   recommendedRoutes?: Record<string, ImportRoute>;
   title: string;
@@ -175,6 +188,8 @@ export type KnowledgeImportCreatedFolderLog = {
 };
 
 export type KnowledgeImportCreatedDocumentLog = {
+  /** "document" is a Knowledge source, not a generated article. */
+  sourceKind?: "article" | "document";
   importFileId: string;
   knowledgeFileId: string;
   fileName: string;
