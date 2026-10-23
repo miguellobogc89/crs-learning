@@ -11,11 +11,15 @@ import {
 } from "lucide-react";
 
 import type { KnowledgeImportProposal } from "@/lib/knowledge/import/types";
+import type { InvoiceImportPreview } from "@/lib/engine/knowledge-invoice-import.service";
 
 type Props = {
   proposal: KnowledgeImportProposal;
   isConfirming: boolean;
   error: string | null;
+  invoicePreview: InvoiceImportPreview | null;
+  invoicePreviewLoading: boolean;
+  invoicePreviewError: string | null;
   onBack: () => void;
   onConfirm: () => void;
 };
@@ -119,6 +123,9 @@ function DocumentNames({
 export function KnowledgeImportProposalStep({
   proposal,
   error,
+  invoicePreview,
+  invoicePreviewLoading,
+  invoicePreviewError,
 }: Props) {
   const createdArticles =
     proposal.articles.filter(
@@ -209,6 +216,57 @@ export function KnowledgeImportProposalStep({
       </div>
 
       <div className="mt-5 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
+        <section className="rounded-xl border border-blue-100 bg-blue-50/30 px-4 py-4">
+          <h4 className="text-[12px] font-semibold text-slate-900">
+            Engine · Plan de registros
+          </h4>
+          {invoicePreviewLoading ? (
+            <p role="status" className="mt-2 text-[11px] text-blue-700">
+              Extrayendo y verificando las facturas contra el catálogo global. Todavía no se ha escrito ningún registro.
+            </p>
+          ) : invoicePreviewError ? (
+            <p role="alert" className="mt-2 text-[11px] text-rose-700">
+              {invoicePreviewError} · Corrige el problema antes de confirmar.
+            </p>
+          ) : invoicePreview && invoicePreview.invoices.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-[11px] text-slate-600">
+                {invoicePreview.recordsToInsert} facturas nuevas · {invoicePreview.recordsToReuse} reutilizadas. Se insertarán al confirmar la propuesta completa.
+              </p>
+              {invoicePreview.invoices.map(invoice => (
+                <div key={invoice.fileId} className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="text-[12px] font-semibold text-slate-900">
+                    {invoice.fileName}
+                    <span className="ml-2 font-normal text-blue-700">
+                      {invoice.action === "insert" ? "INSERT" : "REUSE"}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-600">
+                    Nº {String(invoice.values.invoice_number ?? "—")} · Total {String(invoice.values.total_amount ?? "—")} · {String(invoice.values.issue_date ?? "Fecha no acreditada")}
+                  </p>
+                  <details className="mt-2 text-[10px] text-slate-500">
+                    <summary className="cursor-pointer">Ver campos extraídos</summary>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-[10px]">
+                      {JSON.stringify(invoice.values, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              ))}
+            </div>
+          ) : invoicePreview ? (
+            <p className="mt-2 text-[11px] text-slate-500">
+              No hay facturas compatibles con el catálogo global en esta propuesta.
+            </p>
+          ) : null}
+          {invoicePreview && invoicePreview.otherStructuredCandidates > 0 ? (
+            <p className="mt-2 text-[11px] text-amber-700">
+              {invoicePreview.otherStructuredCandidates} documentos estructurados de otros tipos quedan pendientes de conexión a Engine.
+            </p>
+          ) : null}
+          <p className="mt-2 text-[10px] text-slate-500">
+            Knowledge y Engine se incorporarán juntos al confirmar; antes solo se guarda el plan de revisión.
+          </p>
+        </section>
         {referenceDocuments.length > 0 ? (
           <section>
             <div className="mb-2.5 flex items-center gap-2">
