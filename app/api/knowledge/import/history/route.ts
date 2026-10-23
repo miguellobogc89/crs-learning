@@ -115,10 +115,22 @@ export async function GET() {
             status: file.status,
             processingStatus: file.processing_status,
             error: file.error_message,
-            documents: identified.map(doc => ({
-              type: string(doc.type) ?? "sin clasificar",
-              category: string(doc.category) ?? "sin clasificar",
-            })),
+            documents: identified.map(doc => {
+              const routing = object(doc.routing);
+              return {
+                type: string(doc.type) ?? "sin clasificar",
+                category: string(doc.category) ?? "sin clasificar",
+                routing: routing ? {
+                  knowledge: true,
+                  articleCandidate: routing.articleCandidate === true,
+                  structuredCandidate: routing.structuredCandidate === true,
+                  reason: string(routing.reason) ?? "",
+                  structuredFields: strings(routing.structuredFields),
+                  existingArticleId: string(routing.existingArticleId),
+                  existingStructureKeys: strings(routing.existingStructureKeys),
+                } : null,
+              };
+            }),
             articleTitles,
             skippedAsDuplicate: Boolean(skipped),
             // Null means the article-generation phase has not been reached yet.
