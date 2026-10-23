@@ -726,11 +726,17 @@ export async function generateKnowledgeImportProposal({
         "Revisando la estructura actual de Knowledge",
     });
 
-    const existingKnowledge =
-      await listKnowledgeStatus(
-        userId,
-        workspaceId,
-      );
+    // Only existing ARTICLES may be reused as article destinations.
+    // Independent reference documents are context, not updateable articles.
+    const existingKnowledge = (await listKnowledgeStatus(
+      userId,
+      workspaceId,
+    )).map(library => ({
+      ...library,
+      knowledge_sources: library.knowledge_sources.filter(
+        source => source.knowledge_type !== "document",
+      ),
+    }));
 
     await onProgress?.({
       step: "designing_structure",
