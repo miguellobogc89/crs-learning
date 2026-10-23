@@ -9,6 +9,16 @@ export type InventoryDocument = {
   startLine: number;
   endLine: number;
   confidence: "high" | "medium" | "low";
+  /** Routing proposal only: no articles, tables or Engine records are written here. */
+  routing?: {
+    knowledge: true;
+    articleCandidate: boolean;
+    structuredCandidate: boolean;
+    reason: string;
+    structuredFields: string[];
+    existingArticleId: string | null;
+    existingStructureKeys: string[];
+  };
 };
 export type InventoryFile = {
   fileId: string;
