@@ -230,15 +230,17 @@ async function extract(file: StagingFile, fields: Map<string, string>) {
       return primary;
     const raw: unknown = JSON.parse(second.output_text);
     if (!isObject(raw) || !isObject(raw.values) || !isObject(raw.evidence)) return primary;
+    const retryValues = raw.values;
+    const retryEvidence = raw.evidence;
+    const retryCalculations = isObject(raw.calculations) ? raw.calculations : {};
     const additions = Object.fromEntries(missing
-      .filter(key => key in raw.values && key in raw.evidence)
-      .map(key => [key, raw.values[key]]));
+      .filter(key => key in retryValues && key in retryEvidence)
+      .map(key => [key, retryValues[key]]));
     const quotes = Object.fromEntries(missing
-      .filter(key => key in additions).map(key => [key, raw.evidence[key]]));
-    const calculations = isObject(raw.calculations)
-      ? Object.fromEntries(missing.filter(key => key in additions && key in raw.calculations)
-          .map(key => [key, raw.calculations[key]]))
-      : {};
+      .filter(key => key in additions).map(key => [key, retryEvidence[key]]));
+    const calculations = Object.fromEntries(missing
+      .filter(key => key in additions && key in retryCalculations)
+      .map(key => [key, retryCalculations[key]]));
     return checkedInvoice({
       values: { ...primary.values, ...additions },
       evidence: { ...primary.evidence, ...quotes },
