@@ -34,7 +34,13 @@ function readMap(payload: unknown, importId: string): ImportInventory {
 function normal(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, 120) : fallback;
 }
-function extractDocuments(raw: unknown, file: { id: string; file_name: string }, lineCount: number): InventoryDocument[] {
+function extractDocuments(
+  raw: unknown,
+  file: { id: string; file_name: string },
+  lineCount: number,
+  articleIds: Set<string>,
+  structureKeys: Set<string>,
+): InventoryDocument[] {
   if (!raw || typeof raw !== "object" || !Array.isArray((raw as { documents?: unknown }).documents)) {
     throw new Error("La IA no devolvió un inventario de documentos válido.");
   }
@@ -49,7 +55,39 @@ function extractDocuments(raw: unknown, file: { id: string; file_name: string },
     if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > lineCount) {
       throw new Error("La IA devolvió límites documentales no verificables.");
     }
+    const routing = doc.routing;
+    if (!routing || typeof routing !== "object" || Array.isArray(routing)) {
+      throw new Error("La IA no ha clasificado el destino del documento.");
+    }
+    const route = routing as Record<string, unknown>;
+    if (typeof route.articleCandidate !== "boolean" ||
+        typeof route.structuredCandidate !== "boolean" ||
+        typeof route.reason !== "string" || !route.reason.trim() ||
+        !Array.isArray(route.structuredFields) ||
+        !Array.isArray(route.existingStructureKeys)) {
+      throw new Error("La clasificación de destinos es incompleta.");
+    }
+    const articleCandidate = route.articleCandidate;
+    const structuredCandidate = route.structuredCandidate;
+    const existingArticleId = articleCandidate && typeof route.existingArticleId === "string" &&
+      articleIds.has(route.existingArticleId) ? route.existingArticleId : null;
+    const existingStructureKeys = structuredCandidate
+      ? route.existingStructureKeys.filter((key): key is string =>
+          typeof key === "string" && structureKeys.has(key)).slice(0, 8)
+      : [];
     return {
+      routing: {
+        knowledge: true,
+        articleCandidate,
+        structuredCandidate,
+        reason: route.reason.trim().slice(0, 450),
+        structuredFields: structuredCandidate
+          ? route.structuredFields.filter((field): field is string => typeof field === "string")
+              .map(field => field.trim().slice(0, 60)).filter(Boolean).slice(0, 18)
+          : [],
+        existingArticleId,
+        existingStructureKeys,
+      },
       id: file.id + ":doc:" + (index + 1),
       fileId: file.id, fileName: file.file_name,
       type: normal(doc.type, "documento sin clasificar").toLowerCase(),
@@ -85,6 +123,28 @@ export async function POST(request: Request, context: Context) {
   // "luz" and "electricidad" as separate categories across PDFs.
   const previousMap = readMap(imported.proposal_json, importId);
   const previousCategories = previousMap.summary.byCategory.map(item => item.category);
+  // Use a bounded snapshot of existing knowledge. Its IDs/keys may be suggested,
+  // but never accepted without verifying them against this exact snapshot.
+  const [existingArticles, existingStructures] = await Promise.all([
+    prisma.knowledge_sources.findMany({
+      where: {
+        owner_user_id: session.user.id,
+        knowledge_libraries: { workspace_id: activeWorkspace.id },
+        knowledge_type: "article",
+      },
+      select: { id: true, title: true, description: true },
+      orderBy: { updated_at: "desc" },
+      take: 80,
+    }),
+    prisma.engine_object_types.findMany({
+      where: { workspace_id: activeWorkspace.id, status: "active" },
+      select: { key: true, name: true, description: true },
+      orderBy: { updated_at: "desc" },
+      take: 80,
+    }),
+  ]);
+  const articleIds = new Set(existingArticles.map(item => item.id));
+  const structureKeys = new Set(existingStructures.map(item => item.key));
   const numbered = lines.map((line, i) => `${i + 1}: ${line}`).join("\n");
   let documents: InventoryDocument[];
   try {
@@ -93,22 +153,38 @@ export async function POST(request: Request, context: Context) {
       model: process.env.CRS_IMPORT_INVENTORY_MODEL || "gpt-4o-mini",
       temperature: 0,
       response_format: { type: "json_object" },
-      max_completion_tokens: 2000,
+      max_completion_tokens: 3500,
       messages: [
-        { role: "system", content: `Devuelve exclusivamente JSON válido con la clave documents (array).
-Eres un lector universal de documentos. Identifica CADA documento independiente dentro del archivo, no cada tabla o desglose.
-Lee todas las líneas, considera encabezados, cambios de emisor, fechas, números, cierres y continuidad.
-Para cada documento devuelve: type (factura, contrato, procedimiento, receta, informe u otro según contenido), category (concepto breve descubierto del contenido: electricidad, telefonía, productos, etc.; no uses lista fija), title (breve), startLine, endLine, confidence (high, medium, low).
-Los límites son números de línea del texto proporcionado. Un documento puede contener muchas tablas.
-No inventes documentos, categorías, números o relaciones. Si hay duda, utiliza sin clasificar y confidence low.
-Incluye todos los documentos encontrados, incluso si hay varias facturas dentro de un PDF.
-El nombre del archivo solo es contexto, no prueba. No extraigas filas, importes, tablas ni entidades.\nSi una categoría anterior coincide semánticamente con una categoría del archivo actual, reutiliza exactamente su nombre.` },
-        { role: "user", content: `Categorías usadas en archivos anteriores (reutilízalas solo cuando correspondan): ${JSON.stringify(previousCategories)}\nInventario JSON del archivo ${file.file_name}. Texto completo con líneas numeradas:\n${numbered}` },
+        { role: "system", content: `Devuelve exclusivamente un objeto JSON con la clave "documents" (array).
+Eres el clasificador documental de una empresa. Identifica CADA documento independiente dentro del archivo; una tabla, un desglose y una página adicional NO son documentos nuevos.
+Examina el contenido antes que el nombre. Para cada documento devuelve:
+- type: tipo concreto según contenido, no uses "procedimiento" como categoría por defecto.
+- category: tema empresarial breve; reutiliza categorías anteriores semánticamente equivalentes.
+- title, startLine, endLine, confidence: high|medium|low; límites de línea íntegros y verificables.
+- routing: objeto con knowledge=true, articleCandidate (boolean), structuredCandidate (boolean), reason (explicación breve), structuredFields (array de nombres de campos posibles, sin extraer valores), existingArticleId (ID exacto de artículo conocido o null), existingStructureKeys (array de claves exactas de estructuras conocidas).
+
+Criterios de destino, NO excluyentes:
+1. Knowledge: SIEMPRE true. El archivo original y su contenido deben conservarse como fuente consultable para el asistente.
+2. articleCandidate=true solo cuando aporte conocimiento explicativo, normativo, instructivo o temático que merezca una unidad de conocimiento reutilizable; puede ampliar un artículo ya existente. No crees artículo solo por ser un archivo o por contener información.
+3. structuredCandidate=true si posee atributos, filas, importes, fechas, vencimientos u otros datos estructurables útiles y comparables. No requiere una tabla dibujada. Es un candidato a JSON, NO crea tablas.
+4. Ambos true para contenido híbrido: por ejemplo, un manual con reglas y catálogo de datos.
+5. Una factura, recibo, contrato individual o liquidación legal normalmente es información de referencia + candidato estructurado; NO es un procedimiento ni un artículo por defecto.
+6. Si ninguna transformación aporta valor, ambos false y permanece únicamente como documento informativo.
+7. Usa existingArticleId/existingStructureKeys solo si hay correspondencia razonable con los catálogos facilitados, sin inventar IDs.
+8. No extraigas registros ni valores; solo propon destinos y nombres de campos. Evita asumir que todo se transforma.
+
+Conserva cada documento aunque el archivo contenga varios. No inventes fechas, categorías, límites, relaciones ni documentos. En caso de incertidumbre, explica la duda y usa confidence low.` },
+        { role: "user", content: `Categorías anteriores: ${JSON.stringify(previousCategories)}
+Artículos actuales de Knowledge (posibles reutilizaciones): ${JSON.stringify(existingArticles)}
+Estructuras actuales de Engine (posibles reutilizaciones, NO insertar): ${JSON.stringify(existingStructures)}
+Archivo: ${file.file_name}
+Contenido numerado:
+${numbered}` },
       ],
     });
     const answer = completion.choices[0]?.message?.content;
     if (!answer) throw new Error("Respuesta vacía del modelo.");
-    documents = extractDocuments(JSON.parse(answer), file, lines.length);
+    documents = extractDocuments(JSON.parse(answer), file, lines.length, articleIds, structureKeys);
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Fallo en reconocimiento IA" }, { status: 502 });
   }
