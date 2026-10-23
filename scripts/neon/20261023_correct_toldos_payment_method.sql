@@ -21,8 +21,8 @@ BEGIN
     RAISE EXCEPTION 'Target Toldos invoice not found; no changes applied';
   END IF;
 
-  IF original.values_json ->> 'invoice_number' <> '018-2026'
-     OR original.values_json ->> 'total_amount' <> '955' THEN
+  IF (original.values_json ->> 'invoice_number') IS DISTINCT FROM '018-2026'
+     OR (original.values_json ->> 'total_amount') IS DISTINCT FROM '955' THEN
     RAISE EXCEPTION 'Target invoice identity / total differs; no changes applied';
   END IF;
 
@@ -32,7 +32,7 @@ BEGIN
     RETURN;
   END IF;
 
-  IF original.values_json ->> 'payment_terms' <> 'TRANSFERENCIA'
+  IF (original.values_json ->> 'payment_terms') IS DISTINCT FROM 'TRANSFERENCIA'
      OR original.values_json ? 'payment_method' THEN
     RAISE EXCEPTION 'Unexpected payment data; manual review required';
   END IF;
