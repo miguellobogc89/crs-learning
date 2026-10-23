@@ -205,7 +205,7 @@ export function KnowledgeInfoSidebar() {
               (!file.documents.length ||
                 file.documents.some(doc => doc.routing === null || doc.routing.articleCandidate)));
             return (
-              <details key={item.id} defaultOpen={index === 0}
+              <details key={item.id} open={index === 0}
                 className="group rounded-xl border border-slate-200 bg-white">
                 <summary className="cursor-pointer list-none px-3 py-3 [&::-webkit-details-marker]:hidden">
                   <div className="flex items-start justify-between gap-2">
