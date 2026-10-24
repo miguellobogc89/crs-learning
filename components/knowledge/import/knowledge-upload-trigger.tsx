@@ -2,6 +2,7 @@
 
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 
@@ -23,6 +24,7 @@ export function KnowledgeUploadTrigger({
   label = "Subir",
   variant = "default",
 }: Props) {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [open, setOpen] = useState(false);
@@ -83,7 +85,12 @@ export function KnowledgeUploadTrigger({
         context={context}
         selectedFiles={files}
         onOpenChange={handleOpenChange}
-        onCompleted={() => setFiles([])}
+        onCompleted={() => {
+          setFiles([]);
+          // Import confirmation updates Engine and Knowledge server-side.
+          // Refresh the current RSC view so table records and fields reflect Neon.
+          router.refresh();
+        }}
       />
     </>
   );
