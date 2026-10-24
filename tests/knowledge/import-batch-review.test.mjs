@@ -197,3 +197,19 @@ test("model timeout preserves the snapshot and returns a retryable error", async
   await assert.rejects(service.reviewKnowledgeImportBatch(scope), /texto extraído se conserva/);
   assert.equal(service.calls().saves, 0);
 });
+
+test("retained uploaded originals are storage containers, not pending extraction work", () => {
+  const f = fixture();
+  const originals = f.files.map(file => ({ id: "original-" + file.id, status: "uploaded", extracted_text: "" }));
+  const reviewed = applyImportBatchReview({ ...f, files: [...originals, ...f.files] });
+  assert.doesNotThrow(() => assertReviewedImportBatch(reviewed, [...originals, ...f.files]));
+  assert.equal(Object.keys(reviewedDocumentRoutes(reviewed, [...originals, ...f.files])).length, 3);
+  assert.equal(importBatchFingerprint(reviewed, f.files), importBatchFingerprint(reviewed, [...originals, ...f.files]));
+});
+test("a real extracted queue item still blocks review even when originals are retained", () => {
+  const f = fixture();
+  const files = [{ id: "original", status: "uploaded", extracted_text: "" }, ...f.files,
+    { id: "queued", status: "extracted", extracted_text: "" }];
+  assert.throws(() => assertCompleteImportInventory(f.inventory, files), /extracción/);
+  assert.throws(() => assertCompleteImportInventory(emptyImportInventory("import"), [files[0]]), /extracción/);
+});

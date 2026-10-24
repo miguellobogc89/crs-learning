@@ -11,7 +11,7 @@ export type BatchSource = { id: string; status: string; extracted_text: string }
 
 export function importBatchFingerprint(inventory: ImportInventory, files: BatchSource[]) {
   return createHash("sha256").update(JSON.stringify({
-    files: files.map(file => ({ id: file.id, status: file.status,
+    files: files.filter(file => file.status !== "uploaded").map(file => ({ id: file.id, status: file.status,
       hash: createHash("sha256").update(file.extracted_text).digest("hex") }))
       .sort((a, b) => a.id.localeCompare(b.id)),
     documents: [...inventory.documents].sort((a, b) => a.id.localeCompare(b.id)),
@@ -21,8 +21,10 @@ export function importBatchFingerprint(inventory: ImportInventory, files: BatchS
 }
 
 export function assertCompleteImportInventory(inventory: ImportInventory, files: BatchSource[]) {
+  // analyze retains uploaded originals as storage containers and creates a
+  // separate extracted queue. Only that queue can be pending text extraction.
   const ready = files.filter(file => file.status === "text_ready");
-  if (!ready.length || files.some(file => ["uploaded", "extracted", "text_processing"].includes(file.status))) {
+  if (!ready.length || files.some(file => ["extracted", "text_processing"].includes(file.status))) {
     throw new Error("Termina la extracción de todos los archivos antes de revisar el lote.");
   }
   const readyIds = new Set(ready.map(file => file.id));
