@@ -511,3 +511,26 @@ test("invoice table places invoice number first, hides ID/currency and shows par
   assert.match(file, /formatEngineNumericValue/);
   assert.match(file, /sourceTextsByRecord/);
 });
+
+
+test("printed invoice with separate Cliente / Nombre lines identifies Toldos issuer and Plocia customer", () => {
+  const text = [
+    "                      TOLDOS CHICLANA S.L.                        FACTURA 018-2026",
+    "                      B-11507829",
+    "                      P.I. LA HOYA, C/ TAPIZADORES, 4, CHICLANA (CADIZ)",
+    "        Cliente",
+    "Nombre      D'PLOCIA HELADOS SL          CIF: B72378581",
+    "Dirección CALLE PLOCIA 4",
+  ].join("\n");
+  assert.deepEqual(getInvoicePartyLabels({}, text), {
+    issuer: "TOLDOS CHICLANA S.L.",
+    customer: "D'PLOCIA HELADOS SL",
+  });
+});
+
+test("invoice money conversion preserves JSON decimals and parses Spanish printed numbers", () => {
+  const field = { key: "net_amount", field_type: "decimal" };
+  assert.equal(formatEngineNumericValue("1133.81", field, "EUR"), "1.133,81 €");
+  assert.equal(formatEngineNumericValue("1.133,81", field, "EUR"), "1.133,81 €");
+  assert.equal(formatEngineNumericValue("3.050,00", field, "EUR"), "3.050,00 €");
+});
