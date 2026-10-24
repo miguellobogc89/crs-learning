@@ -63,6 +63,18 @@ export function getInvoicePartyLabels(
       if (named) { customer = named; break; }
     }
   }
+  if (!customer) {
+    // Some printed invoices use a "Cliente" section followed by
+    // "Nombre    ACME S.L." rather than a CLIENTE: value on one line.
+    for (let index = 0; index < Math.min(lines.length, 40); index++) {
+      if (!/^\s*(?:cliente|receptor|comprador)\s*:?\s*$/i.test(lines[index])) continue;
+      for (const next of lines.slice(index + 1, index + 4)) {
+        const named = labelValue(next, /\b(?:Nombre|Raz[oó]n\s+social)\s*:?\s+/i);
+        if (named) { customer = named; break; }
+      }
+      if (customer) break;
+    }
+  }
   if (!issuer) {
     for (const line of lines) {
       const named = labelValue(line, ISSUER_LABEL);
