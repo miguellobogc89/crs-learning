@@ -18,12 +18,14 @@ export type InvoicePreviewField = { field: string; value: string | number; evide
 export type InvoicePreviewConflict = {
   field: string; current: string | number | boolean; extracted: string | number;
 };
+export type InvoiceImportFailure = { fileId: string; fileName: string; reason: string };
 export type InvoiceImportPreview = {
   status: "ready" | "not_applicable";
   planId: string | null;
   recordsToInsert: number;
   recordsToUpdate: number;
   recordsToReuse: number;
+  failures: InvoiceImportFailure[];
   invoices: Array<Pick<InvoiceImportRow, "fileId" | "fileName" | "action" | "values"> & {
     addedFields: InvoicePreviewField[];
     conflictingFields: InvoicePreviewConflict[];
@@ -35,6 +37,7 @@ type InvoicePlan = {
   catalogTypeId: string;
   catalogVersion: number;
   documents: InvoiceImportRow[];
+  failedFiles?: InvoiceImportFailure[];
 };
 type StagingFile = {
   id: string; file_name: string; status: string;
@@ -502,7 +505,8 @@ export async function previewKnowledgeInvoices(input: {
   const otherStructuredCandidates = Object.entries(proposal.documentRoutes ?? {})
     .filter(([id, route]) => route.structuredCandidate && !ids.includes(id)).length;
   if (!ids.length) return { status: "not_applicable", planId: null,
-    recordsToInsert: 0, recordsToUpdate: 0, recordsToReuse: 0, invoices: [], otherStructuredCandidates };
+    recordsToInsert: 0, recordsToUpdate: 0, recordsToReuse: 0,
+    invoices: [], failures: [], otherStructuredCandidates };
   if (ids.length > 12) throw new Error("Máximo 12 facturas por confirmación.");
   const ws = await prisma.workspaces.findFirst({
     where: { id: input.workspaceId, status: "active" },
@@ -556,31 +560,76 @@ export async function previewKnowledgeInvoices(input: {
         .filter(p => p.field_key && p.evidence_text)
         .map(p => [p.field_key!, p.evidence_text!])),
     }]));
-  const rows: InvoiceImportRow[] = [];
-  const deltaByFileId = new Map<string, ReturnType<typeof previewInvoiceFieldDelta>>();
+  // Group identical content before extraction. Different filenames can point to
+  // byte-identical documents; never ask the model to re-read a duplicate.
+  const groups = new Map<string, StagingFile[]>();
   for (const file of files) {
-    const externalKey = externalKeyForFile(file);
-    const prior = existing.get(externalKey);
-    const extracted = await extract(
-      file, fields,
-      version.engine_catalog_fields.map(f => ({
-        key: f.key, name: f.name, field_type: f.field_type,
-        description: f.description, is_required: f.is_required,
-      })),
-      prior ?? null,
-    );
-    const previousValues = prior?.values;
-    const delta = previewInvoiceFieldDelta(previousValues, extracted);
-    deltaByFileId.set(file.id, delta);
-    const action: InvoiceImportRow["action"] = previousValues === undefined
-      ? "insert"
-      : delta.addedFields.length ? "update" : "reuse";
-    rows.push({ fileId: file.id, fileName: file.file_name, externalKey,
-      action, ...extracted });
+    const key = externalKeyForFile(file);
+    groups.set(key, [...(groups.get(key) ?? []), file]);
+  }
+  const rows: InvoiceImportRow[] = [];
+  const failures: InvoiceImportFailure[] = [];
+  const deltaByFileId = new Map<string, ReturnType<typeof previewInvoiceFieldDelta>>();
+  const catalogFields = version.engine_catalog_fields.map(f => ({
+    key: f.key, name: f.name, field_type: f.field_type,
+    description: f.description, is_required: f.is_required,
+  }));
+  const uniqueGroups = [...groups.entries()];
+
+  // Bound concurrent model calls to avoid serial timeouts on longer batches.
+  for (let offset = 0; offset < uniqueGroups.length; offset += 3) {
+    const results = await Promise.all(uniqueGroups.slice(offset, offset + 3)
+      .map(async ([externalKey, siblings]) => {
+        const file = siblings[0];
+        try {
+          const prior = existing.get(externalKey);
+          const extracted = await extract(file, fields, catalogFields, prior ?? null);
+          const delta = previewInvoiceFieldDelta(prior?.values, extracted);
+          const firstAction: InvoiceImportRow["action"] = !prior ? "insert"
+            : delta.addedFields.length ? "update" : "reuse";
+          const planned: Array<{
+            row: InvoiceImportRow;
+            delta: ReturnType<typeof previewInvoiceFieldDelta>;
+          }> = siblings.map((f, index) => ({
+            row: {
+              fileId: f.id, fileName: f.file_name, externalKey,
+              action: index === 0 ? firstAction : "reuse",
+              ...extracted,
+            },
+            delta: index === 0 ? delta :
+              { addedFields: [], conflictingFields: [] },
+          }));
+          return { planned, failed: [] as InvoiceImportFailure[] };
+        } catch (error) {
+          // Do not discard eight valid documents because one is unreadable.
+          const reason = error instanceof Error ? error.message : "Error de extracción no identificado";
+          console.warn("[engine-invoices] File excluded from batch proposal", {
+            file: file.file_name, reason,
+          });
+          return {
+            planned: [] as Array<{ row: InvoiceImportRow;
+              delta: ReturnType<typeof previewInvoiceFieldDelta> }>,
+            failed: siblings.map(f => ({
+              fileId: f.id, fileName: f.file_name, reason,
+            })),
+          };
+        }
+      }));
+    for (const result of results) {
+      failures.push(...result.failed);
+      for (const { row, delta } of result.planned) {
+        rows.push(row);
+        deltaByFileId.set(row.fileId, delta);
+      }
+    }
+  }
+  if (rows.length === 0) {
+    throw new Error("Ningún documento pudo verificarse para Engine: " +
+      failures.slice(0, 3).map(f => f.fileName + ": " + f.reason).join(" | "));
   }
   const body: InvoicePlan = {
     kind: "catalog_invoice_import_v1", catalogTypeId: catalog.id,
-    catalogVersion: version.version, documents: rows,
+    catalogVersion: version.version, documents: rows, failedFiles: failures,
   };
   const idempotencyKey = "knowledge-import:" + input.importId;
   const where = { workspace_id_idempotency_key: {
@@ -609,6 +658,7 @@ export async function previewKnowledgeInvoices(input: {
     recordsToInsert: rows.filter(r => r.action === "insert").length,
     recordsToUpdate: rows.filter(r => r.action === "update").length,
     recordsToReuse: rows.filter(r => r.action === "reuse").length,
+    failures,
     invoices: rows.map(({ fileId, fileName, action, values }) =>
       ({ fileId, fileName, action, values,
          ...(deltaByFileId.get(fileId) ?? { addedFields: [], conflictingFields: [] }),
@@ -635,12 +685,19 @@ export async function validatePreparedInvoicePlan(input: {
   // Narrow JSON arrays before using them in callbacks (Prisma.JsonValue is a union).
   const sourceFileIds = isObject(source) && Array.isArray(source.fileIds) ? source.fileIds : null;
   const documentRows = isObject(data) && Array.isArray(data.documents) ? data.documents : null;
+  const failedFiles = isObject(data) && Array.isArray(data.failedFiles) ? data.failedFiles : [];
+  const plannedIds = documentRows?.map((row: unknown) =>
+    isObject(row) && typeof row.fileId === "string" ? row.fileId : null) ?? [];
+  const failedIds = failedFiles.map((row: unknown) =>
+    isObject(row) && typeof row.fileId === "string" ? row.fileId : null);
+  const allIds = [...plannedIds, ...failedIds];
   if (!sourceFileIds || !documentRows || !isObject(source) ||
       source.importId !== input.importId || !isObject(data) ||
       data.kind !== "catalog_invoice_import_v1" ||
-      documentRows.length !== ids.length ||
-      ids.some(id => !sourceFileIds.includes(id) ||
-        !documentRows.some((row: unknown) => isObject(row) && row.fileId === id)) ||
+      documentRows.length === 0 || allIds.length !== ids.length ||
+      new Set(allIds).size !== ids.length ||
+      ids.some(id => !sourceFileIds.includes(id) || !allIds.includes(id)) ||
+      sourceFileIds.length !== ids.length ||
       sha256(stableJson(data)) !== plan.plan_hash)
     throw new Error("La propuesta de Engine no coincide con los documentos.");
   for (const doc of documentRows) {
