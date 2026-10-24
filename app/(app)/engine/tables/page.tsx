@@ -53,23 +53,33 @@ export default async function EngineTablesPage({
           record_id: { in: records.map(record => record.id) },
           knowledge_file_id: { not: null },
         },
-        select: {
-          record_id: true,
-          knowledge_files: { select: { file_name: true, extracted_text: true } },
-        },
+        distinct: ["record_id", "knowledge_file_id"],
+        orderBy: { created_at: "asc" },
+        select: { record_id: true, knowledge_file_id: true },
       })
     : [];
+  // Fetch each source file only once. A single record may have many evidence
+  // rows, which would otherwise repeatedly hydrate the same PDF text.
+  const sourceFileIds = [...new Set(invoiceSources
+    .map(source => source.knowledge_file_id)
+    .filter((id): id is string => !!id))];
+  const invoiceFiles = sourceFileIds.length
+    ? await prisma.knowledge_files.findMany({
+        where: { id: { in: sourceFileIds } },
+        select: { id: true, file_name: true, extracted_text: true },
+      })
+    : [];
+  const invoiceFileById = new Map(invoiceFiles.map(file => [file.id, file]));
   const sourceNamesByRecord = new Map<string, Set<string>>();
   const sourceTextsByRecord = new Map<string, string>();
   for (const source of invoiceSources) {
-    const name = source.knowledge_files?.file_name;
-    if (!name) continue;
+    const file = source.knowledge_file_id && invoiceFileById.get(source.knowledge_file_id);
+    if (!file) continue;
     const names = sourceNamesByRecord.get(source.record_id) ?? new Set<string>();
-    names.add(name);
+    names.add(file.file_name);
     sourceNamesByRecord.set(source.record_id, names);
-    if (!sourceTextsByRecord.has(source.record_id) &&
-        source.knowledge_files?.extracted_text) {
-      sourceTextsByRecord.set(source.record_id, source.knowledge_files.extracted_text);
+    if (!sourceTextsByRecord.has(source.record_id) && file.extracted_text) {
+      sourceTextsByRecord.set(source.record_id, file.extracted_text);
     }
   }
   const canReview = activeWorkspace.role === "owner" || activeWorkspace.role === "admin";
