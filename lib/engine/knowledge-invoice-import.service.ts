@@ -232,9 +232,16 @@ export function checkedInvoice(
   const evidence: InvoiceImportRow["evidence"] = {};
   const calculations: NonNullable<InvoiceImportRow["calculations"]> = {};
   const normalizedText = norm(text);
-  for (const [key, value] of Object.entries(raw.values)) {
+  // Field keys are schema identities. Accept only mechanically equivalent
+  // formatting (camelCase, snake_case, hyphens); never guess different meanings.
+  const canonicalByShape = new Map([...fields.keys()].map(key =>
+    [key.replace(/[^a-z0-9]/gi, "").toLowerCase(), key]));
+  for (const [rawKey, value] of Object.entries(raw.values)) {
+    const key = fields.has(rawKey) ? rawKey :
+      canonicalByShape.get(rawKey.replace(/[^a-z0-9]/gi, "").toLowerCase());
+    if (!key || values[key] !== undefined) continue;
     const fieldType = fields.get(key);
-    const quote = raw.evidence[key];
+    const quote = raw.evidence[rawKey] ?? raw.evidence[key];
     if (!fieldType || typeof quote !== "string" || !quote.trim() ||
       quote.length > 500 || !normalizedText.includes(norm(quote))) continue;
     if (fieldType === "decimal") {
@@ -294,6 +301,67 @@ export function recoverInvoiceIdentity(
   }, text, fields, { allowPartial: true });
 }
 
+/**
+ * Last-resort source-backed anchor recovery for invariant document identity.
+ * Uses field labels rather than supplier-specific templates or LLM inferences.
+ * Only exact excerpts returned from the original text can be accepted.
+ */
+export function recoverDocumentInvoiceAnchors(
+  partial: ReturnType<typeof checkedInvoice>,
+  text: string,
+  fields: Map<string, string>,
+) {
+  const values = { ...partial.values };
+  const evidence = { ...partial.evidence };
+  const lines = text.split(/\r?\n/);
+  const identityLabel = /(?:n[º°]\s*factura|n[uú]mero\s*(?:de\s*)?factura|factura\s*(?:n[º°]|n[uú]m(?:ero)?\.?|n[uú]mero)|invoice\s*(?:number|no\.?|#))\s*:?/i;
+  const totalLabel = /(?:total\s*(?:de\s*)?factura|total\s*a\s*pagar|importe\s*total|invoice\s*total)\s*:?/i;
+  const candidates: Array<{key: "invoice_number" | "total_amount"; value: string | number; quote: string}> = [];
+  for (const line of lines) {
+    // Fragments longer than the evidence cap are unsafe: never truncate
+    // the source quote without checking where its evidence is located.
+    const numberLabel = line.match(identityLabel);
+    if (numberLabel && fields.has("invoice_number")) {
+      const suffix = line.slice(numberLabel.index! + numberLabel[0].length).trim();
+      const tokens = suffix.match(/^([A-Z0-9][\w./-]*)(?:\s+([A-Z0-9][\w./-]*))?/i);
+      if (tokens) {
+        let number = tokens[1].replace(/[.,;:]$/, "");
+        if (!/\d/.test(number) && tokens[2] && /\d/.test(tokens[2]))
+          number += " " + tokens[2].replace(/[.,;:]$/, "");
+        if (/\d/.test(number) && number.length >= 3) {
+          const quote = line.slice(Math.max(0, numberLabel.index! - 10),
+            numberLabel.index! + 450).trim();
+          candidates.push({ key: "invoice_number", value: number, quote });
+        }
+      }
+    }
+    const totalMatch = line.match(totalLabel);
+    if (totalMatch && fields.has("total_amount")) {
+      const suffix = line.slice(totalMatch.index! + totalMatch[0].length);
+      const amount = suffix.match(/^\s*[:=-]?\s*(\d[\d., ]{0,20})\s*€?/);
+      if (amount) {
+        const parsed = decimal(amount[1]);
+        if (parsed !== null && parsed >= 0) {
+          const quote = line.slice(Math.max(0, totalMatch.index! - 10),
+            totalMatch.index! + 450).trim();
+          candidates.push({ key: "total_amount", value: parsed, quote });
+        }
+      }
+    }
+  }
+  for (const key of ["invoice_number", "total_amount"] as const) {
+    if (values[key] !== undefined) continue;
+    const options = candidates.filter(c => c.key === key);
+    // Conflicting totals or identifiers must not be guessed away.
+    const distinct = new Set(options.map(c => stableJson(c.value)));
+    if (distinct.size !== 1) continue;
+    values[key] = options[0].value;
+    evidence[key] = options[0].quote;
+  }
+  return checkedInvoice({ values, evidence, calculations: partial.calculations },
+    text, fields, { allowPartial: true });
+}
+
 type CatalogInvoiceField = {
   key: string; name: string; field_type: string;
   description: string | null; is_required: boolean;
@@ -342,6 +410,7 @@ async function extract(
   // Do not reject missing mandatory fields before the recovery attempt.
   const first = checkedInvoice(parsed, file.extracted_text, fields, { allowPartial: true });
   let verified = recoverInvoiceIdentity(first, previous, file.extracted_text, fields);
+  verified = recoverDocumentInvoiceAnchors(verified, file.extracted_text, fields);
   const core = ["invoice_number", "total_amount"];
   const missing = [...new Set([...core, "issue_date", "net_amount", "tax_amount", "payment_method"])]
     .filter(key => fields.has(key) && verified.values[key] === undefined);
@@ -396,6 +465,7 @@ async function extract(
       calculations: { ...verified.calculations, ...calculations },
     }, file.extracted_text, fields, { allowPartial: true });
     verified = recoverInvoiceIdentity(enriched, previous, file.extracted_text, fields);
+    verified = recoverDocumentInvoiceAnchors(verified, file.extracted_text, fields);
   } catch (error) {
     // Optional fields are best effort. Missing essentials still fail below.
     console.warn("[engine-invoices] Unable to complete extracted fields", {
