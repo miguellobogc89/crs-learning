@@ -1,3 +1,4 @@
+import type { ImportInventory } from "@/lib/knowledge/import/build-import-map";
 
 // components/knowledge/import/knowledge-import-api.ts
 
@@ -580,4 +581,13 @@ export async function generateKnowledgeImportProposal(
     proposal:
       proposalResult.proposal,
   };
+}
+
+export async function reviewKnowledgeImportBatch(importId: string): Promise<ImportInventory> {
+  const response = await fetch(`/api/knowledge/import/${encodeURIComponent(importId)}/review-batch`, {
+    method: "POST",
+  });
+  const result = await readResponse<{ map: ImportInventory }>(response, "No se ha podido revisar el lote completo");
+  if (result.map?.batchReview?.status !== "reviewed") throw new Error("La revisión del lote no está completa");
+  return result.map;
 }

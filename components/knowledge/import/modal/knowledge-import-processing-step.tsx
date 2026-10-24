@@ -1,7 +1,7 @@
-// components/knowledge/import/modal/knowledge-import-processing-step.tsx
-
 "use client";
 
+import { KnowledgeImportBatchSummary } from "./knowledge-import-batch-summary";
+import type { ImportInventory } from "@/lib/knowledge/import/build-import-map";
 import Image from "next/image";
 
 import {
@@ -31,6 +31,7 @@ type Props = {
   phase: KnowledgeImportProcessingPhase;
   files: KnowledgeImportFileProgress[];
   summary: KnowledgeImportProgressSummary;
+  inventory?: ImportInventory | null;
   proposalProgress?: KnowledgeImportProposalProgress | null;
 };
 
@@ -84,6 +85,7 @@ export function KnowledgeImportProcessingStep({
   files,
   summary,
   proposalProgress,
+  inventory,
 }: Props) {
   const totalFiles =
     summary.totalFiles ||
@@ -94,8 +96,9 @@ export function KnowledgeImportProcessingStep({
     summary.duplicateFiles +
     summary.failedFiles;
 
+  const reviewingBatch = phase === "reviewing_batch";
   const analysisFinished =
-    totalFiles > 0 &&
+    !reviewingBatch && totalFiles > 0 &&
     analyzedFiles >= totalFiles &&
     summary.pendingFiles === 0;
 
@@ -124,7 +127,7 @@ export function KnowledgeImportProcessingStep({
         <div className="flex items-end justify-between gap-6">
           <div>
             <h3 className="text-[17px] font-semibold tracking-[-0.015em] text-slate-950">
-              {isGeneratingProposal
+              {reviewingBatch ? "Revisando el lote completo" : isGeneratingProposal
                 ? "Preparando la propuesta"
                 : analysisFinished
                   ? "Análisis completado"
@@ -132,7 +135,7 @@ export function KnowledgeImportProcessingStep({
             </h3>
 
             <p className="mt-1 text-[12px] leading-5 text-slate-500">
-              {isGeneratingProposal
+              {reviewingBatch ? "Comparando los documentos y proponiendo destinos para Knowledge y Engine." : isGeneratingProposal
                 ? proposalProgress
                     ?.message ??
                   "Estamos preparando la mejor forma de incorporar el contenido."
@@ -176,6 +179,7 @@ export function KnowledgeImportProcessingStep({
       </div>
 
       <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
+        <div className="mb-4"><KnowledgeImportBatchSummary inventory={inventory} /></div>
         <div className="space-y-2">
           {files.map((file) => {
             const isCompleted =

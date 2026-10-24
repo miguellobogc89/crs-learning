@@ -2,6 +2,7 @@
 
 "use client";
 
+import { KnowledgeImportBatchSummary } from "./knowledge-import-batch-summary";
 import {
   AlertTriangle,
   FilePlus2,
@@ -216,6 +217,7 @@ export function KnowledgeImportProposalStep({
       </div>
 
       <div className="mt-5 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
+        <KnowledgeImportBatchSummary inventory={proposal.globalImportMap} />
         <section className="rounded-xl border border-blue-100 bg-blue-50/30 px-4 py-4">
           <h4 className="text-[12px] font-semibold text-slate-900">
             Engine · Plan de registros

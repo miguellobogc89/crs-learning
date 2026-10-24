@@ -1,3 +1,4 @@
+import type { BatchReview } from "./review-import-batch";
 /** Lightweight persisted inventory. One queued source at a time; no Engine writes. */
 export type InventoryDocument = {
   id: string;
@@ -38,6 +39,7 @@ export type ImportInventory = {
   files: InventoryFile[];
   documents: InventoryDocument[];
   summary: { filesProcessed: number; documentsIdentified: number; byType: Array<{ type: string; count: number }>; byCategory: Array<{ category: string; count: number }> };
+  batchReview?: BatchReview;
   writesPerformed: { engine: false; knowledge: false };
 };
 export function emptyImportInventory(importId: string): ImportInventory {
@@ -63,8 +65,10 @@ export function appendInventoryFile(
     for (const doc of allDocuments) grouped.set(doc[key], (grouped.get(doc[key]) ?? 0) + 1);
     return [...grouped.entries()].map(([name, total]) => ({ [key]: name, count: total }));
   };
+  const next = { ...previous };
+  delete next.batchReview;
   return {
-    ...previous, files, documents: allDocuments,
+    ...next, files, documents: allDocuments,
     summary: {
       filesProcessed: files.length,
       documentsIdentified: allDocuments.length,

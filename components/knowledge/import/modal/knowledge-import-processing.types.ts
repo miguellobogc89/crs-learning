@@ -9,4 +9,5 @@ export type KnowledgeImportProcessingPhase =
   | "uploading"
   | "preparing"
   | "extracting"
+  | "reviewing_batch"
   | "generating_proposal";

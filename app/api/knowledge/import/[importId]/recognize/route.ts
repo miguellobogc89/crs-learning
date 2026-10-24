@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import OpenAI from "openai";
 import { getKnowledgeImportModel } from "@/lib/ai/openai";
@@ -17,7 +18,7 @@ async function loadImport(importId: string, userId: string, workspaceId: string)
   return prisma.knowledge_imports.findFirst({
     where: { id: importId, owner_user_id: userId, knowledge_libraries: { workspace_id: workspaceId } },
     select: {
-      proposal_json: true,
+      proposal_json: true, status: true, processing_status: true,
       knowledge_import_files: {
         select: { id: true, file_name: true, extracted_text: true, status: true, processing_status: true, error_message: true },
       },
@@ -39,8 +40,6 @@ function extractDocuments(
   raw: unknown,
   file: { id: string; file_name: string },
   lineCount: number,
-  articleIds: Set<string>,
-  structureKeys: Set<string>,
 ): InventoryDocument[] {
   if (!raw || typeof raw !== "object" || !Array.isArray((raw as { documents?: unknown }).documents)) {
     throw new Error("La IA no devolvió un inventario de documentos válido.");
@@ -56,39 +55,7 @@ function extractDocuments(
     if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > lineCount) {
       throw new Error("La IA devolvió límites documentales no verificables.");
     }
-    const routing = doc.routing;
-    if (!routing || typeof routing !== "object" || Array.isArray(routing)) {
-      throw new Error("La IA no ha clasificado el destino del documento.");
-    }
-    const route = routing as Record<string, unknown>;
-    if (typeof route.articleCandidate !== "boolean" ||
-        typeof route.structuredCandidate !== "boolean" ||
-        typeof route.reason !== "string" || !route.reason.trim() ||
-        !Array.isArray(route.structuredFields) ||
-        !Array.isArray(route.existingStructureKeys)) {
-      throw new Error("La clasificación de destinos es incompleta.");
-    }
-    const articleCandidate = route.articleCandidate;
-    const structuredCandidate = route.structuredCandidate;
-    const existingArticleId = articleCandidate && typeof route.existingArticleId === "string" &&
-      articleIds.has(route.existingArticleId) ? route.existingArticleId : null;
-    const existingStructureKeys = structuredCandidate
-      ? route.existingStructureKeys.filter((key): key is string =>
-          typeof key === "string" && structureKeys.has(key)).slice(0, 8)
-      : [];
     return {
-      routing: {
-        knowledge: true,
-        articleCandidate,
-        structuredCandidate,
-        reason: route.reason.trim().slice(0, 450),
-        structuredFields: structuredCandidate
-          ? route.structuredFields.filter((field): field is string => typeof field === "string")
-              .map(field => field.trim().slice(0, 60)).filter(Boolean).slice(0, 18)
-          : [],
-        existingArticleId,
-        existingStructureKeys,
-      },
       id: file.id + ":doc:" + (index + 1),
       fileId: file.id, fileName: file.file_name,
       type: normal(doc.type, "documento sin clasificar").toLowerCase(),
@@ -108,6 +75,9 @@ export async function POST(request: Request, context: Context) {
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
   const imported = await loadImport(importId, session.user.id, activeWorkspace.id);
   if (!imported) return Response.json({ error: "Importación no encontrada" }, { status: 404 });
+  if (imported.status !== "text_ready" || ["processing", "cancelled"].includes(imported.processing_status)) {
+    return Response.json({ error: "La importación no está preparada para reconocer documentos" }, { status: 409 });
+  }
   let body: { fileId?: string };
   try { body = await request.json(); } catch { return Response.json({ error: "Indica fileId en JSON" }, { status: 400 }); }
   if (!body.fileId) return Response.json({ error: "Falta fileId" }, { status: 400 });
@@ -124,28 +94,6 @@ export async function POST(request: Request, context: Context) {
   // "luz" and "electricidad" as separate categories across PDFs.
   const previousMap = readMap(imported.proposal_json, importId);
   const previousCategories = previousMap.summary.byCategory.map(item => item.category);
-  // Use a bounded snapshot of existing knowledge. Its IDs/keys may be suggested,
-  // but never accepted without verifying them against this exact snapshot.
-  const [existingArticles, existingStructures] = await Promise.all([
-    prisma.knowledge_sources.findMany({
-      where: {
-        owner_user_id: session.user.id,
-        knowledge_libraries: { workspace_id: activeWorkspace.id },
-        knowledge_type: "article",
-      },
-      select: { id: true, title: true, description: true },
-      orderBy: { updated_at: "desc" },
-      take: 80,
-    }),
-    prisma.engine_object_types.findMany({
-      where: { workspace_id: activeWorkspace.id, status: "active" },
-      select: { key: true, name: true, description: true },
-      orderBy: { updated_at: "desc" },
-      take: 80,
-    }),
-  ]);
-  const articleIds = new Set(existingArticles.map(item => item.id));
-  const structureKeys = new Set(existingStructures.map(item => item.key));
   const numbered = lines.map((line, i) => `${i + 1}: ${line}`).join("\n");
   let documents: InventoryDocument[];
   try {
@@ -161,22 +109,10 @@ Examina el contenido antes que el nombre. Para cada documento devuelve:
 - type: tipo concreto según contenido, no uses "procedimiento" como categoría por defecto.
 - category: tema empresarial breve; reutiliza categorías anteriores semánticamente equivalentes.
 - title, startLine, endLine, confidence: high|medium|low; límites de línea íntegros y verificables.
-- routing: objeto con knowledge=true, articleCandidate (boolean), structuredCandidate (boolean), reason (explicación breve), structuredFields (array de nombres de campos posibles, sin extraer valores), existingArticleId (ID exacto de artículo conocido o null), existingStructureKeys (array de claves exactas de estructuras conocidas).
-
-Criterios de destino, NO excluyentes:
-1. Knowledge: SIEMPRE true. El archivo original y su contenido deben conservarse como fuente consultable para el asistente.
-2. articleCandidate=true solo cuando aporte conocimiento explicativo, normativo, instructivo o temático que merezca una unidad de conocimiento reutilizable; puede ampliar un artículo ya existente. No crees artículo solo por ser un archivo o por contener información.
-3. structuredCandidate=true si posee atributos, filas, importes, fechas, vencimientos u otros datos estructurables útiles y comparables. No requiere una tabla dibujada. Es un candidato a JSON, NO crea tablas.
-4. Ambos true para contenido híbrido: por ejemplo, un manual con reglas y catálogo de datos.
-5. Una factura, recibo, contrato individual o liquidación legal normalmente es información de referencia + candidato estructurado; NO es un procedimiento ni un artículo por defecto.
-6. Si ninguna transformación aporta valor, ambos false y permanece únicamente como documento informativo.
-7. Usa existingArticleId/existingStructureKeys solo si hay correspondencia razonable con los catálogos facilitados, sin inventar IDs.
-8. No extraigas registros ni valores; solo propon destinos y nombres de campos. Evita asumir que todo se transforma.
+No propongas destinos, artículos, tablas ni registros en esta etapa. La revisión conjunta posterior comparará todos los archivos y decidirá los candidatos para Knowledge y Engine.
 
 Conserva cada documento aunque el archivo contenga varios. No inventes fechas, categorías, límites, relaciones ni documentos. En caso de incertidumbre, explica la duda y usa confidence low.` },
         { role: "user", content: `Categorías anteriores: ${JSON.stringify(previousCategories)}
-Artículos actuales de Knowledge (posibles reutilizaciones): ${JSON.stringify(existingArticles)}
-Estructuras actuales de Engine (posibles reutilizaciones, NO insertar): ${JSON.stringify(existingStructures)}
 Archivo: ${file.file_name}
 Contenido numerado:
 ${numbered}` },
@@ -184,7 +120,7 @@ ${numbered}` },
     });
     const answer = completion.choices[0]?.message?.content;
     if (!answer) throw new Error("Respuesta vacía del modelo.");
-    documents = extractDocuments(JSON.parse(answer), file, lines.length, articleIds, structureKeys);
+    documents = extractDocuments(JSON.parse(answer), file, lines.length);
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Fallo en reconocimiento IA" }, { status: 502 });
   }
@@ -200,9 +136,12 @@ ${numbered}` },
   const map = appendInventoryFile(readMap(previous, importId), fileResult, documents);
   const eligible = imported.knowledge_import_files.filter(item => item.status !== "uploaded");
   map.status = map.files.filter(item => item.status === "completed").length >= eligible.length ? "completed" : "in_progress";
-  await prisma.knowledge_imports.update({
-    where: { id: importId }, data: { proposal_json: { ...previous, globalImportMap: map } },
+  const saved = await prisma.knowledge_imports.updateMany({
+    where: { id: importId, status: "text_ready", processing_status: { notIn: ["cancelled", "processing"] },
+      proposal_json: { equals: latest?.proposal_json ?? Prisma.DbNull } },
+    data: { proposal_json: { ...previous, globalImportMap: map }, updated_at: new Date() },
   });
+  if (saved.count !== 1) return Response.json({ error: "El lote cambió durante el reconocimiento" }, { status: 409 });
   return Response.json({ map, file: fileResult, documents, status: map.status, writesPerformed: false });
 }
 

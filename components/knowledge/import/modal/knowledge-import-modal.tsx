@@ -589,6 +589,7 @@ export function KnowledgeImportModal({
             knowledgeImport.step ===
               "analyzing" ? (
               <KnowledgeImportProcessingStep
+                inventory={knowledgeImport.globalMap}
                 phase={
                   knowledgeImport.processingPhase
                 }

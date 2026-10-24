@@ -1,3 +1,4 @@
+import { assertReviewedDocumentRoutes } from "./review-import-batch";
 // lib/knowledge/import/confirm-import.ts
 
 import type { Prisma } from "@prisma/client";
@@ -263,6 +264,11 @@ export async function confirmKnowledgeImport({
     knowledgeImport.proposal_json,
   );
 
+  if (!proposal.globalImportMap) {
+    throw new Error("Falta la revisión conjunta del lote. Repite el análisis antes de confirmar.");
+  }
+  assertReviewedDocumentRoutes(proposal.globalImportMap, knowledgeImport.knowledge_import_files, proposal.documentRoutes);
+
   const importFilesById = new Map(
     knowledgeImport.knowledge_import_files.map(
       (file) => [file.id, file] as const,
@@ -270,7 +276,6 @@ export async function confirmKnowledgeImport({
   );
 
   // Standalone documents are Knowledge sources, not artificial articles.
-  // Old proposals without routes retain their previous behaviour.
   const assignedToArticles = new Set(proposal.articles.flatMap(article => article.documentIds));
   const referenceFiles = Object.entries(proposal.documentRoutes ?? {})
     .filter(([id, route]) => !route.articleCandidate && !assignedToArticles.has(id))

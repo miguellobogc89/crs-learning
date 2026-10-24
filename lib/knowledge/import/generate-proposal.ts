@@ -5,6 +5,8 @@ import {
 } from "@/lib/ai/openai";
 import { prisma } from "@/lib/prisma";
 import type { ImportInventory } from "./build-import-map";
+import { reviewKnowledgeImportBatch } from "./review-import-batch.service";
+import { assertReviewedImportBatch, reviewedDocumentRoutes } from "./review-import-batch";
 import { listKnowledgeStatus } from "@/lib/services/knowledge-library.service";
 
 import {
@@ -22,7 +24,6 @@ import type {
   GenerateKnowledgeImportProposalResult,
   KnowledgeImportDocumentAnalysis,
   KnowledgeImportDocumentInput,
-  KnowledgeImportDocumentRoute,
   KnowledgeImportProposal,
 } from "./types";
 
@@ -355,6 +356,7 @@ for (const folder of proposal.folders) {
 }
 
 async function generateGlobalProposal(
+  inventory: ImportInventory,
   analyses: KnowledgeImportDocumentAnalysis[],
   existingKnowledge: Awaited<
     ReturnType<typeof listKnowledgeStatus>
@@ -366,10 +368,9 @@ async function generateGlobalProposal(
   const response = await openai.responses.create({
     model,
     instructions: PROPOSAL_SYSTEM_PROMPT,
-    input: buildProposalPrompt(
-      analyses,
-      existingKnowledge,
-    ),
+    input: buildProposalPrompt(analyses, existingKnowledge) +
+      "\nRevisión conjunta del lote (agrupa artículos cuando el propósito común lo justifique; los IDs de origen de los documentos lógicos corresponden a fileId):\n" +
+      JSON.stringify({ groups: inventory.batchReview?.groups, documents: inventory.documents }),
     text: {
       format: {
         type: "json_schema",
@@ -429,6 +430,12 @@ export async function generateKnowledgeImportProposal({
       "Preparando los documentos vÃ¡lidos",
   });
 
+  await onProgress?.({ step: "preparing", progressPercentage: 5,
+    message: "Revisando el lote completo y sus destinos" });
+  // Also covers resumed imports. A persisted review is reused only while its
+  // source fingerprint matches; individual classifications cannot bypass it.
+  const reviewedInventory = await reviewKnowledgeImportBatch({ importId, userId, workspaceId });
+
   const knowledgeImport =
     await prisma.knowledge_imports.findFirst({
       where: {
@@ -440,9 +447,6 @@ export async function generateKnowledgeImportProposal({
       },
       include: {
         knowledge_import_files: {
-          where: {
-            status: "text_ready",
-          },
           orderBy: {
             created_at: "asc",
           },
@@ -488,7 +492,7 @@ export async function generateKnowledgeImportProposal({
   }
 
   const files =
-    knowledgeImport.knowledge_import_files;
+    knowledgeImport.knowledge_import_files.filter(file => file.status === "text_ready");
 
   if (files.length === 0) {
     throw new Error(
@@ -515,65 +519,26 @@ export async function generateKnowledgeImportProposal({
 
   // The document inventory is the authoritative routing step. Do not
   // allow legacy "every document must become an article" logic to bypass it.
-  const storedImportProposal = knowledgeImport.proposal_json &&
-    typeof knowledgeImport.proposal_json === "object" &&
-    !Array.isArray(knowledgeImport.proposal_json)
-      ? knowledgeImport.proposal_json as Record<string, unknown>
-      : null;
-  const inventoryValue = storedImportProposal?.globalImportMap;
-  // Check the inventory envelope before retaining it as a typed proposal.
-  const envelope = inventoryValue && typeof inventoryValue === "object" &&
-    !Array.isArray(inventoryValue)
-      ? inventoryValue as Partial<ImportInventory>
-      : null;
-  const inventory: ImportInventory | null =
-    envelope?.format === "crs-import-map" &&
-    envelope.version === 3 &&
-    envelope.importId === importId &&
-    Array.isArray(envelope.files) &&
-    Array.isArray(envelope.documents) &&
-    envelope.summary !== undefined
-      ? envelope as ImportInventory
-      : null;
-
-  if (!inventory) {
-    throw new Error("Falta la clasificación de destinos. Vuelve a analizar los documentos antes de generar artículos.");
+  const inventory = reviewedInventory;
+  assertReviewedImportBatch(inventory, knowledgeImport.knowledge_import_files);
+  const currentPayload = knowledgeImport.proposal_json;
+  const currentMap = currentPayload && typeof currentPayload === "object" && !Array.isArray(currentPayload)
+    ? currentPayload.globalImportMap : null;
+  if (!currentMap || typeof currentMap !== "object" || Array.isArray(currentMap) ||
+    !currentMap.batchReview || typeof currentMap.batchReview !== "object" || Array.isArray(currentMap.batchReview) ||
+    currentMap.batchReview.sourceFingerprint !== inventory.batchReview?.sourceFingerprint) {
+    throw new Error("El inventario cambió después de revisar el lote. Repite la revisión.");
   }
 
-  const documentRoutes: Record<string, KnowledgeImportDocumentRoute> = {};
-  for (const document of documents) {
-    const classified = inventory.documents.filter(item => item.fileId === document.id);
-    if (classified.length === 0 || classified.some(item =>
-      !item.routing || item.routing.knowledge !== true ||
-      typeof item.routing.articleCandidate !== "boolean" ||
-      typeof item.routing.structuredCandidate !== "boolean"
-    )) {
-      throw new Error(`El archivo "${document.name}" no tiene una clasificación válida. Repite el reconocimiento antes de continuar.`);
-    }
-    const routes = classified.map(item => item.routing!);
-    const structuredKeys = [...new Set(routes.flatMap(item => item.existingStructureKeys ?? []))];
-    const structuredFields = [...new Set(routes.flatMap(item => item.structuredFields ?? []))];
-    documentRoutes[document.id] = {
-      knowledge: true,
-      articleCandidate: routes.some(item => item.articleCandidate),
-      structuredCandidate: routes.some(item => item.structuredCandidate),
-      reason: routes.map(item => item.reason).filter(Boolean).join(" · ").slice(0, 600),
-      structuredFields,
-      existingArticleId: routes.find(item => item.articleCandidate && item.existingArticleId)?.existingArticleId ?? null,
-      existingStructureKeys: structuredKeys,
-    };
-  }
+  const documentRoutes = reviewedDocumentRoutes(inventory, knowledgeImport.knowledge_import_files);
   const articleDocuments = documents.filter(document => documentRoutes[document.id].articleCandidate);
 
-  await prisma.knowledge_imports.updateMany({
+  const claimed = await prisma.knowledge_imports.updateMany({
     where: {
       id: importId,
-      status: {
-        not: "cancelled",
-      },
-      processing_status: {
-        not: "cancelled",
-      },
+      updated_at: knowledgeImport.updated_at,
+      status: { in: ["text_ready", "proposal_ready"] },
+      processing_status: { notIn: ["cancelled", "processing"] },
     },
     data: {
       status: "proposal_generating",
@@ -581,6 +546,8 @@ export async function generateKnowledgeImportProposal({
       updated_at: new Date(),
     },
   });
+
+  if (claimed.count !== 1) throw new Error("La importación cambió antes de generar la propuesta.");
 
   try {
     const documentAnalyses =
@@ -644,6 +611,7 @@ export async function generateKnowledgeImportProposal({
     const generatedProposal: GeneratedProposal =
       articleDocuments.length > 0
         ? await generateGlobalProposal(
+            inventory,
             documentAnalyses,
             existingKnowledge,
           )

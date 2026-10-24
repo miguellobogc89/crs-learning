@@ -1,7 +1,6 @@
-
-// components/knowledge/import/hooks/use-knowledge-import.ts
-
 "use client";
+
+import type { ImportInventory } from "@/lib/knowledge/import/build-import-map";
 
 import {
   useCallback,
@@ -54,6 +53,7 @@ import type {
 
 import {
   runKnowledgeImportAnalysis,
+  reviewKnowledgeImportBatch,
   uploadKnowledgeImport,
   type KnowledgeImportProposalProgress,
   type KnowledgeImportUploadResult,
@@ -128,7 +128,7 @@ export function useKnowledgeImport({
     );
 
   const [tableDetection, setTableDetection] = useState<Record<string, boolean>>({});
-  const [globalMap, setGlobalMap] = useState<Record<string, unknown> | null>(null);
+  const [globalMap, setGlobalMap] = useState<ImportInventory | null>(null);
   const [recognition, setRecognition] = useState<Record<string, {
     status: "completed" | "error";
     sourceChars: number;
@@ -560,7 +560,7 @@ export function useKnowledgeImport({
           "preparing",
         );
 
-        let lastMap: Record<string, unknown> | null = null;
+        let lastMap: ImportInventory | null = null;
         const recognitionFailures: string[] = [];
 
         // The complete unit of work is ONE file:
@@ -632,7 +632,7 @@ export function useKnowledgeImport({
                 );
                 const result: {
                   error?: string;
-                  map?: Record<string, unknown>;
+                  map?: ImportInventory;
                   file?: { fileId: string; fileName: string; sourceChars: number; status: string };
                 } = await response.json();
                 if (!response.ok || !result.map || !result.file) {
@@ -678,7 +678,7 @@ export function useKnowledgeImport({
                     existingStructures: [], error: message,
                   },
                 }));
-                // The source text is valid and can still produce Knowledge articles.
+                // Keep the extracted evidence; the joint review will block until recognition is complete.
                 updateQueuedFile(file.id, "completed");
               }
             },
@@ -687,6 +687,14 @@ export function useKnowledgeImport({
 
         if (!isCurrentOperation()) return;
 
+        if (analysisResult.textExtraction.successfulFiles > 0) {
+          setProcessingPhase("reviewing_batch");
+          updateImport(uploadResult.importId, { phase: "reviewing_batch", isAnalyzing: true });
+          lastMap = await reviewKnowledgeImportBatch(uploadResult.importId);
+          if (!isCurrentOperation()) return;
+          setGlobalMap(lastMap);
+        }
+
         const duplicateFiles = analysisResult.extraction.duplicateFiles;
         const finalizedFiles = latestFileProgressRef.current;
         const finalizedSummary = createSummaryFromAnalysisSnapshot(finalizedFiles);
@@ -694,12 +702,13 @@ export function useKnowledgeImport({
         setProgressSummary(finalizedSummary);
 
         // Document inventory is a preliminary step, not the end of Knowledge import.
-        // A failed classification must not discard successfully extracted source text.
+        // The reviewed batch proposes destinations; materialization still requires confirmation.
         if (analysisResult.textExtraction.successfulFiles > 0) {
           if (lastMap) setGlobalMap(lastMap);
+          setProcessingPhase("preparing");
           setStep("analyzing");
           updateImport(uploadResult.importId, {
-            step: "analyzing", status: "text_ready", files: finalizedFiles,
+            step: "analyzing", phase: "preparing", status: "text_ready", files: finalizedFiles,
             summary: finalizedSummary, isAnalyzing: false, isConfirming: false,
             error: recognitionFailures.length ? recognitionFailures.join(" · ") : null,
           });
@@ -822,7 +831,6 @@ export function useKnowledgeImport({
       }
     }, [
       context,
-      context.libraryId,
       importReview,
       registerImport,
       selectedDocuments,
