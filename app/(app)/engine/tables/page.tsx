@@ -10,6 +10,10 @@ import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { listEngineObjectTypes, listEngineRecords } from "@/lib/engine/records.service";
 import {
+  formatEngineNumericValue, getInvoicePartyLabels,
+  invoiceDisplayCurrency, isMonetaryField,
+} from "@/lib/engine/invoice-display";
+import {
   listPendingEngineRelations, listApprovedEngineRelations,
 } from "@/lib/engine/review-record-relation.service";
 import { reviewEngineRelationAction } from "./actions";
@@ -33,9 +37,16 @@ export default async function EngineTablesPage({
     objectTypeId: selected.id, take: 100,
   }) : [];
   const fields = selected?.engine_field_definitions ?? [];
+  const isInvoice = selected?.key === "invoice";
+  const visibleFields = isInvoice
+    ? [
+        ...fields.filter(field => field.key === "invoice_number"),
+        ...fields.filter(field => field.key !== "invoice_number" && field.key !== "currency"),
+      ]
+    : fields;
   // Provenance is metadata, not part of the editable invoice schema.
   // Only invoice tables need this additional lookup.
-  const invoiceSources = selected?.key === "invoice" && records.length
+  const invoiceSources = isInvoice && records.length
     ? await prisma.engine_record_provenance.findMany({
         where: {
           workspace_id: activeWorkspace.id,
@@ -44,17 +55,22 @@ export default async function EngineTablesPage({
         },
         select: {
           record_id: true,
-          knowledge_files: { select: { file_name: true } },
+          knowledge_files: { select: { file_name: true, extracted_text: true } },
         },
       })
     : [];
   const sourceNamesByRecord = new Map<string, Set<string>>();
+  const sourceTextsByRecord = new Map<string, string>();
   for (const source of invoiceSources) {
     const name = source.knowledge_files?.file_name;
     if (!name) continue;
     const names = sourceNamesByRecord.get(source.record_id) ?? new Set<string>();
     names.add(name);
     sourceNamesByRecord.set(source.record_id, names);
+    if (!sourceTextsByRecord.has(source.record_id) &&
+        source.knowledge_files?.extracted_text) {
+      sourceTextsByRecord.set(source.record_id, source.knowledge_files.extracted_text);
+    }
   }
   const canReview = activeWorkspace.role === "owner" || activeWorkspace.role === "admin";
   const importLibrary = view === "tables" && canReview ? await prisma.knowledge_libraries.findFirst({
@@ -110,13 +126,26 @@ export default async function EngineTablesPage({
                   <table className="w-full min-w-[540px] border-collapse text-left text-sm">
                     <thead className="bg-slate-50 text-xs text-slate-500">
                       <tr>
-                        <th className="whitespace-nowrap px-4 py-3 font-semibold">ID</th>
-                        {selected.key === "invoice" ? (
-                          <th className="whitespace-nowrap px-4 py-3 font-semibold">Documento origen</th>
+                        {!isInvoice ? (
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">ID</th>
                         ) : null}
-                        {fields.map(field => <th key={field.id} className="whitespace-nowrap px-4 py-3 font-semibold">
-                          {field.name}
-                        </th>)}
+                        {isInvoice ? (
+                          <>
+                            <th className="whitespace-nowrap px-4 py-3 font-semibold">Número de factura</th>
+                            <th className="whitespace-nowrap px-4 py-3 font-semibold">Emisor</th>
+                            <th className="whitespace-nowrap px-4 py-3 font-semibold">Cliente</th>
+                            <th className="whitespace-nowrap px-4 py-3 font-semibold">Documento origen</th>
+                          </>
+                        ) : null}
+                        {visibleFields.filter(field => !isInvoice || field.key !== "invoice_number")
+                          .map(field => (
+                            <th key={field.id} className={
+                              "whitespace-nowrap px-4 py-3 font-semibold " +
+                              (isMonetaryField(field) ? "text-right" : "")
+                            }>
+                              {field.name}
+                            </th>
+                          ))}
                         <th className="px-4 py-3 font-semibold">Estado</th>
                       </tr>
                     </thead>
@@ -124,32 +153,53 @@ export default async function EngineTablesPage({
                       {records.map(record => {
                         const values = record.values_json && typeof record.values_json === "object" &&
                           !Array.isArray(record.values_json) ? record.values_json : {};
+                        const attributes = values as Record<string, unknown>;
+                        const sourceText = sourceTextsByRecord.get(record.id);
+                        const parties = isInvoice ? getInvoicePartyLabels(attributes, sourceText) : null;
+                        const currency = isInvoice ? invoiceDisplayCurrency(attributes, sourceText) : null;
                         return <tr key={record.id} className="hover:bg-slate-50/70">
-                          <td className="max-w-[160px] truncate px-4 py-3 font-mono text-xs text-slate-500" title={record.id}>{record.id}</td>
-                          {selected.key === "invoice" ? (
-                            <td className="max-w-[290px] px-4 py-3 text-xs text-slate-700">
-                              {sourceNamesByRecord.has(record.id) ? (
-                                <div className="space-y-1">
-                                  {[...sourceNamesByRecord.get(record.id)!].map(name => (
-                                    <div key={name} className="max-w-[290px] truncate" title={name}>
-                                      {name}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : "—"}
-                            </td>
-                          ) : null}
-                          {fields.map(field => {
-                            const value = (values as Record<string, unknown>)[field.key];
-                            return <td key={field.id} className="max-w-[320px] truncate px-4 py-3 text-slate-700"
-                              title={value == null ? "" : String(value)}>
-                              {value == null ? "—" : typeof value === "object" ? JSON.stringify(value) : String(value)}
-                            </td>;
-                          })}
+                          {!isInvoice ? (
+                            <td className="max-w-[160px] truncate px-4 py-3 font-mono text-xs text-slate-500"
+                              title={record.id}>{record.id}</td>
+                          ) : (
+                            <>
+                              <td className="max-w-[220px] whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                                {typeof attributes.invoice_number === "string" ? attributes.invoice_number : "—"}
+                              </td>
+                              <td className="max-w-[260px] truncate px-4 py-3 text-slate-700"
+                                title={parties?.issuer ?? ""}>{parties?.issuer ?? "—"}</td>
+                              <td className="max-w-[260px] truncate px-4 py-3 text-slate-700"
+                                title={parties?.customer ?? ""}>{parties?.customer ?? "—"}</td>
+                              <td className="max-w-[290px] px-4 py-3 text-xs text-slate-700">
+                                {sourceNamesByRecord.has(record.id) ? (
+                                  <div className="space-y-1">
+                                    {[...sourceNamesByRecord.get(record.id)!].map(name => (
+                                      <div key={name} className="max-w-[290px] truncate" title={name}>
+                                        {name}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : "—"}
+                              </td>
+                            </>
+                          )}
+                          {visibleFields.filter(field => !isInvoice || field.key !== "invoice_number")
+                            .map(field => {
+                              const value = attributes[field.key];
+                              const formatted = formatEngineNumericValue(value, field, currency);
+                              const display = formatted ?? (value == null ? "—" :
+                                typeof value === "object" ? JSON.stringify(value) : String(value));
+                              return <td key={field.id} className={
+                                "max-w-[320px] truncate px-4 py-3 text-slate-700 " +
+                                (isMonetaryField(field) ? "text-right tabular-nums whitespace-nowrap" : "")
+                              } title={display}>
+                                {display}
+                              </td>;
+                            })}
                           <td className="px-4 py-3 text-xs text-slate-500">{record.status}</td>
                         </tr>;
                       })}
-                      {!records.length && <tr><td colSpan={fields.length + 2 + (selected.key === "invoice" ? 1 : 0)}
+                      {!records.length && <tr><td colSpan={visibleFields.length + (isInvoice ? 3 : 2)}
                         className="px-4 py-12 text-center text-sm text-slate-500">
                         Todavía no hay registros en esta tabla.
                       </td></tr>}
