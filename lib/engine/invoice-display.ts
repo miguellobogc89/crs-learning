@@ -133,7 +133,7 @@ export function formatEngineNumericValue(
   if (!Number.isFinite(number)) return null;
   if (isMonetaryField(field)) {
     const formatted = new Intl.NumberFormat("es-ES", {
-      minimumFractionDigits: 2, maximumFractionDigits: 2,
+      minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true,
     }).format(number);
     return EURO_CURRENCY.test(currency?.trim() ?? "") ? formatted + " €" : formatted;
   }
