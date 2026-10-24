@@ -141,7 +141,7 @@ export default async function EngineTablesPage({
                           .map(field => (
                             <th key={field.id} className={
                               "whitespace-nowrap px-4 py-3 font-semibold " +
-                              (isMonetaryField(field) ? "text-right" : "")
+                              (isInvoice && isMonetaryField(field) ? "text-right" : "")
                             }>
                               {field.name}
                             </th>
@@ -186,12 +186,12 @@ export default async function EngineTablesPage({
                           {visibleFields.filter(field => !isInvoice || field.key !== "invoice_number")
                             .map(field => {
                               const value = attributes[field.key];
-                              const formatted = formatEngineNumericValue(value, field, currency);
+                              const formatted = isInvoice ? formatEngineNumericValue(value, field, currency) : null;
                               const display = formatted ?? (value == null ? "—" :
                                 typeof value === "object" ? JSON.stringify(value) : String(value));
                               return <td key={field.id} className={
                                 "max-w-[320px] truncate px-4 py-3 text-slate-700 " +
-                                (isMonetaryField(field) ? "text-right tabular-nums whitespace-nowrap" : "")
+                                (isInvoice && isMonetaryField(field) ? "text-right tabular-nums whitespace-nowrap" : "")
                               } title={display}>
                                 {display}
                               </td>;
