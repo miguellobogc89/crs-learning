@@ -459,17 +459,18 @@ async function extract(
     const raw: unknown = JSON.parse(second.output_text);
     if (!isObject(raw) || !isObject(raw.values) || !isObject(raw.evidence))
       throw new Error("La segunda lectura no devolvió valores y evidencias válidos.");
-    const retryValues = raw.values;
-    const retryEvidence = raw.evidence;
-    const retryCalculations = isObject(raw.calculations) ? raw.calculations : {};
+    // Validate and canonicalise independently before accepting the recovery.
+    // Both passes use the same evidence rules, including camelCase key handling.
+    const retry = checkedInvoice(raw, file.extracted_text, fields,
+      { allowPartial: true });
     const additions = Object.fromEntries(missing
-      .filter(key => key in retryValues && key in retryEvidence)
-      .map(key => [key, retryValues[key]]));
+      .filter(key => key in retry.values && key in retry.evidence)
+      .map(key => [key, retry.values[key]]));
     const quotes = Object.fromEntries(missing
-      .filter(key => key in additions).map(key => [key, retryEvidence[key]]));
+      .filter(key => key in additions).map(key => [key, retry.evidence[key]]));
     const calculations = Object.fromEntries(missing
-      .filter(key => key in additions && key in retryCalculations)
-      .map(key => [key, retryCalculations[key]]));
+      .filter(key => key in additions && retry.calculations?.[key])
+      .map(key => [key, retry.calculations![key]]));
     const enriched = checkedInvoice({
       values: { ...verified.values, ...additions },
       evidence: { ...verified.evidence, ...quotes },
