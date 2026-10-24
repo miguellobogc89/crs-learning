@@ -233,6 +233,22 @@ export function KnowledgeImportProposalStep({
               <p className="text-[11px] text-slate-600">
                 {invoicePreview.recordsToInsert} nuevas · {invoicePreview.recordsToUpdate} por completar · {invoicePreview.recordsToReuse} sin datos nuevos. Se aplicarán los cambios únicamente al confirmar.
               </p>
+              {invoicePreview.failures.length > 0 ? (
+                <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                  <p className="text-[11px] font-semibold text-amber-900">
+                    {invoicePreview.failures.length} documentos no se incorporarán a Engine
+                  </p>
+                  <p className="mt-1 text-[10px] text-amber-800">
+                    El resto puede confirmarse. Los documentos siguientes quedan pendientes
+                    de revisar o reintentar, sin crear registros incompletos.
+                  </p>
+                  {invoicePreview.failures.map(failed => (
+                    <p key={failed.fileId} className="mt-2 break-words text-[11px] text-amber-900">
+                      <span className="font-medium">{failed.fileName}</span>: {failed.reason}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
               {invoicePreview.invoices.map(invoice => (
                 <div key={invoice.fileId} className="rounded-lg border border-slate-200 bg-white p-3">
                   <p className="text-[12px] font-semibold text-slate-900">
