@@ -406,7 +406,7 @@ async function extract(
       fields: catalogFields, text: file.extracted_text,
     }),
     text: { format: { type: "json_object" } },
-  }, { timeout: 60000, maxRetries: 0 });
+  }, { timeout: 55000, maxRetries: 0 });
     if (response.status !== "completed" || !response.output_text ||
         response.output_text.length > 18000)
       throw new Error("La lectura inicial de IA fue incompleta.");
@@ -423,7 +423,7 @@ async function extract(
   let verified = recoverInvoiceIdentity(first, previous, file.extracted_text, fields);
   verified = recoverDocumentInvoiceAnchors(verified, file.extracted_text, fields);
   const core = ["invoice_number", "total_amount"];
-  const missing = [...new Set([...core, "issue_date", "net_amount", "tax_amount", "payment_method"])]
+  const missing = [...new Set([...core, "issue_date", "net_amount", "tax_amount"])]
     .filter(key => fields.has(key) && verified.values[key] === undefined);
   if (!missing.length) return checkedInvoice({
     values: verified.values, evidence: verified.evidence, calculations: verified.calculations,
@@ -453,7 +453,7 @@ async function extract(
         text: file.extracted_text,
       }),
       text: { format: { type: "json_object" } },
-    }, { timeout: 45000, maxRetries: 0 });
+    }, { timeout: 30000, maxRetries: 0 });
     if (second.status !== "completed" || !second.output_text || second.output_text.length > 18000)
       throw new Error("La segunda lectura no devolvió un resultado completo.");
     const raw: unknown = JSON.parse(second.output_text);
