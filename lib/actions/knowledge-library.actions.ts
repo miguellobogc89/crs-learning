@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { deleteKnowledgeSelection } from "@/lib/knowledge/delete-knowledge.service";
 import { auth } from "@/auth";
 import {
   knowledgeLibraryReadWhere,
@@ -205,72 +206,8 @@ export async function deleteKnowledgeLibrary(id: string) {
     session.user.id,
   );
 
-  const libraries = await prisma.knowledge_libraries.findMany({
-    where: knowledgeLibraryWriteWhere(
-      session.user.id,
-      activeWorkspace.id,
-    ),
-    select: {
-      id: true,
-      parent_id: true,
-    },
-  });
-
-  const targetLibrary = libraries.find((library) => library.id === id);
-
-  if (!targetLibrary) {
-    throw new Error("Carpeta no encontrada");
-  }
-
-  const libraryIdsToDelete = new Set<string>([id]);
-  let foundNewDescendants = true;
-
-  while (foundNewDescendants) {
-    foundNewDescendants = false;
-
-    for (const library of libraries) {
-      if (!library.parent_id) {
-        continue;
-      }
-
-      if (!libraryIdsToDelete.has(library.parent_id)) {
-        continue;
-      }
-
-      if (libraryIdsToDelete.has(library.id)) {
-        continue;
-      }
-
-      libraryIdsToDelete.add(library.id);
-      foundNewDescendants = true;
-    }
-  }
-
-  const descendantIds = Array.from(libraryIdsToDelete);
-
-  await prisma.$transaction(async (transaction) => {
-    await transaction.knowledge_sources.deleteMany({
-      where: {
-        owner_user_id: session.user.id,
-        knowledge_libraries: {
-          workspace_id: activeWorkspace.id,
-        },
-        library_id: {
-          in: descendantIds,
-        },
-      },
-    });
-
-    await transaction.knowledge_libraries.deleteMany({
-      where: {
-        id,
-        ...knowledgeLibraryWriteWhere(
-          session.user.id,
-          activeWorkspace.id,
-        ),
-      },
-    });
-  });
+  await deleteKnowledgeSelection({ userId: session.user.id, workspaceId: activeWorkspace.id,
+    sourceIds: [], folderIds: [id] });
 
   revalidatePath("/knowledge");
 }

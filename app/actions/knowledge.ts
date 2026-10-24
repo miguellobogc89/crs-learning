@@ -14,6 +14,7 @@ export {
 export {
   createKnowledgeAction,
   deleteKnowledgeAction,
+  deleteKnowledgeSelectionAction,
   rebuildKnowledgeAction,
   updateKnowledgeAction,
 } from "./knowledge/article.actions";

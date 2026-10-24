@@ -81,7 +81,7 @@ export function useKnowledgeCardActions({
 
   function deleteArticle() {
     const confirmed = window.confirm(
-      `¿Quieres eliminar el artículo "${knowledge.title}"?\n\nTambién se eliminarán sus archivos, análisis y datos asociados. Esta acción no se puede deshacer.`,
+      `¿Quieres eliminar "${knowledge.title}" de Knowledge?\n\nSus documentos dejarán de estar disponibles en Knowledge. Los registros, historial y evidencias de Engine se conservan.`,
     );
 
     if (!confirmed) {

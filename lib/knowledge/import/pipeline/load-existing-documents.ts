@@ -62,11 +62,13 @@ export async function loadExistingKnowledgeDocuments(
 
   const existingFiles = await prisma.knowledge_files.findMany({
     where: {
+      status: { not: "deleted" },
       file_size: {
         in: candidateSizes,
       },
       knowledge_sources: {
         owner_user_id: ownerUserId,
+        status: { not: "deleted" },
         knowledge_libraries: {
           workspace_id: workspaceId,
         },

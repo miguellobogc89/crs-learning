@@ -314,7 +314,9 @@ export async function confirmKnowledgeImport({
       }),
       prisma.knowledge_files.findMany({
         where: {
+          status: { not: "deleted" },
           knowledge_sources: {
+            status: { not: "deleted" },
             owner_user_id:
               knowledgeImport.owner_user_id,
             knowledge_libraries: {

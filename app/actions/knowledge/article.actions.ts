@@ -4,6 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { deleteKnowledgeSelection } from "@/lib/knowledge/delete-knowledge.service";
 import { auth } from "@/auth";
 import {
   knowledgeLibraryWriteWhere,
@@ -136,31 +137,10 @@ export async function deleteKnowledgeAction(
     session.user.id,
   );
 
-  const knowledge =
-    await prisma.knowledge_sources.findFirst({
-      where: {
-        id,
-        ...knowledgeSourceOwnerWhere(
-          session.user.id,
-          activeWorkspace.id,
-        ),
-      },
-      select: {
-        id: true,
-      },
-    });
+  await deleteKnowledgeSelection({ userId: session.user.id, workspaceId: activeWorkspace.id, sourceIds: [id] });
 
-  if (!knowledge) {
-    throw new Error("Articulo no encontrado");
-  }
-
-  await prisma.knowledge_sources.delete({
-    where: {
-      id,
-    },
-  });
-
-  revalidatePath("/knowledge");
+  revalidatePath("/knowledge", "layout");
+  revalidatePath("/engine/tables");
 }
 
 export async function createKnowledgeAction(
@@ -245,4 +225,13 @@ export async function createKnowledgeAction(
   revalidatePath(`/knowledge/${knowledge.id}`);
 
   redirect(`/knowledge/${knowledge.id}`);
+}
+
+export async function deleteKnowledgeSelectionAction(sourceIds: string[], folderIds: string[] = []) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("No autenticado");
+  const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
+  await deleteKnowledgeSelection({ userId: session.user.id, workspaceId: activeWorkspace.id, sourceIds, folderIds });
+  revalidatePath("/knowledge", "layout");
+  revalidatePath("/engine/tables");
 }

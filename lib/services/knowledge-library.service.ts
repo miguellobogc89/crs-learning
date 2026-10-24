@@ -12,12 +12,13 @@ const libraryInclude = {
   },
 
   knowledge_sources: {
+    where: { status: { not: "deleted" } },
     select: {
       id: true,
       knowledge_type: true,
       _count: {
         select: {
-          knowledge_files: true,
+          knowledge_files: { where: { status: { not: "deleted" } } },
         },
       },
     },
@@ -34,7 +35,7 @@ const libraryInclude = {
 
   _count: {
     select: {
-      knowledge_sources: true,
+      knowledge_sources: { where: { status: { not: "deleted" } } },
       other_knowledge_libraries: true,
     },
   },
@@ -99,6 +100,7 @@ async function getKnowledgeStatus(
       position: true,
 
       knowledge_sources: {
+        where: { status: { not: "deleted" } },
         orderBy: {
           title: "asc",
         },
@@ -111,6 +113,7 @@ async function getKnowledgeStatus(
           visibility: true,
 
           knowledge_files: {
+            where: { status: { not: "deleted" } },
             orderBy: {
               file_name: "asc",
             },

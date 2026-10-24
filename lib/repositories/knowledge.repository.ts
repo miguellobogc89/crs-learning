@@ -7,6 +7,7 @@ import {
 
 const knowledgeSourceDetailInclude = {
   knowledge_files: {
+    where: { status: { not: "deleted" } },
     orderBy: {
       created_at: "desc",
     },
@@ -75,7 +76,7 @@ export async function getVisibleKnowledgeSources(
 
       _count: {
         select: {
-          knowledge_files: true,
+          knowledge_files: { where: { status: { not: "deleted" } } },
         },
       },
     },

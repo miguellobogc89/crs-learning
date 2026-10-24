@@ -121,9 +121,10 @@ export async function analyzeKnowledgeSource(
         updated_at: new Date(),
       },
     }),
-    prisma.knowledge_sources.update({
+    prisma.knowledge_sources.updateMany({
       where: {
         id: knowledgeSourceId,
+        status: { not: "deleted" },
       },
       data: {
         status: "processing",
@@ -137,9 +138,11 @@ export async function analyzeKnowledgeSource(
       await prisma.knowledge_sources.findUnique({
         where: {
           id: knowledgeSourceId,
+          status: { not: "deleted" },
         },
         include: {
           knowledge_files: {
+            where: { status: { not: "deleted" } },
             orderBy: [
               {
                 created_at: "asc",
@@ -222,9 +225,10 @@ export async function analyzeKnowledgeSource(
         },
       }),
 
-      prisma.knowledge_sources.update({
+      prisma.knowledge_sources.updateMany({
         where: {
           id: knowledgeSourceId,
+          status: { not: "deleted" },
         },
         data: {
           knowledge_type: finalKnowledgeType,
@@ -310,9 +314,10 @@ export async function analyzeKnowledgeSource(
           updated_at: new Date(),
         },
       }),
-      prisma.knowledge_sources.update({
+      prisma.knowledge_sources.updateMany({
         where: {
           id: knowledgeSourceId,
+          status: { not: "deleted" },
         },
         data: {
           status: "error",

@@ -5,9 +5,13 @@
 import {
   useMemo,
   useState,
+  useTransition,
   type ReactNode,
 } from "react";
 
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { deleteKnowledgeSelectionAction } from "@/app/actions/knowledge";
 import { AppCard } from "@/components/app/layouts/app-card";
 import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { AppPagination } from "@/components/app/layouts/app-pagination";
@@ -48,6 +52,8 @@ export function KnowledgeContent({
   selectedView,
   aside,
 }: Props) {
+  const router = useRouter();
+  const [isDeleting, startDeleteTransition] = useTransition();
   const [
     explorerState,
     setExplorerState,
@@ -87,18 +93,6 @@ export function KnowledgeContent({
     handleDroppedFiles,
     handleUpload,
   } = useKnowledgeUpload();
-
-  const selectedLibrary =
-    useMemo(() => {
-      return knowledgeLibraries.find(
-        (library) =>
-          library.id ===
-          selectedLibraryId,
-      );
-    }, [
-      knowledgeLibraries,
-      selectedLibraryId,
-    ]);
 
   const currentFolderId =
     useMemo(() => {
@@ -189,26 +183,6 @@ export function KnowledgeContent({
       currentLibrary.name;
   }
 
-  let parentHref:
-    | string
-    | null = null;
-
-  if (selectedView !== "all") {
-    parentHref = "/knowledge";
-  } else if (selectedLibrary) {
-    if (
-      selectedLibrary.parent_id
-    ) {
-      parentHref =
-        `/knowledge?library=${encodeURIComponent(
-          selectedLibrary.parent_id,
-        )}`;
-    } else {
-      parentHref =
-        "/knowledge";
-    }
-  }
-
 const breadcrumbItems =
   selectedLibraryId &&
   libraryPath.length > 0
@@ -236,6 +210,19 @@ const breadcrumbItems =
     }
 
     setIsCreateFolderOpen(true);
+  }
+
+  function handleDeleteSelection() {
+    if (isDeleting || !selectedCount) return;
+    if (!window.confirm(`¿Eliminar los ${selectedCount} elementos seleccionados? Se eliminarán sus documentos y análisis de Knowledge. Los registros e historial de Engine se conservan.`)) return;
+    startDeleteTransition(async () => {
+      try {
+        await deleteKnowledgeSelectionAction([...selectedArticleIds], [...selectedFolderIds]);
+        clearSelection(); router.refresh(); toast.success("Selección eliminada");
+      } catch (error) {
+        toast.error("No se ha podido eliminar la selección", { description: error instanceof Error ? error.message : "Vuelve a intentarlo." });
+      }
+    });
   }
 
   return (
@@ -276,6 +263,7 @@ const breadcrumbItems =
               selectedCount={
                 selectedCount
               }
+              onDeleteSelection={handleDeleteSelection}
               onClearSelection={
                 clearSelection
               }
