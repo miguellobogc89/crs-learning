@@ -145,6 +145,7 @@ function serviceFixture({ cached = false, saveCount = 1, modelError = null } = {
     "@/lib/ai/openai": {
       getKnowledgeImportModel: () => "test-model",
       getOpenAIClient: () => ({ responses: { async create(args, options) {
+        assert.match(args.input, /json/i, "JSON mode requires an explicit JSON instruction in the input messages");
         aiCalls++; modelContext = JSON.parse(args.input); modelOptions = options;
         if (modelError) throw modelError;
         return { status: "completed", output_text: JSON.stringify(f.response) };

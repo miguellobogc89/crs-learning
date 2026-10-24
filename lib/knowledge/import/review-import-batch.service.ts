@@ -76,7 +76,8 @@ export async function reviewKnowledgeImportBatch(input: {
       select: { key: true, name: true, description: true }, take: 80, orderBy: { key: "asc" },
     }),
   ]);
-  const context = JSON.stringify({ documents: inventory.documents, sources, articles,
+  const context = JSON.stringify({ outputFormat: "Devuelve exclusivamente un objeto JSON según las instrucciones.",
+    documents: inventory.documents, sources, articles,
     localStructures: localTypes, reusableStandards: catalogTypes });
   if (context.length > 200_000) {
     throw new Error("El lote supera el tamaño admitido para su revisión conjunta. Divide la selección en lotes más pequeños.");
