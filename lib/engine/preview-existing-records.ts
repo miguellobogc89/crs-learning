@@ -21,7 +21,7 @@ export async function compareExistingEngineRecords(workspaceId: string, blocks: 
     // A bounded scan cannot prove absence of duplicates if the type exceeds the bound.
     const limit = 2001;
     const rows = await prisma.engine_records.findMany({
-      where: { workspace_id: workspaceId, object_type_id: typeId },
+      where: { workspace_id: workspaceId, object_type_id: typeId, status: { not: "archived" } },
       select: { id: true, external_key: true, values_json: true },
       take: limit,
       orderBy: { id: "asc" },

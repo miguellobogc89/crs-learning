@@ -22,7 +22,8 @@ export async function listPendingEngineRelations(input: { workspaceId: string; u
   return prisma.$transaction(async tx => {
     await authorize(tx, input.workspaceId, input.userId, false);
     const proposals = await tx.engine_relation_proposals.findMany({
-      where: { workspace_id: input.workspaceId, status: "pending_review",
+      where: { workspace_id: input.workspaceId,
+        from_record: { status: { not: "archived" } }, to_record: { status: { not: "archived" } }, status: "pending_review",
         document: { knowledge_sources: knowledgeSourceReadWhere(input.userId, input.workspaceId) } },
       orderBy: { created_at: "desc" }, take: 100,
       include: { definition: { select: { key: true, name: true, cardinality: true } },
@@ -41,6 +42,7 @@ export async function listApprovedEngineRelations(input: {
     await authorize(tx, input.workspaceId, input.userId, false);
     return tx.engine_record_relations.findMany({
       where: { workspace_id: input.workspaceId,
+        from_record: { status: { not: "archived" } }, to_record: { status: { not: "archived" } },
         ...(input.recordIds ? { OR: [{ from_record_id: { in: input.recordIds } },
           { to_record_id: { in: input.recordIds } }] } : {}) },
       include: { definition: { select: { key: true, name: true, cardinality: true } } },
@@ -94,6 +96,7 @@ export async function reviewEngineRelation(input: {
     if (!definition || !from || !to || !file) throw new Error("Relation evidence or records unavailable.");
     const existing = await tx.engine_record_relations.findMany({
       where: { workspace_id: input.workspaceId,
+        from_record: { status: { not: "archived" } }, to_record: { status: { not: "archived" } },
         relation_definition_id: definition.id },
       select: { relation_definition_id: true, from_record_id: true, to_record_id: true },
     });

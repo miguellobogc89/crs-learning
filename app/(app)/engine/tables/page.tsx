@@ -1,3 +1,4 @@
+import { EngineTableEditor, EngineSelectionHeader, EngineActionsHeader, EngineRowSelection, EngineRowActions } from "@/components/engine/engine-table-editor";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { KnowledgeUploadTrigger } from "@/components/knowledge/import/knowledge-upload-trigger";
@@ -124,6 +125,12 @@ export default async function EngineTablesPage({
               Registros de {selected?.name ?? "las tablas"} en {activeWorkspace.name}.
               Consulta directa a la base de datos, sin análisis con IA.
             </p>
+            <EngineTableEditor key={selected?.id ?? "empty"} enabled={canReview && !!selected}
+              fields={fields.map(field => ({ key: field.key, name: field.name, field_type: field.field_type,
+                is_required: field.is_required, is_unique: field.is_unique, configuration: field.configuration }))}
+              records={records.map(record => ({ id: record.id, revision: record.revision,
+                values: record.values_json && typeof record.values_json === "object" && !Array.isArray(record.values_json)
+                  ? record.values_json as Record<string, unknown> : {} }))}>
             <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
               {selected ? <>
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-4">
@@ -136,6 +143,7 @@ export default async function EngineTablesPage({
                   <table className="w-full min-w-[540px] border-collapse text-left text-sm">
                     <thead className="bg-slate-50 text-xs text-slate-500">
                       <tr>
+                        <EngineSelectionHeader />
                         {!isInvoice ? (
                           <th className="whitespace-nowrap px-4 py-3 font-semibold">ID</th>
                         ) : null}
@@ -157,6 +165,7 @@ export default async function EngineTablesPage({
                             </th>
                           ))}
                         <th className="px-4 py-3 font-semibold">Estado</th>
+                        <EngineActionsHeader />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -168,6 +177,7 @@ export default async function EngineTablesPage({
                         const parties = isInvoice ? getInvoicePartyLabels(attributes, sourceText) : null;
                         const currency = isInvoice ? invoiceDisplayCurrency(attributes, sourceText) : null;
                         return <tr key={record.id} className="hover:bg-slate-50/70">
+                          <EngineRowSelection id={record.id} />
                           {!isInvoice ? (
                             <td className="max-w-[160px] truncate px-4 py-3 font-mono text-xs text-slate-500"
                               title={record.id}>{record.id}</td>
@@ -207,6 +217,7 @@ export default async function EngineTablesPage({
                               </td>;
                             })}
                           <td className="px-4 py-3 text-xs text-slate-500">{record.status}</td>
+                          <EngineRowActions id={record.id} />
                         </tr>;
                       })}
                       {!records.length && <tr><td colSpan={visibleFields.length + (isInvoice ? 3 : 2)}
@@ -220,6 +231,7 @@ export default async function EngineTablesPage({
                 Todavía no hay entidades en este espacio de trabajo.
               </p>}
             </section>
+            </EngineTableEditor>
           </div>
         ) : (
           <div className="space-y-5 pt-4">

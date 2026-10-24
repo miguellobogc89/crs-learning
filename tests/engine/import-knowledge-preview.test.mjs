@@ -24,7 +24,7 @@ function setup({ role = "admin", owner = false, files = [{ id: "file-1", extract
       findMany: async ({ where }) => {
         calls.files++;
         assert.deepEqual(Array.from(where.id.in), ["file-1"]);
-        assert.equal(where.status, "ready");
+        assert.deepEqual(Array.from(where.status.in), ["ready", "processed"]);
         return files;
       },
     },

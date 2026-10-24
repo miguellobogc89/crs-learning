@@ -20,11 +20,11 @@ export async function loadEngineReconciliationSnapshot(workspaceId: string, db: 
         to_object_type_id: true, cardinality: true },
     }),
     db.engine_records.findMany({
-      where: { workspace_id: workspaceId },
+      where: { workspace_id: workspaceId, status: { not: "archived" } },
       select: { id: true, object_type_id: true, values_json: true },
     }),
     db.engine_record_relations.findMany({
-      where: { workspace_id: workspaceId },
+      where: { workspace_id: workspaceId, from_record: { status: { not: "archived" } }, to_record: { status: { not: "archived" } } },
       select: { relation_definition_id: true, from_record_id: true, to_record_id: true },
     }),
   ]);

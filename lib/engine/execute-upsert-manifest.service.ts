@@ -76,7 +76,7 @@ export async function executeEngineUpsertManifest(input: {
       include: { engine_field_definitions: { where: { status: "active" } } },
     });
     const records = await tx.engine_records.findMany({
-      where: { workspace_id: workspaceId,
+      where: { workspace_id: workspaceId, status: { not: "archived" },
         object_type_id: { in: types.map(type => type.id) } },
       select: { id: true, object_type_id: true, values_json: true },
     });

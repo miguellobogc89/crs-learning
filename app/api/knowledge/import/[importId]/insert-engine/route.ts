@@ -64,7 +64,7 @@ export async function POST(request: Request, context: Context) {
       if (!lock[0]?.acquired) throw new Error("Ya hay una inserción en curso en este workspace.");
       const [types, records, relations] = await Promise.all([
         tx.engine_object_types.count({ where: { workspace_id: ws } }),
-        tx.engine_records.count({ where: { workspace_id: ws } }),
+        tx.engine_records.count({ where: { workspace_id: ws, status: { not: "archived" } } }),
         tx.engine_relation_definitions.count({ where: { workspace_id: ws } }),
       ]);
       if (types || records || relations) {
@@ -161,7 +161,7 @@ export async function POST(request: Request, context: Context) {
         // Update only explicitly approved fields, preserving old values and revisions.
         for (const [localId, change] of resolution?.updates ?? []) {
           const existing = await tx.engine_records.findFirst({
-            where: { id: change.existingId, workspace_id: ws },
+            where: { id: change.existingId, workspace_id: ws, status: { not: "archived" } },
             select: { id: true, object_type_id: true, revision: true },
           });
           if (!existing) throw new Error("Registro actualizado no encontrado: " + localId);
