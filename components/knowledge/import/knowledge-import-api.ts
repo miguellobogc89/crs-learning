@@ -155,10 +155,6 @@ type RunKnowledgeImportAnalysisOptions = {
     stage: KnowledgeImportAnalysisStage,
   ) => void;
 
-  onProgress?: (
-    progress: KnowledgeImportProgress,
-  ) => void;
-
   onAnalysisReady?: (
     analysis: AnalyzeImportResponse,
   ) => void;
@@ -514,65 +510,6 @@ export async function confirmKnowledgeImport(
     response,
     "No se ha podido aplicar la propuesta",
   );
-}
-
-function startProgressPolling(
-  importId: string,
-  onProgress:
-    | ((
-        progress: KnowledgeImportProgress,
-      ) => void)
-    | undefined,
-) {
-  if (!onProgress) {
-    return () => undefined;
-  }
-
-  const progressCallback = onProgress;
-
-  let stopped = false;
-  let timeoutId:
-    | ReturnType<typeof setTimeout>
-    | null = null;
-
-  async function poll() {
-    if (stopped) {
-      return;
-    }
-
-    try {
-      const progress =
-        await getKnowledgeImportProgress(
-          importId,
-        );
-
-      if (!stopped) {
-        progressCallback(progress);
-      }
-    } catch (error) {
-      console.error(
-        "Error polling knowledge import progress:",
-        error,
-      );
-    }
-
-    if (!stopped) {
-      timeoutId = setTimeout(
-        poll,
-        750,
-      );
-    }
-  }
-
-  void poll();
-
-  return () => {
-    stopped = true;
-
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  };
 }
 
 export async function runKnowledgeImportAnalysis(

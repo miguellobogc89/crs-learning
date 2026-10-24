@@ -6,6 +6,13 @@ import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
 
 const MAX_TEXT_LENGTH_PER_FILE = 2_000_000;
 
+export class ImportTextConflictError extends Error {
+  constructor() {
+    super("La extracción de texto ya está en curso o la importación ha cambiado. Actualiza su estado antes de reintentar.");
+    this.name = "ImportTextConflictError";
+  }
+}
+
 export type ImportTextFileResult = {
   id: string;
   name: string;
@@ -183,7 +190,7 @@ export async function processImportText(
   );
 
   const previouslyFailedFiles = allFiles.filter(file =>
-    file.status === "text_error" && (!fileId || file.id !== fileId));
+    file.status === "text_error" && Boolean(fileId) && file.id !== fileId);
 
   if (filesToProcess.length === 0) {
     return {
@@ -215,15 +222,14 @@ export async function processImportText(
   const processingStartedAt =
     knowledgeImport.processing_started_at ?? new Date();
 
-  await prisma.knowledge_imports.updateMany({
+  // Claim this snapshot atomically. A route-level read/check alone allows
+  // simultaneous requests to extract the same files and call vision twice.
+  const claimed = await prisma.knowledge_imports.updateMany({
     where: {
       id: importId,
-      status: {
-        not: "cancelled",
-      },
-      processing_status: {
-        not: "cancelled",
-      },
+      updated_at: knowledgeImport.updated_at,
+      status: { in: ["extracted", "text_error", "text_ready"] },
+      processing_status: { notIn: ["cancelled", "processing"] },
     },
     data: {
       status: "text_processing",
@@ -237,6 +243,8 @@ export async function processImportText(
       updated_at: new Date(),
     },
   });
+
+  if (claimed.count !== 1) throw new ImportTextConflictError();
 
   const results: ImportTextFileResult[] = [];
 

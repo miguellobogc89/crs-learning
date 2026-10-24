@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
-import { processImportText } from "@/lib/knowledge/import/process-import-text";
+import { ImportTextConflictError, processImportText } from "@/lib/knowledge/import/process-import-text";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
@@ -143,6 +143,9 @@ export async function POST(
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof ImportTextConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     const errorMessage =
       error instanceof Error
         ? error.message

@@ -1,6 +1,4 @@
 import type { ImportInventory } from "./build-import-map";
-import type { ImportRoute } from "./recommend-route";
-import type { ImportContentClassification } from "./classify-content";
 // lib/knowledge/import/types.ts
 
 export type KnowledgeImportDocumentInput = {
@@ -146,8 +144,6 @@ export type KnowledgeImportProposal = {
   globalImportMap?: ImportInventory;
   /** One entry per original file. Files without an article remain available in Knowledge. */
   documentRoutes?: Record<string, KnowledgeImportDocumentRoute>;
-  contentClassification?: Record<string, ImportContentClassification>;
-  recommendedRoutes?: Record<string, ImportRoute>;
   title: string;
   description: string;
 

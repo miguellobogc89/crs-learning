@@ -1,4 +1,4 @@
-﻿// lib/knowledge/import/generate-proposal.ts
+// lib/knowledge/import/generate-proposal.ts
 import {
   getKnowledgeImportModel,
   getOpenAIClient,
@@ -78,9 +78,6 @@ type ExistingKnowledge = Awaited<
   ReturnType<typeof listKnowledgeStatus>
 >;
 
-type ExistingArticle =
-  ExistingKnowledge[number]["knowledge_sources"][number];
-
 type GeneratedProposal = Omit<
   KnowledgeImportProposal,
   "documentAnalyses"
@@ -105,124 +102,12 @@ function parseJsonResponse<T>(
   }
 }
 
-function normalizeComparableText(
-  value: string,
-) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("es")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function containsUpdateIntent(
-  value: string,
-) {
-  const normalizedValue =
-    normalizeComparableText(value);
-
-  const updateExpressions = [
-    "actualizar",
-    "actualizacion",
-    "ampliar",
-    "ampliacion",
-    "completar",
-    "corregir",
-    "correccion",
-    "sustituir",
-    "sustitucion",
-    "incorporar",
-    "incorporacion",
-    "integrar",
-    "integracion",
-    "unificar",
-    "unificacion",
-    "consolidar",
-    "consolidacion",
-    "nueva version",
-    "version actualizada",
-    "material complementario",
-    "complementar",
-  ];
-
-  return updateExpressions.some(
-    (expression) =>
-      normalizedValue.includes(expression),
-  );
-}
-
 function getExistingArticles(
   existingKnowledge: ExistingKnowledge,
 ) {
   return existingKnowledge.flatMap(
     (library) =>
       library.knowledge_sources,
-  );
-}
-
-function getArticleNarrative(
-  article: GeneratedProposal["articles"][number],
-  proposal: GeneratedProposal,
-) {
-  const articleDocumentIds = new Set(
-    article.documentIds,
-  );
-
-  const relatedWarnings =
-    proposal.warnings.filter((warning) =>
-      warning.documentIds.some(
-        (documentId) =>
-          articleDocumentIds.has(documentId),
-      ),
-    );
-
-  return [
-    article.title,
-    article.description,
-    ...relatedWarnings.flatMap(
-      (warning) => [
-        warning.title,
-        warning.description,
-        warning.suggestedAction,
-      ],
-    ),
-  ].join("\n");
-}
-
-function findReferencedExistingArticles(
-  article: GeneratedProposal["articles"][number],
-  narrative: string,
-  existingArticles: ExistingArticle[],
-) {
-  const normalizedNarrative =
-    normalizeComparableText(narrative);
-
-  const normalizedProposedTitle =
-    normalizeComparableText(article.title);
-
-  return existingArticles.filter(
-    (existingArticle) => {
-      const normalizedExistingTitle =
-        normalizeComparableText(
-          existingArticle.title,
-        );
-
-      if (!normalizedExistingTitle) {
-        return false;
-      }
-
-      if (
-        normalizedProposedTitle ===
-        normalizedExistingTitle
-      ) {
-        return true;
-      }
-
-      return normalizedNarrative.includes(
-        normalizedExistingTitle,
-      );
-    },
   );
 }
 

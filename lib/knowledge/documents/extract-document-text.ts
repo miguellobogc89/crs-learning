@@ -1,7 +1,8 @@
-// lib/knowledge/file-analysis/extract-document-text.ts
+// Shared extraction for import staging and document reanalysis.
 
 import path from "node:path";
 import { parseOffice } from "officeparser";
+import * as XLSX from "xlsx";
 
 import {
   isPlainTextKnowledgeDocument,
@@ -11,9 +12,7 @@ import {
 import { ingestDocument } from "@/lib/knowledge/documents/document-ingestion.service";
 
 const OFFICE_FILE_TYPES = {
-  ".pdf": "pdf",
   ".docx": "docx",
-  ".xlsx": "xlsx",
   ".pptx": "pptx",
 } as const;
 
@@ -45,14 +44,29 @@ export async function extractDocumentText(
   }
 
   if (extension === ".pdf") {
-  const result = await ingestDocument({
-    buffer: content,
-    fileName,
-    mimeType: "application/pdf",
-  });
+    const result = await ingestDocument({
+      buffer: content,
+      fileName,
+      mimeType: "application/pdf",
+    });
+    return result.text;
+  }
 
-  return result.text;
-}
+  // Preserve worksheet boundaries and empty cells for downstream evidence.
+  // Flattening an Excel workbook as prose loses which values share a row.
+  if (extension === ".xlsx") {
+    const workbook = XLSX.read(content);
+    return workbook.SheetNames.map(sheetName => {
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], {
+        header: 1,
+        defval: "",
+      });
+      return [
+        `# Hoja: ${sheetName}`,
+        ...rows.map(row => row.map(cell => cell == null ? "" : String(cell)).join(" | ")),
+      ].join("\n");
+    }).join("\n\n").trim();
+  }
 
   if (isPlainTextKnowledgeDocument(fileName)) {
     return content.toString("utf8");
