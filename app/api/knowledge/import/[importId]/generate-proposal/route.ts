@@ -81,11 +81,10 @@ export async function POST(
   const encoder =
     new TextEncoder();
 
+  let closed = false;
   const stream =
     new ReadableStream<Uint8Array>({
       async start(controller) {
-        let closed = false;
-
         function send(
           event: ProposalStreamEvent,
         ) {
@@ -138,10 +137,10 @@ export async function POST(
                 : "No se ha podido generar la propuesta",
           });
         } finally {
-          closed = true;
-          controller.close();
+          if (!closed) { closed = true; controller.close(); }
         }
       },
+      cancel() { closed = true; },
     });
 
   return new Response(stream, {

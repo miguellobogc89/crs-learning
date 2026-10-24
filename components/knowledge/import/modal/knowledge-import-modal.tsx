@@ -590,6 +590,7 @@ export function KnowledgeImportModal({
               "analyzing" ? (
               <KnowledgeImportProcessingStep
                 inventory={knowledgeImport.globalMap}
+                error={knowledgeImport.error}
                 phase={
                   knowledgeImport.processingPhase
                 }

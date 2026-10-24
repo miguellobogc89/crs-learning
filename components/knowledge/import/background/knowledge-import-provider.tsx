@@ -465,6 +465,8 @@ export function KnowledgeImportProvider({
               caughtError instanceof Error
                 ? caughtError.message
                 : "No se ha podido generar la propuesta",
+            phase: "preparing",
+            proposalProgress: null,
             isAnalyzing: false,
             step: "analyzing",
           });

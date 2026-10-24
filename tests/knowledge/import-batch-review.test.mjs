@@ -112,11 +112,11 @@ test("fingerprint is independent of database ordering", () => {
   assert.equal(importBatchFingerprint(result, f.files), importBatchFingerprint({ ...result, documents: [...result.documents].reverse() }, [...f.files].reverse()));
 });
 
-function serviceFixture({ cached = false, saveCount = 1 } = {}) {
+function serviceFixture({ cached = false, saveCount = 1, modelError = null } = {}) {
   const f = fixture();
   const inventory = cached ? applyImportBatchReview(f) : f.inventory;
   const payload = { globalImportMap: inventory };
-  let aiCalls = 0, saves = 0, modelContext, authorizedWhere;
+  let aiCalls = 0, saves = 0, modelContext, modelOptions, authorizedWhere;
   const prisma = {
     knowledge_imports: {
       async findFirst({ where }) {
@@ -144,13 +144,14 @@ function serviceFixture({ cached = false, saveCount = 1 } = {}) {
     "./review-import-batch": helpers,
     "@/lib/ai/openai": {
       getKnowledgeImportModel: () => "test-model",
-      getOpenAIClient: () => ({ responses: { async create(args) {
-        aiCalls++; modelContext = JSON.parse(args.input);
+      getOpenAIClient: () => ({ responses: { async create(args, options) {
+        aiCalls++; modelContext = JSON.parse(args.input); modelOptions = options;
+        if (modelError) throw modelError;
         return { status: "completed", output_text: JSON.stringify(f.response) };
       } } }),
     },
   });
-  return { ...api, calls: () => ({ aiCalls, saves, modelContext, authorizedWhere }) };
+  return { ...api, calls: () => ({ aiCalls, saves, modelContext, modelOptions, authorizedWhere }) };
 }
 const scope = { importId: "import", userId: "user", workspaceId: "workspace" };
 test("service reviews all original sources together against local and standard structures without writing records", async () => {
@@ -181,4 +182,18 @@ test("JSONB object key reordering does not invalidate an unchanged batch", () =>
     : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).reverse().map(([key, child]) => [key, reorder(child)])) : value;
   const roundtrip = JSON.parse(JSON.stringify(reorder(result)));
   assert.doesNotThrow(() => assertReviewedImportBatch(roundtrip, f.files));
+});
+
+test("review publishes real phase progress and uses a bounded request without automatic retries", async () => {
+  const service = serviceFixture(); const progress = [];
+  await service.reviewKnowledgeImportBatch({ ...scope, onProgress: value => progress.push(value) });
+  assert.deepEqual(progress.map(item => item.progressPercentage), [5, 15, 35, 80, 95, 100]);
+  assert.equal(service.calls().modelOptions.timeout, 120000);
+  assert.equal(service.calls().modelOptions.maxRetries, 0);
+});
+test("model timeout preserves the snapshot and returns a retryable error", async () => {
+  const error = new Error("Request timed out"); error.name = "APIConnectionTimeoutError";
+  const service = serviceFixture({ modelError: error });
+  await assert.rejects(service.reviewKnowledgeImportBatch(scope), /texto extraído se conserva/);
+  assert.equal(service.calls().saves, 0);
 });

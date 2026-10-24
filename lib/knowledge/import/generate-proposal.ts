@@ -434,7 +434,10 @@ export async function generateKnowledgeImportProposal({
     message: "Revisando el lote completo y sus destinos" });
   // Also covers resumed imports. A persisted review is reused only while its
   // source fingerprint matches; individual classifications cannot bypass it.
-  const reviewedInventory = await reviewKnowledgeImportBatch({ importId, userId, workspaceId });
+  const reviewedInventory = await reviewKnowledgeImportBatch({ importId, userId, workspaceId,
+    onProgress: progress => onProgress?.({ ...progress,
+      progressPercentage: 5 + Math.round(progress.progressPercentage * 0.03) }),
+  });
 
   const knowledgeImport =
     await prisma.knowledge_imports.findFirst({

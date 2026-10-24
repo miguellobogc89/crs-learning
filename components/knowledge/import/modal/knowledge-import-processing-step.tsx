@@ -32,6 +32,7 @@ type Props = {
   files: KnowledgeImportFileProgress[];
   summary: KnowledgeImportProgressSummary;
   inventory?: ImportInventory | null;
+  error?: string | null;
   proposalProgress?: KnowledgeImportProposalProgress | null;
 };
 
@@ -86,6 +87,7 @@ export function KnowledgeImportProcessingStep({
   summary,
   proposalProgress,
   inventory,
+  error,
 }: Props) {
   const totalFiles =
     summary.totalFiles ||
@@ -98,7 +100,7 @@ export function KnowledgeImportProcessingStep({
 
   const reviewingBatch = phase === "reviewing_batch";
   const analysisFinished =
-    !reviewingBatch && totalFiles > 0 &&
+    !error && !reviewingBatch && totalFiles > 0 &&
     analyzedFiles >= totalFiles &&
     summary.pendingFiles === 0;
 
@@ -107,7 +109,7 @@ export function KnowledgeImportProcessingStep({
     "generating_proposal";
 
   const displayedPercentage =
-    isGeneratingProposal
+    (isGeneratingProposal || reviewingBatch)
       ? Math.min(
           proposalProgress
             ?.progressPercentage ??
@@ -123,11 +125,12 @@ export function KnowledgeImportProcessingStep({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {error ? <p role="alert" className="mb-3 shrink-0 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
       <div className="shrink-0">
         <div className="flex items-end justify-between gap-6">
           <div>
             <h3 className="text-[17px] font-semibold tracking-[-0.015em] text-slate-950">
-              {reviewingBatch ? "Revisando el lote completo" : isGeneratingProposal
+              {error ? "Revisión pendiente" : reviewingBatch ? "Revisando el lote completo" : isGeneratingProposal
                 ? "Preparando la propuesta"
                 : analysisFinished
                   ? "Análisis completado"
@@ -135,7 +138,7 @@ export function KnowledgeImportProcessingStep({
             </h3>
 
             <p className="mt-1 text-[12px] leading-5 text-slate-500">
-              {reviewingBatch ? "Comparando los documentos y proponiendo destinos para Knowledge y Engine." : isGeneratingProposal
+              {error ? "Los archivos extraídos se conservan. Puedes volver a generar la propuesta para reintentar la revisión." : reviewingBatch ? (proposalProgress?.message ?? "Comparando los documentos y proponiendo destinos para Knowledge y Engine.") : isGeneratingProposal
                 ? proposalProgress
                     ?.message ??
                   "Estamos preparando la mejor forma de incorporar el contenido."

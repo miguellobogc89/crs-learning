@@ -1,3 +1,4 @@
+import { readImportStream } from "./read-import-stream";
 import type { ImportInventory } from "@/lib/knowledge/import/build-import-map";
 
 // components/knowledge/import/knowledge-import-api.ts
@@ -197,20 +198,6 @@ export type KnowledgeImportProposalProgress = {
   message: string;
 };
 
-type GenerateProposalStreamEvent =
-  | {
-      type: "progress";
-      progress: KnowledgeImportProposalProgress;
-    }
-  | {
-      type: "completed";
-      result: GenerateKnowledgeImportProposalResult;
-    }
-  | {
-      type: "error";
-      error: string;
-    };
-
 type GenerateKnowledgeImportProposalOptions = {
   onProgress?: (
     progress: KnowledgeImportProposalProgress,
@@ -338,130 +325,7 @@ async function generateImportProposal(
     },
   );
 
-  if (!response.ok) {
-    const body = (await response
-      .json()
-      .catch(() => null)) as
-      | ApiErrorBody
-      | null;
-
-    throw new Error(
-      body?.error ??
-        "No se ha podido iniciar la generación de la propuesta",
-    );
-  }
-
-  if (!response.body) {
-    throw new Error(
-      "El servidor no ha iniciado el flujo de generación",
-    );
-  }
-
-  const reader =
-    response.body.getReader();
-
-  const decoder =
-    new TextDecoder();
-
-  let buffer = "";
-
-  let completedResult:
-    | GenerateKnowledgeImportProposalResult
-    | null = null;
-
-  while (true) {
-    const {
-      done,
-      value,
-    } = await reader.read();
-
-    if (done) {
-      break;
-    }
-
-    buffer += decoder.decode(
-      value,
-      {
-        stream: true,
-      },
-    );
-
-    const lines =
-      buffer.split("\n");
-
-    buffer =
-      lines.pop() ?? "";
-
-    for (const line of lines) {
-      if (!line.trim()) {
-        continue;
-      }
-
-      const event =
-        JSON.parse(
-          line,
-        ) as GenerateProposalStreamEvent;
-
-      if (
-        event.type ===
-        "progress"
-      ) {
-        options.onProgress?.(
-          event.progress,
-        );
-        continue;
-      }
-
-      if (
-        event.type ===
-        "error"
-      ) {
-        throw new Error(
-          event.error,
-        );
-      }
-
-      completedResult =
-        event.result;
-    }
-  }
-
-  const remainingLine =
-    buffer.trim();
-
-  if (remainingLine) {
-    const event =
-      JSON.parse(
-        remainingLine,
-      ) as GenerateProposalStreamEvent;
-
-    if (
-      event.type ===
-      "progress"
-    ) {
-      options.onProgress?.(
-        event.progress,
-      );
-    } else if (
-      event.type ===
-      "error"
-    ) {
-      throw new Error(
-        event.error,
-      );
-    } else {
-      completedResult =
-        event.result;
-    }
-  }
-
-  if (!completedResult) {
-    throw new Error(
-      "La generación terminó sin devolver una propuesta",
-    );
-  }
-
-  return completedResult;
+  return readImportStream<GenerateKnowledgeImportProposalResult>(response, options.onProgress);
 }
 
 export async function getKnowledgeImportProgress(
@@ -583,11 +447,21 @@ export async function generateKnowledgeImportProposal(
   };
 }
 
-export async function reviewKnowledgeImportBatch(importId: string): Promise<ImportInventory> {
-  const response = await fetch(`/api/knowledge/import/${encodeURIComponent(importId)}/review-batch`, {
-    method: "POST",
-  });
-  const result = await readResponse<{ map: ImportInventory }>(response, "No se ha podido revisar el lote completo");
-  if (result.map?.batchReview?.status !== "reviewed") throw new Error("La revisión del lote no está completa");
-  return result.map;
+export async function reviewKnowledgeImportBatch(
+  importId: string,
+  onProgress?: (progress: KnowledgeImportProposalProgress) => void,
+): Promise<ImportInventory> {
+  try {
+    const response = await fetch(`/api/knowledge/import/${encodeURIComponent(importId)}/review-batch`, {
+      method: "POST", headers: { Accept: "application/x-ndjson" }, signal: AbortSignal.timeout(150_000),
+    });
+    const result = await readImportStream<{ map: ImportInventory }>(response, onProgress);
+    if (result.map?.batchReview?.status !== "reviewed") throw new Error("La revisión del lote no está completa");
+    return result.map;
+  } catch (error) {
+    if (error instanceof Error && /timeout|abort/i.test(error.name)) {
+      throw new Error("La revisión conjunta no respondió a tiempo. El texto extraído se conserva: reintenta generar la propuesta sin volver a subir los archivos.");
+    }
+    throw error;
+  }
 }

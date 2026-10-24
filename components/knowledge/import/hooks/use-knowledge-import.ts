@@ -690,7 +690,11 @@ export function useKnowledgeImport({
         if (analysisResult.textExtraction.successfulFiles > 0) {
           setProcessingPhase("reviewing_batch");
           updateImport(uploadResult.importId, { phase: "reviewing_batch", isAnalyzing: true });
-          lastMap = await reviewKnowledgeImportBatch(uploadResult.importId);
+          lastMap = await reviewKnowledgeImportBatch(uploadResult.importId, progress => {
+            if (!isCurrentOperation()) return;
+            setProposalProgress(progress);
+            updateImport(uploadResult.importId, { proposalProgress: progress });
+          });
           if (!isCurrentOperation()) return;
           setGlobalMap(lastMap);
         }
@@ -708,7 +712,7 @@ export function useKnowledgeImport({
           setProcessingPhase("preparing");
           setStep("analyzing");
           updateImport(uploadResult.importId, {
-            step: "analyzing", phase: "preparing", status: "text_ready", files: finalizedFiles,
+            step: "analyzing", phase: "preparing", status: "text_ready", files: finalizedFiles, proposalProgress: null,
             summary: finalizedSummary, isAnalyzing: false, isConfirming: false,
             error: recognitionFailures.length ? recognitionFailures.join(" · ") : null,
           });
@@ -816,7 +820,9 @@ export function useKnowledgeImport({
           );
         }
 
-        setStep("upload");
+        setProposalProgress(null);
+        setStep(activeImportId ? "analyzing" : "upload");
+        if (activeImportId) updateImport(activeImportId, { step: "analyzing", phase: "preparing", proposalProgress: null });
       } finally {
         if (
           isCurrentOperation()
