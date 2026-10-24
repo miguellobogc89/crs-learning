@@ -430,3 +430,84 @@ test("batch preview has explicit per-file failures, de-duplication and partial c
   assert.match(content, /allIds\.length !== ids\.length/);
   assert.match(content, /action: index === 0 \? firstAction : "reuse"/);
 });
+
+
+const invoiceDisplayFile = new URL("../lib/engine/invoice-display.ts", import.meta.url);
+const invoiceDisplayJs = ts.transpileModule(
+  fs.readFileSync(invoiceDisplayFile, "utf8"),
+  { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+).outputText;
+const displayFunctions = {};
+new Function("exports", "require", invoiceDisplayJs)(displayFunctions, () => ({}));
+const {
+  getInvoicePartyLabels,
+  formatEngineNumericValue, invoiceDisplayCurrency, isMonetaryField,
+} = displayFunctions;
+
+test("invoice table reads distinct issuer and customer from recurring heladería documents", () => {
+  const text = [
+    "D\`PLOCIA HELADOS SL",
+    "B72378581",
+    "Calle Plocia nº4",
+    "FACTURA Nº: 2026-005",
+    "CLIENTE: CÁDIZ DESARROLLO PATRIMONIAL SL",
+    "CIF/DNI: B14951446",
+  ].join("\n");
+  assert.deepEqual(getInvoicePartyLabels({}, text), {
+    issuer: "D'PLOCIA HELADOS SL",
+    customer: "CÁDIZ DESARROLLO PATRIMONIAL SL",
+  });
+});
+
+test("invoice table assigns the utility account holder to customer, not issuer", () => {
+  const text = [
+    "Loop Electricidad y Gas, S.L. con sede social en Madrid, C/...",
+    "D'PLOCIA HELADOS S.L.",
+    "Titular:          D'PLOCIA HELADOS S.L.          Nº de contrato: 163913",
+    "CIF/NIF: B72378581",
+    "Forma de pago: DOMICILIADO",
+  ].join("\n");
+  assert.deepEqual(getInvoicePartyLabels({}, text), {
+    issuer: "Loop Electricidad y Gas, S.L.",
+    customer: "D'PLOCIA HELADOS S.L.",
+  });
+});
+
+test("invoice table always prefers persisted party names and does not guess missing identities", () => {
+  assert.deepEqual(getInvoicePartyLabels({
+    issuer_name: "TOLDOS CHICLANA S.L.", customer_name: "D'PLOCIA HELADOS S.L.",
+  }, "Factura nº 018-2026"), {
+    issuer: "TOLDOS CHICLANA S.L.",
+    customer: "D'PLOCIA HELADOS S.L.",
+  });
+  assert.deepEqual(getInvoicePartyLabels({}, "FACTURA Nº: 123\nTOTAL FACTURA 99.00"), {
+    issuer: null, customer: null,
+  });
+});
+
+test("invoice monetary columns format thousands and decimal comma using verified currency", () => {
+  const amount = { key: "total_amount", field_type: "decimal" };
+  const tax = { key: "tax_amount", field_type: "decimal" };
+  const rate = { key: "tax_rate", field_type: "decimal" };
+  assert.equal(isMonetaryField(amount), true);
+  assert.equal(isMonetaryField(rate), false);
+  assert.equal(formatEngineNumericValue(7205, amount, "EUR"), "7.205,00 €");
+  assert.equal(formatEngineNumericValue(237.87, tax, "EUR"), "237,87 €");
+  assert.equal(formatEngineNumericValue(1371.91, amount, null), "1.371,91");
+  assert.equal(formatEngineNumericValue(1371.91, amount, "USD"), "1.371,91");
+  assert.equal(formatEngineNumericValue(10, rate, "EUR"), "10");
+  assert.equal(invoiceDisplayCurrency({}, "Total Factura: 1.370,57 €"), "EUR");
+  assert.equal(invoiceDisplayCurrency({}, "importe neto 3050,00"), null);
+});
+
+test("invoice table places invoice number first, hides ID/currency and shows party source columns", () => {
+  const file = fs.readFileSync(
+    new URL("../app/(app)/engine/tables/page.tsx", import.meta.url), "utf8");
+  assert.match(file, /<th[^>]*>Número de factura<\/th>/);
+  assert.match(file, /<th[^>]*>Emisor<\/th>/);
+  assert.match(file, /<th[^>]*>Cliente<\/th>/);
+  assert.match(file, /field\.key !== "currency"/);
+  assert.match(file, /!isInvoice \? \(/);
+  assert.match(file, /formatEngineNumericValue/);
+  assert.match(file, /sourceTextsByRecord/);
+});
