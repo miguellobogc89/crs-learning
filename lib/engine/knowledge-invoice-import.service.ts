@@ -378,7 +378,10 @@ async function extract(
 ) {
   if (!file.extracted_text || file.extracted_text.length > 50000)
     throw new Error("Texto de factura ausente o demasiado grande: " + file.file_name);
-  const response = await getOpenAIClient().responses.create({
+  let first = checkedInvoice({ values: {}, evidence: {} },
+    file.extracted_text, fields, { allowPartial: true });
+  try {
+    const response = await getOpenAIClient().responses.create({
     model: getKnowledgeImportModel(),
     instructions: [
       "Devuelve solo un objeto JSON con values, evidence y opcionalmente calculations (diccionarios).",
@@ -403,15 +406,20 @@ async function extract(
       fields: catalogFields, text: file.extracted_text,
     }),
     text: { format: { type: "json_object" } },
-  }, { timeout: 120000, maxRetries: 0 });
-  if (response.status !== "completed" || !response.output_text || response.output_text.length > 18000)
-    throw new Error("La IA no ha terminado de extraer " + file.file_name);
-  let parsed: unknown;
-  try { parsed = JSON.parse(response.output_text); }
-  catch { throw new Error("JSON no válido para " + file.file_name); }
-  // IMPORTANT: extraction can be incomplete even when the invoice is valid.
-  // Do not reject missing mandatory fields before the recovery attempt.
-  const first = checkedInvoice(parsed, file.extracted_text, fields, { allowPartial: true });
+  }, { timeout: 60000, maxRetries: 0 });
+    if (response.status !== "completed" || !response.output_text ||
+        response.output_text.length > 18000)
+      throw new Error("La lectura inicial de IA fue incompleta.");
+    first = checkedInvoice(JSON.parse(response.output_text), file.extracted_text,
+      fields, { allowPartial: true });
+  } catch (error) {
+    // The source PDF still contains evidence: a model failure cannot prevent
+    // using the independently verifiable anchors or a targeted second pass.
+    console.warn("[engine-invoices] Initial extraction incomplete; attempting source recovery", {
+      file: file.file_name,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+  }
   let verified = recoverInvoiceIdentity(first, previous, file.extracted_text, fields);
   verified = recoverDocumentInvoiceAnchors(verified, file.extracted_text, fields);
   const core = ["invoice_number", "total_amount"];
@@ -445,7 +453,7 @@ async function extract(
         text: file.extracted_text,
       }),
       text: { format: { type: "json_object" } },
-    }, { timeout: 120000, maxRetries: 0 });
+    }, { timeout: 45000, maxRetries: 0 });
     if (second.status !== "completed" || !second.output_text || second.output_text.length > 18000)
       throw new Error("La segunda lectura no devolvió un resultado completo.");
     const raw: unknown = JSON.parse(second.output_text);
