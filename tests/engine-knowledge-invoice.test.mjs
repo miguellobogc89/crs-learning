@@ -15,7 +15,7 @@ new Function("exports", "require", js)(exports, id => {
   if (id === "node:crypto") return require(id);
   return {};
 });
-const { invoiceFileIds, checkedInvoice, stableJson, invoiceMissingFields, ensureInvoiceRevisionSnapshot, recoverInvoiceIdentity, previewInvoiceFieldDelta } = exports;
+const { invoiceFileIds, checkedInvoice, stableJson, invoiceMissingFields, ensureInvoiceRevisionSnapshot, recoverInvoiceIdentity, recoverDocumentInvoiceAnchors, previewInvoiceFieldDelta } = exports;
 
 function route(articleCandidate, structuredCandidate) {
   return { articleCandidate, structuredCandidate, knowledge: true };
@@ -361,4 +361,72 @@ test("Neon catalog upgrade and Toldos correction are separately reviewable scrip
   assert.match(correction, /revision = revision \+ 1/);
   assert.match(correction, /ON CONFLICT \(record_id, revision\) DO NOTHING/);
   assert.match(correction, /payment_method/);
+});
+
+
+test("catalog field keys tolerate mechanical camelCase without semantic guessing", () => {
+  const text = "Factura A-1\nTotal factura: 1.370,57 €";
+  const values = checkedInvoice({
+    values: { invoiceNumber: "A-1", totalAmount: "1.370,57" },
+    evidence: { invoiceNumber: "Factura A-1", totalAmount: "Total factura: 1.370,57 €" },
+  }, text, new Map([["invoice_number", "text"], ["total_amount", "decimal"]]));
+  assert.deepEqual(values.values, { invoice_number: "A-1", total_amount: 1370.57 });
+});
+
+test("source anchored fallback recovers IGNIS invoice September identity without vendor assumptions", () => {
+  const text = [
+    "Nº Factura:              IGNIS 260307734                                Tipo de factura:Registro",
+    "Fecha factura:          15 de septiembre de 2026                      Forma de pago: DOMICILIADO",
+    "Total Factura:                          1.370,57 €",
+    "Base Imponible                       1.132,70€         21%       237,87 €",
+    "TOTAL FACTURA                           1.370,57 €",
+  ].join("\n");
+  const fields = new Map([["invoice_number", "text"], ["total_amount", "decimal"]]);
+  const primary = checkedInvoice({ values: {}, evidence: {} }, text, fields, { allowPartial: true });
+  const recovered = recoverDocumentInvoiceAnchors(primary, text, fields);
+  assert.deepEqual(recovered.values, { invoice_number: "IGNIS 260307734", total_amount: 1370.57 });
+  const final = checkedInvoice({ values: recovered.values, evidence: recovered.evidence }, text, fields);
+  assert.deepEqual(final.values, recovered.values);
+  assert.match(final.evidence.invoice_number, /Nº Factura/);
+  assert.match(final.evidence.total_amount, /1.370,57/);
+});
+
+test("source anchored fallback recovers a multipage heladería invoice only from its invoice total", () => {
+  const text = [
+    "FACTURA Nº: 2026-005",
+    "Cubeta de helado Fresa                     35,00",
+    "Subtotal 570,00",
+    "FACTURA Nº: 2026-005. Cont.",
+    "Subtotal 590,00",
+    "IMPORTE NETO                                   6.550,00",
+    "I.V.A. 10%                                        655,00",
+    "TOTAL FACTURA                                  7.205,00",
+  ].join("\n");
+  const fields = new Map([["invoice_number", "text"], ["total_amount", "decimal"]]);
+  const recovered = recoverDocumentInvoiceAnchors(
+    checkedInvoice({ values: {}, evidence: {} }, text, fields, { allowPartial: true }),
+    text, fields,
+  );
+  assert.deepEqual(recovered.values, { invoice_number: "2026-005", total_amount: 7205 });
+});
+
+test("source recovery will not invent values when invoice identifiers or totals conflict", () => {
+  const text = "Nº Factura: 12345\nNº Factura: 23456\nTOTAL FACTURA 12,00\nTOTAL FACTURA 13,00";
+  const fields = new Map([["invoice_number", "text"], ["total_amount", "decimal"]]);
+  const recovered = recoverDocumentInvoiceAnchors(
+    checkedInvoice({ values: {}, evidence: {} }, text, fields, { allowPartial: true }),
+    text, fields,
+  );
+  assert.deepEqual(recovered.values, {});
+});
+
+test("batch preview has explicit per-file failures, de-duplication and partial confirmation", () => {
+  const content = fs.readFileSync(
+    new URL("../lib/engine/knowledge-invoice-import.service.ts", import.meta.url), "utf8",
+  );
+  assert.match(content, /const groups = new Map<string, StagingFile\[\]>/);
+  assert.match(content, /offset \+= 3/);
+  assert.match(content, /failedFiles: failures/);
+  assert.match(content, /allIds\.length !== ids\.length/);
+  assert.match(content, /action: index === 0 \? firstAction : "reuse"/);
 });
