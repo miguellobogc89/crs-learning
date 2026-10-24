@@ -12,15 +12,15 @@ import {
 } from "lucide-react";
 
 import type { KnowledgeImportProposal } from "@/lib/knowledge/import/types";
-import type { InvoiceImportPreview } from "@/lib/engine/knowledge-invoice-import.service";
+import type { KnowledgeEnginePreview } from "@/lib/engine/knowledge-engine-import.service";
 
 type Props = {
   proposal: KnowledgeImportProposal;
   isConfirming: boolean;
   error: string | null;
-  invoicePreview: InvoiceImportPreview | null;
-  invoicePreviewLoading: boolean;
-  invoicePreviewError: string | null;
+  enginePreview: KnowledgeEnginePreview | null;
+  enginePreviewLoading: boolean;
+  enginePreviewError: string | null;
   onBack: () => void;
   onConfirm: () => void;
 };
@@ -124,9 +124,9 @@ function DocumentNames({
 export function KnowledgeImportProposalStep({
   proposal,
   error,
-  invoicePreview,
-  invoicePreviewLoading,
-  invoicePreviewError,
+  enginePreview,
+  enginePreviewLoading,
+  enginePreviewError,
 }: Props) {
   const createdArticles =
     proposal.articles.filter(
@@ -222,96 +222,36 @@ export function KnowledgeImportProposalStep({
           <h4 className="text-[12px] font-semibold text-slate-900">
             Engine · Plan de registros
           </h4>
-          {invoicePreviewLoading ? (
-            <p role="status" className="mt-2 text-[11px] text-blue-700">
-              Extrayendo y verificando las facturas contra el catálogo global. Todavía no se ha escrito ningún registro.
+          {enginePreviewLoading ? (
+            <p role="status" className="mt-2 text-xs text-blue-700">
+              Descubriendo tablas, extrayendo registros y verificando relaciones en todo el lote. No se ha escrito ningún registro.
             </p>
-          ) : invoicePreviewError ? (
-            <p role="alert" className="mt-2 text-[11px] text-rose-700">
-              {invoicePreviewError} · Corrige el problema antes de confirmar.
-            </p>
-          ) : invoicePreview && invoicePreview.invoices.length > 0 ? (
-            <div className="mt-3 space-y-2">
-              <p className="text-[11px] text-slate-600">
-                {invoicePreview.recordsToInsert} nuevas · {invoicePreview.recordsToUpdate} por completar · {invoicePreview.recordsToReuse} sin datos nuevos. Se aplicarán los cambios únicamente al confirmar.
-              </p>
-              {invoicePreview.failures.length > 0 ? (
-                <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3">
-                  <p className="text-[11px] font-semibold text-amber-900">
-                    {invoicePreview.failures.length} documentos no se incorporarán a Engine
-                  </p>
-                  <p className="mt-1 text-[10px] text-amber-800">
-                    El resto puede confirmarse. Los documentos siguientes quedan pendientes
-                    de revisar o reintentar, sin crear registros incompletos.
-                  </p>
-                  {invoicePreview.failures.map(failed => (
-                    <p key={failed.fileId} className="mt-2 break-words text-[11px] text-amber-900">
-                      <span className="font-medium">{failed.fileName}</span>: {failed.reason}
-                    </p>
-                  ))}
-                </div>
-              ) : null}
-              {invoicePreview.invoices.map(invoice => (
-                <div key={invoice.fileId} className="rounded-lg border border-slate-200 bg-white p-3">
-                  <p className="text-[12px] font-semibold text-slate-900">
-                    {invoice.fileName}
-                    <span className="ml-2 font-normal text-blue-700">
-                      {invoice.action === "insert" ? "INSERT" : invoice.action === "update" ? "UPDATE" : "REUSE"}
-                    </span>
-                  </p>
-                  <p className="mt-1 text-[11px] text-slate-600">
-                    Nº {String(invoice.values.invoice_number ?? "—")} · Total {String(invoice.values.total_amount ?? "—")} · {String(invoice.values.issue_date ?? "Fecha no acreditada")}
-                  </p>
-                  {invoice.action === "update" && invoice.addedFields.length > 0 ? (
-                    <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/60 p-2">
-                      <p className="text-[11px] font-medium text-emerald-900">
-                        Nuevos campos que se añadirán ({invoice.addedFields.length})
-                      </p>
-                      {invoice.addedFields.map(item => (
-                        <div key={item.field} className="mt-1.5 text-[11px] text-emerald-900">
-                          <span className="font-semibold">{item.field}:</span>{" "}
-                          {String(item.value)}
-                          <p className="mt-0.5 break-words text-[10px] text-emerald-800">
-                            Evidencia: «{item.evidence}»
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                  {invoice.conflictingFields.length > 0 ? (
-                    <details className="mt-2 text-[10px] text-amber-700">
-                      <summary className="cursor-pointer">
-                        {invoice.conflictingFields.length} diferencias detectadas (se conservarán los valores existentes)
-                      </summary>
-                      {invoice.conflictingFields.map(item => (
-                        <p key={item.field} className="mt-1 break-words">
-                          {item.field}: guardado {String(item.current)} · extraído {String(item.extracted)}
-                        </p>
-                      ))}
-                    </details>
-                  ) : null}
-                  <details className="mt-2 text-[10px] text-slate-500">
-                    <summary className="cursor-pointer">Ver campos extraídos</summary>
-                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-[10px]">
-                      {JSON.stringify(invoice.values, null, 2)}
-                    </pre>
-                  </details>
+          ) : enginePreviewError ? (
+            <p role="alert" className="mt-2 text-xs text-rose-700">{enginePreviewError} · Corrige el problema antes de confirmar.</p>
+          ) : enginePreview?.status === "ready" ? (
+            <div className="mt-3 space-y-3 text-xs">
+              <p>{enginePreview.recordsToInsert} nuevos · {enginePreview.recordsToUpdate} por completar · {enginePreview.recordsToReuse} sin cambios.</p>
+              <p className="text-slate-600">Al confirmar se aprobarán las tablas y relaciones siguientes. Sus definiciones serán reutilizables; los registros serán privados de este workspace.</p>
+              {enginePreview.tables.map(table => (
+                <div key={table.key} className="rounded-lg border bg-white p-3">
+                  <p className="font-semibold">{table.name} · {table.records} registros</p>
+                  <p className="mt-1 text-slate-500">{table.fields.join(" · ")}</p>
                 </div>
               ))}
+              {enginePreview.relations.map(relation => (
+                <p key={relation.key}>{relation.fromEntity} → {relation.toEntity} · {relation.key} · {relation.links} vínculos</p>
+              ))}
+              {enginePreview.warnings.map((warning,index) => <p key={index} className="text-amber-700">{warning}</p>)}
+              {enginePreview.records.map(record => (
+                <details key={record.id} className="rounded-lg border bg-white p-3">
+                  <summary className="cursor-pointer font-medium">{record.entity} · {record.fileName} · {record.action === "insert" ? "Nuevo" : record.action === "update" ? "Completar" : "Reutilizar"}</summary>
+                  <pre className="mt-2 whitespace-pre-wrap break-words text-[11px]">{JSON.stringify(record.values,null,2)}</pre>
+                  {record.conflictingFields.map(field => <p key={field.field} className="mt-1 text-amber-700">{field.field}: guardado {String(field.current)} · extraído {String(field.extracted)}. Se conserva el valor guardado.</p>)}
+                </details>
+              ))}
             </div>
-          ) : invoicePreview ? (
-            <p className="mt-2 text-[11px] text-slate-500">
-              No hay facturas compatibles con el catálogo global en esta propuesta.
-            </p>
-          ) : null}
-          {invoicePreview && invoicePreview.otherStructuredCandidates > 0 ? (
-            <p className="mt-2 text-[11px] text-amber-700">
-              {invoicePreview.otherStructuredCandidates} documentos estructurados de otros tipos quedan pendientes de conexión a Engine.
-            </p>
-          ) : null}
-          <p className="mt-2 text-[10px] text-slate-500">
-            Puedes analizar nuevamente los mismos PDF. Al confirmar solo se crearán registros nuevos o se completarán campos vacíos con evidencia; los demás se reutilizarán.
-          </p>
+          ) : enginePreview ? <p className="mt-2 text-xs text-slate-500">No hay documentos destinados a Engine.</p> : null}
+
         </section>
         {referenceDocuments.length > 0 ? (
           <section>
@@ -327,7 +267,7 @@ export function KnowledgeImportProposalStep({
                     {fileNames.get(id) ?? id}
                   </p>
                   <p className="mt-1 text-[10px] font-medium text-blue-700">
-                    Knowledge · {route.structuredCandidate ? "candidato a JSON" : "solo consulta"}
+                    {route.structuredCandidate ? "Knowledge · Fuente para Engine" : "Knowledge · Solo consulta"}
                   </p>
                   {route.reason ? (
                     <p className="mt-2 text-[11px] leading-5 text-slate-600">{route.reason}</p>

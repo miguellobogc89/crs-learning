@@ -5,7 +5,7 @@ import ts from "typescript";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const filename = new URL("../lib/engine/knowledge-invoice-import.service.ts", import.meta.url);
+const filename = new URL("../lib/engine/invoice-evidence.ts", import.meta.url);
 const js = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
@@ -15,60 +15,7 @@ new Function("exports", "require", js)(exports, id => {
   if (id === "node:crypto") return require(id);
   return {};
 });
-const { invoiceFileIds, checkedInvoice, stableJson, invoiceMissingFields, ensureInvoiceRevisionSnapshot, recoverInvoiceIdentity, recoverDocumentInvoiceAnchors, previewInvoiceFieldDelta } = exports;
-
-function route(articleCandidate, structuredCandidate) {
-  return { articleCandidate, structuredCandidate, knowledge: true };
-}
-function file(id, text) {
-  return { id, file_name: id + ".pdf", extracted_text: text,
-    status: "text_ready", content_hash: null };
-}
-function proposal(routes, docs) {
-  return { documentRoutes: routes, globalImportMap: { documents: docs } };
-}
-
-test("1 procedure and 2 commercial invoices route to exactly 2 Engine invoice records", () => {
-  const files = [
-    file("procedure", "PROCEDIMIENTO OPERATIVO APERTURA"),
-    file("invoice-a", "FACTURA 018-2026 TOTAL 955,00"),
-    file("invoice-b", "FACTURA 2026-22 TOTAL 125,00"),
-  ];
-  const p = proposal({
-    procedure: route(true, false),
-    "invoice-a": route(false, true),
-    "invoice-b": route(false, true),
-  }, [
-    { fileId: "procedure", type: "procedimiento", title: "Apertura", category: "operaciones" },
-    { fileId: "invoice-a", type: "factura comercial", title: "Factura 018", category: "compras" },
-    { fileId: "invoice-b", type: "factura", title: "Factura 2026", category: "gastos" },
-  ]);
-  assert.deepEqual(invoiceFileIds(p, files), ["invoice-a", "invoice-b"]);
-});
-
-test("payroll settlements are not mistakenly inserted as invoices", () => {
-  const p = proposal({ rlc: route(false, true) }, [
-    { fileId: "rlc", type: "liquidacion de cotizaciones", title: "RLC mayo", category: "laboral" },
-  ]);
-  assert.deepEqual(invoiceFileIds(p, [file("rlc", "LIQUIDACION COTIZACIONES importe 1158,66")]), []);
-});
-
-test("a misleading filename alone cannot classify a non-invoice", () => {
-  const p = proposal({ a: route(false, true) }, [
-    { fileId: "a", type: "factura", title: "Factura", category: "compras" },
-  ]);
-  assert.deepEqual(invoiceFileIds(p, [
-    { ...file("a", "Asiento de diario contable"), file_name: "FACTURA.pdf" },
-  ]), []);
-});
-
-test("a PDF containing multiple classified documents must not be partially imported", () => {
-  const p = proposal({ a: route(false, true) }, [
-    { fileId: "a", type: "factura", title: "Factura 1", category: "compras" },
-    { fileId: "a", type: "factura", title: "Factura 2", category: "compras" },
-  ]);
-  assert.deepEqual(invoiceFileIds(p, [file("a", "FACTURA 1\nFACTURA 2")]), []);
-});
+const { checkedInvoice, stableJson, invoiceMissingFields, ensureInvoiceRevisionSnapshot, previewInvoiceFieldDelta } = exports;
 
 test("invoice values are normalized only when exact source evidence proves them", () => {
   const source = "FACTURA 018-2026\n12-02-2026\nSubtotal € 789,26\nIVA 165,74\nTOTAL EUROS € 955,00";
@@ -131,13 +78,6 @@ test("invoice JSONB roundtrip keeps plan identity despite reordered object keys"
       values: { ...fromDatabase.documents[0].values, total_amount: 999 } }],
   }));
 });
-
-test("advisory lock returns a Prisma-compatible integer instead of PostgreSQL void", () => {
-  const source = fs.readFileSync(filename, "utf8");
-  assert.match(source, /SELECT 1::integer AS acquired\s+FROM pg_advisory_xact_lock\(hashtext\(/);
-  assert.doesNotMatch(source, /SELECT pg_advisory_xact_lock\(/);
-});
-
 
 test("Spanish long-form date is accepted with literal evidence", () => {
   const text = "Factura núm: OM4VAHJ0014748\n04 de Agosto de 2026\nTotal factura 38,00 €";
@@ -302,31 +242,6 @@ test("first extraction pass can be partial without relaxing the final identity c
   assert.throws(() => checkedInvoice(proposed, text, fields), /número y el importe total/);
 });
 
-test("re-upload reuses prior invoice number and total only with evidence in the PDF", () => {
-  const text = "Factura A-1\\nTotal 10,00\\nPago criptomonedas";
-  const fields = new Map([["invoice_number", "text"], ["total_amount", "decimal"],
-    ["payment_method", "text"]]);
-  const partial = checkedInvoice({
-    values: { payment_method: "criptomonedas" },
-    evidence: { payment_method: "criptomonedas" },
-  }, text, fields, { allowPartial: true });
-  const recovered = recoverInvoiceIdentity(partial, {
-    values: { invoice_number: "A-1", total_amount: 10 },
-    evidence: { invoice_number: "Factura A-1", total_amount: "Total 10,00" },
-  }, text, fields);
-  const complete = checkedInvoice({
-    values: recovered.values, evidence: recovered.evidence,
-  }, text, fields);
-  assert.deepEqual(complete.values,
-    { invoice_number: "A-1", total_amount: 10, payment_method: "criptomonedas" });
-  const unverified = recoverInvoiceIdentity(partial, {
-    values: { invoice_number: "A-1", total_amount: 10 },
-    evidence: { invoice_number: "Factura A-1", total_amount: "FAKE TOTAL 10,00" },
-  }, text, fields);
-  assert.equal("total_amount" in unverified.values, false,
-    "A prior value cannot be copied if its quote is absent from uploaded text");
-});
-
 test("invoice preview lists only new fields with their source evidence", () => {
   const delta = previewInvoiceFieldDelta({
     invoice_number: "018-2026", total_amount: 955, payment_method: "TRANSFERENCIA",
@@ -373,65 +288,6 @@ test("catalog field keys tolerate mechanical camelCase without semantic guessing
   assert.deepEqual(values.values, { invoice_number: "A-1", total_amount: 1370.57 });
 });
 
-test("source anchored fallback recovers IGNIS invoice September identity without vendor assumptions", () => {
-  const text = [
-    "Nº Factura:              IGNIS 260307734                                Tipo de factura:Registro",
-    "Fecha factura:          15 de septiembre de 2026                      Forma de pago: DOMICILIADO",
-    "Total Factura:                          1.370,57 €",
-    "Base Imponible                       1.132,70€         21%       237,87 €",
-    "TOTAL FACTURA                           1.370,57 €",
-  ].join("\n");
-  const fields = new Map([["invoice_number", "text"], ["total_amount", "decimal"]]);
-  const primary = checkedInvoice({ values: {}, evidence: {} }, text, fields, { allowPartial: true });
-  const recovered = recoverDocumentInvoiceAnchors(primary, text, fields);
-  assert.deepEqual(recovered.values, { invoice_number: "IGNIS 260307734", total_amount: 1370.57 });
-  const final = checkedInvoice({ values: recovered.values, evidence: recovered.evidence }, text, fields);
-  assert.deepEqual(final.values, recovered.values);
-  assert.match(final.evidence.invoice_number, /Nº Factura/);
-  assert.match(final.evidence.total_amount, /1.370,57/);
-});
-
-test("source anchored fallback recovers a multipage heladería invoice only from its invoice total", () => {
-  const text = [
-    "FACTURA Nº: 2026-005",
-    "Cubeta de helado Fresa                     35,00",
-    "Subtotal 570,00",
-    "FACTURA Nº: 2026-005. Cont.",
-    "Subtotal 590,00",
-    "IMPORTE NETO                                   6.550,00",
-    "I.V.A. 10%                                        655,00",
-    "TOTAL FACTURA                                  7.205,00",
-  ].join("\n");
-  const fields = new Map([["invoice_number", "text"], ["total_amount", "decimal"]]);
-  const recovered = recoverDocumentInvoiceAnchors(
-    checkedInvoice({ values: {}, evidence: {} }, text, fields, { allowPartial: true }),
-    text, fields,
-  );
-  assert.deepEqual(recovered.values, { invoice_number: "2026-005", total_amount: 7205 });
-});
-
-test("source recovery will not invent values when invoice identifiers or totals conflict", () => {
-  const text = "Nº Factura: 12345\nNº Factura: 23456\nTOTAL FACTURA 12,00\nTOTAL FACTURA 13,00";
-  const fields = new Map([["invoice_number", "text"], ["total_amount", "decimal"]]);
-  const recovered = recoverDocumentInvoiceAnchors(
-    checkedInvoice({ values: {}, evidence: {} }, text, fields, { allowPartial: true }),
-    text, fields,
-  );
-  assert.deepEqual(recovered.values, {});
-});
-
-test("batch preview has explicit per-file failures, de-duplication and partial confirmation", () => {
-  const content = fs.readFileSync(
-    new URL("../lib/engine/knowledge-invoice-import.service.ts", import.meta.url), "utf8",
-  );
-  assert.match(content, /const groups = new Map<string, StagingFile\[\]>/);
-  assert.match(content, /offset \+= 3/);
-  assert.match(content, /failedFiles: failures/);
-  assert.match(content, /allIds\.length !== ids\.length/);
-  assert.match(content, /action: index === 0 \? firstAction : "reuse"/);
-});
-
-
 const invoiceDisplayFile = new URL("../lib/engine/invoice-display.ts", import.meta.url);
 const invoiceDisplayJs = ts.transpileModule(
   fs.readFileSync(invoiceDisplayFile, "utf8"),
@@ -440,49 +296,17 @@ const invoiceDisplayJs = ts.transpileModule(
 const displayFunctions = {};
 new Function("exports", "require", invoiceDisplayJs)(displayFunctions, () => ({}));
 const {
-  getInvoicePartyLabels,
+  persistedInvoiceParties,
   formatEngineNumericValue, invoiceDisplayCurrency, isMonetaryField,
 } = displayFunctions;
 
-test("invoice table reads distinct issuer and customer from recurring heladería documents", () => {
-  const text = [
-    "D\`PLOCIA HELADOS SL",
-    "B72378581",
-    "Calle Plocia nº4",
-    "FACTURA Nº: 2026-005",
-    "CLIENTE: CÁDIZ DESARROLLO PATRIMONIAL SL",
-    "CIF/DNI: B14951446",
-  ].join("\n");
-  assert.deepEqual(getInvoicePartyLabels({}, text), {
-    issuer: "D'PLOCIA HELADOS SL",
-    customer: "CÁDIZ DESARROLLO PATRIMONIAL SL",
-  });
-});
-
-test("invoice table assigns the utility account holder to customer, not issuer", () => {
-  const text = [
-    "Loop Electricidad y Gas, S.L. con sede social en Madrid, C/...",
-    "D'PLOCIA HELADOS S.L.",
-    "Titular:          D'PLOCIA HELADOS S.L.          Nº de contrato: 163913",
-    "CIF/NIF: B72378581",
-    "Forma de pago: DOMICILIADO",
-  ].join("\n");
-  assert.deepEqual(getInvoicePartyLabels({}, text), {
-    issuer: "Loop Electricidad y Gas, S.L.",
-    customer: "D'PLOCIA HELADOS S.L.",
-  });
-});
-
-test("invoice table always prefers persisted party names and does not guess missing identities", () => {
-  assert.deepEqual(getInvoicePartyLabels({
-    issuer_name: "TOLDOS CHICLANA S.L.", customer_name: "D'PLOCIA HELADOS S.L.",
-  }, "Factura nº 018-2026"), {
-    issuer: "TOLDOS CHICLANA S.L.",
-    customer: "D'PLOCIA HELADOS S.L.",
-  });
-  assert.deepEqual(getInvoicePartyLabels({}, "FACTURA Nº: 123\nTOTAL FACTURA 99.00"), {
-    issuer: null, customer: null,
-  });
+test("invoice parties come from persisted company relationships, never phone/service text", () => {
+  const parties = persistedInvoiceParties([
+    {to_record_id:"invoice",definition:{key:"invoice_issuer"},from_record:{values_json:{legal_name:"TOLDOS SL",tax_id:"B11111111"}}},
+    {to_record_id:"invoice",definition:{key:"invoice_customer"},from_record:{values_json:{legal_name:"PLOCIA SL",tax_id:"B72378581"}}},
+  ]);
+  assert.deepEqual(parties.get("invoice"),{issuer:"TOLDOS SL",customer:"PLOCIA SL"});
+  assert.equal(persistedInvoiceParties([]).size,0);
 });
 
 test("invoice monetary columns format thousands and decimal comma using verified currency", () => {
@@ -512,21 +336,6 @@ test("invoice table places invoice number first, hides ID/currency and shows par
   assert.match(file, /sourceTextsByRecord/);
 });
 
-
-test("printed invoice with separate Cliente / Nombre lines identifies Toldos issuer and Plocia customer", () => {
-  const text = [
-    "                      TOLDOS CHICLANA S.L.                        FACTURA 018-2026",
-    "                      B-11507829",
-    "                      P.I. LA HOYA, C/ TAPIZADORES, 4, CHICLANA (CADIZ)",
-    "        Cliente",
-    "Nombre      D'PLOCIA HELADOS SL          CIF: B72378581",
-    "Dirección CALLE PLOCIA 4",
-  ].join("\n");
-  assert.deepEqual(getInvoicePartyLabels({}, text), {
-    issuer: "TOLDOS CHICLANA S.L.",
-    customer: "D'PLOCIA HELADOS SL",
-  });
-});
 
 test("invoice money conversion preserves JSON decimals and parses Spanish printed numbers", () => {
   const field = { key: "net_amount", field_type: "decimal" };

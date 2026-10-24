@@ -113,15 +113,15 @@ export function KnowledgeImportCompletedStep({
       <div className="mt-6 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
         {log.engineImports && log.engineImports.length > 0 ? (
           <section className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
-            <h4 className="text-[12px] font-semibold text-slate-900">Engine · Facturas</h4>
+            <h4 className="text-[12px] font-semibold text-slate-900">Engine · Registros y relaciones</h4>
             <p className="mt-1 text-[11px] text-slate-700">
               {createdRecords} nuevos · {updatedRecords} completados ·{" "}
               {log.engineImports.reduce((n, item) => n + item.recordsReused, 0)} sin cambios
             </p>
             {log.engineImports.map((item, index) => (
               <p key={item.knowledgeFileId + index} className="mt-2 text-[11px] text-slate-600">
-                {item.fileName}: {item.recordsCreated ? "Factura creada" :
-                  item.recordsUpdated ? `Factura completada (${item.fieldsCompleted ?? 0} campos nuevos)` :
+                {item.fileName}: {item.recordsCreated ? "Registro creado" :
+                  item.recordsUpdated ? `Registro completado (${item.fieldsCompleted ?? 0} campos nuevos)` :
                   item.recordsReused ? "No hay datos nuevos que importar" : "Sin cambios en Engine"}
               </p>
             ))}

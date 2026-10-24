@@ -11,7 +11,7 @@ import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { listEngineObjectTypes, listEngineRecords } from "@/lib/engine/records.service";
 import {
-  formatEngineNumericValue, getInvoicePartyLabels,
+  formatEngineNumericValue, persistedInvoiceParties,
   invoiceDisplayCurrency, isMonetaryField,
 } from "@/lib/engine/invoice-display";
 import {
@@ -83,6 +83,15 @@ export default async function EngineTablesPage({
       sourceTextsByRecord.set(source.record_id, file.extracted_text);
     }
   }
+  // Parties are actual workspace-private company records linked to the invoice.
+  // Do not infer legal roles from PDF layout or service labels at render time.
+  const partyLinks = isInvoice && records.length ? await prisma.engine_record_relations.findMany({
+    where: { workspace_id: activeWorkspace.id, to_record_id: { in: records.map(r=>r.id) },
+      definition: { status: "active", key: { in: ["invoice_issuer", "invoice_customer"] } },
+      from_record: { status: { not: "archived" } }, to_record: { status: { not: "archived" } } },
+    select: { to_record_id: true, definition: { select: { key: true } }, from_record: { select: { values_json: true } } },
+  }) : [];
+  const partiesByRecord = persistedInvoiceParties(partyLinks);
   const canReview = activeWorkspace.role === "owner" || activeWorkspace.role === "admin";
   const importLibrary = view === "tables" && canReview ? await prisma.knowledge_libraries.findFirst({
     where: { workspace_id: activeWorkspace.id, owner_user_id: session.user.id, parent_id: null },
@@ -174,7 +183,7 @@ export default async function EngineTablesPage({
                           !Array.isArray(record.values_json) ? record.values_json : {};
                         const attributes = values as Record<string, unknown>;
                         const sourceText = sourceTextsByRecord.get(record.id);
-                        const parties = isInvoice ? getInvoicePartyLabels(attributes, sourceText) : null;
+                        const parties = isInvoice ? partiesByRecord.get(record.id) : null;
                         const currency = isInvoice ? invoiceDisplayCurrency(attributes, sourceText) : null;
                         return <tr key={record.id} className="hover:bg-slate-50/70">
                           <EngineRowSelection id={record.id} />

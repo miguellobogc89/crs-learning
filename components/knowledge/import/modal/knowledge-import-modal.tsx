@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { useKnowledgeImport } from "../hooks/use-knowledge-import";
-import type { InvoiceImportPreview } from "@/lib/engine/knowledge-invoice-import.service";
+import type { KnowledgeEnginePreview } from "@/lib/engine/knowledge-engine-import.service";
 import { KnowledgeImportModalHeader } from "./knowledge-import-modal-header";
 import { KnowledgeImportModalProgress } from "./knowledge-import-modal-progress";
 import { KnowledgeImportModalFooter } from "./knowledge-import-modal-footer";
@@ -301,9 +301,9 @@ export function KnowledgeImportModal({
       resumeImportId,
     });
 
-  const [invoicePreview, setInvoicePreview] = useState<InvoiceImportPreview | null>(null);
-  const [invoicePreviewLoading, setInvoicePreviewLoading] = useState(false);
-  const [invoicePreviewError, setInvoicePreviewError] = useState<string | null>(null);
+  const [enginePreview, setEnginePreview] = useState<KnowledgeEnginePreview | null>(null);
+  const [enginePreviewLoading, setEnginePreviewLoading] = useState(false);
+  const [enginePreviewError, setEnginePreviewError] = useState<string | null>(null);
 
   const selectionKey = getFilesSelectionKey(knowledgeImport.files);
 
@@ -378,15 +378,15 @@ export function KnowledgeImportModal({
   useEffect(() => {
     if (!open || knowledgeImport.step !== "proposal" ||
         !knowledgeImport.proposal || !knowledgeImport.importId) {
-      setInvoicePreview(null);
-      setInvoicePreviewError(null);
-      setInvoicePreviewLoading(false);
+      setEnginePreview(null);
+      setEnginePreviewError(null);
+      setEnginePreviewLoading(false);
       return;
     }
     const controller = new AbortController();
-    setInvoicePreview(null);
-    setInvoicePreviewError(null);
-    setInvoicePreviewLoading(true);
+    setEnginePreview(null);
+    setEnginePreviewError(null);
+    setEnginePreviewLoading(true);
     const run = async () => {
       try {
         const response = await fetch(
@@ -395,13 +395,13 @@ export function KnowledgeImportModal({
         );
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error ?? "No se pudo analizar Engine.");
-        if (!controller.signal.aborted) setInvoicePreview(payload as InvoiceImportPreview);
+        if (!controller.signal.aborted) setEnginePreview(payload as KnowledgeEnginePreview);
       } catch (cause) {
         if (!controller.signal.aborted) {
-          setInvoicePreviewError(cause instanceof Error ? cause.message : "No se pudo preparar Engine.");
+          setEnginePreviewError(cause instanceof Error ? cause.message : "No se pudo preparar Engine.");
         }
       } finally {
-        if (!controller.signal.aborted) setInvoicePreviewLoading(false);
+        if (!controller.signal.aborted) setEnginePreviewLoading(false);
       }
     };
     void run();
@@ -624,9 +624,9 @@ export function KnowledgeImportModal({
                   error={
                     knowledgeImport.error
                   }
-                  invoicePreview={invoicePreview}
-                  invoicePreviewLoading={invoicePreviewLoading}
-                  invoicePreviewError={invoicePreviewError}
+                  enginePreview={enginePreview}
+                  enginePreviewLoading={enginePreviewLoading}
+                  enginePreviewError={enginePreviewError}
                   onBack={
                     knowledgeImport.goBackToUpload
                   }
@@ -688,7 +688,7 @@ export function KnowledgeImportModal({
                 knowledgeImport.isConfirming
               }
               canConfirm={
-                invoicePreview !== null && !invoicePreviewLoading && !invoicePreviewError
+                enginePreview !== null && !enginePreviewLoading && !enginePreviewError
               }
               canContinue={
                 knowledgeImport.canContinue

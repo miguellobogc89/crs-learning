@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { previewKnowledgeInvoices } from "@/lib/engine/knowledge-invoice-import.service";
+import { previewKnowledgeEngine } from "@/lib/engine/knowledge-engine-import.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export const runtime = "nodejs";
@@ -16,7 +16,7 @@ export async function POST(request: Request, context: Context) {
   const { importId } = await context.params;
   try {
     const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
-    const result = await previewKnowledgeInvoices({
+    const result = await previewKnowledgeEngine({
       importId, userId: session.user.id, workspaceId: activeWorkspace.id,
     });
     return Response.json(result, { headers: { "Cache-Control": "no-store" } });

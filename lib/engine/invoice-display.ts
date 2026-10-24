@@ -1,105 +1,20 @@
-/**
- * Read-only formatting of invoice rows. Source information is not silently
- * persisted as business entities: entity creation needs identity reconciliation.
- */
-export type InvoicePartyLabels = { issuer: string | null; customer: string | null };
-
-const normalizeCompanyName = (value: string): string =>
-  value.replace(/[`´‘’]/g, "'").replace(/\s+/g, " ").trim()
-    .replace(/[,:;]+$/, "");
-
-const canonicalCompanyName = (value: string): string =>
-  normalizeCompanyName(value).toLocaleLowerCase("es").replace(/[^a-z0-9]/gi, "");
-
-function firstNamedValue(values: Record<string, unknown>, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = values[key];
-    if (typeof value === "string" && value.trim() && value.length <= 200)
-      return normalizeCompanyName(value);
-  }
-  return null;
-}
-
-// Stop at a tabular column or a separate label rather than treating adjacent
-// invoice metadata ("Nº de contrato", etc.) as part of a company name.
-function labelValue(line: string, label: RegExp): string | null {
-  const match = label.exec(line);
-  if (!match) return null;
-  const rest = line.slice(match.index + match[0].length)
-    .split(/\s{2,}|\s+(?=(?:N[º°]\.?(?:\s+de)?\s+(?:contrato|factura)|CIF|NIF|Direcci[oó]n|Vto\.)\s*:)/i)[0];
-  const candidate = normalizeCompanyName(rest);
-  return candidate.length >= 3 && candidate.length <= 180 ? candidate : null;
-}
-
-const COMPANY_SUFFIX = /(?:S\.?\s*L\.?\s*U?\.?|S\.?\s*A\.?\s*U?\.?)(?:\s|$|,)/i;
-const CUSTOMER_LABEL = /\b(?:CLIENTE|TITULAR|RECEPTOR|COMPRADOR|DESTINATARIO|BILL\s+TO)\s*:\s*/i;
-const ISSUER_LABEL = /\b(?:EMISOR|VENDEDOR|PROVEEDOR|RAZ[oó]N\s+SOCIAL\s+EMISOR|ISSUED\s+BY)\s*:\s*/i;
-
-/**
- * Best-effort invoice participant labels for legacy imports without those
- * fields. Explicit schema values take precedence. Never infer a role merely
- * because a familiar company name happens to appear in the document.
- */
-export function getInvoicePartyLabels(
-  values: Record<string, unknown>, sourceText: string | null | undefined,
-): InvoicePartyLabels {
-  let issuer = firstNamedValue(values, [
-    "issuer_name", "issuer", "seller_name", "supplier_name",
-    "vendor_name", "sellerName", "supplierName",
-  ]);
-  let customer = firstNamedValue(values, [
-    "customer_name", "buyer_name", "client_name", "recipient_name",
-    "customerName", "buyerName", "clientName",
-  ]);
-  if (issuer && customer) return { issuer, customer };
-  if (!sourceText) return { issuer, customer };
-
-  // Read the opening portion of the PDF. It contains the labelled parties
-  // in conventional commercial documents and avoids regulatory appendices.
-  const lines = sourceText.slice(0, 14000).split(/\r?\n/).filter(x => x.trim());
-  if (!customer) {
-    for (const line of lines) {
-      const named = labelValue(line, CUSTOMER_LABEL);
-      if (named) { customer = named; break; }
+/** Invoice participant labels come exclusively from persisted, authorized company links. */
+export function persistedInvoiceParties(links: readonly {
+  to_record_id: string; definition: {key:string}; from_record: {values_json:unknown};
+}[]) {
+  const result = new Map<string,{issuer:string|null;customer:string|null}>();
+  for (const link of links) {
+    const values = link.from_record.values_json;
+    if (!values || typeof values !== "object" || Array.isArray(values)) continue;
+    const record = values as Record<string,unknown>;
+    const name = [record.legal_name,record.name,record.company_name,record.business_name].find(v=>typeof v === "string" && v.trim());
+    const parties = result.get(link.to_record_id) ?? {issuer:null,customer:null};
+    if (typeof name === "string" && ["invoice_issuer","invoice_customer"].includes(link.definition.key)) {
+      parties[link.definition.key === "invoice_issuer" ? "issuer" : "customer"] = name;
     }
+    result.set(link.to_record_id,parties);
   }
-  if (!customer) {
-    // Some printed invoices use a "Cliente" section followed by
-    // "Nombre    ACME S.L." rather than a CLIENTE: value on one line.
-    for (let index = 0; index < Math.min(lines.length, 40); index++) {
-      if (!/^\s*(?:cliente|receptor|comprador)\s*:?\s*$/i.test(lines[index])) continue;
-      for (const next of lines.slice(index + 1, index + 4)) {
-        const named = labelValue(next, /\b(?:Nombre|Raz[oó]n\s+social)\s*:?\s+/i);
-        if (named) { customer = named; break; }
-      }
-      if (customer) break;
-    }
-  }
-  if (!issuer) {
-    for (const line of lines) {
-      const named = labelValue(line, ISSUER_LABEL);
-      if (named) { issuer = named; break; }
-    }
-  }
-  if (!issuer) {
-    for (const rawLine of lines.slice(0, 30)) {
-      const line = rawLine.trim();
-      // Some invoices state the legal issuer directly before "con sede social".
-      const legal = line.match(/^(.{3,160}?)\s+con\s+sede\s+social\b/i);
-      const candidate = legal ? normalizeCompanyName(legal[1]) :
-        normalizeCompanyName(line.split(/\s{2,}/)[0]);
-      if (!COMPANY_SUFFIX.test(candidate) || candidate.length > 140 ||
-          /^(?:cliente|titular|receptor|comprador|factura|cif|nif)\s*:/i.test(candidate))
-        continue;
-      if (customer && canonicalCompanyName(candidate) === canonicalCompanyName(customer))
-        continue;
-      issuer = candidate;
-      break;
-    }
-  }
-  if (issuer && customer && canonicalCompanyName(issuer) === canonicalCompanyName(customer))
-    issuer = null;
-  return { issuer, customer };
+  return result;
 }
 
 const EURO_CURRENCY = /^(?:EUR|EURO|EUROS|€)$/i;
