@@ -33,6 +33,29 @@ export default async function EngineTablesPage({
     objectTypeId: selected.id, take: 100,
   }) : [];
   const fields = selected?.engine_field_definitions ?? [];
+  // Provenance is metadata, not part of the editable invoice schema.
+  // Only invoice tables need this additional lookup.
+  const invoiceSources = selected?.key === "invoice" && records.length
+    ? await prisma.engine_record_provenance.findMany({
+        where: {
+          workspace_id: activeWorkspace.id,
+          record_id: { in: records.map(record => record.id) },
+          knowledge_file_id: { not: null },
+        },
+        select: {
+          record_id: true,
+          knowledge_files: { select: { file_name: true } },
+        },
+      })
+    : [];
+  const sourceNamesByRecord = new Map<string, Set<string>>();
+  for (const source of invoiceSources) {
+    const name = source.knowledge_files?.file_name;
+    if (!name) continue;
+    const names = sourceNamesByRecord.get(source.record_id) ?? new Set<string>();
+    names.add(name);
+    sourceNamesByRecord.set(source.record_id, names);
+  }
   const canReview = activeWorkspace.role === "owner" || activeWorkspace.role === "admin";
   const importLibrary = view === "tables" && canReview ? await prisma.knowledge_libraries.findFirst({
     where: { workspace_id: activeWorkspace.id, owner_user_id: session.user.id, parent_id: null },
@@ -88,6 +111,9 @@ export default async function EngineTablesPage({
                     <thead className="bg-slate-50 text-xs text-slate-500">
                       <tr>
                         <th className="whitespace-nowrap px-4 py-3 font-semibold">ID</th>
+                        {selected.key === "invoice" ? (
+                          <th className="whitespace-nowrap px-4 py-3 font-semibold">Documento origen</th>
+                        ) : null}
                         {fields.map(field => <th key={field.id} className="whitespace-nowrap px-4 py-3 font-semibold">
                           {field.name}
                         </th>)}
@@ -100,6 +126,19 @@ export default async function EngineTablesPage({
                           !Array.isArray(record.values_json) ? record.values_json : {};
                         return <tr key={record.id} className="hover:bg-slate-50/70">
                           <td className="max-w-[160px] truncate px-4 py-3 font-mono text-xs text-slate-500" title={record.id}>{record.id}</td>
+                          {selected.key === "invoice" ? (
+                            <td className="max-w-[290px] px-4 py-3 text-xs text-slate-700">
+                              {sourceNamesByRecord.has(record.id) ? (
+                                <div className="space-y-1">
+                                  {[...sourceNamesByRecord.get(record.id)!].map(name => (
+                                    <div key={name} className="max-w-[290px] truncate" title={name}>
+                                      {name}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : "—"}
+                            </td>
+                          ) : null}
                           {fields.map(field => {
                             const value = (values as Record<string, unknown>)[field.key];
                             return <td key={field.id} className="max-w-[320px] truncate px-4 py-3 text-slate-700"
@@ -110,7 +149,7 @@ export default async function EngineTablesPage({
                           <td className="px-4 py-3 text-xs text-slate-500">{record.status}</td>
                         </tr>;
                       })}
-                      {!records.length && <tr><td colSpan={fields.length + 2}
+                      {!records.length && <tr><td colSpan={fields.length + 2 + (selected.key === "invoice" ? 1 : 0)}
                         className="px-4 py-12 text-center text-sm text-slate-500">
                         Todavía no hay registros en esta tabla.
                       </td></tr>}
