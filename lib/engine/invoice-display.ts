@@ -106,8 +106,15 @@ export function formatEngineNumericValue(
   if (value === null || value === undefined || value === "") return null;
   if (field.field_type !== "decimal" && field.field_type !== "integer") return null;
   if (typeof value !== "number" && typeof value !== "string") return null;
-  const number = typeof value === "number" ? value :
-    Number(value.trim().replace(/\./g, "").replace(",", "."));
+  const number = typeof value === "number" ? value : (() => {
+    const raw = value.trim();
+    // PostgreSQL JSON decimal strings can use 1133.81, while source
+    // documents may use 1.133,81. Never erase the decimal dot blindly.
+    if (/^-?\d{1,3}(?:\.\d{3})+(?:,\d+)?$/.test(raw))
+      return Number(raw.replace(/\./g, "").replace(",", "."));
+    if (/^-?\d+(?:,\d+)?$/.test(raw)) return Number(raw.replace(",", "."));
+    return Number(raw);
+  })();
   if (!Number.isFinite(number)) return null;
   if (isMonetaryField(field)) {
     const formatted = new Intl.NumberFormat("es-ES", {
