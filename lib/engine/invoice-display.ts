@@ -94,6 +94,9 @@ const EURO_CURRENCY = /^(?:EUR|EURO|EUROS|€)$/i;
 const MONEY_KEYS = /(?:^|_)(?:amount|total|subtotal|price|cost|fee|net|tax|base|importe|precio|coste)(?:_|$)/i;
 
 export function isMonetaryField(field: {key: string;field_type: string}): boolean {
+  // A tax rate/discount percentage is not money even though "tax" is in its key.
+  if (/(?:^|_)(?:rate|percent|percentage|ratio|quantity|count|units)(?:_|$)/i.test(field.key))
+    return false;
   return field.field_type === "decimal" && MONEY_KEYS.test(field.key);
 }
 
