@@ -15,7 +15,7 @@ function load(path, dependencies = {}) {
   }, module, module.exports);
   return module.exports;
 }
-const { applyImportBatchReview, assertCompleteImportInventory, assertReviewedImportBatch,
+const { articleProposalBatchContext, applyImportBatchReview, assertCompleteImportInventory, assertReviewedImportBatch,
   importBatchFingerprint, reviewedDocumentRoutes, assertReviewedDocumentRoutes } = load("../../lib/knowledge/import/review-import-batch.ts");
 const { emptyImportInventory, appendInventoryFile } = load("../../lib/knowledge/import/build-import-map.ts");
 function fixture() {
@@ -213,4 +213,23 @@ test("a real extracted queue item still blocks review even when originals are re
     { id: "queued", status: "extracted", extracted_text: "" }];
   assert.throws(() => assertCompleteImportInventory(f.inventory, files), /extracción/);
   assert.throws(() => assertCompleteImportInventory(emptyImportInventory("import"), [files[0]]), /extracción/);
+});
+
+
+test("article context maps logical segment IDs to authorized original files and excludes invoice-only groups", () => {
+  const inventory = {documents:[
+    {id:"invoice:doc:1",fileId:"invoice",title:"Factura",type:"factura",category:"compras",startLine:1,endLine:3},
+    {id:"procedure:doc:1",fileId:"procedure",title:"Apertura",type:"procedimiento",category:"operaciones",startLine:1,endLine:3},
+    {id:"procedure:doc:2",fileId:"procedure",title:"Cierre",type:"procedimiento",category:"operaciones",startLine:4,endLine:6},
+  ],batchReview:{groups:[
+    {title:"Compras",reason:"Facturas",documentIds:["invoice:doc:1"]},
+    {title:"Operaciones",reason:"Procedimientos",documentIds:["procedure:doc:1","procedure:doc:2"]},
+  ]}};
+  const context=articleProposalBatchContext(inventory,["procedure"]);
+  assert.deepEqual(context.allowedDocumentIds,["procedure"]);
+  assert.deepEqual(context.groups,[{title:"Operaciones",reason:"Procedimientos",documentIds:["procedure"]}]);
+  assert.equal(context.documents.length,2);
+  assert.ok(context.documents.every(doc=>doc.documentId==="procedure"));
+  assert.equal(JSON.stringify(context).includes(":doc:"),false);
+  assert.deepEqual(articleProposalBatchContext(inventory,[]),{allowedDocumentIds:[],groups:[],documents:[]});
 });

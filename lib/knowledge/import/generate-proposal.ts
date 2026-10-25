@@ -6,7 +6,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import type { ImportInventory } from "./build-import-map";
 import { reviewKnowledgeImportBatch } from "./review-import-batch.service";
-import { assertReviewedImportBatch, reviewedDocumentRoutes } from "./review-import-batch";
+import { articleProposalBatchContext, assertReviewedImportBatch, reviewedDocumentRoutes } from "./review-import-batch";
 import { listKnowledgeStatus } from "@/lib/services/knowledge-library.service";
 
 import {
@@ -296,7 +296,7 @@ for (const folder of proposal.folders) {
     for (const documentId of article.documentIds) {
       if (!validDocumentIds.has(documentId)) {
         throw new Error(
-          `El artÃ­culo ${article.id} contiene un documento desconocido: ${documentId}`,
+          `El artículo ${article.id} contiene un documento desconocido: ${documentId}`,
         );
       }
 
@@ -369,8 +369,8 @@ async function generateGlobalProposal(
     model,
     instructions: PROPOSAL_SYSTEM_PROMPT,
     input: buildProposalPrompt(analyses, existingKnowledge) +
-      "\nRevisión conjunta del lote (agrupa artículos cuando el propósito común lo justifique; los IDs de origen de los documentos lógicos corresponden a fileId):\n" +
-      JSON.stringify({ groups: inventory.batchReview?.groups, documents: inventory.documents }),
+      "\nRevisión conjunta para artículos. Usa en articles.documentIds únicamente los allowedDocumentIds siguientes, que son IDs de archivos originales. No uses identificadores de segmentos lógicos ni incluyas documentos de otros destinos. Agrupa artículos solo cuando el propósito común lo justifique:\n" +
+      JSON.stringify(articleProposalBatchContext(inventory, analyses.map(analysis => analysis.documentId))),
     text: {
       format: {
         type: "json_schema",

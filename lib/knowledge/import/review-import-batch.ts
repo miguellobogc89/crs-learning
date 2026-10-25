@@ -9,6 +9,25 @@ export type BatchReview = {
 };
 export type BatchSource = { id: string; status: string; extracted_text: string };
 
+/** Article proposals reference persisted file IDs, never logical inventory IDs. */
+export function articleProposalBatchContext(inventory: ImportInventory, fileIds: string[]) {
+  const allowed = new Set(fileIds);
+  const logicalToFile = new Map(inventory.documents.map(doc => [doc.id, doc.fileId]));
+  return {
+    allowedDocumentIds: [...allowed],
+    groups: (inventory.batchReview?.groups ?? []).map(group => ({
+      title: group.title,
+      reason: group.reason,
+      documentIds: [...new Set(group.documentIds.map(id => logicalToFile.get(id))
+        .filter((id): id is string => !!id && allowed.has(id)))],
+    })).filter(group => group.documentIds.length > 0),
+    documents: inventory.documents.filter(doc => allowed.has(doc.fileId)).map(doc => ({
+      documentId: doc.fileId, title: doc.title, type: doc.type, category: doc.category,
+      startLine: doc.startLine, endLine: doc.endLine,
+    })),
+  };
+}
+
 export function importBatchFingerprint(inventory: ImportInventory, files: BatchSource[]) {
   return createHash("sha256").update(JSON.stringify({
     files: files.filter(file => file.status !== "uploaded").map(file => ({ id: file.id, status: file.status,
