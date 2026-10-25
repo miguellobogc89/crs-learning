@@ -16,14 +16,12 @@ import {
 
 import { useKnowledgeImport } from "../hooks/use-knowledge-import";
 import { KnowledgeImportModalHeader } from "./knowledge-import-modal-header";
-import { KnowledgeImportModalProgress } from "./knowledge-import-modal-progress";
 import { KnowledgeImportModalFooter } from "./knowledge-import-modal-footer";
+import { EnginePreviewPanel, type EnginePreviewSnapshot } from "./engine-preview-panel";
+import { ImportSummary } from "./import-summary";
+import { importSummary } from "@/lib/engine/knowledge-preview/reports";
 import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
-import { KnowledgeImportProcessingStep } from "./knowledge-import-processing-step";
-import { KnowledgeImportProposalStep } from "./knowledge-import-proposal-step";
-import { KnowledgeImportCompletedStep } from "./knowledge-import-completed-step";
 import { KnowledgeImportCloseGuard } from "./knowledge-import-close-guard";
-import { KnowledgeImportLoadingOverlay } from "./knowledge-import-loading-overlay";
 
 import type {
   KnowledgeImportModalProps,
@@ -294,6 +292,7 @@ export function KnowledgeImportModal({
   const consumedSelectionRef = useRef<File[] | null>(null);
   const automaticProposalRef = useRef<string | null>(null);
   const [engineBusy, setEngineBusy] = useState(true);
+  const [engineSnapshot,setEngineSnapshot]=useState<EnginePreviewSnapshot|null>(null);
 
   const knowledgeImport =
     useKnowledgeImport({
@@ -391,6 +390,9 @@ export function KnowledgeImportModal({
     return null;
   }
 
+  const activeEngineSnapshot = (knowledgeImport.step === "proposal" || knowledgeImport.step === "completed") &&
+    engineSnapshot?.importId === knowledgeImport.importId ? engineSnapshot : null;
+
   function requestClose() {
     if (knowledgeImport.allFilesDuplicate) {
       knowledgeImport.finishActiveImport();
@@ -485,10 +487,10 @@ export function KnowledgeImportModal({
         <DialogContent
           showCloseButton
           style={{
-            width: "900px",
-            maxWidth: "92vw",
-            height: "680px",
-            maxHeight: "88vh",
+            width: "calc(100vw - 24px)",
+            maxWidth: "1800px",
+            height: "calc(100dvh - 24px)",
+            maxHeight: "calc(100dvh - 24px)",
           }}
           className="flex flex-col gap-0 overflow-hidden p-0"
         >
@@ -496,142 +498,28 @@ export function KnowledgeImportModal({
             context={context}
           />
 
-          <KnowledgeImportModalProgress
-            currentStep={
-              isWaitingToStart
-                ? "analyzing"
-                : knowledgeImport.step
-            }
-          />
-
-          <div className="min-h-0 flex-1 overflow-hidden px-6 py-5">
-            {isWaitingToStart ? (
-              <KnowledgeImportProcessingStep
-                phase="uploading"
-                files={
-                  knowledgeImport.fileProgress
-                }
-                summary={{
-                  totalFiles:
-                    selectedFiles?.length ??
-                    0,
-                  completedFiles: 0,
-                  duplicateFiles: 0,
-                  failedFiles: 0,
-                  processedFiles: 0,
-                  pendingFiles:
-                    selectedFiles?.length ??
-                    0,
-                  progressPercentage: 0,
-                  currentFileName: null,
-                }}
-              />
-            ) : null}
-
-            {knowledgeImport.duplicateNotice ? (
-              <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
-                {knowledgeImport.duplicateNotice}
-              </p>
-            ) : null}
-            {!isWaitingToStart &&
-            knowledgeImport.step ===
-              "upload" &&
-            knowledgeImport.importReview ? (
-              <KnowledgeImportReview
-                review={
-                  knowledgeImport.importReview
-                }
-              />
-            ) : null}
-
-            {!isWaitingToStart &&
-            knowledgeImport.step ===
-              "upload" &&
-            !knowledgeImport.importReview ? (
-              <KnowledgeImportUploadStep
-                files={
-                  knowledgeImport.files
-                }
-                isAnalyzing={
-                  knowledgeImport.isAnalyzing
-                }
-                error={
-                  knowledgeImport.error
-                }
-                onFilesChange={
-                  knowledgeImport.handleFilesChange
-                }
-              />
-            ) : null}
-
-            {!isWaitingToStart &&
-            knowledgeImport.step ===
-              "analyzing" ? (
-              <KnowledgeImportProcessingStep
-                inventory={knowledgeImport.globalMap}
-                error={knowledgeImport.error}
-                phase={
-                  knowledgeImport.processingPhase
-                }
-                files={
-                  knowledgeImport.fileProgress
-                }
-                summary={{
-                  ...knowledgeImport.progressSummary,
-                  duplicateFiles:
-                    duplicateFileCount,
-                }}
-                proposalProgress={
-                  knowledgeImport.proposalProgress
-                }
-              />
-            ) : null}
-
-            {knowledgeImport.step ===
-              "proposal" &&
-            knowledgeImport.proposal ? (
-              knowledgeImport.isConfirming ? (
-                <KnowledgeImportLoadingOverlay />
-              ) : (
-                <KnowledgeImportProposalStep
-                  proposal={
-                    knowledgeImport.proposal
-                  }
-                  isConfirming={
-                    knowledgeImport.isConfirming
-                  }
-                  error={
-                    knowledgeImport.error
-                  }
-                  importId={knowledgeImport.importId ?? ""}
-                  onEngineBusyChange={setEngineBusy}
-                  onBack={
-                    knowledgeImport.goBackToUpload
-                  }
-                  onConfirm={
-                    knowledgeImport.confirmProposal
-                  }
-                />
-              )
-            ) : null}
-
-            {knowledgeImport.step ===
-              "completed" &&
-            knowledgeImport.completionResult ? (
-              <KnowledgeImportCompletedStep
-                result={
-                  knowledgeImport.completionResult
-                }
-                onClose={() => {
-                  knowledgeImport.finishActiveImport();
-
-                  startedSelectionKeyRef.current =
-                    null;
-
-                  onOpenChange(false);
-                }}
-              />
-            ) : null}
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 sm:px-6 sm:py-4">
+            {!isWaitingToStart && knowledgeImport.step === "upload" ? (
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {knowledgeImport.duplicateNotice ? <p role="status" className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm">{knowledgeImport.duplicateNotice}</p> : null}
+                {knowledgeImport.importReview ? <KnowledgeImportReview review={knowledgeImport.importReview}/> :
+                  <KnowledgeImportUploadStep files={knowledgeImport.files} isAnalyzing={knowledgeImport.isAnalyzing} error={knowledgeImport.error} onFilesChange={knowledgeImport.handleFilesChange}/>}
+              </div>
+            ) : <ImportSummary text={importSummary({
+                inventory:knowledgeImport.globalMap,
+                proposal:knowledgeImport.proposal,
+                completion:knowledgeImport.completionResult,
+                files:knowledgeImport.fileProgress.length ? knowledgeImport.fileProgress : (selectedFiles??[]).map(file=>({name:file.name,status:"Pendiente"})),
+                message:knowledgeImport.isConfirming ? "Guardando en Knowledge…" : knowledgeImport.step === "completed" ? "Importación finalizada." : knowledgeImport.proposalProgress?.message,
+                error:knowledgeImport.error,
+                notice:knowledgeImport.duplicateNotice,
+                preview:activeEngineSnapshot?.preview,
+                engineMessage:activeEngineSnapshot?.message,
+                engineError:activeEngineSnapshot?.error,
+                engineSeconds:activeEngineSnapshot?.seconds,
+              })}/>}
+            {knowledgeImport.step === "proposal" && knowledgeImport.proposal && knowledgeImport.importId ?
+              <EnginePreviewPanel key={knowledgeImport.importId} importId={knowledgeImport.importId} onBusyChange={setEngineBusy} onSnapshotChange={setEngineSnapshot}/> : null}
           </div>
 
           {!isWaitingToStart ? (

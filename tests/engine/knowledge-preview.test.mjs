@@ -518,3 +518,22 @@ test("old checkpoints without non-ownership link evidence are marked for review 
   assert.ok(preview.documents[0].issues.some(issue => issue.code === "MISSING_RELATION_EVIDENCE"));
   assert.equal(h.state.calls.length, calls);
 });
+
+test("one import summary preserves every phase, evidence, errors, Knowledge proposal and completion", async()=>{
+  const {importSummary}=load("lib/engine/knowledge-preview/reports.ts");
+  const h=harness({answers:{"o2.pdf":"timeout"}});
+  const preview=await h.service.runKnowledgeEnginePreview({...h.scope,mode:"continue"});
+  const inventory={status:"completed",files:[{fileId:"procedure",fileName:"apertura.pdf",status:"completed",sourceChars:100,documentIds:["procedure:doc:1"]}],documents:[{id:"procedure:doc:1",fileId:"procedure",fileName:"apertura.pdf",title:"Apertura",type:"procedimiento",startLine:1,endLine:3,routing:{articleCandidate:true,structuredCandidate:false,reason:"Proceso operativo"}}],batchReview:{status:"reviewed",groups:[{title:"Operaciones",reason:"Conocimiento reutilizable",documentIds:["procedure:doc:1"]}]}};
+  const proposal={globalImportMap:inventory,title:"Propuesta de apertura",description:"Organización del lote",summary:{totalDocuments:5},folders:[{name:"Operaciones",description:"Trabajo diario"}],articles:[{title:"Abrir el local",description:"Revisar cámaras",action:"create",documentIds:["procedure"]}],warnings:[{title:"Comprobar versión",description:"Pendiente de revisión"}]};
+  const text=importSummary({inventory,proposal,preview,error:"Error de prueba",engineError:"Error recuperable",engineMessage:"Conciliando",engineSeconds:10,completion:{log:{proposalSnapshot:proposal,summary:{documentsCreated:5,documentsSkippedAsDuplicates:1,articlesCreated:1,articlesUpdated:0,foldersCreated:1},documents:[{fileName:"apertura.pdf"}],skippedDocuments:[{fileName:"toldos.pdf"}]}}});
+  for(const expected of ["1 · Preparación","2 · Revisión conjunta","3 · Esquema común","4 · Extracción","5 · Conciliación","B72378581","L","Cliente","5 llamadas","PROPUESTA DE KNOWLEDGE","Abrir el local","apertura.pdf","Error de prueba","Error recuperable","Conciliando · 10 s","RESULTADO DEL GUARDADO","Documento reutilizado: toldos.pdf","Comprobar versión","GRUPOS DEL LOTE"]){assert.ok(text.includes(expected),expected);}
+  assert.equal(text.split("3 · Esquema común").length-1,1);
+});
+
+test("unified summary handles pending files and no Engine candidates without fabricated extraction results",()=>{
+  const {importSummary}=load("lib/engine/knowledge-preview/reports.ts");
+  assert.match(importSummary({files:[{name:"factura.pdf",status:"error",error:"No legible"}]}),/factura.pdf: error · No legible/);
+  const text=importSummary({preview:{status:"not_applicable",documents:[],schema:null,calls:[],schemaIssues:[],clusters:[],labelIssues:[],support:null,totals:{calls:0,durationMs:0,inputTokens:0,outputTokens:0}}});
+  assert.match(text,/Engine sin candidatos/);
+  assert.doesNotMatch(text,/4 · Extracción/);
+});
