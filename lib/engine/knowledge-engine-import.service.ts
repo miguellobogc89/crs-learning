@@ -18,15 +18,25 @@ export type KnowledgeEnginePreview = {
   tables: Array<{
     key: string;
     name: string;
-    fields: string[];
+    description: string;
+    fields: Array<{
+      key: string;
+      name: string;
+      type: string;
+      required: boolean;
+      evidence: SchemaDiscoveryProposal["entities"][number]["evidence"];
+    }>;
     records: number;
+    evidence: SchemaDiscoveryProposal["entities"][number]["evidence"];
   }>;
   relations: Array<{
     key: string;
     fromEntity: string;
     toEntity: string;
     cardinality: string;
+    description: string;
     links: number;
+    evidence: SchemaDiscoveryProposal["relations"][number]["evidence"];
   }>;
   warnings: string[];
   records: Array<{
@@ -35,6 +45,7 @@ export type KnowledgeEnginePreview = {
     fileName: string;
     action: "insert" | "update" | "reuse";
     values: EngineBatchRow["values"];
+    evidence: EngineBatchRow["evidence"];
     addedFields: ReturnType<typeof previewInvoiceFieldDelta>["addedFields"];
     conflictingFields: ReturnType<typeof previewInvoiceFieldDelta>["conflictingFields"];
   }>;
@@ -42,6 +53,65 @@ export type KnowledgeEnginePreview = {
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const planKey = (id: string) => "knowledge-relational:" + id;
 const candidates = (proposal: KnowledgeImportProposal, files: EngineSource[]) => files.filter(f => f.status === "text_ready" && proposal.documentRoutes?.[f.id]?.structuredCandidate);
+type JsonSchemaOutputFormat = {
+  type: "json_schema";
+  name: string;
+  strict: true;
+  schema: Record<string, unknown>;
+};
+const JOINT_SCHEMA_OUTPUT_FORMAT: JsonSchemaOutputFormat = {
+  type: "json_schema",
+  name: "engine_joint_schema",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      entities: { type: "array", items: {
+        type: "object", additionalProperties: false,
+        properties: {
+          key: { type: "string" }, name: { type: "string" }, description: { type: "string" },
+          fields: { type: "array", items: {
+            type: "object", additionalProperties: false,
+            properties: {
+              key: { type: "string" }, name: { type: "string" },
+              type: { type: "string", enum: ["text", "long_text", "integer", "decimal", "boolean", "date", "datetime", "enum"] },
+              required: { type: "boolean" },
+              evidence: { type: "array", items: {
+                type: "object", additionalProperties: false,
+                properties: { documentId: { type: "string" }, quote: { type: "string" } },
+                required: ["documentId", "quote"],
+              } },
+            },
+            required: ["key", "name", "type", "required", "evidence"],
+          } },
+          evidence: { type: "array", items: {
+            type: "object", additionalProperties: false,
+            properties: { documentId: { type: "string" }, quote: { type: "string" } },
+            required: ["documentId", "quote"],
+          } },
+        },
+        required: ["key", "name", "description", "fields", "evidence"],
+      } },
+      relations: { type: "array", items: {
+        type: "object", additionalProperties: false,
+        properties: {
+          key: { type: "string" }, fromEntity: { type: "string" }, toEntity: { type: "string" },
+          cardinality: { type: "string", enum: ["one_to_one", "one_to_many", "many_to_many"] },
+          description: { type: "string" },
+          evidence: { type: "array", items: {
+            type: "object", additionalProperties: false,
+            properties: { documentId: { type: "string" }, quote: { type: "string" } },
+            required: ["documentId", "quote"],
+          } },
+        },
+        required: ["key", "fromEntity", "toEntity", "cardinality", "description", "evidence"],
+      } },
+      warnings: { type: "array", items: { type: "string" } },
+    },
+    required: ["entities", "relations", "warnings"],
+  },
+};
 function recordKey(plan: EngineBatchPlan, row: EngineBatchRow): string {
   if (row.entity !== "invoice")
     return row.identityParent
@@ -74,7 +144,7 @@ async function ask(instructions: string, payload: unknown, budget: {
   timeoutMs: number;
   maxOutputTokens: number;
   deadline: number;
-}) {
+}, outputFormat?: JsonSchemaOutputFormat) {
   const remaining = budget.deadline - Date.now();
   if (remaining < 5000)
     throw new Error("Engine ha agotado esta ventana de análisis. Reintenta Engine: se conserva el trabajo verificado.");
@@ -87,11 +157,15 @@ async function ask(instructions: string, payload: unknown, budget: {
       model,
       ...(/^gpt-5(?:[.-]|$)|^o[134](?:[.-]|$)/.test(model) && !/-pro|-chat|-codex/.test(model) ? { reasoning: { effort: "low" as const } } : {}),
       instructions, input: message,
-      text: { format: { type: "json_object" } }, max_output_tokens: budget.maxOutputTokens,
+      text: { format: outputFormat ?? { type: "json_object" } }, max_output_tokens: budget.maxOutputTokens,
     }, { timeout: Math.min(budget.timeoutMs, remaining), maxRetries: 0 });
     if (response.status !== "completed" || !response.output_text || response.output_text.length > 350000)
       throw new Error("Engine devolvió una respuesta incompleta. Las fuentes se conservan; reintenta la propuesta.");
-    return JSON.parse(response.output_text) as unknown;
+    try {
+      return JSON.parse(response.output_text) as unknown;
+    } catch {
+      throw new Error("Engine devolvió JSON no válido durante " + budget.label + ". Reintenta la propuesta; las fuentes y los checkpoints verificados se conservan.");
+    }
   }
   catch (error) {
     if (error instanceof Error && /timeout|timed\s*out|abort/i.test(error.name + " " + error.message))
@@ -201,14 +275,25 @@ export async function previewKnowledgeEngine(input: {
     };
     if (!checkpoint.schema) {
       await input.onProgress?.("Descubriendo el esquema común del lote; todavía sin extraer registros");
-      const raw = await ask(SCHEMA_DISCOVERY_INSTRUCTIONS + "\n" + relationalInstructions + "\nReturn JSON {entities,relations,warnings} ONLY. Discover the joint schema, NOT rows or links. Use a single short exact quote per field/entity/relation; never repeat full documents as quotes.", {
+      const raw = await ask(SCHEMA_DISCOVERY_INSTRUCTIONS + "\n" + relationalInstructions + "\nReturn the root JSON object with entities, relations and warnings. Do not wrap it. Discover the joint schema, NOT rows or links. Use a single short exact quote per field/entity/relation; never repeat full documents as quotes. Evidence documentId must exactly equal one of documents[].id (the import file id), never an inventory segment id such as :doc:1.", {
         task: "joint_schema", catalog: catalogContext, catalogRelations,
         workspaceSchema: local.map(t => ({ key: t.key, name: t.name, fields: t.engine_field_definitions.map(f => ({ key: f.key, type: f.field_type })) })),
-        reviewedBatch: proposal.globalImportMap, documents: files.map(f => ({ id: f.id, text: f.extracted_text })),
-      }, { label: "descubrimiento conjunto del esquema", timeoutMs: 60000, maxOutputTokens: 10000, deadline });
+        reviewedBatch: {
+          documents: proposal.globalImportMap!.documents.map(document => ({
+            sourceFileId: document.fileId, title: document.title, type: document.type,
+            category: document.category, startLine: document.startLine, endLine: document.endLine,
+          })),
+          groups: proposal.globalImportMap!.batchReview!.groups.map(group => ({
+            title: group.title, reason: group.reason,
+            sourceFileIds: [...new Set(group.documentIds.map(documentId =>
+              proposal.globalImportMap!.documents.find(document => document.id === documentId)!.fileId))],
+          })),
+        },
+        documents: files.map(f => ({ id: f.id, fileName: f.file_name, text: f.extracted_text })),
+      }, { label: "descubrimiento conjunto del esquema", timeoutMs: 60000, maxOutputTokens: 10000, deadline }, JOINT_SCHEMA_OUTPUT_FORMAT);
       const checked = validateSchemaDiscovery({ workspaceId: input.workspaceId, documents: files.map(f => ({ id: f.id, workspaceId: input.workspaceId, extractedText: f.extracted_text })), proposal: raw });
       if (!checked.valid || !checked.proposal)
-        throw new Error("Engine devolvió un esquema sin evidencia válida: " + JSON.stringify(checked.issues));
+        throw new Error("Engine devolvió un esquema inválido: " + JSON.stringify(checked.issues));
       checkpoint.schema = checked.proposal;
       await saveCheckpoint();
     }
@@ -302,7 +387,7 @@ export async function previewKnowledgeEngine(input: {
     });
     records.push({
       id: row.id, entity: row.entity, fileName: files.find(f => f.id === row.documentId)!.file_name,
-      action: !existing ? "insert" : delta.addedFields.length ? "update" : "reuse", values: row.values, ...delta
+      action: !existing ? "insert" : delta.addedFields.length ? "update" : "reuse", values: row.values, evidence: row.evidence, ...delta
     });
   }
   const stored = await prisma.$transaction(async (tx) => {
@@ -340,7 +425,11 @@ export async function previewKnowledgeEngine(input: {
     status: "ready", planId: stored.id, records,
     recordsToInsert: records.filter(r => r.action === "insert").length, recordsToUpdate: records.filter(r => r.action === "update").length,
     recordsToReuse: records.filter(r => r.action === "reuse").length,
-    tables: plan.schema.entities.map(e => ({ key: e.key, name: e.name, fields: e.fields.map(f => f.name), records: records.filter(r => r.entity === e.key).length })),
+    tables: plan.schema.entities.map(e => ({
+      key: e.key, name: e.name, description: e.description,
+      fields: e.fields.map(f => ({ key: f.key, name: f.name, type: f.type, required: f.required, evidence: f.evidence })),
+      records: records.filter(r => r.entity === e.key).length, evidence: e.evidence,
+    })),
     relations: plan.schema.relations.map(r => ({ ...r, links: plan.links.filter(l => l.relationKey === r.key).length })), warnings: plan.schema.warnings
   };
 }
@@ -514,7 +603,7 @@ export async function commitPreparedEngine(tx: Prisma.TransactionClient, input: 
     if (globalRelation && (globalRelation.status !== "active" || globalRelation.from_type_id !== fromCatalog.id || globalRelation.to_type_id !== toCatalog.id || globalRelation.cardinality !== relation.cardinality))
       throw new Error("Relación de catálogo incompatible: " + relation.key);
     if (!globalRelation)
-      await tx.engine_catalog_relations.create({ data: { key: relation.key, name: relation.key, from_type_id: fromCatalog.id, to_type_id: toCatalog.id, cardinality: relation.cardinality } });
+      await tx.engine_catalog_relations.create({ data: { key: relation.key, name: relation.key, description: relation.description, from_type_id: fromCatalog.id, to_type_id: toCatalog.id, cardinality: relation.cardinality } });
     let definition = await tx.engine_relation_definitions.findUnique({ where: { workspace_id_key: { workspace_id: workspaceId, key: relation.key } } });
     if (definition && (definition.status !== "active" || definition.from_object_type_id !== from.id || definition.to_object_type_id !== to.id || definition.cardinality !== relation.cardinality))
       throw new Error("Relación existente incompatible: " + relation.key);
@@ -553,27 +642,88 @@ export async function commitPreparedEngine(tx: Prisma.TransactionClient, input: 
   return outcomes;
 }
 async function bindType(tx: Prisma.TransactionClient, workspaceId: string, entity: EngineBatchPlan["schema"]["entities"][number]) {
+  await tx.$queryRaw(Prisma.sql`SELECT 1::integer FROM pg_advisory_xact_lock(hashtext(${"engine-catalog-type:" + entity.key}))`);
   let catalog = await tx.engine_catalog_types.findUnique({ where: { key: entity.key } });
-  if (!catalog) {
-    // Only first publication of a missing key needs a shared lock. Existing standards are read-only.
-    await tx.$queryRaw(Prisma.sql`SELECT 1::integer FROM pg_advisory_xact_lock(hashtext(${"engine-catalog-type:" + entity.key}))`);
-    catalog = await tx.engine_catalog_types.findUnique({ where: { key: entity.key } });
-  }
-  // Confirmation approves generic definitions, never records, as reusable catalog structures.
-  // Published versions are immutable: additional fields on existing standards are workspace extensions.
   let version = catalog ? await tx.engine_catalog_type_versions.findFirst({ where: { type_id: catalog.id, status: "published" }, orderBy: { version: "desc" }, include: { engine_catalog_fields: { where: { status: "active" } } } }) : null;
-  if (!catalog) {
-    catalog = await tx.engine_catalog_types.create({ data: { key: entity.key, name: entity.key === "company" ? "Empresas" : entity.name, description: null } });
-    const fields = entity.key === "company" ? [{ key: "legal_name", name: "Razón social", type: "text" }, { key: "tax_id", name: "Identificación fiscal", type: "text" }] : entity.fields;
-    version = await tx.engine_catalog_type_versions.create({
-      data: {
-        type_id: catalog.id, version: 1, status: "published", published_at: new Date(),
-        engine_catalog_fields: { create: fields.map((f, i) => ({ key: f.key, name: f.name, field_type: f.type, is_required: false, sort_order: i })) }
-      }, include: { engine_catalog_fields: true }
-    });
-  }
   if (catalog && (!version || catalog.status !== "active"))
     throw new Error("El estándar no está publicado: " + entity.key);
+
+  if (!catalog) {
+    catalog = await tx.engine_catalog_types.create({
+      data: { key: entity.key, name: entity.key === "company" ? "Empresas" : entity.name, description: entity.description },
+    });
+    const fields = new Map<string, { key: string; name: string; type: string }>();
+    if (entity.key === "company") {
+      fields.set("legal_name", { key: "legal_name", name: "Razón social", type: "text" });
+      fields.set("tax_id", { key: "tax_id", name: "Identificación fiscal", type: "text" });
+    }
+    for (const field of entity.fields) {
+      const existing = fields.get(field.key);
+      if (existing && existing.type !== field.type)
+        throw new Error("Campo incompatible con el estándar: " + entity.key + "." + field.key);
+      fields.set(field.key, { key: field.key, name: field.name, type: field.type });
+    }
+    await tx.engine_catalog_type_versions.create({
+      data: {
+        type_id: catalog.id, version: 1, status: "published", published_at: new Date(),
+        engine_catalog_fields: { create: [...fields.values()].map((field, i) => ({
+          key: field.key, name: field.name, field_type: field.type, is_required: false, sort_order: i,
+        })) }
+      }, include: { engine_catalog_fields: true }
+    });
+    version = await tx.engine_catalog_type_versions.findFirst({
+      where: { type_id: catalog.id, status: "published" },
+      orderBy: { version: "desc" },
+      include: { engine_catalog_fields: { where: { status: "active" } } },
+    });
+    if (!version)
+      throw new Error("No se pudo leer el nuevo estándar: " + entity.key);
+  }
+  else {
+    const publishedFields = new Map(version!.engine_catalog_fields.map(field => [field.key, field]));
+    const additions = entity.fields.filter(field => {
+      const published = publishedFields.get(field.key);
+      if (published && published.field_type !== field.type)
+        throw new Error("Campo incompatible con el estándar: " + entity.key + "." + field.key);
+      return !published;
+    });
+    if (additions.length) {
+      const nextVersion = version!.version + 1;
+      await tx.engine_catalog_type_versions.create({
+        data: {
+          type_id: catalog.id,
+          version: nextVersion,
+          status: "published",
+          published_at: new Date(),
+          notes: "Campos genéricos aprobados mediante importación de Knowledge.",
+          engine_catalog_fields: {
+            create: [
+              ...version!.engine_catalog_fields.map(field => ({
+                key: field.key, name: field.name, field_type: field.field_type,
+                description: field.description, is_required: field.is_required,
+                is_unique: field.is_unique, sort_order: field.sort_order,
+                configuration: field.configuration === null ? {} : field.configuration as Prisma.InputJsonValue,
+              })),
+              ...additions.map((field, index) => ({
+                key: field.key, name: field.name, field_type: field.type,
+                description: null, is_required: false, is_unique: false,
+                sort_order: version!.engine_catalog_fields.length + index,
+                configuration: {},
+              })),
+            ],
+          },
+        },
+      });
+      version = await tx.engine_catalog_type_versions.findFirst({
+        where: { type_id: catalog.id, status: "published" },
+        orderBy: { version: "desc" },
+        include: { engine_catalog_fields: { where: { status: "active" } } },
+      });
+      if (!version)
+        throw new Error("No se pudo leer la nueva versión del estándar: " + entity.key);
+    }
+  }
+
   let local = await tx.engine_object_types.findUnique({ where: { workspace_id_key: { workspace_id: workspaceId, key: entity.key } }, include: { engine_field_definitions: true } });
   if (local && local.status !== "active")
     throw new Error("Tabla inactiva: " + entity.key);
@@ -582,8 +732,9 @@ async function bindType(tx: Prisma.TransactionClient, workspaceId: string, entit
     local = await tx.engine_object_types.findUniqueOrThrow({ where: { id: created.id }, include: { engine_field_definitions: true } });
   }
   const fields = new Map(local.engine_field_definitions.map(f => [f.key, f]));
-  const required = [...(version?.engine_catalog_fields.map(f => ({ key: f.key, name: f.name, type: f.field_type, required: f.is_required, configuration: f.configuration })) ?? []),
-  ...entity.fields.map(f => ({ ...f, configuration: {} }))];
+  const required = version!.engine_catalog_fields.map(f => ({
+    key: f.key, name: f.name, type: f.field_type, required: f.is_required, configuration: f.configuration,
+  }));
   let added = false;
   for (const field of required) {
     const existing = fields.get(field.key);
@@ -613,15 +764,6 @@ async function bindType(tx: Prisma.TransactionClient, workspaceId: string, entit
     else if (binding.catalog_version !== version.version)
       await tx.engine_workspace_catalog_bindings.update({ where: { id: binding.id }, data: { catalog_version: version.version, updated_at: new Date() } });
   }
-  if (catalog && version) {
-    for (const field of entity.fields.filter(f => !version.engine_catalog_fields.some(c => c.key === f.key))) {
-      const extension = await tx.engine_workspace_field_extensions.findUnique({ where: { workspace_id_catalog_type_id_key: { workspace_id: workspaceId, catalog_type_id: catalog.id, key: field.key } } });
-      if (extension && (extension.field_type !== field.type || extension.status !== "active"))
-        throw new Error("Extensión incompatible: " + field.key);
-      if (!extension)
-        await tx.engine_workspace_field_extensions.create({ data: { workspace_id: workspaceId, catalog_type_id: catalog.id, key: field.key, name: field.name, field_type: field.type, is_required: false } });
-    }
-  }
   const bound = await tx.engine_object_types.findUniqueOrThrow({ where: { id: local.id }, include: { engine_field_definitions: true } });
-  return { ...bound, catalogRequired: version?.engine_catalog_fields.filter(f => f.is_required).map(f => f.key) ?? [] };
+  return { ...bound, catalogRequired: version!.engine_catalog_fields.filter(f => f.is_required).map(f => f.key) };
 }

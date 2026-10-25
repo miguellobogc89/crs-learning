@@ -158,11 +158,23 @@ export function validateEngineBatchPlan(raw: unknown, files: EngineSource[], wor
     if (batchRowIdentity(byId.get(parties[0].from)!) === batchRowIdentity(byId.get(parties[1].from)!))
       return fail("emisor y cliente coinciden; requiere revisión.");
   }
-  const metadata = normalizedIdentity(schema.proposal.entities.map(e=>[e.key,e.name,...e.fields.flatMap(f=>[f.key,f.name])].join(" ")).join(" "));
-  for(const row of rows.filter(r=>r.entity==="company")){
+  const metadata = normalizedIdentity([
+    ...schema.proposal.entities.flatMap(entity => [
+      entity.key, entity.name, entity.description,
+      ...entity.fields.flatMap(field => [field.key, field.name]),
+    ]),
+    ...schema.proposal.relations.flatMap(relation => [relation.key, relation.description]),
+  ].join(" "));
+  for(const row of rows){
     for(const value of Object.values(row.values)){
       const privateValue=normalizedIdentity(value);
-      if(typeof value==="string" && privateValue.length>=8 && metadata.includes(privateValue))
+      const companyNameTokens = row.entity === "company" && typeof value === "string"
+        ? value.normalize("NFKC").toLocaleUpperCase("es").split(/[^\p{L}\p{N}]+/u)
+          .map(normalizedIdentity).filter(token => token.length >= 4)
+        : [];
+      if(typeof value==="string" &&
+        ((privateValue.length>=8 && metadata.includes(privateValue)) ||
+          companyNameTokens.some(token => metadata.includes(token))))
         return fail("las definiciones reutilizables no pueden contener nombres o identificadores privados.");
     }
   }

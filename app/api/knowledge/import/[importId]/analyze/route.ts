@@ -213,6 +213,67 @@ export async function POST(
   let queuePersisted = false;
 
   try {
+    const reusableDerivedFiles = knowledgeImport.knowledge_import_files.filter(
+      (file) => file.status !== "uploaded",
+    );
+    if (reusableDerivedFiles.length > 0) {
+      const completedFiles = reusableDerivedFiles.filter(
+        (file) => file.status === "text_ready" && file.processing_status === "completed",
+      ).length;
+      const failedFiles = reusableDerivedFiles.filter(
+        (file) => file.status === "text_error",
+      ).length;
+      const totalSize = reusableDerivedFiles.reduce((total, file) => total + file.file_size, 0);
+      const restored = await prisma.knowledge_imports.updateMany({
+        where: {
+          id: importId,
+          status: "processing",
+          processing_status: "analyzing",
+        },
+        data: {
+          status: "extracted",
+          processing_status: "pending",
+          total_files: reusableDerivedFiles.length,
+          total_size: totalSize,
+          completed_files: completedFiles,
+          failed_files: failedFiles,
+          current_file_id: null,
+          processing_started_at: null,
+          processing_completed_at: null,
+          error_message: null,
+          updated_at: new Date(),
+        },
+      });
+      if (restored.count !== 1) {
+        throw new Error("La importación ha cambiado de estado al reanudar el análisis.");
+      }
+      return NextResponse.json({
+        importId,
+        status: "extracted",
+        processingStatus: "pending",
+        fileCount: reusableDerivedFiles.length,
+        completedFiles,
+        failedFiles,
+        totalSize,
+        duplicateCount: 0,
+        unsupportedCount: 0,
+        allFilesDuplicate: false,
+        duplicateFiles: [],
+        files: reusableDerivedFiles.map((file) => ({
+          id: file.id,
+          name: file.file_name,
+          relativePath: file.relative_path,
+          size: file.file_size,
+          fileType: file.mime_type,
+          status: "ready" as const,
+          processingOrder: file.processing_order,
+          processingStatus: file.processing_status,
+          processingStep: file.processing_step,
+          error: file.error_message,
+        })),
+      });
+    }
+
     /*
      * El inventario, la expansión ZIP, los formatos y
      * los duplicados utilizan el mismo pipeline que

@@ -52,6 +52,9 @@ export function validateSchemaDiscovery(input: {
   const issues: SchemaDiscoveryIssue[] = [];
   const issue = (path: string, code: SchemaDiscoveryIssue["code"]) => issues.push({ path, code });
   const docs = new Map(input.documents.map((d) => [d.id, d]));
+  const entities = object(input.proposal) ? input.proposal.entities : undefined;
+  const relations = object(input.proposal) ? input.proposal.relations : undefined;
+  const warnings = object(input.proposal) ? input.proposal.warnings : undefined;
   const evidence = (value: unknown, path: string) => {
     if (!Array.isArray(value) || value.length === 0) {
       issue(path, "MISSING_EVIDENCE");
@@ -69,15 +72,21 @@ export function validateSchemaDiscovery(input: {
       else if (!doc.extractedText.includes(item.quote)) issue(p, "EVIDENCE_NOT_IN_DOCUMENT");
     }
   };
-  if (!object(input.proposal) || !Array.isArray(input.proposal.entities) ||
-      !Array.isArray(input.proposal.relations) || !Array.isArray(input.proposal.warnings) ||
-      !input.proposal.warnings.every((w) => typeof w === "string")) {
+  if (!object(input.proposal))
     return { valid: false, proposal: null, issues: [{ path: "$", code: "INVALID_SHAPE" }] };
-  }
-  const { entities, relations, warnings } = input.proposal;
-  if (entities.length > 50 || relations.length > 200 || warnings.length > 100) issue("$", "LIMIT_EXCEEDED");
+  if (!Array.isArray(entities)) issue("$.entities", "INVALID_SHAPE");
+  if (!Array.isArray(relations)) issue("$.relations", "INVALID_SHAPE");
+  if (!Array.isArray(warnings)) issue("$.warnings", "INVALID_SHAPE");
+  if (issues.length)
+    return { valid: false, proposal: null, issues };
+  if (!(warnings as unknown[]).every((w) => typeof w === "string"))
+    return { valid: false, proposal: null, issues: [{ path: "$.warnings", code: "INVALID_SHAPE" }] };
+  const entityList = entities as unknown[];
+  const relationList = relations as unknown[];
+  const warningList = warnings as string[];
+  if (entityList.length > 50 || relationList.length > 200 || warningList.length > 100) issue("$", "LIMIT_EXCEEDED");
   const keys = new Set<string>();
-  for (const [i, entity] of entities.entries()) {
+  for (const [i, entity] of entityList.entries()) {
     const p = `entities[${i}]`;
     if (!object(entity) || !string(entity.key) || !string(entity.name) ||
         typeof entity.description !== "string" || !Array.isArray(entity.fields)) {
@@ -103,7 +112,7 @@ export function validateSchemaDiscovery(input: {
     }
   }
   const relationKeys = new Set<string>();
-  for (const [i, relation] of relations.entries()) {
+  for (const [i, relation] of relationList.entries()) {
     const p = `relations[${i}]`;
     if (!object(relation) || !string(relation.key) ||
         !string(relation.fromEntity) || !string(relation.toEntity) ||

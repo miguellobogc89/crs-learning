@@ -69,3 +69,12 @@ test("rejects missing evidence", () => {
 test("rejects malformed proposals", () => {
   assert.equal(run({ entities: "wrong", relations: [], warnings: [] }).issues[0].code, "INVALID_SHAPE");
 });
+test("identifies exactly which required root collection is missing", () => {
+  const result = run({ entities: [], relations: [] });
+  assert.deepEqual(result.issues, [{ path: "$.warnings", code: "INVALID_SHAPE" }]);
+});
+test("rejects logical segment IDs when evidence must point to a source file", () => {
+  const p = structuredClone(proposal);
+  p.entities[0].evidence[0].documentId = "file-1:doc:1";
+  assert.ok(run(p).issues.some(issue => issue.code === "UNKNOWN_DOCUMENT"));
+});

@@ -4,8 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import {createRequire} from "node:module";
+import {fileURLToPath} from "node:url";
 const require=createRequire(import.meta.url);
-const root=path.resolve(path.dirname(new URL(import.meta.url).pathname),"../..");
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"../..");
 function loader(mocks={}){
   const cache=new Map();
   function load(filename){
@@ -112,7 +113,7 @@ function harness(f=fixture()){
     },
     engine_field_definitions:simple(state.fields,{status:"active",is_required:false}),
     engine_catalog_types:{...simple(state.catalog,{status:"active"}),async findUnique({where}){return state.catalog.find(c=>c.key===where.key)??null;},async findUniqueOrThrow(args){return this.findUnique(args);},async findMany(){return state.catalog.map(c=>({...c,engine_catalog_type_versions:state.versions.filter(v=>v.type_id===c.id)}));}},
-    engine_catalog_type_versions:{async findFirst({where}){return state.versions.find(v=>v.type_id===where.type_id)??null;},async create({data}){const version={...data,engine_catalog_fields:data.engine_catalog_fields.create.map(f=>({status:"active",...f}))};state.versions.push(version);return version;}},
+    engine_catalog_type_versions:{async findFirst({where}){return state.versions.filter(v=>v.type_id===where.type_id&&(!where.status||v.status===where.status)).sort((a,b)=>b.version-a.version)[0]??null;},async create({data}){const version={...data,engine_catalog_fields:data.engine_catalog_fields.create.map(f=>({status:"active",...f}))};state.versions.push(version);return version;}},
     engine_workspace_catalog_bindings:{...simple(state.bindings,{status:"active"}),async findUnique({where}){const w=where.workspace_id_catalog_type_id;return state.bindings.find(b=>b.workspace_id===w.workspace_id&&b.catalog_type_id===w.catalog_type_id)??null;}},
     engine_workspace_field_extensions:{...simple(state.extensions),async findUnique(){return null;}},
     engine_records:{
@@ -135,7 +136,7 @@ function harness(f=fixture()){
   };
   const prisma={...tx,async $transaction(fn){const backup=structuredClone(state);try{return await fn(tx);}catch(e){for(const k of Object.keys(state)){if(Array.isArray(state[k]))state[k].splice(0,Infinity,...backup[k]);else state[k]=backup[k];}throw e;}}};
   const api=loader({"@/lib/prisma":{prisma},"@/lib/ai/openai":{getKnowledgeImportModel:()=>"test",getOpenAIClient:()=>({responses:{async create(args,options){state.aiCalls++;assert.match(args.input,/json/i);assert.equal(options.maxRetries,0);
-        const payload=JSON.parse(args.input).data;state.requests.push({task:payload.task,id:payload.document?.id,timeout:options.timeout,tokens:args.max_output_tokens});
+        const payload=JSON.parse(args.input).data;state.requests.push({task:payload.task,id:payload.document?.id,timeout:options.timeout,tokens:args.max_output_tokens,format:args.text?.format,instructions:args.instructions,input:args.input});
         if(payload.task===state.timeoutTask&&state.timeoutDocument===payload.document.id){const error=new Error("Request timed out.");error.name="APIConnectionTimeoutError";throw error;}
         const result=payload.task==="joint_schema"?f.plan.schema:payload.task==="extract_document"?{rows:f.plan.rows.filter(r=>r.documentId===payload.document.id),links:f.plan.links.filter(l=>l.documentId===payload.document.id)}:{valid:state.auditValid,issues:state.auditValid?[]:["swapped parties"]};
         return {status:"completed",output_text:JSON.stringify(result)};}}})}})("lib/engine/knowledge-engine-import.service.ts");
@@ -148,8 +149,32 @@ test("preview restores relational tables without writing schemas, records or lin
   const h=harness();const preview=await h.api.previewKnowledgeEngine(h.scope);
   assert.equal(preview.status,"ready");assert.equal(preview.recordsToInsert,9);assert.equal(preview.recordsToReuse,3);
   assert.deepEqual(preview.tables.map(t=>t.key),["company","invoice"]);
+  const discovery=h.state.requests.find(r=>r.task==="joint_schema");
+  assert.equal(discovery.format.type,"json_schema");
+  assert.deepEqual(discovery.format.schema.required,["entities","relations","warnings"]);
+  assert.match(discovery.instructions,/exactly equal one of documents\[\]\.id/);
+  assert.ok(preview.tables.every(table=>table.fields.every(field=>field.evidence.length)));
+  assert.ok(preview.records.every(record=>Object.keys(record.evidence).length));
   assert.equal(preview.relations.length,2);assert.equal(h.state.records.length,0);assert.equal(h.state.types.length,0);assert.equal(h.state.catalog.length,0);assert.equal(h.state.links.length,0);
   assert.equal(h.state.aiCalls,9);await h.api.previewKnowledgeEngine(h.scope);assert.equal(h.state.aiCalls,9,"cached reviewed plan is reused without another model call");
+});
+
+test("approved field additions publish a reusable catalog version instead of a workspace-only extension",async()=>{
+  const f=fixture(1),company=f.plan.schema.entities.find(e=>e.key==="company");
+  company.fields.push({key:"email",name:"Correo electrónico",type:"text",required:false,evidence:[{documentId:"f0",quote:"PLOCIA SL"}]});
+  const h=harness(f);
+  h.state.catalog.push({id:"company-standard",key:"company",name:"Empresas",status:"active"});
+  h.state.versions.push({type_id:"company-standard",version:1,status:"published",engine_catalog_fields:[
+    {key:"legal_name",name:"Razón social",field_type:"text",is_required:false,sort_order:0,status:"active",configuration:{}},
+    {key:"tax_id",name:"Identificación fiscal",field_type:"text",is_required:false,sort_order:1,status:"active",configuration:{}},
+  ]});
+  await h.api.previewKnowledgeEngine(h.scope);
+  const prepared=await h.api.validatePreparedEnginePlan({...h.scope,proposal:f.proposal,files:f.files});
+  await h.prisma.$transaction(tx=>h.api.commitPreparedEngine(tx,{...h.scope,prepared,documents:h.documents,skippedDocuments:[]}));
+  const published=h.state.versions.find(v=>v.type_id==="company-standard"&&v.version===2);
+  assert.ok(published.engine_catalog_fields.some(field=>field.key==="email"));
+  assert.equal(h.state.bindings.find(binding=>binding.catalog_type_id==="company-standard").catalog_version,2);
+  assert.equal(h.state.extensions.length,0);
 });
 
 test("confirmation persists global structures, private companies and invoices, eight relations and provenance",async()=>{
@@ -215,6 +240,49 @@ test("legacy invoice external keys are reused and enriched, not duplicated",asyn
 test("private company values cannot leak into reusable catalog labels",()=>{
   const f=fixture();f.plan.schema.entities[0].name="PLOCIA SL B72378581";
   assert.throws(()=>pure.validateEngineBatchPlan(f.plan,f.files,"ws"),/privados/);
+});
+test("private company values cannot leak into shared schema descriptions",()=>{
+  const f=fixture();f.plan.schema.entities[0].description="Facturas emitidas a PLOCIA SL B72378581";
+  assert.throws(()=>pure.validateEngineBatchPlan(f.plan,f.files,"ws"),/privados/);
+});
+test("short private company names cannot leak into shared schema descriptions",()=>{
+  const f=fixture();f.plan.schema.entities[0].description="Cliente PLOCIA";
+  assert.throws(()=>pure.validateEngineBatchPlan(f.plan,f.files,"ws"),/privados/);
+});
+test("Toldos, O2, Mercadona and IGNIS invoices share one D’PLOCIA customer by fiscal ID",async()=>{
+  const f=fixture(4),issuers=["Toldos SL","O2 España SL","Mercadona SA","IGNIS Energía SL"];
+  for(const [index,file] of f.files.entries()){
+    file.extracted_text=file.extracted_text
+      .replace(`Proveedor ${index} SL`,issuers[index])
+      .replace("PLOCIA SL","D’PLOCIA SL");
+    for(const row of f.plan.rows.filter(row=>row.documentId===file.id&&row.entity==="company")){
+      if(row.values.tax_id==="B72378581"){
+        row.values.legal_name="D’PLOCIA SL";
+        row.evidence.legal_name="CLIENTE: D’PLOCIA SL CIF B72378581";
+      }else{
+        row.values.legal_name=issuers[index];
+        row.evidence.legal_name=`EMISOR: ${issuers[index]} CIF B1111111${index}`;
+      }
+    }
+    f.plan.links.filter(link=>link.documentId===file.id).forEach(link=>link.evidence=file.extracted_text);
+  }
+  const sourceQuote=f.files[0].extracted_text;
+  for(const entity of f.plan.schema.entities){
+    entity.evidence=[{documentId:"f0",quote:sourceQuote}];
+    entity.fields.forEach(field=>field.evidence=[{documentId:"f0",quote:sourceQuote}]);
+  }
+  f.plan.schema.relations.forEach(relation=>relation.evidence=[{documentId:"f0",quote:sourceQuote}]);
+  f.proposal.globalImportMap.batchReview.sourceFingerprint=review.importBatchFingerprint(f.proposal.globalImportMap,f.files);
+  f.plan.sourceFingerprint=pure.sourceFingerprint(f.files,f.proposal);
+  const normalized=pure.validateEngineBatchPlan(f.plan,f.files,"ws");
+  const companyRows=normalized.rows.filter(row=>row.entity==="company");
+  assert.equal(new Set(companyRows.map(pure.batchRowIdentity)).size,5);
+  const h=harness(f),preview=await h.api.previewKnowledgeEngine(h.scope);
+  assert.equal(preview.relations.reduce((total,relation)=>total+relation.links,0),8);
+  assert.equal(preview.records.filter(record=>record.entity==="invoice").length,4);
+  const prepared=await h.api.validatePreparedEnginePlan({...h.scope,proposal:f.proposal,files:f.files});
+  await h.prisma.$transaction(tx=>h.api.commitPreparedEngine(tx,{...h.scope,prepared,documents:h.documents,skippedDocuments:[]}));
+  assert.equal(h.state.records.filter(record=>record.values_json.legal_name==="D’PLOCIA SL").length,1);
 });
 
 test("the same invoice number from different issuers remains separate",async()=>{

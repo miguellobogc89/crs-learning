@@ -64,6 +64,18 @@ test("whole batch review consolidates equivalent categories, retains provenance 
   routes.f1.articleCandidate = true;
   assert.throws(() => assertReviewedDocumentRoutes(result, f.files, routes), /destinos/);
 });
+test("a reusable operating procedure can become a Knowledge article without an Engine table", () => {
+  const f = fixture();
+  const procedure = f.response.documents[2].routing;
+  procedure.articleCandidate = true;
+  procedure.structuredCandidate = false;
+  procedure.structuredFields = [];
+  procedure.existingStructureKeys = [];
+  const result = applyImportBatchReview(f);
+  const route = reviewedDocumentRoutes(result, f.files).f3;
+  assert.equal(route.articleCandidate, true);
+  assert.equal(route.structuredCandidate, false);
+});
 test("one file follows exactly the same review boundary", () => {
   const f = fixture(); f.files = f.files.slice(0, 1);
   f.inventory.files = f.inventory.files.slice(0, 1); f.inventory.documents = f.inventory.documents.slice(0, 1);
@@ -116,7 +128,7 @@ function serviceFixture({ cached = false, saveCount = 1, modelError = null } = {
   const f = fixture();
   const inventory = cached ? applyImportBatchReview(f) : f.inventory;
   const payload = { globalImportMap: inventory };
-  let aiCalls = 0, saves = 0, modelContext, modelOptions, authorizedWhere;
+  let aiCalls = 0, saves = 0, modelContext, modelOptions, modelInstructions, authorizedWhere;
   const prisma = {
     knowledge_imports: {
       async findFirst({ where }) {
@@ -146,13 +158,13 @@ function serviceFixture({ cached = false, saveCount = 1, modelError = null } = {
       getKnowledgeImportModel: () => "test-model",
       getOpenAIClient: () => ({ responses: { async create(args, options) {
         assert.match(args.input, /json/i, "JSON mode requires an explicit JSON instruction in the input messages");
-        aiCalls++; modelContext = JSON.parse(args.input); modelOptions = options;
+        aiCalls++; modelContext = JSON.parse(args.input); modelOptions = options; modelInstructions = args.instructions;
         if (modelError) throw modelError;
         return { status: "completed", output_text: JSON.stringify(f.response) };
       } } }),
     },
   });
-  return { ...api, calls: () => ({ aiCalls, saves, modelContext, modelOptions, authorizedWhere }) };
+  return { ...api, calls: () => ({ aiCalls, saves, modelContext, modelOptions, modelInstructions, authorizedWhere }) };
 }
 const scope = { importId: "import", userId: "user", workspaceId: "workspace" };
 test("service reviews all original sources together against local and standard structures without writing records", async () => {
@@ -163,6 +175,8 @@ test("service reviews all original sources together against local and standard s
   assert.equal(calls.modelContext.sources.length, 3);
   assert.equal(calls.modelContext.sources[0].lines, "1: Factura 1\n2: Total 100");
   assert.equal(calls.modelContext.reusableStandards[0].key, "invoice");
+  assert.match(calls.modelInstructions, /procedimientos narrativos y manuales operativos/);
+  assert.match(calls.modelInstructions, /no envíes sus pasos a Engine/i);
   assert.equal(calls.authorizedWhere.owner_user_id, "user");
   assert.equal(calls.authorizedWhere.knowledge_libraries.workspace_id, "workspace");
   assert.deepEqual(result.writesPerformed, { engine: false, knowledge: false });

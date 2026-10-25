@@ -222,43 +222,146 @@ export function KnowledgeImportProposalStep({
 
       <div className="mt-5 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
         <KnowledgeImportBatchSummary inventory={proposal.globalImportMap} />
-        <section className="rounded-xl border border-blue-100 bg-blue-50/30 px-4 py-4">
-          <h4 className="text-[12px] font-semibold text-slate-900">
-            Engine · Plan de registros
-          </h4>
+        <section className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/80 to-white p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-blue-700">Destino estructurado</p>
+              <h4 className="mt-1 text-[15px] font-semibold text-slate-950">Engine · propuesta relacional</h4>
+              <p className="mt-1 max-w-2xl text-[11px] leading-5 text-slate-600">
+                El modelo conjunto se revisa con las fuentes antes de guardar. Al confirmar, las definiciones genéricas se publican en el catálogo compartido; registros, relaciones y evidencias quedan en este workspace.
+              </p>
+            </div>
+            {enginePreview?.status === "ready" ? (
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">Listo para revisar</span>
+            ) : null}
+          </div>
           {enginePreviewLoading ? (
-            <p role="status" className="mt-2 text-xs text-blue-700">
-              {enginePreviewMessage || "Preparando tablas, registros y relaciones del lote"}. Todavía no se ha escrito ningún registro.
+            <p role="status" className="mt-4 rounded-xl border border-blue-100 bg-white/80 p-3 text-xs text-blue-700">
+              {enginePreviewMessage || "Preparando tablas, registros y relaciones del lote"}. Todavía no se ha escrito ningún cambio de negocio.
             </p>
           ) : enginePreviewError ? (
-            <div className="mt-2 space-y-2">
+            <div className="mt-4 space-y-2 rounded-xl border border-rose-200 bg-rose-50 p-3">
               <p role="alert" className="text-xs text-rose-700">{enginePreviewError}</p>
-              <button type="button" onClick={onRetryEnginePreview} className="rounded-md border border-blue-300 px-3 py-2 text-xs font-medium text-blue-700">Reintentar Engine</button>
-              <p className="text-xs text-slate-500">Continúa con los documentos ya verificados, sin volver a subir los archivos.</p>
+              <button type="button" onClick={onRetryEnginePreview} className="rounded-md border border-blue-300 bg-white px-3 py-2 text-xs font-medium text-blue-700">Reintentar Engine</button>
+              <p className="text-xs text-slate-500">Los originales y documentos ya verificados se conservan; puedes reintentar Engine sin volver a subir ni extraer los archivos.</p>
             </div>
           ) : enginePreview?.status === "ready" ? (
-            <div className="mt-3 space-y-3 text-xs">
-              <p>{enginePreview.recordsToInsert} nuevos · {enginePreview.recordsToUpdate} por completar · {enginePreview.recordsToReuse} sin cambios.</p>
-              <p className="text-slate-600">Al confirmar se aprobarán las tablas y relaciones siguientes. Sus definiciones serán reutilizables; los registros serán privados de este workspace.</p>
-              {enginePreview.tables.map(table => (
-                <div key={table.key} className="rounded-lg border bg-white p-3">
-                  <p className="font-semibold">{table.name} · {table.records} registros</p>
-                  <p className="mt-1 text-slate-500">{table.fields.join(" · ")}</p>
+            <div className="mt-4 space-y-5">
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: enginePreview.recordsToInsert, label: "nuevos" },
+                  { value: enginePreview.recordsToUpdate, label: "por completar" },
+                  { value: enginePreview.recordsToReuse, label: "reutilizados" },
+                ].map(metric => (
+                  <div key={metric.label} className="rounded-xl border border-slate-200 bg-white p-3">
+                    <p className="text-xl font-semibold text-slate-950">{metric.value}</p>
+                    <p className="text-[10px] text-slate-500">{metric.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <h5 className="mb-2 text-[11px] font-semibold text-slate-800">Esquema común propuesto</h5>
+                <div className="space-y-2">
+                  {enginePreview.tables.map(table => (
+                    <article key={table.key} className="rounded-xl border border-slate-200 bg-white p-3">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <p className="text-xs font-semibold text-slate-900">{table.name}<span className="ml-2 font-mono text-[10px] font-normal text-slate-400">{table.key}</span></p>
+                        <span className="text-[10px] text-slate-500">{table.records} registros de origen</span>
+                      </div>
+                      {table.description ? <p className="mt-1 text-[11px] text-slate-600">{table.description}</p> : null}
+                      <div className="mt-2 divide-y divide-slate-100">
+                        {table.fields.map(field => (
+                          <div key={field.key} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                            <p className="text-[11px] text-slate-700">
+                              <span className="font-medium">{field.name}</span>
+                              <span className="ml-1 font-mono text-[9px] text-slate-400">{field.key}</span>
+                              <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] text-slate-500">{field.type}{field.required ? " · obligatorio" : ""}</span>
+                            </p>
+                            {field.evidence.length > 0 ? (
+                              <details className="max-w-full text-[10px] text-blue-700">
+                                <summary className="cursor-pointer">Ver evidencia ({field.evidence.length})</summary>
+                                <div className="mt-1 space-y-1">
+                                  {field.evidence.map((item, index) => (
+                                    <blockquote key={`${item.documentId}-${index}`} className="rounded bg-blue-50 px-2 py-1 text-slate-600">
+                                      <span className="font-medium">{fileNames.get(item.documentId) ?? "Fuente"}:</span> {item.quote}
+                                    </blockquote>
+                                  ))}
+                                </div>
+                              </details>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                      {table.evidence.length > 0 ? (
+                        <details className="mt-2 border-t border-slate-100 pt-2 text-[10px] text-blue-700">
+                          <summary className="cursor-pointer">Evidencia de la entidad ({table.evidence.length})</summary>
+                          {table.evidence.map((item, index) => (
+                            <p key={`${item.documentId}-${index}`} className="mt-1 text-slate-600">
+                              <span className="font-medium">{fileNames.get(item.documentId) ?? "Fuente"}:</span> {item.quote}
+                            </p>
+                          ))}
+                        </details>
+                      ) : null}
+                    </article>
+                  ))}
                 </div>
-              ))}
-              {enginePreview.relations.map(relation => (
-                <p key={relation.key}>{relation.fromEntity} → {relation.toEntity} · {relation.key} · {relation.links} vínculos</p>
-              ))}
-              {enginePreview.warnings.map((warning,index) => <p key={index} className="text-amber-700">{warning}</p>)}
-              {enginePreview.records.map(record => (
-                <details key={record.id} className="rounded-lg border bg-white p-3">
-                  <summary className="cursor-pointer font-medium">{record.entity} · {record.fileName} · {record.action === "insert" ? "Nuevo" : record.action === "update" ? "Completar" : "Reutilizar"}</summary>
-                  <pre className="mt-2 whitespace-pre-wrap break-words text-[11px]">{JSON.stringify(record.values,null,2)}</pre>
-                  {record.conflictingFields.map(field => <p key={field.field} className="mt-1 text-amber-700">{field.field}: guardado {String(field.current)} · extraído {String(field.extracted)}. Se conserva el valor guardado.</p>)}
-                </details>
-              ))}
+              </div>
+
+              {enginePreview.relations.length > 0 ? (
+                <div>
+                  <h5 className="mb-2 text-[11px] font-semibold text-slate-800">Relaciones acreditadas por las fuentes</h5>
+                  <div className="space-y-2">
+                    {enginePreview.relations.map(relation => (
+                      <article key={relation.key} className="rounded-xl border border-slate-200 bg-white p-3">
+                        <p className="text-[11px] font-semibold text-slate-800">{relation.fromEntity} <span className="text-blue-600">→</span> {relation.toEntity}</p>
+                        <p className="mt-1 text-[10px] text-slate-500">{relation.key} · {relation.cardinality.replaceAll("_", " ")} · {relation.links} vínculos · {relation.description}</p>
+                        {relation.evidence.map((item, index) => (
+                          <p key={`${item.documentId}-${index}`} className="mt-1 rounded bg-slate-50 px-2 py-1 text-[10px] text-slate-600">
+                            <span className="font-medium">{fileNames.get(item.documentId) ?? "Fuente"}:</span> {item.quote}
+                          </p>
+                        ))}
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {enginePreview.warnings.length > 0 ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <h5 className="text-[11px] font-semibold text-amber-900">Dudas y límites</h5>
+                  {enginePreview.warnings.map((warning,index) => <p key={index} className="mt-1 text-[10px] text-amber-800">{warning}</p>)}
+                </div>
+              ) : null}
+
+              <div>
+                <h5 className="mb-2 text-[11px] font-semibold text-slate-800">Registros, conciliación y trazabilidad</h5>
+                <div className="space-y-2">
+                  {enginePreview.records.map(record => (
+                    <details key={record.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                      <summary className="cursor-pointer text-[11px] font-medium text-slate-800">
+                        {record.entity} · {record.fileName} · {record.action === "insert" ? "Nuevo" : record.action === "update" ? "Completar" : "Reutilizar"}
+                      </summary>
+                      <dl className="mt-2 divide-y divide-slate-100">
+                        {Object.entries(record.values).map(([key, value]) => (
+                          <div key={key} className="grid grid-cols-[minmax(90px,0.7fr)_minmax(0,1.3fr)] gap-3 py-1.5 text-[10px]">
+                            <dt className="font-mono text-slate-500">{key}</dt>
+                            <dd className="break-words text-slate-800">{String(value)}</dd>
+                            {record.evidence[key] ? (
+                              <dd className="col-span-2 rounded bg-slate-50 px-2 py-1 text-slate-500">{record.evidence[key]}</dd>
+                            ) : null}
+                          </div>
+                        ))}
+                      </dl>
+                      {record.conflictingFields.map(field => <p key={field.field} className="mt-1 rounded bg-amber-50 p-2 text-[10px] text-amber-800">{field.field}: guardado {String(field.current)} · extraído {String(field.extracted)}. Se conserva el valor guardado.</p>)}
+                    </details>
+                  ))}
+                </div>
+              </div>
             </div>
-          ) : enginePreview ? <p className="mt-2 text-xs text-slate-500">No hay documentos destinados a Engine.</p> : null}
+          ) : enginePreview ? (
+            <p className="mt-4 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600">Este lote no contiene documentos que justifiquen registros estructurados en Engine. Las fuentes y los artículos propuestos se conservan en Knowledge.</p>
+          ) : null}
 
         </section>
         {referenceDocuments.length > 0 ? (
