@@ -8,7 +8,6 @@ import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
 import { prisma } from "@/lib/prisma";
 import { analyzeKnowledgeSource } from "@/lib/services/knowledge-analysis.service";
 import { createKnowledgeStatusSnapshot } from "@/lib/services/knowledge-library.service";
-import { validatePreparedEnginePlan, commitPreparedEngine } from "@/lib/engine/knowledge-engine-import.service";
 
 import { generateArticleContent } from "./generate-article-content";
 import type {
@@ -296,10 +295,9 @@ export async function confirmKnowledgeImport({
     }
   }
 
-  const preparedEnginePlan = await validatePreparedEnginePlan({
-    importId, userId, workspaceId, proposal,
-    files: knowledgeImport.knowledge_import_files,
-  });
+  // Phase 1: the Engine analysis is a reviewable preview only. Confirming the
+  // import stores Knowledge (sources and articles); no Engine schema, catalog
+  // entry or record is written until the Engine commit is rebuilt (phase 4).
 
   const [existingFolders, existingKnowledgeFiles] =
     await Promise.all([
@@ -922,15 +920,7 @@ export async function confirmKnowledgeImport({
           });
         }
 
-        // Knowledge files, the Engine records and their provenance are atomic.
-        // No Engine write occurs until the user confirms the full proposal.
-        const engineImports = preparedEnginePlan
-          ? await commitPreparedEngine(tx, {
-              workspaceId, userId, importId,
-              prepared: preparedEnginePlan, documents: createdDocuments,
-              skippedDocuments,
-            })
-          : [];
+        const engineImports: NonNullable<KnowledgeImportExecutionLog["engineImports"]> = [];
 
         const completedAt = new Date();
 

@@ -42,6 +42,8 @@ export function KnowledgeImportCompletedStep({
   const referenceDocuments = log.documents.filter(document => document.sourceKind === "document");
   const createdRecords = (log.engineImports ?? []).reduce((n, item) => n + item.recordsCreated, 0);
   const updatedRecords = (log.engineImports ?? []).reduce((n, item) => n + (item.recordsUpdated ?? 0), 0);
+  const structuredSources = Object.values(log.proposalSnapshot?.documentRoutes ?? {})
+    .filter(route => route.structuredCandidate).length;
   const noNewContent = log.summary.documentsCreated === 0 &&
     log.summary.articlesCreated === 0 && log.summary.articlesUpdated === 0 &&
     createdRecords === 0 && updatedRecords === 0;
@@ -125,6 +127,14 @@ export function KnowledgeImportCompletedStep({
                   item.recordsReused ? "No hay datos nuevos que importar" : "Sin cambios en Engine"}
               </p>
             ))}
+          </section>
+        ) : structuredSources > 0 ? (
+          <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h4 className="text-[12px] font-semibold text-slate-900">Engine · sin cambios guardados</h4>
+            <p className="mt-1 text-[11px] text-slate-600">
+              {structuredSources === 1 ? "El documento con datos estructurados se ha guardado" : `Los ${structuredSources} documentos con datos estructurados se han guardado`} en Knowledge.
+              Sus registros de Engine eran una vista previa y todavía no se guardan en esta versión.
+            </p>
           </section>
         ) : null}
 
