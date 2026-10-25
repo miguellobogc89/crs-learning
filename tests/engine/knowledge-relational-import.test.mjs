@@ -89,7 +89,7 @@ test("fingerprints survive JSONB ordering but change with source, routes or sche
 });
 
 function harness(f=fixture()){
-  const state={types:[],fields:[],catalog:[],versions:[],bindings:[],extensions:[],records:[],revisions:[],provenance:[],relations:[],globalRelations:[],links:[],plans:[],aiCalls:0,auditValid:true,authorized:true,imported:{...f.proposal}};
+  const state={types:[],fields:[],catalog:[],versions:[],bindings:[],extensions:[],records:[],revisions:[],provenance:[],relations:[],globalRelations:[],links:[],plans:[],aiCalls:0,auditValid:true,timeoutDocument:null,timeoutTask:"extract_document",requests:[],authorized:true,imported:{...f.proposal}};
   const imported={id:"import",proposal_json:f.proposal,knowledge_import_files:f.files};
   let serial=0;const id=()=>"id-"+(++serial);
   const simple=(array,defaults={})=>({
@@ -134,7 +134,11 @@ function harness(f=fixture()){
     },
   };
   const prisma={...tx,async $transaction(fn){const backup=structuredClone(state);try{return await fn(tx);}catch(e){for(const k of Object.keys(state)){if(Array.isArray(state[k]))state[k].splice(0,Infinity,...backup[k]);else state[k]=backup[k];}throw e;}}};
-  const api=loader({"@/lib/prisma":{prisma},"@/lib/ai/openai":{getKnowledgeImportModel:()=>"test",getOpenAIClient:()=>({responses:{async create(args,options){state.aiCalls++;assert.match(args.input,/json/i);assert.equal(options.maxRetries,0);return {status:"completed",output_text:JSON.stringify(state.aiCalls%2===1?f.plan:{valid:state.auditValid,issues:state.auditValid?[]:["swapped parties"]})};}}})}})("lib/engine/knowledge-engine-import.service.ts");
+  const api=loader({"@/lib/prisma":{prisma},"@/lib/ai/openai":{getKnowledgeImportModel:()=>"test",getOpenAIClient:()=>({responses:{async create(args,options){state.aiCalls++;assert.match(args.input,/json/i);assert.equal(options.maxRetries,0);
+        const payload=JSON.parse(args.input).data;state.requests.push({task:payload.task,id:payload.document?.id,timeout:options.timeout,tokens:args.max_output_tokens});
+        if(payload.task===state.timeoutTask&&state.timeoutDocument===payload.document.id){const error=new Error("Request timed out.");error.name="APIConnectionTimeoutError";throw error;}
+        const result=payload.task==="joint_schema"?f.plan.schema:payload.task==="extract_document"?{rows:f.plan.rows.filter(r=>r.documentId===payload.document.id),links:f.plan.links.filter(l=>l.documentId===payload.document.id)}:{valid:state.auditValid,issues:state.auditValid?[]:["swapped parties"]};
+        return {status:"completed",output_text:JSON.stringify(result)};}}})}})("lib/engine/knowledge-engine-import.service.ts");
   const scope={importId:"import",workspaceId:"ws",userId:"user"};
   const documents=f.files.map(file=>({importFileId:file.id,knowledgeFileId:"knowledge-"+file.id,articleId:"source"}));
   return {api,state,prisma,tx,scope,documents,f,imported};
@@ -145,7 +149,7 @@ test("preview restores relational tables without writing schemas, records or lin
   assert.equal(preview.status,"ready");assert.equal(preview.recordsToInsert,9);assert.equal(preview.recordsToReuse,3);
   assert.deepEqual(preview.tables.map(t=>t.key),["company","invoice"]);
   assert.equal(preview.relations.length,2);assert.equal(h.state.records.length,0);assert.equal(h.state.types.length,0);assert.equal(h.state.catalog.length,0);assert.equal(h.state.links.length,0);
-  assert.equal(h.state.aiCalls,2);await h.api.previewKnowledgeEngine(h.scope);assert.equal(h.state.aiCalls,2,"cached reviewed plan is reused without another model call");
+  assert.equal(h.state.aiCalls,9);await h.api.previewKnowledgeEngine(h.scope);assert.equal(h.state.aiCalls,9,"cached reviewed plan is reused without another model call");
 });
 
 test("confirmation persists global structures, private companies and invoices, eight relations and provenance",async()=>{
@@ -166,7 +170,7 @@ test("confirmation persists global structures, private companies and invoices, e
 test("semantic audit catches party swaps even though both names and IDs occur literally",async()=>{
   const h=harness();h.state.auditValid=false;
   await assert.rejects(()=>h.api.previewKnowledgeEngine(h.scope),/swapped parties/);
-  assert.equal(h.state.plans.length,0);assert.equal(h.state.records.length,0);
+  assert.ok(h.state.plans.every(p=>p.status!=="ready"));assert.equal(h.state.records.length,0);
 });
 
 test("changed source, lost permissions and missing original each prevent writes",async()=>{
@@ -236,5 +240,74 @@ test("required published catalog fields cannot be omitted by the discovered sche
   const h=harness(fixture(1));h.state.catalog.push({id:"standard",key:"invoice",status:"active"});
   h.state.versions.push({type_id:"standard",version:1,status:"published",engine_catalog_fields:[{key:"due_date",field_type:"date",is_required:true,status:"active"}]});
   await assert.rejects(()=>h.api.previewKnowledgeEngine(h.scope),/no cumple el estándar/);
-  assert.equal(h.state.plans.length,0);
+  assert.ok(h.state.plans.every(p=>p.status!=="ready"));
+});
+
+test("timed out document preserves audited checkpoints and retry skips completed sources",async()=>{
+  const h=harness();h.state.timeoutDocument="f0";
+  const progress=[];
+  await assert.rejects(()=>h.api.previewKnowledgeEngine({...h.scope,onProgress:m=>progress.push(m)}),/extracción de factura-0.pdf.*Reintenta Engine/);
+  assert.equal(h.state.plans[0].status,"draft");
+  assert.equal(h.state.records.length,0);assert.equal(h.state.types.length,0);
+  const cached=Object.keys(h.state.plans[0].review_json.checkpoint.documents);
+  assert.ok(cached.length>0);assert.ok(!cached.includes("f0"));
+  assert.ok(progress.some(m=>m.includes("Extrayendo registros")));
+  h.state.timeoutDocument=null;
+  const before=h.state.requests.length;
+  const preview=await h.api.previewKnowledgeEngine(h.scope);
+  assert.equal(preview.status,"ready");assert.equal(preview.recordsToInsert,9);
+  const retry=h.state.requests.slice(before);
+  assert.ok(retry.every(r=>r.task!=="joint_schema"));
+  assert.ok(retry.filter(r=>r.task==="extract_document").every(r=>!cached.includes(r.id)));
+  assert.ok(h.state.requests.every(r=>r.timeout<=60000));
+  assert.ok(h.state.requests.filter(r=>r.task==="audit_document").every(r=>r.timeout<=30000&&r.tokens===2000));
+});
+
+test("audit timeout never marks an unverified document complete",async()=>{
+  const h=harness(fixture(1));h.state.timeoutDocument="f0";h.state.timeoutTask="audit_document";
+  await assert.rejects(()=>h.api.previewKnowledgeEngine(h.scope),/verificación de factura-0.pdf/);
+  assert.deepEqual(h.state.plans[0].review_json.checkpoint.documents,{});
+  assert.equal(h.state.plans[0].status,"draft");
+  h.state.timeoutDocument=null;
+  assert.equal((await h.api.previewKnowledgeEngine(h.scope)).status,"ready");
+});
+
+test("expired ready plan can be regenerated from verified checkpoints",async()=>{
+  const h=harness(fixture(1));await h.api.previewKnowledgeEngine(h.scope);
+  h.state.plans[0].expires_at=new Date(0);
+  const calls=h.state.aiCalls;
+  const result=await h.api.previewKnowledgeEngine(h.scope);
+  assert.equal(result.status,"ready");assert.equal(h.state.aiCalls,calls);
+  assert.ok(h.state.plans[0].expires_at>new Date());
+});
+
+test("Engine route streams actual phases and the completed plan through the shared reader",async()=>{
+  const messages=[];
+  const api=loader({"@/auth":{auth:async()=>({user:{id:"user"}})},
+    "@/lib/services/workspace.service":{getActiveWorkspaceContext:async()=>({activeWorkspace:{id:"ws"}})},
+    "@/lib/engine/knowledge-engine-import.service":{previewKnowledgeEngine:async scope=>{
+      assert.equal(scope.workspaceId,"ws");
+      await scope.onProgress("Extrayendo factura.pdf");await scope.onProgress("Verificando factura.pdf");
+      return {status:"ready",planId:"plan"};
+    }},
+  })("app/api/knowledge/import/[importId]/engine-preview/route.ts");
+  const response=await api.POST(new Request("http://localhost/api/knowledge/import/i/engine-preview",{method:"POST",headers:{origin:"http://localhost",accept:"application/x-ndjson"}}),{params:Promise.resolve({importId:"i"})});
+  assert.match(response.headers.get("content-type"),/ndjson/);
+  const {readImportStream}=loader()("components/knowledge/import/read-import-stream.ts");
+  assert.deepEqual(await readImportStream(response,p=>messages.push(p.message)),{status:"ready",planId:"plan"});
+  assert.ok(messages.some(m=>m.includes("Extrayendo factura.pdf")));assert.ok(messages.some(m=>m.includes("Verificando factura.pdf")));
+});
+
+test("Engine stream reports a recoverable timeout and retains same-origin protection",async()=>{
+  let calls=0;
+  const api=loader({"@/auth":{auth:async()=>({user:{id:"user"}})},
+    "@/lib/services/workspace.service":{getActiveWorkspaceContext:async()=>({activeWorkspace:{id:"ws"}})},
+    "@/lib/engine/knowledge-engine-import.service":{previewKnowledgeEngine:async()=>{calls++;throw Error("Tiempo agotado en factura.pdf. Reintenta Engine");}},
+  })("app/api/knowledge/import/[importId]/engine-preview/route.ts");
+  const request=headers=>new Request("http://localhost/api/knowledge/import/i/engine-preview",{method:"POST",headers});
+  assert.equal((await api.POST(request({origin:"http://other",accept:"application/x-ndjson"}),{params:Promise.resolve({importId:"i"})})).status,403);
+  assert.equal(calls,0);
+  const response=await api.POST(request({origin:"http://localhost",accept:"application/x-ndjson"}),{params:Promise.resolve({importId:"i"})});
+  const {readImportStream}=loader()("components/knowledge/import/read-import-stream.ts");
+  await assert.rejects(()=>readImportStream(response),/factura.pdf.*Reintenta Engine/);
 });

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { useKnowledgeImport } from "../hooks/use-knowledge-import";
+import { readImportStream } from "../read-import-stream";
 import type { KnowledgeEnginePreview } from "@/lib/engine/knowledge-engine-import.service";
 import { KnowledgeImportModalHeader } from "./knowledge-import-modal-header";
 import { KnowledgeImportModalProgress } from "./knowledge-import-modal-progress";
@@ -304,6 +305,8 @@ export function KnowledgeImportModal({
   const [enginePreview, setEnginePreview] = useState<KnowledgeEnginePreview | null>(null);
   const [enginePreviewLoading, setEnginePreviewLoading] = useState(false);
   const [enginePreviewError, setEnginePreviewError] = useState<string | null>(null);
+  const [enginePreviewMessage,setEnginePreviewMessage]=useState("");
+  const [enginePreviewAttempt,setEnginePreviewAttempt]=useState(0);
 
   const selectionKey = getFilesSelectionKey(knowledgeImport.files);
 
@@ -387,15 +390,17 @@ export function KnowledgeImportModal({
     setEnginePreview(null);
     setEnginePreviewError(null);
     setEnginePreviewLoading(true);
+    setEnginePreviewMessage("Preparando el análisis de Engine");
     const run = async () => {
       try {
         const response = await fetch(
           "/api/knowledge/import/" + encodeURIComponent(knowledgeImport.importId!) + "/engine-preview",
-          { method: "POST", signal: controller.signal },
+          { method: "POST", signal: controller.signal, headers:{Accept:"application/x-ndjson"} },
         );
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error ?? "No se pudo analizar Engine.");
-        if (!controller.signal.aborted) setEnginePreview(payload as KnowledgeEnginePreview);
+        const payload = await readImportStream<KnowledgeEnginePreview>(response,progress=>{
+          if(!controller.signal.aborted)setEnginePreviewMessage(progress.message);
+        });
+        if (!controller.signal.aborted) setEnginePreview(payload);
       } catch (cause) {
         if (!controller.signal.aborted) {
           setEnginePreviewError(cause instanceof Error ? cause.message : "No se pudo preparar Engine.");
@@ -406,7 +411,7 @@ export function KnowledgeImportModal({
     };
     void run();
     return () => controller.abort();
-  }, [open, knowledgeImport.step, knowledgeImport.proposal, knowledgeImport.importId]);
+  }, [open, knowledgeImport.step, knowledgeImport.proposal, knowledgeImport.importId, enginePreviewAttempt]);
 
   if (!context) {
     return null;
@@ -627,6 +632,8 @@ export function KnowledgeImportModal({
                   enginePreview={enginePreview}
                   enginePreviewLoading={enginePreviewLoading}
                   enginePreviewError={enginePreviewError}
+                  enginePreviewMessage={enginePreviewMessage}
+                  onRetryEnginePreview={()=>setEnginePreviewAttempt(attempt=>attempt+1)}
                   onBack={
                     knowledgeImport.goBackToUpload
                   }

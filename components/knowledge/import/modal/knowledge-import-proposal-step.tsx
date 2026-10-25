@@ -21,6 +21,8 @@ type Props = {
   enginePreview: KnowledgeEnginePreview | null;
   enginePreviewLoading: boolean;
   enginePreviewError: string | null;
+  enginePreviewMessage:string;
+  onRetryEnginePreview:()=>void;
   onBack: () => void;
   onConfirm: () => void;
 };
@@ -127,6 +129,8 @@ export function KnowledgeImportProposalStep({
   enginePreview,
   enginePreviewLoading,
   enginePreviewError,
+  enginePreviewMessage,
+  onRetryEnginePreview,
 }: Props) {
   const createdArticles =
     proposal.articles.filter(
@@ -224,10 +228,14 @@ export function KnowledgeImportProposalStep({
           </h4>
           {enginePreviewLoading ? (
             <p role="status" className="mt-2 text-xs text-blue-700">
-              Descubriendo tablas, extrayendo registros y verificando relaciones en todo el lote. No se ha escrito ningún registro.
+              {enginePreviewMessage || "Preparando tablas, registros y relaciones del lote"}. Todavía no se ha escrito ningún registro.
             </p>
           ) : enginePreviewError ? (
-            <p role="alert" className="mt-2 text-xs text-rose-700">{enginePreviewError} · Corrige el problema antes de confirmar.</p>
+            <div className="mt-2 space-y-2">
+              <p role="alert" className="text-xs text-rose-700">{enginePreviewError}</p>
+              <button type="button" onClick={onRetryEnginePreview} className="rounded-md border border-blue-300 px-3 py-2 text-xs font-medium text-blue-700">Reintentar Engine</button>
+              <p className="text-xs text-slate-500">Continúa con los documentos ya verificados, sin volver a subir los archivos.</p>
+            </div>
           ) : enginePreview?.status === "ready" ? (
             <div className="mt-3 space-y-3 text-xs">
               <p>{enginePreview.recordsToInsert} nuevos · {enginePreview.recordsToUpdate} por completar · {enginePreview.recordsToReuse} sin cambios.</p>
