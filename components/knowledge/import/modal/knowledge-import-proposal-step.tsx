@@ -13,6 +13,8 @@ import {
 
 import type { KnowledgeImportProposal } from "@/lib/knowledge/import/types";
 import { EnginePreviewPanel } from "./engine-preview-panel";
+import { sourceReports } from "@/lib/engine/knowledge-preview/reports";
+import { ImportPhaseReport } from "./import-phase-report";
 
 type Props = {
   proposal: KnowledgeImportProposal;
@@ -21,6 +23,7 @@ type Props = {
   importId: string;
   onBack: () => void;
   onConfirm: () => void;
+  onEngineBusyChange?: (busy: boolean) => void;
 };
 
 function getFolderPath(
@@ -123,6 +126,7 @@ export function KnowledgeImportProposalStep({
   proposal,
   error,
   importId,
+  onEngineBusyChange,
 }: Props) {
   const createdArticles =
     proposal.articles.filter(
@@ -214,10 +218,16 @@ export function KnowledgeImportProposalStep({
 
       <div className="mt-5 min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">
         <KnowledgeImportBatchSummary inventory={proposal.globalImportMap} />
+        {proposal.globalImportMap ? sourceReports(proposal.globalImportMap).map(report => <ImportPhaseReport key={report.title} report={report} />) : null}
+        <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          Al importar se guardarán {proposal.summary.totalDocuments} documentos, {createdArticles.length} artículos nuevos,
+          {" "}{updatedArticles.length} actualizaciones y {proposal.folders.length} carpetas en Knowledge.
+          Engine conserva únicamente una vista previa: su guardado está bloqueado porque aún no está implementado y validado en este flujo.
+        </p>
         <section className="rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/80 to-white p-5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-blue-700">Destino estructurado</p>
           <h4 className="mb-3 mt-1 text-[15px] font-semibold text-slate-950">Engine · datos de los documentos</h4>
-          {importId ? <EnginePreviewPanel importId={importId} /> : null}
+          {importId ? <EnginePreviewPanel key={importId} importId={importId} onBusyChange={onEngineBusyChange} /> : null}
         </section>
         {referenceDocuments.length > 0 ? (
           <section>

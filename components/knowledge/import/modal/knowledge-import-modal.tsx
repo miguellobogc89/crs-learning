@@ -292,6 +292,8 @@ export function KnowledgeImportModal({
     useRef<string | null>(null);
 
   const consumedSelectionRef = useRef<File[] | null>(null);
+  const automaticProposalRef = useRef<string | null>(null);
+  const [engineBusy, setEngineBusy] = useState(true);
 
   const knowledgeImport =
     useKnowledgeImport({
@@ -315,41 +317,57 @@ export function KnowledgeImportModal({
         file.status === "duplicate",
     ).length;
 
+  const { importId, step, isAnalyzing, error, canContinue, continueWithValidDocuments,
+    handleFilesChange, importReview, analyzeDocuments } = knowledgeImport;
+  const fileCount = knowledgeImport.files.length;
+  const failedFiles = knowledgeImport.progressSummary.failedFiles;
+
   useEffect(() => {
     if (!open) {
-      startedSelectionKeyRef.current =
-        null;
-      consumedSelectionRef.current = null;
       return;
     }
 
     if (
       !selectedFiles?.length ||
       consumedSelectionRef.current === selectedFiles ||
-      knowledgeImport.files.length > 0
+      fileCount > 0
     ) {
       return;
     }
 
     // Resetting the hook during cancellation must not reload the old selection.
     consumedSelectionRef.current = selectedFiles;
-    knowledgeImport.handleFilesChange(
+    handleFilesChange(
       selectedFiles,
     );
   }, [
     open,
     selectedFiles,
-    knowledgeImport.files.length,
-    knowledgeImport.handleFilesChange,
+    fileCount,
+    handleFilesChange,
   ]);
+
+  useEffect(() => {
+    if (!open || !importId || step !== "analyzing" ||
+        isAnalyzing || error || !canContinue ||
+        failedFiles > 0 ||
+        automaticProposalRef.current === importId) return;
+    const timer = setTimeout(() => {
+      automaticProposalRef.current = importId;
+      void continueWithValidDocuments();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [open, importId, step, isAnalyzing,
+    error, canContinue, failedFiles,
+    continueWithValidDocuments]);
 
   useEffect(() => {
     if (
       !open ||
       !selectionKey ||
-      knowledgeImport.importReview ||
-      knowledgeImport.step !== "upload" ||
-      knowledgeImport.files.length === 0 ||
+      importReview ||
+      step !== "upload" ||
+      fileCount === 0 ||
       startedSelectionKeyRef.current ===
         selectionKey
     ) {
@@ -359,14 +377,14 @@ export function KnowledgeImportModal({
     startedSelectionKeyRef.current =
       selectionKey;
 
-    void knowledgeImport.analyzeDocuments();
+    void analyzeDocuments();
   }, [
     open,
     selectionKey,
-    knowledgeImport.importReview,
-    knowledgeImport.step,
-    knowledgeImport.files.length,
-    knowledgeImport.analyzeDocuments,
+    importReview,
+    step,
+    fileCount,
+    analyzeDocuments,
   ]);
 
   if (!context) {
@@ -586,6 +604,7 @@ export function KnowledgeImportModal({
                     knowledgeImport.error
                   }
                   importId={knowledgeImport.importId ?? ""}
+                  onEngineBusyChange={setEngineBusy}
                   onBack={
                     knowledgeImport.goBackToUpload
                   }
@@ -646,7 +665,7 @@ export function KnowledgeImportModal({
               isConfirming={
                 knowledgeImport.isConfirming
               }
-              canConfirm
+              canConfirm={!engineBusy}
 
               canContinue={
                 knowledgeImport.canContinue

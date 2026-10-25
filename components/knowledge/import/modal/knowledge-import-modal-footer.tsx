@@ -46,8 +46,6 @@ export function KnowledgeImportModalFooter({
   step,
   fileCount,
   validFileCount,
-  duplicateFileCount,
-  failedFileCount,
   isAnalyzing,
   isConfirming,
   canConfirm = true,
@@ -122,7 +120,7 @@ export function KnowledgeImportModalFooter({
                 ? "Analizando documentos"
                 : validFileCount === 0
                   ? "No hay documentos válidos"
-                  : `Generar propuesta con ${validFileCount} ${
+                  : `Reanudar con ${validFileCount} ${
                       validFileCount ===
                       1
                         ? "documento"
@@ -182,7 +180,7 @@ export function KnowledgeImportModalFooter({
 
               {isConfirming
                 ? "Aplicando propuesta"
-                : "Confirmar incorporación"}
+                : "Importar solo en Knowledge"}
             </Button>
           </div>
         </div>

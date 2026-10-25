@@ -440,14 +440,81 @@ test("aborting stops further model calls and leaves unfinished documents pending
   assert.equal(h.plans.get("p").review_json.lease, null, "the run is released");
 });
 
-test("discovery reads the full batch when it fits, else one document per reviewed group, else fails explicitly", () => {
+test("discovery includes every segment, or refuses an oversized batch without sampling", () => {
   const h = harness();
   const segments = [
     { segmentId: "a", group: "Facturas", chars: 50 }, { segmentId: "b", group: "Facturas", chars: 80 }, { segmentId: "c", group: "Recetas", chars: 40 },
   ];
   assert.deepEqual(h.service.discoveryScope(segments, 1000), { segmentIds: ["a", "b", "c"], reason: null });
-  const scoped = h.service.discoveryScope(segments, 150);
-  assert.deepEqual(scoped.segmentIds, ["b", "c"]);
-  assert.match(scoped.reason, /2 de 3/);
+  assert.throws(() => h.service.discoveryScope(segments, 150), /No se han omitido documentos/);
   assert.throws(() => h.service.discoveryScope(segments, 100), /Divide el lote/);
+});
+
+test("automatic continuation advances pending checkpoints, never failed or reviewed work", async () => {
+  const { automaticPreviewKey } = load("lib/engine/knowledge-preview/pipeline.ts");
+  const h = harness();
+  const idle = await h.service.getKnowledgeEnginePreview(h.scope);
+  assert.equal(automaticPreviewKey(idle), "initial");
+  const pending = { ...idle, status: "incomplete" };
+  const key = automaticPreviewKey(pending);
+  assert.ok(key.includes("f0:doc:1"));
+  assert.notEqual(automaticPreviewKey({ ...pending, schema: {} }), key, "an accepted schema advances the checkpoint");
+  assert.equal(automaticPreviewKey({ ...pending, documents: [{ ...idle.documents[0], status: "failed" }] }), null);
+  assert.equal(automaticPreviewKey({ ...pending, documents: [{ ...idle.documents[0], status: "needs_review" }] }), null);
+  for (const status of ["running", "schema_failed", "needs_review", "ready", "not_applicable"])
+    assert.equal(automaticPreviewKey({ ...idle, status }), null);
+});
+
+test("batch conflicts and private labels prevent a ready preview even with individually verified documents", async () => {
+  const h = harness();
+  await h.service.runKnowledgeEnginePreview({ ...h.scope, mode: "continue" });
+  const stored = h.plans.get("p");
+  stored.review_json.documents["f0:doc:1"].records.find(record => record.ref === "r2").values.legal_name.value = "Otra razón social";
+  assert.equal((await h.service.getKnowledgeEnginePreview(h.scope)).status, "needs_review");
+  stored.review_json.documents["f0:doc:1"].records.find(record => record.ref === "r2").values.legal_name.value = "D'PLOCIA HELADOS, S.L.";
+  stored.review_json.schema.entities[0].description = "Datos de D'PLOCIA HELADOS, S.L.";
+  assert.equal((await h.service.getKnowledgeEnginePreview(h.scope)).status, "needs_review");
+});
+
+test("phase reports include readable values, original evidence, identities, roles, errors and telemetry", async () => {
+  const { engineReports } = load("lib/engine/knowledge-preview/reports.ts");
+  const h = harness({ answers: { "o2.pdf": "timeout" } });
+  const preview = await h.service.runKnowledgeEnginePreview({ ...h.scope, mode: "continue" });
+  const reports = engineReports(preview);
+  assert.deepEqual(reports.map(report => report.status), ["Validado", "Revisar", "Revisar"]);
+  assert.match(reports[0].text, /tax_id/);
+  assert.match(reports[1].text, /B72378581/);
+  assert.match(reports[1].text, /L\d+ «/);
+  assert.match(reports[1].text, /Sin respuesta/);
+  assert.match(reports[2].text, /Cliente/);
+  assert.match(reports[2].text, /5 llamadas/);
+  assert.match(reports[2].text, /Guardado en Engine bloqueado/);
+});
+
+test("a single non-ownership relation needs evidence even without competing roles", () => {
+  const invoice = INVOICES[0], text = textOf(invoice);
+  const raw = structuredClone(SCHEMA_RAW);
+  raw.relations = raw.relations.filter(relation => relation.key !== "invoice_customer");
+  const schema = schemaModule.validateDiscoveredSchema(raw, { types: [], relations: [] }).schema;
+  assert.ok(schema);
+  const answer = modelAnswer(invoice);
+  answer.links = answer.links.filter(link => link.relation !== "invoice_customer");
+  answer.links.find(link => link.relation === "invoice_issuer").roleEvidence = null;
+  const result = extraction.validateSegmentExtraction(answer, schema, evidence.sourceLines(text), bounds(text));
+  assert.ok(result.issues.some(issue => issue.code === "MISSING_RELATION_EVIDENCE"));
+  assert.equal(result.links.filter(link => link.relation === "invoice_issuer").length, 0);
+  assert.equal(result.links.filter(link => link.relation === "invoice_has_line").length, invoice.lines.length);
+});
+
+test("old checkpoints without non-ownership link evidence are marked for review without model calls", async () => {
+  const h = harness();
+  await h.service.runKnowledgeEnginePreview({ ...h.scope, mode: "continue" });
+  const stored = h.plans.get("p");
+  stored.review_json.documents["f0:doc:1"].links[0].roleEvidence = null;
+  const calls = h.state.calls.length;
+  const preview = await h.service.getKnowledgeEnginePreview(h.scope);
+  assert.equal(preview.status, "needs_review");
+  assert.equal(preview.documents[0].status, "needs_review");
+  assert.ok(preview.documents[0].issues.some(issue => issue.code === "MISSING_RELATION_EVIDENCE"));
+  assert.equal(h.state.calls.length, calls);
 });

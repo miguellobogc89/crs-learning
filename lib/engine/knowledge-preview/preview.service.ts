@@ -21,6 +21,7 @@ import { numberLines, sourceLines } from "./evidence";
 import { validateSegmentExtraction } from "./extraction";
 import { DISCOVERY_INSTRUCTIONS, EXTRACTION_INSTRUCTIONS } from "./prompts";
 import { privateLabelIssues, reconcileBatch, schemaSupport } from "./reconcile";
+import { batchNeedsReview, relationNeedsEvidence } from "./pipeline";
 import {
   DISCOVERY_OUTPUT_FORMAT, extractionOutputFormat, schemaForExtraction, validateDiscoveredSchema,
   type CatalogContext, type PreviewSchema, type SchemaIssue,
@@ -60,7 +61,7 @@ const EXTRACTION_TIMEOUT_MS = 100_000;
 const MIN_TIME_FOR_EXTRACTION_MS = 60_000;
 const LEASE_MS = 330_000;
 const WORKERS = 3;
-/** Above this the discovery call reads one representative per reviewed group (stated in the UI). */
+/** Hard limit: never silently leave batch differences out of discovery. */
 const DISCOVERY_FULL_TEXT_LIMIT = 120_000;
 const MAX_STORED_CALLS = 60;
 
@@ -140,26 +141,34 @@ function pendingDocument(segment: Segment): EnginePreviewDocument {
 function buildPreview(state: StoredState, segments: Segment[]): KnowledgeEnginePreview {
   const documents = segments.map(segment => {
     const stored = state.documents[segment.segmentId];
-    return stored && stored.schemaHash === state.schemaHash ? stored : pendingDocument(segment);
+    if (!stored || stored.schemaHash !== state.schemaHash) return pendingDocument(segment);
+    // Reassess old checkpoints under the stricter relation contract without another model call.
+    const missing = state.schema ? stored.links.filter(link => relationNeedsEvidence(state.schema!, link.relation) && !link.roleEvidence) : [];
+    if (!missing.length) return stored;
+    return { ...stored, status: "needs_review" as const, issues: [...stored.issues,
+      ...missing.map(link => ({ code: "MISSING_RELATION_EVIDENCE", path: `links.${link.relation}`, severity: "error" as const,
+        message: `${link.relation}: falta evidencia de la relación; compartir segmento no basta.` }))] };
   });
   const extracted = documents.filter(document => document.status === "verified" || document.status === "needs_review")
     .map(document => ({ segmentId: document.segmentId, fileName: document.fileName, records: document.records, links: document.links }));
   const schema = state.schema;
+  const clusters = schema ? reconcileBatch(schema, extracted) : [];
+  const labelIssues = schema ? privateLabelIssues(schema, extracted) : [];
   let status: EnginePreviewStatus;
   if (!segments.length) status = "not_applicable";
   else if (leaseActive(state)) status = "running";
   else if (state.schemaError || state.schemaIssues.length) status = "schema_failed";
   else if (!schema && !state.startedAt) status = "idle";
   else if (!schema || documents.some(document => document.status === "pending")) status = "incomplete";
-  else if (documents.some(document => document.status !== "verified")) status = "needs_review";
+  else if (documents.some(document => document.status !== "verified") || batchNeedsReview({ clusters, labelIssues })) status = "needs_review";
   else status = "ready";
   const calls = state.calls.map(call => ({ ...call, rawOutput: undefined }));
   return {
     version: 2, status, savedToEngine: false, startedAt: state.startedAt, updatedAt: state.updatedAt,
     schema, schemaIssues: state.schemaIssues, schemaError: state.schemaError, discoveryScope: state.discoveryScope,
     support: schema ? schemaSupport(schema, extracted) : null,
-    labelIssues: schema ? privateLabelIssues(schema, extracted) : [],
-    documents, clusters: schema ? reconcileBatch(schema, extracted) : [], calls,
+    labelIssues,
+    documents, clusters, calls,
     totals: {
       calls: state.calls.length,
       durationMs: state.calls.reduce((total, call) => total + call.durationMs, 0),
@@ -289,23 +298,11 @@ async function catalogContext(workspaceId: string): Promise<CatalogContext> {
   };
 }
 
-/** Full text of every structured document when it fits; otherwise one per reviewed group, stated explicitly. */
+/** Every segment participates in schema discovery; oversized batches fail explicitly. */
 export function discoveryScope(segments: Array<Pick<Segment, "segmentId" | "group" | "chars">>, limit = DISCOVERY_FULL_TEXT_LIMIT) {
   const total = segments.reduce((sum, segment) => sum + segment.chars, 0);
   if (total <= limit) return { segmentIds: segments.map(segment => segment.segmentId), reason: null };
-  const byGroup = new Map<string, Pick<Segment, "segmentId" | "group" | "chars">>();
-  for (const segment of segments) {
-    const key = segment.group ?? segment.segmentId;
-    const current = byGroup.get(key);
-    if (!current || segment.chars > current.chars) byGroup.set(key, segment);
-  }
-  const chosen = [...byGroup.values()];
-  if (chosen.reduce((sum, segment) => sum + segment.chars, 0) > limit)
-    throw new Error("Los documentos estructurados son demasiado extensos para proponer un esquema común en una sola lectura. Divide el lote.");
-  return {
-    segmentIds: chosen.map(segment => segment.segmentId),
-    reason: `El esquema se propuso leyendo ${chosen.length} de ${segments.length} documentos (uno por grupo de la revisión) porque el lote completo supera ${limit.toLocaleString("es-ES")} caracteres. Todos los documentos se extraen y verifican igualmente.`,
-  };
+  throw new Error(`El lote supera ${limit.toLocaleString("es-ES")} caracteres para el esquema común. Divide el lote. No se han omitido documentos ni truncado sus textos.`);
 }
 
 export async function runKnowledgeEnginePreview(input: Scope & {

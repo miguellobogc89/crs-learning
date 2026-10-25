@@ -7,6 +7,7 @@
  */
 import { checkValue, identityToken, resolveSpan, type ResolvedSpan, type SegmentBounds, type TypedValue } from "./evidence";
 import type { PreviewSchema } from "./schema";
+import { relationNeedsEvidence } from "./pipeline";
 
 export type ExtractedValue = { value: TypedValue; written: string; evidence: ResolvedSpan };
 export type ExtractedRecord = { ref: string; entity: string; values: Record<string, ExtractedValue>; identityComplete: boolean };
@@ -116,6 +117,9 @@ export function validateSegmentExtraction(
     }
     if (relation.roleEvidenceRequired && !roleEvidence) {
       error("MISSING_ROLE_EVIDENCE", path, `${relation.name} (${from.ref} → ${to.ref}): falta la cita que muestra el rol.`); continue;
+    }
+    if (relationNeedsEvidence(schema, relation.key) && !roleEvidence) {
+      error("MISSING_RELATION_EVIDENCE", path, `${relation.name} (${from.ref} → ${to.ref}): falta evidencia de la relación; compartir segmento no basta.`); continue;
     }
     if (links.some(link => link.relation === relation.key && link.from === from.ref && link.to === to.ref)) {
       error("DUPLICATE_LINK", path, `${relation.name} (${from.ref} → ${to.ref}) está repetido.`); continue;

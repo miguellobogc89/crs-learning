@@ -1,6 +1,8 @@
 "use client";
 
 import { KnowledgeImportBatchSummary } from "./knowledge-import-batch-summary";
+import { sourceReports } from "@/lib/engine/knowledge-preview/reports";
+import { ImportPhaseReport } from "./import-phase-report";
 import type { ImportInventory } from "@/lib/knowledge/import/build-import-map";
 import Image from "next/image";
 
@@ -183,6 +185,10 @@ export function KnowledgeImportProcessingStep({
 
       <div className="mt-5 min-h-0 flex-1 overflow-y-auto pr-1">
         <div className="mb-4"><KnowledgeImportBatchSummary inventory={inventory} /></div>
+        <div className="mb-4 space-y-3">{inventory ? sourceReports(inventory).map(report => <ImportPhaseReport key={report.title} report={report} />) :
+          <ImportPhaseReport report={{ title: "1 · Preparación de fuentes", status: error ? "Revisar" : "En curso",
+            input: `${totalFiles} archivos seleccionados.`, validation: "Subida, duplicados y extracción de texto por archivo.",
+            text: files.map(file => `${file.name}: ${getFileStatusLabel(file)}`).join("\n") || "Preparando la selección." }} />}</div>
         <div className="space-y-2">
           {files.map((file) => {
             const isCompleted =

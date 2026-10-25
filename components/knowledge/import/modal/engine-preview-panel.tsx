@@ -8,6 +8,9 @@ import type {
 } from "@/lib/engine/knowledge-preview/types";
 import type { ExtractedRecord } from "@/lib/engine/knowledge-preview/extraction";
 import type { PreviewEntity } from "@/lib/engine/knowledge-preview/schema";
+import { automaticPreviewKey } from "@/lib/engine/knowledge-preview/pipeline";
+import { engineReports } from "@/lib/engine/knowledge-preview/reports";
+import { ImportPhaseReport } from "./import-phase-report";
 
 type StreamEvent = EnginePreviewEvent | { type: "heartbeat"; seconds: number };
 
@@ -175,7 +178,7 @@ function DocumentCard({ document, preview, busy, onRetry }: {
   );
 }
 
-export function EnginePreviewPanel({ importId }: { importId: string }) {
+export function EnginePreviewPanel({ importId, onBusyChange }: { importId: string; onBusyChange?: (busy: boolean) => void }) {
   const [preview, setPreview] = useState<KnowledgeEnginePreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -183,6 +186,8 @@ export function EnginePreviewPanel({ importId }: { importId: string }) {
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  const attemptedCheckpoints = useRef(new Set<string>());
+  const stoppedRef = useRef(false);
 
   const refresh = useCallback(async () => {
     const response = await fetch(`/api/knowledge/import/${encodeURIComponent(importId)}/engine-preview`, { cache: "no-store" });
@@ -194,9 +199,11 @@ export function EnginePreviewPanel({ importId }: { importId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    refresh().catch(cause => { if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause)); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; controllerRef.current?.abort(); };
+    const timer = setTimeout(() => {
+      void refresh().catch(cause => { if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause)); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    }, 0);
+    return () => { cancelled = true; clearTimeout(timer); controllerRef.current?.abort(); };
   }, [refresh]);
 
   // A run started elsewhere (another tab) is followed, never duplicated.
@@ -207,7 +214,7 @@ export function EnginePreviewPanel({ importId }: { importId: string }) {
   }, [preview?.status, refresh, running]);
 
   const run = useCallback(async (mode: EnginePreviewRunMode, segmentId?: string) => {
-    controllerRef.current?.abort();
+    if (controllerRef.current) return;
     const controller = new AbortController();
     controllerRef.current = controller;
     setRunning(true); setError(null); setSeconds(0);
@@ -218,13 +225,18 @@ export function EnginePreviewPanel({ importId }: { importId: string }) {
         headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({ mode, segmentId }),
       });
+      let terminal = false;
       await readStream(response, event => {
         if (controller.signal.aborted) return;
         if (event.type === "progress") setMessage(event.message);
         else if (event.type === "heartbeat") setSeconds(event.seconds);
-        else if (event.type === "state" || event.type === "completed") setPreview(event.preview);
-        else if (event.type === "error") { setError(event.error); if (event.preview) setPreview(event.preview); }
+        else if (event.type === "state" || event.type === "completed") {
+          if (event.type === "completed") terminal = true;
+          setPreview(event.preview);
+        }
+        else if (event.type === "error") { terminal = true; setError(event.error); if (event.preview) setPreview(event.preview); }
       });
+      if (!terminal && !controller.signal.aborted) throw new Error("La conexión terminó antes de recibir el resultado. Reanuda para recuperar los checkpoints guardados.");
     } catch (cause) {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "No se pudo analizar Engine.");
     } finally {
@@ -236,19 +248,42 @@ export function EnginePreviewPanel({ importId }: { importId: string }) {
     }
   }, [importId, refresh]);
 
-  const stop = () => { controllerRef.current?.abort(); setMessage("Deteniendo… lo ya verificado se conserva"); };
+  useEffect(() => {
+    if (!preview || loading || running || error || stoppedRef.current) return;
+    const key = automaticPreviewKey(preview);
+    if (!key || attemptedCheckpoints.current.has(key)) return;
+    // Defer so Strict Mode's setup/cleanup probe cannot launch an aborted run.
+    const timer = setTimeout(() => {
+      attemptedCheckpoints.current.add(key);
+      void run("continue");
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [preview, loading, running, error, run]);
+
+  const stop = () => { stoppedRef.current = true; controllerRef.current?.abort(); setMessage("Deteniendo… lo ya verificado se conserva"); };
+
+  useEffect(() => {
+    const timer = setTimeout(() => onBusyChange?.(loading || running || preview?.status === "running" || (preview?.status === "idle" && !error)), 0);
+    return () => clearTimeout(timer);
+  }, [loading, running, preview?.status, error, onBusyChange]);
 
   if (loading) {
     return <p className="text-[11px] text-slate-500"><Loader2 className="mr-1.5 inline size-3 animate-spin" />Consultando Engine…</p>;
   }
   if (!preview) {
-    return <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-700">{error ?? "No se pudo leer Engine."}</p>;
+    return <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-[11px] text-rose-700">
+      {error ?? "No se pudo leer Engine."}
+      <button type="button" className="ml-2 rounded border px-2 py-1" onClick={() => {
+        setError(null); setLoading(true);
+        void refresh().catch(cause => setError(cause instanceof Error ? cause.message : String(cause))).finally(() => setLoading(false));
+      }}>Reintentar consulta</button>
+    </div>;
   }
   if (preview.status === "not_applicable") {
     return (
-      <p className="rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-600">
-        La revisión del lote no ha marcado ningún documento con datos estructurados para Engine. Las fuentes y los artículos propuestos se conservan en Knowledge.
-      </p>
+      <ImportPhaseReport report={{ title: "3 · Engine sin candidatos", status: "Validado",
+        input: "Destinos de la revisión conjunta.", validation: "Ningún segmento está marcado para extracción estructurada.",
+        text: "No se ejecutan esquema, extracción ni conciliación en Engine. Los documentos y artículos siguen propuestos para Knowledge. No se ha importado nada todavía." }} />
     );
   }
 
@@ -261,6 +296,7 @@ export function EnginePreviewPanel({ importId }: { importId: string }) {
 
   return (
     <div className="space-y-4">
+      {engineReports(preview).map(report => <ImportPhaseReport key={report.title} report={report} />)}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="max-w-2xl">
           <p className="text-[11px] leading-5 text-slate-600">
@@ -302,9 +338,9 @@ export function EnginePreviewPanel({ importId }: { importId: string }) {
                   Volver a analizar todo
                 </button>
               ) : (
-                <button type="button" onClick={() => void run("continue")} className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-700">
+                <button type="button" onClick={() => { stoppedRef.current = false; void run("continue"); }} className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-700">
                   <Database className="size-3" />
-                  {preview.status === "idle" ? "Analizar documentos estructurados" : preview.status === "schema_failed" ? "Proponer de nuevo el esquema" : "Continuar el análisis"}
+                  {preview.status === "idle" ? "Reanudar análisis automático" : preview.status === "schema_failed" ? "Reintentar esquema" : "Reanudar pendientes y fallidos"}
                 </button>
               )}
             </div>

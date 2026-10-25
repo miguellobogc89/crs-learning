@@ -27,6 +27,6 @@ export const EXTRACTION_INSTRUCTIONS = [
   "line / endLine: the line numbers where that value is written (usually one line). text: the characters copied exactly from those lines, without the line number, containing the value as written in the document.",
   "Each value has its own evidence. Never join pieces from distant lines, never compute, sum, convert units or infer a value that is not written. Omit fields that are not written.",
   "Every record of an entity with ownedBy must be linked from its owner through that relation.",
-  "roleEvidence: for relations marked roleEvidenceRequired, cite the lines that show the role (for example the label next to the party). Otherwise use null unless a specific line states the relationship.",
+  "roleEvidence: for relations marked roleEvidenceRequired, cite the lines that show the role (for example the label next to the party). For every other relation except an entity's ownedBy relation, also cite evidence that establishes the relationship. Sharing a document or segment alone is not evidence. Do not require both endpoint identities in a single contiguous quote. Ownership of detail rows may use null.",
   "Do not omit lines or items to save space. Put doubts in warnings.",
 ].join("\n");
