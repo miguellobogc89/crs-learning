@@ -6,14 +6,15 @@ import ts from 'typescript';
 const require=createRequire(import.meta.url);
 function load(file,deps={}){const m={exports:{}};new Function('require','module','exports',ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText)(n=>{if(n in deps)return deps[n];throw Error(n);},m,m.exports);return m.exports;}
 const contract=load('lib/knowledge/intake/extractor/contract.ts');
+const layout=load('lib/knowledge/intake/extractor/layout.ts');
 const fixture=()=>({paginas:[{numero:1,bloques:[
  {tipo:'texto',texto:'Empresa emisora\nCliente identificado'},
  {tipo:'tabla',columnas:['Cantidad','Descripción','PRECIO UNITARIO','TOTAL €'],filas:[['2','Confección, mano de obra y montaje','','789,26 €']]},
  {tipo:'texto',texto:'Subtotal 789,26 €\nIVA 21 % 165,74 €\nTOTAL 955,00 €'}],incidencias:[]}]});
 function visual(response,requests=[]){return load('lib/knowledge/intake/extractor/extract.ts',{
- 'node:path':require('node:path'),unpdf:{getDocumentProxy:async()=>({numPages:1,destroy:async()=>{}})},xlsx:require('xlsx'),'./contract':contract,
+ 'node:path':require('node:path'),unpdf:{getDocumentProxy:async()=>({numPages:1,destroy:async()=>{}})},xlsx:require('xlsx'),'./contract':contract,'./layout':layout,
  '@/lib/knowledge/documents/extract-document-text':{extractDocumentText:()=>{throw Error('PDF must not be flattened');}},
- '@/lib/ai/openai':{getKnowledgeImportModel:()=> 'vision-model',getOpenAIClient:()=>({responses:{create:async(...args)=>{requests.push(args);return response;}}})}
+ '@/lib/ai/openai':{getKnowledgeImportModel:()=> 'vision-model',getOpenAIClient:()=>({responses:{create:async(...args)=>{requests.push(args);return Array.isArray(response)?response[Math.min(requests.length-1,response.length-1)]:response;}}})}
 });}
 test('PDF passes original bytes as native visual input, never falls back to flattened text',async()=>{
  const requests=[];const service=visual({status:'completed',output_text:JSON.stringify(fixture())},requests);
@@ -66,4 +67,39 @@ test('lost lease cannot save a file or publish extraction',async()=>{
 test('CSV identifiers and decimal strings are not coerced into numbers',async()=>{
  const service=visual({});const result=await service.extractDocument(Buffer.from('Id;Importe;Vacío\n0012;789,26;\n'),'source.csv');
  const row=result.paginas[0].bloques[1].filas[1];assert.equal(row[0],'0012');assert.equal(row[1],'789,26');assert.equal(row[2],'');
+});
+function receiptPages() {
+ const columnas=['Descripción','Unid.','P.Unitario','B.Imp.','IVA','Cuota IVA','Importe'];
+ return [{numero:1,bloques:[
+  {tipo:'tabla',columnas,filas:[['LECHE ENTERA S/LACT','2','6,0000','12,0000','4%','0,4800','12,4800'],['LECHE ENTERA P6','10','9,0000','90,0000','4%','3,6000','93,6000'],['FREGONA HILO MIR.','1','2,3141','2,3141','21%','0,4860','2,8000']]},
+  {tipo:'texto',texto:'TOTAL (€)\n104,31          4,57          108,88'},
+  {tipo:'texto',texto:'Segunda operación'},
+  {tipo:'tabla',columnas,filas:[['LECHE ENTERA P6','2','9,0000','18,0000','4%','0,7200','18,7200'],['LECHE ENTERA S/LACT','3','6,0000','18,0000','4%','0,7200','18,7200'],['FRIEGASUELOS PINO','3','0,7851','2,3554','21%','0,4946','2,8500'],['LEJIA DETERG.LIMON','3','0,9504','2,8512','21%','0,5988','3,4500']]},
+  {tipo:'texto',texto:'TOTAL (€)\n41,21          2,53          43,74'}
+ ],incidencias:[]}];
+}
+function correctedReceipts() {
+ const p=receiptPages();p[0].bloques[0].filas.push(['TOTAL (€)','','','104,31','','4,57','108,88']);p[0].bloques[3].filas.push(['TOTAL (€)','','','41,21','','2,53','43,74']);p[0].bloques=p[0].bloques.filter(b=>b.tipo==='tabla'||b.texto==='Segunda operación');return p;
+}
+test('detects detached summary rows generically without invoice-specific words',()=>{
+ assert.equal(layout.detachedTableRows(receiptPages()).length,2);assert.equal(layout.detachedTableRows(correctedReceipts()).length,0);
+ const p=receiptPages();p[0].bloques[1].texto='Balance\n104,31 4,57 108,88';assert.equal(layout.detachedTableRows(p).length,2);
+ p[0].bloques[1].texto='El plazo de entrega es de 2 a 4 días';assert.equal(layout.detachedTableRows(p).length,1);
+});
+test('conditional visual review preserves seven items and restores each total to its original columns',async()=>{
+ const requests=[];const output=p=>({status:'completed',output_text:JSON.stringify({paginas:p})});
+ const service=visual([output(receiptPages()),output(correctedReceipts())],requests);
+ const bytes=Buffer.from('%PDF-original');const result=await service.extractDocument(bytes,'scan.pdf');
+ assert.equal(requests.length,2);assert.equal(requests[0][0].input[0].content[0].file_data,requests[1][0].input[0].content[0].file_data);
+ const tables=result.paginas[0].bloques.filter(b=>b.tipo==='tabla');assert.equal(tables[0].filas.length,4);assert.equal(tables[1].filas.length,5);
+ assert.equal(tables[0].filas[3][3],'104,31');assert.equal(tables[0].filas[3][5],'4,57');assert.equal(tables[0].filas[3][6],'108,88');assert.equal(tables[1].filas[4][6],'43,74');
+});
+test('correctly structured input uses one model call, not a mandatory second pass',async()=>{
+ const requests=[];await visual({status:'completed',output_text:JSON.stringify({paginas:correctedReceipts()})},requests).extractDocument(Buffer.from('pdf'),'scan.pdf');assert.equal(requests.length,1);
+});
+test('failed correction is bounded and cannot silently discard totals or detail rows',async()=>{
+ const raw={status:'completed',output_text:JSON.stringify({paginas:receiptPages()})};const requests=[];
+ await assert.rejects(()=>visual([raw,raw],requests).extractDocument(Buffer.from('pdf'),'scan.pdf'),/conservado|sin columnas/);assert.equal(requests.length,2);
+ const missing=correctedReceipts();missing[0].bloques[0].filas.pop();assert.throws(()=>layout.assertTableRepairPreserves(receiptPages(),missing),/resumen/);
+ const changed=correctedReceipts();changed[0].bloques[0].filas[0][3]='99';assert.throws(()=>layout.assertTableRepairPreserves(receiptPages(),changed),/detalle/);
 });
