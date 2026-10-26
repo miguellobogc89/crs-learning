@@ -36,6 +36,37 @@ export function hybridSources(units: IntakeUnit[], raw: unknown): { sources: Sou
   }
   return { sources, excluded };
 }
+/** Resolve only declared evidence paths. Quotes are cut from the original, never rewritten. */
+export function resolveStructureEvidence(raw: unknown, sources: Source[]): unknown {
+  if (!obj(raw)) return raw;
+  const byId = new Map(sources.map(source => [source.id, source]));
+  function evidence(value: unknown) {
+    if (!Array.isArray(value)) return value;
+    return value.map(item => {
+      if (!obj(item) || Object.keys(item).some(k => !["documentId", "startLine", "endLine"].includes(k)) ||
+          typeof item.documentId !== "string" || !Number.isInteger(item.startLine) || !Number.isInteger(item.endLine)) {
+        throw new Error("La evidencia debe señalar documentId, startLine y endLine; no transcribir citas");
+      }
+      const source = byId.get(item.documentId);
+      if (!source) throw new Error(`Fuente de evidencia desconocida: ${item.documentId}`);
+      const starts = [0];
+      for (let i = 0; i < source.text.length; i++) if (source.text[i] === "\n") starts.push(i+1);
+      const start = item.startLine as number, end = item.endLine as number;
+      if (start < 1 || end < start || end > starts.length) throw new Error(`Rango de evidencia inválido: ${item.documentId}:${start}-${end}`);
+      let finish = end < starts.length ? starts[end]-1 : source.text.length;
+      if (source.text[finish-1] === "\r") finish--;
+      const quote = source.text.slice(starts[start-1],finish);
+      if (!quote.trim()) throw new Error("La evidencia señala únicamente líneas vacías");
+      return { documentId: item.documentId, startLine: start, endLine: end, quote };
+    });
+  }
+  function node(item: unknown): unknown {
+    if (!obj(item)) return item;
+    return { ...item, evidence: evidence(item.evidence),
+      ...(Array.isArray(item.fields) ? { fields: item.fields.map(node) } : {}) };
+  }
+  return { ...raw, ...Object.fromEntries(["entities", "relations", "pending"].filter(k => Array.isArray(raw[k])).map(k => [k, (raw[k] as unknown[]).map(node)])) };
+}
 export function validateStructureOutput(raw: unknown, sources: Source[], catalog: Catalog, workspaceId: string, loteId: string) {
   if (!obj(raw) || Object.keys(raw).some(k => !["entities", "relations", "warnings", "coverage", "pending"].includes(k))) throw new Error("La salida solo admite estructuras y cobertura, sin registros");
   const checked = validateSchemaDiscovery({ workspaceId, documents: sources.map(s => ({ id: s.id, workspaceId, extractedText: s.text })), proposal: raw });
@@ -83,11 +114,11 @@ export function validateStructureOutput(raw: unknown, sources: Source[], catalog
     const evidence = item.evidence.map(e => {
       if (!obj(e) || typeof e.documentId !== "string" || typeof e.quote !== "string" || !e.quote.trim() ||
           !sources.some(s => s.id === e.documentId && s.text.includes(e.quote as string))) throw new Error("Pendiente sin evidencia verificable");
-      return { documentId: e.documentId, quote: e.quote };
+      return { documentId: e.documentId, quote: e.quote, ...(typeof e.startLine === "number" ? { startLine: e.startLine, endLine: e.endLine } : {}) };
     });
     return { concept: item.concept, reason: item.reason, candidateTables: item.candidateTables as string[], evidence };
   });
-  return { version: 2, module: "business_structure_discovery", loteId, definitionScope: "global", recordScope: "workspace", tables, relations, coverage, pending, warnings: proposal.warnings,
+  return { version: 3, module: "business_structure_discovery", loteId, definitionScope: "global", recordScope: "workspace", tables, relations, coverage, pending, warnings: proposal.warnings,
     sources: sources.map(({ id, unitId, origen }) => ({ id, unitId, origen })), writesPerformed: { definitions: false, records: false } };
 }
 export type StructureOutput = ReturnType<typeof validateStructureOutput>;

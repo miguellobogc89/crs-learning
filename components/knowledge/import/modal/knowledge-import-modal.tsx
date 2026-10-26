@@ -11,7 +11,7 @@ async function read(response: Response) {
   return body;
 }
 export function KnowledgeImportModal({ open, context, onOpenChange, selectedFiles, resumeImportId }: KnowledgeImportModalProps) {
-  const [structureState, setStructureState] = useState<{ estado: string; resultado: unknown; error: string | null; recuperable?: boolean } | null>(null);
+  const [structureState, setStructureState] = useState<{ estado: string; resultado: unknown; error: string | null; recuperable?: boolean; excludeCatalogKeys?: string[] } | null>(null);
   const [excludedTables, setExcludedTables] = useState("");
   const [showStructures, setShowStructures] = useState(false);
   const [structurePoll, setStructurePoll] = useState(0);
@@ -66,10 +66,11 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
   }, [open, id, state?.resultado, structurePoll]);
   async function discoverStructures(rerun = false) {
     if (!id) return;
+    const requestedExclusions = rerun ? excludedTables.split(",").map(k => k.trim()).filter(Boolean) : structureState?.excludeCatalogKeys ?? [];
     setError(null); setShowStructures(true);
     setStructureState({ estado: "running", resultado: null, error: null });
     try {
-      await read(await fetch(`/api/knowledge/intake/${id}/structures`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ excludeCatalogKeys: excludedTables.split(",").map(k => k.trim()).filter(Boolean), rerun }) }));
+      await read(await fetch(`/api/knowledge/intake/${id}/structures`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ excludeCatalogKeys: requestedExclusions, rerun }) }));
       setStructurePoll(n => n+1);
     } catch(e) { setStructureState(null); setError(e instanceof Error ? e.message : "Error al descubrir estructuras"); }
   }

@@ -21,7 +21,7 @@ export async function GET(_request: Request, context: Context) {
   const found = await authorized(context);
   if (!found) return NextResponse.json({ error: "Lote no encontrado" }, { status: 404 });
   const state = (found.batch.proposal_json as StoredIntake | null)?.structureDiscovery;
-  return NextResponse.json({ estado: state?.status === "completed" && state.revision !== DISCOVERY_REVISION ? "pending" : state?.status ?? "pending", resultado: state?.revision === DISCOVERY_REVISION ? state?.result ?? null : null, error: state?.error ?? null,
+  return NextResponse.json({ estado: state?.status === "completed" && state.revision !== DISCOVERY_REVISION ? "pending" : state?.status ?? "pending", resultado: state?.revision === DISCOVERY_REVISION ? state?.result ?? null : null, error: state?.error ?? null, excludeCatalogKeys: state?.excludeCatalogKeys ?? [],
     recuperable: state?.status === "running" && Date.now()-Date.parse(state.lease) > 360000 });
 }
 export async function POST(_request: Request, context: Context) {

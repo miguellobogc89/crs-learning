@@ -50,10 +50,10 @@ test('whole-batch service excludes Knowledge, uses only global catalog and retri
  const service=load('lib/knowledge/intake/structures/discover.ts',{'@prisma/client':{},'@/lib/prisma':{prisma:db},'./contract':contract,'@/lib/ai/openai':{getKnowledgeImportModel:()=> 'test',getOpenAIClient:()=>({responses:{create:async request=>{
   const data=JSON.parse(request.input);assert.match(request.input,/JSON/);calls++;
   if(calls===1){assert.equal(data.data.length,1);assert.equal(data.data[0].id,'u3');return {status:'completed',output_text:JSON.stringify({unidades:[{id:'u3',rangos:[{inicio:2,fin:2}],motivo:''}]})};}
-  assert.equal(data.data.sources.length,2);assert.ok(data.data.sources.every(s=>!s.text.includes('Abrir el local')));
+  assert.equal(data.data.sources.length,2);assert.ok(data.data.sources.every(s=>s.lines.every(l=>!l.text.includes('Abrir el local'))));
   assert.equal(data.data.catalog.tables[0].key,'product');
   if(fail)throw Error('timeout');
-  const p=proposal();p.entities[0].evidence.push({documentId:'u3:span:1',quote:'Artículo: pelota'});p.coverage.push({sourceId:'u3:span:1',tables:['product'],pendingReason:''});return {status:'completed',output_text:JSON.stringify(p)};
+  const p=proposal();p.entities[0].evidence.push({documentId:'u3:span:1',quote:'Artículo: pelota'});p.coverage.push({sourceId:'u3:span:1',tables:['product'],pendingReason:''});return {status:'completed',output_text:JSON.stringify(JSON.parse(JSON.stringify(p), (key,value)=> key === 'evidence' ? value.map(e=>({documentId:e.documentId,startLine:1,endLine:1})) : value))};
  }}})}});
  await service.discoverIntakeStructures('b','w',checkpoint,'lease');assert.equal(saved.structureDiscovery.status,'error');assert.equal(saved.structureDiscovery.sources.length,2);
  fail=false;await service.discoverIntakeStructures('b','w',{...saved,structureDiscovery:{...saved.structureDiscovery,status:'running'}},'lease');
@@ -93,18 +93,18 @@ test('test catalog hides invoice_line and incident relations without mutating sh
 test('uncertain ownership is represented explicitly with literal evidence, not an arbitrary new field',()=>{
  const p=proposal({pending:[{concept:'cuenta de pago',candidateTables:['product','organization'],reason:'La fuente no determina el propietario',evidence}]});
  const result=contract.validateStructureOutput(p,[source],catalog,'w','b');
- assert.equal(result.pending.length,1);assert.equal(result.tables[0].action,'reuse');assert.equal(result.version,2);
+ assert.equal(result.pending.length,1);assert.equal(result.tables[0].action,'reuse');assert.equal(result.version,3);
  assert.throws(()=>contract.validateStructureOutput(proposal({pending:[{...p.pending[0],evidence:[{documentId:'u1',quote:'inventado'}]}]}),[source],catalog,'w','b'),/evidencia/);
 });
 test('rerun can replace a completed result with different test settings but preserves prepared inputs',async()=>{
  let next;let scheduled=0;
- const payload={resultado:{version:2,loteId:'b',unidades:[]},structureDiscovery:{status:'completed',revision:2,lease:'old',excludeCatalogKeys:[],sources:[],catalog:{tables:[],relations:[]},result:{version:2}}};
+ const payload={resultado:{version:2,loteId:'b',unidades:[]},structureDiscovery:{status:'completed',revision:3,lease:'old',excludeCatalogKeys:[],sources:[],catalog:{tables:[],relations:[]},result:{version:2}}};
  const route=load('app/api/knowledge/intake/[importId]/structures/route.ts',{
   '@prisma/client':{},'next/server':{NextResponse:{json:(body,opts={})=>({body,status:opts.status??200})},after:()=>scheduled++},
   '@/auth':{auth:async()=>({user:{id:'owner'}})},'@/lib/services/workspace.service':{getActiveWorkspaceContext:async()=>({activeWorkspace:{id:'w'}})},
   '@/lib/knowledge/access-control':{knowledgeLibraryWriteWhere:()=>({workspace_id:'w'})},
   '@/lib/prisma':{prisma:{knowledge_imports:{findFirst:async()=>({id:'b',status:'intake_completed',proposal_json:payload}),updateMany:async args=>{next=args.data.proposal_json;return {count:1};}}}},
-  '@/lib/knowledge/intake/structures/discover':{DISCOVERY_REVISION:2,discoverIntakeStructures:async()=>{}}
+  '@/lib/knowledge/intake/structures/discover':{DISCOVERY_REVISION:3,discoverIntakeStructures:async()=>{}}
  });
  const context={params:Promise.resolve({importId:'b'})};
  const options=async value=>route.POST({text:async()=>JSON.stringify(value)},context);
@@ -112,4 +112,29 @@ test('rerun can replace a completed result with different test settings but pres
  assert.equal((await options({excludeCatalogKeys:['invoice_line'],rerun:true})).status,202);
  assert.deepEqual(next.structureDiscovery.excludeCatalogKeys,['invoice_line']);assert.equal(next.structureDiscovery.result,undefined);assert.deepEqual(next.structureDiscovery.sources,[]);assert.equal(scheduled,1);
  assert.equal((await options({excludeCatalogKeys:'invoice_line'})).status,400);
+});
+test('server slices evidence for entities, fields, relations and pending without paraphrasing source',()=>{
+ const text='Cantidad PRECIO UNITARIO TOTAL €\n2 789,26€\nCOLOR MARRÓN CHO-\nCOLATE';
+ const s={...source,text};
+ const range={documentId:'u1',startLine:3,endLine:4};
+ const p=proposal({pending:[{concept:'concepto incierto',candidateTables:['product'],reason:'Ubicación incierta',evidence:[range]}]});
+ p.entities[0].evidence=[range];p.entities[0].fields[0].evidence=[{documentId:'u1',startLine:1,endLine:2}];
+ p.relations=[{key:'related_products',fromEntity:'product',toEntity:'product',cardinality:'many_to_many',description:'Vínculo',evidence:[range]}];
+ const before=JSON.stringify(p);const resolved=contract.resolveStructureEvidence(p,[s]);
+ assert.equal(resolved.entities[0].evidence[0].quote,'COLOR MARRÓN CHO-\nCOLATE');
+ assert.equal(resolved.entities[0].fields[0].evidence[0].quote,'Cantidad PRECIO UNITARIO TOTAL €\n2 789,26€');
+ assert.equal(resolved.relations[0].evidence[0].quote,'COLOR MARRÓN CHO-\nCOLATE');
+ assert.equal(JSON.stringify(p),before);
+ assert.equal(contract.validateStructureOutput(resolved,[s],catalog,'w','b').pending[0].evidence[0].startLine,3);
+});
+test('evidence resolver preserves CRLF and rejects invented source IDs, ranges, blank lines and model quotes',()=>{
+ const s={...source,text:'uno\r\ndos\r\n\r\ncuatro'};
+ const resolve=ref=>contract.resolveStructureEvidence({entities:[{evidence:[ref]}]},[s]).entities[0].evidence[0];
+ assert.equal(resolve({documentId:'u1',startLine:1,endLine:2}).quote,'uno\r\ndos');
+ for(const ref of [
+  {documentId:'unknown',startLine:1,endLine:1},{documentId:'u1',startLine:0,endLine:1},
+  {documentId:'u1',startLine:1,endLine:5},{documentId:'u1',startLine:2,endLine:1},
+  {documentId:'u1',startLine:1.1,endLine:2},{documentId:'u1',startLine:3,endLine:3},
+  {documentId:'u1',startLine:1,endLine:1,quote:'reformulado'}
+ ])assert.throws(()=>resolve(ref));
 });
