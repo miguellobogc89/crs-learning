@@ -1,3 +1,4 @@
+import { EXTRACTOR_UPLOAD_TYPE } from "@/lib/knowledge/intake/extractor/contract";
 import { isSupportedKnowledgeDocument } from "@/lib/knowledge/import/supported-formats";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
@@ -26,15 +27,16 @@ export async function POST(request: Request) {
     if (!inventory.files.length) throw new Error("No hay documentos compatibles");
     const unsupported = inventory.files.filter(file => !isSupportedKnowledgeDocument(file.fileName));
     if (unsupported.length) throw new Error(`Formatos no admitidos: ${unsupported.map(f => f.fileName).join(", ")}`);
+    if (inventory.files.some(f => f.fileName.toLowerCase().endsWith(".pdf") && f.content.byteLength > 20*1024*1024)) throw new Error("Cada PDF admite un máximo de 20 MB en extracción visual");
     const staged = [];
-    for (const file of inventory.files) {
+    for (const [index, file] of inventory.files.entries()) {
       const storage = await uploadKnowledgeFile(`knowledge/intake/${crypto.randomUUID()}`, Buffer.from(file.content), file.mimeType || "application/octet-stream");
       stored.push(storage);
-      staged.push({ file_name: file.fileName, relative_path: file.relativePath, mime_type: file.mimeType, file_size: file.content.byteLength, storage_path: storage, status: "uploaded" });
+      staged.push({ file_name: file.fileName, relative_path: file.relativePath, mime_type: file.mimeType, file_size: file.content.byteLength, storage_path: storage, status: "uploaded", processing_order: index });
     }
     const batch = await prisma.knowledge_imports.create({ data: {
-      library_id: library.id, owner_user_id: session.user.id, upload_type: "intake-v1", status: "intake_pending", total_files: staged.length,
-      total_size: staged.reduce((n,f) => n+f.file_size,0), proposal_json: { version: 1 }, knowledge_import_files: { create: staged },
+      library_id: library.id, owner_user_id: session.user.id, upload_type: EXTRACTOR_UPLOAD_TYPE, status: "intake_pending", total_files: staged.length,
+      total_size: staged.reduce((n,f) => n+f.file_size,0), proposal_json: { version: 1, archivos: [] }, knowledge_import_files: { create: staged },
     }, select: { id: true } });
     return NextResponse.json({ loteId: batch.id }, { status: 201 });
   } catch (error) {
@@ -48,7 +50,7 @@ export async function GET(request: Request) {
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
   const libraryId = new URL(request.url).searchParams.get("libraryId");
 
-  const batches = await prisma.knowledge_imports.findMany({ where: { owner_user_id: session.user.id, ...(libraryId ? { library_id: libraryId } : { status: "intake_pending" }), upload_type: "intake-v1", knowledge_libraries: knowledgeLibraryWriteWhere(session.user.id, activeWorkspace.id) },
+  const batches = await prisma.knowledge_imports.findMany({ where: { owner_user_id: session.user.id, ...(libraryId ? { library_id: libraryId } : { status: "intake_pending" }), upload_type: EXTRACTOR_UPLOAD_TYPE, knowledge_libraries: knowledgeLibraryWriteWhere(session.user.id, activeWorkspace.id) },
     select: { id: true, status: true, created_at: true }, orderBy: { created_at: "desc" }, take: 20 });
   return NextResponse.json(batches);
 }

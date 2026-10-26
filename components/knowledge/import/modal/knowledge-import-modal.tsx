@@ -47,11 +47,11 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
     } catch(e) { setError(e instanceof Error ? e.message : "Error de subida"); }
     finally { setUploading(false); }
   }
-  const labels: Record<string, string> = { lectura: "Leyendo archivos…", identificacion: "Identificando documentos…", clasificacion: "Clasificando contenido…", estructuras: "Identificando tablas y relaciones…" };
+  const labels: Record<string, string> = { lectura: "Extrayendo contenido de los documentos…" };
   return <Dialog open={open} onOpenChange={next => { if (!uploading) onOpenChange(next); }}>
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
       <DialogTitle>Subir documentos</DialogTitle>
-      <DialogDescription className="sr-only">Procesamiento del lote y resultado JSON</DialogDescription>
+      <DialogDescription className="sr-only">Extracción del contenido documental y resultado JSON</DialogDescription>
       {!id && <>
         <KnowledgeImportUploadStep files={files} isAnalyzing={uploading} error={error} onFilesChange={setFiles} />
         <Button disabled={uploading || !files.length} onClick={start}>{uploading ? "Subiendo…" : "Procesar documentos"}</Button>

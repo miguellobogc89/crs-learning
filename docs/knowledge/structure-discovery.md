@@ -1,3 +1,5 @@
+> Paused: the current upload now stops at the isolated document extractor. This describes the downstream structure module retained for later validation.
+
 # Business structure discovery
 
 A closed, read-only module downstream of intake classification v2. The upload modal runs classification and then structure discovery automatically, displaying one final JSON. It has a single processing action, with no rerun, catalogue-exclusion, recovery, download or phase-switch controls. Knowledge-only batches finish with classification. Internal checkpoints remain separate.
