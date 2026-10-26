@@ -10,7 +10,7 @@ const units=[{id:'u1',tipo:'catalogo',destino:'engine',contenidosDetectados:['ar
 const evidence=[{documentId:'u1',quote:'Artículo: Raqueta'}];
 const catalog={tables:[{id:'shared-product',key:'product',name:'Producto',description:null,version:3,fields:[{key:'name',name:'Nombre',type:'text',required:false,description:null}]}],relations:[]};
 const source={id:'u1',unitId:'u1',text:units[0].contenido.texto,origen:origin};
-function proposal(extra={}){return {entities:[{key:'product',name:'Producto',description:'Artículo comercial',fields:[{key:'name',name:'Nombre',type:'text',required:false,evidence}],evidence}],relations:[],warnings:[],coverage:[{sourceId:'u1',tables:['product'],pendingReason:''}],...extra};}
+function proposal(extra={}){return {entities:[{key:'product',name:'Producto',description:'Artículo comercial',fields:[{key:'name',name:'Nombre',type:'text',required:false,evidence:structuredClone(evidence)}],evidence:structuredClone(evidence)}],relations:[],warnings:[],pending:[],coverage:[{sourceId:'u1',tables:['product'],pendingReason:''}],...extra};}
 test('routes only engine/hybrid and isolates exact structured ranges from hybrid procedures',()=>{
  assert.deepEqual(contract.structuredUnits({version:2,unidades:units}).map(u=>u.id),['u1','u3']);
  const split=contract.hybridSources([units[2]],{unidades:[{id:'u3',rangos:[{inicio:2,fin:2}],motivo:''}]});
@@ -39,7 +39,7 @@ test('supports a different business domain with source-backed composition and re
  const s={...source,text:'Mezcla A contiene 2 kg de Mezcla B'};
  const ev=[{documentId:'u1',quote:s.text}];
  const entity=key=>({key,name:key,description:'Composición de materiales',fields:[],evidence:ev});
- const p={entities:[entity('material'),entity('composition')],relations:[{key:'composition_material',fromEntity:'composition',toEntity:'material',cardinality:'many_to_many',description:'Composición entre materiales',evidence:ev}],warnings:[],coverage:[{sourceId:'u1',tables:['material','composition'],pendingReason:''}]};
+ const p={entities:[entity('material'),entity('composition')],relations:[{key:'composition_material',fromEntity:'composition',toEntity:'material',cardinality:'many_to_many',description:'Composición entre materiales',evidence:ev}],warnings:[],pending:[],coverage:[{sourceId:'u1',tables:['material','composition'],pendingReason:''}]};
  const result=contract.validateStructureOutput(p,[s],{tables:[],relations:[]},'w','b');assert.equal(result.tables[0].action,'propose_create');assert.equal(result.relations.length,1);
 });
 test('whole-batch service excludes Knowledge, uses only global catalog and retries without repeating hybrid filtering',async()=>{
@@ -71,11 +71,45 @@ test('structure endpoint enforces ownership/workspace and atomically claims one 
   '@/lib/knowledge/intake/structures/discover':{discoverIntakeStructures:async()=>{modelRuns++;}}
  });
  const ctx={params:Promise.resolve({importId:'b'})};
- assert.equal((await route.POST({},ctx)).status,202);assert.equal(afterCalls,1);
- claimCount=0;assert.equal((await route.POST({},ctx)).status,409);assert.equal(afterCalls,1);
- authenticated=false;const before=reads;assert.equal((await route.POST({},ctx)).status,404);assert.equal(reads,before);assert.equal(modelRuns,0);
+ assert.equal((await route.POST({text:async()=>''},ctx)).status,202);assert.equal(afterCalls,1);
+ claimCount=0;assert.equal((await route.POST({text:async()=>''},ctx)).status,409);assert.equal(afterCalls,1);
+ authenticated=false;const before=reads;assert.equal((await route.POST({text:async()=>''},ctx)).status,404);assert.equal(reads,before);assert.equal(modelRuns,0);
 });
 test('stale worker cannot overwrite another execution',async()=>{
  const service=load('lib/knowledge/intake/structures/discover.ts',{'@prisma/client':{},'@/lib/prisma':{prisma:{}},'./contract':contract,'@/lib/ai/openai':{}});
  await service.discoverIntakeStructures('b','w',{structureDiscovery:{status:'running',lease:'new'}},'stale');
+});
+test('test catalog hides invoice_line and incident relations without mutating shared definitions',()=>{
+ const service=load('lib/knowledge/intake/structures/discover.ts',{'@prisma/client':{},'@/lib/prisma':{prisma:{}},'./contract':contract,'@/lib/ai/openai':{}});
+ const shared={tables:[{id:'invoice',key:'invoice',fields:[]},{id:'invoice-line',key:'invoice_line',fields:[]}],relations:[{key:'invoice_lines',fromEntity:'invoice',toEntity:'invoice_line'}]};
+ const before=JSON.stringify(shared);
+ const view=service.catalogView(shared,['invoice_line']);
+ assert.deepEqual(view.tables.map(t=>t.key),['invoice']);assert.equal(view.relations.length,0);assert.equal(JSON.stringify(shared),before);
+ assert.throws(()=>service.catalogView(shared,['invented']),/no existe/);
+ const p=proposal();p.entities[0].key='invoice_line';p.coverage[0].tables=['invoice_line'];
+ const result=contract.validateStructureOutput(p,[source],view,'w','b');
+ assert.equal(result.tables[0].action,'propose_create');assert.equal(result.tables[0].catalogId,null);
+});
+test('uncertain ownership is represented explicitly with literal evidence, not an arbitrary new field',()=>{
+ const p=proposal({pending:[{concept:'cuenta de pago',candidateTables:['product','organization'],reason:'La fuente no determina el propietario',evidence}]});
+ const result=contract.validateStructureOutput(p,[source],catalog,'w','b');
+ assert.equal(result.pending.length,1);assert.equal(result.tables[0].action,'reuse');assert.equal(result.version,2);
+ assert.throws(()=>contract.validateStructureOutput(proposal({pending:[{...p.pending[0],evidence:[{documentId:'u1',quote:'inventado'}]}]}),[source],catalog,'w','b'),/evidencia/);
+});
+test('rerun can replace a completed result with different test settings but preserves prepared inputs',async()=>{
+ let next;let scheduled=0;
+ const payload={resultado:{version:2,loteId:'b',unidades:[]},structureDiscovery:{status:'completed',revision:2,lease:'old',excludeCatalogKeys:[],sources:[],catalog:{tables:[],relations:[]},result:{version:2}}};
+ const route=load('app/api/knowledge/intake/[importId]/structures/route.ts',{
+  '@prisma/client':{},'next/server':{NextResponse:{json:(body,opts={})=>({body,status:opts.status??200})},after:()=>scheduled++},
+  '@/auth':{auth:async()=>({user:{id:'owner'}})},'@/lib/services/workspace.service':{getActiveWorkspaceContext:async()=>({activeWorkspace:{id:'w'}})},
+  '@/lib/knowledge/access-control':{knowledgeLibraryWriteWhere:()=>({workspace_id:'w'})},
+  '@/lib/prisma':{prisma:{knowledge_imports:{findFirst:async()=>({id:'b',status:'intake_completed',proposal_json:payload}),updateMany:async args=>{next=args.data.proposal_json;return {count:1};}}}},
+  '@/lib/knowledge/intake/structures/discover':{DISCOVERY_REVISION:2,discoverIntakeStructures:async()=>{}}
+ });
+ const context={params:Promise.resolve({importId:'b'})};
+ const options=async value=>route.POST({text:async()=>JSON.stringify(value)},context);
+ assert.equal((await options({})).body.estado,'completed');assert.equal(scheduled,0);
+ assert.equal((await options({excludeCatalogKeys:['invoice_line'],rerun:true})).status,202);
+ assert.deepEqual(next.structureDiscovery.excludeCatalogKeys,['invoice_line']);assert.equal(next.structureDiscovery.result,undefined);assert.deepEqual(next.structureDiscovery.sources,[]);assert.equal(scheduled,1);
+ assert.equal((await options({excludeCatalogKeys:'invoice_line'})).status,400);
 });

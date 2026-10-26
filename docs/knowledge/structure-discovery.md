@@ -29,3 +29,9 @@ The repository still contains legacy workspace-local Engine definitions and reco
 `node --test tests/knowledge/intake-structures.test.mjs tests/knowledge/intake-contract.test.mjs tests/knowledge/intake-process.test.mjs`
 
 TypeScript and targeted ESLint. Live discovery requires configured database, Blob and OpenAI credentials; automated tests mock model/catalogue responses and do not establish real-document semantic quality.
+
+## Revision 2: controlled catalogue exclusion and unresolved decisions
+
+The test panel accepts catalogue keys to hide (for example `invoice_line`) and reruns discovery on the saved batch. POST options are `{ "excludeCatalogKeys": ["invoice_line"], "rerun": true }`. The view hides both the type and all incident catalogue relationships, so the model cannot infer a hidden standard from those relationships. The stored/global catalogue is never changed. The result declares its exclusions under `test` and still cannot execute schema writes. Clear exclusions to rerun normally. Completed results from revision 1 are marked pending, preserving sources and catalogue snapshot for the new analysis.
+
+The generic prompt now requires proposing source-backed missing attributes rather than omitting them because the catalogue lacks a field. It separates uncertain values from uncertain meaning/ownership. The latter belongs in a validated, evidence-backed `pending` array with concept, candidateTables, reason and evidence, rather than an arbitrarily placed extension accompanied by a warning. This is semantic guidance plus validation of pending shape/evidence; a real model/document run is needed to assess reasoning quality.

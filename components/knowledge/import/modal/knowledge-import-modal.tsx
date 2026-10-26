@@ -12,6 +12,7 @@ async function read(response: Response) {
 }
 export function KnowledgeImportModal({ open, context, onOpenChange, selectedFiles, resumeImportId }: KnowledgeImportModalProps) {
   const [structureState, setStructureState] = useState<{ estado: string; resultado: unknown; error: string | null; recuperable?: boolean } | null>(null);
+  const [excludedTables, setExcludedTables] = useState("");
   const [showStructures, setShowStructures] = useState(false);
   const [structurePoll, setStructurePoll] = useState(0);
   const [files, setFiles] = useState<File[]>(selectedFiles ?? []);
@@ -63,12 +64,12 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
     void pollStructures();
     return () => { alive = false; clearTimeout(timer); };
   }, [open, id, state?.resultado, structurePoll]);
-  async function discoverStructures() {
+  async function discoverStructures(rerun = false) {
     if (!id) return;
     setError(null); setShowStructures(true);
     setStructureState({ estado: "running", resultado: null, error: null });
     try {
-      await read(await fetch(`/api/knowledge/intake/${id}/structures`, { method: "POST" }));
+      await read(await fetch(`/api/knowledge/intake/${id}/structures`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ excludeCatalogKeys: excludedTables.split(",").map(k => k.trim()).filter(Boolean), rerun }) }));
       setStructurePoll(n => n+1);
     } catch(e) { setStructureState(null); setError(e instanceof Error ? e.message : "Error al descubrir estructuras"); }
   }
@@ -111,10 +112,16 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
       {!!state?.resultado && <div className="flex flex-wrap gap-2">
         <Button variant="outline" onClick={() => setShowStructures(false)}>Clasificación</Button>
         {structureState?.estado === "completed" ? <Button onClick={() => setShowStructures(true)}>Ver tablas y relaciones</Button> :
-          <Button disabled={structureState?.estado === "running" && !structureState?.recuperable} onClick={discoverStructures}>
+          <Button disabled={structureState?.estado === "running" && !structureState?.recuperable} onClick={() => discoverStructures()}>
             {structureState?.estado === "running" && !structureState?.recuperable ? "Descubriendo estructuras…" : structureState?.estado === "error" || structureState?.recuperable ? "Reintentar descubrimiento" : "Descubrir tablas y relaciones"}
           </Button>}
       </div>}
+      {!!state?.resultado && <details>
+        <summary>Prueba del descubrimiento</summary>
+        <label className="block text-sm" htmlFor="excluded-catalog-tables">Tablas a ocultar del catálogo, separadas por comas</label>
+        <input id="excluded-catalog-tables" className="w-full rounded border p-2" placeholder="invoice_line" value={excludedTables} onChange={e => setExcludedTables(e.target.value)} />
+        <Button variant="outline" disabled={structureState?.estado === "running" && !structureState?.recuperable} onClick={() => discoverStructures(true)}>Recalcular con este catálogo</Button>
+      </details>}
       {showStructures && structureState?.error && <p role="alert">{structureState.error}</p>}
       {json && <>
         <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded border p-4 text-xs">{json}</pre>
