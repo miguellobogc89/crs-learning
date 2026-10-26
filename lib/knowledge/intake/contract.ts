@@ -1,6 +1,6 @@
 export type Source = { id: string; archivo: string; texto: string };
 export type Unit = { id: string; fuenteId: string; tipo: string; inicio: number; fin: number };
-export type Classification = { id: string; destino: "engine" | "knowledge" | "hibrido"; tablas: { tipo: string; columnas: string[]; filas: (string | number | boolean | null)[][] }[] };
+export type Classification = { id: string; destino: "engine" | "knowledge" | "hibrido"; contenidosDetectados: string[] };
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("JSON inválido");
   return value as Record<string, unknown>;
@@ -32,25 +32,23 @@ export function classify(value: unknown, units: Unit[]): Classification[] {
   return raw.map(item => {
     const u = object(item);
     if (typeof u.id !== "string" || seen.has(u.id) || !units.some(x => x.id === u.id) ||
-        !["engine", "knowledge", "hibrido"].includes(String(u.destino)) || !Array.isArray(u.tablas)) throw new Error("Destino o unidad inválidos");
+        !["engine", "knowledge", "hibrido"].includes(String(u.destino))) throw new Error("Destino o unidad inválidos");
     seen.add(u.id);
-    const tablas = u.tablas.map(item => {
-      const t = object(item);
-      if (typeof t.tipo !== "string" || !Array.isArray(t.columnas) || !t.columnas.length ||
-          !t.columnas.every(c => typeof c === "string") || !Array.isArray(t.filas) ||
-          !t.filas.every(r => Array.isArray(r) && r.length === (t.columnas as unknown[]).length &&
-            r.every(c => c === null || ["string", "number", "boolean"].includes(typeof c)))) throw new Error("Tabla documental inválida");
-      return t as Classification["tablas"][number];
-    });
-    return { id: u.id, destino: u.destino as Classification["destino"], tablas };
+    if (Object.keys(u).some(key => !["id", "destino", "contenidosDetectados"].includes(key)) ||
+        !Array.isArray(u.contenidosDetectados) || !u.contenidosDetectados.length ||
+        !u.contenidosDetectados.every(c => typeof c === "string" && c.trim().length > 0 && c.length <= 120)) {
+      throw new Error("La clasificación solo admite etiquetas de contenido, sin campos, filas ni registros");
+    }
+    return { id: u.id, destino: u.destino as Classification["destino"], contenidosDetectados: u.contenidosDetectados as string[] };
   });
 }
 export function deliver(loteId: string, sources: Source[], units: Unit[], classifications: Classification[]) {
-  return { version: 1, loteId, unidades: units.map(unit => {
+  return { version: 2, loteId, unidades: units.map(unit => {
     const source = sources.find(s => s.id === unit.fuenteId)!;
     const classification = classifications.find(c => c.id === unit.id)!;
     return { id: unit.id, origen: { archivoId: source.id, archivo: source.archivo, lineaInicio: unit.inicio, lineaFin: unit.fin },
       tipo: unit.tipo, destino: classification.destino,
-      contenido: { texto: source.texto.split(/\r?\n/).slice(unit.inicio-1,unit.fin).join("\n"), tablas: classification.tablas } };
+      contenidosDetectados: classification.contenidosDetectados,
+      contenido: { texto: source.texto.split(/\r?\n/).slice(unit.inicio-1,unit.fin).join("\n") } };
   }) };
 }

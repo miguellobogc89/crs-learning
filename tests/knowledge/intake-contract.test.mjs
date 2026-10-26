@@ -7,12 +7,13 @@ new Function('module','exports',ts.transpileModule(readFileSync('lib/knowledge/i
 const { identify, classify, deliver } = module.exports;
 const sources = [{id:'a',archivo:'factura.pdf',texto:'Factura\nProducto A | 2\nProducto B | 1'}, {id:'b',archivo:'condiciones.txt',texto:'Tarifa\nAplicable desde enero'}];
 const identification = {unidades:[{fuenteId:'a',tipo:'factura',inicio:1,fin:3},{fuenteId:'b',tipo:'tarifa',inicio:1,fin:2}]};
-test('batch preserves complete sources, detail rows and hybrid identity',()=> {
+test('batch preserves source text and hybrid identity without transcribing tables',()=> {
  const units=identify(identification,sources);
- const classified=classify({unidades:[{id:'unidad-1',destino:'engine',tablas:[{tipo:'detalle',columnas:['Concepto','Cantidad'],filas:[['Producto A',2],['Producto B',1]]}]},{id:'unidad-2',destino:'hibrido',tablas:[]}]},units);
+ const classified=classify({unidades:[{id:'unidad-1',destino:'engine',contenidosDetectados:['desglose de compra']},{id:'unidad-2',destino:'hibrido',contenidosDetectados:['condiciones']}]},units);
  const result=deliver('batch',sources,units,classified);
  assert.equal(result.unidades[0].contenido.texto,sources[0].texto);
- assert.equal(result.unidades[0].contenido.tablas[0].filas.length,2);
+ assert.deepEqual(result.unidades[0].contenidosDetectados,['desglose de compra']);
+ assert.equal('tablas' in result.unidades[0].contenido,false);
  assert.equal(result.unidades[1].destino,'hibrido');
  assert.equal(result.unidades.length,2);
 });
@@ -21,10 +22,10 @@ test('rejects omitted files, gaps, overlap and fabricated source references',()=
 });
 test('rejects missing/duplicate classifications and malformed rows',()=> {
  const units=identify(identification,sources);
- const u={id:'unidad-1',destino:'engine',tablas:[]};
+ const u={id:'unidad-1',destino:'engine',contenidosDetectados:['condiciones']};
  assert.throws(()=>classify({unidades:[u]},units));
  assert.throws(()=>classify({unidades:[u,u]},units));
- assert.throws(()=>classify({unidades:[{...u,tablas:[{tipo:'detalle',columnas:['a'],filas:[[1,2]]}]},{id:'unidad-2',destino:'knowledge',tablas:[]}]},units));
+ assert.throws(()=>classify({unidades:[{...u,tablas:[{tipo:'detalle',columnas:['a'],filas:[[1,2]]}]},{id:'unidad-2',destino:'knowledge',contenidosDetectados:['condiciones']}]},units));
 });
 test('single document uses exactly the same contract',()=> {
  const units=identify({unidades:identification.unidades.slice(0,1)},sources.slice(0,1));

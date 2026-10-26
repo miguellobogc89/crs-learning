@@ -19,16 +19,18 @@ async function find(context: Context) {
 export async function GET(_request: Request, context: Context) {
   const batch = await find(context);
   if (!batch) return NextResponse.json({ error: "Lote no encontrado" }, { status: 404 });
-  const state = batch.proposal_json as { unidades?: unknown; resultado?: unknown } | null;
-  return NextResponse.json({ loteId: batch.id, estado: batch.status, fase: batch.knowledge_import_files.some(f => f.status !== "text_ready") ? "lectura" : state?.unidades ? "clasificacion" : "identificacion", error: batch.error_message, resultado: state?.resultado ?? null,
+  const state = batch.proposal_json as { unidades?: unknown; resultado?: { version?: number } } | null;
+  const outdated = batch.status === "intake_completed" && state?.resultado?.version !== 2;
+  return NextResponse.json({ loteId: batch.id, estado: outdated ? "intake_pending" : batch.status, fase: batch.knowledge_import_files.some(f => f.status !== "text_ready") ? "lectura" : state?.unidades ? "clasificacion" : "identificacion", error: batch.error_message, resultado: outdated ? null : state?.resultado ?? null,
     recuperable: batch.status === "intake_running" && !!batch.processing_started_at && Date.now()-batch.processing_started_at.getTime()>360000 });
 }
 export async function POST(_request: Request, context: Context) {
   const batch = await find(context);
   if (!batch) return NextResponse.json({ error: "Lote no encontrado" }, { status: 404 });
-  if (batch.status === "intake_completed") return NextResponse.json({ estado: batch.status });
+  const current = batch.proposal_json as { resultado?: { version?: number } } | null;
+  if (batch.status === "intake_completed" && current?.resultado?.version === 2) return NextResponse.json({ estado: batch.status });
   const lease = new Date();
-  const claimed = await prisma.knowledge_imports.updateMany({ where: { id: batch.id, OR: [ { status: { in: ["intake_pending", "intake_error"] } }, { status: "intake_running", processing_started_at: { lt: new Date(Date.now()-360000) } } ] },
+  const claimed = await prisma.knowledge_imports.updateMany({ where: { id: batch.id, OR: [ { status: { in: ["intake_pending", "intake_error", ...(batch.status === "intake_completed" && current?.resultado?.version !== 2 ? ["intake_completed"] : [])] } }, { status: "intake_running", processing_started_at: { lt: new Date(Date.now()-360000) } } ] },
     data: { status: "intake_running", processing_started_at: lease, error_message: null } });
   if (claimed.count) after(() => processIntake(batch.id, lease));
   return NextResponse.json({ estado: "intake_running" }, { status: 202 });
