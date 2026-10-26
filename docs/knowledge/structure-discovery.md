@@ -1,6 +1,6 @@
 # Business structure discovery
 
-A closed, read-only module downstream of intake classification v2. Start it explicitly with **Descubrir tablas y relaciones**, also on previously completed batches. The classification JSON remains independently available.
+A closed, read-only module downstream of intake classification v2. The upload modal runs classification and then structure discovery automatically, displaying one final JSON. It has a single processing action, with no rerun, catalogue-exclusion, recovery, download or phase-switch controls. Knowledge-only batches finish with classification. Internal checkpoints remain separate.
 
 ## Inputs
 
@@ -39,3 +39,7 @@ The generic prompt now requires proposing source-backed missing attributes rathe
 ## Revision 3: source-line evidence
 
 Discovery receives numbered lines rather than an unnumbered text blob. The model emits only evidence references `{documentId,startLine,endLine}`. The server verifies integer/inclusive bounds and exact source IDs, then slices the original text to construct quotes for the existing strict validator. It preserves line breaks, hyphenation and CRLF; no fuzzy match, spelling repair or paraphrase is accepted. The final output includes references and literal quotes. This prevents a model-transcribed quote from causing a literal-substring failure, while semantic support still requires review. Completed older checkpoints are invalidated for discovery only; saved extraction, identification and catalogue preparation remain reusable. Retrying also preserves any catalogue exclusions used in the failed test.
+
+## Current upload UX
+
+The controlled test is a fresh upload, including one ordinary PDF. `advanceIntake` advances saved preparation/classification then starts structure discovery without an extra user action. The modal displays progress, the final JSON, or the actual error. It never automatically retries failures. The earlier catalogue-exclusion/rerun options remain internal API capabilities, not part of this user flow. Workflow tests explicitly start with a fresh batch instead of assuming that a modal survives a pull/reload.
