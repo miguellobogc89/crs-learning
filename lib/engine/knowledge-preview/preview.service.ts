@@ -142,10 +142,28 @@ function buildPreview(state: StoredState, segments: Segment[]): KnowledgeEngineP
   const documents = segments.map(segment => {
     const stored = state.documents[segment.segmentId];
     if (!stored || stored.schemaHash !== state.schemaHash) return pendingDocument(segment);
+    // Re-check previously rejected values from the original saved answer, never by
+    // guessing from the display text or making another model call. Source identity
+    // and schema hash have already been checked above. GET remains read-only.
+    let document = stored;
+    if (state.schema && (stored.status === "verified" || stored.status === "needs_review") &&
+        stored.issues.some(issue => issue.code === "VALUE_NOT_IN_EVIDENCE" || issue.code === "INVALID_CANONICAL_VALUE")) {
+      const call = state.calls.find(item => item.id === stored.callId && item.segmentId === segment.segmentId &&
+        item.stage === "extract" && item.status === "ok");
+      if (call?.rawOutput) {
+        try {
+          const verified = validateSegmentExtraction(JSON.parse(call.rawOutput), state.schema, segment.lines, segment);
+          document = { ...stored, ...verified,
+            status: verified.issues.some(issue => issue.severity === "error") ? "needs_review" : "verified" };
+        } catch {
+          // Old/absent/corrupt raw answers cannot recover a value. Keep all issues.
+        }
+      }
+    }
     // Reassess old checkpoints under the stricter relation contract without another model call.
-    const missing = state.schema ? stored.links.filter(link => relationNeedsEvidence(state.schema!, link.relation) && !link.roleEvidence) : [];
-    if (!missing.length) return stored;
-    return { ...stored, status: "needs_review" as const, issues: [...stored.issues,
+    const missing = state.schema ? document.links.filter(link => relationNeedsEvidence(state.schema!, link.relation) && !link.roleEvidence) : [];
+    if (!missing.length) return document;
+    return { ...document, status: "needs_review" as const, issues: [...document.issues,
       ...missing.map(link => ({ code: "MISSING_RELATION_EVIDENCE", path: `links.${link.relation}`, severity: "error" as const,
         message: `${link.relation}: falta evidencia de la relación; compartir segmento no basta.` }))] };
   });

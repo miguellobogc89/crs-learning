@@ -109,36 +109,49 @@ export type ValueFailure = "INVALID_CANONICAL_VALUE" | "VALUE_NOT_IN_EVIDENCE";
 // Read once allowing space-grouped thousands ("1 370,57") and once without, so
 // adjacent numbers ("1 100,00") are never merged into a single reading only.
 const NUMBER_TOKENS = [
-  /[-\u2212]?\d{1,3}(?:[ \u00A0.,]\d{3})+(?:[.,]\d+)?|[-\u2212]?\d+(?:[.,]\d+)?/g,
-  /[-\u2212]?\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?|[-\u2212]?\d+(?:[.,]\d+)?/g,
+  /(?<![\d.,])(?:[-\u2212]?\d{1,3}(?:[ \u00A0\u202F]\d{3})+(?:[.,]\d+)?(?![\d.,])|[-\u2212]?\d+(?:[.,]\d+)*)/g,
+  /(?<![\d.,])[-\u2212]?\d+(?:[.,]\d+)*/g,
 ];
 
-/** Every reading of the numbers written in a text (decimal comma and decimal point). */
-export function numbersInText(text: string): number[] {
-  const values: number[] = [];
-  for (const match of NUMBER_TOKENS.flatMap(pattern => [...text.matchAll(pattern)])) {
-    const negative = /^[-\u2212]/.test(match[0]);
-    const token = match[0].replace(/^[-\u2212]/, "").replace(/[ \u00A0]/g, "");
-    const readings = new Set<string>();
-    const dots = (token.match(/\./g) ?? []).length, commas = (token.match(/,/g) ?? []).length;
-    if (dots && commas) {
-      const decimal = token.lastIndexOf(".") > token.lastIndexOf(",") ? "." : ",";
-      const thousands = decimal === "." ? "," : ".";
-      readings.add(token.split(thousands).join("").replace(decimal, "."));
-    } else if (dots || commas) {
-      const separator = dots ? "." : ",";
-      const groups = token.split(separator);
-      if (groups.length === 2) readings.add(groups.join("."));
-      if (groups.slice(1).every(group => group.length === 3)) readings.add(groups.join(""));
-    } else {
-      readings.add(token);
-    }
-    for (const reading of readings) {
-      const number = Number(reading);
-      if (Number.isFinite(number)) values.push(negative ? -number : number);
-    }
+/** Exact decimal representation: no rounding, floating-point tolerance or exponent notation. */
+function decimalKey(value: string): string {
+  const negative=value.startsWith("-");
+  const [integer,fraction=""]=value.replace(/^-/,"").split(".");
+  const whole=integer.replace(/^0+(?=\d)/,"");
+  const tail=fraction.replace(/0+$/,"");
+  const magnitude=whole+(tail ? "."+tail : "");
+  return negative&&magnitude!=="0" ? "-"+magnitude : magnitude;
+}
+
+/** Consume entire numeric tokens before interpreting separators: never accept a truncated prefix. */
+function numberReadings(text: string): string[] {
+  const values=new Set<string>();
+  for(const match of NUMBER_TOKENS.flatMap(pattern=>[...text.matchAll(pattern)])){
+    const negative=/^[-\u2212]/.test(match[0]);
+    const token=match[0].replace(/^[-\u2212]/,"").replace(/[ \u00A0\u202F]/g,"");
+    const dots=(token.match(/\./g)??[]).length,commas=(token.match(/,/g)??[]).length;
+    const readings:string[]=[];
+    if(dots&&commas){
+      const separator=token.lastIndexOf(".")>token.lastIndexOf(",") ? "." : ",";
+      const thousands=separator==="." ? "," : ".";
+      const parts=token.split(separator);
+      if(parts.length!==2||!/^\d+$/.test(parts[1]))continue;
+      const groups=parts[0].split(thousands);
+      if(!/^\d{1,3}$/.test(groups[0])||!groups.slice(1).every(group=>/^\d{3}$/.test(group)))continue;
+      readings.push(groups.join("")+"."+parts[1]);
+    }else if(dots||commas){
+      const groups=token.split(dots ? "." : ",");
+      if(groups.length===2)readings.push(groups.join("."));
+      if(/^\d{1,3}$/.test(groups[0])&&groups.slice(1).every(group=>/^\d{3}$/.test(group)))readings.push(groups.join(""));
+    }else readings.push(token);
+    for(const reading of readings)values.add(decimalKey((negative ? "-" : "")+reading));
   }
-  return values;
+  return [...values];
+}
+
+/** Every full decimal-comma/decimal-point reading, retained for callers inspecting source numbers. */
+export function numbersInText(text: string): number[] {
+  return numberReadings(text).map(Number).filter(Number.isFinite);
 }
 
 const MONTHS: Record<string, number> = {
@@ -170,7 +183,7 @@ function isoDate(year: number, month: number, day: number): string | null {
 export function datesInText(text: string): string[] {
   const found = new Set<string>();
   const lower = normalizeEvidenceText(text).toLocaleLowerCase("es").normalize("NFD").replace(/\p{M}/gu, "");
-  for (const m of lower.matchAll(/(\d{4})-(\d{1,2})-(\d{1,2})/g)) {
+  for (const m of lower.matchAll(/(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/g)) {
     const iso = isoDate(+m[1], +m[2], +m[3]); if (iso) found.add(iso);
   }
   for (const m of lower.matchAll(/(?<!\d)(\d{1,2})[/.-](\d{1,2})[/.-](\d{4}|\d{2})(?!\d)/g)) {
@@ -188,7 +201,6 @@ const CANONICAL_INTEGER = /^-?\d+$/;
 const CANONICAL_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const CANONICAL_DATETIME = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::\d{2})?$/;
 
-const sameNumber = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
 const comparable = (value: string) => normalizeEvidenceText(value).toLocaleLowerCase("es");
 
 /** Converts the model's canonical string and checks it against the value's own evidence. */
@@ -200,11 +212,12 @@ export function checkValue(type: FieldType, canonical: string, evidence: string)
     case "integer": {
       if (!(type === "integer" ? CANONICAL_INTEGER : CANONICAL_DECIMAL).test(raw)) return { ok: false, code: "INVALID_CANONICAL_VALUE" };
       const value = Number(raw);
-      return numbersInText(evidence).some(candidate => sameNumber(candidate, value))
+      if(!Number.isFinite(value)||(type==="integer"&&!Number.isSafeInteger(value)))return {ok:false,code:"INVALID_CANONICAL_VALUE"};
+      return numberReadings(evidence).includes(decimalKey(raw))
         ? { ok: true, value } : { ok: false, code: "VALUE_NOT_IN_EVIDENCE" };
     }
     case "date": {
-      if (!CANONICAL_DATE.test(raw) || !isoDate(+raw.slice(0, 4), +raw.slice(5, 7), +raw.slice(8, 10)))
+      if (!CANONICAL_DATE.test(raw) || isoDate(+raw.slice(0, 4), +raw.slice(5, 7), +raw.slice(8, 10)) !== raw)
         return { ok: false, code: "INVALID_CANONICAL_VALUE" };
       return datesInText(evidence).includes(raw) ? { ok: true, value: raw } : { ok: false, code: "VALUE_NOT_IN_EVIDENCE" };
     }

@@ -537,3 +537,86 @@ test("unified summary handles pending files and no Engine candidates without fab
   assert.match(text,/Engine sin candidatos/);
   assert.doesNotMatch(text,/4 · Extracción/);
 });
+
+test("full numeric evidence tokens preserve four/eight decimal places and reject prefix matches or rounding",()=>{
+  const pairs=[
+    ["2.3141","FREGONA HILO MIR. 1 2,3141 2,3141 21% 0,4860 2,8000"],
+    ["0.7851","FRIEGASUELOS PINO 3 0,7851 2,3554 21% 0,4946 2,8500"],
+    ["31.4049","Fibra 1Gb y Móvil 120GB (18 Jun a 17 Jul) 31,4049 €"],
+    ["0.06952520","P1 12,000 kW x 28 Días x 0,06952520 €/kW día 23,36 €"],
+    ["5.11269632","5,11269632 % sobre 160,18 € x 1 8,19 €"],
+    ["1234567.8912","Total 1.234.567,8912 €"],
+    ["1234567.8912","Total 1,234,567.8912"],
+    ["1234.5678","Total 1\u202f234,5678"],
+    ["-2.3141","Abono −2,3141 €"],
+  ];
+  for(const [value,quote] of pairs)assert.deepEqual(evidence.checkValue("decimal",value,quote),{ok:true,value:Number(value)},quote);
+  for(const [value,quote] of [["7851",".7851"],["2.314","2,3141"],["2.31","2,3141"],["3141","2,3141"],["0.069525","0,06952520"],["5.11269633","5,11269632"],["1000000001","1.000.000.000"],["1.0000000001","1,0000000002"]]){
+    assert.equal(evidence.checkValue("decimal",value,quote).ok,false,`${value} must not be inferred from ${quote}`);
+  }
+  assert.equal(evidence.checkValue("decimal","2.3456","Importe 12.34,56 €").ok,false);
+  assert.equal(evidence.checkValue("integer","9007199254740993","9007199254740993").code,"INVALID_CANONICAL_VALUE");
+});
+
+test("written dates remain source-backed; glued page numbers and invalid calendar dates stay unresolved",()=>{
+  for(const quote of ["04 de Agosto de 2026","4 de agosto de 2026","04 AGO 2026","04/08/2026","2026-08-04"]){
+    assert.deepEqual(evidence.checkValue("date","2026-08-04",quote),{ok:true,value:"2026-08-04"});
+  }
+  for(const quote of ["Página 1 de 204 de Agosto de 2026","1232026-08-04","04 de Agosto de 2027"]){
+    assert.equal(evidence.checkValue("date","2026-08-04",quote).ok,false,quote);
+  }
+  assert.equal(evidence.checkValue("date","2026-02-30","30 de febrero de 2026").code,"INVALID_CANONICAL_VALUE");
+  assert.equal(evidence.checkValue("date","0024-08-04","04 de agosto de 2024").code,"INVALID_CANONICAL_VALUE");
+});
+
+test("extraction keeps high-precision prices and the exact source fragment",()=>{
+  const invoice={...INVOICES[2],lines:[["FREGONA HILO MIR.","2,3141"],["FRIEGASUELOS PINO","0,7851"]]};
+  const text=textOf(invoice);
+  const result=extraction.validateSegmentExtraction(modelAnswer(invoice),SCHEMA,evidence.sourceLines(text),bounds(text));
+  assert.equal(result.records.find(r=>r.ref==="l1").values.amount.value,2.3141);
+  assert.equal(result.records.find(r=>r.ref==="l1").values.amount.evidence.text,"2,3141");
+  assert.equal(result.records.find(r=>r.ref==="l2").values.amount.value,0.7851);
+  assert.ok(!result.issues.some(issue=>issue.code==="VALUE_NOT_IN_EVIDENCE"));
+});
+
+test("GET revalidates rejected saved values without model calls, writes or exposing raw output",async()=>{
+  const h=harness();await h.service.runKnowledgeEnginePreview({...h.scope,mode:"continue"});
+  const stored=h.plans.get("p").review_json;
+  const document=stored.documents["f0:doc:1"];
+  delete document.records.find(r=>r.ref==="l1").values.amount;
+  document.status="needs_review";
+  document.issues.push({code:"VALUE_NOT_IN_EVIDENCE",path:"records[3].fields[1]",severity:"error",message:"Old numeric reader rejected this value"});
+  const calls=h.state.calls.length,writes=h.state.writes;
+  const preview=await h.service.getKnowledgeEnginePreview(h.scope);
+  assert.equal(preview.documents[0].records.find(r=>r.ref==="l1").values.amount.value,980);
+  assert.ok(!preview.documents[0].issues.some(issue=>issue.message.includes("Old numeric")));
+  assert.equal(h.state.calls.length,calls);assert.equal(h.state.writes,writes);
+  assert.equal(document.records.find(r=>r.ref==="l1").values.amount,undefined,"stored checkpoint is not mutated by GET");
+  assert.ok(preview.calls.every(call=>call.rawOutput===undefined));
+});
+
+test("revalidation refuses missing, mismatched or corrupted original answers",async()=>{
+  const h=harness();await h.service.runKnowledgeEnginePreview({...h.scope,mode:"continue"});
+  const stored=h.plans.get("p").review_json,document=stored.documents["f0:doc:1"];
+  const call=stored.calls.find(c=>c.id===document.callId);
+  document.status="needs_review";document.issues.push({code:"VALUE_NOT_IN_EVIDENCE",path:"records[3].fields[1]",severity:"error",message:"Keep this issue"});
+  const raw=call.rawOutput;
+  for(const invalid of [null,"not JSON"]){call.rawOutput=invalid;const preview=await h.service.getKnowledgeEnginePreview(h.scope);assert.ok(preview.documents[0].issues.some(i=>i.message==="Keep this issue"));}
+  call.rawOutput=raw;call.segmentId="another-segment";
+  assert.ok((await h.service.getKnowledgeEnginePreview(h.scope)).documents[0].issues.some(i=>i.message==="Keep this issue"));
+});
+
+test("saved-answer revalidation never revives an unsupported value",async()=>{
+  const h=harness();await h.service.runKnowledgeEnginePreview({...h.scope,mode:"continue"});
+  const stored=h.plans.get("p").review_json,document=stored.documents["f0:doc:1"];
+  delete document.records.find(r=>r.ref==="l1").values.amount;
+  document.status="needs_review";document.issues.push({code:"VALUE_NOT_IN_EVIDENCE",path:"records[3].fields[1]",severity:"error",message:"Old rejection"});
+  const call=stored.calls.find(c=>c.id===document.callId),raw=JSON.parse(call.rawOutput);
+  raw.records.find(r=>r.ref==="l1").fields.find(f=>f.key==="amount").value="999.9999";
+  call.rawOutput=JSON.stringify(raw);
+  const calls=h.state.calls.length,writes=h.state.writes;
+  const preview=await h.service.getKnowledgeEnginePreview(h.scope);
+  assert.equal(preview.documents[0].records.find(r=>r.ref==="l1").values.amount,undefined);
+  assert.ok(preview.documents[0].issues.some(i=>i.code==="VALUE_NOT_IN_EVIDENCE"));
+  assert.equal(h.state.calls.length,calls);assert.equal(h.state.writes,writes);
+});
