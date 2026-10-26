@@ -1,3 +1,4 @@
+import { IntakeQueue } from "@/components/knowledge/import/intake-queue";
 
 import { redirect } from "next/navigation";
 
@@ -18,13 +19,9 @@ import {
 import { AutoBreadcrumb } from "@/components/app/auto-breadcrumb";
 import { FloatingChat } from "@/components/chat/floating-chat";
 
-import {
-  KnowledgeImportProvider,
-} from "@/components/knowledge/import/background/knowledge-import-provider";
 
-import {
-  KnowledgeImportBackgroundWidget,
-} from "@/components/knowledge/import/background/knowledge-import-background-widget";
+
+
 
 import { listChatConversations } from "@/lib/services/chat.service";
 import { getUserNotificationSummary } from "@/lib/services/notification.service";
@@ -63,7 +60,8 @@ export default async function AppLayout({
   ]);
 
   return (
-    <KnowledgeImportProvider>
+    <>
+      <IntakeQueue />
       <Sheet>
         <div
           className="
@@ -103,7 +101,7 @@ export default async function AppLayout({
             hideTrigger
           />
 
-          <KnowledgeImportBackgroundWidget />
+
         </div>
 
         <SheetContent
@@ -121,6 +119,6 @@ export default async function AppLayout({
           />
         </SheetContent>
       </Sheet>
-    </KnowledgeImportProvider>
+    </>
   );
 }
