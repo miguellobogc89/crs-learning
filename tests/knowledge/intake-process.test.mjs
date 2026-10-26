@@ -13,7 +13,7 @@ test('classification retry reuses identified units and source text without extra
   '@prisma/client':{}, '@/lib/prisma':{prisma}, './contract':contract,
   '@/lib/knowledge/documents/extract-document-text':{extractDocumentText:()=>{throw Error('Must not extract');}},
   '@/lib/storage/knowledge-storage':{readKnowledgeFile:()=>{throw Error('Must not reread');}},
-  '@/lib/ai/openai':{getKnowledgeImportModel:()=> 'test',getOpenAIClient:()=>({responses:{create:async()=>{calls++;if(fail) throw Error('timeout'); return {status:'completed',output_text:JSON.stringify({unidades:[{id:'unidad-1',destino:'engine',tablas:[]}]})};}}})}
+  '@/lib/ai/openai':{getKnowledgeImportModel:()=> 'test',getOpenAIClient:()=>({responses:{create:async(request)=>{assert.match(request.input, /JSON/); JSON.parse(request.input); calls++;if(fail) throw Error('timeout'); return {status:'completed',output_text:JSON.stringify({unidades:[{id:'unidad-1',destino:'engine',tablas:[]}]})};}}})}
  });
  const lease=new Date(); await service.processIntake('b',lease);
  assert.equal(updates[0].data.status,'intake_error'); assert.equal(updates[0].data.proposal_json,undefined);

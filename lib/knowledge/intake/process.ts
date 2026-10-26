@@ -5,7 +5,7 @@ import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
 import { getKnowledgeImportModel, getOpenAIClient } from "@/lib/ai/openai";
 import { identify, classify, deliver, type Unit } from "./contract";
 async function ask(instructions: string, input: unknown) {
-  const text = JSON.stringify(input);
+  const text = JSON.stringify({ outputFormat: "Devuelve exclusivamente un objeto JSON conforme a las instrucciones.", sources: input });
   if (text.length > 180000) throw new Error("El lote supera 180.000 caracteres. Divide el lote; no se ha truncado contenido.");
   const response = await getOpenAIClient().responses.create({ model: getKnowledgeImportModel(), instructions,
     input: text, text: { format: { type: "json_object" } }, max_output_tokens: 24000 }, { timeout: 120000, maxRetries: 0 });
