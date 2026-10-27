@@ -60,13 +60,16 @@ test('step by step: a stored batch stops at the next pending module and starts o
   if(url.endsWith('/classification'))return {estado:'completed',resultado:{module:'document_classifier'}};
   if(url.endsWith('/verification'))return {estado:'completed',resultado:{module:'reading_verifier'}};
   if(url.endsWith('/reconciliation')){if(method==='POST'){st.reconciled=true;return {estado:'completed'};}return st.reconciled?{estado:'completed',resultado:{module:'reconciliation'}}:{estado:'pending'};}
+  if(url.endsWith('/writing')){assert.notEqual(method,'POST','records are never saved automatically');return {estado:'pending',plan:{module:'record_writer_plan'}};}
   return {estado:'intake_completed',resultado:{module:'targeted_extraction'}};};
  const waiting=await advanceIntake('s',request,{start:false});
  assert.equal(waiting.status,'waiting');assert.equal(waiting.phase,'conciliacion');assert.equal(waiting.result.module,'targeted_extraction','earlier results are shown');
  assert.ok(calls.every(c=>c.startsWith('GET')),'nothing is started without the person');
  calls.length=0;await advanceIntake('s',request,{start:true});
  assert.deepEqual(calls.filter(c=>c.startsWith('POST')),['POST /reconciliation']);
- const done=await advanceIntake('s',request,{start:false});assert.equal(done.status,'completed');assert.equal(done.reconciliation.result.module,'reconciliation');
+ const done=await advanceIntake('s',request,{start:false});assert.equal(done.status,'waiting');assert.equal(done.phase,'escritura');assert.equal(done.reconciliation.result.module,'reconciliation');
+ assert.equal(done.writing.plan.module,'record_writer_plan','the plan is shown for review');
+ const auto=await advanceIntake('s',request,{start:true});assert.equal(auto.phase,'escritura','not even in automatic mode');
  const pending=await advanceIntake('p',async(url)=>url.endsWith('/base-reading')||url.endsWith('/classification')?{estado:'completed',resultado:{module:url.endsWith('/classification')?'document_classifier':'base_reading'}}:{estado:'intake_pending'},{start:false});
  assert.deepEqual([pending.status,pending.phase],['waiting','lectura'],'the extraction also waits');
 });

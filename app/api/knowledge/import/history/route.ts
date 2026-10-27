@@ -33,7 +33,7 @@ function pipelineStages(status: string, proposal: JsonObject | null) {
   const etapas = {
     lectura_base: stage(proposal?.lecturaBase), clasificacion: stage(proposal?.clasificacion),
     lectura: status === "intake_completed" ? "completed" : status === "intake_error" ? "error" : status === "intake_running" ? "running" : "pendiente",
-    verificacion: stage(proposal?.verificacion), conciliacion: stage(proposal?.conciliacion),
+    verificacion: stage(proposal?.verificacion), conciliacion: stage(proposal?.conciliacion), escritura: stage(proposal?.escritura),
   };
   const siguiente = (Object.entries(etapas) as [string, string][]).find(([, s]) => s !== "completed")?.[0] ?? null;
   return { etapas, siguiente };

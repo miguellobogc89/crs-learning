@@ -86,6 +86,7 @@ test('orchestrator: reconciliation only after the verification has finished, and
   if(url.endsWith('/classification'))return {estado:'completed',resultado:{module:'document_classifier'}};
   if(url.endsWith('/verification'))return verification;
   if(url.endsWith('/reconciliation'))return method==='POST'?{estado:'completed'}:{estado:'completed',resultado:{module:'reconciliation'}};
+  if(url.endsWith('/writing'))return {estado:'completed',resultado:{module:'record_writer'}};
   return {estado:'intake_completed',resultado:{module}};});return {view,urls};};
  const running=await run('targeted_extraction',{estado:'running'});
  assert.equal(running.view.phase,'verificacion');assert.ok(!running.urls.some(u=>u.endsWith('/reconciliation')));

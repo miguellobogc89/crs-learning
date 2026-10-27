@@ -6,7 +6,7 @@ import type { TargetedFile, TargetedResult } from "../targeted/contract";
  * identifiers printed in the document (tax id, invoice number, supply point, telecom line), never from names.
  * Entities without an identifier, or with conflicting candidates, are left for a person to review.
  */
-export const RECONCILIATION_REVISION = 4;
+export const RECONCILIATION_REVISION = 5;
 
 /** Entity kinds reconciled on their own; other extracted entities (lines, charges, tax rows…) are details of their invoice. */
 export const RECONCILED_TYPES = ["company", "invoice", "supply_point", "telecom_line"] as const;
@@ -29,11 +29,14 @@ const ROLE_KINDS: Record<string, { type: ReconciledType; field: string }> = {
   lines_service: { type: "telecom_line", field: "number" },
 };
 
-export type Mention = { archivoId: string; archivo: string; parteId: string; rol: string; nombre: string | null; valorImpreso: string | null };
+/** `indice`: position of the record within its role in the part (0 for single entities, row for lists). */
+export type Mention = { archivoId: string; archivo: string; parteId: string; rol: string; indice: number; nombre: string | null; valorImpreso: string | null };
 export type EntityState = "nueva" | "existente" | "ambigua" | "sin_identificador" | "tipo_no_definido" | "no_comprobada";
 export type ReconciledEntity = {
   ref: string; tipo: ReconciledType; clave: string | null; nombres: string[]; menciones: Mention[];
   estado: EntityState; registros: { id: string; externalKey: string | null }[]; avisos: string[];
+  /** Probable entity this one is a misreading of (never merged automatically). */
+  sugerencia?: string;
 };
 export type PlannedRelation = { desde: string; relacion: string; hacia: string };
 export type InvoiceDetail = { factura: string; rol: string; filas: number };
@@ -113,13 +116,13 @@ export function groupEntities(result: TargetedResult) {
           if (filas) detalles.push({ factura: "", rol, filas });
           continue;
         }
-        for (const record of records) {
+        for (const [indice, record] of records.entries()) {
           const printed = value(record, kind.field);
           const nombre = value(record, "legal_name") ?? value(record, "service") ?? value(record, "plan");
           if (!printed && !nombre && !Object.values(record).some(v => v?.valor !== null)) continue;
           let clave = printed ? normalizeIdentifier(kind.type, printed) : null;
           if (kind.type === "invoice" && clave) clave = `${issuerKey ?? "sin-emisor"}/${clave}`;
-          const f: Found = { type: kind.type, clave, mention: { archivoId: file.archivoId, archivo: file.archivo, parteId: part.parteId, rol, nombre, valorImpreso: printed } };
+          const f: Found = { type: kind.type, clave, mention: { archivoId: file.archivoId, archivo: file.archivo, parteId: part.parteId, rol, indice, nombre, valorImpreso: printed } };
           if (kind.type === "company" && printed) {
             const valid = spanishTaxIdValid(normalizeIdentifier("company", printed));
             if (valid === false) f.aviso = `${file.archivo}: el NIF/CIF «${printed}» (${rol}) no supera el dígito de control; probable error de lectura`;
@@ -180,6 +183,7 @@ function flagMisreadTaxIds(entidades: ReconciledEntity[]) {
   for (const entity of entidades) {
     if (entity.tipo !== "company" || !entity.clave || spanishTaxIdValid(entity.clave) === true) continue;
     const match = taxIdLookalikes(entity.clave).find(k => keys.has(k));
+    if (match) entity.sugerencia = keys.get(match)!.ref;
     if (match) entity.avisos.push(`«${entity.clave}» no es un NIF/CIF válido; probablemente es ${match} (${keys.get(match)!.nombres[0] ?? "otra empresa del lote"}) mal leído. No se ha unido: confírmalo`);
     else if (spanishTaxIdValid(entity.clave) === null && /^\d{9}$/.test(entity.clave)) entity.avisos.push(`«${entity.clave}» no tiene formato de NIF/CIF (9 cifras): probable letra leída como número`);
   }

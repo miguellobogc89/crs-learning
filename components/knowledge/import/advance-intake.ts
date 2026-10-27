@@ -1,4 +1,4 @@
-type Progress = { estado: string; fase?: string; error?: string | null; resultado?: unknown; referencias?: unknown };
+type Progress = { estado: string; fase?: string; error?: string | null; resultado?: unknown; referencias?: unknown; plan?: unknown };
 type Step = { status: "processing" | "waiting" | "completed" | "error"; result: unknown; error: string | null };
 /**
  * `waiting`: step-by-step mode only. The next module (`phase`) is ready to start and waits for the person to
@@ -10,13 +10,16 @@ export type IntakeView = { status: "processing" | "waiting" | "completed" | "err
   /** Classification of the reading's parts. Its failure never hides the reading or its verification. */
   classification?: Step;
   /** Which extracted entities already exist in the workspace (targeted extractions only; read-only). */
-  reconciliation?: Step };
+  reconciliation?: Step;
+  /** Saving records: the plan to review (always waits for the person) or the saved result. */
+  writing?: { status: "waiting" | "completed"; result: unknown; plan: unknown; error: string | null } };
 type Request = (url: string, method?: "POST") => Promise<Progress>;
 /** `start: false` (step-by-step mode) never starts a module: it stops at the next pending one as `waiting`. */
 export type AdvanceOptions = { start?: boolean };
 
 export const PHASE_NAMES: Record<string, string> = {
   lectura_base: "Lectura base", clasificacion: "Clasificación", lectura: "Extracción", verificacion: "Revisión de valores", conciliacion: "Conciliación",
+  escritura: "Guardar en mis datos",
 };
 
 const moduleOf = (value: unknown) => value && typeof value === "object" && "module" in value ? (value as { module: unknown }).module : null;
@@ -67,6 +70,12 @@ export async function advanceIntake(id: string, request: Request, { start = true
   if (extractionModule !== "targeted_extraction") return { status: "completed", phase: "completado", result: reading, error: null, verification, classification: classified };
   const reconciled = await step(`/api/knowledge/intake/${id}/reconciliation`, "reconciliation", request, start);
   const reconciliation = { status: reconciled.status, result: reconciled.result, error: reconciled.error };
-  return { status: pause(reconciled.status) ? reconciled.status as "processing" | "waiting" : "completed", phase: pause(reconciled.status) ? "conciliacion" : "completado",
-    result: reading, error: null, verification, classification: classified, reconciliation };
+  const base_ = { result: reading, error: null, verification, classification: classified, reconciliation };
+  if (pause(reconciled.status)) return { ...base_, status: reconciled.status as "processing" | "waiting", phase: "conciliacion" };
+  if (reconciled.status === "error") return { ...base_, status: "completed", phase: "completado" };
+  // Writing records is never started automatically: the plan is shown and the person saves it (with decisions).
+  const writing = await request(`/api/knowledge/intake/${id}/writing`);
+  if (writing.estado === "completed") return { ...base_, status: "completed", phase: "completado", writing: { status: "completed", result: writing.resultado ?? null, plan: null, error: null } };
+  if (writing.estado === "blocked") return { ...base_, status: "completed", phase: "completado" };
+  return { ...base_, status: "waiting", phase: "escritura", writing: { status: "waiting", result: null, plan: writing.plan ?? null, error: writing.error ?? null } };
 }

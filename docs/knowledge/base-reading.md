@@ -9,6 +9,7 @@ Pipeline (orchestrated by `components/knowledge/import/advance-intake.ts`, used 
 3. **Targeted extraction** (`targeted-extraction.md`), only after 1 and 2 — `POST /api/knowledge/intake/:id`: only the reviewed fields of each classified part; knowledge parts are not sent to the vision model; full visual reading only for parts without a field set or with low confidence
 4. **Verification** of the extracted values against the base reading — `/verification`
 5. **Reconciliation** (`reconciliation.md`): which extracted entities already exist in the workspace, read-only — `/reconciliation`
+6. **Saving records** (`record-writer.md`): the reviewed plan is written as Engine records and relations, only when the person saves — `/writing`
 
 The base reading keeps all the text for Knowledge and search.
 
