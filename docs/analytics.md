@@ -52,3 +52,10 @@ la evidencia `intake:<lote>/<archivo>/…` de la factura).
 - **Costes**: gasto por mes y categoría, reparto, detalle por tipo (subcategoría), proveedores, consumo eléctrico, últimos gastos.
 - **Ingresos**: por mes, clientes, ingresos frente a gastos, últimas facturas emitidas.
 - **Productos**: más gasto, más unidades, cambios de precio unitario (primera y última compra), a quién se compra.
+
+## Unir empresas duplicadas
+
+Tablas → Empresas → «Unir con…» en la duplicada (`lib/analytics/merge.ts`, una transacción con el mismo bloqueo que el
+guardado de importaciones): sus relaciones (facturas como emisor o cliente, suministros…) pasan a la que se queda; las
+repetidas o entre ambas se descartan; la que se queda conserva sus valores y recibe solo los que le faltan; la duplicada
+se **archiva** (no se borra: conserva historial y evidencias). Si el resultado daría dos dueños a algo que admite uno, no se hace nada.

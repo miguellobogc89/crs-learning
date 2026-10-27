@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { updateEngineRecord, EngineRecordError } from "@/lib/engine/records.service";
 import { editedValues } from "@/lib/analytics/edit";
+import { mergeRecords } from "@/lib/analytics/merge";
 
 /** One cell edited in Analítica → Tablas. A new revision of the record (its history keeps the previous value). */
 export async function editAnalyticsCellAction(input: { recordId: string; expectedRevision: number; field: string; value: unknown }) {
@@ -25,5 +26,21 @@ export async function editAnalyticsCellAction(input: { recordId: string; expecte
     return { ok: true as const };
   } catch (error) {
     return { ok: false as const, error: error instanceof EngineRecordError ? error.message : "No se pudo guardar el cambio." };
+  }
+}
+
+/** "Unir con…": the duplicate company's invoices and relations move to the one that stays; the duplicate is archived. */
+export async function mergeCompaniesAction(input: { sourceId: string; targetId: string }) {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false as const, error: "Sesión no válida." };
+  const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
+  if (activeWorkspace.role !== "owner" && activeWorkspace.role !== "admin") return { ok: false as const, error: "Solo el propietario o un administrador puede unir empresas." };
+  try {
+    const result = await prisma.$transaction(tx => mergeRecords(tx, { workspaceId: activeWorkspace.id, userId: session.user!.id!, sourceId: input.sourceId, targetId: input.targetId, typeKey: "company" }),
+      { timeout: 60_000, maxWait: 15_000 });
+    revalidatePath("/analytics");
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "No se pudieron unir." };
   }
 }

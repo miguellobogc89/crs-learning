@@ -1,9 +1,9 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, FileText, Loader2, Pencil, X } from "lucide-react";
+import { Check, FileText, GitMerge, Loader2, Pencil, X } from "lucide-react";
 import type { CellValue, Column, Table } from "@/lib/analytics/compute";
-import { editAnalyticsCellAction } from "@/app/(app)/analytics/actions";
+import { editAnalyticsCellAction, mergeCompaniesAction } from "@/app/(app)/analytics/actions";
 import { fmtDate, fmtMoney, fmtNumber } from "./format";
 
 const right = (c: Column) => c.kind === "money" || c.kind === "number";
@@ -25,6 +25,17 @@ export function DataTable({ table, canEdit = false, limit = 500 }: { table: Tabl
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Companies can be joined: the duplicate's invoices move to the one that stays.
+  const mergeable = canEdit && table.key === "empresas";
+  async function merge(sourceId: string, targetId: string) {
+    setBusy(`${sourceId}:merge`); setError(null); setNotice(null);
+    const result = await mergeCompaniesAction({ sourceId, targetId });
+    setBusy(null);
+    if (!result.ok) { setError(result.error); return; }
+    setNotice(`Empresas unidas: ${result.movidas} ${result.movidas === 1 ? "relación pasada" : "relaciones pasadas"} a la que se queda; la otra queda archivada.`);
+    startTransition(() => router.refresh());
+  }
 
   async function save(row: Record<string, CellValue>, column: Column, value: unknown) {
     if (!column.edit || typeof row._id !== "string" || typeof row._rev !== "number") return;
@@ -43,9 +54,10 @@ export function DataTable({ table, canEdit = false, limit = 500 }: { table: Tabl
         {table.rows.length > limit ? `${limit} de ${table.rows.length}` : table.rows.length} filas</span>
     </div>
     {error && <p className="border-b border-rose-100 bg-rose-50 px-5 py-2 text-sm text-rose-700">{error}</p>}
+    {notice && <p className="border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-800">{notice}</p>}
     {rows.length ? <div className="max-h-[70vh] overflow-auto"><table className="w-full min-w-[640px] border-collapse text-left text-sm">
       <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500"><tr>{table.columns.map(c =>
-        <th key={c.key} className={"whitespace-nowrap px-4 py-3 font-semibold " + (right(c) ? "text-right" : "")}>{c.label}</th>)}</tr></thead>
+        <th key={c.key} className={"whitespace-nowrap px-4 py-3 font-semibold " + (right(c) ? "text-right" : "")}>{c.label}</th>)}{mergeable && <th className="px-4 py-3" />}</tr></thead>
       <tbody>{rows.map((r, i) => <tr key={typeof r._id === "string" ? r._id : i} className="border-t border-slate-100 hover:bg-slate-50/60">{table.columns.map(c => {
         const editable = canEdit && !!c.edit && typeof r._id === "string" && typeof r._rev === "number";
         const cellBusy = busy === `${r._id}:${c.key}`;
@@ -63,7 +75,8 @@ export function DataTable({ table, canEdit = false, limit = 500 }: { table: Tabl
             : editable && c.edit!.type === "text" ? <EditableText value={String(r[c.key] ?? "")} busy={cellBusy} onSave={v => save(r, c, v)} />
             : show(r[c.key] ?? null, c.kind)}
         </td>;
-      })}</tr>)}</tbody>
+      })}{mergeable && typeof r._id === "string" && <td className="whitespace-nowrap px-4 py-2 text-right">
+        <MergeControl row={r} rows={table.rows} busy={busy === `${r._id}:merge`} onMerge={target => merge(r._id as string, target)} /></td>}</tr>)}</tbody>
     </table></div> : <p className="px-5 py-10 text-center text-sm text-slate-500">Todavía no hay datos. Importa documentos desde Conocimiento o desde Drive.</p>}
   </section>;
 }
@@ -81,4 +94,28 @@ function EditableText({ value, busy, onSave }: { value: string; busy: boolean; o
     <button type="button" aria-label="Guardar" onClick={() => void commit()} className="rounded p-1 text-emerald-600 hover:bg-emerald-50"><Check className="size-3.5" /></button>
     <button type="button" aria-label="Cancelar" onClick={() => setEditing(false)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="size-3.5" /></button>
   </span>;
+}
+
+const companyLabel = (r: Record<string, CellValue>) => `${r.empresa ?? "Sin nombre"}${typeof r.nif === "string" ? ` · ${r.nif}` : ""}`;
+
+/** "Unir con…": choose the company this one really is, confirm, done. */
+function MergeControl({ row, rows, busy, onMerge }: { row: Record<string, CellValue>; rows: Record<string, CellValue>[]; busy: boolean; onMerge: (target: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [target, setTarget] = useState("");
+  const others = rows.filter(r => typeof r._id === "string" && r._id !== row._id);
+  if (!open) return <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-[#0A58FF]">
+    <GitMerge className="size-3.5" />Unir con…</button>;
+  const chosen = others.find(r => r._id === target);
+  return <div className="flex max-w-[460px] flex-col items-end gap-1.5 whitespace-normal text-left">
+    <select autoFocus value={target} onChange={e => setTarget(e.target.value)} className="h-7 w-full rounded-md border border-slate-200 px-1 text-xs">
+      <option value="">Es la misma que…</option>
+      {others.map(r => <option key={r._id as string} value={r._id as string}>{companyLabel(r)}</option>)}
+    </select>
+    {chosen && <p className="text-[11px] text-slate-600">«{row.empresa}» se une a «{chosen.empresa}»: sus facturas y relaciones pasan a «{chosen.empresa}», se completan los datos que le falten y «{row.empresa}» queda archivada.</p>}
+    <div className="flex gap-1">
+      <button type="button" disabled={!target || busy} onClick={() => void onMerge(target).then(() => setOpen(false))}
+        className="inline-flex items-center gap-1 rounded-md bg-[#0A58FF] px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40">{busy && <Loader2 className="size-3 animate-spin" />}Unir</button>
+      <button type="button" disabled={busy} onClick={() => { setOpen(false); setTarget(""); }} className="rounded-md px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100">Cancelar</button>
+    </div>
+  </div>;
 }
