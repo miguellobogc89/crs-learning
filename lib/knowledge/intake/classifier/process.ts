@@ -31,7 +31,7 @@ export async function runClassification(batchId: string, claimed: ClassifiableIn
     for (const file of reading.archivos) {
       if (done.some(d => d.archivoId === file.archivoId)) continue;
       done.push(await deps.classifyFile(file));
-      await save({ status: "running", revision: CLASSIFIER_REVISION, lease, archivos: done });
+      await save({ status: "running", revision: CLASSIFIER_REVISION, lease: new Date().toISOString(), archivos: done });
     }
     const archivos = reading.archivos.map(file => done.find(d => d.archivoId === file.archivoId)!);
     await save({ status: "completed", revision: CLASSIFIER_REVISION, lease, archivos, resultado: classificationResult(batchId, archivos) });

@@ -32,7 +32,7 @@ export async function runBaseReading(batchId: string, claimed: BaseReadableIntak
       if (done.some(d => d.archivoId === file.id)) continue;
       if (!file.storage_path) throw new Error(`${file.file_name}: falta el original`);
       done.push(await deps.readBaseFile(await deps.readFile(file.storage_path), file.id, file.file_name));
-      await save({ status: "running", revision: BASE_READING_REVISION, lease, archivos: done });
+      await save({ status: "running", revision: BASE_READING_REVISION, lease: new Date().toISOString(), archivos: done });
     }
     const archivos = files.map(file => done.find(d => d.archivoId === file.id)!);
     await save({ status: "completed", revision: BASE_READING_REVISION, lease, archivos, resultado: baseReadingResult(batchId, archivos) });

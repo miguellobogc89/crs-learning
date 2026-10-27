@@ -34,7 +34,12 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
       try {
-        const next = await advanceIntake(id!, async (url, method) => read(await fetch(url, { method: method ?? "GET", cache: "no-store" })));
+        const next = await advanceIntake(id!, async (url, method) => {
+          const response = await fetch(url, { method: method ?? "GET", cache: "no-store" });
+          // A stage that is busy or not ready yet (409) is not a failure: the next poll checks again.
+          if (method === "POST" && response.status === 409) return { estado: "ocupado" };
+          return read(response);
+        });
         if (!alive) return;
         setView(next);
         if (next.status === "processing") timer = setTimeout(poll, 1500);

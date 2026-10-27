@@ -47,3 +47,8 @@ test('errors are visible and do not launch automatic retries',async()=>{
 test('modal has one processing action and no rediscovery or test controls',()=>{
  const modal=readFileSync('components/knowledge/import/modal/knowledge-import-modal.tsx','utf8');assert.equal((modal.match(/<Button /g)||[]).length,1);assert.doesNotMatch(modal,/Reintentar|Recalcular|excludedTables|structurePoll|Recuperar lote|Descubrir tablas/);
 });
+
+test('a busy or not-ready stage (409 on start) keeps the modal polling instead of stopping with an error',()=>{
+ const modal=readFileSync('components/knowledge/import/modal/knowledge-import-modal.tsx','utf8');
+ assert.match(modal,/method === "POST" && response\.status === 409\) return \{ estado: "ocupado" \}/);
+});
