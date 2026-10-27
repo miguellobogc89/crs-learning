@@ -95,3 +95,14 @@ test('orchestrator: reconciliation only after the verification has finished, and
  const old=await run('document_extractor',{estado:'completed',resultado:{module:'reading_verifier'}});
  assert.ok(!old.urls.some(u=>u.endsWith('/reconciliation')));assert.equal(old.view.reconciliation,undefined);
 });
+
+test('a tax id misread by one look-alike character is flagged with the probable company, never merged',()=>{
+ assert.deepEqual(contract.taxIdLookalikes('800000000'),['B00000000']);
+ assert.deepEqual(contract.taxIdLookalikes('B00000000'),[],'valid ids have no look-alikes');
+ const misread={...result,archivos:[...result.archivos,{archivoId:'f4',archivo:'compra.pdf',incidencias:[],partes:[invoicePart('p1',{issuerTax:'800000000',issuerName:'PROVEEDOR DEMO SL',number:'T-9'})]}]};
+ const g=contract.groupEntities(misread);
+ const wrong=g.entidades.find(e=>e.ref==='organization:800000000');
+ assert.ok(wrong,'kept apart: a person confirms');assert.match(wrong.avisos.join(),/probablemente es B00000000 \(PROVEEDOR DEMO, S\.L\.\)/);
+ const lone=contract.groupEntities({...result,archivos:[{archivoId:'f5',archivo:'x.pdf',incidencias:[],partes:[invoicePart('p1',{issuerTax:'812345678',issuerName:'X',number:'1'})]}]});
+ assert.match(lone.entidades.find(e=>e.ref==='organization:812345678').avisos.join(),/9 cifras/);
+});

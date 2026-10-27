@@ -6,7 +6,7 @@ import type { TargetedFile, TargetedResult } from "../targeted/contract";
  * identifiers printed in the document (tax id, invoice number, supply point, telecom line), never from names.
  * Entities without an identifier, or with conflicting candidates, are left for a person to review.
  */
-export const RECONCILIATION_REVISION = 1;
+export const RECONCILIATION_REVISION = 2;
 
 /** Entity kinds reconciled on their own; other extracted entities (lines, charges, tax rows…) are details of their invoice. */
 export const RECONCILED_TYPES = ["organization", "invoice", "supply_point", "telecom_line"] as const;
@@ -150,9 +150,39 @@ export function groupEntities(result: TargetedResult) {
     if (f.aviso && !entity.avisos.includes(f.aviso)) entity.avisos.push(f.aviso);
     groups.set(ref, entity);
   }
+  flagMisreadTaxIds([...groups.values()]);
   // A relation listed twice (same supplier on both sides of one document) is kept once.
   const unique = [...new Map(relaciones.map(r => [`${r.desde}|${r.relacion}|${r.hacia}`, r])).values()];
   return { entidades: [...groups.values()], relaciones: unique, detalles, avisos };
+}
+
+// Characters OCR and vision models confuse at the start of a tax id ("B72378581" read as "872378581").
+const LOOKALIKES: Record<string, string[]> = { "8": ["B"], "B": ["8"], "0": ["O", "D", "Q"], "O": ["0"], "D": ["0"], "5": ["S"], "S": ["5"],
+  "1": ["I", "L"], "I": ["1"], "2": ["Z"], "Z": ["2"], "6": ["G"], "G": ["6"], "4": ["A"], "A": ["4"], "7": ["T"], "T": ["7"] };
+
+/** Valid Spanish tax ids one look-alike character away from an id that is not a valid one. */
+export function taxIdLookalikes(id: string): string[] {
+  if (spanishTaxIdValid(id) === true || id.length !== 9) return [];
+  const out = new Set<string>();
+  for (let i = 0; i < id.length; i++) for (const alt of LOOKALIKES[id[i]] ?? []) {
+    const candidate = id.slice(0, i) + alt + id.slice(i + 1);
+    if (spanishTaxIdValid(candidate) === true) out.add(candidate);
+  }
+  return [...out];
+}
+
+/**
+ * A tax id that is not valid but is one look-alike character away from a company of the batch is almost surely
+ * that company misread. It is NOT merged (a person confirms): it gets a notice naming the probable company.
+ */
+function flagMisreadTaxIds(entidades: ReconciledEntity[]) {
+  const keys = new Map(entidades.filter(e => e.tipo === "organization" && e.clave && spanishTaxIdValid(e.clave)).map(e => [e.clave!, e]));
+  for (const entity of entidades) {
+    if (entity.tipo !== "organization" || !entity.clave || spanishTaxIdValid(entity.clave) === true) continue;
+    const match = taxIdLookalikes(entity.clave).find(k => keys.has(k));
+    if (match) entity.avisos.push(`«${entity.clave}» no es un NIF/CIF válido; probablemente es ${match} (${keys.get(match)!.nombres[0] ?? "otra empresa del lote"}) mal leído. No se ha unido: confírmalo`);
+    else if (spanishTaxIdValid(entity.clave) === null && /^\d{9}$/.test(entity.clave)) entity.avisos.push(`«${entity.clave}» no tiene formato de NIF/CIF (9 cifras): probable letra leída como número`);
+  }
 }
 
 /** Candidate Engine records per identifier, or why they could not be checked. */
