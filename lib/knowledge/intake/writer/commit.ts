@@ -91,7 +91,7 @@ export async function commitWritePlan(tx: Tx, input: { workspaceId: string; user
   for (const record of [...toWrite].sort((a, b) => order(a) - order(b))) {
     const type = types.get(record.tipo)!;
     if (record.accion === "reutilizar") {
-      const existing = await tx.engine_records.findFirst({ where: { id: record.registroId, workspace_id: workspaceId, status: { not: "archived" } }, select: { id: true } });
+      const existing = await tx.engine_records.findFirst({ where: { id: record.registroId, workspace_id: workspaceId, object_type_id: type.id, status: { not: "archived" } }, select: { id: true } });
       if (!existing) throw new Error(`El registro existente de ${record.ref} ya no está disponible`);
       ids.set(record.ref, existing.id);
       result.registros.push({ ref: record.ref, tipo: record.tipo, registroId: existing.id, accion: "reutilizado" });

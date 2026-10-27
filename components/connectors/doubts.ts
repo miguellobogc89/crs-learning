@@ -3,6 +3,22 @@
  * (e.g. "D'PLOCIA without tax id — is it D'PLOCIA B12345678?" in 23 documents). Pure: plans in, decisions out.
  */
 export type Decision = "unir" | "tal_cual" | "omitir";
+/** A decision, or "unir:<id>": the person picked the saved company it is. */
+export type Answer = Decision | `unir:${string}`;
+/** Companies the person can name ("es la misma que…") when the importer has no suggestion, or a different one. */
+export const canPick = (d: { tipo: string; opciones: Decision[] }) => d.tipo === "company" && d.opciones.includes("tal_cual");
+export const validAnswer = (d: { tipo: string; opciones: Decision[] }, a: Answer | undefined): a is Answer =>
+  !!a && (a.startsWith("unir:") ? canPick(d) : d.opciones.includes(a as Decision));
+
+/** What each question means, in words for the person. */
+export const EXPLICACION: Record<string, string> = {
+  "Sin identificador; por el nombre parece una empresa conocida": "El documento no trae NIF/CIF, pero el nombre se parece al de una empresa que ya tienes.",
+  "Sin identificador con el que reconocerlo después": "El documento no trae NIF/CIF y el nombre no coincide con ninguna empresa guardada (puede estar mal leído). Si sabes cuál es, elígela en «Es la misma que…»; si es nueva, guárdala igualmente.",
+  "NIF/CIF no válido": "El NIF/CIF leído no cumple su letra o dígito de control: casi seguro hay una cifra mal leída. Si sabes qué empresa es, elígela en «Es la misma que…»; si no, guárdala igualmente (con ese NIF) o no la guardes.",
+  "Identificador probablemente mal leído": "El NIF/CIF se diferencia en un carácter del de otra empresa de los mismos documentos: casi seguro es la misma, mal leída.",
+  "Varios registros tienen este identificador": "Ya hay más de una empresa guardada con este NIF/CIF; elige cuál es o guárdala aparte.",
+  "No se pudo comprobar si ya existe": "No se pudo comprobar si ya existía (su tabla no está lista). Solo se puede dejar sin guardar.",
+};
 type Planned = {
   ref: string; tipo: string; accion: string; claveExterna: string | null; registroId?: string;
   valores: Record<string, unknown>; evidencias?: { archivo: string }[]; avisos?: string[];
@@ -47,18 +63,18 @@ export function collectDoubts(plans: { loteId: string; plan: PlanLike }[]): Doub
 }
 
 /** One answer per group → the decisions of every batch (only answers the group allows). */
-export function decisionsByBatch(doubts: Doubt[], answers: Record<string, Decision>): Record<string, Record<string, Decision>> {
-  const out: Record<string, Record<string, Decision>> = {};
+export function decisionsByBatch(doubts: Doubt[], answers: Record<string, Answer>): Record<string, Record<string, Answer>> {
+  const out: Record<string, Record<string, Answer>> = {};
   for (const d of doubts) {
     const answer = answers[d.key];
-    if (!answer || !d.opciones.includes(answer)) continue;
+    if (!validAnswer(d, answer)) continue;
     for (const o of d.ocurrencias) (out[o.loteId] ??= {})[o.ref] = answer;
   }
   return out;
 }
 
 /** Batches that would have no pending question left with these answers. */
-export function resolvedBatches(doubts: Doubt[], answers: Record<string, Decision>, batches: string[]): string[] {
-  const open = new Set(doubts.filter(d => !answers[d.key] || !d.opciones.includes(answers[d.key])).flatMap(d => d.ocurrencias.map(o => o.loteId)));
+export function resolvedBatches(doubts: Doubt[], answers: Record<string, Answer>, batches: string[]): string[] {
+  const open = new Set(doubts.filter(d => !validAnswer(d, answers[d.key])).flatMap(d => d.ocurrencias.map(o => o.loteId)));
   return batches.filter(b => !open.has(b));
 }

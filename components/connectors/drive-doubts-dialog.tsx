@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { collectDoubts, decisionsByBatch, OPCION, resolvedBatches, TIPO, type Decision, type Doubt, type PlanLike } from "./doubts";
+import { canPick, collectDoubts, decisionsByBatch, EXPLICACION, OPCION, resolvedBatches, sameName, TIPO, validAnswer, type Answer, type Decision, type Doubt, type PlanLike } from "./doubts";
 import { saveClean, type SaveOutcome } from "./intake-queue";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -22,13 +22,15 @@ export function DriveDoubtsDialog({ open, onOpenChange, batchIds, onDone }: {
 }) {
   const [plans, setPlans] = useState<{ loteId: string; plan: PlanLike }[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Record<string, Decision>>({});
+  const [answers, setAnswers] = useState<Record<string, Answer>>({});
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [saving, setSaving] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setPlans(null); setError(null); setAnswers({});
+    call("/api/knowledge/intake/companies").then(r => { if (!cancelled && r.ok) setCompanies((r.json as { empresas?: Company[] }).empresas ?? []); }).catch(() => undefined);
     (async () => {
       const loaded: { loteId: string; plan: PlanLike }[] = [];
       // A few at a time: each plan is built on the server from the batch.
@@ -46,10 +48,10 @@ export function DriveDoubtsDialog({ open, onOpenChange, batchIds, onDone }: {
 
   const doubts = useMemo(() => plans ? collectDoubts(plans) : [], [plans]);
   const ready = useMemo(() => plans ? resolvedBatches(doubts, answers, plans.map(p => p.loteId)) : [], [doubts, answers, plans]);
-  const answered = doubts.filter(d => answers[d.key]).length;
+  const answered = doubts.filter(d => validAnswer(d, answers[d.key])).length;
 
   function answerAll(decision: Decision) {
-    setAnswers(prev => ({ ...prev, ...Object.fromEntries(doubts.filter(d => d.opciones.includes(decision) && !prev[d.key]).map(d => [d.key, decision])) }));
+    setAnswers(prev => ({ ...prev, ...Object.fromEntries(doubts.filter(d => d.opciones.includes(decision) && !validAnswer(d, prev[d.key])).map(d => [d.key, decision])) }));
   }
 
   async function apply() {
@@ -79,7 +81,7 @@ export function DriveDoubtsDialog({ open, onOpenChange, batchIds, onDone }: {
                 <button type="button" className="rounded-md border border-slate-200 bg-white px-2 py-1 font-medium text-slate-700 hover:border-slate-300" onClick={() => answerAll("unir")}>Es la misma</button>
                 <button type="button" className="rounded-md border border-slate-200 bg-white px-2 py-1 font-medium text-slate-700 hover:border-slate-300" onClick={() => answerAll("tal_cual")}>Guardar aparte</button>
               </div>
-              {doubts.map(d => <DoubtCard key={d.key} doubt={d} answer={answers[d.key]} onAnswer={a => setAnswers(prev => ({ ...prev, [d.key]: a }))} />)}
+              {doubts.map(d => <DoubtCard key={d.key} doubt={d} answer={answers[d.key]} companies={companies} onAnswer={a => setAnswers(prev => ({ ...prev, [d.key]: a }))} />)}
             </div>}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-3">
@@ -94,23 +96,50 @@ export function DriveDoubtsDialog({ open, onOpenChange, batchIds, onDone }: {
   </Dialog>;
 }
 
-function DoubtCard({ doubt: d, answer, onAnswer }: { doubt: Doubt; answer?: Decision; onAnswer: (a: Decision) => void }) {
-  return <section className={cn("rounded-xl border bg-white p-4", answer ? "border-emerald-200" : "border-slate-200")}>
+type Company = { id: string; nombre: string; nif: string | null };
+
+/** Companies whose name looks like the doubt's first (so the right one is usually at the top). */
+function ranked(companies: Company[], name: string): { close: Company[]; rest: Company[] } {
+  const key = sameName(name).replace(/(sl|sa|slu|scoop)+$/g, "");
+  const score = (c: Company) => {
+    const k = sameName(c.nombre).replace(/(sl|sa|slu|scoop)+$/g, "");
+    if (!key || !k) return 0;
+    if (k === key) return 3;
+    if (k.includes(key) || key.includes(k)) return 2;
+    let common = 0; while (common < Math.min(k.length, key.length) && k[common] === key[common]) common++;
+    return common >= 3 ? 1 : 0;
+  };
+  const close = companies.filter(c => score(c) > 0).sort((a, b) => score(b) - score(a)).slice(0, 8);
+  return { close, rest: companies.filter(c => !close.includes(c)) };
+}
+
+function DoubtCard({ doubt: d, answer, companies, onAnswer }: { doubt: Doubt; answer?: Answer; companies: Company[]; onAnswer: (a: Answer) => void }) {
+  const picked = answer?.startsWith("unir:") ? answer.slice(5) : "";
+  const options = canPick(d) ? ranked(companies, d.nombre) : null;
+  const label = (c: Company) => `${c.nombre}${c.nif ? ` · ${c.nif}` : ""}`;
+  return <section className={cn("rounded-xl border bg-white p-4", validAnswer(d, answer) ? "border-emerald-200" : "border-slate-200")}>
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0">
         <p className="text-sm font-semibold text-slate-900">{TIPO[d.tipo] ?? d.tipo} «{d.nombre}»{d.clave && <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">{d.clave}</span>}</p>
-        <p className="mt-0.5 text-xs text-amber-700">{d.motivo}</p>
+        <p className="mt-0.5 text-xs font-medium text-amber-700">{d.motivo}</p>
       </div>
       <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{plural(d.ocurrencias.length, "vez", "veces")}</span>
     </div>
+    {EXPLICACION[d.motivo] && <p className="mt-1 text-xs text-slate-500">{EXPLICACION[d.motivo]}</p>}
     {d.destino && <p className="mt-2 text-sm text-slate-700">¿Es la misma que <b className="font-semibold">«{d.destino.nombre}»</b>{d.destino.clave ? ` (${d.destino.clave})` : ""}{d.destino.existente ? ", que ya está en tus datos" : ""}?</p>}
     {d.archivos.length > 0 && <details className="mt-1 text-[11px] text-slate-500"><summary className="cursor-pointer">En {plural(d.archivos.length, "documento", "documentos")}</summary>
       <p className="mt-1">{d.archivos.slice(0, 12).join(" · ")}{d.archivos.length > 12 ? ` y ${d.archivos.length - 12} más` : ""}</p></details>}
-    <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label={`Respuesta para ${d.nombre}`}>
+    <div className="mt-3 flex flex-wrap items-center gap-2" role="radiogroup" aria-label={`Respuesta para ${d.nombre}`}>
       {d.opciones.map(o => <button key={o} type="button" role="radio" aria-checked={answer === o} onClick={() => onAnswer(o)}
         className={cn("rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
           answer === o ? "border-[#0A58FF] bg-[#EDF3FF] text-[#0A58FF]" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900")}>
         {!d.destino && o === "tal_cual" ? "Guardar igualmente" : OPCION[o]}</button>)}
+      {options && <select value={picked} onChange={e => { if (e.target.value) onAnswer(`unir:${e.target.value}`); }} aria-label="Es la misma que…"
+        className={cn("h-[30px] max-w-[280px] rounded-lg border px-2 text-xs", picked ? "border-[#0A58FF] bg-[#EDF3FF] font-medium text-[#0A58FF]" : "border-slate-200 text-slate-600")}>
+        <option value="">{d.destino ? "Es la misma que otra…" : "Es la misma que…"}</option>
+        {options.close.length > 0 && <optgroup label="Nombres parecidos">{options.close.map(c => <option key={c.id} value={c.id}>{label(c)}</option>)}</optgroup>}
+        {options.rest.length > 0 && <optgroup label="Todas las empresas">{options.rest.map(c => <option key={c.id} value={c.id}>{label(c)}</option>)}</optgroup>}
+      </select>}
     </div>
   </section>;
 }

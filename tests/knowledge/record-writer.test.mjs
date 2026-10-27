@@ -66,6 +66,14 @@ test('plan: typed values with printed evidence, details under their invoice, rel
  assert.equal(joined.resumen.bloqueados,0);assert.equal(joined.registros.find(r=>r.ref==='company:1234S678Z').accion,'unir');
  assert.ok(joined.relaciones.some(r=>r.relacion==='invoice_customer'&&r.desde==='company:12345678Z'&&r.hacia==='invoice:B00000000/F-2'),'relations move to the joined entity');
  assert.ok(joined.relaciones.some(r=>r.relacion==='supply_point_holder'&&r.desde==='company:12345678Z'));
+ // The person can also say which SAVED company it is (no suggestion needed): that record takes its place.
+ const uid='0b4f6f0e-1111-4c4c-9a9a-123456789abc';
+ const manual=planner.buildWritePlan(extraction,rec,{'company:1234S678Z':'unir:'+uid});
+ assert.equal(manual.resumen.bloqueados,0);
+ const chosen=manual.registros.find(r=>r.ref==='company:registro:'+uid);assert.equal(chosen.accion,'reutilizar');assert.equal(chosen.registroId,uid);
+ assert.ok(manual.relaciones.some(r=>r.relacion==='invoice_customer'&&r.desde==='company:registro:'+uid&&r.hacia==='invoice:B00000000/F-2'));
+ assert.equal(planner.buildWritePlan(extraction,rec,{'company:1234S678Z':'unir:no-es-un-id'}).resumen.bloqueados,1,'a malformed id is not a decision');
+ assert.equal(planner.MANUAL_JOIN.test('unir:'+uid),true);
  const left=planner.buildWritePlan(extraction,rec,{'company:1234S678Z':'omitir'});
  assert.ok(!left.relaciones.some(r=>r.desde==='company:1234S678Z'||r.hacia==='company:1234S678Z'),'no relation to a left-out entity');
 });

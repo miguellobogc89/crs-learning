@@ -101,3 +101,14 @@ test('save with decisions: sent to the server; a batch still missing one stays w
  assert.deepEqual(out.guardados,['L1']);assert.deepEqual(out.conDudas,['L2','L3']);
  assert.deepEqual(posted,{L1:{a:'unir'},L2:{b:'unir'}},'L3 (no answers, still blocked) is not even sent');
 });
+
+test('doubts: "es la misma que…" a saved company is a valid answer for company questions only',()=>{
+ const company={tipo:'company',opciones:['tal_cual','omitir']};
+ assert.equal(dq.validAnswer(company,'unir:0b4f6f0e-1111-4c4c-9a9a-123456789abc'),true);
+ assert.equal(dq.validAnswer(company,'unir'),false,'no suggestion: plain "unir" is not an option');
+ assert.equal(dq.validAnswer({tipo:'company',opciones:['omitir']},'unir:x'),false,'not when the only option is leaving it out');
+ assert.equal(dq.validAnswer({tipo:'invoice',opciones:['tal_cual','omitir']},'unir:x'),false);
+ const doubts=[{key:'k',tipo:'company',opciones:['tal_cual','omitir'],ocurrencias:[{loteId:'L1',ref:'company:x'}]}];
+ assert.deepEqual(dq.decisionsByBatch(doubts,{k:'unir:ID'}),{L1:{'company:x':'unir:ID'}});
+ assert.ok(dq.EXPLICACION['NIF/CIF no válido']);
+});

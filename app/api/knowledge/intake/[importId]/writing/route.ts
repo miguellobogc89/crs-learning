@@ -7,7 +7,7 @@ import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { EXTRACTOR_UPLOAD_TYPE } from "@/lib/knowledge/intake/extractor/contract";
 import type { TargetedResult } from "@/lib/knowledge/intake/targeted/contract";
 import { RECONCILIATION_REVISION, type ReconciliationState } from "@/lib/knowledge/intake/reconciliation/contract";
-import { buildWritePlan, WRITER_REVISION, type Decision } from "@/lib/knowledge/intake/writer/plan";
+import { buildWritePlan, MANUAL_JOIN, WRITER_REVISION, type DecisionValue as Decision } from "@/lib/knowledge/intake/writer/plan";
 import { commitWritePlan, type WriteResult } from "@/lib/knowledge/intake/writer/commit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,7 +56,7 @@ export async function POST(request: Request, context: Context) {
   const inputs = ready(payload);
   if (!inputs) return NextResponse.json({ error: "Falta la conciliación actual del lote" }, { status: 409 });
   const body = await request.json().catch(() => ({})) as { decisiones?: Record<string, Decision> };
-  const decisiones = Object.fromEntries(Object.entries(body.decisiones ?? {}).filter(([, d]) => d === "unir" || d === "tal_cual" || d === "omitir"));
+  const decisiones = Object.fromEntries(Object.entries(body.decisiones ?? {}).filter(([, d]) => d === "unir" || d === "tal_cual" || d === "omitir" || (typeof d === "string" && MANUAL_JOIN.test(d))));
   const plan = buildWritePlan(inputs.extraction, inputs.reconciliation, decisiones);
   if (plan.resumen.bloqueados) return NextResponse.json({ error: `Faltan ${plan.resumen.bloqueados} decisión(es)`, plan }, { status: 409 });
   try {

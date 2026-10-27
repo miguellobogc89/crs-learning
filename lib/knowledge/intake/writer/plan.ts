@@ -12,6 +12,9 @@ import { toDate, toDecimal, toInteger, usesCommaDecimals, type Conversion } from
 export const WRITER_REVISION = 1;
 
 export type Decision = "unir" | "tal_cual" | "omitir";
+/** A decision, or "unir:<record id>": the person says which saved company it is (when no suggestion fits). */
+export type DecisionValue = Decision | `unir:${string}`;
+export const MANUAL_JOIN = /^unir:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 export type Evidence = { campo: string; impreso: string; archivo: string; archivoId: string; pagina: number | null; origen: string; inferido?: string };
 export type PlannedRecord = {
   ref: string; tipo: string;
@@ -59,7 +62,7 @@ function convert(type: string, printed: string, ctx: { commaDecimals: boolean; r
   }
 }
 
-export function buildWritePlan(extraction: TargetedResult, reconciliation: ReconciliationResult, decisions: Record<string, Decision> = {}): WritePlan {
+export function buildWritePlan(extraction: TargetedResult, reconciliation: ReconciliationResult, decisions: Record<string, DecisionValue> = {}): WritePlan {
   // Mention (file, part, role, row) → reconciled entity.
   const entityOf = new Map<string, ReconciledEntity>();
   for (const e of reconciliation.entidades) for (const m of e.menciones) entityOf.set(`${m.archivoId}|${m.parteId}|${m.rol}|${m.indice ?? 0}`, e);
@@ -170,8 +173,14 @@ export function buildWritePlan(extraction: TargetedResult, reconciliation: Recon
     else if (e.tipo === "company" && e.avisos.some(a => /NIF\/CIF/.test(a))) r.bloqueo = { motivo: "NIF/CIF no válido", opciones: ["tal_cual", "omitir"] };
     if (r.bloqueo) {
       const decision = decisions[e.ref];
-      if (decision && r.bloqueo.opciones.includes(decision)) {
-        r.accion = decision === "tal_cual" ? "crear" : decision;
+      const manual = e.tipo === "company" && r.bloqueo.opciones.includes("tal_cual") && typeof decision === "string" ? MANUAL_JOIN.exec(decision)?.[1] : undefined;
+      if (manual) {
+        // The person chose the saved company it is: that record takes its place (checked to exist when saving).
+        const ref = `company:registro:${manual}`;
+        if (!records.has(ref)) records.set(ref, { ref, tipo: "company", accion: "reutilizar", registroId: manual, claveExterna: null, valores: {}, evidencias: [], noConvertidos: [], avisos: [] });
+        r.accion = "unir"; r.unidoA = ref;
+      } else if (decision && r.bloqueo.opciones.includes(decision as Decision)) {
+        r.accion = decision === "tal_cual" ? "crear" : decision as "unir" | "omitir";
         if (decision === "unir") r.unidoA = r.bloqueo.sugerencia;
       } else r.accion = "bloqueado";
     }
