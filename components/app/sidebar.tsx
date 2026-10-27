@@ -9,6 +9,7 @@ import { usePathname } from "next/navigation";
 import { SheetClose } from "@/components/ui/sheet";
 
 import {
+  BarChart3,
   GraduationCap,
   Home,
   Inbox,
@@ -43,6 +44,11 @@ const navItems = [
     href: "/engine/tables",
     icon: Table2,
     label: "Tablas",
+  },
+  {
+    href: "/analytics",
+    icon: BarChart3,
+    label: "Analítica",
   },
   {
     href: "/courses",
