@@ -36,7 +36,7 @@ A PDF grouping several tickets in one invoice is classified as several parts; ea
 
 ## Catalog alignment
 
-`invoice`, `invoice_line` and `organization` are used by the existing Engine code. `invoice_tax_line`, `supply_point`, `contracted_power`, `energy_consumption`, `meter_reading` and `telecom_line` are **proposed** catalog types. Before records are written, keys must be checked against the published global catalog (it lives in the database) and new types created or mapped. The legacy workspace-scoped Engine definitions still need the planned transition to global definitions.
+Catalog types and field names come from the standard global catalog (`docs/engine/standard-catalog.md`): companies are `company` (`organization` is kept for other uses), and `FIELD_SET_MAPPING` maps each extracted field to its catalog field (e.g. `tax_id` → `tax_identifier`, `subtotal` → `net_amount`; the billed period printed with the supply is stored on the invoice).
 
 ## Growth loop (planned)
 

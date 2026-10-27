@@ -38,7 +38,7 @@ test('each subtype resolves to its most specific set, composed with what it exte
 test('entities carry roles for future relations, and matching identifiers are marked',()=>{
  const elec=sets.resolveFieldSet('transaccion','factura','suministro_electricidad');
  assert.deepEqual(roles(elec),['invoice','issuer','recipient','tax_breakdown','supply','charges','power','consumption','meter_readings']);
- assert.equal(elec.entities.find(e=>e.role==='issuer').catalogType,'organization');
+ assert.equal(elec.entities.find(e=>e.role==='issuer').catalogType,'company');
  assert.ok(field(elec,'issuer','tax_id').identifier&&field(elec,'issuer','tax_id').required,'issuer tax id is the key to reuse the company');
  assert.ok(field(elec,'supply','supply_point_id').identifier&&field(elec,'supply','supply_point_id').required);
  assert.ok(field(elec,'invoice','invoice_number').identifier);

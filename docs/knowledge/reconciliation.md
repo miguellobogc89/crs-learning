@@ -11,7 +11,7 @@ Stage 5 of the intake pipeline: base reading → classification → targeted ext
 
 | Role in the extraction | Entity | Identity |
 |---|---|---|
-| issuer, recipient | `organization` | tax id |
+| issuer, recipient | `company` | tax id |
 | invoice | `invoice` | issuer tax id + invoice number (two suppliers may use the same number) |
 | supply | `supply_point` | supply point id (CUPS, line, service id) |
 | lines_service | `telecom_line` | line number (digits) |
@@ -25,9 +25,9 @@ Identity comes **only from printed identifiers**, never from names: the same tax
 1. **Group** (`groupEntities`, pure): every mention of the batch is grouped by type + normalised identifier. The same supplier in two invoices, or the recipient of every invoice, is one entity with several mentions and all its printed names.
 2. **Normalise**: tax ids drop spaces, dots, dashes and an `ES` VAT prefix; lines keep digits; other ids drop whitespace and are upper-cased.
 3. **Validate** Spanish tax ids (DNI/NIF, NIE, CIF check character). A failing check is a notice ("probable error de lectura"), e.g. a `B` read as `8`. Foreign ids are not judged. A tax id that is not valid but is one look-alike character away (`8`/`B`, `0`/`O`, `5`/`S`…) from a valid company of the batch gets a notice naming that company ("872378581 … probablemente es B72378581"); it is never merged automatically. Nine bare digits are flagged as a letter probably read as a number (revision 2, first real run).
-4. **Look up** (`loadLookups`): records of the workspace's object type with the same key (`organization`, `invoice`, …), matched on any field that may hold the identifier (`tax_id`, `nif`, `cif`, `vat_number`…; `invoice_number`, `numero_factura`…; `cups`…) or the record's `external_key`.
+4. **Look up** (`loadLookups`): records of the workspace's object type with the same key (`company`, `invoice`, …), matched on any field that may hold the identifier (`tax_id`, `nif`, `cif`, `vat_number`…; `invoice_number`, `numero_factura`…; `cups`…) or the record's `external_key`.
 5. **State per entity**: `nueva` (no record), `existente` (exactly one), `ambigua` (several: a person decides), `sin_identificador` (nothing to match on: review), `tipo_no_definido` (the workspace has no such object type yet, e.g. proposed catalog types), `no_comprobada` (the scan exceeded its bound of 2,000 records, so absence cannot be proven). An invoice that already exists is flagged as a possible repeated document.
-6. **Plan relations**: invoice → issuer, recipient, supply point, telecom lines, using the entity refs (`organization:B…`). Record ids are only those of existing matches; new records get ids when they are written, never here.
+6. **Plan relations**: invoice → issuer, recipient, supply point, telecom lines, using the entity refs (`company:B…`). Record ids are only those of existing matches; new records get ids when they are written, never here.
 
 ## Output
 
@@ -41,7 +41,7 @@ The upload modal shows a plain-language list (entity, printed names, state, wher
 
 ## Known limits
 
-- The workspace's own company has no stored tax id yet, so the recipient cannot be checked against it; it is reconciled like any organization.
+- The workspace's own company has no stored tax id yet, so the recipient cannot be checked against it; it is reconciled like any company.
 - Invoices are matched on their number only; the issuer half of the identity will be checked through the issuer relation once records are written.
 - Field naming of older Engine records varies; only the identifier fields listed above are recognised.
 

@@ -16,6 +16,8 @@
     "test:knowledge:base-reading": "node --test tests/knowledge/base-reading.test.mjs tests/knowledge/intake-upload-flow.test.mjs",
     "test:knowledge:targeted": "node --test tests/knowledge/targeted-extraction.test.mjs tests/knowledge/field-sets.test.mjs tests/knowledge/intake-upload-flow.test.mjs",
     "test:knowledge:reconciliation": "node --test tests/knowledge/reconciliation.test.mjs",
+    "engine:standard-catalog-sql": "node scripts/engine/standard-catalog-sql.mjs",
+    "test:engine:catalog": "node --test tests/engine/standard-catalog.test.mjs",
     "test:knowledge:classifier": "node --test tests/knowledge/document-classifier.test.mjs tests/knowledge/field-sets.test.mjs tests/knowledge/intake-upload-flow.test.mjs",
     "knowledge:replay-verification": "node scripts/knowledge/replay-verification.mjs"
   },

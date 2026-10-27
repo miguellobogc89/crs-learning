@@ -1,6 +1,6 @@
 import type { ReconciliationResult } from "@/lib/knowledge/intake/reconciliation/contract";
 
-const TIPO: Record<string, string> = { organization: "Empresa", invoice: "Factura", supply_point: "Punto de suministro", telecom_line: "Línea" };
+const TIPO: Record<string, string> = { company: "Empresa", invoice: "Factura", supply_point: "Punto de suministro", telecom_line: "Línea" };
 const ESTADO: Record<string, string> = {
   nueva: "nueva", existente: "ya existe", ambigua: "varias coincidencias: revisar", sin_identificador: "sin identificador: revisar",
   tipo_no_definido: "tipo aún no definido en el espacio", no_comprobada: "no comprobada",

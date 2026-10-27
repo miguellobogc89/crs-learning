@@ -4,11 +4,10 @@ import { TAXONOMY, type Family } from "../classifier/taxonomy";
  * WHAT to extract from each kind of document. DATA, not logic: reviewed by people, extended over time with
  * approved proposals. Values are always taken as printed (no conversions, no computed values); the extraction
  * never assigns record ids. Fields are grouped by ENTITY with a ROLE so that, in the later relational phase,
- * each group becomes a record of its catalog type and each role a relation (invoice → issuer → organization).
+ * each group becomes a record of its catalog type and each role a relation (invoice → issuer → company).
  *
- * `catalogType` names follow the global Engine catalog. `catalogo: "existente"` marks types already used by the
- * Engine code (invoice, invoice_line, organization); "propuesto" types must be created or mapped in the catalog
- * before records are written. Keys must be checked against the published catalog when wiring the extraction.
+ * `catalogType` names follow the standard global catalog (lib/engine/catalog/standard-catalog.ts), and
+ * FIELD_SET_MAPPING there says in which catalog field each extracted field is stored (a test keeps both aligned).
  */
 
 export type FieldType = "text" | "long_text" | "integer" | "decimal" | "boolean" | "date" | "enum";
@@ -44,7 +43,7 @@ const f = (key: string, name: string, type: FieldType, required: boolean, descri
   ({ key, name, type, required, description, ...(identifier ? { identifier } : {}) });
 
 const organization = (role: string, name: string, required: boolean, taxIdRequired: boolean, extra: Partial<EntityDef> = {}): EntityDef => ({
-  role, name, catalogType: "organization", catalogo: "existente", cardinality: "one", required, ...extra,
+  role, name, catalogType: "company", catalogo: "existente", cardinality: "one", required, ...extra,
   fields: [
     f("legal_name", "Razón social", "text", required, "Nombre o razón social tal como aparece."),
     f("tax_id", "NIF/CIF", "text", taxIdRequired, "Identificador fiscal tal como aparece; clave para reconocer la empresa en otros documentos.", true),

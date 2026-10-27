@@ -23,23 +23,23 @@ test('Spanish tax ids: DNI, NIE and CIF check characters; foreign ids are not ju
  assert.equal(contract.spanishTaxIdValid('X1234567L'),true);
  assert.equal(contract.spanishTaxIdValid('B00000000'),true);assert.equal(contract.spanishTaxIdValid('B00000001'),false);
  assert.equal(contract.spanishTaxIdValid('DE123456789'),null);
- assert.equal(contract.normalizeIdentifier('organization','ES B-00000000'),'B00000000');
- assert.equal(contract.normalizeIdentifier('organization','esb00000000'),'B00000000');
+ assert.equal(contract.normalizeIdentifier('company','ES B-00000000'),'B00000000');
+ assert.equal(contract.normalizeIdentifier('company','esb00000000'),'B00000000');
  assert.equal(contract.normalizeIdentifier('telecom_line','956 28-95 65'),'956289565');
 });
 
 test('mentions group by identifier across documents; invoices are issuer + number; names never merge different ids',()=>{
  const g=contract.groupEntities(result);
  const refs=g.entidades.map(e=>e.ref).filter(r=>!r.startsWith('invoice:sin-identificador')).sort();
- assert.deepEqual(refs,['invoice:B00000000/F001','invoice:B00000000/F002','organization:12345678Z','organization:B00000000','organization:B00000001','supply_point:ES0000000000000000AA']);
- const supplier=g.entidades.find(e=>e.ref==='organization:B00000000');
+ assert.deepEqual(refs,['company:12345678Z','company:B00000000','company:B00000001','invoice:B00000000/F001','invoice:B00000000/F002','supply_point:ES0000000000000000AA']);
+ const supplier=g.entidades.find(e=>e.ref==='company:B00000000');
  assert.equal(supplier.menciones.length,2,'same supplier in two invoices is one entity');
  assert.deepEqual(supplier.nombres,['PROVEEDOR DEMO, S.L.','Proveedor Demo SL']);
- assert.equal(g.entidades.find(e=>e.ref==='organization:12345678Z').menciones.length,3,'the recipient of every invoice');
+ assert.equal(g.entidades.find(e=>e.ref==='company:12345678Z').menciones.length,3,'the recipient of every invoice');
  assert.equal(g.entidades.find(e=>e.ref==='supply_point:ES0000000000000000AA').menciones.length,2);
- assert.match(g.entidades.find(e=>e.ref==='organization:B00000001').avisos[0],/dígito de control/);
+ assert.match(g.entidades.find(e=>e.ref==='company:B00000001').avisos[0],/dígito de control/);
  assert.equal(g.entidades.find(e=>e.ref.startsWith('invoice:sin-identificador')).estado,'sin_identificador');
- assert.ok(g.relaciones.some(r=>r.desde==='invoice:B00000000/F001'&&r.relacion==='issuer'&&r.hacia==='organization:B00000000'));
+ assert.ok(g.relaciones.some(r=>r.desde==='invoice:B00000000/F001'&&r.relacion==='issuer'&&r.hacia==='company:B00000000'));
  assert.ok(g.relaciones.some(r=>r.desde==='invoice:B00000000/F002'&&r.relacion==='supply'&&r.hacia==='supply_point:ES0000000000000000AA'));
  assert.deepEqual(g.detalles.filter(d=>d.factura==='invoice:B00000000/F001').map(d=>[d.rol,d.filas]),[['lines',2],['tax_breakdown',1]],'details stay with their invoice');
  assert.ok(!g.entidades.some(e=>e.menciones.some(m=>m.parteId==='p2'&&m.archivo==='enero.pdf')),'knowledge parts are not reconciled');
@@ -53,16 +53,16 @@ function fakeDb({types,records}){
 }
 
 test('existing records are found by any identifier field or external key; archived types ignored; read only',async()=>{
- const db=fakeDb({types:[{id:'t-org',key:'organization'},{id:'t-inv',key:'invoice'}],records:[
+ const db=fakeDb({types:[{id:'t-org',key:'company'},{id:'t-inv',key:'invoice'}],records:[
   {id:'r1',type:'t-org',external_key:null,values_json:{name:'Proveedor',nif:'B-00000000'}},
   {id:'r2',type:'t-org',external_key:'12345678Z',values_json:{name:'Cliente'}},
   {id:'r3',type:'t-org',external_key:null,values_json:{tax_id:'12345678z'}},
   {id:'r4',type:'t-inv',external_key:null,values_json:{invoice_number:'F 001'}}]});
  const r=await process_.reconcile('b','w1',result,db);
  const by=ref=>r.entidades.find(e=>e.ref===ref);
- assert.equal(by('organization:B00000000').estado,'existente');assert.deepEqual(by('organization:B00000000').registros.map(x=>x.id),['r1']);
- assert.equal(by('organization:12345678Z').estado,'ambigua','two records share the tax id: a person decides');
- assert.equal(by('organization:B00000001').estado,'nueva');
+ assert.equal(by('company:B00000000').estado,'existente');assert.deepEqual(by('company:B00000000').registros.map(x=>x.id),['r1']);
+ assert.equal(by('company:12345678Z').estado,'ambigua','two records share the tax id: a person decides');
+ assert.equal(by('company:B00000001').estado,'nueva');
  assert.equal(by('invoice:B00000000/F001').estado,'existente');assert.match(by('invoice:B00000000/F001').avisos.join(),/posible documento repetido/);
  assert.equal(by('invoice:B00000000/F002').estado,'nueva');
  assert.equal(by('supply_point:ES0000000000000000AA').estado,'tipo_no_definido','proposed catalog type not in the workspace yet');
@@ -74,8 +74,8 @@ test('existing records are found by any identifier field or external key; archiv
 
 test('a scan larger than the bound cannot prove absence: entities stay unchecked instead of "new"',async()=>{
  const many=Array.from({length:process_.SCAN_LIMIT+1},(_,i)=>({id:`r${i}`,type:'t-org',external_key:null,values_json:{tax_id:`X${i}`}}));
- const r=await process_.reconcile('b','w1',result,fakeDb({types:[{id:'t-org',key:'organization'}],records:many}));
- assert.equal(r.entidades.find(e=>e.ref==='organization:B00000000').estado,'no_comprobada');
+ const r=await process_.reconcile('b','w1',result,fakeDb({types:[{id:'t-org',key:'company'}],records:many}));
+ assert.equal(r.entidades.find(e=>e.ref==='company:B00000000').estado,'no_comprobada');
 });
 
 test('orchestrator: reconciliation only after the verification has finished, and only for targeted extractions',async()=>{
@@ -101,8 +101,8 @@ test('a tax id misread by one look-alike character is flagged with the probable 
  assert.deepEqual(contract.taxIdLookalikes('B00000000'),[],'valid ids have no look-alikes');
  const misread={...result,archivos:[...result.archivos,{archivoId:'f4',archivo:'compra.pdf',incidencias:[],partes:[invoicePart('p1',{issuerTax:'800000000',issuerName:'PROVEEDOR DEMO SL',number:'T-9'})]}]};
  const g=contract.groupEntities(misread);
- const wrong=g.entidades.find(e=>e.ref==='organization:800000000');
+ const wrong=g.entidades.find(e=>e.ref==='company:800000000');
  assert.ok(wrong,'kept apart: a person confirms');assert.match(wrong.avisos.join(),/probablemente es B00000000 \(PROVEEDOR DEMO, S\.L\.\)/);
  const lone=contract.groupEntities({...result,archivos:[{archivoId:'f5',archivo:'x.pdf',incidencias:[],partes:[invoicePart('p1',{issuerTax:'812345678',issuerName:'X',number:'1'})]}]});
- assert.match(lone.entidades.find(e=>e.ref==='organization:812345678').avisos.join(),/9 cifras/);
+ assert.match(lone.entidades.find(e=>e.ref==='company:812345678').avisos.join(),/9 cifras/);
 });
