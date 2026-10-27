@@ -69,3 +69,35 @@ test('queue: a dropped request is retried; only repeated failures mark the batch
  const q2=new q.IntakeQueue({advance:async()=>{throw new Error('Failed to fetch');},onUpdate:u=>u2.push(u),onIdle:()=>idle2(),sleep:async()=>{}});
  q2.add(['B']);await done2;assert.equal(u2.at(-1).status,'error');
 });
+
+const dq=load('components/connectors/doubts.ts');
+const rec=(ref,o={})=>({ref,tipo:'company',accion:'crear',claveExterna:null,valores:{legal_name:'X'},evidencias:[],...o});
+const plan=(lote,name,file)=>({loteId:lote,plan:{registros:[
+ rec('company:dplocia-sin',{accion:'bloqueado',valores:{legal_name:name},evidencias:[{archivo:file}],bloqueo:{motivo:'Sin identificador; por el nombre parece una empresa conocida',opciones:['unir','tal_cual','omitir'],sugerencia:'company:registro:R1'}}),
+ rec('company:registro:R1',{accion:'reutilizar',registroId:'R1',claveExterna:'B11111111',valores:{legal_name:"D'PLOCIA SL"}}),
+ rec('invoice:1',{tipo:'invoice',accion:'bloqueado',padre:undefined,valores:{invoice_number:'F1'}}), // blocked by its parent: not a question
+]}});
+
+test('doubts: the same question in many batches is asked once, whatever the punctuation',()=>{
+ const plans=[plan('L1',"D'PLOCIA",'a.pdf'),plan('L2','D´Plocia','b.pdf'),plan('L3',"D'PLOCIA",'c.pdf'),
+  {loteId:'L4',plan:{registros:[rec('company:otra',{accion:'bloqueado',valores:{legal_name:'Bar Pepe'},bloqueo:{motivo:'Sin identificador con el que reconocerlo después',opciones:['tal_cual','omitir']}})]}},
+  {loteId:'L5',plan:{registros:[rec('company:ok')]}}];
+ const doubts=dq.collectDoubts(plans);
+ assert.equal(doubts.length,2);
+ assert.equal(doubts[0].ocurrencias.length,3);assert.deepEqual(doubts[0].archivos,['a.pdf','b.pdf','c.pdf']);
+ assert.deepEqual(doubts[0].destino,{nombre:"D'PLOCIA SL",clave:'B11111111',existente:true});
+ const answers={[doubts[0].key]:'unir'};
+ assert.deepEqual(dq.decisionsByBatch(doubts,answers),{L1:{'company:dplocia-sin':'unir'},L2:{'company:dplocia-sin':'unir'},L3:{'company:dplocia-sin':'unir'}});
+ assert.deepEqual(dq.resolvedBatches(doubts,answers,['L1','L2','L3','L4','L5']),['L1','L2','L3','L5'],'L4 still waits; clean batches are saved too');
+ assert.deepEqual(dq.decisionsByBatch(doubts,{[doubts[1].key]:'unir'}),{},'an answer the question does not allow is ignored');
+});
+
+test('save with decisions: sent to the server; a batch still missing one stays waiting',async()=>{
+ const posted={};
+ const call=async(url,init)=>{const id=url.split('/')[4];
+  if(init?.method==='POST'){posted[id]=JSON.parse(init.body).decisiones;return id==='L2'?{ok:false,status:409,json:{error:'Faltan 1 decisión(es)'}}:{ok:true,status:200,json:{estado:'completed'}};}
+  return{ok:true,json:{estado:'pending',plan:{resumen:{bloqueados:1}}}};};
+ const out=await q.saveClean(['L1','L2','L3'],call,undefined,{L1:{a:'unir'},L2:{b:'unir'}});
+ assert.deepEqual(out.guardados,['L1']);assert.deepEqual(out.conDudas,['L2','L3']);
+ assert.deepEqual(posted,{L1:{a:'unir'},L2:{b:'unir'}},'L3 (no answers, still blocked) is not even sent');
+});

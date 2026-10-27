@@ -76,3 +76,11 @@ fase), por guardar, guardado, con error, repetido o no legible. Vale desde cualq
 - **Guardar los que no tienen dudas**: tras confirmar, guarda uno a uno los lotes cuyo plan no tiene decisiones
   pendientes; los que las tienen se abren con «Revisar».
 - **Continuar** en un lote con error de extracción lo reanuda desde el documento que falló.
+
+## Resolver dudas (guardado en bloque)
+
+«Resolver dudas y guardar» reúne las decisiones pendientes de todos los lotes por guardar
+(`components/connectors/doubts.ts`) y las **agrupa**: misma entidad (nombre sin tildes ni signos), mismo identificador,
+mismo motivo y misma sugerencia → una sola pregunta, con cuántas veces aparece y en qué documentos. La respuesta se
+aplica a todas sus apariciones. «Aplicar y guardar» guarda, uno a uno, los lotes que quedan sin preguntas (también los
+que no tenían ninguna) enviando sus decisiones; el servidor las vuelve a comprobar y el que aún tenga alguna sigue esperando.

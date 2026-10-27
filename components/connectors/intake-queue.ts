@@ -78,25 +78,29 @@ export class IntakeQueue {
 
 type Json = { estado?: string; plan?: { resumen?: { bloqueados?: number } } | null; error?: string };
 export type SaveOutcome = { guardados: string[]; conDudas: string[]; errores: { id: string; error: string }[] };
+type Call = (url: string, init?: RequestInit) => Promise<{ ok: boolean; status?: number; json: Json }>;
 
 /**
- * "Guardar los que no tienen dudas": saves, one after another, every batch whose plan needs no decision. Batches with
- * pending decisions are left for the person (opened one by one). Explicit action only.
+ * Saves, one after another, the batches given. Without decisions for a batch, it is saved only if its plan needs
+ * none ("Guardar los que no tienen dudas"); with decisions (from "Resolver dudas"), they are sent and the server
+ * checks them: a batch still missing one stays for the person. Explicit action only.
  */
-export async function saveClean(ids: string[], call: (url: string, init?: RequestInit) => Promise<{ ok: boolean; json: Json }>, onProgress?: (done: number) => void): Promise<SaveOutcome> {
+export async function saveClean(ids: string[], call: Call, onProgress?: (done: number) => void, decisions: Record<string, Record<string, string>> = {}): Promise<SaveOutcome> {
   const out: SaveOutcome = { guardados: [], conDudas: [], errores: [] };
   let done = 0;
   for (const id of ids) {
     try {
+      const own = decisions[id];
       const plan = await call(`/api/knowledge/intake/${id}/writing`);
       if (!plan.ok) throw new Error(plan.json.error ?? "No se pudo leer el plan");
       if (plan.json.estado === "completed") out.guardados.push(id);
       else if (plan.json.estado !== "pending" && plan.json.estado !== "error") throw new Error(plan.json.error ?? "El lote no está listo para guardar");
-      else if ((plan.json.plan?.resumen?.bloqueados ?? 0) > 0) out.conDudas.push(id);
+      else if (!own && (plan.json.plan?.resumen?.bloqueados ?? 0) > 0) out.conDudas.push(id);
       else {
-        const saved = await call(`/api/knowledge/intake/${id}/writing`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ decisiones: {} }) });
-        if (!saved.ok) throw new Error(saved.json.error ?? "No se pudo guardar");
-        out.guardados.push(id);
+        const saved = await call(`/api/knowledge/intake/${id}/writing`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ decisiones: own ?? {} }) });
+        if (saved.ok) out.guardados.push(id);
+        else if (saved.status === 409 && /decisi/i.test(saved.json.error ?? "")) out.conDudas.push(id);
+        else throw new Error(saved.json.error ?? "No se pudo guardar");
       }
     } catch (e) { out.errores.push({ id, error: e instanceof Error ? e.message : String(e) }); }
     onProgress?.(++done);

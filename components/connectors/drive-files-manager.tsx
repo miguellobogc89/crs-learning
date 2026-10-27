@@ -6,7 +6,8 @@ import { KnowledgeImportModal } from "@/components/knowledge/import/modal";
 import { advanceIntake, PHASE_NAMES } from "@/components/knowledge/import/advance-intake";
 import { intakeRequest } from "@/components/knowledge/import/intake-request";
 import { cn } from "@/lib/utils";
-import { IntakeQueue, saveClean, type QueueItem } from "./intake-queue";
+import { IntakeQueue, saveClean, type QueueItem, type SaveOutcome } from "./intake-queue";
+import { DriveDoubtsDialog } from "./drive-doubts-dialog";
 
 type FileStatus = "sin_traer" | "procesando" | "por_guardar" | "guardado" | "error" | "repetido" | "no_legible";
 type Row = { id: string; nombre: string; modificado: string | null; tamano: number | null; estado: FileStatus; fase: string | null; detalle: string | null; loteId: string | null; traido: string | null };
@@ -38,6 +39,8 @@ export function DriveFilesManager({ libraryId }: { libraryId: string | null }) {
   const [confirmSave, setConfirmSave] = useState(false);
   const [saving, setSaving] = useState<{ done: number; total: number } | null>(null);
   const [opened, setOpened] = useState<string | null>(null);
+  // The batches are fixed when the dialog opens (the list keeps refreshing behind it).
+  const [doubtsFor, setDoubtsFor] = useState<string[] | null>(null);
   const runner = useRef<IntakeQueue | null>(null);
 
   const load = useCallback(async () => {
@@ -120,9 +123,13 @@ export function DriveFilesManager({ libraryId }: { libraryId: string | null }) {
     const out = await saveClean(toSave, async (url, init) => { const r = await fetch(url, { cache: "no-store", ...init }); return { ok: r.ok, json: await r.json().catch(() => ({})) }; },
       done => setSaving({ done, total: toSave.length }));
     setSaving(null);
+    await reportSaved(out);
+  }
+
+  async function reportSaved(out: SaveOutcome) {
     await load();
     setNotice({ kind: out.errores.length ? "error" : "ok", text: `${plural(out.guardados.length, "lote guardado", "lotes guardados")}` +
-      (out.conDudas.length ? ` · ${plural(out.conDudas.length, "lote necesita", "lotes necesitan")} tu decisión (ábrelos con «Revisar»)` : "") +
+      (out.conDudas.length ? ` · ${plural(out.conDudas.length, "lote necesita", "lotes necesitan")} tu decisión (pulsa «Resolver dudas»)` : "") +
       (out.errores.length ? ` · ${plural(out.errores.length, "con error", "con error")}: ${out.errores.map(e => e.error).join(" · ")}` : "") });
   }
 
@@ -151,6 +158,7 @@ export function DriveFilesManager({ libraryId }: { libraryId: string | null }) {
         ? <><span className="text-xs text-slate-600">Se guardarán los lotes sin decisiones pendientes. ¿Seguro?</span>
             <Button variant="brand" size="sm" onClick={saveAll}>Sí, guardar</Button><Button variant="ghost" size="sm" onClick={() => setConfirmSave(false)}>Cancelar</Button></>
         : <Button variant="outline" size="sm" disabled={!!saving || !!bringing} onClick={() => setConfirmSave(true)}>Guardar los que no tienen dudas ({plural(toSave.length, "lote", "lotes")})</Button>)}
+      {canManage && toSave.length > 0 && <Button variant="brand" size="sm" disabled={!!saving || !!bringing} onClick={() => setDoubtsFor(toSave)}>Resolver dudas y guardar</Button>}
       {canManage && failed.length > 0 && <Button variant="outline" size="sm" disabled={!!bringing} onClick={() => void resumeAll()}>Continuar los que fallaron ({plural(failed.length, "lote", "lotes")})</Button>}
       <Button variant="ghost" size="sm" onClick={() => void load()} aria-label="Actualizar"><RefreshCw className="size-3.5" /></Button>
     </div>
@@ -190,6 +198,7 @@ export function DriveFilesManager({ libraryId }: { libraryId: string | null }) {
         </table>
       </div>
     </section>
+    {doubtsFor && <DriveDoubtsDialog open batchIds={doubtsFor} onOpenChange={next => { if (!next) setDoubtsFor(null); }} onDone={out => { void reportSaved(out); }} />}
     {opened && libraryId && <KnowledgeImportModal open stepwise resumeImportId={opened} context={{ origin: "root", libraryId }}
       onOpenChange={(next: boolean) => { if (!next) { setOpened(null); void load(); } }} />}
   </div>;
