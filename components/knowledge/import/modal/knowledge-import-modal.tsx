@@ -4,6 +4,8 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { Button } from "@/components/ui/button";
 import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
 import { advanceIntake, type IntakeView } from "../advance-intake";
+import { ReadingVerification } from "./reading-verification";
+import type { VerificationReport } from "@/lib/knowledge/intake/verifier/contract";
 import type { KnowledgeImportModalProps } from "./knowledge-import-modal.types";
 async function read(response: Response) {
   const body = await response.json();
@@ -47,7 +49,7 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
     } catch(e) { setError(e instanceof Error ? e.message : "Error de subida"); }
     finally { setUploading(false); }
   }
-  const labels: Record<string, string> = { lectura: "Extrayendo contenido de los documentos…" };
+  const labels: Record<string, string> = { lectura: "Extrayendo contenido de los documentos…", verificacion: "Revisando la lectura contra el documento original…" };
   return <Dialog open={open} onOpenChange={next => { if (!uploading) onOpenChange(next); }}>
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
       <DialogTitle>Subir documentos</DialogTitle>
@@ -58,7 +60,11 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
       </>}
       {id && !error && (!view || view.status === "processing") && <p role="status">{labels[view?.phase ?? "lectura"]}</p>}
       {(error || view?.error) && <p role="alert">{error || view?.error}</p>}
+      {view?.verification?.status === "error" && <p role="alert">La lectura está completa, pero no se pudo verificar: {view.verification.error}</p>}
+      {view?.verification?.status === "completed" && <ReadingVerification report={view.verification.result as VerificationReport} />}
       {view?.status === "completed" && <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded border p-4 text-xs">{JSON.stringify(view.result, null, 2)}</pre>}
+      {view?.verification?.status === "completed" && <details className="rounded border p-4 text-xs"><summary>JSON de la revisión</summary>
+        <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap">{JSON.stringify(view.verification.result, null, 2)}</pre></details>}
     </DialogContent>
   </Dialog>;
 }
