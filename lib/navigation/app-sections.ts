@@ -1,6 +1,7 @@
 // lib/navigation/app-sections.ts
 import {
   BarChart3,
+  Plug,
   GraduationCap,
   Grid2X2,
   Home,
@@ -31,6 +32,11 @@ export const APP_SECTIONS = {
     label: "Analítica",
     href: "/analytics",
     icon: BarChart3,
+  },
+  connectors: {
+    label: "Conectores",
+    href: "/connectors",
+    icon: Plug,
   },
   courses: {
     label: "Academy",
