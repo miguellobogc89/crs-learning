@@ -15,13 +15,13 @@ export type BarGroup = { key: string; label: string; values: Record<string, numb
  * Grouped vertical bars: one group per month, one bar per series (category). One y axis, recessive grid, 2px gaps
  * between bars, rounded data ends anchored on the baseline, a legend, a hover tooltip per group and a table view.
  */
-export function GroupedBarChart({ groups, series, unit = "money", title }: {
-  groups: BarGroup[]; series: BarSeries[]; title: string; unit?: keyof typeof UNITS;
+export function GroupedBarChart({ groups, series, unit = "money", title, compact = false }: {
+  groups: BarGroup[]; series: BarSeries[]; title: string; unit?: keyof typeof UNITS; compact?: boolean;
 }) {
   const { value: format, axis: formatAxis } = UNITS[unit];
   const [hover, setHover] = useState<number | null>(null);
   const [asTable, setAsTable] = useState(false);
-  const W = 760, H = 280, left = 56, right = 8, top = 12, bottom = 28;
+  const W = compact ? 560 : 760, H = compact ? 190 : 280, left = compact ? 48 : 56, right = 8, top = 10, bottom = 24;
   const { min, max, ticks } = useMemo(() => {
     const all = groups.flatMap(g => series.map(s => g.values[s.key] ?? 0));
     const hi = Math.max(0, ...all), lo = Math.min(0, ...all);
@@ -35,20 +35,20 @@ export function GroupedBarChart({ groups, series, unit = "money", title }: {
   const plotW = W - left - right, plotH = H - top - bottom;
   const y = (v: number) => top + (max - v) / (max - min) * plotH;
   const groupW = plotW / Math.max(groups.length, 1);
-  const inner = Math.min(groupW * 0.78, series.length * 22);
+  const inner = Math.min(groupW * 0.8, series.length * (compact ? 14 : 22));
   const gap = 2, barW = Math.max(2, (inner - gap * (series.length - 1)) / Math.max(series.length, 1));
 
   if (!groups.length || !series.length) return <p className="py-10 text-center text-sm text-slate-500">Todavía no hay datos para este gráfico.</p>;
-  return <figure className="space-y-3">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <ul className="flex flex-wrap gap-x-4 gap-y-1" aria-label="Leyenda">
-        {series.map(s => <li key={s.key} className="flex items-center gap-1.5 text-xs text-slate-600">
+  return <figure className={compact ? "space-y-2" : "space-y-3"}>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <ul className={compact ? "flex flex-wrap gap-x-3 gap-y-0.5" : "flex flex-wrap gap-x-4 gap-y-1"} aria-label="Leyenda">
+        {series.length > 1 && series.map(s => <li key={s.key} className={(compact ? "text-[11px]" : "text-xs") + " flex items-center gap-1.5 text-slate-600"}>
           <span className="size-2.5 rounded-sm" style={{ background: s.color }} aria-hidden />{s.label}</li>)}
       </ul>
-      <button type="button" onClick={() => setAsTable(v => !v)} className="text-xs font-medium text-[#0A58FF] hover:underline">
+      <button type="button" onClick={() => setAsTable(v => !v)} className={(compact ? "text-[11px]" : "text-xs") + " font-medium text-[#0A58FF] hover:underline"}>
         {asTable ? "Ver gráfico" : "Ver como tabla"}</button>
     </div>
-    {asTable ? <div className="overflow-x-auto"><table className="w-full text-left text-sm">
+    {asTable ? <div className={compact ? "max-h-[190px] overflow-auto" : "overflow-x-auto"}><table className={(compact ? "text-xs" : "text-sm") + " w-full text-left"}>
       <caption className="sr-only">{title}</caption>
       <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-4 font-semibold">Mes</th>
         {series.map(s => <th key={s.key} className="py-2 pr-4 text-right font-semibold">{s.label}</th>)}
