@@ -1,9 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
-import { EXTRACTOR_UPLOAD_TYPE, type ExtractionResult, type ExtractedFile } from "../extractor/contract";
+import { EXTRACTOR_UPLOAD_TYPE, type ExtractionResult, type ExtractedFile, type Page } from "../extractor/contract";
 import { verifyPage } from "./compare";
-import { VERIFIER_REVISION, verificationReport, type FileReference, type FileReport, type VerificationState } from "./contract";
+import { VERIFIER_REVISION, verificationReport, type FileReference, type FileReport, type PageReference, type VerificationState } from "./contract";
 import { readReference } from "./reference";
 
 /** Batch payload as stored by the extractor, plus this module's own checkpoint. The extraction is read-only here. */
@@ -19,8 +19,35 @@ export function verifyFile(file: ExtractedFile, reference: FileReference | undef
       avisos: [file.metodo === "hoja_nativa" ? "Hoja leída celda a celda sin IA; no requiere verificación visual" : "Formato sin maquetación visual verificable"] })) };
   }
   if (reference.paginas.length !== file.paginas.length) throw new Error(`${file.archivo}: la lectura y el documento no tienen el mismo número de páginas`);
+  const order = matchPages(file.paginas, reference.paginas);
   return { archivoId: file.archivoId, archivo: file.archivo, metodo: file.metodo,
-    paginas: file.paginas.map((page, i) => verifyPage(page, reference.paginas[i])) };
+    paginas: file.paginas.map((page, i) => {
+      const report = verifyPage(page, reference.paginas[order[i]]);
+      if (order[i] === i) return report;
+      // The reading must keep the document's physical page order; it is compared with the page it actually transcribes.
+      report.avisos.unshift(`La página ${i + 1} de la lectura corresponde a la página ${order[i] + 1} del PDF: la lectura ha cambiado el orden de las páginas`);
+      return { ...report, paginaDocumento: order[i] + 1 };
+    }) };
+}
+
+const pageWords = (text: string) => new Set((text.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? []));
+function readingText(page: Page) {
+  return page.bloques.map(b => b.tipo === "texto" ? b.texto : [b.columnas, ...b.filas].flat().join(" ")).join(" ");
+}
+/**
+ * For each page of the reading, the PDF page it actually transcribes. Pages keep their own number unless
+ * another page shares clearly more words (a reading that reordered pages, e.g. by the printed "Página 1 de 4").
+ */
+export function matchPages(reading: Page[], reference: PageReference[]): number[] {
+  const refs = reference.map(r => pageWords(r.palabras.map(w => w.t).join(" ")));
+  return reading.map((page, i) => {
+    const words = pageWords(readingText(page));
+    if (!words.size || reference[i]?.fuente === "sin_referencia") return i;
+    const score = (j: number) => [...words].filter(w => refs[j].has(w)).length / words.size;
+    let best = i;
+    refs.forEach((_, j) => { if (score(j) > score(best)) best = j; });
+    return best !== i && score(best) >= 0.5 && score(best) >= score(i) + 0.25 ? best : i;
+  });
 }
 
 /**

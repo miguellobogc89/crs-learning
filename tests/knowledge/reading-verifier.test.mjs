@@ -69,9 +69,12 @@ test('a page without an independent reading is reported, never silently passed',
 });
 
 // ---------- independent reading ----------
-function referenceModule(pages){
- return load('lib/knowledge/intake/verifier/reference.ts',{unpdf:{getDocumentProxy:async()=>({numPages:pages.length,destroy:async()=>{},
-  getPage:async n=>({getViewport:()=>({width:600,height:800}),getTextContent:async()=>({items:pages[n-1]})})})}});
+// Minimal pdf.js operator codes (the module resolves the real ones from the bundled pdf.js).
+const OPS={save:10,restore:11,transform:12,setTextRenderingMode:30,showText:44,showSpacedText:45,nextLineShowText:46,nextLineSetSpacingShowText:47,paintJpegXObject:82,paintImageXObject:85,paintInlineImageXObject:86};
+function referenceModule(pages,operators=[]){
+ return load('lib/knowledge/intake/verifier/reference.ts',{unpdf:{getResolvedPDFJS:async()=>({OPS}),getDocumentProxy:async()=>({numPages:pages.length,destroy:async()=>{},
+  getPage:async n=>({getViewport:()=>({width:600,height:800,transform:[1,0,0,-1,0,800]}),getTextContent:async()=>({items:pages[n-1]}),
+   getOperatorList:async()=>operators[n-1]??{fnArray:[],argsArray:[]}})})}});
 }
 const visionBody=pageNumber=>({responses:[{responses:[{context:{pageNumber},fullTextAnnotation:{pages:[{blocks:[{paragraphs:[{words:[
  {symbols:[{text:'7'},{text:','},{text:'52'}],boundingBox:{normalizedVertices:[{y:0.1},{x:0.2,y:0.1},{x:0.2,y:0.12},{y:0.12}]}}]}]}]}]}}]}]});
@@ -202,4 +205,64 @@ test('very short values are never paired by similarity with a longer number',()=
  const ws=[w('Descripción',0.05,0.20),w('Unid.',0.40,0.20),w('Importe',0.80,0.20),w('LONA',0.05,0.22),w('0,72',0.80,0.22)];
  const r=compare.verifyPage(p,{numero:1,fuente:'ocr',palabras:ws});
  assert.deepEqual(r.literales.map(l=>[l.modelo,l.estado,l.documento]),[['2','no_encontrado',undefined]]);
+});
+test('rotated text-layer runs (vertical margin notes) get their real box and are flagged as rotated',async()=>{
+ const ref=referenceModule([[{str:'Registro Mercantil de Valencia, Tomo 3073',transform:[0,6,-6,0,20,100],width:400,height:6},{str:'TOTAL EUROS 955,00 IVA',transform:[1,0,0,10,60,700],width:270,height:10}]]);
+ const [page]=await ref.readReference(Buffer.from('%PDF'),{apiKey:null});
+ const margin=page.palabras.filter(w=>w.r);assert.equal(margin.length,6);
+ for(const w of margin){assert.ok(w.y1-w.y0>w.x1-w.x0,'vertical box');assert.ok(w.x1<0.04,'stays in the left margin');}
+ assert.ok(page.palabras.filter(w=>!w.r).every(w=>w.y1-w.y0<w.x1-w.x0));
+});
+test('a scan with an invisible third-party OCR layer is read with Google Vision, not trusted as text',async()=>{
+ const scan={fnArray:[OPS.save,OPS.transform,OPS.paintJpegXObject,OPS.restore,OPS.setTextRenderingMode,OPS.showText,OPS.showText],argsArray:[[],[600,0,0,800,0,0],[],[],[3],[],[]]};
+ const background={fnArray:[OPS.save,OPS.transform,OPS.paintImageXObject,OPS.restore,OPS.showText,OPS.showText],argsArray:[[],[600,0,0,800,0,0],[],[],[],[]]};
+ const item={str:'Deslgnaclon y Referencia articulo 1151O',transform:[1,0,0,10,60,700],width:300,height:10};
+ const ref=referenceModule([[item],[item]],[scan,background]);
+ const fetcher=async(_url,init)=>{assert.deepEqual(JSON.parse(init.body).requests[0].pages,[1]);return {ok:true,json:async()=>visionBody(1)};};
+ const pages=await ref.readReference(Buffer.from('%PDF'),{apiKey:'k',fetcher});
+ assert.deepEqual(pages.map(p=>p.fuente),['ocr','capa_texto'],'a full-page background image with visible text is still a text layer');
+ const none=await ref.readReference(Buffer.from('%PDF'),{apiKey:null});assert.match(none[0].aviso,/escaneo/);
+});
+test('ligatures, dot leaders and list markers do not count as differences',()=>{
+ const ws=[w('•',0.05,0.10),w('Línea',0.08,0.10),w('ﬁja',0.15,0.10),w('SUBTOTAL………………120€.',0.05,0.20),w('eRoaming',0.05,0.30),w('incluido.',0.17,0.30)];
+ const p={numero:1,incidencias:[],bloques:[{tipo:'texto',texto:'- Línea fija\nSUBTOTAL.............120€.'}]};
+ const r=compare.verifyPage(p,{numero:1,fuente:'capa_texto',palabras:ws});
+ assert.equal(r.literales.length,0,JSON.stringify(r.literales));
+});
+test('values absent from a text layer (logos, icons) are for review, contradictions stay probable errors',()=>{
+ const p=page();p.bloques.unshift({tipo:'texto',texto:'ABOGADOS Y ECONOMISTAS'});p.bloques[1].texto='Calle Alfons, s/n.';
+ const r=compare.verifyPage(p,ref());
+ assert.deepEqual(r.literales.map(l=>[l.estado,l.severidad]),[['no_encontrado','revisar'],['distinto','probable_error']]);
+});
+test('a reading that reorders pages is reported and each page is compared with the one it transcribes',()=>{
+ const process=processModule(fakeDb(),{});
+ const pg=(n,text)=>({numero:n,incidencias:[],bloques:[{tipo:'texto',texto:text}]});
+ const refPage=(n,text)=>({numero:n,fuente:'capa_texto',palabras:text.split(' ').map((t,i)=>w(t,0.05+i*0.1,0.1))});
+ const a='Resumen factura cuotas mensuales total pagar',b='Detalle llamadas consumo datos roaming';
+ const file={archivoId:'f',archivo:'o2.pdf',metodo:'pdf_visual',paginas:[pg(1,a),pg(2,b)]};
+ const r=process.verifyFile(file,{archivoId:'f',paginas:[refPage(1,b),refPage(2,a)]});
+ assert.deepEqual(r.paginas.map(p=>p.paginaDocumento),[2,1]);
+ assert.ok(r.paginas.every(p=>p.literales.length===0&&p.omisiones.length===0));
+ assert.match(r.paginas[0].avisos[0],/página 1 de la lectura corresponde a la página 2 del PDF/);
+ assert.equal(contract.summarize([r]).paginasDesordenadas,2);
+});
+test('a mislocated stacked header does not flag every value of its column',()=>{
+ // Headers repeat words; suppose "Total" was located over the wrong column (left of "Precio").
+ const ws=[w('Total',0.30,0.20),w('Precio',0.55,0.20),w('Cant',0.05,0.20),
+  w('1',0.07,0.24),w('2,00',0.55,0.24),w('2,00',0.80,0.24),w('2',0.07,0.27),w('3,00',0.55,0.27),w('6,00',0.80,0.27)];
+ const p={numero:1,incidencias:[],bloques:[{tipo:'tabla',columnas:['Cant','Precio','Total'],filas:[['1','2,00','2,00'],['2','3,00','6,00']]}]};
+ const r=compare.verifyPage(p,{numero:1,fuente:'capa_texto',palabras:ws});
+ assert.equal(r.columnas.length,0,JSON.stringify(r.columnas));
+ assert.ok(r.avisos.some(a=>/cabeceras no concuerda/.test(a)));
+});
+test('a value present only inside a longer document word is reported as absent, not as different',()=>{
+ const ws=[w('IGNIS_260022559',0.05,0.05),w('Factura',0.05,0.20)];
+ const r=compare.verifyPage({numero:1,incidencias:[],bloques:[{tipo:'texto',texto:'IGNIS\nFactura'}]},{numero:1,fuente:'capa_texto',palabras:ws});
+ assert.deepEqual(r.literales.map(l=>[l.modelo,l.estado,l.severidad]),[['IGNIS','no_encontrado','revisar']]);
+});
+test('equal values in one row are matched left to right, not swapped between columns',()=>{
+ // Stream order lists the right-hand amount first (as some OCR block orders do).
+ const ws=[w('Producto',0.05,0.20),w('Precio',0.50,0.20),w('Importe',0.80,0.20),w('39,99',0.80,0.24),w('LONA',0.05,0.24),w('39,99',0.50,0.24)];
+ const p={numero:1,incidencias:[],bloques:[{tipo:'tabla',columnas:['Producto','Precio','Importe'],filas:[['LONA','39,99','39,99']]}]};
+ assert.equal(compare.verifyPage(p,{numero:1,fuente:'capa_texto',palabras:ws}).columnas.length,0);
 });

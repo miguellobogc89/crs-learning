@@ -5,11 +5,12 @@
  * Coordinates are normalised to the page (0..1 in both axes, origin top-left) so that a PDF text
  * layer and an OCR response are directly comparable.
  */
-export const VERIFIER_REVISION = 3;
+export const VERIFIER_REVISION = 4;
 
 /** Origin of the independent reading of a page. */
 export type ReferenceSource = "capa_texto" | "ocr" | "sin_referencia";
-export type RefWord = { t: string; x0: number; y0: number; x1: number; y1: number };
+/** `r`: the word is printed rotated (margin notes, watermarks); it never belongs to a table row. */
+export type RefWord = { t: string; x0: number; y0: number; x1: number; y1: number; r?: true };
 export type PageReference = { numero: number; fuente: ReferenceSource; palabras: RefWord[]; aviso?: string };
 export type FileReference = { archivoId: string; paginas: PageReference[] };
 
@@ -23,10 +24,12 @@ export type ColumnFinding = { donde: string; valor: string; metodo: "cabecera" |
 export type OmissionFinding = { textoDocumento: string; severidad: Severity };
 export type PageReport = {
   numero: number; referencia: ReferenceSource;
+  /** Present when the reading placed this page out of the document's order: the PDF page it actually transcribes. */
+  paginaDocumento?: number;
   literales: LiteralFinding[]; columnas: ColumnFinding[]; omisiones: OmissionFinding[]; avisos: string[];
 };
 export type FileReport = { archivoId: string; archivo: string; metodo: string; paginas: PageReport[] };
-export type VerificationSummary = { literales: number; columnas: number; omisiones: number; paginasSinReferencia: number; probablesErrores: number; aRevisar: number };
+export type VerificationSummary = { literales: number; columnas: number; omisiones: number; paginasSinReferencia: number; paginasDesordenadas: number; probablesErrores: number; aRevisar: number };
 export type VerificationReport = {
   module: "reading_verifier"; version: typeof VERIFIER_REVISION; loteId: string;
   /** The extraction JSON is evidence under review; it is never rewritten by this module. */
@@ -49,6 +52,7 @@ export function summarize(archivos: FileReport[]): VerificationSummary {
     columnas: pages.reduce((n, p) => n + p.columnas.length, 0),
     omisiones: pages.reduce((n, p) => n + p.omisiones.length, 0),
     paginasSinReferencia: pages.filter(p => p.referencia === "sin_referencia").length,
+    paginasDesordenadas: pages.filter(p => p.paginaDocumento !== undefined).length,
     probablesErrores: findings.filter(f => f.severidad === "probable_error").length,
     aRevisar: findings.filter(f => f.severidad === "revisar").length,
   };

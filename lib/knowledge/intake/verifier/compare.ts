@@ -25,7 +25,24 @@ type Box = { x0: number; y0: number; x1: number; y1: number };
 type Band = [number, number] | null;
 type Span = [number, number];
 
-const squash = (value: string) => value.replace(/\s+/gu, "");
+/** Dot/ellipsis leaders ("SUBTOTAL………120€") are layout filler: their length and glyphs are arbitrary. */
+const LEADERS = /[.…·_]{3,}/gu;
+/** Typographic variants compared as the same text: ligatures ("ﬁ"), "…" vs "...", "O₂" vs "O2", full-width forms. */
+const normalize = (value: string) => value.normalize("NFKC").replace(LEADERS, " ");
+/** List markers are layout; OCR often misreads them ("•" as "e" or "2"). */
+const LIST_MARKER = /^\s*[-–—•●⚫▪■◦·∙‣⁃*]\s+/u;
+const squash = (value: string) => normalize(value).replace(/\s+/gu, "");
+
+/** Splits reference words on leaders and leading list markers, keeping proportional boxes for horizontal text. */
+function splitWord(word: RefWord): RefWord[] {
+  const text = normalize(word.t).replace(/^([-–—•●⚫▪■◦·∙‣⁃])(?=\p{L})/u, "$1 ");
+  const parts = [...text.matchAll(/\S+/gu)];
+  if (parts.length <= 1) return [{ ...word, t: text.trim() || word.t }];
+  return parts.map(m => {
+    const from = (m.index ?? 0) / text.length, to = ((m.index ?? 0) + m[0].length) / text.length;
+    return word.r ? { ...word, t: m[0] } : { ...word, t: m[0], x0: word.x0 + (word.x1 - word.x0) * from, x1: word.x0 + (word.x1 - word.x0) * to };
+  });
+}
 
 class ReferenceStream {
   readonly s: string;
@@ -113,12 +130,12 @@ export function verifyPage(page: Page, reference: PageReference): PageReport {
     return report;
   }
   const severity: Severity = reference.fuente === "capa_texto" ? "probable_error" : "revisar";
-  const words = reference.fuente === "ocr"
+  const words = (reference.fuente === "ocr"
     ? reference.palabras.map(w => ({ ...w, t: [...w.t].map(ch => HOMOGLYPHS[ch] ?? ch).join("") }))
-    : reference.palabras;
+    : reference.palabras).flatMap(splitWord).filter(w => w.t.trim());
   const st = new ReferenceStream(words);
   // Rotated text (e.g. a registry note printed vertically in the margin) spans many rows; it never belongs to a row band.
-  const vertical = words.map(w => w.y1 - w.y0 > 0.02 && w.y1 - w.y0 > 2.5 * (w.x1 - w.x0));
+  const vertical = words.map(w => !!w.r || (w.y1 - w.y0 > 0.02 && w.y1 - w.y0 > 2.5 * (w.x1 - w.x0)));
   const inBand = ([a, b]: Span, band: Band) => {
     if (!band) return true;
     if (st.owner.slice(a, b).some(i => vertical[i])) return false;
@@ -127,6 +144,7 @@ export function verifyPage(page: Page, reference: PageReference): PageReport {
   };
   const preferFree = (spans: Span[]) => spans.sort((x, y) => Number(!st.free(...x)) - Number(!st.free(...y)));
   const midY = (span: Span) => { const box = st.box(...span); return (box.y0 + box.y1) / 2; };
+  const midX = (span: Span) => { const box = st.box(...span); return (box.x0 + box.x1) / 2; };
   const boxOf = (spans: Span[]) => st.box(Math.min(...spans.map(s => s[0])), Math.max(...spans.map(s => s[1])));
 
   /**
@@ -143,8 +161,16 @@ export function verifyPage(page: Page, reference: PageReference): PageReport {
       const missing = tokens.slice(0, first);
       for (const token of tokens.slice(first + 1)) {
         const prev = spans.at(-1)!;
-        const found = candidates(token).filter(o => !spans.some(s => s[0] === o[0]) && Math.abs(midY(o) - midY(prev)) <= LINE_STEP).sort((x, y) =>
-          Number(!st.free(...x)) - Number(!st.free(...y)) || Number(x[0] < prev[1]) - Number(y[0] < prev[1]) || Math.abs(x[0] - prev[1]) - Math.abs(y[0] - prev[1]));
+        // Next word of the same value: same line just to the right, or the start of the next line of the same cell.
+        // Without the horizontal term, stacked headers ("Prec / unid. / SI / (EUR)") take words of the neighbouring column.
+        // Rotated text (vertical margin notes) advances along y: its "line" is a column of the page.
+        const p = st.box(...prev), lineStart = st.box(...spans[0]).x0;
+        const rotated = (span: Span) => vertical[st.owner[span[0]]];
+        const across = (o: Span) => rotated(o) && rotated(prev) ? Math.abs(midX(o) - midX(prev)) : Math.abs(midY(o) - midY(prev));
+        const distance = (o: Span) => { const q = st.box(...o); return rotated(o) && rotated(prev) ? across(o) + Math.min(Math.abs(q.y0 - p.y1), Math.abs(q.y1 - p.y0))
+          : 3 * across(o) + Math.min(Math.abs(q.x0 - p.x1), Math.abs(q.x0 - lineStart)); };
+        const found = candidates(token).filter(o => !spans.some(s => s[0] === o[0]) && across(o) <= LINE_STEP).sort((x, y) =>
+          Number(!st.free(...x)) - Number(!st.free(...y)) || distance(x) - distance(y));
         if (found.length) spans.push(found[0]); else missing.push(token);
       }
       const free = spans.filter(span => st.free(...span)).length;
@@ -156,14 +182,16 @@ export function verifyPage(page: Page, reference: PageReference): PageReport {
 
   type Attempt = { box: Box | null; spans: Span[]; finding?: LiteralFinding; aviso?: string };
   /** Searches without side effects; `commit` applies the result. Returns null when nothing usable is found. */
-  function attempt(value: string, where: string, band: Band): Attempt | null {
+  function attempt(original: string, where: string, band: Band): Attempt | null {
+    const value = original.replace(LIST_MARKER, "");
     const v = squash(value);
     // 1. exact, on word boundaries, in text not yet matched to another value
     const exact = st.occurrences(v).filter(o => inBand(o, band));
-    const exactFree = exact.filter(o => st.free(...o));
+    // Within a row, equal values ("39,99" as unit price and as amount) are taken left to right, like the cells.
+    const exactFree = exact.filter(o => st.free(...o)).sort((x, y) => band ? st.box(...x).x0 - st.box(...y).x0 : 0);
     if (exactFree.length) return { box: st.box(...exactFree[0]), spans: [exactFree[0]] };
     // 2. every word present, close together, but separated by the reference's reading order
-    const tokens = value.split(/\s+/u).filter(Boolean);
+    const tokens = normalize(value).split(/\s+/u).filter(Boolean);
     const { spans, missing } = chain(tokens, band);
     if (tokens.length > 1 && !missing.length && spans.every(span => st.free(...span))) return { box: boxOf(spans), spans };
     // 2a. only text already matched to another value: the document prints it once, the reading repeats it
@@ -171,7 +199,7 @@ export function verifyPage(page: Page, reference: PageReference): PageReport {
     if (tokens.length > 1 && !missing.length) return { box: boxOf(spans), spans };
     if (!/[\p{L}\p{N}]/u.test(v)) {
       // Drawn marks (radio buttons, ticks, bullets) are graphics, not text: they cannot be checked against a text reading.
-      return { box: null, spans: [], aviso: `${where}: «${value}» no aparece como texto en el documento (puede ser un símbolo dibujado)` };
+      return { box: null, spans: [], aviso: `${where}: «${original}» no aparece como texto en el documento (puede ser un símbolo dibujado)` };
     }
     // 2b. long sentence with a few differing words: report the words, which is what a reader can check
     if (tokens.length >= 4 && missing.length <= tokens.length / 2) {
@@ -188,7 +216,7 @@ export function verifyPage(page: Page, reference: PageReference): PageReport {
         return { modelo: token, documento: st.s.slice(s0, s1) };
       });
       return { box: spans.length ? boxOf(spans) : null, spans: [...spans, ...extra],
-        finding: { donde: where, modelo: value, severidad: severity, estado: "distinto", diferencias } };
+        finding: { donde: where, modelo: original, severidad: severity, estado: "distinto", diferencias } };
     }
     // 3. approximate. Not for very short values: "2" inside "0,7200" or "10" against "3073" is not evidence of anything.
     if (v.length <= 3) return null;
@@ -207,20 +235,23 @@ export function verifyPage(page: Page, reference: PageReference): PageReport {
     let s0 = index[start], s1 = index[end - 1] + 1;
     while (s0 > 0 && st.owner[s0 - 1] === st.owner[s0]) s0--;
     while (s1 < st.s.length && st.owner[s1] === st.owner[s1 - 1]) s1++;
+    // Identical text only as part of a much longer word ("IGNIS" inside "IGNIS_260022559") is not this value.
+    if (best.distance === 0 && s1 - s0 > v.length + 3) return null;
     const document = s1 - s0 <= end - start + 12 ? st.s.slice(s0, s1) : region.slice(start, end);
     return { box: st.box(index[start], index[end - 1] + 1), spans: index.slice(start, end).map(k => [k, k + 1] as Span),
-      finding: { donde: where, modelo: value, severidad: severity, estado: "distinto", documento: document, diferencias: describeDifferences(v, document) } };
+      finding: { donde: where, modelo: original, severidad: severity, estado: "distinto", documento: document, diferencias: describeDifferences(v, document) } };
   }
 
   /**
    * Locates a value and records what it finds. `near` is where the value is expected (e.g. just below the
    * previous row of the same table); it is tried first, then `band` (or the whole page).
    */
-  function locate(value: string, where: string, band: Band = null, near: Band = null): Box | null {
-    if (!squash(value)) return null;
-    const found = (near ? attempt(value, where, near) : null) ?? attempt(value, where, band);
+  function locate(value: string, where: string, band: Band = null, near: Band = null, anywhere = false): Box | null {
+    if (!squash(value.replace(LIST_MARKER, ""))) return null;
+    const found = (near ? attempt(value, where, near) : null) ?? attempt(value, where, band) ?? (anywhere && band ? attempt(value, where, null) : null);
     if (!found) {
-      report.literales.push({ donde: where, modelo: value, severidad: severity, estado: "no_encontrado" });
+      // A value absent from the reference may be inside an image (logos, icons, stamps): weaker evidence than a contradiction.
+      report.literales.push({ donde: where, modelo: value, severidad: "revisar", estado: "no_encontrado" });
       return null;
     }
     found.spans.forEach(span => st.mark(...span));
@@ -251,7 +282,7 @@ export function verifyPage(page: Page, reference: PageReference): PageReport {
   return report;
 }
 
-function verifyTable(b: number, block: TableBlock, locate: (value: string, where: string, band?: Band, near?: Band) => Box | null, report: PageReport, severity: Severity) {
+function verifyTable(b: number, block: TableBlock, locate: (value: string, where: string, band?: Band, near?: Band, anywhere?: boolean) => Box | null, report: PageReport, severity: Severity) {
   const { columnas, filas } = block;
   let headerRow: number | null = null;
   if (!columnas.some(c => c.trim())) {
@@ -265,7 +296,7 @@ function verifyTable(b: number, block: TableBlock, locate: (value: string, where
   }
   const header = headerRow === null ? columnas : filas[headerRow].map(c => c ?? "");
   /** Locates one visual row: its longest cell (usually the description) fixes the vertical band for the others. */
-  const locateRow = (row: (string | null)[], label: (c: number) => string, near: Band = null) => {
+  const locateRow = (row: (string | null)[], label: (c: number) => string, near: Band = null, isHeader = false) => {
     const located = new Map<number, Box>();
     const cells = row.map((cell, c) => [c, cell] as const).filter((x): x is readonly [number, string] => !!x[1]?.trim());
     if (!cells.length) return located;
@@ -273,9 +304,10 @@ function verifyTable(b: number, block: TableBlock, locate: (value: string, where
     const anchor = locate(anchorValue, label(anchorCol), null, near);
     if (anchor) located.set(anchorCol, anchor);
     const band: Band = anchor ? [anchor.y0, anchor.y1] : null;
-    for (const [c, cell] of cells) {
+    for (const [c, cell] of [...cells].sort((x, y) => x[0] - y[0])) {
       if (c === anchorCol) continue;
-      const box = locate(cell, label(c), band);
+      // Header labels may sit on another line than the anchor label (stacked or two-level headers).
+      const box = locate(cell, label(c), band, null, isHeader);
       if (box) located.set(c, box);
     }
     return located;
@@ -287,11 +319,11 @@ function verifyTable(b: number, block: TableBlock, locate: (value: string, where
   const advance = (located: Map<number, Box>) => { if (located.size) bottom = Math.max(...[...located.values()].map(box => box.y1)); };
   const nearNext = (): Band => bottom === null ? null : [bottom, bottom + NEXT_ROW_WINDOW];
   let headerLocated = new Map<number, Box>();
-  if (headerRow === null) { headerLocated = locateRow(header, c => `bloque ${b} cabecera col ${c + 1}`); advance(headerLocated); }
+  if (headerRow === null) { headerLocated = locateRow(header, c => `bloque ${b} cabecera col ${c + 1}`, null, true); advance(headerLocated); }
   const boxes = new Map<string, Box>();
   filas.forEach((row, r) => {
     if (r === headerRow) {
-      headerLocated = locateRow(header, c => `bloque ${b} cabecera col ${c + 1}`, nearNext());
+      headerLocated = locateRow(header, c => `bloque ${b} cabecera col ${c + 1}`, nearNext(), true);
       advance(headerLocated);
       return;
     }
@@ -306,33 +338,42 @@ function verifyTable(b: number, block: TableBlock, locate: (value: string, where
   const numeric = [...boxes].map(([key, box]) => { const [r, c] = key.split(":").map(Number); return { r, c, box }; })
     .filter(({ r, c }) => r >= firstData && NUMERIC.test((filas[r][c] ?? "").trim()))
     .sort((x, y) => x.r - y.r || x.c - y.c);
+  // Column reference: its located header; otherwise the median position of its numeric cells (alignment).
   const refX = new Map<number, number>();
-  let method: ColumnFinding["metodo"];
-  if (headerBoxes.some(Boolean)) {
-    method = "cabecera";
-    headerBoxes.forEach((box, c) => { if (box) refX.set(c, center(box)); });
-  } else {
-    method = "alineacion";
-    for (let c = 0; c < columnas.length; c++) {
-      const xs = numeric.filter(n => n.c === c).map(n => center(n.box)).sort((x, y) => x - y);
-      if (xs.length) refX.set(c, xs[Math.floor(xs.length / 2)]);
-    }
-    if (refX.size < 2) {
-      report.avisos.push(`bloque ${b}: sin cabecera ni columnas numéricas suficientes; columnas no verificables`);
-      return;
-    }
+  const method = new Map<number, ColumnFinding["metodo"]>();
+  const aligned = new Map<number, number>();
+  for (let c = 0; c < header.length; c++) {
+    const xs = numeric.filter(n => n.c === c).map(n => center(n.box)).sort((x, y) => x - y);
+    if (xs.length >= 2) aligned.set(c, xs[Math.floor(xs.length / 2)]);
   }
+  // Headers are only trusted if they agree with the document: left to right in column order, and where the
+  // columns' own values actually sit. Stacked headers with repeated words ("SI (EUR)") are easy to mislocate;
+  // a mislocated header would flag every value of its column, so the values' alignment is used instead.
+  const located = headerBoxes.map((box, c) => box ? { c, x: center(box) } : null).filter((h): h is { c: number; x: number } => !!h);
+  const ordered = located.every((h, i) => i === 0 || h.x > located[i - 1].x);
+  const nearestHeader = (x: number) => located.reduce((best, h) => Math.abs(h.x - x) < Math.abs(best.x - x) ? h : best).c;
+  const disagreeing = located.length ? [...aligned].filter(([c, x]) => headerBoxes[c] && nearestHeader(x) !== c).length : 0;
+  const trustHeaders = located.length > 0 && ordered && disagreeing < 2;
+  if (located.length && !trustHeaders) report.avisos.push(`bloque ${b}: la posición de las cabeceras no concuerda con la de sus valores; columnas comprobadas por alineación`);
+  for (let c = 0; c < header.length; c++) {
+    const box = trustHeaders ? headerBoxes[c] : null;
+    if (box) { refX.set(c, center(box)); method.set(c, "cabecera"); }
+    else if (aligned.has(c)) { refX.set(c, aligned.get(c)!); method.set(c, "alineacion"); }
+  }
+  if (refX.size < 2) {
+    if (numeric.length) report.avisos.push(`bloque ${b}: sin cabecera ni columnas numéricas suficientes; columnas no verificables`);
+    return;
+  }
+  const unverifiable = numeric.filter(n => !refX.has(n.c)).length;
+  if (unverifiable) report.avisos.push(`bloque ${b}: ${unverifiable} valor(es) en columnas sin cabecera ni alineación; columnas no verificables`);
   for (const { r, c, box } of numeric) {
     const own = refX.get(c);
-    if (own === undefined) {
-      report.avisos.push(`bloque ${b} fila ${r + 1} col ${c + 1}: columna sin cabecera; no verificable`);
-      continue;
-    }
+    if (own === undefined) continue;
     const x = center(box);
     let best = c;
     for (const [col, ref] of refX) if (Math.abs(ref - x) < Math.abs(refX.get(best)! - x)) best = col;
     if (best !== c && Math.abs(own - x) - Math.abs(refX.get(best)! - x) > COLUMN_MARGIN) {
-      report.columnas.push({ donde: `bloque ${b} fila ${r + 1}`, valor: filas[r][c] ?? "", metodo: method,
+      report.columnas.push({ donde: `bloque ${b} fila ${r + 1}`, valor: filas[r][c] ?? "", metodo: method.get(c)!,
         columnaLectura: header[c] || `#${c + 1}`, columnaDocumento: header[best] || `#${best + 1}`, severidad: severity });
     }
   }

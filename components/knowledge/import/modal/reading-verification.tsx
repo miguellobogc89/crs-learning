@@ -3,13 +3,14 @@ import type { VerificationReport } from "@/lib/knowledge/intake/verifier/contrac
 /** Plain-language view of the reading verification. The reading JSON is shown separately and unchanged. */
 export function ReadingVerification({ report }: { report: VerificationReport }) {
   const { resumen } = report;
-  const clean = !resumen.literales && !resumen.columnas && !resumen.omisiones;
+  const clean = !resumen.literales && !resumen.columnas && !resumen.omisiones && !resumen.paginasDesordenadas;
   return <section aria-label="Revisión de la lectura" className="space-y-3 rounded border p-4 text-sm">
     <h3 className="font-medium">Revisión de la lectura contra el documento original</h3>
     <p>{clean ? "No se han encontrado diferencias entre la lectura y el documento." :
       `${resumen.literales} valores distintos o no encontrados, ${resumen.columnas} en otra columna y ${resumen.omisiones} textos del documento que faltan en la lectura.`}
       {resumen.aRevisar > 0 && " Las marcadas «a revisar» proceden de un reconocimiento de imagen, que también puede equivocarse."}
-      {resumen.paginasSinReferencia > 0 && ` ${resumen.paginasSinReferencia} página(s) sin verificar.`}</p>
+      {resumen.paginasSinReferencia > 0 && ` ${resumen.paginasSinReferencia} página(s) sin verificar.`}
+      {resumen.paginasDesordenadas > 0 && ` La lectura ha cambiado el orden de ${resumen.paginasDesordenadas} página(s).`}</p>
     {report.archivos.map(file => <div key={file.archivoId} className="space-y-2">
       <h4 className="font-medium">{file.archivo}</h4>
       {file.paginas.map(page => {

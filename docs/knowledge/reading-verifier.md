@@ -40,6 +40,16 @@ Revision 3 (replayed on the stored Google Vision words of a real run):
 - Values of three characters or fewer are never paired by similarity ("2" inside "0,7200").
 - OCR look-alike letters of other alphabets ("Pб" for "P6") are compared as what they look like.
 
+Revision 4 (nine more real documents: telecom, utility, legal-services and retail invoices; text layers, vector-drawn text, phone scans):
+- **Page order.** Each page of the reading is matched to the PDF page it actually transcribes (shared words). A reading that reorders pages (e.g. by the printed "Página 1 de 4" when the PDF's physical order differs) is reported (`paginaDocumento`, `resumen.paginasDesordenadas`) and each page is compared with the page it transcribes.
+- **Scans with an embedded OCR layer** (scanner apps such as Adobe Scan: a full-page image plus invisible text, render mode 3) are not trusted as a text layer; they are read with Google Vision like any image page. A page with a background image and visible text is still a text layer.
+- **Rotated text in the text layer** (registry notes printed vertically in the margin) gets its real rotated box and is flagged `r`; it never joins a row, and its words are chained along their own direction.
+- **Normalisation before comparing** (both sides): Unicode compatibility forms (ligature "ﬁ", "…", "O₂", "º"), dot leaders of any length ("SUBTOTAL………120€"), list markers ("•", "-", which OCR also misreads).
+- **Severity of absence.** A value absent from a text layer is `revisar` (it may be inside a logo or icon); a contradiction stays `probable_error`. Identical text only inside a much longer word ("IGNIS" in "IGNIS_260022559") counts as absent.
+- **Headers.** Header labels may be found on other lines (stacked headers). Headers are trusted only if they are left-to-right and agree with where their columns' values sit; otherwise columns are checked by the values' alignment, with a notice. Columns without a located header use alignment too; a single notice per table replaces one per cell. Equal values in one row are matched left to right.
+
+Known remaining limits seen in this set: white text (invisible machine markers) appears as an omission; glyphs from symbol fonts in logos can produce text-layer garbage ("lπ" for the O2 logo).
+
 To check a change against real output without uploading again or paying for OCR, copy everything from the modal ("Copiar todo") into a file outside the repository and run `npm run knowledge:replay-verification -- bundle.json`.
 
 Known limits, stated rather than hidden: it does not judge how text is grouped into blocks (two adjacent boxes merged into one table), does not read checkbox/radio states, cannot check columns of tables without a header or several numeric columns, and a PDF text layer may contain text hidden by clipping (reported as omissions).
