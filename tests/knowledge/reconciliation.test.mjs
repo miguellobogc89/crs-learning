@@ -128,3 +128,9 @@ test('a company printed without tax id gets a name suggestion (batch first, then
  const existing=contract.applyLookups('b',contract.groupEntities(onlyFile),stored).entidades.find(e=>e.tipo==='company'&&!e.clave);
  assert.deepEqual(existing.sugerenciaRegistro,{id:'r-own',nombre:'CLIENTE DEMO SL',clave:'12345678Z'});
 });
+
+test('company ids: a printed label glued to the number is not part of it',()=>{
+ const c=load('lib/knowledge/intake/reconciliation/contract.ts');
+ for(const [raw,id] of [['CIFB84818442','B84818442'],['CIF: B-84818442','B84818442'],['DNI31246253V','31246253V'],['NIF ES B84818442','B84818442']])assert.equal(c.normalizeIdentifier('company',raw),id,raw);
+ assert.equal(c.normalizeIdentifier('company','C12345678'),'C12345678','a real id starting like a label is kept');
+});

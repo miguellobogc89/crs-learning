@@ -6,7 +6,7 @@ import type { TargetedFile, TargetedResult } from "../targeted/contract";
  * identifiers printed in the document (tax id, invoice number, supply point, telecom line), never from names.
  * Entities without an identifier, or with conflicting candidates, are left for a person to review.
  */
-export const RECONCILIATION_REVISION = 6;
+export const RECONCILIATION_REVISION = 7;
 
 /** Entity kinds reconciled on their own; other extracted entities (lines, charges, tax rows…) are details of their invoice. */
 export const RECONCILED_TYPES = ["company", "invoice", "supply_point", "telecom_line"] as const;
@@ -71,7 +71,13 @@ export function spanishTaxIdValid(id: string): boolean | null {
 export function normalizeIdentifier(type: ReconciledType, raw: string): string {
   const compact = raw.normalize("NFKC").toUpperCase().replace(/\s+/g, "");
   if (type === "company") {
-    const id = compact.replace(/[.\-/]/g, "");
+    let id = compact.replace(/[.\-/:]/g, "");
+    // A printed label glued to the number ("CIF B84818442", "NIF:…", "DNI 31246253V") is not part of it.
+    const label = /^(NIFIVA|CIF|NIF|DNI|NIE|VAT)(?=[A-Z0-9])/.exec(id);
+    if (label) {
+      const rest = id.slice(label[1].length);
+      if (spanishTaxIdValid(rest) !== null || (/^ES/.test(rest) && spanishTaxIdValid(rest.slice(2)) !== null)) id = rest;
+    }
     return /^ES/.test(id) && spanishTaxIdValid(id.slice(2)) !== null ? id.slice(2) : id;
   }
   if (type === "telecom_line") return compact.replace(/\D/g, "");
