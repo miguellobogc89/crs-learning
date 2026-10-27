@@ -93,6 +93,14 @@ test('no targeted part → no vision call; incomplete responses are rejected; no
  const k=await none.run(Buffer.from('%PDF'),{...classified,partes:[classified.partes[1]]},base);assert.equal(none.calls.length,0);assert.equal(k.partes[0].modo,'knowledge');
  const bad=extractor(()=>({status:'incomplete',output_text:'{'}));
  await assert.rejects(()=>bad.run(Buffer.from('%PDF'),classified,base),/no terminó/);
+ let n=0;const long=extractor(req=>++n===1?{status:'incomplete',incomplete_details:{reason:'max_output_tokens'},output_text:'{"partes":'}:{status:'completed',output_text:JSON.stringify(output())},async()=>({paginas:[]}));
+ const lr=await long.run(Buffer.from('%PDF'),classified,base);
+ assert.deepEqual(long.calls.map(c=>c.req.max_output_tokens),[16000,64000],'a long document is retried once with more room');
+ assert.ok(lr.incidencias.some(i=>/Documento largo/.test(i)));
+ const tooLong=extractor(()=>({status:'incomplete',incomplete_details:{reason:'max_output_tokens'},output_text:'{'}));
+ await assert.rejects(()=>tooLong.run(Buffer.from('%PDF'),classified,base),/demasiado largo/);assert.equal(tooLong.calls.length,2);
+ const filtered=extractor(()=>({status:'incomplete',incomplete_details:{reason:'content_filter'},output_text:''}));
+ await assert.rejects(()=>filtered.run(Buffer.from('%PDF'),classified,base),/content_filter/);assert.equal(filtered.calls.length,1,'other reasons are not retried');
  const sheet=extractor(()=>({status:'completed',output_text:JSON.stringify(output())}),async()=>({paginas:[]}));
  await sheet.run(Buffer.from('x'),{...classified,archivo:'precios.xlsx'},{...base,metodo:'hoja_nativa',paginas:[{numero:1,bloques:[{tipo:'tabla',columnas:['A'],filas:[['1']]}],incidencias:[]}]});
  assert.equal(sheet.calls[0].req.input[0].content[0].type,'input_text');

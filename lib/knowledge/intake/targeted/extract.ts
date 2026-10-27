@@ -32,6 +32,10 @@ type Deps = {
   fullReading?: (buffer: Buffer, fileName: string) => Promise<ExtractedDocument>;
 };
 
+/** Output tokens of the targeted call (reasoning included), and the retry for long documents. */
+export const OUTPUT_BUDGET = 16000;
+export const OUTPUT_BUDGET_LARGE = 64000;
+
 async function defaultFullReading(buffer: Buffer, fileName: string) {
   const { extractDocument } = await import("../extractor/extract");
   return extractDocument(buffer, fileName);
@@ -56,14 +60,25 @@ export async function targetedExtractFile(buffer: Buffer, classified: Classified
       ? { type: "input_file" as const, filename: classified.archivo, file_data: `data:application/pdf;base64,${buffer.toString("base64")}` }
       : imageMime ? { type: "input_image" as const, image_url: `data:${imageMime};base64,${buffer.toString("base64")}`, detail: "high" as const }
       : { type: "input_text" as const, text: `Documento (lectura nativa por páginas):\n${JSON.stringify(base.paginas)}` };
-    const response = await (deps.client ?? getOpenAIClient)().responses.create({
+    const ask = (budget: number, timeout: number) => (deps.client ?? getOpenAIClient)().responses.create({
       model, instructions: INSTRUCTIONS,
       ...(/^gpt-5(?:[.-]|$)|^o[134](?:[.-]|$)/.test(model) && !/-pro|-chat|-codex/.test(model) ? { reasoning: { effort: "low" as const } } : {}),
       input: [{ role: "user", content: [source, { type: "input_text", text: `Extrae estos campos y devuelve únicamente JSON según el esquema.\n${requestText(plans)}` }] }],
       text: { format: { type: "json_schema", name: "targeted_extraction", strict: true, schema: fileSchema(plans) } },
-      max_output_tokens: 16000,
-    }, { timeout: 180_000, maxRetries: 0 });
-    if (response.status !== "completed" || !response.output_text.trim()) throw new Error(`${classified.archivo}: la extracción no terminó; no se acepta una salida parcial`);
+      max_output_tokens: budget,
+    }, { timeout, maxRetries: 0 });
+    let response = await ask(OUTPUT_BUDGET, 180_000);
+    // A long document (many lines) can need more room than usual: retried ONCE with a larger budget. A cut answer is
+    // never used, whatever the budget.
+    if (response.status === "incomplete" && response.incomplete_details?.reason === "max_output_tokens") {
+      incidencias.push(`Documento largo: la extracción se repitió con más espacio de respuesta (${OUTPUT_BUDGET_LARGE} en vez de ${OUTPUT_BUDGET})`);
+      response = await ask(OUTPUT_BUDGET_LARGE, 300_000);
+    }
+    if (response.status !== "completed" || !response.output_text.trim()) {
+      const why = response.incomplete_details?.reason === "max_output_tokens" ? " (el documento es demasiado largo para una sola respuesta)"
+        : response.incomplete_details?.reason ? ` (${response.incomplete_details.reason})` : "";
+      throw new Error(`${classified.archivo}: la extracción no terminó${why}; no se acepta una salida parcial`);
+    }
     const checked = validateTargeted(JSON.parse(response.output_text), plans, classified.archivo);
     incidencias.push(...checked.incidencias);
     for (const [id, data] of checked.partes) partes.set(id, { ...partes.get(id)!, ...data });

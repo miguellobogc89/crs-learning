@@ -15,7 +15,9 @@ export type IntakeView = { status: "processing" | "waiting" | "completed" | "err
   writing?: { status: "waiting" | "completed"; result: unknown; plan: unknown; error: string | null } };
 type Request = (url: string, method?: "POST") => Promise<Progress>;
 /** `start: false` (step-by-step mode) never starts a module: it stops at the next pending one as `waiting`. */
-export type AdvanceOptions = { start?: boolean };
+/** `retry`: only from an explicit "Continuar" of the person — resumes a reading that stopped with an error (the files
+ *  already read are kept; it goes on with the next one). Never set by the automatic polling. */
+export type AdvanceOptions = { start?: boolean; retry?: boolean };
 
 export const PHASE_NAMES: Record<string, string> = {
   lectura_base: "Lectura base", clasificacion: "Clasificación", lectura: "Extracción", verificacion: "Revisión de valores", conciliacion: "Conciliación",
@@ -47,9 +49,13 @@ const pause = (s: Step["status"]) => s === "processing" || s === "waiting";
  * shown, never retried here. In step-by-step mode (`start: false`) nothing is started: the view stops at the
  * next pending module, so a stored batch can be resumed one module at a time without uploading it again.
  */
-export async function advanceIntake(id: string, request: Request, { start = true }: AdvanceOptions = {}): Promise<IntakeView> {
+export async function advanceIntake(id: string, request: Request, { start = true, retry = false }: AdvanceOptions = {}): Promise<IntakeView> {
   const intake = await request(`/api/knowledge/intake/${id}`);
-  if (intake.estado === "intake_error") return { status: "error", phase: intake.fase ?? "lectura", result: null, error: intake.error ?? "No se pudo procesar el documento" };
+  if (intake.estado === "intake_error") {
+    if (!retry) return { status: "error", phase: intake.fase ?? "lectura", result: null, error: intake.error ?? "No se pudo procesar el documento" };
+    await request(`/api/knowledge/intake/${id}`, "POST");
+    return { status: "processing", phase: "lectura", result: null, error: null };
+  }
   const base = await step(`/api/knowledge/intake/${id}/base-reading`, "base_reading", request, start);
   if (pause(base.status)) return { status: base.status as "processing" | "waiting", phase: "lectura_base", result: null, error: null };
   if (base.status === "error") return { status: "error", phase: "lectura_base", result: null, error: `Lectura base: ${base.error}` };

@@ -43,6 +43,9 @@ test('classification results cannot silently pass for extraction output',async()
 });
 test('errors are visible and do not launch automatic retries',async()=>{
  let calls=0;const result=await advanceIntake('fresh',async()=>{calls++;return {estado:'intake_error',error:'No se pudo leer el archivo'};});assert.equal(result.status,'error');assert.equal(calls,1);
+ const posted=[];const resumed=await advanceIntake('fresh',async(url,method)=>{posted.push(method??'GET');return {estado:'intake_error',fase:'lectura',error:'cortada'};},{start:true,retry:true});
+ assert.deepEqual(posted,['GET','POST'],'an explicit Continuar resumes a failed reading');assert.equal(resumed.status,'processing');
+ const auto=[];await advanceIntake('fresh',async(url,method)=>{auto.push(method??'GET');return {estado:'intake_error',error:'x'};},{start:true});assert.deepEqual(auto,['GET'],'never retried by the polling');
 });
 test('modal has one processing action and no rediscovery or test controls',()=>{
  const modal=readFileSync('components/knowledge/import/modal/knowledge-import-modal.tsx','utf8');assert.equal((modal.match(/<Button /g)||[]).length,1);assert.doesNotMatch(modal,/Reintentar|Recalcular|excludedTables|structurePoll|Recuperar lote|Descubrir tablas/);

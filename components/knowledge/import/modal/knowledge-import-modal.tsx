@@ -87,7 +87,7 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
   async function continueStep() {
     setError(null);
     log("accion", `continuar: ${view?.phase}`);
-    try { setView(await advanceIntake(id!, request, { start: true })); setRun(n => n + 1); }
+    try { setView(await advanceIntake(id!, request, { start: true, retry: view?.status === "error" && view.phase === "lectura" })); setRun(n => n + 1); }
     catch(e) { setError(e instanceof Error ? e.message : "Error de procesamiento"); }
   }
   async function start() {
@@ -161,7 +161,7 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-white px-6 py-3">
         <p role="status" className="text-xs text-slate-500">{status}</p>
-        {(!id || view?.status === "waiting") && <Button disabled={uploading || saving || (!id && !files.length) || (writingBlocked > 0)}
+        {(!id || view?.status === "waiting" || (view?.status === "error" && view.phase === "lectura")) && <Button disabled={uploading || saving || (!id && !files.length) || (writingBlocked > 0)}
           onClick={!id ? start : view!.phase === "escritura" ? saveRecords : continueStep}>
           {!id ? (uploading ? "Subiendo…" : "Procesar documentos") : view!.phase === "escritura"
             ? (saving ? "Guardando…" : writingBlocked > 0 ? `Decide ${writingBlocked} pendiente(s)` : "Guardar en mis datos")
