@@ -109,6 +109,7 @@ test('commit: refuses pending decisions; writes records, revisions, evidence and
  const result=await commit.commitWritePlan(tx,{workspaceId:'w',userId:'u',batchId:'b',plan,revision:1});
  assert.equal(result.resumen.creados,plan.resumen.crear);assert.equal(db.records.length,plan.resumen.crear);assert.equal(db.revisions.length,db.records.length);
  assert.ok(db.records.every(r=>r.workspace_id==='w'&&r.status==='draft'));
+ assert.ok(db.provenance.every(p=>p.origin_type==='integration'),'"document" needs a Knowledge file (check constraint)');
  assert.ok(db.provenance.some(p=>p.field_key==='net_amount'&&/100,00/.test(p.evidence_text)&&/^intake:b\/f1\/p1\/invoice\.subtotal$/.test(p.source_locator)));
  assert.deepEqual([...new Set(db.types.map(t=>t.key))].sort(),[...new Set(plan.registros.filter(r=>r.accion==='crear').map(r=>r.tipo))].sort(),'only the types used are bound');
  assert.equal(db.bindings.length,db.types.length);

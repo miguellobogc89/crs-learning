@@ -114,7 +114,10 @@ export async function commitWritePlan(tx: Tx, input: { workspaceId: string; user
     // The printed text of every value, where it was read and how it was converted.
     if (record.evidencias.length) await tx.engine_record_provenance.createMany({ data: record.evidencias.map(ev => ({ workspace_id: workspaceId, record_id: created.id,
       revision: 1, field_key: ev.campo, source_locator: `intake:${batchId}/${ev.archivoId}${ev.pagina ? `/p${ev.pagina}` : ""}/${ev.origen}`,
-      evidence_text: `${ev.impreso}${ev.inferido ? ` (${ev.inferido})` : ""} · ${ev.archivo}`, origin_type: "document", created_by_user_id: userId })) });
+      evidence_text: `${ev.impreso}${ev.inferido ? ` (${ev.inferido})` : ""} · ${ev.archivo}`,
+      // "document" requires a Knowledge file; the originals are still files of the intake batch, so the evidence is
+      // recorded as coming from the intake pipeline, with the batch file, page and field in the locator.
+      origin_type: "integration", created_by_user_id: userId })) });
     result.resumen.evidencias += record.evidencias.length;
     ids.set(record.ref, created.id);
     result.registros.push({ ref: record.ref, tipo: record.tipo, registroId: created.id, accion: "creado" });
