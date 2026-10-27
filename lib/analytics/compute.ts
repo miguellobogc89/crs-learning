@@ -1,4 +1,5 @@
 import type { AnalyticsData, Row } from "./data";
+import { extraCopies } from "@/lib/knowledge/intake/writer/duplicates";
 
 /**
  * Pure analytics over the workspace's records: income and expenses, costs by category, products and prices,
@@ -305,7 +306,7 @@ export function computeProducts(data: AnalyticsData, period: Period = 12): Produ
 export type CellValue = string | number | boolean | null;
 /** `edit`: the cell can be changed from the table (field of the record behind the row, `_id`/`_rev`/`_type`). */
 export type Column = { key: string; label: string; kind?: "money" | "number" | "date" | "text" | "document" | "boolean";
-  edit?: { field: string; type: "text" | "select" | "boolean"; options?: { value: string; label: string }[] } };
+  edit?: { field: string; type: "text" | "select" | "boolean" | "party"; options?: { value: string; label: string }[] } };
 export type Table = { key: string; label: string; description: string; columns: Column[]; rows: Record<string, CellValue>[] };
 export const TABLE_KEYS = ["facturas", "compras", "empresas", "suministros", "consumos"] as const;
 /** Edits allowed from Analítica (record type → fields). Anything else is changed in Tablas of the engine. */
@@ -362,15 +363,42 @@ export function buildTable(data: AnalyticsData, key: string): Table {
         columns: [{ key: "mes", label: "Mes" }, { key: "kwh", label: "kWh", kind: "number" }], rows: electricity.map(e => ({ mes: MONTH_LABEL(e.month), kwh: e.kwh })) };
     }
     default: return { key: "facturas", label: "Facturas", description: "Todas tus facturas guardadas. «Tipo» dice si es un gasto o un ingreso: cámbialo si no es correcto.",
-      columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "numero", label: "Número" }, { key: "emisor", label: "Emisor" }, { key: "receptor", label: "Receptor" },
+      columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "numero", label: "Número" }, { key: "emisor", label: "Emisor", edit: { field: "issuer", type: "party" } }, { key: "receptor", label: "Receptor", edit: { field: "customer", type: "party" } },
         { key: "tipo", label: "Tipo", edit: { field: "direction", type: "select", options: [{ value: "recibida", label: "Gasto" }, { value: "emitida", label: "Ingreso" }] } },
         { key: "categoria", label: "Categoría", edit: { field: "expense_category", type: "select", options: CATEGORIES.map(c => ({ value: c.key, label: c.label })) } },
         { key: "base", label: "Base", kind: "money" }, { key: "iva", label: "IVA", kind: "money" }, { key: "total", label: "Total", kind: "money" },
         { key: "documento", label: "Documento", kind: "document" }],
-      rows: data.invoices.map(i => ({ _id: i.id, _rev: i.revision ?? null, _type: "invoice", fecha: str(i.values.issue_date), numero: str(i.values.invoice_number),
+      rows: data.invoices.map(i => ({ _id: i.id, _rev: i.revision ?? null, _type: "invoice", _issuer: ix.issuerOf.get(i.id) ?? null, _customer: ix.customerOf.get(i.id) ?? null, fecha: str(i.values.issue_date), numero: str(i.values.invoice_number),
         emisor: companyName(ix.byId.get(ix.issuerOf.get(i.id) ?? "")), receptor: companyName(ix.byId.get(ix.customerOf.get(i.id) ?? "")),
         tipo: isIncome(i, ix) ? "Ingreso" : "Gasto", categoria: label(category(i)),
         base: num(i.values.net_amount), iva: num(i.values.tax_amount), total: num(i.values.total_amount), documento: doc(i.id) }))
         .sort((a, b) => String(b.fecha ?? "").localeCompare(String(a.fecha ?? ""))) };
   }
+}
+
+// ---------- review ----------
+export type DuplicatedLines = { invoiceId: string; numero: string | null; emisor: string | null; fecha: string | null; base: number; sumaLineas: number; quitar: string[] };
+
+/** Saved invoices whose lines were read twice (they add up to twice the net amount, every line in pairs). */
+export function duplicatedLineIssues(data: AnalyticsData): DuplicatedLines[] {
+  const ix = indexes(data);
+  const byInvoice = new Map<string, Row[]>();
+  for (const l of data.lines) { const inv = ix.invoiceOfLine.get(l.id); if (inv) byInvoice.set(inv, [...(byInvoice.get(inv) ?? []), l]); }
+  const out: DuplicatedLines[] = [];
+  for (const inv of data.invoices) {
+    const lines = byInvoice.get(inv.id) ?? [];
+    const net = num(inv.values.net_amount);
+    const amount = (l: Row) => num(l.values.line_total);
+    const key = (l: Row) => JSON.stringify([str(l.values.description), str(l.values.quantity), str(l.values.unit_price), str(l.values.line_total), str(l.values.source_ticket_number)]);
+    const quitar = extraCopies(lines.map(l => ({ id: l.id, key: key(l), amount: amount(l) })), net);
+    if (quitar.length) out.push({ invoiceId: inv.id, numero: str(inv.values.invoice_number), emisor: companyName(ix.byId.get(ix.issuerOf.get(inv.id) ?? "")),
+      fecha: str(inv.values.issue_date), base: net!, sumaLineas: round(lines.reduce((a, l) => a + (amount(l) ?? 0), 0)), quitar });
+  }
+  return out.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+}
+
+/** Companies to choose from when correcting an invoice's issuer or customer. */
+export function companyOptions(data: AnalyticsData): { id: string; nombre: string; nif: string | null }[] {
+  return data.companies.map(c => ({ id: c.id, nombre: companyName(c) ?? "Sin nombre", nif: str(c.values.tax_identifier) }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 }

@@ -7,6 +7,9 @@ import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { updateEngineRecord, EngineRecordError } from "@/lib/engine/records.service";
 import { editedValues } from "@/lib/analytics/edit";
 import { mergeRecords } from "@/lib/analytics/merge";
+import { archiveLines, setInvoiceParty } from "@/lib/analytics/parties";
+import { loadAnalyticsData } from "@/lib/analytics/data";
+import { duplicatedLineIssues } from "@/lib/analytics/compute";
 
 /** One cell edited in Analítica → Tablas. A new revision of the record (its history keeps the previous value). */
 export async function editAnalyticsCellAction(input: { recordId: string; expectedRevision: number; field: string; value: unknown }) {
@@ -42,5 +45,39 @@ export async function mergeCompaniesAction(input: { sourceId: string; targetId: 
     return { ok: true as const, ...result };
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : "No se pudieron unir." };
+  }
+}
+
+/** Tablas → Facturas: who issued it / who it was billed to (an existing company, a new one, or none). */
+export async function setInvoicePartyAction(input: { invoiceId: string; role: "issuer" | "customer"; companyId: string | null; nueva?: { nombre: string; nif?: string | null } }) {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false as const, error: "Sesión no válida." };
+  const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
+  if (activeWorkspace.role !== "owner" && activeWorkspace.role !== "admin") return { ok: false as const, error: "Solo el propietario o un administrador puede corregir datos." };
+  if (input.role !== "issuer" && input.role !== "customer") return { ok: false as const, error: "Dato no válido." };
+  try {
+    const result = await prisma.$transaction(tx => setInvoiceParty(tx, { workspaceId: activeWorkspace.id, userId: session.user!.id!, invoiceId: input.invoiceId,
+      role: input.role, companyId: input.companyId, nueva: input.nueva }), { timeout: 30_000, maxWait: 15_000 });
+    revalidatePath("/analytics");
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "No se pudo guardar." };
+  }
+}
+
+/** Removes the copies of lines read twice, recomputed here (never trusting the browser's list). */
+export async function removeDuplicatedLinesAction(input: { invoiceIds: string[] }) {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false as const, error: "Sesión no válida." };
+  const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
+  if (activeWorkspace.role !== "owner" && activeWorkspace.role !== "admin") return { ok: false as const, error: "Solo el propietario o un administrador puede corregir datos." };
+  const chosen = new Set(input.invoiceIds);
+  const issues = duplicatedLineIssues(await loadAnalyticsData(activeWorkspace.id)).filter(i => chosen.has(i.invoiceId));
+  try {
+    const archived = await prisma.$transaction(tx => archiveLines(tx, { workspaceId: activeWorkspace.id, userId: session.user!.id!, lineIds: issues.flatMap(i => i.quitar) }), { timeout: 30_000, maxWait: 15_000 });
+    revalidatePath("/analytics");
+    return { ok: true as const, facturas: issues.length, lineas: archived };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "No se pudo corregir." };
   }
 }

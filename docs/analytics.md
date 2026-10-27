@@ -59,3 +59,13 @@ Tablas → Empresas → «Unir con…» en la duplicada (`lib/analytics/merge.ts
 guardado de importaciones): sus relaciones (facturas como emisor o cliente, suministros…) pasan a la que se queda; las
 repetidas o entre ambas se descartan; la que se queda conserva sus valores y recibe solo los que le faltan; la duplicada
 se **archiva** (no se borra: conserva historial y evidencias). Si el resultado daría dos dueños a algo que admite uno, no se hace nada.
+
+## Corregir emisor y receptor, y líneas leídas dos veces
+
+- Tablas → Facturas: «Emisor» y «Receptor» son desplegables con las empresas guardadas, «— Ninguna» y «+ Nueva
+  empresa…» (nombre y NIF/CIF opcional; si el NIF ya existe se reutiliza esa empresa). Cambia la relación
+  `invoice_issuer`/`invoice_customer` (`lib/analytics/parties.ts`).
+- Facturas cuyas líneas suman exactamente el doble de la base, todas por parejas (original y copia en el mismo PDF):
+  aviso arriba de Facturas y Productos comprados, y «Quitar las copias» archiva la segunda de cada pareja (se recalcula
+  en el servidor). Al importar, `writer/duplicates.ts` ya no guarda la mitad repetida (con subtotal: si suman el doble;
+  sin subtotal: solo con 4 líneas o más).

@@ -7,11 +7,12 @@ import { AppSectionShell } from "@/components/app/section-sidebar";
 import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { ANALYTICS_LIMIT, loadAnalyticsData } from "@/lib/analytics/data";
-import { availableYears, buildTable, CATEGORIES, computeDashboard, computeIncome, computeOverview, computeProducts, MONTH_LABEL, TABLE_KEYS, type Period } from "@/lib/analytics/compute";
+import { availableYears, buildTable, companyOptions, duplicatedLineIssues, CATEGORIES, computeDashboard, computeIncome, computeOverview, computeProducts, MONTH_LABEL, TABLE_KEYS, type Period } from "@/lib/analytics/compute";
 import { AnalyticsNavigation } from "@/components/analytics/analytics-navigation";
 import { GroupedBarChart } from "@/components/analytics/grouped-bar-chart";
 import { RankingList } from "@/components/analytics/ranking-list";
 import { DataTable } from "@/components/analytics/data-table";
+import { DuplicateLinesReview } from "@/components/analytics/duplicate-lines-review";
 import { CATEGORY_COLOR, SINGLE_SERIES_COLOR, fmtDate, fmtMoney, fmtNumber } from "@/components/analytics/format";
 
 export const dynamic = "force-dynamic";
@@ -97,7 +98,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
   let content: React.ReactNode;
   if (view === "tablas") {
-    content = <div className="space-y-4 pt-4">{notice}<DataTable table={buildTable(data, tableKey)} canEdit={canEdit} /></div>;
+    content = <div className="space-y-4 pt-4">{notice}
+      {(tableKey === "facturas" || tableKey === "compras") && <DuplicateLinesReview issues={duplicatedLineIssues(data)} canEdit={canEdit} />}
+      <DataTable table={buildTable(data, tableKey)} canEdit={canEdit} companies={tableKey === "facturas" ? companyOptions(data) : []} /></div>;
   } else {
     const tab: Tab = TABS.some(t => t.key === params.tab) ? params.tab as Tab : "general";
     const years = availableYears(data);

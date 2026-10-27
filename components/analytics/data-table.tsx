@@ -3,7 +3,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, FileText, GitMerge, Loader2, Pencil, X } from "lucide-react";
 import type { CellValue, Column, Table } from "@/lib/analytics/compute";
-import { editAnalyticsCellAction, mergeCompaniesAction } from "@/app/(app)/analytics/actions";
+import { editAnalyticsCellAction, mergeCompaniesAction, setInvoicePartyAction } from "@/app/(app)/analytics/actions";
 import { fmtDate, fmtMoney, fmtNumber } from "./format";
 
 const right = (c: Column) => c.kind === "money" || c.kind === "number";
@@ -19,7 +19,9 @@ const show = (v: CellValue, kind?: Column["kind"]) => {
  * A readable table: numbers right-aligned, a link to the original document of each row, and a few cells that can be
  * corrected in place (company name, "Mi empresa", invoice type and category). Each change is a new revision.
  */
-export function DataTable({ table, canEdit = false, limit = 500 }: { table: Table; canEdit?: boolean; limit?: number }) {
+type Company = { id: string; nombre: string; nif: string | null };
+
+export function DataTable({ table, canEdit = false, limit = 500, companies = [] }: { table: Table; canEdit?: boolean; limit?: number; companies?: Company[] }) {
   const rows = table.rows.slice(0, limit);
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +37,16 @@ export function DataTable({ table, canEdit = false, limit = 500 }: { table: Tabl
     if (!result.ok) { setError(result.error); return; }
     setNotice(`Empresas unidas: ${result.movidas} ${result.movidas === 1 ? "relación pasada" : "relaciones pasadas"} a la que se queda; la otra queda archivada.`);
     startTransition(() => router.refresh());
+  }
+
+  async function saveParty(row: Record<string, CellValue>, column: Column, choice: { companyId: string | null; nueva?: { nombre: string; nif?: string } }) {
+    if (typeof row._id !== "string" || !column.edit) return false;
+    setBusy(`${row._id}:${column.key}`); setError(null);
+    const result = await setInvoicePartyAction({ invoiceId: row._id, role: column.edit.field === "issuer" ? "issuer" : "customer", ...choice });
+    setBusy(null);
+    if (!result.ok) { setError(result.error); return false; }
+    startTransition(() => router.refresh());
+    return true;
   }
 
   async function save(row: Record<string, CellValue>, column: Column, value: unknown) {
@@ -72,6 +84,9 @@ export function DataTable({ table, canEdit = false, limit = 500 }: { table: Tabl
               ? <select value={c.edit!.options!.find(o => o.label === r[c.key])?.value ?? ""} disabled={cellBusy} onChange={e => void save(r, c, e.target.value)}
                   className="h-7 rounded-md border border-transparent bg-transparent px-1 text-sm hover:border-slate-200 focus:border-[#0A58FF]">
                   {c.edit!.options!.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
+            : canEdit && c.edit?.type === "party" && typeof r._id === "string"
+              ? <PartyCell name={r[c.key] as string | null} current={(c.edit.field === "issuer" ? r._issuer : r._customer) as string | null} companies={companies} busy={cellBusy}
+                  onSave={choice => saveParty(r, c, choice)} />
             : editable && c.edit!.type === "text" ? <EditableText value={String(r[c.key] ?? "")} busy={cellBusy} onSave={v => save(r, c, v)} />
             : show(r[c.key] ?? null, c.kind)}
         </td>;
@@ -118,4 +133,31 @@ function MergeControl({ row, rows, busy, onMerge }: { row: Record<string, CellVa
       <button type="button" disabled={busy} onClick={() => { setOpen(false); setTarget(""); }} className="rounded-md px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-100">Cancelar</button>
     </div>
   </div>;
+}
+
+/** Issuer or customer of an invoice: pick a saved company, none, or create one (name and, if known, NIF/CIF). */
+function PartyCell({ name, current, companies, busy, onSave }: { name: string | null; current: string | null; companies: Company[]; busy: boolean;
+  onSave: (choice: { companyId: string | null; nueva?: { nombre: string; nif?: string } }) => Promise<boolean> }) {
+  const [creating, setCreating] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [nif, setNif] = useState("");
+  if (creating) return <span className="flex min-w-[260px] flex-col gap-1">
+    <input autoFocus placeholder="Nombre de la empresa" value={nombre} onChange={e => setNombre(e.target.value)} className="h-7 rounded-md border border-[#0A58FF] px-2 text-sm outline-none" />
+    <span className="flex items-center gap-1">
+      <input placeholder="NIF/CIF (opcional)" value={nif} onChange={e => setNif(e.target.value)} className="h-7 w-36 rounded-md border border-slate-200 px-2 text-sm outline-none focus:border-[#0A58FF]" />
+      <button type="button" disabled={!nombre.trim() || busy} onClick={() => void onSave({ companyId: null, nueva: { nombre, nif } }).then(ok => { if (ok) { setCreating(false); setNombre(""); setNif(""); } })}
+        className="inline-flex items-center gap-1 rounded-md bg-[#0A58FF] px-2 py-1 text-xs font-medium text-white disabled:opacity-40">{busy && <Loader2 className="size-3 animate-spin" />}Crear</button>
+      <button type="button" onClick={() => setCreating(false)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="size-3.5" /></button>
+    </span>
+  </span>;
+  return <span className="inline-flex items-center gap-1">
+    <select value={current ?? ""} disabled={busy} title={name ?? undefined}
+      onChange={e => { if (e.target.value === "__new") setCreating(true); else void onSave({ companyId: e.target.value || null }); }}
+      className={"h-7 max-w-[230px] rounded-md border border-transparent bg-transparent px-1 text-sm hover:border-slate-200 focus:border-[#0A58FF] " + (current ? "" : "text-slate-400")}>
+      <option value="">{current ? "— Ninguna" : "— Sin empresa"}</option>
+      {companies.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.nif ? ` · ${c.nif}` : ""}</option>)}
+      <option value="__new">+ Nueva empresa…</option>
+    </select>
+    {busy && <Loader2 className="size-3 animate-spin text-slate-400" />}
+  </span>;
 }

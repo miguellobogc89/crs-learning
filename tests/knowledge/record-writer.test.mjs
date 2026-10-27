@@ -6,7 +6,7 @@ function load(file,deps={}){const m={exports:{}};new Function('require','module'
 const conv=load('lib/knowledge/intake/writer/convert.ts');
 const cat=load('lib/engine/catalog/standard-catalog.ts');
 const rc=load('lib/knowledge/intake/reconciliation/contract.ts');
-const planner=load('lib/knowledge/intake/writer/plan.ts',{'@/lib/engine/catalog/standard-catalog':cat,'./convert':conv,'../reconciliation/contract':rc});
+const planner=load('lib/knowledge/intake/writer/plan.ts',{'./duplicates':load('lib/knowledge/intake/writer/duplicates.ts'),'@/lib/engine/catalog/standard-catalog':cat,'./convert':conv,'../reconciliation/contract':rc});
 const commit=load('lib/knowledge/intake/writer/commit.ts',{'@prisma/client':{Prisma:{sql:(s,...v)=>({s,v})}}});
 
 test('printed amounts become exact decimal strings; ambiguous ones are not guessed',()=>{
@@ -152,4 +152,19 @@ test('a company without tax id can be joined to an existing record suggested by 
  const result=await commit.commitWritePlan(tx,{workspaceId:'w',userId:'u',batchId:'b',plan,revision:1});
  assert.ok(result.registros.some(r=>r.registroId==='r-own'&&r.accion==='reutilizado'));
  assert.ok(db.relations.some(r=>r.from_record_id==='r-own'),'the invoice is linked to the existing company');
+});
+
+test('lines read twice (original + copy): dropped only when it is certain',()=>{
+ const d=load('lib/knowledge/intake/writer/duplicates.ts');
+ const row=(desc,total)=>({description:desc,line_total:total});
+ const amount=r=>r.line_total===null?null:Number(r.line_total);
+ assert.deepEqual(d.copiedHalf([row('Nata','25.90'),row('Leche','25.90'),row('Nata','25.90'),row('Leche','25.90')],51.80,amount),[2,3]);
+ assert.deepEqual(d.copiedHalf([row('Cono','51.80'),row('Cono','51.80')],51.80,amount),[1],'one line twice, adds up to twice the subtotal');
+ assert.deepEqual(d.copiedHalf([row('Cono','51.80'),row('Cono','51.80')],103.60,amount),[],'two equal purchases that add up to the subtotal stay');
+ assert.deepEqual(d.copiedHalf([row('Cono','51.80'),row('Cono','51.80')],null,amount),[],'no subtotal and only two lines: not sure enough');
+ assert.deepEqual(d.copiedHalf([row('A','1'),row('B','2'),row('A','1'),row('C','2')],6,amount),[],'halves differ');
+ assert.deepEqual(d.extraCopies([{id:'1',key:'a',amount:51.8},{id:'2',key:'a',amount:51.8}],51.8),['2']);
+ assert.deepEqual(d.extraCopies([{id:'1',key:'a',amount:10},{id:'2',key:'b',amount:10},{id:'3',key:'a',amount:10},{id:'4',key:'b',amount:10}],20),['3','4']);
+ assert.deepEqual(d.extraCopies([{id:'1',key:'a',amount:10},{id:'2',key:'a',amount:10}],20),[],'sum equals the net: genuine');
+ assert.deepEqual(d.extraCopies([{id:'1',key:'a',amount:10},{id:'2',key:'a',amount:10},{id:'3',key:'b',amount:10}],15),[],'odd count');
 });

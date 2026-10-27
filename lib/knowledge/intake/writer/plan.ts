@@ -1,3 +1,4 @@
+import { copiedHalf } from "./duplicates";
 import { expenseCategory, FIELD_SET_MAPPING, STANDARD_TYPES } from "@/lib/engine/catalog/standard-catalog";
 import type { TargetedFile, TargetedResult } from "../targeted/contract";
 import type { ReconciliationResult, ReconciledEntity } from "../reconciliation/contract";
@@ -109,7 +110,15 @@ export function buildWritePlan(extraction: TargetedResult, reconciliation: Recon
       for (const [rol, data] of Object.entries(entities)) {
         const rows = (Array.isArray(data) ? data : [data]) as Row[];
         const mapping = FIELD_SET_MAPPING[rol] ?? {};
+        // Detail lines read twice (original + copy in the same PDF): the repeated half is not saved.
+        const lineAmount = Object.entries(mapping).find(([, t]) => t.type === "invoice_line" && t.field === "line_total")?.[0];
+        const subtotalKey = Object.entries(FIELD_SET_MAPPING.invoice ?? {}).find(([, t]) => t.field === "net_amount")?.[0];
+        const subtotal = subtotalKey && invoiceRow?.[subtotalKey]?.valor ? toDecimal(invoiceRow[subtotalKey].valor!, { commaDecimals }) : null;
+        const skip = new Set(Array.isArray(data) && lineAmount ? copiedHalf(rows.map(r => Object.fromEntries(Object.entries(r).map(([k, f]) => [k, f?.valor ?? null]))),
+          subtotal?.ok ? Number(subtotal.value) : null, r => { const d = r[lineAmount] ? toDecimal(r[lineAmount]!, { commaDecimals }) : null; return d?.ok ? Number(d.value) : null; }) : []);
+        if (skip.size) avisos.push(`${file.archivo} (${part.parteId}): las ${skip.size} líneas de «${rol}» estaban repetidas (original y copia en el mismo documento); se guardan una vez`);
         rows.forEach((row, indice) => {
+          if (skip.has(indice)) return;
           if (!Object.values(row).some(f => f?.valor)) return;
           const origen = Array.isArray(data) ? `${rol}[${indice + 1}]` : rol;
           let own: PlannedRecord;

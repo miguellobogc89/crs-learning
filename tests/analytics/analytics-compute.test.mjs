@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 function load(file,deps={}){const m={exports:{}};new Function('require','module','exports',ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(n=>{if(n in deps)return deps[n];throw Error(n);},m,m.exports);return m.exports;}
-const a=load('lib/analytics/compute.ts');
+const a=load('lib/analytics/compute.ts',{'@/lib/knowledge/intake/writer/duplicates':load('lib/knowledge/intake/writer/duplicates.ts')});
 
 // Synthetic workspace (no customer data).
 const row=(id,values)=>({id,values});
@@ -145,4 +145,14 @@ test('edits from Analítica: only a few fields, validated',()=>{
  assert.equal(e.editedValues('invoice',{},'expense_category','servicios').ok,true);
  assert.equal(e.editedValues('invoice',{},'total_amount','1').ok,false,'amounts are not edited here');
  assert.equal(e.editedValues('company',{},'tax_identifier','B2').ok,false,'nor identifiers');
+});
+
+test('review: invoices whose lines add up to exactly twice the net, in pairs',()=>{
+ const dup={...data,lines:[...data.lines,{id:'d1',values:{description:'Cono',line_total:'51.80'}},{id:'d2',values:{description:'Cono',line_total:'51.80'}}],
+  invoices:[...data.invoices,{id:'i9',values:{invoice_number:'000831',issue_date:'2026-04-30',net_amount:'51.80',total_amount:'62.68'}}],
+  relations:{...data.relations,invoice_lines:[...data.relations.invoice_lines,['i9','d1'],['i9','d2']]}};
+ const issues=a.duplicatedLineIssues(dup);
+ assert.deepEqual(issues.map(i=>[i.numero,i.sumaLineas,i.quitar]),[['000831',103.6,['d2']]]);
+ assert.equal(a.buildTable(dup,'facturas').columns.find(c=>c.key==='emisor').edit.type,'party');
+ assert.deepEqual(a.companyOptions(data).map(c=>c.nombre),['Eléctrica Sur SA','Lácteos Norte SL','Mi Negocio']);
 });

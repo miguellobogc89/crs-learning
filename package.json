@@ -21,7 +21,7 @@
     "test:engine:catalog": "node --test tests/engine/standard-catalog.test.mjs",
     "test:knowledge:classifier": "node --test tests/knowledge/document-classifier.test.mjs tests/knowledge/field-sets.test.mjs tests/knowledge/intake-upload-flow.test.mjs",
     "knowledge:replay-verification": "node scripts/knowledge/replay-verification.mjs",
-    "test:analytics": "node --test tests/analytics/analytics-compute.test.mjs tests/analytics/merge.test.mjs",
+    "test:analytics": "node --test tests/analytics/analytics-compute.test.mjs tests/analytics/merge.test.mjs tests/analytics/parties.test.mjs",
     "test:connectors": "node --test tests/connectors/google-drive.test.mjs tests/connectors/drive-sync.test.mjs tests/connectors/drive-queue.test.mjs"
   },
   "dependencies": {
