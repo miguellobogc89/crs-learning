@@ -33,7 +33,9 @@ export async function GET(_request: Request, context: Context) {
   const state = (batch.proposal_json as VerifiableIntake | null)?.verificacion;
   const estado = status(state);
   return NextResponse.json({ fase: "verificacion", estado, error: estado === "error" ? state?.error ?? null : null,
-    resultado: estado === "completed" ? state?.resultado ?? null : null });
+    resultado: estado === "completed" ? state?.resultado ?? null : null,
+    // Independent readings (text layer / OCR words) for diagnosis; only for the batch owner.
+    referencias: estado === "completed" || estado === "error" ? state?.referencias ?? [] : null });
 }
 export async function POST(_request: Request, context: Context) {
   const batch = await find(context);

@@ -15,9 +15,10 @@ export function ReadingVerification({ report }: { report: VerificationReport }) 
       {file.paginas.map(page => {
         const tag = page.referencia === "capa_texto" ? "probable error" : "a revisar";
         const items = [
-          ...page.literales.map(l => l.estado === "distinto"
-            ? `${l.donde}: la lectura dice «${l.modelo}» y el documento «${l.documento}»`
-            : `${l.donde}: «${l.modelo}» no aparece en el documento`),
+          ...page.literales.map(l => l.estado === "no_encontrado" ? `${l.donde}: «${l.modelo}» no aparece en el documento`
+            : l.documento === undefined
+              ? `${l.donde}: ${(l.diferencias ?? []).map(d => d.documento ? `la lectura dice «${d.modelo}» y el documento «${d.documento}»` : `«${d.modelo}» no aparece en el documento`).join("; ")}`
+              : `${l.donde}: la lectura dice «${l.modelo}» y el documento «${l.documento}»`),
           ...page.columnas.map(c => `${c.donde}: «${c.valor}» está bajo «${c.columnaDocumento}», no bajo «${c.columnaLectura}»`),
           ...page.omisiones.map(o => `Falta en la lectura: «${o.textoDocumento}»`),
         ];

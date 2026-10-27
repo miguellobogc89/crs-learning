@@ -27,6 +27,13 @@ For every value of the extraction (each line of a text block, each table header 
 2. **Columns** — for numeric cells, the horizontal position in the document must fall under its own column: by the column header when one is located (also when the header was transcribed as a row; this is reported as a notice), or by alignment with the other numeric cells of the column. Cells are searched within their row's vertical band.
 3. **Omissions** — reference text not covered by any extracted value (lost titles, footers, margin text).
 
+Revision 2 (after the first real Google Vision run on an image invoice):
+- Rotated text (tall, narrow words such as a registry note printed vertically in the margin) never belongs to a row band; before, it captured cells of every row it crossed.
+- Header cells are located as one row anchored on the longest label, so labels repeated elsewhere on the page ("IVA" inside "Cuota IVA" or in a later breakdown) do not take the wrong occurrence.
+- The approximate search prefers document text not yet matched to another value, so an anchor misread by OCR ("P6" as "Pб") does not land on a similar row elsewhere.
+- Long sentences report the specific differing words ("http://www." vs "https://www.") instead of a character diff; words under four characters are reported as absent rather than paired with an arbitrary closest match.
+- Values with no letters or digits that are not found as text (radio buttons, ticks) are notices, not findings; printed symbols such as "€" or "-" are still checked.
+
 Known limits, stated rather than hidden: it does not judge how text is grouped into blocks (two adjacent boxes merged into one table), does not read checkbox/radio states, cannot check columns of tables without a header or several numeric columns, and a PDF text layer may contain text hidden by clipping (reported as omissions).
 
 ## Output
@@ -41,7 +48,7 @@ No migration. The module's checkpoint lives in `proposal_json.verificacion` of t
 
 Independent readings (`referencias`) are persisted as soon as each file is read, before the comparison. A retry after an error, or a new comparison revision (`VERIFIER_REVISION`), recomputes the report from stored readings **without another OCR call**. Errors are stored and shown; the client does not retry automatically. Repeat POST to retry.
 
-The upload modal reads the extraction, then requests the verification and shows a plain-language summary, the unchanged extraction JSON, and the report JSON. A verification failure never hides the extraction.
+The upload modal reads the extraction, then requests the verification and shows a plain-language summary, the unchanged extraction JSON, and the report JSON. A verification failure never hides the extraction. Copy buttons (no server calls) copy the reading, the report, or everything at once including the stored independent readings (`GET` returns `referencias` to the batch owner for diagnosis).
 
 ## Configuration
 

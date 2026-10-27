@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
 import { advanceIntake, type IntakeView } from "../advance-intake";
 import { ReadingVerification } from "./reading-verification";
+import { CopyButton } from "./copy-button";
 import type { VerificationReport } from "@/lib/knowledge/intake/verifier/contract";
 import type { KnowledgeImportModalProps } from "./knowledge-import-modal.types";
 async function read(response: Response) {
@@ -60,6 +61,12 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
       </>}
       {id && !error && (!view || view.status === "processing") && <p role="status">{labels[view?.phase ?? "lectura"]}</p>}
       {(error || view?.error) && <p role="alert">{error || view?.error}</p>}
+      {view?.status === "completed" && view.verification?.status !== "processing" && <div className="flex flex-wrap gap-2">
+        <CopyButton label="Copiar todo" text={JSON.stringify({ lectura: view.result, revision: view.verification?.result ?? null,
+          errorRevision: view.verification?.error ?? null, lecturaIndependiente: view.verification?.references ?? null }, null, 2)} />
+        <CopyButton label="Copiar lectura" text={JSON.stringify(view.result, null, 2)} />
+        {view.verification?.status === "completed" && <CopyButton label="Copiar revisión" text={JSON.stringify(view.verification.result, null, 2)} />}
+      </div>}
       {view?.verification?.status === "error" && <p role="alert">La lectura está completa, pero no se pudo verificar: {view.verification.error}</p>}
       {view?.verification?.status === "completed" && <ReadingVerification report={view.verification.result as VerificationReport} />}
       {view?.status === "completed" && <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded border p-4 text-xs">{JSON.stringify(view.result, null, 2)}</pre>}

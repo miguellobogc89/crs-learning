@@ -152,3 +152,33 @@ test('repeated words of a multi-line cell each match their own occurrence (no fa
  const r=compare.verifyPage(p,{numero:1,fuente:'capa_texto',palabras:ws});
  assert.equal(findings(r),0,JSON.stringify(r));
 });
+test('vertical margin text does not capture the cells of the rows it crosses',()=>{
+ // A rotated registry note: tall, narrow words spanning the whole table height.
+ const margin=[{t:'Tomo',x0:0.01,x1:0.02,y0:0.25,y1:0.32},{t:'3073',x0:0.01,x1:0.02,y0:0.32,y1:0.40}];
+ const r=compare.verifyPage(page(),{numero:1,fuente:'ocr',palabras:[...margin,...words]});
+ assert.equal(r.literales.length+r.columnas.length,0,JSON.stringify(r));
+ assert.deepEqual(r.omisiones.map(o=>o.textoDocumento),['Tomo 3073']);
+});
+test('repeated header labels are located on their own header line',()=>{
+ // "IVA" appears first inside an earlier line; the table header must not take that occurrence.
+ const ws=[w('Cuota',0.05,0.10),w('IVA',0.12,0.10),
+  w('IVA',0.05,0.30),w('Base',0.25,0.30),w('Imponible',0.31,0.30),w('Total',0.70,0.30),
+  w('4%',0.07,0.33),w('138,00',0.33,0.33),w('143,52',0.70,0.33)];
+ const p={numero:1,incidencias:[],bloques:[{tipo:'texto',texto:'Cuota IVA'},{tipo:'tabla',columnas:['IVA','Base Imponible','Total'],filas:[['4%','138,00','143,52']]}]};
+ const r=compare.verifyPage(p,{numero:1,fuente:'ocr',palabras:ws});
+ assert.equal(r.columnas.length,0,JSON.stringify(r.columnas));assert.equal(r.literales.length,0);
+});
+test('a long sentence reports the specific words that differ',()=>{
+ const ws='Para saber más visite https://info.example.es o pida información'.split(' ').map((t,i)=>w(t,0.05+i*0.09,0.60));
+ const p={numero:1,incidencias:[],bloques:[{tipo:'texto',texto:'Para saber más visite http://info.example.es o pida información'}]};
+ const r=compare.verifyPage(p,{numero:1,fuente:'capa_texto',palabras:ws});
+ assert.equal(r.literales.length,1);assert.deepEqual(r.literales[0].diferencias,[{modelo:'http://info.example.es',documento:'https://info.example.es'}]);
+ assert.equal(r.omisiones.length,0);
+});
+test('drawn marks are a notice, while printed symbols are still checked as text',()=>{
+ const ws=[...words,w('€',0.70,0.40),w('-',0.80,0.40),w('Envío',0.05,0.40)];
+ const p=page();p.bloques.push({tipo:'tabla',columnas:['','',''],filas:[['Envío','€','-'],['○','','']]});
+ const r=compare.verifyPage(p,{numero:1,fuente:'capa_texto',palabras:ws});
+ assert.equal(findings(r),0,JSON.stringify(r));
+ assert.equal(r.avisos.filter(a=>/símbolo dibujado/.test(a)).length,1);
+});

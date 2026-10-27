@@ -107,8 +107,11 @@ export function verifyPage(page: Page, reference: PageReference): PageReport {
   }
   const severity: Severity = reference.fuente === "capa_texto" ? "probable_error" : "revisar";
   const st = new ReferenceStream(reference.palabras);
+  // Rotated text (e.g. a registry note printed vertically in the margin) spans many rows; it never belongs to a row band.
+  const vertical = reference.palabras.map(w => w.y1 - w.y0 > 0.02 && w.y1 - w.y0 > 2.5 * (w.x1 - w.x0));
   const inBand = ([a, b]: Span, band: Band) => {
     if (!band) return true;
+    if (st.owner.slice(a, b).some(i => vertical[i])) return false;
     const box = st.box(a, b);
     return box.y1 >= band[0] - BAND_TOLERANCE && box.y0 <= band[1] + BAND_TOLERANCE;
   };
@@ -123,26 +126,54 @@ export function verifyPage(page: Page, reference: PageReference): PageReport {
     // 2. every word present, but separated by the reference's reading order
     const tokens = value.split(/\s+/u).filter(Boolean);
     const spans: Span[] = [];
+    const missing: string[] = [];
     for (const token of tokens) {
       // Repeated words ("DE", "DOS"…) each take their own occurrence, preferably the next one in reading order.
       const previous = spans.at(-1)?.[1] ?? -1;
       const taken = (o: Span) => spans.some(s => s[0] === o[0]);
       const found = st.occurrences(squash(token)).filter(o => inBand(o, band) && !taken(o)).sort((x, y) =>
         Number(!st.free(...x)) - Number(!st.free(...y)) || Number(x[0] < previous) - Number(y[0] < previous) || Math.abs(x[0] - previous) - Math.abs(y[0] - previous));
-      if (!found.length) break;
-      spans.push(found[0]);
+      if (found.length) spans.push(found[0]); else missing.push(token);
     }
-    if (tokens.length > 1 && spans.length === tokens.length) {
+    if (tokens.length > 1 && !missing.length) {
       spans.forEach(span => st.mark(...span));
       return st.box(Math.min(...spans.map(s => s[0])), Math.max(...spans.map(s => s[1])));
     }
-    // 3. approximate: within the row band when known, otherwise the whole page
-    const all = Array.from({ length: st.s.length }, (_, k) => k);
-    const index = band ? all.filter(k => inBand([k, k + 1], band)) : all;
-    const region = index.map(k => st.s[k]).join("");
-    const { start, end, distance } = region ? fuzzySubstring(v, region) : { start: 0, end: 0, distance: v.length };
+    if (!/[\p{L}\p{N}]/u.test(v)) {
+      // Drawn marks (radio buttons, ticks, bullets) are graphics, not text: they cannot be checked against a text reading.
+      report.avisos.push(`${where}: «${value}» no aparece como texto en el documento (puede ser un símbolo dibujado)`);
+      return null;
+    }
+    // 2b. long sentence with a few differing words: report the words, which is what a reader can check
+    if (tokens.length >= 4 && missing.length <= tokens.length / 2) {
+      spans.forEach(span => st.mark(...span));
+      const diferencias = missing.map(token => {
+        // Very short words ("se", "Nº") have no meaningful closest match: report them as absent.
+        if (squash(token).length < 4) return { modelo: token, documento: "" };
+        const { start, end, distance } = fuzzySubstring(squash(token), st.s);
+        if (end <= start || distance > Math.max(1, Math.floor(token.length / 2))) return { modelo: token, documento: "" };
+        let s0 = start, s1 = end;
+        while (s0 > 0 && st.owner[s0 - 1] === st.owner[s0]) s0--;
+        while (s1 < st.s.length && st.owner[s1] === st.owner[s1 - 1]) s1++;
+        st.mark(s0, s1);
+        return { modelo: token, documento: st.s.slice(s0, s1) };
+      });
+      report.literales.push({ donde: where, modelo: value, severidad: severity, estado: "distinto", diferencias });
+      return spans.length ? st.box(Math.min(...spans.map(s => s[0])), Math.max(...spans.map(s => s[1]))) : null;
+    }
+    // 3. approximate: within the row band when known, otherwise the whole page; text not yet matched to another value first
+    const all = Array.from({ length: st.s.length }, (_, k) => k).filter(k => !band || inBand([k, k + 1], band));
+    const limit = Math.max(1, Math.floor(v.length / 3));
+    const attempt = (candidates: number[]) => {
+      const text = candidates.map(k => st.s[k]).join("");
+      const match = text ? fuzzySubstring(v, text) : { start: 0, end: 0, distance: v.length };
+      return { index: candidates, region: text, ...match, ok: match.end > match.start && match.distance <= limit };
+    };
+    let best = attempt(all.filter(k => !st.used[k]));
+    if (!best.ok) best = attempt(all);
+    const { index, region, start, end } = best;
     const finding: LiteralFinding = { donde: where, modelo: value, severidad: severity, estado: "no_encontrado" };
-    if (end > start && distance <= Math.max(1, Math.floor(v.length / 3))) {
+    if (best.ok) {
       let s0 = index[start], s1 = index[end - 1] + 1;
       while (s0 > 0 && st.owner[s0 - 1] === st.owner[s0]) s0--;
       while (s1 < st.s.length && st.owner[s1] === st.owner[s1 - 1]) s1++;
@@ -191,23 +222,30 @@ function verifyTable(b: number, block: TableBlock, locate: (value: string, where
     else report.avisos.push(`bloque ${b}: la cabecera está en la fila ${headerRow + 1}, no en 'columnas'`);
   }
   const header = headerRow === null ? columnas : filas[headerRow].map(c => c ?? "");
-  const headerBoxes = header.map((cell, c) => cell.trim() ? locate(cell, `bloque ${b} cabecera col ${c + 1}`) : null);
+  /** Locates one visual row: its longest cell (usually the description) fixes the vertical band for the others. */
+  const locateRow = (row: (string | null)[], label: (c: number) => string) => {
+    const located = new Map<number, Box>();
+    const cells = row.map((cell, c) => [c, cell] as const).filter((x): x is readonly [number, string] => !!x[1]?.trim());
+    if (!cells.length) return located;
+    const [anchorCol, anchorValue] = cells.reduce((best, x) => x[1].length > best[1].length ? x : best);
+    const anchor = locate(anchorValue, label(anchorCol));
+    if (anchor) located.set(anchorCol, anchor);
+    const band: Band = anchor ? [anchor.y0, anchor.y1] : null;
+    for (const [c, cell] of cells) {
+      if (c === anchorCol) continue;
+      const box = locate(cell, label(c), band);
+      if (box) located.set(c, box);
+    }
+    return located;
+  };
+  // Header labels repeat across tables ("IVA", "Total"): locate them as one row, not each one anywhere on the page.
+  const headerLocated = locateRow(header, c => `bloque ${b} cabecera col ${c + 1}`);
+  const headerBoxes = header.map((_, c) => headerLocated.get(c) ?? null);
 
   const boxes = new Map<string, Box>();
   filas.forEach((row, r) => {
     if (r === headerRow) return;
-    const cells = row.map((cell, c) => [c, cell] as const).filter((x): x is readonly [number, string] => !!x[1]?.trim());
-    if (!cells.length) return;
-    // Row anchor: the longest cell (usually the description) fixes the row's vertical band.
-    const [anchorCol, anchorValue] = cells.reduce((best, x) => x[1].length > best[1].length ? x : best);
-    const anchor = locate(anchorValue, `bloque ${b} fila ${r + 1} col ${anchorCol + 1}`);
-    if (anchor) boxes.set(`${r}:${anchorCol}`, anchor);
-    const band: Band = anchor ? [anchor.y0, anchor.y1] : null;
-    for (const [c, cell] of cells) {
-      if (c === anchorCol) continue;
-      const box = locate(cell, `bloque ${b} fila ${r + 1} col ${c + 1}`, band);
-      if (box) boxes.set(`${r}:${c}`, box);
-    }
+    for (const [c, box] of locateRow(row, c => `bloque ${b} fila ${r + 1} col ${c + 1}`)) boxes.set(`${r}:${c}`, box);
   });
 
   const center = (box: Box) => (box.x0 + box.x1) / 2;
