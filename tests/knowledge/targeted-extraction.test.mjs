@@ -139,3 +139,14 @@ test('extraction stage uses the targeted extraction for classified batches and k
  assert.deepEqual(saved.proposal_json.clasificacion,batch.proposal_json.clasificacion);assert.deepEqual(saved.proposal_json.lecturaBase,batch.proposal_json.lecturaBase);
  assert.equal(typeof fileUpdate.data.extracted_text,'string');
 });
+test('punctuation around a value in the document is not a difference; a dropped minus sign or inner change still is',()=>{
+ const pref={archivoId:'f1',paginas:[{numero:1,fuente:'capa_texto',palabras:[w('CIF.',0.05,0.10),w('A-82018474.',0.12,0.10),w('IVA',0.05,0.20),w('(21.00',0.12,0.20),w('%)',0.22,0.20),
+  w('Gran',0.05,0.30),w('Vía',0.12,0.30),w('28,',0.18,0.30),w('Madrid,',0.24,0.30),w('956289565-',0.05,0.40),w('Fijo',0.05,0.50),w('e',0.11,0.50),w('internet:',0.13,0.50),
+  w('-5,00',0.05,0.60),w('S.A,U.',0.05,0.70)]}]};
+ const f=(campo,valor)=>({[campo]:{valor,pagina:1}});
+ const file={archivoId:'f1',archivo:'x.pdf',incidencias:[],partes:[{parteId:'p1',modo:'dirigida',tipo:'factura',subtipo:null,paginas:[1],conjunto:[],motivo:'',
+  entidades:{issuer:{...f('tax_id','A-82018474'),...f('address','Gran Vía 28, Madrid'),...f('legal_name','S.A.U.')},tax:{...f('rate','21.00 %')},
+   line:{...f('number','956289565'),...f('service','Fijo e internet'),...f('amount','5,00')}}}]};
+ const r=values.verifyTargetedFile(file,pref);
+ assert.deepEqual(r.hallazgos.map(h=>h.campo).sort(),['issuer.legal_name','line.amount'],JSON.stringify(r.hallazgos));
+});

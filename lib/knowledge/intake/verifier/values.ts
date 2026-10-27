@@ -38,6 +38,21 @@ function checkOnPage(values: Item[], reference: FileReference["paginas"][number]
   return { byBlock, avisos: report.avisos.filter(a => /símbolo dibujado/.test(a)), source: reference.fuente };
 }
 
+// A field value is extracted without the punctuation around it in the document ("A-82018474" from "CIF. A-82018474.",
+// "21.00 %" from "(21.00 %)", "Madrid" from "Madrid,"). Leading "-" is never ignored: it may be a negative sign.
+const LEADING = /^[(\[¿¡"'«“.,:;]+/u;
+const TRAILING = /[)\]"'»”.,:;\-–—]+$/u;
+const edges = (text: string) => text.replace(LEADING, "").replace(TRAILING, "");
+const compact = (text: string) => text.replace(/\s+/g, "");
+function onlyEdgePunctuation(valor: string, findings: Finding[]) {
+  return findings.every(f => {
+    if (f.estado !== "distinto") return false;
+    if (f.documento !== undefined && compact(edges(f.documento)) === compact(valor)) return true;
+    // Word-level differences only ("Madrid" vs "Madrid,"): the model's word is whole and the document adds edge punctuation.
+    return !!f.diferencias?.length && f.diferencias.every(d => d.modelo !== "" && edges(d.modelo) === d.modelo && edges(d.documento) === d.modelo);
+  });
+}
+
 export function verifyTargetedFile(file: TargetedFile, reference: FileReference | undefined): FileValueReport {
   const out: FileValueReport = { archivoId: file.archivoId, archivo: file.archivo, comprobados: 0, hallazgos: [],
     faltan: file.partes.flatMap(p => (p.faltan ?? []).map(campo => ({ parte: p.parteId, campo }))), avisos: [] };
@@ -69,7 +84,7 @@ export function verifyTargetedFile(file: TargetedFile, reference: FileReference 
     }
     if (best) pending.push(best);
   }
-  for (const { item, findings } of pending) {
+  for (const { item, findings } of pending.filter(p => !onlyEdgePunctuation(p.item.valor, p.findings))) {
     // A multi-line value yields one finding per line: the value is reported once, with its first difference.
     const [first] = findings;
     out.hallazgos.push({ parte: item.parte, campo: item.campo, valor: item.valor, pagina: item.pagina, estado: first.estado,
