@@ -59,12 +59,14 @@ const category = (inv: Row): CategoryKey => {
 };
 
 /** "emitida"/"recibida" as marked by the person win; otherwise an invoice issued by "Mi empresa" is income. */
-export function isIncome(inv: Row, ix: { issuerOf: Map<string, string>; own: Set<string> }): boolean {
+export function isIncome(inv: Row, ix: { issuerOf: Map<string, string>; customerOf: Map<string, string>; own: Set<string> }): boolean {
   const direction = str(inv.values.direction)?.toLowerCase() ?? "";
   if (/emitid|venta|ingreso|issued|sale/.test(direction)) return true;
   if (/recibid|compra|gasto|received|purchase/.test(direction)) return false;
-  const issuer = ix.issuerOf.get(inv.id);
-  return !!issuer && ix.own.has(issuer);
+  const issuer = ix.issuerOf.get(inv.id), customer = ix.customerOf.get(inv.id);
+  // Issued by my company AND addressed to someone else. "From me to me" is a misread issuer (e.g. a utility bill
+  // where the holder was taken as issuer): it stays an expense until the person fixes it.
+  return !!issuer && ix.own.has(issuer) && !(customer && ix.own.has(customer));
 }
 
 // ---------- period ----------

@@ -103,6 +103,9 @@ test('income: invoices issued by «Mi empresa» (or marked emitida) are income, 
  assert.equal(a.computeOverview(data).hasOwnCompany,false);
  assert.equal(a.buildTable(own,'empresas').rows[0].empresa,'Lácteos Norte SL','my company first');
  assert.deepEqual(a.computeDashboard(own).subcategories.map(s=>s.key),['sin_subtipo']);
+ // "From my company to my company" is a misread issuer (a water bill), not a sale.
+ const self={...own,companies:own.companies.map(c=>c.id==='own'?{...c,values:{...c.values,is_own_company:true}}:c)};
+ assert.equal(a.computeIncome(self).invoices,2,'F1 (to «Mi Negocio», also mine) stays an expense');
 });
 
 test('products: by spend and quantity, and unit price changes for products bought at least twice',()=>{
