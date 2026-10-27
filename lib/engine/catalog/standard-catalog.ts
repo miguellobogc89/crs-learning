@@ -15,7 +15,7 @@ export type CatalogType = { key: string; name: string; description: string; fiel
 export type CatalogRelation = { key: string; name: string; from: string; to: string; cardinality: "one_to_one" | "one_to_many" | "many_to_many"; description: string };
 
 /** Bump when this file changes: the SQL records it in the version notes. */
-export const STANDARD_CATALOG_REVISION = "2026-10-27.2";
+export const STANDARD_CATALOG_REVISION = "2026-10-27.3";
 
 const f = (key: string, name: string, type: CatalogFieldType, description?: string, extra: { required?: true; unique?: true } = {}): CatalogField =>
   ({ key, name, type, ...(description ? { description } : {}), ...extra });
@@ -95,6 +95,8 @@ export const STANDARD_TYPES: CatalogType[] = [
   ] },
   { key: "invoice_line", name: "Líneas de factura", description: "Artículos o conceptos de una factura.", fields: [
     ...documentLine,
+    f("unit_price_with_tax", "Precio unitario con impuestos", "decimal", "Cuando el documento imprime ambos precios."),
+    f("line_total_with_tax", "Importe con impuestos", "decimal", "Cuando el documento imprime ambos importes."),
     f("unit_price_basis", "Precio unitario con o sin impuestos", "text", "«sin_impuestos» o «con_impuestos»."),
     f("line_total_basis", "Importe con o sin impuestos", "text", "«sin_impuestos» o «con_impuestos»."),
     f("calculation_detail", "Detalle del cálculo", "long_text", "Cantidades y precios del cálculo tal como aparecen (12 kW x 31 días…)."),
@@ -236,6 +238,7 @@ export const FIELD_SET_MAPPING: Record<string, Record<string, { type: string; fi
     quantity: { type: "invoice_line", field: "quantity" }, unit: { type: "invoice_line", field: "unit" }, unit_price: { type: "invoice_line", field: "unit_price" },
     unit_price_basis: { type: "invoice_line", field: "unit_price_basis" }, discount: { type: "invoice_line", field: "discount_amount" },
     tax_rate: { type: "invoice_line", field: "tax_rate" }, line_total: { type: "invoice_line", field: "line_total" },
+    unit_price_with_tax: { type: "invoice_line", field: "unit_price_with_tax" }, line_total_with_tax: { type: "invoice_line", field: "line_total_with_tax" },
     line_total_basis: { type: "invoice_line", field: "line_total_basis" }, source_ticket_number: { type: "invoice_line", field: "source_ticket_number" },
     source_ticket_date: { type: "invoice_line", field: "source_ticket_date" },
   },

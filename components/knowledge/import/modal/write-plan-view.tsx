@@ -9,6 +9,11 @@ const OPCION: Record<Decision, string> = { unir: "Unir a la sugerida", tal_cual:
 const name = (r: WritePlan["registros"][number]) =>
   String(r.valores.legal_name ?? r.valores.invoice_number ?? r.valores.supply_point_id ?? r.valores.number ?? r.valores.description ?? r.valores.period ?? r.ref);
 
+const suggestedName = (plan: WritePlan, ref: string) => {
+  const r = plan.registros.find(x => x.ref === ref);
+  return r ? `${String(r.valores.legal_name ?? "")}${r.claveExterna ? ` (${r.claveExterna})` : ""}`.trim() || ref : ref;
+};
+
 /** What will be saved, what needs a decision, and what could not be converted. Nothing is saved until "Guardar". */
 export function WritePlanView({ plan, decisions, onDecide }: { plan: WritePlan; decisions: Record<string, Decision>; onDecide: (ref: string, d: Decision) => void }) {
   const r = plan.resumen;
@@ -24,7 +29,7 @@ export function WritePlanView({ plan, decisions, onDecide }: { plan: WritePlan; 
       <h4 className="font-medium">Necesita tu decisión ({pending.length})</h4>
       {pending.map(x => <fieldset key={x.ref} className="rounded border p-2">
         <legend className="px-1 font-medium">{TIPO[x.tipo] ?? x.tipo} {name(x)}</legend>
-        <p className="text-amber-700 dark:text-amber-400">{x.bloqueo!.motivo}{x.bloqueo!.sugerencia ? ` · sugerida: ${x.bloqueo!.sugerencia.split(":")[1]}` : ""}</p>
+        <p className="text-amber-700 dark:text-amber-400">{x.bloqueo!.motivo}{x.bloqueo!.sugerencia ? ` · sugerida: ${suggestedName(plan, x.bloqueo!.sugerencia)}` : ""}</p>
         {x.avisos.map((a, i) => <p key={i} className="text-muted-foreground">{a}</p>)}
         <div className="flex flex-wrap gap-3">{x.bloqueo!.opciones.map(o => <label key={o} className="flex items-center gap-1">
           <input type="radio" name={x.ref} checked={decisions[x.ref] === o} onChange={() => onDecide(x.ref, o)} /> {OPCION[o]}</label>)}</div>

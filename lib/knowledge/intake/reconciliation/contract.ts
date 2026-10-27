@@ -6,7 +6,7 @@ import type { TargetedFile, TargetedResult } from "../targeted/contract";
  * identifiers printed in the document (tax id, invoice number, supply point, telecom line), never from names.
  * Entities without an identifier, or with conflicting candidates, are left for a person to review.
  */
-export const RECONCILIATION_REVISION = 5;
+export const RECONCILIATION_REVISION = 6;
 
 /** Entity kinds reconciled on their own; other extracted entities (lines, charges, tax rows…) are details of their invoice. */
 export const RECONCILED_TYPES = ["company", "invoice", "supply_point", "telecom_line"] as const;
@@ -37,6 +37,8 @@ export type ReconciledEntity = {
   estado: EntityState; registros: { id: string; externalKey: string | null }[]; avisos: string[];
   /** Probable entity this one is a misreading of (never merged automatically). */
   sugerencia?: string;
+  /** Existing record that is probably the same company (same name, no tax id printed); a person confirms. */
+  sugerenciaRegistro?: { id: string; nombre: string; clave: string | null };
 };
 export type PlannedRelation = { desde: string; relacion: string; hacia: string };
 export type InvoiceDetail = { factura: string; rol: string; filas: number };
@@ -189,8 +191,19 @@ function flagMisreadTaxIds(entidades: ReconciledEntity[]) {
   }
 }
 
-/** Candidate Engine records per identifier, or why they could not be checked. */
-export type Lookup = { tipoDefinido: boolean; completo: boolean; candidatos: Map<string, { id: string; externalKey: string | null }[]> };
+/**
+ * Comparable form of a company name: no accents, punctuation, spaces or legal form ("D'PLOCIA HELADOS, S.L." and
+ * "D PLOCIA HELADOS SL SL" → "dplociahelados"). Only used to SUGGEST a match to a person, never to merge.
+ */
+export function nameKey(name: string): string {
+  return name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/\b(s\.?\s?l\.?\s?u|s\.?\s?a\.?\s?u|s\.?\s?l\.?\s?l|s\.?\s?c\.?\s?p|s\.?\s?l|s\.?\s?a|s\.?\s?c|c\.?\s?b|sociedad limitada|sociedad anonima)\b\.?/g, " ")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/** Candidate Engine records per identifier (and, for companies, per name), or why they could not be checked. */
+export type Lookup = { tipoDefinido: boolean; completo: boolean; candidatos: Map<string, { id: string; externalKey: string | null }[]>;
+  porNombre?: Map<string, { id: string; nombre: string; clave: string | null }[]> };
 
 export function applyLookups(loteId: string, grouped: ReturnType<typeof groupEntities>, lookups: Map<ReconciledType, Lookup>): ReconciliationResult {
   const entidades = grouped.entidades.map(entity => {
@@ -205,6 +218,27 @@ export function applyLookups(loteId: string, grouped: ReturnType<typeof groupEnt
     return { ...entity, estado, registros, avisos };
   });
   // The same tax id on different printed names is the same company; a different tax id is never merged by name.
+  // A company printed WITHOUT tax id gets a suggestion when its name matches exactly one company of the batch
+  // (with tax id) or one existing record: a person confirms it when saving.
+  const named = new Map<string, ReconciledEntity[]>();
+  for (const e of entidades) if (e.tipo === "company" && e.clave) for (const n of e.nombres) {
+    const k = nameKey(n); if (k) named.set(k, [...(named.get(k) ?? []).filter(x => x.ref !== e.ref), e]);
+  }
+  for (const e of entidades) {
+    if (e.tipo !== "company" || e.clave || e.sugerencia) continue;
+    const keys = [...new Set(e.nombres.map(nameKey).filter(Boolean))];
+    const inBatch = [...new Map(keys.flatMap(k => named.get(k) ?? []).map(x => [x.ref, x])).values()];
+    if (inBatch.length === 1) {
+      e.sugerencia = inBatch[0].ref;
+      e.avisos.push(`Sin NIF impreso; por el nombre parece ${inBatch[0].nombres[0]} (${inBatch[0].clave}). No se ha unido: confírmalo`);
+      continue;
+    }
+    const existing = [...new Map(keys.flatMap(k => lookups.get("company")?.porNombre?.get(k) ?? []).map(x => [x.id, x])).values()];
+    if (inBatch.length === 0 && existing.length === 1) {
+      e.sugerenciaRegistro = existing[0];
+      e.avisos.push(`Sin NIF impreso; por el nombre parece ${existing[0].nombre}${existing[0].clave ? ` (${existing[0].clave})` : ""}, ya guardada. No se ha unido: confírmalo`);
+    }
+  }
   const count = (s: EntityState) => entidades.filter(e => e.estado === s).length;
   const avisos = [...grouped.avisos];
   return { module: "reconciliation", version: RECONCILIATION_REVISION, loteId, soloLectura: true,

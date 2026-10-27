@@ -127,3 +127,20 @@ test('orchestration and route guards: never saved automatically; claim before wr
  assert.match(route,/prisma\.\$transaction\(/);assert.match(route,/proposal_json: \{ equals: batch\.proposal_json/);assert.match(route,/plan\.resumen\.bloqueados/);
  const flow=readFileSync('components/knowledge/import/advance-intake.ts','utf8');assert.doesNotMatch(flow,/writing`, "POST"/);
 });
+
+test('a company without tax id can be joined to an existing record suggested by name; its relations go there',async()=>{
+ const noNif={...extraction,archivos:[{archivoId:'f3',archivo:'sin-nif.pdf',incidencias:[],partes:[part('p1',{invoice:{invoice_number:v('M-1'),issue_date:v('12/02/2026')},
+  issuer:{legal_name:v('PROVEEDOR DEMO SL'),tax_id:v('B00000000')},recipient:{legal_name:v("CLIENTE DEMO, S.L."),tax_id:v(null)}})]}]};
+ const lookups=new Map(['company','invoice','supply_point','telecom_line'].map(t=>[t,{tipoDefinido:true,completo:true,candidatos:new Map(),
+  ...(t==='company'?{porNombre:new Map([['clientedemo',[{id:'r-own',nombre:'CLIENTE DEMO SL',clave:'12345678Z'}]]])}:{})}]));
+ const rec=rc.applyLookups('b',rc.groupEntities(noNif),lookups);
+ const anon=rec.entidades.find(e=>e.tipo==='company'&&!e.clave);
+ const pending=planner.buildWritePlan(noNif,rec);
+ assert.deepEqual(pending.registros.find(r=>r.ref===anon.ref).bloqueo.opciones,['unir','tal_cual','omitir']);
+ const plan=planner.buildWritePlan(noNif,rec,{[anon.ref]:'unir'});
+ assert.ok(plan.relaciones.some(r=>r.relacion==='invoice_customer'&&r.desde==='company:registro:r-own'));
+ const {tx,db}=fakeTx();db.records.push({id:'r-own',object_type_id:'x',workspace_id:'w',status:'draft'});
+ const result=await commit.commitWritePlan(tx,{workspaceId:'w',userId:'u',batchId:'b',plan,revision:1});
+ assert.ok(result.registros.some(r=>r.registroId==='r-own'&&r.accion==='reutilizado'));
+ assert.ok(db.relations.some(r=>r.from_record_id==='r-own'),'the invoice is linked to the existing company');
+});

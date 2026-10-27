@@ -30,7 +30,7 @@ Checked on a local PostgreSQL 16 copy of the catalog tables seeded like the prod
 | `supplier_catalog_item` | Artículos de catálogo de proveedor | supplier_reference, description, unit, pack_size, unit_price, price_basis, tax_rate, min_quantity, valid_from |
 | `bank_account` | Cuentas bancarias | iban, bank_name, holder_name, currency |
 | `invoice` | Facturas | invoice_number, issue_date, due_date, currency, net_amount, tax_amount, total_amount, payment_terms, reference, notes, payment_method, payment_account, order_reference, invoice_kind, direction, period_start, period_end |
-| `invoice_line` | Líneas de factura | line_number, product_reference, description, quantity, unit, unit_price, discount_amount, tax_rate, line_total, unit_price_basis, line_total_basis, calculation_detail, source_ticket_number, source_ticket_date |
+| `invoice_line` | Líneas de factura | line_number, product_reference, description, quantity, unit, unit_price, discount_amount, tax_rate, line_total, unit_price_with_tax, line_total_with_tax, unit_price_basis, line_total_basis, calculation_detail, source_ticket_number, source_ticket_date |
 | `invoice_tax_line` | Desglose de impuestos | tax_type, tax_rate, taxable_base, tax_amount |
 | `delivery_note` | Albaranes | delivery_note_number, issue_date, order_reference, total_amount, notes |
 | `delivery_note_line` | Líneas de albarán | line_number, product_reference, description, quantity, unit, unit_price, discount_amount, tax_rate, line_total, lot_number, expiry_date |
@@ -52,7 +52,7 @@ Companies are `company` (more specific than `organization`, which stays for othe
 
 ## Relations (38)
 
-From owner to owned (`one_to_many`: one company issues many invoices), as the Engine expects. Relations already published are reused as they are (`invoice_lines`, `invoice_payments` many-to-many, `product_invoice_lines`); `invoice_issuer` / `invoice_customer` (company → invoice) are the ones the existing Engine importer checks. The `organization_*` relations stay for `organization`.
+From owner to owned (`one_to_many`: one company issues many invoices), as the Engine expects.
 
 | Key | From → to | Cardinality |
 |---|---|---|

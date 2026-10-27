@@ -67,11 +67,13 @@ const articleLines = (required: boolean): EntityDef => ({
     f("product_reference", "Referencia", "text", false, "Código o referencia del producto; clave para reconocer el producto.", true),
     f("quantity", "Cantidad", "decimal", true, "Cantidad tal como aparece."),
     f("unit", "Unidad", "text", false, "Unidad de venta (ud., kg, m…)."),
-    f("unit_price", "Precio unitario", "decimal", false, "Precio unitario tal como aparece."),
+    f("unit_price", "Precio unitario", "decimal", false, "Precio unitario tal como aparece; si hay dos columnas de precio (sin y con impuestos), el SIN impuestos."),
+    f("unit_price_with_tax", "Precio unitario con impuestos", "decimal", false, "Solo si el documento imprime OTRA columna de precio unitario con impuestos (PVP, TTI, IVA incl.)."),
     f("unit_price_basis", "Precio unitario con o sin impuestos", "enum", false, "«sin_impuestos» o «con_impuestos» según indique la columna; vacío si no se indica."),
     f("discount", "Descuento", "decimal", false, "Descuento de la línea tal como aparece."),
     f("tax_rate", "Tipo de impuesto", "text", false, "Tipo de la línea tal como aparece."),
-    f("line_total", "Importe de la línea", "decimal", true, "Importe total de la línea tal como aparece."),
+    f("line_total", "Importe de la línea", "decimal", true, "Importe total de la línea tal como aparece; si hay dos columnas de importe (sin y con impuestos), el SIN impuestos."),
+    f("line_total_with_tax", "Importe de la línea con impuestos", "decimal", false, "Solo si el documento imprime OTRA columna de importe de la línea con impuestos (Importe TTI, Total IVA incl.)."),
     f("line_total_basis", "Importe con o sin impuestos", "enum", false, "«sin_impuestos» o «con_impuestos» según indique la columna; vacío si no se indica."),
     // An invoice may group several tickets: each line keeps the ticket it comes from and that ticket's date
     // (the date of the purchase, needed e.g. for monthly spend per product).
@@ -152,7 +154,7 @@ export const FIELD_SETS: FieldSet[] = [
     ],
   },
   {
-    id: "factura_compra_articulos", name: "Factura de compra de artículos", version: 1, extends: ["factura_nucleo"],
+    id: "factura_compra_articulos", name: "Factura de compra de artículos", version: 2, extends: ["factura_nucleo"],
     appliesTo: { familia: "transaccion", tipo: "factura", subtipos: ["compra_articulos"] },
     entities: [
       articleLines(true),
@@ -165,7 +167,7 @@ export const FIELD_SETS: FieldSet[] = [
   {
     // A PDF may group several tickets in one invoice: each ticket is a classified part extracted with this set,
     // and the grouping invoice part keeps its own number, date and total.
-    id: "ticket", name: "Ticket o factura simplificada", version: 1,
+    id: "ticket", name: "Ticket o factura simplificada", version: 2,
     appliesTo: { familia: "transaccion", tipo: "factura", subtipos: ["factura_simplificada"] },
     entities: [
       { role: "invoice", name: "Ticket", catalogType: "invoice", catalogo: "existente", cardinality: "one", required: true, fields: [

@@ -16,6 +16,10 @@ Goal: the vision model only reads what matters for each kind of document. Footer
 
 One call per file for all its targeted parts (the PDF is sent once; spreadsheets and other formats send their native base reading as text). The request lists each part with its pages, entities and fields (descriptions from the field set; `*` = required if present) and the excluded content. Strict JSON schema **generated from the field sets**: each field is `{valor, pagina}` — the value exactly as printed (or `null`), and the PDF page where it is seen. Lists (lines, charges, tax breakdown) are one entry per real row. When an invoice groups several tickets, each line carries its ticket number and date (`source_ticket_number`, `source_ticket_date`), needed e.g. for monthly spend per product. The model may add up to five **proposals** per part (relevant data not in the set, with literal value and page) and never assigns record ids. Model: `OPENAI_DOCUMENT_EXTRACTION_MODEL`, otherwise `OPENAI_KNOWLEDGE_IMPORT_MODEL`; 180 s timeout, no hidden retries, 16,000-token cap; incomplete responses are rejected.
 
+## Second pass for missing required fields
+
+When the visual reading leaves REQUIRED single fields empty (an issuer printed vertically in the margin, a base amount in a corner), one text-only call searches only those fields in the base reading of the part's pages, which includes small and rotated text. A value is accepted only if it appears literally in that text; it is recorded as recovered in the file's notices, and the value verification checks it like any other. Nothing missing: no extra call.
+
 ## Validation (`validateTargeted`)
 
 Shape errors fail. Recoverable slips are corrected and recorded: a value citing a page outside its part loses the page reference; proposals duplicating a listed field are dropped. Empty (template) rows are dropped. Missing required fields are listed in `faltan` (notices) and never invented.
@@ -32,7 +36,7 @@ The upload modal shows the extracted data (fields, line tables, missing required
 
 ## Known limits
 
-The whole PDF is sent even when only some pages belong to targeted parts (splitting would need a PDF library). Column positions of extracted line values are not checked yet (only literal presence on the page). Proposals are recorded but not yet grouped across documents nor offered for approval.
+Article lines carry both amounts when the document prints both (without and with taxes: `line_total` / `line_total_with_tax`, `unit_price` / `unit_price_with_tax`; field sets v2). The whole PDF is sent even when only some pages belong to targeted parts (splitting would need a PDF library). Column positions of extracted line values are not checked yet (only literal presence on the page). Proposals are recorded but not yet grouped across documents nor offered for approval.
 
 ## Checks
 

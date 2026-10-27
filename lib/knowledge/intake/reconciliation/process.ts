@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { TargetedResult } from "../targeted/contract";
-import { applyLookups, groupEntities, IDENTIFIER_KEYS, normalizeIdentifier, type Lookup, type ReconciledType, type ReconciliationResult } from "./contract";
+import { applyLookups, groupEntities, IDENTIFIER_KEYS, nameKey, normalizeIdentifier, type Lookup, type ReconciledType, type ReconciliationResult } from "./contract";
 
 /** A bounded scan cannot prove that a record does not exist: beyond it, entities stay "no comprobada". */
 export const SCAN_LIMIT = 2000;
@@ -39,7 +39,19 @@ export async function loadLookups(workspaceId: string, types: ReconciledType[], 
       }
       if (row.external_key?.trim()) add(normalizeIdentifier(type, row.external_key), row);
     }
-    lookups.set(type, { tipoDefinido: true, completo: rows.length <= SCAN_LIMIT, candidatos });
+    // Companies are also indexed by name, only to SUGGEST a match for companies printed without tax id.
+    const porNombre = new Map<string, { id: string; nombre: string; clave: string | null }[]>();
+    if (type === "company") for (const row of rows.slice(0, SCAN_LIMIT)) {
+      const values = row.values_json && typeof row.values_json === "object" && !Array.isArray(row.values_json) ? row.values_json as Record<string, unknown> : {};
+      const clave = IDENTIFIER_KEYS.company.map(k => values[k]).find((v): v is string => typeof v === "string" && !!v.trim()) ?? null;
+      for (const field of ["legal_name", "trade_name", "name"]) {
+        const nombre = values[field];
+        if (typeof nombre !== "string" || !nameKey(nombre)) continue;
+        const list = porNombre.get(nameKey(nombre)) ?? [];
+        if (!list.some(x => x.id === row.id)) porNombre.set(nameKey(nombre), [...list, { id: row.id, nombre, clave: clave && normalizeIdentifier("company", clave) }]);
+      }
+    }
+    lookups.set(type, { tipoDefinido: true, completo: rows.length <= SCAN_LIMIT, candidatos, porNombre });
   }
   return lookups;
 }

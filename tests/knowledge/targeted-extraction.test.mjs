@@ -159,3 +159,23 @@ test('classification fields are not searched as text; a word glued by punctuatio
  assert.deepEqual(r.hallazgos.map(h=>h.campo).sort(),['lines[1].description','lines[1].quantity'],JSON.stringify(r.hallazgos));
  assert.equal(r.comprobados,3,'the enum field is not counted as checked');
 });
+
+test('second pass: missing required fields are searched in the base reading (margins included) and accepted only if literal',async()=>{
+ const o=output();o.partes.p1.issuer.tax_id=nil;o.partes.p1.issuer.legal_name=nil;
+ const baseText={...base,paginas:[{numero:1,incidencias:[],bloques:[{tipo:'texto',texto:'FACTURA F-1'},{tipo:'texto',texto:'TIENDA DEMO, S.L. Calle Mayor 1 · CIF. B-00000000.'}]}]};
+ const ex=extractor(req=>req.text.format.name==='missing_fields'
+  ?{status:'completed',output_text:JSON.stringify({'p1.issuer.tax_id':{valor:'B-00000000',pagina:1},'p1.issuer.legal_name':{valor:'TIENDA INVENTADA SL',pagina:1}})}
+  :{status:'completed',output_text:JSON.stringify(o)});
+ const file=await ex.run(Buffer.from('%PDF'),{...classified,partes:[classified.partes[0]]},baseText);
+ const p=file.partes.find(x=>x.parteId==='p1');
+ assert.equal(ex.calls.length,2,'one visual call + one text-only call');
+ const second=ex.calls[1].req;assert.equal(second.input[0].content[0].type,'input_text');assert.match(second.input[0].content[0].text,/CIF\. B-00000000\./);
+ assert.deepEqual(Object.keys(second.text.format.schema.properties).sort(),['p1.issuer.legal_name','p1.issuer.tax_id'],'only the missing required fields');
+ assert.deepEqual(p.entidades.issuer.tax_id,{valor:'B-00000000',pagina:1});
+ assert.equal(p.entidades.issuer.legal_name.valor,null,'a value not printed in the document is discarded');
+ assert.deepEqual(p.faltan,['issuer.legal_name']);
+ assert.ok(file.incidencias.some(i=>/recuperado de la lectura base/.test(i))&&file.incidencias.some(i=>/no aparece literal/.test(i)));
+ const complete=extractor(()=>({status:'completed',output_text:JSON.stringify(output())}));
+ await complete.run(Buffer.from('%PDF'),{...classified,partes:[classified.partes[0]]},baseText);
+ assert.equal(complete.calls.length,1,'nothing missing: no second call');
+});

@@ -114,3 +114,17 @@ test('a type of the global catalog not yet used by the workspace means no record
  assert.equal(by('company:B00000000').estado,'nueva');assert.equal(by('invoice:B00000000/F001').estado,'nueva');
  assert.equal(by('supply_point:ES0000000000000000AA').estado,'tipo_no_definido','not in the global catalog either');
 });
+
+test('a company printed without tax id gets a name suggestion (batch first, then existing records); never merged',()=>{
+ assert.equal(contract.nameKey("D'PLOCIA HELADOS, S.L."),'dplociahelados');assert.equal(contract.nameKey('D PLOCIA HELADOS SL SL'),'dplociahelados');
+ assert.equal(contract.nameKey('Proveedor Demo, S.L.U.'),'proveedordemo');
+ const noId=(name)=>({archivoId:'f9',archivo:'sin-nif.pdf',incidencias:[],partes:[invoicePart('p1',{issuerTax:'B00000000',issuerName:'PROVEEDOR DEMO SL',number:'Z-1',recipientTax:null})].map(p=>({...p,entidades:{...p.entidades,recipient:{legal_name:{valor:name,pagina:1},tax_id:{valor:null,pagina:null}}}}))});
+ const all=new Map(['company','invoice','supply_point','telecom_line'].map(t=>[t,{tipoDefinido:true,completo:true,candidatos:new Map()}]));
+ const inBatch=contract.applyLookups('b',contract.groupEntities({...result,archivos:[...result.archivos,noId('Proveedor Demo, S.L.')]}),all);
+ const anon=inBatch.entidades.find(e=>e.tipo==='company'&&!e.clave);
+ assert.equal(anon.sugerencia,'company:B00000000');assert.equal(anon.estado,'sin_identificador');assert.match(anon.avisos.join(),/por el nombre parece/);
+ const stored=new Map(all);stored.set('company',{...all.get('company'),porNombre:new Map([['clientedemo',[{id:'r-own',nombre:'CLIENTE DEMO SL',clave:'12345678Z'}]]])});
+ const onlyFile={...result,archivos:[noId('Cliente Demo, S.L.')]};
+ const existing=contract.applyLookups('b',contract.groupEntities(onlyFile),stored).entidades.find(e=>e.tipo==='company'&&!e.clave);
+ assert.deepEqual(existing.sugerenciaRegistro,{id:'r-own',nombre:'CLIENTE DEMO SL',clave:'12345678Z'});
+});

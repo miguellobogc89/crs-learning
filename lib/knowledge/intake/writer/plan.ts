@@ -149,9 +149,16 @@ export function buildWritePlan(extraction: TargetedResult, reconciliation: Recon
     const idField = IDENTIFIER_FIELD[e.tipo];
     if (idField && e.clave && r.valores[idField] !== undefined) r.valores[idField] = e.clave;
     r.avisos.push(...e.avisos);
+    // A company printed without tax id whose name matches an existing record: that record can take its place.
+    if (e.sugerenciaRegistro && !records.has(`company:registro:${e.sugerenciaRegistro.id}`))
+      records.set(`company:registro:${e.sugerenciaRegistro.id}`, { ref: `company:registro:${e.sugerenciaRegistro.id}`, tipo: "company", accion: "reutilizar",
+        registroId: e.sugerenciaRegistro.id, claveExterna: e.sugerenciaRegistro.clave, valores: { legal_name: e.sugerenciaRegistro.nombre }, evidencias: [], noConvertidos: [], avisos: [] });
+    const suggested = e.sugerencia && records.has(e.sugerencia) ? e.sugerencia : e.sugerenciaRegistro ? `company:registro:${e.sugerenciaRegistro.id}` : undefined;
     if (e.estado === "existente") { r.accion = "reutilizar"; r.registroId = e.registros[0].id; }
     else if (e.estado === "ambigua") r.bloqueo = { motivo: "Varios registros tienen este identificador", opciones: ["tal_cual", "omitir"] };
-    else if (e.estado === "sin_identificador") r.bloqueo = { motivo: "Sin identificador con el que reconocerlo después", opciones: ["tal_cual", "omitir"] };
+    else if (e.estado === "sin_identificador") r.bloqueo = suggested
+      ? { motivo: "Sin identificador; por el nombre parece una empresa conocida", opciones: ["unir", "tal_cual", "omitir"], sugerencia: suggested }
+      : { motivo: "Sin identificador con el que reconocerlo después", opciones: ["tal_cual", "omitir"] };
     else if (e.estado === "tipo_no_definido" || e.estado === "no_comprobada") r.bloqueo = { motivo: "No se pudo comprobar si ya existe", opciones: ["omitir"] };
     else if (e.sugerencia && records.has(e.sugerencia)) r.bloqueo = { motivo: "Identificador probablemente mal leído", opciones: ["unir", "tal_cual", "omitir"], sugerencia: e.sugerencia };
     else if (e.tipo === "company" && e.avisos.some(a => /NIF\/CIF/.test(a))) r.bloqueo = { motivo: "NIF/CIF no válido", opciones: ["tal_cual", "omitir"] };
