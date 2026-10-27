@@ -5,7 +5,7 @@ import { checkTaxonomy, FAMILIES } from "./taxonomy";
  * Document classifier: decides WHAT each part of a document is (family, type, subtype) and where it belongs
  * (Engine, Knowledge or both), from the verified visual reading. It extracts no values.
  */
-export const CLASSIFIER_REVISION = 1;
+export const CLASSIFIER_REVISION = 2;
 
 export type BlockRange = { pagina: number; desde: number; hasta: number };
 export type Evidence = { pagina: number; bloque: number; texto: string };
@@ -61,6 +61,8 @@ export function validateClassification(raw: unknown, file: ExtractedFile): Class
   }
   if (!raw.partes.length) throw new Error(`${file.archivo}: la clasificación no contiene ninguna parte`);
   const owner = new Map<string, string>();
+  // Recoverable model slips are corrected or recorded, never silently accepted and never fatal for the batch.
+  const incidencias = [...raw.incidencias as string[]];
   const partes = raw.partes.map((value, index): Part => {
     if (!object(value)) throw new Error(`${file.archivo}: parte ${index + 1} inválida`);
     const id = `p${index + 1}`;
@@ -79,25 +81,41 @@ export function validateClassification(raw: unknown, file: ExtractedFile): Class
       if (!page || range.desde < 1 || range.hasta < range.desde || range.hasta > page.bloques.length) throw new Error(`${file.archivo} ${id}: el rango página ${range.pagina} bloques ${range.desde}-${range.hasta} no existe en la lectura`);
       for (let b = range.desde; b <= range.hasta; b++) {
         const key = `${range.pagina}:${b}`;
-        if (owner.has(key)) throw new Error(`${file.archivo}: el bloque ${b} de la página ${range.pagina} está en dos partes (${owner.get(key)} y ${id})`);
-        owner.set(key, id);
+        if (owner.has(key)) incidencias.push(`El bloque ${b} de la página ${range.pagina} se asignó a dos partes; se mantiene en ${owner.get(key)}`);
+        else owner.set(key, id);
       }
       return { pagina: range.pagina, desde: range.desde, hasta: range.hasta };
     });
-    if (!Array.isArray(evidencia) || !evidencia.length) throw new Error(`${file.archivo} ${id}: falta evidencia`);
-    const evidence = evidencia.map((item): Evidence => {
-      if (!object(item) || !int(item.pagina) || !int(item.bloque) || typeof item.texto !== "string" || space(item.texto).length < 3) throw new Error(`${file.archivo} ${id}: evidencia inválida`);
-      const pagina = item.pagina, bloque = item.bloque, texto = item.texto;
-      if (!ranges.some(r => r.pagina === pagina && bloque >= r.desde && bloque <= r.hasta)) throw new Error(`${file.archivo} ${id}: la evidencia cita un bloque que no pertenece a la parte`);
-      const block = file.paginas.find(p => p.numero === pagina)!.bloques[bloque - 1];
-      if (!space(blockText(block)).includes(space(texto))) throw new Error(`${file.archivo} ${id}: la evidencia «${texto.slice(0, 60)}» no aparece literalmente en la lectura`);
-      return { pagina, bloque, texto };
+    if (!Array.isArray(evidencia)) throw new Error(`${file.archivo} ${id}: evidencia inválida`);
+    // A quote must be literal text of this part. A wrong block number is corrected; an unfound quote is dropped.
+    const partBlocks = ranges.flatMap(r => Array.from({ length: r.hasta - r.desde + 1 }, (_, k) => ({ pagina: r.pagina, bloque: r.desde + k })));
+    const textOf = (ref: { pagina: number; bloque: number }) => space(blockText(file.paginas.find(p => p.numero === ref.pagina)!.bloques[ref.bloque - 1]));
+    const evidence = evidencia.flatMap((item): Evidence[] => {
+      if (!object(item) || typeof item.texto !== "string" || space(item.texto).length < 3) return [];
+      const texto = item.texto, quote = space(texto);
+      const cited = partBlocks.find(ref => ref.pagina === item.pagina && ref.bloque === item.bloque);
+      const where = cited && textOf(cited).includes(quote) ? cited : partBlocks.find(ref => textOf(ref).includes(quote));
+      if (!where) { incidencias.push(`${id}: se descarta la cita «${texto.slice(0, 60)}», que no aparece literalmente en esta parte`); return []; }
+      return [{ pagina: where.pagina, bloque: where.bloque, texto }];
     });
-    return { id, bloques: ranges, familia, tipo, subtipo: subtipo as string | null, descripcion, destino, contieneTablas, confianza, evidencia: evidence, motivo };
+    const level = evidence.length ? confianza : "baja";
+    if (!evidence.length) incidencias.push(`${id}: sin evidencia literal verificable; confianza rebajada a baja`);
+    return { id, bloques: ranges, familia, tipo, subtipo: subtipo as string | null, descripcion, destino, contieneTablas, confianza: level, evidencia: evidence, motivo };
   });
-  const missing = file.paginas.flatMap(p => p.bloques.map((_, b) => `${p.numero}:${b + 1}`)).filter(key => !owner.has(key));
-  if (missing.length) throw new Error(`${file.archivo}: bloques sin clasificar (${missing.slice(0, 8).map(k => `p${k.replace(":", " b")}`).join(", ")}${missing.length > 8 ? "…" : ""})`);
-  return { archivoId: file.archivoId, archivo: file.archivo, partes, incidencias: raw.incidencias as string[] };
+  // Blocks the model left out are kept visible as an explicit low-confidence part, not dropped.
+  const missing = file.paginas.flatMap(p => p.bloques.map((_, b) => ({ pagina: p.numero, bloque: b + 1 }))).filter(ref => !owner.has(`${ref.pagina}:${ref.bloque}`));
+  if (missing.length) {
+    const ranges = missing.reduce<BlockRange[]>((acc, ref) => {
+      const last = acc.at(-1);
+      if (last && last.pagina === ref.pagina && last.hasta === ref.bloque - 1) last.hasta = ref.bloque; else acc.push({ pagina: ref.pagina, desde: ref.bloque, hasta: ref.bloque });
+      return acc;
+    }, []);
+    incidencias.push(`${missing.length} bloque(s) sin asignar por el clasificador; se agrupan en una parte sin clasificar`);
+    partes.push({ id: `p${partes.length + 1}`, bloques: ranges, familia: "otro", tipo: "otro", subtipo: null, descripcion: "Bloques no asignados por el clasificador",
+      destino: "hibrido", contieneTablas: missing.some(ref => file.paginas.find(p => p.numero === ref.pagina)!.bloques[ref.bloque - 1].tipo === "tabla"),
+      confianza: "baja", evidencia: [], motivo: "El clasificador no asignó estos bloques a ninguna parte" });
+  }
+  return { archivoId: file.archivoId, archivo: file.archivo, partes, incidencias };
 }
 
 export function classificationResult(loteId: string, archivos: ClassifiedFile[]): ClassificationResult {

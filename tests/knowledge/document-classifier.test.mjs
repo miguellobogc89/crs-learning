@@ -19,21 +19,25 @@ test('a valid classification keeps every block in exactly one part, with literal
  assert.deepEqual(r.partes.map(p=>[p.id,p.tipo,p.subtipo]),[['p1','factura','factura_simplificada'],['p2','factura','factura_simplificada']]);
  assert.equal(r.archivoId,'f1');
 });
-test('rejects blocks left out, blocks in two parts and ranges that do not exist',()=>{
+test('slips are recorded, not fatal: blocks left out become an explicit part, overlaps keep the first owner; nonexistent ranges fail',()=>{
  const gap=valid();gap.partes[1].bloques=[{pagina:1,desde:3,hasta:4}];
- assert.throws(()=>contract.validateClassification(gap,file),/sin clasificar \(p1 b5\)/);
- const overlap=valid();overlap.partes[1].bloques=[{pagina:1,desde:2,hasta:5}];overlap.partes[1].evidencia=[{pagina:1,bloque:3,texto:'Factura Simplificada: T-2'}];
- assert.throws(()=>contract.validateClassification(overlap,file),/en dos partes/);
+ const g=contract.validateClassification(gap,file);
+ assert.deepEqual(g.partes.at(-1).bloques,[{pagina:1,desde:5,hasta:5}]);assert.equal(g.partes.at(-1).confianza,'baja');assert.match(g.incidencias[0],/sin asignar/);
+ const overlap=valid();overlap.partes[1].bloques=[{pagina:1,desde:2,hasta:5}];
+ const o=contract.validateClassification(overlap,file);assert.match(o.incidencias[0],/bloque 2 de la página 1 se asignó a dos partes; se mantiene en p1/);
  const ghost=valid();ghost.partes[1].bloques=[{pagina:1,desde:3,hasta:9}];
  assert.throws(()=>contract.validateClassification(ghost,file),/no existe en la lectura/);
  const page2=valid();page2.partes[1].bloques=[{pagina:2,desde:1,hasta:1}];
  assert.throws(()=>contract.validateClassification(page2,file),/no existe en la lectura/);
 });
-test('evidence must be literal text of a block of the same part',()=>{
+test('evidence must be literal text of the same part: wrong block numbers are corrected, invented quotes dropped',()=>{
+ const misplaced=valid();misplaced.partes[0].evidencia=[{pagina:1,bloque:1,texto:'PAN | 1,00'}];
+ assert.deepEqual(contract.validateClassification(misplaced,file).partes[0].evidencia,[{pagina:1,bloque:2,texto:'PAN | 1,00'}]);
  const invented=valid();invented.partes[0].evidencia=[{pagina:1,bloque:1,texto:'Factura de Mercadona'}];
- assert.throws(()=>contract.validateClassification(invented,file),/no aparece literalmente/);
+ const r=contract.validateClassification(invented,file);
+ assert.equal(r.partes[0].evidencia.length,0);assert.equal(r.partes[0].confianza,'baja');assert.match(r.incidencias.join(' '),/se descarta la cita/);
  const foreign=valid();foreign.partes[0].evidencia=[{pagina:1,bloque:3,texto:'Factura Simplificada: T-2'}];
- assert.throws(()=>contract.validateClassification(foreign,file),/no pertenece a la parte/);
+ assert.equal(contract.validateClassification(foreign,file).partes[0].evidencia.length,0,'a quote from another part is not evidence for this one');
  const table=valid();table.partes[0].evidencia=[{pagina:1,bloque:2,texto:'TOTAL (€) |  1,00'}];
  assert.equal(contract.validateClassification(table,file).partes[0].evidencia[0].bloque,2,'table cells are quotable, whitespace-insensitive');
 });
@@ -84,7 +88,7 @@ const reading={module:'document_extractor',version:1,loteId:'b',archivos:[file,{
 const classified=f=>({archivoId:f.archivoId,archivo:f.archivo,partes:[],incidencias:[]});
 test('classifies file by file, saving each before the next, and never touches the reading or the verification',async()=>{
  const db=fakeDb();const seen=[];
- const claimed={version:1,archivos:reading.archivos,resultado:reading,verificacion:{status:'completed'},clasificacion:{status:'running',revision:1,lease:'L',archivos:[]}};
+ const claimed={version:1,archivos:reading.archivos,resultado:reading,verificacion:{status:'completed'},clasificacion:{status:'running',revision:2,lease:'L',archivos:[]}};
  db.stored=JSON.parse(JSON.stringify(claimed));
  await processModule(db).runClassification('b',claimed,'L',{classifyFile:async f=>{seen.push(f.archivoId);return classified(f);}});
  assert.deepEqual(seen,['f1','f2']);assert.deepEqual(db.saves.map(s=>s.clasificacion.status),['running','running','completed']);

@@ -26,7 +26,7 @@ The previous classifier (`intake-v1`, Engine/Knowledge/hybrid on the old flatten
 
 - **Parts, not files.** A PDF may hold several documents (two tickets), or a document plus legal conditions, or a recipe book plus procedures. Every block of every page belongs to exactly one part: no gaps, no overlaps (checked by code).
 - **Taxonomy as data** (`lib/knowledge/intake/classifier/taxonomy.ts`): families `transaccion`, `maestro`, `operacion`, `contrato`, `informe`, `texto`, `otro`, each with types and optional subtypes. Extend it there without touching the module. `tipo: "otro"` (or `subtipo: "otro"`) is always valid with a `descripcion`; `subtipo: null` when undetermined. Sector neutral: no supplier or customer names.
-- **Evidence** (1–3 short quotes per part) must appear literally in a block of that same part (whitespace- and Unicode-form-insensitive); checked by code, not by the model.
+- **Evidence** (1–3 short quotes per part) must appear literally in a block of that same part (whitespace- and Unicode-form-insensitive); checked by code, not by the model. Recoverable slips never fail the batch: a quote cited with the wrong block number is re-pointed to the block of the part that contains it; a quote found nowhere in the part is dropped with an incident; a part left without evidence gets `confianza: "baja"`; blocks the model left out become an explicit `otro` part with low confidence; a block assigned twice stays with its first part. Ranges that do not exist in the reading still fail.
 - **Confidence** in three levels (`alta`, `media`, `baja`), not a number: model self-reported percentages are not calibrated.
 - **Destination**: `engine` (structured business data), `knowledge` (text to consult), `hibrido` (inseparable mix).
 
