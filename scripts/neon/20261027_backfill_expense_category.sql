@@ -4,6 +4,7 @@
 -- invoices that do not have it yet. Each change is a new record revision; nothing else is modified.
 BEGIN;
 
+CREATE TEMP TABLE backfill_expense_category ON COMMIT DROP AS
 WITH saved AS (
   SELECT k.id AS batch_id, reg->>'registroId' AS record_id, reg->>'ref' AS ref, k.proposal_json AS p
   FROM public.knowledge_imports k
@@ -29,16 +30,22 @@ WITH saved AS (
     CASE subtipo WHEN 'suministro_electricidad' THEN 'electricidad' WHEN 'suministro_gas' THEN 'gas' WHEN 'suministro_agua' THEN 'agua'
       WHEN 'factura_simplificada' THEN 'ticket' ELSE COALESCE(subtipo, 'sin_subtipo') END AS subcategory
   FROM classified
-), updated AS (
-  UPDATE public.engine_records r
-  SET values_json = r.values_json || jsonb_build_object('expense_category', m.category, 'expense_subcategory', m.subcategory),
-      revision = r.revision + 1, updated_at = now()
-  FROM mapped m
-  WHERE r.id = m.id AND NOT (r.values_json ? 'expense_category')
-  RETURNING r.*
 )
+SELECT * FROM mapped;
+
+-- 1) New values (and revision + 1). The database trigger engine_record_revision_capture snapshots the revision at
+--    the END of this statement, so the snapshot is NOT written in the same statement (it would collide).
+UPDATE public.engine_records r
+SET values_json = r.values_json || jsonb_build_object('expense_category', b.category, 'expense_subcategory', b.subcategory),
+    revision = r.revision + 1, updated_at = now()
+FROM backfill_expense_category b
+WHERE r.id = b.id AND NOT (r.values_json ? 'expense_category');
+
+-- 2) Fallback for databases without that trigger: the snapshot of the new revision, only if it is missing.
 INSERT INTO public.engine_record_revisions (workspace_id, record_id, object_type_id, revision, schema_version, status, values_json, changed_by_user_id)
-SELECT workspace_id, id, object_type_id, revision, schema_version, status, values_json, updated_by_user_id FROM updated
+SELECT r.workspace_id, r.id, r.object_type_id, r.revision, r.schema_version, r.status, r.values_json, r.updated_by_user_id
+FROM public.engine_records r JOIN backfill_expense_category b ON b.id = r.id
+WHERE r.values_json ? 'expense_category'
 ON CONFLICT (record_id, revision) DO NOTHING;
 
 COMMIT;
