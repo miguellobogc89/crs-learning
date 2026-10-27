@@ -20,7 +20,10 @@ export async function GET(_request: Request, context: Context) {
   const batch = await find(context);
   if (!batch) return NextResponse.json({ error: "Lote no encontrado" }, { status: 404 });
   const state = batch.proposal_json as unknown as ExtractorState;
-  return NextResponse.json({ loteId: batch.id, estado: batch.status, fase: "lectura", error: batch.error_message,
+  // `pipeline` tells which server code answered (useful to detect a stale dev server).
+  const stages = state as { lecturaBase?: { status?: string }; clasificacion?: { status?: string } } | null;
+  return NextResponse.json({ loteId: batch.id, pipeline: "lectura_base+clasificacion+extraccion_dirigida", estado: batch.status, fase: "lectura", error: batch.error_message,
+    etapas: { lecturaBase: stages?.lecturaBase?.status ?? null, clasificacion: stages?.clasificacion?.status ?? null },
     resultado: batch.status === "intake_completed" ? state.resultado ?? null : null });
 }
 export async function POST(_request: Request, context: Context) {

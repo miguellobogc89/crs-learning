@@ -28,6 +28,7 @@ export async function processExtractor(id: string, lease: Date) {
     // the full visual reading is kept as before.
     // The mode is decided once for the whole batch, so a result never mixes both kinds of files.
     const targetedBatch = state.clasificacion?.status === "completed" && state.lecturaBase?.status === "completed";
+    console.info(`[intake] ${id} · ${file.file_name}: extracción ${targetedBatch ? "dirigida" : "completa"} (lectura base: ${state.lecturaBase?.status ?? "ausente"}, clasificación: ${state.clasificacion?.status ?? "ausente"})`);
     let entry: ExtractedFile | TargetedFile, text: string;
     if (targetedBatch) {
       const base = state.lecturaBase!.resultado!.archivos.find(b => b.archivoId === file.id);
