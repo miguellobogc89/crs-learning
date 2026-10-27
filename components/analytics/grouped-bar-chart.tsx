@@ -1,6 +1,12 @@
 "use client";
 import { useMemo, useState } from "react";
-import { fmtMoney, fmtMoneyShort } from "./format";
+import { fmtMoney, fmtMoneyShort, fmtNumber } from "./format";
+
+/** Units are passed by name (a server page cannot pass functions to this client component). */
+const UNITS = {
+  money: { value: fmtMoney, axis: fmtMoneyShort },
+  kwh: { value: (n: number) => `${fmtNumber(n)} kWh`, axis: fmtNumber },
+};
 
 export type BarSeries = { key: string; label: string; color: string };
 export type BarGroup = { key: string; label: string; values: Record<string, number> };
@@ -9,9 +15,10 @@ export type BarGroup = { key: string; label: string; values: Record<string, numb
  * Grouped vertical bars: one group per month, one bar per series (category). One y axis, recessive grid, 2px gaps
  * between bars, rounded data ends anchored on the baseline, a legend, a hover tooltip per group and a table view.
  */
-export function GroupedBarChart({ groups, series, format = fmtMoney, formatAxis = fmtMoneyShort, title }: {
-  groups: BarGroup[]; series: BarSeries[]; title: string; format?: (n: number) => string; formatAxis?: (n: number) => string;
+export function GroupedBarChart({ groups, series, unit = "money", title }: {
+  groups: BarGroup[]; series: BarSeries[]; title: string; unit?: keyof typeof UNITS;
 }) {
+  const { value: format, axis: formatAxis } = UNITS[unit];
   const [hover, setHover] = useState<number | null>(null);
   const [asTable, setAsTable] = useState(false);
   const W = 760, H = 280, left = 56, right = 8, top = 12, bottom = 28;

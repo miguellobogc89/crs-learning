@@ -80,7 +80,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         </Card>
       </div>
       {d.electricity.length > 0 && <Card title="Consumo eléctrico (kWh)" subtitle="Por el mes en que termina el periodo facturado.">
-        <GroupedBarChart title="Consumo eléctrico por mes" format={n => `${fmtNumber(n)} kWh`} formatAxis={n => fmtNumber(n)}
+        <GroupedBarChart title="Consumo eléctrico por mes" unit="kwh"
           series={[{ key: "kwh", label: "kWh", color: SINGLE_SERIES_COLOR }]}
           groups={d.electricity.map(e => ({ key: e.month, label: MONTH_LABEL(e.month), values: { kwh: e.kwh } }))} />
       </Card>}
