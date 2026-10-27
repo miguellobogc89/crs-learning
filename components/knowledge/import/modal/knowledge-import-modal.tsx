@@ -8,6 +8,8 @@ import { ReadingVerification } from "./reading-verification";
 import { CopyButton } from "./copy-button";
 import { DocumentClassification } from "./document-classification";
 import { ExtractedData } from "./extracted-data";
+import { ReconciliationView } from "./reconciliation-view";
+import type { ReconciliationResult } from "@/lib/knowledge/intake/reconciliation/contract";
 import type { TargetedResult } from "@/lib/knowledge/intake/targeted/contract";
 import type { ClassificationResult } from "@/lib/knowledge/intake/classifier/contract";
 import type { VerificationReport } from "@/lib/knowledge/intake/verifier/contract";
@@ -59,7 +61,7 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
     } catch(e) { setError(e instanceof Error ? e.message : "Error de subida"); }
     finally { setUploading(false); }
   }
-  const labels: Record<string, string> = { lectura_base: "Leyendo el texto de los documentos…", lectura: "Extrayendo contenido de los documentos…", verificacion: "Revisando la lectura contra el documento original…", clasificacion: "Clasificando los documentos…" };
+  const labels: Record<string, string> = { lectura_base: "Leyendo el texto de los documentos…", lectura: "Extrayendo contenido de los documentos…", verificacion: "Revisando la lectura contra el documento original…", clasificacion: "Clasificando los documentos…", conciliacion: "Comprobando qué datos ya existen…" };
   return <Dialog open={open} onOpenChange={next => { if (!uploading) onOpenChange(next); }}>
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
       <DialogTitle>Subir documentos</DialogTitle>
@@ -73,7 +75,8 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
       {view?.status === "completed" && view.verification?.status !== "processing" && <div className="flex flex-wrap gap-2">
         <CopyButton label="Copiar todo" text={JSON.stringify({ lectura: view.result, revision: view.verification?.result ?? null,
           errorRevision: view.verification?.error ?? null, clasificacion: view.classification?.result ?? null,
-          errorClasificacion: view.classification?.error ?? null, lecturaIndependiente: view.verification?.references ?? null }, null, 2)} />
+          errorClasificacion: view.classification?.error ?? null, conciliacion: view.reconciliation?.result ?? null,
+          errorConciliacion: view.reconciliation?.error ?? null, lecturaIndependiente: view.verification?.references ?? null }, null, 2)} />
         <CopyButton label="Copiar lectura" text={JSON.stringify(view.result, null, 2)} />
         {view.verification?.status === "completed" && <CopyButton label="Copiar revisión" text={JSON.stringify(view.verification.result, null, 2)} />}
         {view.classification?.status === "completed" && <CopyButton label="Copiar clasificación" text={JSON.stringify(view.classification.result, null, 2)} />}
@@ -83,6 +86,8 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
       {view?.verification?.status === "error" && <p role="alert">La lectura está completa, pero no se pudo verificar: {view.verification.error}</p>}
       {view?.verification?.status === "completed" && <ReadingVerification report={view.verification.result as VerificationReport} />}
       {view?.status === "completed" && (view.result as { module?: string } | null)?.module === "targeted_extraction" && <ExtractedData result={view.result as TargetedResult} />}
+      {view?.reconciliation?.status === "error" && <p role="alert">No se pudo conciliar: {view.reconciliation.error}</p>}
+      {view?.status === "completed" && view.reconciliation?.status === "completed" && <ReconciliationView result={view.reconciliation.result as ReconciliationResult} />}
       {view?.status === "completed" && <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded border p-4 text-xs">{JSON.stringify(view.result, null, 2)}</pre>}
       {view?.verification?.status === "completed" && <details className="rounded border p-4 text-xs"><summary>JSON de la revisión</summary>
         <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap">{JSON.stringify(view.verification.result, null, 2)}</pre></details>}
