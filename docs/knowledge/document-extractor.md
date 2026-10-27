@@ -1,6 +1,6 @@
 # Document extractor: isolated contract
 
-Since the pipeline reorganisation this module is the **vision reading**: it starts only after the base reading and the classification (see `base-reading.md`), and it carries their checkpoints over when it saves. The new document classifier (`document-classifier.md`) runs before it; the legacy `intake-v1` classification and the global schema discovery remain disconnected from upload execution. The modal retains one processing action and shows the reading JSON (plus classification and verification) or the actual error.
+Since the pipeline reorganisation this module is the **full visual reading**: the extraction stage starts only after the base reading and the classification (see `base-reading.md`); classified batches use the targeted extraction instead (`targeted-extraction.md`), which calls this full reading only for parts without a field set or with low confidence. The stage carries earlier checkpoints over when it saves. The new document classifier (`document-classifier.md`) runs before it; the legacy `intake-v1` classification and the global schema discovery remain disconnected from upload execution. The modal retains one processing action and shows the reading JSON (plus classification and verification) or the actual error.
 
 ## Input
 

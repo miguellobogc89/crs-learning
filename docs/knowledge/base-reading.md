@@ -6,10 +6,10 @@ Pipeline (orchestrated by `components/knowledge/import/advance-intake.ts`, used 
 
 1. **Base reading** (this module) — `GET/POST /api/knowledge/intake/:id/base-reading`
 2. **Classification** on the base reading — `/classification`
-3. **Vision reading** (visual extractor), only after 1 and 2 — `POST /api/knowledge/intake/:id`
-4. **Verification** of the vision reading against the base reading — `/verification`
+3. **Targeted extraction** (`targeted-extraction.md`), only after 1 and 2 — `POST /api/knowledge/intake/:id`: only the reviewed fields of each classified part; knowledge parts are not sent to the vision model; full visual reading only for parts without a field set or with low confidence
+4. **Verification** of the extracted values against the base reading — `/verification`
 
-Next step (planned): the vision reading becomes a **targeted extraction** using the classification and the reviewed field sets (`extraction-field-sets.md`), so the vision model stops transcribing footers, social links and legal boilerplate. The base reading keeps all the text for Knowledge and search.
+The base reading keeps all the text for Knowledge and search.
 
 ## What it reads
 

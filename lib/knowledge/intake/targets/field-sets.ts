@@ -74,6 +74,10 @@ const articleLines = (required: boolean): EntityDef => ({
     f("tax_rate", "Tipo de impuesto", "text", false, "Tipo de la línea tal como aparece."),
     f("line_total", "Importe de la línea", "decimal", true, "Importe total de la línea tal como aparece."),
     f("line_total_basis", "Importe con o sin impuestos", "enum", false, "«sin_impuestos» o «con_impuestos» según indique la columna; vacío si no se indica."),
+    // An invoice may group several tickets: each line keeps the ticket it comes from and that ticket's date
+    // (the date of the purchase, needed e.g. for monthly spend per product).
+    f("source_ticket_number", "Ticket de origen", "text", false, "Número del ticket o factura simplificada al que pertenece la línea, si la factura agrupa varios.", true),
+    f("source_ticket_date", "Fecha del ticket de origen", "date", false, "Fecha del ticket o factura simplificada al que pertenece la línea, tal como aparece."),
   ],
 });
 

@@ -1,0 +1,88 @@
+import type { Page } from "../extractor/contract";
+import type { TargetedFile } from "../targeted/contract";
+import { verifyPage } from "./compare";
+import { VERIFIER_REVISION, type FileReference, type Severity } from "./contract";
+
+/**
+ * Verification of a TARGETED extraction: every extracted value must appear in the base reading of the page it
+ * cites (exactly, or it is reported with what the document says there). Only extracted values are checked, so
+ * footers, logos and legal text that were never extracted produce no noise.
+ */
+export type ValueFinding = { parte: string; campo: string; valor: string; pagina: number | null; estado: "distinto" | "no_encontrado";
+  documento?: string; diferencias?: { modelo: string; documento: string }[]; severidad: Severity };
+export type FileValueReport = { archivoId: string; archivo: string; comprobados: number; hallazgos: ValueFinding[];
+  faltan: { parte: string; campo: string }[]; avisos: string[] };
+export type ValuesSummary = { comprobados: number; distintos: number; noEncontrados: number; faltan: number; probablesErrores: number; aRevisar: number };
+export type ValuesReport = { module: "reading_verifier"; version: typeof VERIFIER_REVISION; modo: "valores"; loteId: string;
+  lecturaModificada: false; resumen: ValuesSummary; archivos: FileValueReport[] };
+
+type Item = { parte: string; campo: string; valor: string; pagina: number | null; paginas: number[] };
+type Finding = ReturnType<typeof verifyPage>["literales"][number];
+
+function items(file: TargetedFile): Item[] {
+  return file.partes.filter(p => p.modo === "dirigida" && p.entidades).flatMap(p => Object.entries(p.entidades!).flatMap(([role, data]) =>
+    (Array.isArray(data) ? data.map((r, i) => [`${role}[${i + 1}]`, r] as const) : [[role, data] as const]).flatMap(([label, record]) =>
+      Object.entries(record).filter(([, v]) => v.valor !== null).map(([key, v]): Item =>
+        ({ parte: p.parteId, campo: `${label}.${key}`, valor: v.valor!, pagina: v.pagina, paginas: p.paginas })))));
+}
+
+/** Checks a set of values against one page: each value is one block of a synthetic page fed to the comparator. */
+function checkOnPage(values: Item[], reference: FileReference["paginas"][number]) {
+  const page: Page = { numero: reference.numero, incidencias: [], bloques: values.map(v => ({ tipo: "texto" as const, texto: v.valor })) };
+  const report = verifyPage(page, reference);
+  const byBlock = new Map<number, Finding[]>();
+  for (const finding of report.literales) {
+    const block = Number(/^bloque (\d+)/.exec(finding.donde)?.[1]);
+    byBlock.set(block, [...(byBlock.get(block) ?? []), finding]);
+  }
+  return { byBlock, avisos: report.avisos.filter(a => /símbolo dibujado/.test(a)), source: reference.fuente };
+}
+
+export function verifyTargetedFile(file: TargetedFile, reference: FileReference | undefined): FileValueReport {
+  const out: FileValueReport = { archivoId: file.archivoId, archivo: file.archivo, comprobados: 0, hallazgos: [],
+    faltan: file.partes.flatMap(p => (p.faltan ?? []).map(campo => ({ parte: p.parteId, campo }))), avisos: [] };
+  const all = items(file);
+  out.comprobados = all.length;
+  if (!all.length) return out;
+  if (!reference) { out.avisos.push("Sin lectura base posicionada (formato no PDF): valores no comprobados"); return out; }
+  const pageRef = (n: number) => reference.paginas.find(p => p.numero === n);
+  // Values with a cited page are checked there; values without one, on every page of their part (found anywhere = ok).
+  const cited = new Map<number, Item[]>();
+  for (const v of all) if (v.pagina !== null) cited.set(v.pagina, [...(cited.get(v.pagina) ?? []), v]);
+  const pending: { item: Item; findings: Finding[]; source: string }[] = [];
+  for (const [n, values] of cited) {
+    const ref = pageRef(n);
+    if (!ref || ref.fuente === "sin_referencia") { out.avisos.push(`Página ${n} sin lectura base: ${values.length} valor(es) no comprobados`); continue; }
+    const { byBlock, avisos, source } = checkOnPage(values, ref);
+    out.avisos.push(...avisos);
+    values.forEach((v, i) => { const f = byBlock.get(i + 1); if (f?.length) pending.push({ item: v, findings: f, source }); });
+  }
+  for (const v of all.filter(x => x.pagina === null)) {
+    let best: (typeof pending)[number] | null = null;
+    for (const n of v.paginas) {
+      const ref = pageRef(n);
+      if (!ref || ref.fuente === "sin_referencia") continue;
+      const { byBlock, source } = checkOnPage([v], ref);
+      const f = byBlock.get(1);
+      if (!f?.length) { best = null; break; }
+      if (!best || (best.findings[0].estado === "no_encontrado" && f[0].estado === "distinto")) best = { item: v, findings: f, source };
+    }
+    if (best) pending.push(best);
+  }
+  for (const { item, findings } of pending) {
+    // A multi-line value yields one finding per line: the value is reported once, with its first difference.
+    const [first] = findings;
+    out.hallazgos.push({ parte: item.parte, campo: item.campo, valor: item.valor, pagina: item.pagina, estado: first.estado,
+      ...(first.documento !== undefined ? { documento: first.documento } : {}), ...(first.diferencias ? { diferencias: first.diferencias } : {}),
+      severidad: findings.some(f => f.severidad === "probable_error") ? "probable_error" : "revisar" });
+  }
+  return out;
+}
+
+export function valuesReport(loteId: string, archivos: FileValueReport[]): ValuesReport {
+  const findings = archivos.flatMap(a => a.hallazgos);
+  return { module: "reading_verifier", version: VERIFIER_REVISION, modo: "valores", loteId, lecturaModificada: false, archivos,
+    resumen: { comprobados: archivos.reduce((n, a) => n + a.comprobados, 0), distintos: findings.filter(f => f.estado === "distinto").length,
+      noEncontrados: findings.filter(f => f.estado === "no_encontrado").length, faltan: archivos.reduce((n, a) => n + a.faltan.length, 0),
+      probablesErrores: findings.filter(f => f.severidad === "probable_error").length, aRevisar: findings.filter(f => f.severidad === "revisar").length } };
+}

@@ -5,7 +5,7 @@
  * Coordinates are normalised to the page (0..1 in both axes, origin top-left) so that a PDF text
  * layer and an OCR response are directly comparable.
  */
-export const VERIFIER_REVISION = 4;
+export const VERIFIER_REVISION = 5;
 
 /** Origin of the independent reading of a page. */
 export type ReferenceSource = "capa_texto" | "ocr" | "sin_referencia";
@@ -41,7 +41,8 @@ export type VerificationState = {
   status: "running" | "completed" | "error"; revision: number; lease: string; error?: string;
   /** Persisted independent readings: comparison can be recomputed without another OCR call. */
   referencias?: FileReference[];
-  resultado?: VerificationReport;
+  /** Full-reading batches: VerificationReport; targeted batches: values report (see values.ts). */
+  resultado?: VerificationReport | import("./values").ValuesReport;
 };
 
 export function summarize(archivos: FileReport[]): VerificationSummary {

@@ -14,6 +14,7 @@
     "engine:export-preview-fixture": "node scripts/engine/export-knowledge-preview-fixture.mjs",
     "test:knowledge:verifier": "node --test tests/knowledge/reading-verifier.test.mjs tests/knowledge/intake-upload-flow.test.mjs",
     "test:knowledge:base-reading": "node --test tests/knowledge/base-reading.test.mjs tests/knowledge/intake-upload-flow.test.mjs",
+    "test:knowledge:targeted": "node --test tests/knowledge/targeted-extraction.test.mjs tests/knowledge/field-sets.test.mjs tests/knowledge/intake-upload-flow.test.mjs",
     "test:knowledge:classifier": "node --test tests/knowledge/document-classifier.test.mjs tests/knowledge/field-sets.test.mjs tests/knowledge/intake-upload-flow.test.mjs",
     "knowledge:replay-verification": "node scripts/knowledge/replay-verification.mjs"
   },

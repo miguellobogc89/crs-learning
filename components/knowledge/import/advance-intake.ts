@@ -36,7 +36,8 @@ export async function advanceIntake(id: string, request: Request): Promise<Intak
   if (classification.status === "processing") return { status: "processing", phase: "clasificacion", result: null, error: null, classification: classified };
   if (intake.estado === "intake_pending") await request(`/api/knowledge/intake/${id}`, "POST");
   if (intake.estado !== "intake_completed") return { status: "processing", phase: "lectura", result: null, error: null, classification: classified };
-  if (moduleOf(intake.resultado) !== "document_extractor") throw new Error("Falta el JSON del extractor");
+  const extractionModule = moduleOf(intake.resultado);
+  if (extractionModule !== "document_extractor" && extractionModule !== "targeted_extraction") throw new Error("Falta el JSON del extractor");
   const reading = intake.resultado;
   const verification = await step(`/api/knowledge/intake/${id}/verification`, "reading_verifier", request);
   return { status: verification.status === "processing" ? "processing" : "completed", phase: verification.status === "processing" ? "verificacion" : "completado",

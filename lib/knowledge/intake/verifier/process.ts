@@ -6,9 +6,11 @@ import { verifyPage } from "./compare";
 import { VERIFIER_REVISION, verificationReport, type FileReference, type FileReport, type PageReference, type VerificationState } from "./contract";
 import { readReference } from "./reference";
 import type { BaseReadingState } from "../base-reading/contract";
+import type { TargetedResult } from "../targeted/contract";
+import { valuesReport, verifyTargetedFile } from "./values";
 
 /** Batch payload as stored by the extractor, plus this module's own checkpoint. The extraction is read-only here. */
-export type VerifiableIntake = { version: 1; archivos: ExtractedFile[]; resultado?: ExtractionResult; verificacion?: VerificationState; lecturaBase?: BaseReadingState; [key: string]: unknown };
+export type VerifiableIntake = { version: 1; archivos: ExtractedFile[]; resultado?: ExtractionResult | TargetedResult; verificacion?: VerificationState; lecturaBase?: BaseReadingState; [key: string]: unknown };
 
 type Deps = { readReference: typeof readReference; readFile: (storagePath: string) => Promise<Buffer> };
 const defaults: Deps = { readReference, readFile: readKnowledgeFile };
@@ -75,6 +77,12 @@ export async function runVerification(batchId: string, claimed: VerifiableIntake
   const referenceOf = (archivoId: string) => referencias.find(r => r.archivoId === archivoId) ?? fromBase(archivoId);
   try {
     const extraction = claimed.resultado;
+    if (extraction?.module === "targeted_extraction") {
+      // Targeted batches: only the extracted values are checked, against the base reading of their pages.
+      const archivos = extraction.archivos.map(f => verifyTargetedFile(f, referenceOf(f.archivoId)));
+      await save({ status: "completed", revision: VERIFIER_REVISION, lease, referencias, resultado: valuesReport(batchId, archivos) });
+      return;
+    }
     if (extraction?.module !== "document_extractor") throw new Error("Falta la lectura completa del lote");
     // Only batches without a base reading (older uploads) read the originals here.
     const pending = extraction.archivos.filter(f => f.metodo === "pdf_visual" && !referenceOf(f.archivoId));

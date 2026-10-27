@@ -23,7 +23,7 @@ Target pipeline: base reading (text layer or Google OCR, no vision AI) → class
 | `factura_suministro` | electricity, gas, water, telecom (extends core) | supply (supply point, period, contract, plan), charges |
 | `factura_electricidad` | electricity (extends supply) | contracted power, consumption, meter readings |
 | `factura_telecomunicaciones` | telecom (extends supply) | service lines |
-| `factura_compra_articulos` | article purchases (extends core) | article lines; order or till-ticket number on the invoice |
+| `factura_compra_articulos` | article purchases (extends core) | article lines (with the ticket of origin and its date when an invoice groups several tickets); order or till-ticket number on the invoice |
 | `ticket` | simplified invoices / tickets | ticket, shop (issuer), optional recipient, article lines, optional tax breakdown |
 
 A PDF grouping several tickets in one invoice is classified as several parts; each ticket part uses `ticket` and the grouping part keeps its own number, date and total.

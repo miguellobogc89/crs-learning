@@ -7,6 +7,8 @@ import { advanceIntake, type IntakeView } from "../advance-intake";
 import { ReadingVerification } from "./reading-verification";
 import { CopyButton } from "./copy-button";
 import { DocumentClassification } from "./document-classification";
+import { ExtractedData } from "./extracted-data";
+import type { TargetedResult } from "@/lib/knowledge/intake/targeted/contract";
 import type { ClassificationResult } from "@/lib/knowledge/intake/classifier/contract";
 import type { VerificationReport } from "@/lib/knowledge/intake/verifier/contract";
 import type { KnowledgeImportModalProps } from "./knowledge-import-modal.types";
@@ -75,6 +77,7 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
       {view?.classification?.status === "completed" && <DocumentClassification result={view.classification.result as ClassificationResult} />}
       {view?.verification?.status === "error" && <p role="alert">La lectura está completa, pero no se pudo verificar: {view.verification.error}</p>}
       {view?.verification?.status === "completed" && <ReadingVerification report={view.verification.result as VerificationReport} />}
+      {view?.status === "completed" && (view.result as { module?: string } | null)?.module === "targeted_extraction" && <ExtractedData result={view.result as TargetedResult} />}
       {view?.status === "completed" && <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded border p-4 text-xs">{JSON.stringify(view.result, null, 2)}</pre>}
       {view?.verification?.status === "completed" && <details className="rounded border p-4 text-xs"><summary>JSON de la revisión</summary>
         <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap">{JSON.stringify(view.verification.result, null, 2)}</pre></details>}

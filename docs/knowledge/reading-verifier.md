@@ -6,6 +6,8 @@ Why: the visual extractor transcribes layout well, but it can silently alter lit
 
 ## Input
 
+For **targeted** batches the verifier checks only the extracted values (see `targeted-extraction.md`, `verifier/values.ts`); the comparison below applies to full visual readings (older or unclassified batches) and is reused value by value.
+
 Since the pipeline reorganisation, the independent reading comes from the **base reading** module (`base-reading.md`), stored once per batch: the verifier reuses its positioned words and never reads the PDF or calls Google Vision again. Only older batches without a base reading read the originals here.
 
 

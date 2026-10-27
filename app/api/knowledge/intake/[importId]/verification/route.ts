@@ -45,7 +45,7 @@ export async function POST(_request: Request, context: Context) {
   const batch = await find(context);
   if (!batch) return NextResponse.json({ error: "Lote no encontrado" }, { status: 404 });
   const payload = batch.proposal_json as VerifiableIntake | null;
-  if (batch.status !== "intake_completed" || payload?.resultado?.module !== "document_extractor") return NextResponse.json({ error: "Completa primero la lectura del lote" }, { status: 409 });
+  if (batch.status !== "intake_completed" || (payload?.resultado?.module !== "document_extractor" && payload?.resultado?.module !== "targeted_extraction")) return NextResponse.json({ error: "Completa primero la lectura del lote" }, { status: 409 });
   const estado = status(payload.verificacion);
   if (estado === "completed" || estado === "running") return NextResponse.json({ estado }, { status: estado === "running" ? 202 : 200 });
   const lease = new Date().toISOString();
