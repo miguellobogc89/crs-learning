@@ -59,15 +59,53 @@ export type Dashboard = {
   excluded: { withoutDate: number; withoutAmount: number; withoutCategory: number };
 };
 
-export function computeDashboard(data: AnalyticsData, monthsBack = 12): Dashboard {
+/** kWh per month the billed period ends (a printed total wins over the sum of its periods, never both). */
+export function electricityByMonth(data: AnalyticsData): { month: string; kwh: number }[] {
+  const ix = indexes(data);
+  const kwhByMonth = new Map<string, { total: number | null; periods: number }>();
+  for (const c of data.consumption) {
+    const invoice = ix.byId.get(ix.invoiceOfConsumption.get(c.id) ?? "");
+    const m = invoice ? month(invoice.values.period_end) ?? month(invoice.values.issue_date) : null;
+    const kwh = num(c.values.energy_kwh);
+    if (!m || kwh === null) continue;
+    const entry = kwhByMonth.get(m) ?? { total: null, periods: 0 };
+    // A printed total wins over the sum of its periods (never both).
+    if (/total/i.test(str(c.values.period) ?? "")) entry.total = (entry.total ?? 0) + kwh; else entry.periods += kwh;
+    kwhByMonth.set(m, entry);
+  }
+  return [...kwhByMonth].map(([m, e]) => ({ month: m, kwh: round(e.total ?? e.periods) })).sort((a, b) => a.month.localeCompare(b.month));
+}
+
+const receivedInvoices = (data: AnalyticsData) => data.invoices.filter(i => !/emitid|venta|issued|sale/i.test(str(i.values.direction) ?? ""));
+
+/** Years with dated spend, most recent first (the year selector). */
+export function availableYears(data: AnalyticsData): number[] {
+  return [...new Set(receivedInvoices(data).map(i => month(i.values.issue_date)).filter((m): m is string => !!m).map(m => Number(m.slice(0, 4))))].sort((a, b) => b - a);
+}
+
+/**
+ * Period of the dashboard: the last `monthsBack` months with data (default), or a calendar `year` (January to
+ * December; the current year stops at the current month, so future months are not shown as zero spend).
+ */
+export type Period = number | { monthsBack?: number; year?: number; today?: Date };
+
+export function computeDashboard(data: AnalyticsData, period: Period = 12): Dashboard {
+  const { monthsBack = 12, year, today = new Date() } = typeof period === "number" ? { monthsBack: period } : period;
   const ix = indexes(data);
   // Spend: received invoices (issued ones, i.e. sales, are not spend).
-  const received = data.invoices.filter(i => !/emitid|venta|issued|sale/i.test(str(i.values.direction) ?? ""));
+  const received = receivedInvoices(data);
   const dated = received.filter(i => month(i.values.issue_date) && invoiceAmount(i) !== null);
   const latest = dated.map(i => month(i.values.issue_date)!).sort().at(-1) ?? null;
   const earliest = dated.map(i => month(i.values.issue_date)!).sort()[0] ?? null;
   const months: string[] = [];
-  if (latest && earliest) {
+  if (year) {
+    const now = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+    for (let mm = 1; mm <= 12; mm++) {
+      const m = `${year}-${String(mm).padStart(2, "0")}`;
+      if (year === today.getFullYear() && m > now && (!latest || m > latest)) break;
+      months.push(m);
+    }
+  } else if (latest && earliest) {
     let m = latest;
     for (let i = 0; i < monthsBack && m >= earliest; i++) { months.unshift(m); m = addMonths(m, -1); }
   }
@@ -104,17 +142,6 @@ export function computeDashboard(data: AnalyticsData, monthsBack = 12): Dashboar
     products.set(key, entry);
   }
 
-  const kwhByMonth = new Map<string, { total: number | null; periods: number }>();
-  for (const c of data.consumption) {
-    const invoice = ix.byId.get(ix.invoiceOfConsumption.get(c.id) ?? "");
-    const m = invoice ? month(invoice.values.period_end) ?? month(invoice.values.issue_date) : null;
-    const kwh = num(c.values.energy_kwh);
-    if (!m || kwh === null) continue;
-    const entry = kwhByMonth.get(m) ?? { total: null, periods: 0 };
-    // A printed total wins over the sum of its periods (never both).
-    if (/total/i.test(str(c.values.period) ?? "")) entry.total = (entry.total ?? 0) + kwh; else entry.periods += kwh;
-    kwhByMonth.set(m, entry);
-  }
 
   const totalSpend = round(spend.reduce((a, s) => a + s.total, 0));
   const lastMonth = months.at(-1) ?? null;
@@ -125,7 +152,7 @@ export function computeDashboard(data: AnalyticsData, monthsBack = 12): Dashboar
       lastMonthSpend: spend.at(-1)?.total ?? 0, previousMonthSpend: spend.at(-2)?.total ?? 0 },
     topSuppliers: [...suppliers.values()].sort((a, b) => b.spend - a.spend).slice(0, 6),
     topProducts: [...products.values()].sort((a, b) => b.spend - a.spend).slice(0, 8),
-    electricity: [...kwhByMonth].map(([m, e]) => ({ month: m, kwh: round(e.total ?? e.periods) })).sort((a, b) => a.month.localeCompare(b.month)),
+    electricity: electricityByMonth(data).filter(e => months.includes(e.month)),
     excluded: { withoutDate: received.filter(i => !month(i.values.issue_date)).length,
       withoutAmount: received.filter(i => month(i.values.issue_date) && invoiceAmount(i) === null).length,
       withoutCategory: received.filter(i => !str(i.values.expense_category)).length },
@@ -170,9 +197,9 @@ export function buildTable(data: AnalyticsData, key: string): Table {
           titular: companyName(ix.byId.get(ix.holderOfSupply.get(s.id) ?? "")), facturas: invoices.length, gasto: round(invoices.reduce((a, i) => a + (invoiceAmount(i) ?? 0), 0)) };
       }) };
     case "consumos": {
-      const dash = computeDashboard(data, 120);
+      const electricity = electricityByMonth(data);
       return { key, label: "Consumo eléctrico", description: "kWh facturados por mes (el total impreso de la factura o, si no lo hay, la suma de sus periodos).",
-        columns: [{ key: "mes", label: "Mes" }, { key: "kwh", label: "kWh", kind: "number" }], rows: dash.electricity.map(e => ({ mes: MONTH_LABEL(e.month), kwh: e.kwh })) };
+        columns: [{ key: "mes", label: "Mes" }, { key: "kwh", label: "kWh", kind: "number" }], rows: electricity.map(e => ({ mes: MONTH_LABEL(e.month), kwh: e.kwh })) };
     }
     default: return { key: "facturas", label: "Facturas", description: "Todas tus facturas guardadas, con su proveedor y categoría.",
       columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "numero", label: "Número" }, { key: "proveedor", label: "Proveedor" }, { key: "categoria", label: "Categoría" },

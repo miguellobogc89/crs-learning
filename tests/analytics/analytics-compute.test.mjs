@@ -85,3 +85,14 @@ test('useful tables: readable columns, joined names, no relation tables',()=>{
 test('numbers: only exact numeric strings count',()=>{
  assert.equal(a.num('12.50'),12.5);assert.equal(a.num('-3'),-3);assert.equal(a.num('12,50'),null);assert.equal(a.num(''),null);assert.equal(a.num(7),7);
 });
+
+test('year selector: years with spend; a calendar year (the current one up to today); the rest of the panel follows the period',()=>{
+ assert.deepEqual(a.availableYears(data),[2026],'issued invoices (sales) do not add years');
+ const y=a.computeDashboard(data,{year:2026,today:new Date('2026-05-10T12:00:00Z')});
+ assert.deepEqual(y.months,['2026-01','2026-02','2026-03','2026-04','2026-05'],'stops at the current month');
+ assert.equal(y.kpis.totalSpend,226.5);assert.equal(y.kpis.lastMonth,'2026-05');
+ const past=a.computeDashboard(data,{year:2025,today:new Date('2026-05-10T12:00:00Z')});
+ assert.equal(past.months.length,12);assert.equal(past.kpis.totalSpend,0);assert.deepEqual(past.electricity,[],'consumption filtered by the period too');
+ assert.deepEqual(past.topProducts.map(p=>p.name),['Nata'],'products go by the real ticket date, even inside a 2026 invoice');
+ assert.deepEqual(a.buildTable(data,'consumos').rows,[{mes:'ene 26',kwh:160}],'the table keeps every month');
+});

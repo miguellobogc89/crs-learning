@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fmtMoney, fmtMoneyShort, fmtNumber } from "./format";
 
 /** Units are passed by name (a server page cannot pass functions to this client component). */
@@ -21,7 +21,19 @@ export function GroupedBarChart({ groups, series, unit = "money", title, compact
   const { value: format, axis: formatAxis } = UNITS[unit];
   const [hover, setHover] = useState<number | null>(null);
   const [asTable, setAsTable] = useState(false);
-  const W = compact ? 560 : 760, H = compact ? 190 : 280, left = compact ? 48 : 56, right = 8, top = 10, bottom = 24;
+  // Compact (dashboard tiles): the drawing takes exactly the space left in its tile, so it never scrolls or overflows.
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    if (!compact || !box.current) return;
+    const el = box.current;
+    const measure = () => { const r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0) setSize({ w: Math.round(r.width), h: Math.round(r.height) }); };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [compact, asTable]);
+  const W = compact ? size?.w ?? 560 : 760, H = compact ? Math.max(120, size?.h ?? 190) : 280, left = compact ? 48 : 56, right = 8, top = 10, bottom = 24;
   const { min, max, ticks } = useMemo(() => {
     const all = groups.flatMap(g => series.map(s => g.values[s.key] ?? 0));
     const hi = Math.max(0, ...all), lo = Math.min(0, ...all);
@@ -39,7 +51,7 @@ export function GroupedBarChart({ groups, series, unit = "money", title, compact
   const gap = 2, barW = Math.max(2, (inner - gap * (series.length - 1)) / Math.max(series.length, 1));
 
   if (!groups.length || !series.length) return <p className="py-10 text-center text-sm text-slate-500">Todavía no hay datos para este gráfico.</p>;
-  return <figure className={compact ? "space-y-2" : "space-y-3"}>
+  return <figure className={compact ? "flex h-full min-h-0 flex-col gap-2" : "space-y-3"}>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <ul className={compact ? "flex flex-wrap gap-x-3 gap-y-0.5" : "flex flex-wrap gap-x-4 gap-y-1"} aria-label="Leyenda">
         {series.length > 1 && series.map(s => <li key={s.key} className={(compact ? "text-[11px]" : "text-xs") + " flex items-center gap-1.5 text-slate-600"}>
@@ -48,7 +60,7 @@ export function GroupedBarChart({ groups, series, unit = "money", title, compact
       <button type="button" onClick={() => setAsTable(v => !v)} className={(compact ? "text-[11px]" : "text-xs") + " font-medium text-[#0A58FF] hover:underline"}>
         {asTable ? "Ver gráfico" : "Ver como tabla"}</button>
     </div>
-    {asTable ? <div className={compact ? "max-h-[190px] overflow-auto" : "overflow-x-auto"}><table className={(compact ? "text-xs" : "text-sm") + " w-full text-left"}>
+    {asTable ? <div className={compact ? "min-h-0 flex-1 overflow-auto" : "overflow-x-auto"}><table className={(compact ? "text-xs" : "text-sm") + " w-full text-left"}>
       <caption className="sr-only">{title}</caption>
       <thead className="text-xs text-slate-500"><tr><th className="py-2 pr-4 font-semibold">Mes</th>
         {series.map(s => <th key={s.key} className="py-2 pr-4 text-right font-semibold">{s.label}</th>)}
@@ -58,8 +70,8 @@ export function GroupedBarChart({ groups, series, unit = "money", title, compact
         {series.map(s => <td key={s.key} className="py-2 pr-4 text-right tabular-nums text-slate-700">{format(g.values[s.key] ?? 0)}</td>)}
         <td className="py-2 text-right font-medium tabular-nums text-slate-900">{format(series.reduce((a, s) => a + (g.values[s.key] ?? 0), 0))}</td>
       </tr>)}</tbody>
-    </table></div> : <div className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={title} onMouseLeave={() => setHover(null)}>
+    </table></div> : <div ref={box} className={compact ? "relative min-h-0 flex-1 overflow-hidden" : "relative"}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={compact ? W : undefined} height={compact ? H : undefined} className={compact ? "block" : "h-auto w-full"} role="img" aria-label={title} onMouseLeave={() => setHover(null)}>
         {ticks.map(t => <g key={t}>
           <line x1={left} x2={W - right} y1={y(t)} y2={y(t)} stroke={t === 0 ? "#94a3b8" : "#e2e8f0"} strokeWidth={1} />
           <text x={left - 8} y={y(t)} dy="0.32em" textAnchor="end" className="fill-slate-500 text-[11px]">{formatAxis(t)}</text>

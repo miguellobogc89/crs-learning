@@ -7,7 +7,7 @@ import { AppSectionShell } from "@/components/app/section-sidebar";
 import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { ANALYTICS_LIMIT, loadAnalyticsData } from "@/lib/analytics/data";
-import { buildTable, CATEGORIES, computeDashboard, MONTH_LABEL, TABLE_KEYS } from "@/lib/analytics/compute";
+import { availableYears, buildTable, CATEGORIES, computeDashboard, MONTH_LABEL, TABLE_KEYS } from "@/lib/analytics/compute";
 import { AnalyticsNavigation } from "@/components/analytics/analytics-navigation";
 import { GroupedBarChart } from "@/components/analytics/grouped-bar-chart";
 import { RankingList } from "@/components/analytics/ranking-list";
@@ -26,7 +26,7 @@ function Panel({ title, subtitle, href, children }: { title: string; subtitle?: 
       </div>
       {href && <Link href={href} className="shrink-0 rounded-md px-2 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-50 hover:text-[#0A58FF]">Ver tabla →</Link>}
     </header>
-    <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+    <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
   </section>;
 }
 
@@ -38,7 +38,16 @@ function Kpi({ label, value, hint, trend }: { label: string; value: string; hint
   </div>;
 }
 
-export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ view?: string; table?: string }> }) {
+/** Period selector: a calendar year, or the last 12 months with data. Links, so the page stays a server page. */
+function PeriodSelector({ years, current }: { years: number[]; current: string }) {
+  const options = [...years.map(y => ({ key: String(y), label: String(y) })), { key: "12m", label: "Últimos 12 meses" }];
+  return <nav aria-label="Periodo" className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-slate-200/80 bg-white p-1 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+    {options.map(o => <Link key={o.key} href={`/analytics?periodo=${o.key}`} aria-current={current === o.key ? "page" : undefined}
+      className={"rounded-lg px-3 py-1.5 text-xs font-medium transition-colors " + (current === o.key ? "bg-[#0A58FF] text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}>{o.label}</Link>)}
+  </nav>;
+}
+
+export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ view?: string; table?: string; periodo?: string }> }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
@@ -55,19 +64,25 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     const table = buildTable(data, tableKey);
     content = <div className="space-y-4 pt-4">{notice}<DataTable table={table} /></div>;
   } else {
-    const d = computeDashboard(data);
+    const years = availableYears(data);
+    const periodo = params.periodo === "12m" ? "12m" : years.includes(Number(params.periodo)) ? String(Number(params.periodo)) : years[0] ? String(years[0]) : "12m";
+    const d = computeDashboard(data, periodo === "12m" ? 12 : { year: Number(periodo) });
     const k = d.kpis;
     const change = k.previousMonthSpend ? (k.lastMonthSpend - k.previousMonthSpend) / Math.abs(k.previousMonthSpend) * 100 : null;
     const series = d.categories.map(c => ({ key: c, label: CATEGORIES.find(x => x.key === c)!.label, color: CATEGORY_COLOR[c] }));
     const excluded = d.excluded.withoutDate + d.excluded.withoutAmount;
     const byCategory = d.categories.map(c => ({ key: c, total: d.spend.reduce((a, m) => a + m.values[c], 0) })).sort((a, b) => b.total - a.total);
     const positive = byCategory.reduce((a, c) => a + Math.max(0, c.total), 0) || 1;
-    const recent = buildTable(data, "facturas").rows.slice(0, 7);
+    const recent = buildTable(data, "facturas").rows.filter(r => typeof r.fecha === "string" && d.months.includes(r.fecha.slice(0, 7))).slice(0, 5);
     const period = d.months.length ? `${MONTH_LABEL(d.months[0])} – ${MONTH_LABEL(d.months.at(-1)!)}` : "";
     content = <div className="space-y-3 pt-4">
       {notice}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-slate-500">{period ? `Periodo: ${period}` : "Sin facturas con fecha todavía"}</p>
+        <PeriodSelector years={years} current={periodo} />
+      </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label={`Gasto · ${d.months.length} ${d.months.length === 1 ? "mes" : "meses"}`} value={fmtMoney(k.totalSpend)} hint={period} />
+        <Kpi label={periodo === "12m" ? "Gasto · últimos 12 meses" : `Gasto ${periodo}`} value={fmtMoney(k.totalSpend)} hint={period} />
         <Kpi label="Media mensual" value={fmtMoney(k.monthlyAverage)} />
         <Kpi label={k.lastMonth ? `Último mes · ${MONTH_LABEL(k.lastMonth)}` : "Último mes"} value={fmtMoney(k.lastMonthSpend)}
           trend={change === null ? null : change >= 0 ? "up" : "down"}
@@ -84,11 +99,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             display: fmtMoney(c.total), color: CATEGORY_COLOR[c.key], detail: c.total > 0 ? `${fmtNumber(Math.round(c.total / positive * 100))} %` : undefined }))} />
         </Panel>
         <Panel title="Proveedores con más gasto" subtitle={period || undefined} href="/analytics?view=tablas&table=proveedores">
-          <RankingList compact empty="Sin facturas con proveedor." items={d.topSuppliers.map(s => ({ label: s.name, value: s.spend, display: fmtMoney(s.spend),
+          <RankingList compact empty="Sin facturas con proveedor." items={d.topSuppliers.slice(0, 5).map(s => ({ label: s.name, value: s.spend, display: fmtMoney(s.spend),
             detail: `${s.invoices} ${s.invoices === 1 ? "factura" : "facturas"}` }))} />
         </Panel>
         <Panel title="Productos con más gasto" subtitle="Líneas de compra (sin suministros)" href="/analytics?view=tablas&table=compras">
-          <RankingList compact empty="Sin líneas de compra." items={d.topProducts.slice(0, 6).map(p => ({ label: p.name, value: p.spend, display: fmtMoney(p.spend),
+          <RankingList compact empty="Sin líneas de compra." items={d.topProducts.slice(0, 5).map(p => ({ label: p.name, value: p.spend, display: fmtMoney(p.spend),
             detail: p.quantity ? `${fmtNumber(p.quantity)} uds.` : undefined }))} />
         </Panel>
         {d.electricity.length > 0 && <Panel title="Consumo eléctrico" subtitle="kWh por mes de fin del periodo facturado" href="/analytics?view=tablas&table=consumos">
