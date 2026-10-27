@@ -56,3 +56,19 @@ test('the committed SQL is the one generated from the catalog file (run npm run 
  assert.doesNotMatch(text,/engine_records\s+(SET|WHERE)|DELETE|DROP|TRUNCATE|ALTER/i,'never touches records nor schema');
  assert.match(text,/ON CONFLICT \(object_type_id, key\) DO NOTHING/);assert.match(text,/NO se cambia/);
 });
+
+// Global relations already published (2026-10-27). Same key = same definition; no second key for the same link.
+const PUBLISHED_RELATIONS=[['invoice_lines','invoice','invoice_line','one_to_many'],['invoice_payments','invoice','payment','many_to_many'],
+ ['organization_buyer_orders','organization','sales_order','one_to_many'],['organization_contacts','organization','contact','many_to_many'],
+ ['organization_issued_invoices','organization','invoice','one_to_many'],['organization_received_invoices','organization','invoice','one_to_many'],
+ ['organization_seller_orders','organization','sales_order','one_to_many'],['product_invoice_lines','product','invoice_line','one_to_many'],
+ ['product_order_lines','product','sales_order_line','one_to_many'],['sales_order_invoices','sales_order','invoice','many_to_many'],['sales_order_lines','sales_order','sales_order_line','one_to_many']];
+test('published relations are reused as they are, never redefined or duplicated under another key',()=>{
+ for(const [key,from,to,cardinality] of PUBLISHED_RELATIONS){
+  const mine=relations.find(r=>r.key===key);
+  if(mine)assert.deepEqual([mine.from,mine.to,mine.cardinality],[from,to,cardinality],key);
+  else assert.ok(!relations.some(r=>r.from===from&&r.to===to),`${from} → ${to} already exists as ${key}`);
+ }
+ const issuer=relations.find(r=>r.key==='invoice_issuer');
+ assert.deepEqual([issuer.from,issuer.to,issuer.cardinality],['company','invoice','one_to_many'],'what the existing Engine importer checks');
+});

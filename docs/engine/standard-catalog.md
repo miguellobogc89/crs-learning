@@ -52,7 +52,7 @@ Companies are `company` (more specific than `organization`, which stays for othe
 
 ## Relations (38)
 
-From owner to owned (`one_to_many`: one company issues many invoices), as the Engine expects.
+From owner to owned (`one_to_many`: one company issues many invoices), as the Engine expects. Relations already published are reused as they are (`invoice_lines`, `invoice_payments` many-to-many, `product_invoice_lines`); `invoice_issuer` / `invoice_customer` (company → invoice) are the ones the existing Engine importer checks. The `organization_*` relations stay for `organization`.
 
 | Key | From → to | Cardinality |
 |---|---|---|
@@ -60,14 +60,14 @@ From owner to owned (`one_to_many`: one company issues many invoices), as the En
 | `invoice_customer` | company → invoice | one_to_many |
 | `invoice_lines` | invoice → invoice_line | one_to_many |
 | `invoice_tax_lines` | invoice → invoice_tax_line | one_to_many |
-| `invoice_line_product` | product → invoice_line | one_to_many |
+| `product_invoice_lines` | product → invoice_line | one_to_many |
 | `invoice_supply_point` | supply_point → invoice | one_to_many |
 | `invoice_telecom_lines` | telecom_line → invoice | many_to_many |
 | `invoice_contracted_power` | invoice → contracted_power | one_to_many |
 | `invoice_energy_consumption` | invoice → energy_consumption | one_to_many |
 | `invoice_meter_readings` | invoice → meter_reading | one_to_many |
 | `invoice_delivery_notes` | invoice → delivery_note | one_to_many |
-| `invoice_payments` | invoice → payment | one_to_many |
+| `invoice_payments` | invoice → payment | many_to_many |
 | `invoice_site` | site → invoice | one_to_many |
 | `supply_point_holder` | company → supply_point | one_to_many |
 | `supply_point_site` | site → supply_point | one_to_many |

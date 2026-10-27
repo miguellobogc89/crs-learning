@@ -15,7 +15,7 @@ export type CatalogType = { key: string; name: string; description: string; fiel
 export type CatalogRelation = { key: string; name: string; from: string; to: string; cardinality: "one_to_one" | "one_to_many" | "many_to_many"; description: string };
 
 /** Bump when this file changes: the SQL records it in the version notes. */
-export const STANDARD_CATALOG_REVISION = "2026-10-27.1";
+export const STANDARD_CATALOG_REVISION = "2026-10-27.2";
 
 const f = (key: string, name: string, type: CatalogFieldType, description?: string, extra: { required?: true; unique?: true } = {}): CatalogField =>
   ({ key, name, type, ...(description ? { description } : {}), ...extra });
@@ -172,14 +172,15 @@ export const STANDARD_RELATIONS: CatalogRelation[] = [
   r("invoice_customer", "Receptor de la factura", "company", "invoice", "one_to_many", "Empresa a la que se factura."),
   r("invoice_lines", "Líneas de la factura", "invoice", "invoice_line", "one_to_many", "Artículos o conceptos de la factura."),
   r("invoice_tax_lines", "Impuestos de la factura", "invoice", "invoice_tax_line", "one_to_many", "Desglose de impuestos de la factura."),
-  r("invoice_line_product", "Producto de la línea", "product", "invoice_line", "one_to_many", "Producto comprado o vendido en la línea."),
+  r("product_invoice_lines", "Producto de la línea", "product", "invoice_line", "one_to_many", "Producto comprado o vendido en la línea."),
   r("invoice_supply_point", "Suministro facturado", "supply_point", "invoice", "one_to_many", "Suministro al que corresponde la factura."),
   r("invoice_telecom_lines", "Líneas facturadas", "telecom_line", "invoice", "many_to_many", "Líneas de teléfono incluidas en la factura."),
   r("invoice_contracted_power", "Potencias de la factura", "invoice", "contracted_power", "one_to_many", "Potencia contratada por periodo en la factura."),
   r("invoice_energy_consumption", "Consumos de la factura", "invoice", "energy_consumption", "one_to_many", "Consumo por periodo en la factura."),
   r("invoice_meter_readings", "Lecturas de la factura", "invoice", "meter_reading", "one_to_many", "Lecturas de contador de la factura."),
   r("invoice_delivery_notes", "Albaranes de la factura", "invoice", "delivery_note", "one_to_many", "Albaranes que agrupa la factura."),
-  r("invoice_payments", "Pagos de la factura", "invoice", "payment", "one_to_many", "Pagos o cobros de la factura."),
+  // Already published as many_to_many: one payment may settle several invoices.
+  r("invoice_payments", "Pagos de la factura", "invoice", "payment", "many_to_many", "Pagos o cobros de la factura."),
   r("invoice_site", "Local de la factura", "site", "invoice", "one_to_many", "Local al que se imputa la factura."),
   r("supply_point_holder", "Titular del suministro", "company", "supply_point", "one_to_many", "Empresa titular del suministro."),
   r("supply_point_site", "Local del suministro", "site", "supply_point", "one_to_many", "Local donde está el suministro."),
