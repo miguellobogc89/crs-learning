@@ -1,11 +1,16 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { FileStack } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
 import { advanceIntake, PHASE_NAMES, type IntakeView } from "../advance-intake";
 import { ReadingVerification } from "./reading-verification";
 import { CopyButton } from "./copy-button";
+import { DownloadLogButton } from "./download-log-button";
+import { PipelineStepper, StepCard } from "./pipeline-stepper";
+import { deriveSteps } from "./pipeline-steps";
+import { buildImportLog, logFileName, type LogEvent } from "./import-log";
 import { DocumentClassification } from "./document-classification";
 import { ExtractedData } from "./extracted-data";
 import { ReconciliationView } from "./reconciliation-view";
@@ -40,6 +45,10 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [saving, setSaving] = useState(false);
   const [previousResume, setPreviousResume] = useState(resumeImportId);
+  // Timeline of this window for the downloadable log (debugging).
+  const events = useRef<LogEvent[]>([]);
+  const log = (type: LogEvent["type"], detail: string) => { events.current.push({ at: new Date().toISOString(), type, detail }); };
+  const lastState = useRef("");
   if (resumeImportId !== previousResume) {
     setPreviousResume(resumeImportId);
     if (resumeImportId) { setId(resumeImportId); setView(null); setError(null); }
@@ -56,9 +65,11 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
       try {
         const next = await advanceIntake(id!, request, { start: !stepwise });
         if (!alive) return;
+        const state = `${next.phase}:${next.status}${next.error ? `:${next.error}` : ""}`;
+        if (state !== lastState.current) { lastState.current = state; log(next.status === "error" ? "error" : "estado", `${next.phase} → ${next.status}${next.error ? ` (${next.error})` : ""}`); }
         setView(next);
         if (next.status === "processing") timer = setTimeout(poll, 1500);
-      } catch(e) { if (alive) setError(e instanceof Error ? e.message : "Error de procesamiento"); }
+      } catch(e) { if (alive) { const message = e instanceof Error ? e.message : "Error de procesamiento"; log("error", message); setError(message); } }
     }
     void poll();
     return () => { alive = false; clearTimeout(timer); };
@@ -66,14 +77,16 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
   // Saving records is always a person's action, with the decisions taken on the plan.
   async function saveRecords() {
     setSaving(true); setError(null);
+    log("accion", `guardar con decisiones ${JSON.stringify(decisions)}`);
     try {
       await read(await fetch(`/api/knowledge/intake/${id}/writing`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ decisiones: decisions }) }));
       setRun(n => n + 1);
-    } catch(e) { setError(e instanceof Error ? e.message : "No se pudo guardar"); setRun(n => n + 1); }
+    } catch(e) { const message = e instanceof Error ? e.message : "No se pudo guardar"; log("error", message); setError(message); setRun(n => n + 1); }
     finally { setSaving(false); }
   }
   async function continueStep() {
     setError(null);
+    log("accion", `continuar: ${view?.phase}`);
     try { setView(await advanceIntake(id!, request, { start: true })); setRun(n => n + 1); }
     catch(e) { setError(e instanceof Error ? e.message : "Error de procesamiento"); }
   }
@@ -83,7 +96,9 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
     try {
       const data = new FormData(); data.set("libraryId", context.libraryId);
       files.forEach(file => data.append("files", file));
+      log("accion", `subir ${files.length} archivo(s): ${files.map(f => f.name).join(", ")}`);
       const result = await read(await fetch("/api/knowledge/intake", { method: "POST", body: data }));
+      log("estado", `lote creado ${result.loteId}`);
       setId(result.loteId);
     } catch(e) { setError(e instanceof Error ? e.message : "Error de subida"); }
     finally { setUploading(false); }
@@ -92,45 +107,66 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
   const writingBlocked = writingPlan ? writingPlan.registros.filter(r => r.bloqueo && !(decisions[r.ref] && r.bloqueo.opciones.includes(decisions[r.ref]))).length : 0;
   // Finished results are shown when everything is done, and also while a step-by-step run waits for "Continuar".
   const done = view && view.result !== null && (view.status === "completed" || view.status === "waiting") ? view : null;
-  const labels: Record<string, string> = { lectura_base: "Leyendo el texto de los documentos…", lectura: "Extrayendo contenido de los documentos…", verificacion: "Revisando la lectura contra el documento original…", clasificacion: "Clasificando los documentos…", conciliacion: "Comprobando qué datos ya existen…", escritura: "Guardando…" };
-  return <Dialog open={open} onOpenChange={next => { if (!uploading) onOpenChange(next); }}>
-    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-      <DialogTitle>Subir documentos</DialogTitle>
-      <DialogDescription className="sr-only">Extracción del contenido documental y resultado JSON</DialogDescription>
-      {!id && <KnowledgeImportUploadStep files={files} isAnalyzing={uploading} error={error} onFilesChange={setFiles} />}
-      {id && !error && (!view || view.status === "processing") && <p role="status">{labels[view?.phase ?? "lectura_base"]}</p>}
-      {id && view?.status === "waiting" && <p role="status">Siguiente paso: <strong>{PHASE_NAMES[view.phase] ?? view.phase}</strong>. Pulsa continuar para ejecutarlo.</p>}
-      {id && view?.status === "waiting" && view.phase === "escritura" && view.writing?.plan != null &&
-        <WritePlanView plan={view.writing.plan as WritePlan} decisions={decisions} onDecide={(ref, d) => setDecisions(prev => ({ ...prev, [ref]: d }))} />}
-      {id && view?.writing?.error && <p role="alert">No se guardó: {view.writing.error}</p>}
-      {(!id || view?.status === "waiting") && <Button disabled={uploading || saving || (!id && !files.length) || (writingBlocked > 0)}
-        onClick={!id ? start : view!.phase === "escritura" ? saveRecords : continueStep}>
-        {!id ? (uploading ? "Subiendo…" : "Procesar documentos") : view!.phase === "escritura"
-          ? (saving ? "Guardando…" : writingBlocked > 0 ? `Decide ${writingBlocked} pendiente(s) para guardar` : "Guardar en mis datos")
-          : `Continuar: ${PHASE_NAMES[view!.phase] ?? view!.phase}`}</Button>}
-      {(error || view?.error) && <p role="alert">{error || view?.error}</p>}
-      {done && done.verification?.status !== "processing" && <div className="flex flex-wrap gap-2">
-        <CopyButton label="Copiar todo" text={JSON.stringify({ lectura: done.result, revision: done.verification?.result ?? null,
-          errorRevision: done.verification?.error ?? null, clasificacion: done.classification?.result ?? null,
-          errorClasificacion: done.classification?.error ?? null, conciliacion: done.reconciliation?.result ?? null,
-          errorConciliacion: done.reconciliation?.error ?? null, escritura: done.writing?.result ?? done.writing?.plan ?? null,
-          lecturaIndependiente: done.verification?.references ?? null }, null, 2)} />
-        {done.reconciliation?.status === "completed" && <CopyButton label="Copiar conciliación" text={JSON.stringify(done.reconciliation.result, null, 2)} />}
-        <CopyButton label="Copiar lectura" text={JSON.stringify(done.result, null, 2)} />
-        {done.verification?.status === "completed" && <CopyButton label="Copiar revisión" text={JSON.stringify(done.verification.result, null, 2)} />}
-        {done.classification?.status === "completed" && <CopyButton label="Copiar clasificación" text={JSON.stringify(done.classification.result, null, 2)} />}
-      </div>}
-      {view?.classification?.status === "error" && <p role="alert">No se pudo clasificar: {view.classification.error}</p>}
-      {view?.classification?.status === "completed" && <DocumentClassification result={view.classification.result as ClassificationResult} />}
-      {view?.verification?.status === "error" && <p role="alert">La lectura está completa, pero no se pudo verificar: {view.verification.error}</p>}
-      {view?.verification?.status === "completed" && <ReadingVerification report={view.verification.result as VerificationReport} />}
-      {done && (done.result as { module?: string } | null)?.module === "targeted_extraction" && <ExtractedData result={done.result as TargetedResult} />}
-      {view?.reconciliation?.status === "error" && <p role="alert">No se pudo conciliar: {view.reconciliation.error}</p>}
-      {done && done.writing?.status === "completed" && <WriteResultView result={done.writing.result as WriteResult} />}
-      {done && done.reconciliation?.status === "completed" && <ReconciliationView result={done.reconciliation.result as ReconciliationResult} />}
-      {done && <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded border p-4 text-xs">{JSON.stringify(done.result, null, 2)}</pre>}
-      {view?.verification?.status === "completed" && <details className="rounded border p-4 text-xs"><summary>JSON de la revisión</summary>
-        <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap">{JSON.stringify(view.verification.result, null, 2)}</pre></details>}
+  const steps = deriveSteps(view, uploading);
+  const labels: Record<string, string> = { lectura_base: "Leyendo el texto de los documentos…", lectura: "Extrayendo los datos útiles…", verificacion: "Revisando cada dato contra el documento…", clasificacion: "Clasificando los documentos…", conciliacion: "Comprobando qué datos ya existen…", escritura: "Guardando…" };
+  const status = !id ? (uploading ? "Subiendo…" : files.length ? `${files.length} archivo(s) listos para procesar` : "Añade los documentos que quieras importar")
+    : error ? "Se ha detenido por un error" : !view ? "Consultando el estado…"
+    : view.status === "processing" ? labels[view.phase] ?? "Procesando…"
+    : view.status === "waiting" ? (view.phase === "escritura" ? (writingBlocked ? `Revisa ${writingBlocked} decisión(es) antes de guardar` : "Todo listo para guardar en tus datos") : `Siguiente paso: ${PHASE_NAMES[view.phase] ?? view.phase}`)
+    : view.status === "completed" ? (view.writing?.status === "completed" ? "Importación completada y guardada" : "Importación completada") : "Con errores";
+  const detail: Record<string, ReactNode> = {
+    clasificacion: view?.classification?.status === "completed" ? <DocumentClassification result={view.classification.result as ClassificationResult} /> : null,
+    lectura: done ? ((done.result as { module?: string } | null)?.module === "targeted_extraction" ? <ExtractedData result={done.result as TargetedResult} />
+      : <pre className="max-h-[50vh] overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(done.result, null, 2)}</pre>) : null,
+    verificacion: view?.verification?.status === "completed" ? <ReadingVerification report={view.verification.result as VerificationReport} /> : null,
+    conciliacion: done?.reconciliation?.status === "completed" ? <ReconciliationView result={done.reconciliation.result as ReconciliationResult} /> : null,
+    escritura: done?.writing?.status === "completed" ? <WriteResultView result={done.writing.result as WriteResult} /> : null,
+  };
+  const bundle = () => buildImportLog(id, events.current, view);
+  return <Dialog open={open} onOpenChange={next => { if (!uploading && !saving) onOpenChange(next); }}>
+    <DialogContent className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-6 pb-4 pt-5 pr-12">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-[#0A58FF]"><FileStack className="size-5" /></span>
+          <div className="min-w-0">
+            <DialogTitle className="text-base font-semibold text-slate-900">Importar documentos</DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              {id ? `Lote ${id.slice(0, 8)}${stepwise ? " · paso a paso" : ""}` : "Facturas, tickets, contratos, tarifas… Se leen, se revisan y tú decides qué se guarda."}
+            </DialogDescription>
+          </div>
+        </div>
+        {id && <div className="flex flex-wrap gap-2">
+          <CopyButton label="Copiar todo" text={JSON.stringify(bundle(), null, 2)} />
+          <DownloadLogButton build={bundle} fileName={() => logFileName(id)} />
+        </div>}
+      </div>
+      {(id || uploading) && <div className="border-b border-slate-100 bg-slate-50/60 px-6 py-4"><PipelineStepper steps={steps} /></div>}
+      <div className="flex-1 space-y-3 overflow-y-auto px-6 py-4">
+        {!id && <KnowledgeImportUploadStep files={files} isAnalyzing={uploading} error={error} onFilesChange={setFiles} />}
+        {id && (error || view?.error) && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error || view?.error}</div>}
+        {id && view?.writing?.error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">No se guardó: {view.writing.error}</div>}
+        {id && view?.status === "waiting" && view.phase === "escritura" && view.writing?.plan != null &&
+          <WritePlanView plan={view.writing.plan as WritePlan} decisions={decisions} onDecide={(ref, d) => { log("accion", `decisión ${ref} → ${d}`); setDecisions(prev => ({ ...prev, [ref]: d })); }} />}
+        {id && steps.map((step, i) => <StepCard key={step.key} step={step} index={i} open={step.key === "escritura" && step.state === "done"}>{detail[step.key] ?? undefined}</StepCard>)}
+        {done && <details className="rounded-xl border border-dashed border-slate-200 p-3 text-xs text-slate-500">
+          <summary className="cursor-pointer font-medium">Datos técnicos</summary>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <CopyButton label="Copiar lectura" text={JSON.stringify(done.result, null, 2)} />
+            {done.classification?.status === "completed" && <CopyButton label="Copiar clasificación" text={JSON.stringify(done.classification.result, null, 2)} />}
+            {done.verification?.status === "completed" && <CopyButton label="Copiar revisión" text={JSON.stringify(done.verification.result, null, 2)} />}
+            {done.reconciliation?.status === "completed" && <CopyButton label="Copiar conciliación" text={JSON.stringify(done.reconciliation.result, null, 2)} />}
+          </div>
+          <pre className="mt-3 max-h-[50vh] overflow-auto whitespace-pre-wrap">{JSON.stringify(done.result, null, 2)}</pre>
+        </details>}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-white px-6 py-3">
+        <p role="status" className="text-xs text-slate-500">{status}</p>
+        {(!id || view?.status === "waiting") && <Button disabled={uploading || saving || (!id && !files.length) || (writingBlocked > 0)}
+          onClick={!id ? start : view!.phase === "escritura" ? saveRecords : continueStep}>
+          {!id ? (uploading ? "Subiendo…" : "Procesar documentos") : view!.phase === "escritura"
+            ? (saving ? "Guardando…" : writingBlocked > 0 ? `Decide ${writingBlocked} pendiente(s)` : "Guardar en mis datos")
+            : `Continuar: ${PHASE_NAMES[view!.phase] ?? view!.phase}`}</Button>}
+      </div>
     </DialogContent>
   </Dialog>;
 }

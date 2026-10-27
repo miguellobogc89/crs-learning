@@ -77,3 +77,29 @@ test('history offers step-by-step reopening of pipeline batches',()=>{
  const sidebar=readFileSync('components/knowledge/knowledge-info-sidebar.tsx','utf8');const history=readFileSync('app/api/knowledge/import/history/route.ts','utf8');
  assert.match(sidebar,/<KnowledgeImportModal open stepwise resumeImportId=/);assert.match(history,/upload_type === EXTRACTOR_UPLOAD_TYPE/);
 });
+
+const stepsModule=(()=>{const m={exports:{}};new Function('module','exports','require',ts.transpileModule(readFileSync('components/knowledge/import/modal/pipeline-steps.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(m,m.exports,()=>({}));return m.exports;})();
+test('the window shows six plain-language stages with their state and a one-line result',()=>{
+ const {deriveSteps}=stepsModule;
+ assert.deepEqual(deriveSteps(null).map(s=>s.state),['pending','pending','pending','pending','pending','pending']);
+ const running=deriveSteps({status:'processing',phase:'lectura',result:null,error:null,classification:{status:'completed',error:null,result:{archivos:[{partes:[{destino:'engine'},{destino:'knowledge'}]}]}}});
+ assert.deepEqual(running.map(s=>s.state),['done','done','running','pending','pending','pending']);
+ assert.equal(running[1].summary,'1 documento · 2 partes · 1 solo para consulta');
+ const waiting=deriveSteps({status:'waiting',phase:'escritura',result:{module:'targeted_extraction',archivos:[{partes:[{modo:'dirigida',faltan:['issuer.tax_id']}]}]},error:null,
+  verification:{status:'error',error:'Google 403',result:null},reconciliation:{status:'completed',error:null,result:{resumen:{nuevas:3,existentes:1,avisos:1}}},
+  writing:{status:'waiting',result:null,error:null,plan:{resumen:{crear:5,bloqueados:1}}}});
+ assert.deepEqual(waiting.map(s=>s.state),['done','done','done','error','done','waiting'],'a failed verification is shown without stopping the import');
+ assert.equal(waiting[2].summary,'1 parte con datos · 1 dato obligatorio sin encontrar');
+ assert.equal(waiting[4].summary,'3 nuevas · 1 existente · 1 aviso');assert.equal(waiting[5].summary,'5 registros por guardar · 1 decisión pendiente');
+ const old=deriveSteps({status:'completed',phase:'completado',result:{module:'document_extractor'},error:null});
+ assert.deepEqual(old.slice(4).map(s=>s.state),['skipped','skipped'],'older full readings have no reconciliation nor saving');
+});
+test('the downloadable log has the timeline and every stage; the window keeps one processing action',()=>{
+ const m={exports:{}};new Function('module','exports',ts.transpileModule(readFileSync('components/knowledge/import/modal/import-log.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(m,m.exports);
+ const log=m.exports.buildImportLog('abcdef123',[{at:'t',type:'accion',detail:'continuar'}],{status:'waiting',phase:'escritura',result:{module:'targeted_extraction'},error:null,writing:{status:'waiting',plan:{module:'record_writer_plan'},result:null,error:null}});
+ assert.equal(log.tipo,'crs-import-log');assert.equal(log.eventos.length,1);assert.equal(log.escritura.module,'record_writer_plan');assert.equal(log.lectura.module,'targeted_extraction');
+ assert.match(m.exports.logFileName('abcdef123'),/^crs-import-abcdef12-\d{4}-\d{2}-\d{2}T/);
+ const modal=readFileSync('components/knowledge/import/modal/knowledge-import-modal.tsx','utf8');assert.match(modal,/DownloadLogButton/);assert.equal((modal.match(/<Button /g)||[]).length,1);
+ const sidebar=readFileSync('components/knowledge/knowledge-info-sidebar.tsx','utf8');assert.match(sidebar,/Se \{count === 1 \? "subió 1 documento"/);assert.match(sidebar,/MoreHorizontal/);
+ assert.match(sidebar,/\{ start: false \}/,'downloading a log from the list never starts a stage');
+});
