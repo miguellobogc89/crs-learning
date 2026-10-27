@@ -22,7 +22,7 @@ Es un permiso aparte del inicio de sesión con Google: conectar o desconectar Dr
 
 ## Sincronizar (paso 3)
 
-`POST /api/connectors/google-drive/sync {limit?}` (10 por defecto, máximo 50) — `lib/connectors/google-drive/sync.ts`:
+`POST /api/connectors/google-drive/sync {limit?}` (20 por defecto, máximo 50) — `lib/connectors/google-drive/sync.ts`:
 
 1. Un candado en la conexión (`settings_json.syncLeaseUntil`, 5 min) impide dos sincronizaciones a la vez.
 2. Lista los PDF e imágenes de la carpeta, **más recientes primero**, y descarta los ya vistos (`connector_synced_files`,

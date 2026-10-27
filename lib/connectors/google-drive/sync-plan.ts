@@ -4,7 +4,7 @@ import type { DriveFile } from "./drive";
  * Pure decisions of a Drive sync: which files are new, which are skipped without downloading, the file name the
  * importer sees, and how far a sync goes (a few NEW documents per run; duplicates do not count but are bounded).
  */
-export const SYNC_LIMIT = 10;
+export const SYNC_LIMIT = 20;
 export const SYNC_LIMIT_MAX = 50;
 export const MAX_DOWNLOADS = 40;
 const MAX_BYTES = 20 * 1024 * 1024;

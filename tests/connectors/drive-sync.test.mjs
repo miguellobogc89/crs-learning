@@ -15,7 +15,7 @@ test('plan: import names get an extension; limit clamped',()=>{
  assert.equal(plan.importName({name:'Factura O2',mimeType:'application/pdf'}),'Factura O2.pdf');
  assert.equal(plan.importName({name:'ticket.JPEG',mimeType:'image/jpeg'}),'ticket.JPEG');
  assert.equal(plan.importName({name:'foto',mimeType:'image/jpeg'}),'foto.jpg');
- assert.equal(plan.syncLimit(undefined),10);assert.equal(plan.syncLimit(500),50);assert.equal(plan.syncLimit('3'),3);assert.equal(plan.syncLimit(0),10);
+ assert.equal(plan.syncLimit(undefined),20);assert.equal(plan.syncLimit(500),50);assert.equal(plan.syncLimit('3'),3);assert.equal(plan.syncLimit(0),20);
 });
 
 test('plan: pending = never seen, or seen with different content; oversize skipped before download',()=>{

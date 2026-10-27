@@ -6,13 +6,13 @@ import { KnowledgeImportModal } from "@/components/knowledge/import/modal";
 
 type Summary = { loteId: string | null; libraryId: string | null; importados: number; duplicados: number; omitidos: { nombre: string; motivo: string }[]; pendientes: number; listaIncompleta: boolean };
 export type LastSync = { at: string; loteId: string | null; importados: number; duplicados: number; omitidos: number };
-const BATCH = 10;
+const BATCH = 20;
 
 const when = (iso: string) => new Date(iso).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /**
- * "Sincronizar ahora": brings the next 10 new documents of the folder as one import and opens it, so it runs
+ * "Sincronizar ahora": brings the next 20 new documents of the folder as one import and opens it, so it runs
  * through the pipeline up to "Guardar en mis datos" (which always waits for the person).
  */
 export function DriveSyncPanel({ folderId, canManage, lastSync: initialLast }: { folderId: string; canManage: boolean; lastSync: LastSync | null }) {
