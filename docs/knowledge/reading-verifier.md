@@ -34,6 +34,14 @@ Revision 2 (after the first real Google Vision run on an image invoice):
 - Long sentences report the specific differing words ("http://www." vs "https://www.") instead of a character diff; words under four characters are reported as absent rather than paired with an arbitrary closest match.
 - Values with no letters or digits that are not found as text (radio buttons, ticks) are notices, not findings; printed symbols such as "€" or "-" are still checked.
 
+Revision 3 (replayed on the stored Google Vision words of a real run):
+- Table rows are located in printed order, header included, and each row is searched first just below the previous one. Identical rows of two similar tables (the same product in two tickets) are no longer swapped, also when the reading places pre-header lines inside the table.
+- The words of one value must be close together (same or next line); text already matched to another value is reused only as a last resort.
+- Values of three characters or fewer are never paired by similarity ("2" inside "0,7200").
+- OCR look-alike letters of other alphabets ("Pб" for "P6") are compared as what they look like.
+
+To check a change against real output without uploading again or paying for OCR, copy everything from the modal ("Copiar todo") into a file outside the repository and run `npm run knowledge:replay-verification -- bundle.json`.
+
 Known limits, stated rather than hidden: it does not judge how text is grouped into blocks (two adjacent boxes merged into one table), does not read checkbox/radio states, cannot check columns of tables without a header or several numeric columns, and a PDF text layer may contain text hidden by clipping (reported as omissions).
 
 ## Output

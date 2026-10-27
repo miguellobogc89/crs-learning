@@ -182,3 +182,24 @@ test('drawn marks are a notice, while printed symbols are still checked as text'
  assert.equal(findings(r),0,JSON.stringify(r));
  assert.equal(r.avisos.filter(a=>/símbolo dibujado/.test(a)).length,1);
 });
+test('identical rows of two similar tables are not swapped when OCR misreads the first one',()=>{
+ // Two tickets with the same product; OCR reads the first as "Pб" (Cyrillic) and the second correctly.
+ const ws=[w('Descripción',0.05,0.20),w('Importe',0.80,0.20),w('LECHE',0.05,0.22),w('Pб',0.15,0.22),w('93,60',0.80,0.22),
+  w('Descripción',0.05,0.40),w('Importe',0.80,0.40),w('LECHE',0.05,0.42),w('P6',0.15,0.42),w('18,72',0.80,0.42)];
+ const t=v=>({tipo:'tabla',columnas:['Descripción','Importe'],filas:[['LECHE P6',v]]});
+ const r=compare.verifyPage({numero:1,incidencias:[],bloques:[t('93,60'),t('18,72')]},{numero:1,fuente:'ocr',palabras:ws});
+ assert.equal(findings(r),0,JSON.stringify(r));
+});
+test('rows transcribed before the header are matched in printed order, not below the header',()=>{
+ const ws=[w('Ticket',0.05,0.18),w('A1',0.15,0.18),w('Descripción',0.05,0.20),w('Importe',0.80,0.20),w('PAN',0.05,0.22),w('1,00',0.80,0.22),
+  w('Ticket',0.05,0.25),w('B2',0.15,0.25),w('Descripción',0.05,0.27),w('Importe',0.80,0.27),w('PAN',0.05,0.29),w('2,00',0.80,0.29)];
+ const t=(id,v)=>({tipo:'tabla',columnas:['',''],filas:[[`Ticket ${id}`,''],['Descripción','Importe'],['PAN',v]]});
+ const r=compare.verifyPage({numero:1,incidencias:[],bloques:[t('A1','1,00'),t('B2','2,00')]},{numero:1,fuente:'ocr',palabras:ws});
+ assert.equal(findings(r),0,JSON.stringify(r));
+});
+test('very short values are never paired by similarity with a longer number',()=>{
+ const p={numero:1,incidencias:[],bloques:[{tipo:'tabla',columnas:['Descripción','Unid.','Importe'],filas:[['LONA','2','0,72']]}]};
+ const ws=[w('Descripción',0.05,0.20),w('Unid.',0.40,0.20),w('Importe',0.80,0.20),w('LONA',0.05,0.22),w('0,72',0.80,0.22)];
+ const r=compare.verifyPage(p,{numero:1,fuente:'ocr',palabras:ws});
+ assert.deepEqual(r.literales.map(l=>[l.modelo,l.estado,l.documento]),[['2','no_encontrado',undefined]]);
+});

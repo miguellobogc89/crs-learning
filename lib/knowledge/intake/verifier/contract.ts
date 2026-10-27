@@ -5,7 +5,7 @@
  * Coordinates are normalised to the page (0..1 in both axes, origin top-left) so that a PDF text
  * layer and an OCR response are directly comparable.
  */
-export const VERIFIER_REVISION = 2;
+export const VERIFIER_REVISION = 3;
 
 /** Origin of the independent reading of a page. */
 export type ReferenceSource = "capa_texto" | "ocr" | "sin_referencia";

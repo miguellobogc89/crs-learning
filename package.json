@@ -12,7 +12,8 @@
     "test:engine:reconciler": "node --test tests/engine-reconciler.test.mjs tests/engine-identity.test.mjs tests/engine-pair-evidence.test.mjs tests/engine-table-pair-evidence.test.mjs tests/engine-schema-stability.test.mjs tests/engine-structure-comparison.test.mjs tests/engine-schema-decision.test.mjs tests/engine-progressive-analysis.test.mjs",
     "test:engine:knowledge-preview": "node --test tests/engine/knowledge-preview.test.mjs tests/engine/knowledge-preview-replay.test.mjs",
     "engine:export-preview-fixture": "node scripts/engine/export-knowledge-preview-fixture.mjs",
-    "test:knowledge:verifier": "node --test tests/knowledge/reading-verifier.test.mjs tests/knowledge/intake-upload-flow.test.mjs"
+    "test:knowledge:verifier": "node --test tests/knowledge/reading-verifier.test.mjs tests/knowledge/intake-upload-flow.test.mjs",
+    "knowledge:replay-verification": "node scripts/knowledge/replay-verification.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
