@@ -9,7 +9,7 @@ const sets=load('lib/knowledge/intake/targets/field-sets.ts',{'../classifier/tax
 const contract=load('lib/knowledge/intake/targeted/contract.ts',{'../targets/field-sets':sets});
 const compare=load('lib/knowledge/intake/verifier/compare.ts');
 const verifierContract=load('lib/knowledge/intake/verifier/contract.ts');
-const values=load('lib/knowledge/intake/verifier/values.ts',{'./compare':compare,'./contract':verifierContract});
+const values=load('lib/knowledge/intake/verifier/values.ts',{'./compare':compare,'./contract':verifierContract,'../targets/field-sets':sets});
 
 const part=(id,over={})=>({id,bloques:[{pagina:1,desde:1,hasta:5}],familia:'transaccion',tipo:'factura',subtipo:'compra_articulos',descripcion:'',destino:'engine',contieneTablas:true,confianza:'alta',evidencia:[],motivo:'m',...over});
 const classified={archivoId:'f1',archivo:'compra.pdf',incidencias:[],partes:[
@@ -149,4 +149,13 @@ test('punctuation around a value in the document is not a difference; a dropped 
    line:{...f('number','956289565'),...f('service','Fijo e internet'),...f('amount','5,00')}}}]};
  const r=values.verifyTargetedFile(file,pref);
  assert.deepEqual(r.hallazgos.map(h=>h.campo).sort(),['issuer.legal_name','line.amount'],JSON.stringify(r.hallazgos));
+});
+test('classification fields are not searched as text; a word glued by punctuation is present; digits inside numbers are not',()=>{
+ const pref={archivoId:'f1',paginas:[{numero:1,fuente:'capa_texto',palabras:[w('Lectura',0.05,0.10),w('30/11/2025(REAL)',0.15,0.10),w('IGNIS_260022559',0.05,0.20),w('1,5',0.05,0.30)]}]};
+ const f=(valor)=>({valor,pagina:1});
+ const file={archivoId:'f1',archivo:'x.pdf',incidencias:[],partes:[{parteId:'p1',modo:'dirigida',tipo:'factura',subtipo:null,paginas:[1],conjunto:[],motivo:'',
+  entidades:{meter_readings:[{reading_type:f('REAL')}],lines:[{line_total_basis:f('sin_impuestos'),description:f('IGNIS'),quantity:f('1')}]}}]};
+ const r=values.verifyTargetedFile(file,pref);
+ assert.deepEqual(r.hallazgos.map(h=>h.campo).sort(),['lines[1].description','lines[1].quantity'],JSON.stringify(r.hallazgos));
+ assert.equal(r.comprobados,3,'the enum field is not counted as checked');
 });

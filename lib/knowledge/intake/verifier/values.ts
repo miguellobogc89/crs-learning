@@ -2,6 +2,7 @@ import type { Page } from "../extractor/contract";
 import type { TargetedFile } from "../targeted/contract";
 import { verifyPage } from "./compare";
 import { VERIFIER_REVISION, type FileReference, type Severity } from "./contract";
+import { FIELD_SETS, type EntityDef } from "../targets/field-sets";
 
 /**
  * Verification of a TARGETED extraction: every extracted value must appear in the base reading of the page it
@@ -16,13 +17,19 @@ export type ValuesSummary = { comprobados: number; distintos: number; noEncontra
 export type ValuesReport = { module: "reading_verifier"; version: typeof VERIFIER_REVISION; modo: "valores"; loteId: string;
   lecturaModificada: false; resumen: ValuesSummary; archivos: FileValueReport[] };
 
+// Fields whose value is a classification, not printed text ("sin_impuestos", yes/no): never searched in the document.
+const NOT_LITERAL = new Set<string>();
+const collect = (entities: EntityDef[]) => entities.forEach(e => { e.fields.forEach(f => { if (f.type === "enum" || f.type === "boolean") NOT_LITERAL.add(`${e.role}.${f.key}`); });
+  if (e.children) collect(e.children); });
+FIELD_SETS.forEach(set => collect(set.entities));
+
 type Item = { parte: string; campo: string; valor: string; pagina: number | null; paginas: number[] };
 type Finding = ReturnType<typeof verifyPage>["literales"][number];
 
 function items(file: TargetedFile): Item[] {
   return file.partes.filter(p => p.modo === "dirigida" && p.entidades).flatMap(p => Object.entries(p.entidades!).flatMap(([role, data]) =>
     (Array.isArray(data) ? data.map((r, i) => [`${role}[${i + 1}]`, r] as const) : [[role, data] as const]).flatMap(([label, record]) =>
-      Object.entries(record).filter(([, v]) => v.valor !== null).map(([key, v]): Item =>
+      Object.entries(record).filter(([key, v]) => v.valor !== null && !NOT_LITERAL.has(`${role}.${key}`)).map(([key, v]): Item =>
         ({ parte: p.parteId, campo: `${label}.${key}`, valor: v.valor!, pagina: v.pagina, paginas: p.paginas })))));
 }
 
@@ -51,6 +58,17 @@ function onlyEdgePunctuation(valor: string, findings: Finding[]) {
     // Word-level differences only ("Madrid" vs "Madrid,"): the model's word is whole and the document adds edge punctuation.
     return !!f.diferencias?.length && f.diferencias.every(d => d.modelo !== "" && edges(d.modelo) === d.modelo && edges(d.documento) === d.modelo);
   });
+}
+
+// A worded value printed glued to other text by punctuation ("REAL" in "30/11/2025(REAL)") is present. Only values
+// with letters and at least three characters: digits inside numbers ("1" in "1,5") never count, nor "_"-joined words.
+function insideGluedToken(item: Item, reference: FileReference | undefined) {
+  const value = item.valor.trim();
+  if (!reference || value.length < 3 || !/\p{L}/u.test(value) || /\s/.test(value)) return false;
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, "u");
+  const pages = item.pagina !== null ? [item.pagina] : item.paginas;
+  return reference.paginas.some(p => pages.includes(p.numero) && p.palabras.some(w => w.t !== value && pattern.test(w.t)));
 }
 
 export function verifyTargetedFile(file: TargetedFile, reference: FileReference | undefined): FileValueReport {
@@ -84,7 +102,7 @@ export function verifyTargetedFile(file: TargetedFile, reference: FileReference 
     }
     if (best) pending.push(best);
   }
-  for (const { item, findings } of pending.filter(p => !onlyEdgePunctuation(p.item.valor, p.findings))) {
+  for (const { item, findings } of pending.filter(p => !onlyEdgePunctuation(p.item.valor, p.findings) && !(p.findings.every(f => f.estado === "no_encontrado") && insideGluedToken(p.item, reference)))) {
     // A multi-line value yields one finding per line: the value is reported once, with its first difference.
     const [first] = findings;
     out.hallazgos.push({ parte: item.parte, campo: item.campo, valor: item.valor, pagina: item.pagina, estado: first.estado,

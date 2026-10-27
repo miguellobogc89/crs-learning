@@ -102,7 +102,7 @@ test('Vision errors are surfaced, not converted into empty readings',async()=>{
 
 // ---------- batch process ----------
 function processModule(db,deps){
- return load('lib/knowledge/intake/verifier/process.ts',{'./values':load('lib/knowledge/intake/verifier/values.ts',{'./compare':compare,'./contract':contract}),'@prisma/client':{},'@/lib/prisma':{prisma:db},'@/lib/storage/knowledge-storage':{readKnowledgeFile:async()=>{throw Error('unused');}},
+ return load('lib/knowledge/intake/verifier/process.ts',{'./values':load('lib/knowledge/intake/verifier/values.ts',{'./compare':compare,'./contract':contract,'../targets/field-sets':load('lib/knowledge/intake/targets/field-sets.ts',{'../classifier/taxonomy':load('lib/knowledge/intake/classifier/taxonomy.ts')})}),'@prisma/client':{},'@/lib/prisma':{prisma:db},'@/lib/storage/knowledge-storage':{readKnowledgeFile:async()=>{throw Error('unused');}},
   '../extractor/contract':extractorContract,'./compare':compare,'./contract':contract,'./reference':{readReference:deps.readReference}});
 }
 const extraction={module:'document_extractor',version:1,loteId:'b',archivos:[{archivoId:'f1',archivo:'factura.pdf',metodo:'pdf_visual',paginas:[page()]},{archivoId:'f2',archivo:'tabla.xlsx',metodo:'hoja_nativa',paginas:[{numero:1,bloques:[],incidencias:['Hoja vacía']}]}]};
