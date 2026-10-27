@@ -12,6 +12,8 @@ Pipeline (orchestrated by `components/knowledge/import/advance-intake.ts`, used 
 
 The base reading keeps all the text for Knowledge and search.
 
+**Step-by-step testing (no new upload).** The upload history (right panel) offers "Abrir paso a paso" on batches of this pipeline: the modal opens on the stored batch, shows everything already finished, and stops at the next pending module with a single "Continuar: <módulo>" action that starts only that module. A module whose revision changed shows as pending again, so after changing a module's code the same batch can be re-run from that module on (the earlier, paid steps are reused).
+
 ## What it reads
 
 - **PDF**: positioned words per page — the PDF's own text layer; Google Cloud Vision OCR for image pages and for scans whose embedded text is a third-party OCR (see `reading-verifier.md`). Without `GOOGLE_CLOUD_VISION_API_KEY`, image pages are explicitly unread (`sin_referencia`), never silently empty.

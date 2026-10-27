@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
+import { EXTRACTOR_UPLOAD_TYPE } from "@/lib/knowledge/intake/extractor/contract";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,18 @@ function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+const stage = (value: unknown) => string(object(value)?.status) ?? "pendiente";
+/** Status of each module of the intake pipeline, and the first one not finished (a hint: the modal decides). */
+function pipelineStages(status: string, proposal: JsonObject | null) {
+  const etapas = {
+    lectura_base: stage(proposal?.lecturaBase), clasificacion: stage(proposal?.clasificacion),
+    lectura: status === "intake_completed" ? "completed" : status === "intake_error" ? "error" : status === "intake_running" ? "running" : "pendiente",
+    verificacion: stage(proposal?.verificacion), conciliacion: stage(proposal?.conciliacion),
+  };
+  const siguiente = (Object.entries(etapas) as [string, string][]).find(([, s]) => s !== "completed")?.[0] ?? null;
+  return { etapas, siguiente };
+}
+
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
@@ -44,6 +57,8 @@ export async function GET() {
       id: true,
       status: true,
       processing_status: true,
+      upload_type: true,
+      library_id: true,
       original_name: true,
       total_files: true,
       completed_files: true,
@@ -93,6 +108,8 @@ export async function GET() {
         failedFiles: item.failed_files,
         error: item.error_message,
         proposalReady: hasProposal,
+        // Batches of the current intake pipeline can be resumed module by module from the history.
+        pipeline: item.upload_type === EXTRACTOR_UPLOAD_TYPE ? { libraryId: item.library_id, ...pipelineStages(item.status, proposal) } : null,
         articles: articles.map(article => ({
           title: string(article.title) ?? "Artículo sin título",
           action: string(article.action),

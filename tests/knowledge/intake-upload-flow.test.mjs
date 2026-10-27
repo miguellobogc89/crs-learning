@@ -52,3 +52,25 @@ test('a busy or not-ready stage (409 on start) keeps the modal polling instead o
  const modal=readFileSync('components/knowledge/import/modal/knowledge-import-modal.tsx','utf8');
  assert.match(modal,/method === "POST" && response\.status === 409\) return \{ estado: "ocupado" \}/);
 });
+
+test('step by step: a stored batch stops at the next pending module and starts only it on "continuar"',async()=>{
+ const st={verified:true,reconciled:false};const calls=[];
+ const request=async(url,method)=>{calls.push(`${method??'GET'} ${url.replace('/api/knowledge/intake/s','')||'/'}`);
+  if(url.endsWith('/base-reading'))return {estado:'completed',resultado:{module:'base_reading'}};
+  if(url.endsWith('/classification'))return {estado:'completed',resultado:{module:'document_classifier'}};
+  if(url.endsWith('/verification'))return {estado:'completed',resultado:{module:'reading_verifier'}};
+  if(url.endsWith('/reconciliation')){if(method==='POST'){st.reconciled=true;return {estado:'completed'};}return st.reconciled?{estado:'completed',resultado:{module:'reconciliation'}}:{estado:'pending'};}
+  return {estado:'intake_completed',resultado:{module:'targeted_extraction'}};};
+ const waiting=await advanceIntake('s',request,{start:false});
+ assert.equal(waiting.status,'waiting');assert.equal(waiting.phase,'conciliacion');assert.equal(waiting.result.module,'targeted_extraction','earlier results are shown');
+ assert.ok(calls.every(c=>c.startsWith('GET')),'nothing is started without the person');
+ calls.length=0;await advanceIntake('s',request,{start:true});
+ assert.deepEqual(calls.filter(c=>c.startsWith('POST')),['POST /reconciliation']);
+ const done=await advanceIntake('s',request,{start:false});assert.equal(done.status,'completed');assert.equal(done.reconciliation.result.module,'reconciliation');
+ const pending=await advanceIntake('p',async(url)=>url.endsWith('/base-reading')||url.endsWith('/classification')?{estado:'completed',resultado:{module:url.endsWith('/classification')?'document_classifier':'base_reading'}}:{estado:'intake_pending'},{start:false});
+ assert.deepEqual([pending.status,pending.phase],['waiting','lectura'],'the extraction also waits');
+});
+test('history offers step-by-step reopening of pipeline batches',()=>{
+ const sidebar=readFileSync('components/knowledge/knowledge-info-sidebar.tsx','utf8');const history=readFileSync('app/api/knowledge/import/history/route.ts','utf8');
+ assert.match(sidebar,/<KnowledgeImportModal open stepwise resumeImportId=/);assert.match(history,/upload_type === EXTRACTOR_UPLOAD_TYPE/);
+});

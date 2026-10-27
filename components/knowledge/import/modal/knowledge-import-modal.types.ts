@@ -40,4 +40,6 @@ export type KnowledgeImportModalProps = {
   ) => void;
   selectedFiles?: File[];
   resumeImportId?: string;
+  /** Resume a stored batch one module at a time ("Continuar"), without uploading it again (testing). */
+  stepwise?: boolean;
 };

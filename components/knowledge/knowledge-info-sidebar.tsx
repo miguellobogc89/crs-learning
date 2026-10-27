@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 
 import { AppCard } from "@/components/app/layouts/app-card";
+import { KnowledgeImportModal } from "@/components/knowledge/import/modal";
+import { PHASE_NAMES } from "@/components/knowledge/import/advance-intake";
 
 type HistoryFile = {
   id: string;
@@ -53,6 +55,7 @@ type HistoryImport = {
   proposalReady: boolean;
   articles: Array<{ title: string; action: string; documentIds: string[] }>;
   files: HistoryFile[];
+  pipeline: null | { libraryId: string; siguiente: string | null; etapas: Record<string, string> };
 };
 
 function formatDate(value: string) {
@@ -106,6 +109,8 @@ function getFileState(file: HistoryFile) {
 
 export function KnowledgeInfoSidebar() {
   const [items, setItems] = useState<HistoryImport[]>([]);
+  // Batch reopened step by step (no new upload): its modal resumes at the next pending module.
+  const [opened, setOpened] = useState<{ id: string; libraryId: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -295,6 +300,12 @@ export function KnowledgeInfoSidebar() {
                       </div>
                     ))}
                   </div>
+                  {item.pipeline ? (
+                    <button type="button" onClick={() => setOpened({ id: item.id, libraryId: item.pipeline!.libraryId })}
+                      className="w-full rounded-lg border border-[#0A58FF]/30 px-2 py-1.5 text-[11px] font-medium text-[#0A58FF] hover:bg-blue-50">
+                      Abrir paso a paso{item.pipeline.siguiente ? ` · siguiente: ${PHASE_NAMES[item.pipeline.siguiente] ?? item.pipeline.siguiente}` : " · completo"}
+                    </button>
+                  ) : null}
                   <p className="break-all text-[9px] text-slate-400" title={item.id}>
                     Importación {item.id.slice(0, 8)}
                   </p>
@@ -304,6 +315,10 @@ export function KnowledgeInfoSidebar() {
           })}
         </div>
       </div>
+      {opened ? (
+        <KnowledgeImportModal open stepwise resumeImportId={opened.id} context={{ origin: "root", libraryId: opened.libraryId }}
+          onOpenChange={next => { if (!next) { setOpened(null); void refresh(); } }} />
+      ) : null}
     </AppCard>
   );
 }
