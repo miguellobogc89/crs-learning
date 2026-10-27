@@ -91,7 +91,7 @@ function fakeTx(){
   engine_workspace_catalog_bindings:{findUnique:async()=>null,create:async a=>{db.bindings.push(a.data);return a.data;},update:async()=>({})},
   engine_records:{findFirst:async a=>db.records.find(r=>(a.where.id?r.id===a.where.id:r.object_type_id===a.where.object_type_id&&r.external_key===a.where.external_key))??null,
    create:async a=>{const r={id:id('rec'),status:a.data.status,...a.data};db.records.push(r);return r;}},
-  engine_record_revisions:{create:async a=>{db.revisions.push(a.data);return a.data;}},
+  engine_record_revisions:{createMany:async a=>{assert.equal(a.skipDuplicates,true,'a trigger may have written it already');db.revisions.push(...a.data);return {count:a.data.length};}},
   engine_record_provenance:{createMany:async a=>{db.provenance.push(...a.data);return {count:a.data.length};}},
   engine_catalog_relations:{findFirst:async a=>{const r=rels.find(x=>x.key===a.where.key);return r?{id:'gr-'+r.key,key:r.key,name:r.name,description:r.description,cardinality:r.cardinality,
    engine_catalog_types_engine_catalog_relations_from_type_idToengine_catalog_types:{key:r.from},engine_catalog_types_engine_catalog_relations_to_type_idToengine_catalog_types:{key:r.to}}:null;}},

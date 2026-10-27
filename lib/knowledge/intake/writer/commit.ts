@@ -108,8 +108,9 @@ export async function commitWritePlan(tx: Tx, input: { workspaceId: string; user
     const values = record.valores as Prisma.InputJsonObject;
     const created = await tx.engine_records.create({ data: { workspace_id: workspaceId, object_type_id: type.id, external_key: record.claveExterna,
       values_json: values, status: "draft", revision: 1, schema_version: type.schema_version, created_by_user_id: userId, updated_by_user_id: userId } });
-    await tx.engine_record_revisions.create({ data: { workspace_id: workspaceId, record_id: created.id, object_type_id: type.id, revision: 1,
-      schema_version: type.schema_version, status: created.status, values_json: values, changed_by_user_id: userId } });
+    // The database may already snapshot revision 1 with a trigger: write it only if it is not there.
+    await tx.engine_record_revisions.createMany({ data: [{ workspace_id: workspaceId, record_id: created.id, object_type_id: type.id, revision: 1,
+      schema_version: type.schema_version, status: created.status, values_json: values, changed_by_user_id: userId }], skipDuplicates: true });
     // The printed text of every value, where it was read and how it was converted.
     if (record.evidencias.length) await tx.engine_record_provenance.createMany({ data: record.evidencias.map(ev => ({ workspace_id: workspaceId, record_id: created.id,
       revision: 1, field_key: ev.campo, source_locator: `intake:${batchId}/${ev.archivoId}${ev.pagina ? `/p${ev.pagina}` : ""}/${ev.origen}`,
