@@ -52,14 +52,14 @@ export async function mergeRecords(tx: Tx, input: { workspaceId: string; userId:
   if (source.engine_object_types.key !== input.typeKey || target.engine_object_types.key !== input.typeKey) throw new Error("Solo se pueden unir dos empresas");
   const rows = await tx.engine_record_relations.findMany({ where: { workspace_id: workspaceId, OR: [
       { from_record_id: { in: [sourceId, targetId] } }, { to_record_id: { in: [sourceId, targetId] } }] },
-    select: { id: true, relation_definition_id: true, from_record_id: true, to_record_id: true, engine_relation_definitions: { select: { cardinality: true } } } });
+    select: { id: true, relation_definition_id: true, from_record_id: true, to_record_id: true, definition: { select: { cardinality: true } } } });
   // The other ends' relations of the same definitions matter for "single owner" checks.
   const others = rows.length ? await tx.engine_record_relations.findMany({ where: { workspace_id: workspaceId,
       relation_definition_id: { in: [...new Set(rows.map((r: { relation_definition_id: string }) => r.relation_definition_id))] },
       to_record_id: { in: [...new Set(rows.map((r: { to_record_id: string }) => r.to_record_id))] } },
-    select: { id: true, relation_definition_id: true, from_record_id: true, to_record_id: true, engine_relation_definitions: { select: { cardinality: true } } } }) : [];
-  const toLink = (r: { id: string; relation_definition_id: string; from_record_id: string; to_record_id: string; engine_relation_definitions: { cardinality: string } }): Link =>
-    ({ id: r.id, definitionId: r.relation_definition_id, cardinality: r.engine_relation_definitions.cardinality, from: r.from_record_id, to: r.to_record_id });
+    select: { id: true, relation_definition_id: true, from_record_id: true, to_record_id: true, definition: { select: { cardinality: true } } } }) : [];
+  const toLink = (r: { id: string; relation_definition_id: string; from_record_id: string; to_record_id: string; definition: { cardinality: string } }): Link =>
+    ({ id: r.id, definitionId: r.relation_definition_id, cardinality: r.definition.cardinality, from: r.from_record_id, to: r.to_record_id });
   const links = [...new Map([...rows, ...others].map(r => [r.id, toLink(r)])).values()];
   const steps = planMerge(sourceId, targetId, links);
   for (const s of steps) {

@@ -27,7 +27,7 @@ test('merge: moves, completes, archives the duplicate — in one transaction, un
  const log=[];
  const recs={DUP:{id:'DUP',revision:2,values_json:{legal_name:'D?PLOCIA',phone:'600'},object_type_id:'T',engine_object_types:{key:'company'}},
   KEEP:{id:'KEEP',revision:5,values_json:{legal_name:"D'PLOCIA",tax_identifier:'B7'},object_type_id:'T',engine_object_types:{key:'company'}}};
- const rel=(id,from,to)=>({id,relation_definition_id:'issuer',from_record_id:from,to_record_id:to,engine_relation_definitions:{cardinality:'one_to_many'}});
+ const rel=(id,from,to)=>({id,relation_definition_id:'issuer',from_record_id:from,to_record_id:to,definition:{cardinality:'one_to_many'}});
  const tx={$queryRaw:async q=>{log.push('lock:'+q.v[0]);},
   engine_records:{findMany:async({where})=>where.id.in.map(id=>recs[id]),updateMany:async({where,data})=>{log.push(`update ${where.id} rev${where.revision} ${data.status??JSON.stringify(data.values_json)}`);return{count:1};}},
   engine_record_relations:{findMany:async()=>[rel('r1','DUP','INV1'),rel('r2','KEEP','INV2')],update:async({where,data})=>{log.push(`move ${where.id} ${data.from_record_id}`);},delete:async({where})=>{log.push('drop '+where.id);}}};
