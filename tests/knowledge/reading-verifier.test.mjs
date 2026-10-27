@@ -276,3 +276,13 @@ test('verification reuses the positioned words of the base reading: no second re
  assert.deepEqual(last.verificacion.referencias,[],'base words are not duplicated into the verification checkpoint');
  assert.deepEqual(last.lecturaBase,lecturaBase);
 });
+
+test('image files: Vision images:annotate words normalised from pixels; key in a header; no key → explicitly unread',async()=>{
+ const ref=referenceModule([]);
+ const body={responses:[{fullTextAnnotation:{pages:[{width:1000,height:2000,blocks:[{paragraphs:[{words:[{symbols:[{text:'12'},{text:','},{text:'40'}],boundingBox:{vertices:[{x:100,y:400},{x:300,y:400},{x:300,y:440},{x:100,y:440}]}}]}]}]}]}}]};
+ assert.deepEqual(ref.parseVisionImageResponse(body),[{t:'12,40',x0:0.1,x1:0.3,y0:0.2,y1:0.22}]);
+ const calls=[];
+ const pages=await ref.readImageReference(Buffer.from('img'),{apiKey:'k',fetcher:async(url,init)=>{calls.push({url,init});return {ok:true,json:async()=>body};}});
+ assert.equal(pages[0].fuente,'ocr');assert.match(calls[0].url,/images:annotate$/);assert.equal(calls[0].init.headers['X-Goog-Api-Key'],'k');assert.doesNotMatch(calls[0].url,/key=/);
+ assert.equal((await ref.readImageReference(Buffer.from('img'),{apiKey:null}))[0].fuente,'sin_referencia');
+});

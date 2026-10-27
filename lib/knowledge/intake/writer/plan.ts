@@ -1,4 +1,4 @@
-import { FIELD_SET_MAPPING, STANDARD_TYPES } from "@/lib/engine/catalog/standard-catalog";
+import { expenseCategory, FIELD_SET_MAPPING, STANDARD_TYPES } from "@/lib/engine/catalog/standard-catalog";
 import type { TargetedFile, TargetedResult } from "../targeted/contract";
 import type { ReconciliationResult, ReconciledEntity } from "../reconciliation/contract";
 import { toDate, toDecimal, toInteger, usesCommaDecimals, type Conversion } from "./convert";
@@ -96,6 +96,12 @@ export function buildWritePlan(extraction: TargetedResult, reconciliation: Recon
       const issued = invoiceRow?.issue_date?.valor ? toDate(invoiceRow.issue_date.valor) : null;
       const ctx = { commaDecimals, reference: issued?.ok ? issued.value : null };
       const invoice = recordFor(invoiceRef, "invoice", { claveExterna: invoiceEntity!.clave });
+      // Expense category from the classification (not printed): what analytics groups by (supplies, purchases…).
+      if (invoice.valores.expense_category === undefined) {
+        const { category, subcategory } = expenseCategory(part.subtipo);
+        invoice.valores.expense_category = category; invoice.valores.expense_subcategory = subcategory;
+        invoice.evidencias.push({ campo: "expense_category", impreso: `${part.tipo}${part.subtipo ? ` / ${part.subtipo}` : ""}`, archivo: file.archivo, archivoId: file.archivoId, pagina: null, origen: "clasificación" });
+      }
 
       for (const [rol, data] of Object.entries(entities)) {
         const rows = (Array.isArray(data) ? data : [data]) as Row[];

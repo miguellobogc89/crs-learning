@@ -1,9 +1,10 @@
 import path from "node:path";
-import { readReference } from "../verifier/reference";
+import { readImageReference, readReference } from "../verifier/reference";
+import { isIntakeImage } from "../formats";
 import { blocksFromWords, type BaseReadingFile } from "./contract";
 
 type NativeReader = (buffer: Buffer, fileName: string) => Promise<{ metodo: string; paginas: BaseReadingFile["paginas"] }>;
-type Deps = { readReference: typeof readReference; readNative: NativeReader };
+type Deps = { readReference: typeof readReference; readNative: NativeReader; readImage?: typeof readImageReference };
 
 /** Native (no AI) reading for non-PDF formats: spreadsheet cells and document text, from the existing extractor. */
 async function readNative(buffer: Buffer, fileName: string) {
@@ -19,6 +20,11 @@ export async function readBaseFile(buffer: Buffer, archivoId: string, archivo: s
   if (path.extname(archivo).toLowerCase() === ".pdf") {
     const referencias = await deps.readReference(buffer);
     return { archivoId, archivo, metodo: "pdf", referencias, paginas: referencias.map(blocksFromWords) };
+  }
+  if (isIntakeImage(archivo)) {
+    // Photos and image files: one page read with Google Vision (OCR), like the image pages of a PDF.
+    const referencias = await (deps.readImage ?? readImageReference)(buffer);
+    return { archivoId, archivo, metodo: "imagen", referencias, paginas: referencias.map(blocksFromWords) };
   }
   const native = await deps.readNative(buffer, archivo);
   if (native.metodo === "pdf_visual") throw new Error(`${archivo}: la lectura base no usa la IA de visión`);

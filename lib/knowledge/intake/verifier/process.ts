@@ -71,7 +71,7 @@ export async function runVerification(batchId: string, claimed: VerifiableIntake
   const referencias = [...(claimed.verificacion?.referencias ?? [])];
   // The base reading already holds the positioned words of every PDF page: reused, never read or paid again.
   const fromBase = (archivoId: string): FileReference | undefined => {
-    const file = claimed.lecturaBase?.resultado?.archivos.find(f => f.archivoId === archivoId && f.metodo === "pdf");
+    const file = claimed.lecturaBase?.resultado?.archivos.find(f => f.archivoId === archivoId && (f.metodo === "pdf" || f.metodo === "imagen"));
     return file ? { archivoId, paginas: file.referencias } : undefined;
   };
   const referenceOf = (archivoId: string) => referencias.find(r => r.archivoId === archivoId) ?? fromBase(archivoId);

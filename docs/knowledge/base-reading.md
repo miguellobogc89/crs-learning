@@ -20,6 +20,7 @@ The base reading keeps all the text for Knowledge and search.
 - **PDF**: positioned words per page — the PDF's own text layer; Google Cloud Vision OCR for image pages and for scans whose embedded text is a third-party OCR (see `reading-verifier.md`). Without `GOOGLE_CLOUD_VISION_API_KEY`, image pages are explicitly unread (`sin_referencia`), never silently empty.
 - **Spreadsheets (XLSX/CSV)**: native cells (existing extractor path, no AI).
 - **Other supported formats**: native text (existing extractor path, no AI).
+- **Images** (JPG, PNG, WEBP, GIF; photos of tickets or delivery notes): one page read with Google Vision `images:annotate` (`metodo: "imagen"`), like the image pages of a PDF. The targeted extraction sends the image itself to the model; the value verification uses these words. HEIC photos are refused with a plain explanation (share them as JPG).
 
 ## Output
 

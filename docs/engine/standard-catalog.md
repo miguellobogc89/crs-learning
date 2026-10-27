@@ -29,7 +29,7 @@ Checked on a local PostgreSQL 16 copy of the catalog tables seeded like the prod
 | `supplier_catalog` | Catálogos y tarifas de proveedor | name, reference, valid_from, valid_until, currency, notes |
 | `supplier_catalog_item` | Artículos de catálogo de proveedor | supplier_reference, description, unit, pack_size, unit_price, price_basis, tax_rate, min_quantity, valid_from |
 | `bank_account` | Cuentas bancarias | iban, bank_name, holder_name, currency |
-| `invoice` | Facturas | invoice_number, issue_date, due_date, currency, net_amount, tax_amount, total_amount, payment_terms, reference, notes, payment_method, payment_account, order_reference, invoice_kind, direction, period_start, period_end |
+| `invoice` | Facturas | invoice_number, issue_date, due_date, currency, net_amount, tax_amount, total_amount, payment_terms, reference, notes, payment_method, payment_account, order_reference, invoice_kind, direction, period_start, period_end, expense_category, expense_subcategory |
 | `invoice_line` | Líneas de factura | line_number, product_reference, description, quantity, unit, unit_price, discount_amount, tax_rate, line_total, unit_price_with_tax, line_total_with_tax, unit_price_basis, line_total_basis, calculation_detail, source_ticket_number, source_ticket_date |
 | `invoice_tax_line` | Desglose de impuestos | tax_type, tax_rate, taxable_base, tax_amount |
 | `delivery_note` | Albaranes | delivery_note_number, issue_date, order_reference, total_amount, notes |

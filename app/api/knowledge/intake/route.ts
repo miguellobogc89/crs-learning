@@ -1,5 +1,5 @@
 import { EXTRACTOR_UPLOAD_TYPE } from "@/lib/knowledge/intake/extractor/contract";
-import { isSupportedKnowledgeDocument } from "@/lib/knowledge/import/supported-formats";
+import { intakeFormatProblem, isIntakeImage, INTAKE_IMAGE_MAX_BYTES, intakeImageMime } from "@/lib/knowledge/intake/formats";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -23,10 +23,11 @@ export async function POST(request: Request) {
     const files = form.getAll("files").filter((f): f is File => f instanceof File);
     if (!files.length || files.length > 100 || files.reduce((n,f) => n+f.size,0) > 150*1024*1024) throw new Error("Selecciona entre 1 y 100 archivos, hasta 150 MB");
     const inventory = buildKnowledgeImportInventory({ mode: files.length === 1 && files[0].name.toLowerCase().endsWith(".zip") ? "zip" : "files",
-      files: await Promise.all(files.map(async (f,i) => ({ id: `source-${i}`, fileName: f.name, relativePath: f.name, mimeType: f.type, content: new Uint8Array(await f.arrayBuffer()) }))) });
+      files: await Promise.all(files.map(async (f,i) => ({ id: `source-${i}`, fileName: f.name, relativePath: f.name, mimeType: f.type || intakeImageMime(f.name) || "", content: new Uint8Array(await f.arrayBuffer()) }))) });
     if (!inventory.files.length) throw new Error("No hay documentos compatibles");
-    const unsupported = inventory.files.filter(file => !isSupportedKnowledgeDocument(file.fileName));
-    if (unsupported.length) throw new Error(`Formatos no admitidos: ${unsupported.map(f => f.fileName).join(", ")}`);
+    const problems = inventory.files.map(file => intakeFormatProblem(file.fileName)).filter((p): p is string => p !== null);
+    if (problems.length) throw new Error(problems.join(" · "));
+    if (inventory.files.some(f => isIntakeImage(f.fileName) && f.content.byteLength > INTAKE_IMAGE_MAX_BYTES)) throw new Error("Cada imagen admite un máximo de 20 MB");
     if (inventory.files.some(f => f.fileName.toLowerCase().endsWith(".pdf") && f.content.byteLength > 20*1024*1024)) throw new Error("Cada PDF admite un máximo de 20 MB en extracción visual");
     const staged = [];
     for (const [index, file] of inventory.files.entries()) {

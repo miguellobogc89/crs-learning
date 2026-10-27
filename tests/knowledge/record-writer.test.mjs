@@ -46,7 +46,8 @@ test('plan: typed values with printed evidence, details under their invoice, rel
  const plan=planner.buildWritePlan(extraction,rec);
  const by=ref=>plan.registros.find(r=>r.ref===ref);
  const inv=by('invoice:B00000000/F-1');
- assert.deepEqual(inv.valores,{invoice_number:'F-1',issue_date:'2026-01-27',net_amount:'100.00',total_amount:'121.00'});
+ assert.deepEqual(inv.valores,{invoice_number:'F-1',issue_date:'2026-01-27',net_amount:'100.00',total_amount:'121.00',expense_category:'compras',expense_subcategory:'compra_articulos'});
+ assert.equal(by('invoice:B00000000/F-2').valores.expense_category,'suministros','electricity → supplies');
  assert.equal(inv.evidencias.find(e=>e.campo==='net_amount').impreso,'100,00');
  const supplier=by('company:B00000000');assert.equal(supplier.valores.tax_identifier,'B00000000','identifier stored comparable');
  assert.equal(supplier.valores.legal_name,'PROVEEDOR DEMO SL','first printed value wins');assert.equal(supplier.evidencias.find(e=>e.campo==='tax_identifier').impreso,'B-00000000');

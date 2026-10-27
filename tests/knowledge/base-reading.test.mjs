@@ -26,7 +26,8 @@ test('OCR pages are labelled; pages without a reading are explicit, never empty 
  assert.deepEqual(tall.bloques.map(b=>b.texto),['Total','Inscrita'],'tall narrow OCR words are rotated text');
 });
 
-const read=load('lib/knowledge/intake/base-reading/read.ts',{'node:path':await import('node:path'),'../verifier/reference':{},'./contract':contract});
+const formats=load('lib/knowledge/intake/formats.ts',{'node:path':await import('node:path'),'@/lib/knowledge/import/supported-formats':load('lib/knowledge/import/supported-formats.ts')});
+const read=load('lib/knowledge/intake/base-reading/read.ts',{'node:path':await import('node:path'),'../verifier/reference':{},'./contract':contract,'../formats':formats});
 test('PDF: positioned words (text layer or OCR) without the vision model; other formats: native reading',async()=>{
  let native=0;
  const deps={readReference:async()=>[page],readNative:async()=>{native++;return {metodo:'hoja_nativa',paginas:[{numero:1,bloques:[{tipo:'tabla',columnas:['A'],filas:[['1']]}],incidencias:[]}]};}};
@@ -74,4 +75,14 @@ test('stage gates: base reading never during the vision reading; vision reading 
  assert.match(extractor,/\{ \.\.\.state, version: 1, archivos/,'the vision reading keeps the earlier checkpoints');
  const queue=readFileSync('components/knowledge/import/intake-queue.tsx','utf8');
  assert.match(queue,/advanceIntake\(/,'the app queue advances every stage, not only the vision reading');
+});
+
+test('images: accepted formats, HEIC explained; one page read with Google Vision as OCR; never the vision model',async()=>{
+ assert.equal(formats.intakeFormatProblem('ticket.jpg'),null);assert.equal(formats.intakeFormatProblem('Ticket.PNG'),null);assert.equal(formats.intakeFormatProblem('factura.pdf'),null);
+ assert.match(formats.intakeFormatProblem('IMG_1234.HEIC'),/JPG/);assert.match(formats.intakeFormatProblem('x.exe'),/no admitido/);
+ let native=0;
+ const img=await read.readBaseFile(Buffer.from('jpg'),'f1','ticket.jpg',{readReference:async()=>{throw Error('no PDF');},readNative:async()=>{native++;return {};},
+  readImage:async()=>[{numero:1,fuente:'ocr',palabras:[{t:'TOTAL',x0:0.1,x1:0.2,y0:0.5,y1:0.52},{t:'12,40',x0:0.7,x1:0.8,y0:0.5,y1:0.52}]}]});
+ assert.equal(img.metodo,'imagen');assert.equal(native,0);assert.equal(img.referencias[0].fuente,'ocr');
+ assert.equal(img.paginas[0].bloques[0].texto,'TOTAL 12,40');
 });

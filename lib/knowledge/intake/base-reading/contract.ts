@@ -11,7 +11,7 @@ export const BASE_READING_REVISION = 1;
 
 export type BaseReadingFile = {
   archivoId: string; archivo: string;
-  metodo: "pdf" | "hoja_nativa" | "texto_nativo";
+  metodo: "pdf" | "imagen" | "hoja_nativa" | "texto_nativo";
   /** Positioned words per PDF page (text layer or OCR); empty for non-PDF formats. */
   referencias: PageReference[];
   /** Text grouped into numbered blocks per page, in the reading contract shape used by the classifier. */

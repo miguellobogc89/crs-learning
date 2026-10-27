@@ -15,7 +15,7 @@ export type CatalogType = { key: string; name: string; description: string; fiel
 export type CatalogRelation = { key: string; name: string; from: string; to: string; cardinality: "one_to_one" | "one_to_many" | "many_to_many"; description: string };
 
 /** Bump when this file changes: the SQL records it in the version notes. */
-export const STANDARD_CATALOG_REVISION = "2026-10-27.3";
+export const STANDARD_CATALOG_REVISION = "2026-10-27.4";
 
 const f = (key: string, name: string, type: CatalogFieldType, description?: string, extra: { required?: true; unique?: true } = {}): CatalogField =>
   ({ key, name, type, ...(description ? { description } : {}), ...extra });
@@ -92,6 +92,8 @@ export const STANDARD_TYPES: CatalogType[] = [
     f("invoice_kind", "Clase de factura", "text", "Ordinaria, simplificada (ticket) o rectificativa."),
     f("direction", "Sentido", "text", "Recibida (compra o gasto) o emitida (venta)."),
     f("period_start", "Inicio del periodo facturado", "date"), f("period_end", "Fin del periodo facturado", "date"),
+    f("expense_category", "Categoría de gasto", "text", "suministros, compras, servicios, alquiler, rectificativas u otros (según la clasificación del documento)."),
+    f("expense_subcategory", "Subcategoría de gasto", "text", "electricidad, gas, agua, telecomunicaciones, compra_articulos, ticket…"),
   ] },
   { key: "invoice_line", name: "Líneas de factura", description: "Artículos o conceptos de una factura.", fields: [
     ...documentLine,
@@ -250,3 +252,19 @@ export const FIELD_SET_MAPPING: Record<string, Record<string, { type: string; fi
   },
   lines_service: { number: { type: "telecom_line", field: "number" }, service: { type: "telecom_line", field: "service" } },
 };
+
+/** Expense category of an invoice from its classified subtype (for analytics); null subtype → "otros". */
+export const EXPENSE_CATEGORY: Record<string, { category: string; subcategory: string }> = {
+  suministro_electricidad: { category: "suministros", subcategory: "electricidad" },
+  suministro_gas: { category: "suministros", subcategory: "gas" },
+  suministro_agua: { category: "suministros", subcategory: "agua" },
+  telecomunicaciones: { category: "suministros", subcategory: "telecomunicaciones" },
+  compra_articulos: { category: "compras", subcategory: "compra_articulos" },
+  factura_simplificada: { category: "compras", subcategory: "ticket" },
+  servicios_profesionales: { category: "servicios", subcategory: "servicios_profesionales" },
+  alquiler: { category: "alquiler", subcategory: "alquiler" },
+  rectificativa_abono: { category: "rectificativas", subcategory: "rectificativa_abono" },
+};
+export function expenseCategory(subtipo: string | null | undefined) {
+  return (subtipo && EXPENSE_CATEGORY[subtipo]) || { category: "otros", subcategory: subtipo ?? "sin_subtipo" };
+}

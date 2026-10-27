@@ -29,6 +29,7 @@ The orchestrator stops at this step even in automatic mode. The modal shows the 
 - Products are not created from line references yet (`product_invoice_lines` is ready in the catalog).
 - `company.is_own_company` is not set automatically.
 - Records are created as `draft`, like the existing Engine importer.
+- Each invoice gets `expense_category` / `expense_subcategory` from its classification (suministros, compras, servicios, alquiler, rectificativas, otros) for analytics. Invoices saved before this change are filled by `scripts/neon/20261027_backfill_expense_category.sql` (re-runnable; a new revision per record).
 - Evidence is stored with `origin_type: "integration"`: the database only accepts `document` evidence linked to a Knowledge file, and the originals are still files of the intake batch. The locator keeps batch, file, page and field; it can be linked to the Knowledge file once the originals are published to Knowledge.
 
 ## Checks

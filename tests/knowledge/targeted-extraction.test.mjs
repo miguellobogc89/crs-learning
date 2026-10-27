@@ -68,9 +68,10 @@ test('validation corrects slips (page outside the part, duplicate proposals) and
  assert.throws(()=>contract.validateTargeted(broken,plans,'compra.pdf'),/falta la extracción de la parte p1/);
 });
 
+const formats=load('lib/knowledge/intake/formats.ts',{'node:path':path,'@/lib/knowledge/import/supported-formats':load('lib/knowledge/import/supported-formats.ts')});
 function extractor(respond,fullReading){
  const calls=[];
- const mod=load('lib/knowledge/intake/targeted/extract.ts',{'node:path':path,'@/lib/ai/openai':{getKnowledgeImportModel:()=>'gpt-5-mini',getOpenAIClient:()=>({})},'../targets/field-sets':sets,'./contract':contract});
+ const mod=load('lib/knowledge/intake/targeted/extract.ts',{'node:path':path,'@/lib/ai/openai':{getKnowledgeImportModel:()=>'gpt-5-mini',getOpenAIClient:()=>({})},'../targets/field-sets':sets,'./contract':contract,'../formats':formats});
  const client=()=>({responses:{create:async(req,opts)=>{calls.push({req,opts});return respond(req);}}});
  return {calls,run:(buf,c,base)=>mod.targetedExtractFile(buf,c,base,{client,model:()=>'gpt-5-mini',fullReading}),mod};
 }
@@ -178,4 +179,11 @@ test('second pass: missing required fields are searched in the base reading (mar
  const complete=extractor(()=>({status:'completed',output_text:JSON.stringify(output())}));
  await complete.run(Buffer.from('%PDF'),{...classified,partes:[classified.partes[0]]},baseText);
  assert.equal(complete.calls.length,1,'nothing missing: no second call');
+});
+
+test('images are sent to the model as images (not as text), once',async()=>{
+ const ex=extractor(()=>({status:'completed',output_text:JSON.stringify(output())}));
+ await ex.run(Buffer.from('jpg-bytes'),{...classified,archivo:'ticket.jpg',partes:[classified.partes[0]]},{...base,archivo:'ticket.jpg',metodo:'imagen'});
+ const content=ex.calls[0].req.input[0].content[0];
+ assert.equal(content.type,'input_image');assert.match(content.image_url,/^data:image\/jpeg;base64,/);
 });

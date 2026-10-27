@@ -35,7 +35,7 @@ export async function GET(_request: Request, context: Context) {
   const estado = status(state);
   // Independent readings (text layer / OCR words) for diagnosis; only for the batch owner. From the base reading
   // when it exists; older batches stored their own in the verification checkpoint.
-  const base = (payload?.lecturaBase?.resultado?.archivos ?? []).filter(f => f.metodo === "pdf").map(f => ({ archivoId: f.archivoId, paginas: f.referencias }));
+  const base = (payload?.lecturaBase?.resultado?.archivos ?? []).filter(f => f.metodo === "pdf" || f.metodo === "imagen").map(f => ({ archivoId: f.archivoId, paginas: f.referencias }));
   const referencias = [...(state?.referencias ?? []), ...base.filter(b => !(state?.referencias ?? []).some(r => r.archivoId === b.archivoId))];
   return NextResponse.json({ fase: "verificacion", estado, error: estado === "error" ? state?.error ?? null : null,
     resultado: estado === "completed" ? state?.resultado ?? null : null,

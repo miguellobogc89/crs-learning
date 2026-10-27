@@ -176,3 +176,40 @@ export async function readReference(buffer: Buffer, deps: { apiKey?: string | nu
       : "La página es una imagen y falta GOOGLE_CLOUD_VISION_API_KEY; no se ha podido verificar" };
   });
 }
+
+const VISION_IMAGE_ENDPOINT = "https://vision.googleapis.com/v1/images:annotate";
+type VisionImageResponse = { responses?: { fullTextAnnotation?: { pages?: (VisionPage & { width?: number; height?: number })[] }; error?: { message?: string } }[]; error?: { message?: string } };
+type ImageWord = { boundingBox?: { vertices?: Vertex[]; normalizedVertices?: Vertex[] }; symbols?: { text?: string }[] };
+
+/** Words of a photo or image file (one page), with coordinates normalised to the image (0..1). */
+export function parseVisionImageResponse(body: VisionImageResponse): RefWord[] {
+  if (body.error) throw new Error(`Google Vision: ${body.error.message ?? "error desconocido"}`);
+  const response = body.responses?.[0];
+  if (response?.error) throw new Error(`Google Vision: ${response.error.message ?? "error en la imagen"}`);
+  const words: RefWord[] = [];
+  for (const page of response?.fullTextAnnotation?.pages ?? []) {
+    const width = page.width || 1, height = page.height || 1;
+    for (const block of page.blocks ?? []) for (const paragraph of block.paragraphs ?? []) for (const word of (paragraph.words ?? []) as ImageWord[]) {
+      const text = (word.symbols ?? []).map(s => s.text ?? "").join("");
+      const normalized = word.boundingBox?.normalizedVertices?.length ? word.boundingBox.normalizedVertices
+        : (word.boundingBox?.vertices ?? []).map(v => ({ x: (v.x ?? 0) / width, y: (v.y ?? 0) / height }));
+      if (!text.trim() || !normalized.length) continue;
+      const xs = normalized.map(v => v.x ?? 0), ys = normalized.map(v => v.y ?? 0);
+      words.push({ t: text, x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) });
+    }
+  }
+  return words;
+}
+
+/** Reads an image file (JPG, PNG, WEBP…) with Google Vision. Without a key the page is explicitly unread. */
+export async function readImageReference(buffer: Buffer, deps: { apiKey?: string | null; fetcher?: typeof fetch } = {}): Promise<PageReference[]> {
+  const apiKey = deps.apiKey === undefined ? visionApiKey() : deps.apiKey;
+  if (!apiKey) return [{ numero: 1, fuente: "sin_referencia", palabras: [], aviso: "La imagen no se ha podido leer: falta GOOGLE_CLOUD_VISION_API_KEY" }];
+  const response = await (deps.fetcher ?? fetch)(VISION_IMAGE_ENDPOINT, {
+    method: "POST", headers: { "Content-Type": "application/json", "X-Goog-Api-Key": apiKey }, signal: AbortSignal.timeout(VISION_TIMEOUT_MS),
+    body: JSON.stringify({ requests: [{ image: { content: buffer.toString("base64") }, features: [{ type: "DOCUMENT_TEXT_DETECTION" }], imageContext: { languageHints: ["es"] } }] }),
+  });
+  const body = await response.json().catch(() => ({})) as VisionImageResponse;
+  if (!response.ok) throw new Error(`Google Vision respondió ${response.status}: ${body.error?.message ?? "sin detalle"}`);
+  return [{ numero: 1, fuente: "ocr", palabras: parseVisionImageResponse(body) }];
+}
