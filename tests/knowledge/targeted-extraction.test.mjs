@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 function load(file,deps={}){const m={exports:{}};new Function('require','module','exports',ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(n=>{if(n in deps)return deps[n];throw Error(n);},m,m.exports);return m.exports;}
+const transientMod=load('lib/knowledge/intake/transient.ts');
 const taxonomy=load('lib/knowledge/intake/classifier/taxonomy.ts');
 const sets=load('lib/knowledge/intake/targets/field-sets.ts',{'../classifier/taxonomy':taxonomy});
 const contract=load('lib/knowledge/intake/targeted/contract.ts',{'../targets/field-sets':sets});
@@ -139,7 +140,7 @@ test('extraction stage uses the targeted extraction for classified batches and k
  const tx={knowledge_imports:{updateMany:async a=>{updates.push(a);return {count:1};}},knowledge_import_files:{update:async a=>{fileUpdate=a;}}};
  const db={knowledge_imports:{findFirstOrThrow:async()=>batch,updateMany:async a=>{updates.push(a);return {count:1};}},$transaction:async fn=>fn(tx)};
  let targetedCalls=0,fullCalls=0;
- const service=load('lib/knowledge/intake/extractor/process.ts',{'@prisma/client':{},'@/lib/prisma':{prisma:db},'@/lib/storage/knowledge-storage':{readKnowledgeFile:async()=>Buffer.from('%PDF')},
+ const service=load('lib/knowledge/intake/extractor/process.ts',{'../transient':transientMod,'@prisma/client':{},'@/lib/prisma':{prisma:db},'@/lib/storage/knowledge-storage':{readKnowledgeFile:async()=>Buffer.from('%PDF')},
   './extract':{extractDocument:async()=>{fullCalls++;return {metodo:'pdf_visual',paginas:[]};}},'./contract':extractorContract,'../targeted/contract':contract,
   '../targeted/extract':{targetedExtractFile:async(_b,c)=>{targetedCalls++;return {archivoId:c.archivoId,archivo:c.archivo,partes:[],incidencias:[]};}}});
  await service.processExtractor('b',new Date());

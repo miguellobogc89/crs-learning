@@ -54,10 +54,15 @@ export class IntakeQueue {
     const sleep = this.options.sleep ?? (ms => new Promise(r => setTimeout(r, ms)));
     const update = (status: QueueStatus, phase: string, error: string | null = null) => this.options.onUpdate({ id, status, phase, error });
     update("procesando", "");
+    let failures = 0;
     while (!this.stopped) {
       let view: View;
-      try { view = await this.options.advance(id); }
-      catch (e) { update("error", "", e instanceof Error ? e.message : String(e)); return; }
+      try { view = await this.options.advance(id); failures = 0; }
+      catch (e) {
+        // A dropped request (network, server restarting) is not an error of the batch: try again a few times.
+        if (++failures < 4) { await sleep((this.options.pollMs ?? 4000) * failures * 2); continue; }
+        update("error", "", e instanceof Error ? e.message : String(e)); return;
+      }
       if (view.status === "error") { update("error", view.phase, view.error); return; }
       if (view.status === "waiting" && view.phase === "escritura") { update("por_guardar", "escritura"); return; }
       if (view.status === "completed") {

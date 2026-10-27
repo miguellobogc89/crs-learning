@@ -78,6 +78,7 @@ export function DriveFilesManager({ libraryId }: { libraryId: string | null }) {
   const visible = filter === "todos" ? rows : rows.filter(r => r.estado === filter);
   const notBrought = rows.filter(r => r.estado === "sin_traer").map(r => r.id);
   const toSave = [...new Set(rows.filter(r => r.estado === "por_guardar" && r.loteId).map(r => r.loteId!))];
+  const failed = [...new Set(rows.filter(r => r.estado === "error" && r.fase === "lectura" && r.loteId).map(r => r.loteId!))];
   const canManage = data?.canManage ?? false;
 
   function toggle(id: string) { setSelected(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
@@ -111,6 +112,8 @@ export function DriveFilesManager({ libraryId }: { libraryId: string | null }) {
       runner.current?.forget(loteId); runner.current?.add([loteId]);
     } catch (e) { setNotice({ kind: "error", text: e instanceof Error ? e.message : String(e) }); }
   }
+  /** Explicit: every batch whose reading stopped with an error goes on from the document that failed. */
+  async function resumeAll() { setNotice(null); for (const id of failed) await resume(id); }
 
   async function saveAll() {
     setConfirmSave(false); setSaving({ done: 0, total: toSave.length }); setNotice(null);
@@ -148,6 +151,7 @@ export function DriveFilesManager({ libraryId }: { libraryId: string | null }) {
         ? <><span className="text-xs text-slate-600">Se guardarán los lotes sin decisiones pendientes. ¿Seguro?</span>
             <Button variant="brand" size="sm" onClick={saveAll}>Sí, guardar</Button><Button variant="ghost" size="sm" onClick={() => setConfirmSave(false)}>Cancelar</Button></>
         : <Button variant="outline" size="sm" disabled={!!saving || !!bringing} onClick={() => setConfirmSave(true)}>Guardar los que no tienen dudas ({plural(toSave.length, "lote", "lotes")})</Button>)}
+      {canManage && failed.length > 0 && <Button variant="outline" size="sm" disabled={!!bringing} onClick={() => void resumeAll()}>Continuar los que fallaron ({plural(failed.length, "lote", "lotes")})</Button>}
       <Button variant="ghost" size="sm" onClick={() => void load()} aria-label="Actualizar"><RefreshCw className="size-3.5" /></Button>
     </div>
     {notice && <p className={cn("rounded-lg px-4 py-2 text-sm", notice.kind === "ok" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-700")}>{notice.text}</p>}

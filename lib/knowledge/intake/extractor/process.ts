@@ -1,3 +1,4 @@
+import { withTransientRetry } from "../transient";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { readKnowledgeFile } from "@/lib/storage/knowledge-storage";
@@ -23,13 +24,15 @@ export async function processExtractor(id: string, lease: Date) {
     if (state?.version !== 1 || !Array.isArray(state.archivos)) throw new Error("Estado del extractor inválido");
     const file = batch.knowledge_import_files.find(f => !state.archivos.some(a => a.archivoId === f.id));
     if (!file?.storage_path) throw new Error("Falta un archivo original pendiente de extracción");
-    const buffer = await readKnowledgeFile(file.storage_path);
     // Classified batches get the targeted extraction; without a classification (older batches, or a failed one)
     // the full visual reading is kept as before.
     // The mode is decided once for the whole batch, so a result never mixes both kinds of files.
     const targetedBatch = state.clasificacion?.status === "completed" && state.lecturaBase?.status === "completed";
-    console.info(`[intake] ${id} · ${file.file_name}: extracción ${targetedBatch ? "dirigida" : "completa"} (lectura base: ${state.lecturaBase?.status ?? "ausente"}, clasificación: ${state.clasificacion?.status ?? "ausente"})`);
+    // Network hiccups (OpenAI, Google, file storage) are retried a couple of times before the batch stops.
+    const { entry, text } = await withTransientRetry(async (): Promise<{ entry: ExtractedFile | TargetedFile; text: string }> => {
+    const buffer = await readKnowledgeFile(file.storage_path!);
     let entry: ExtractedFile | TargetedFile, text: string;
+    console.info(`[intake] ${id} · ${file.file_name}: extracción ${targetedBatch ? "dirigida" : "completa"} (lectura base: ${state.lecturaBase?.status ?? "ausente"}, clasificación: ${state.clasificacion?.status ?? "ausente"})`);
     if (targetedBatch) {
       const base = state.lecturaBase!.resultado!.archivos.find(b => b.archivoId === file.id);
       if (!base) throw new Error(`${file.file_name}: falta su lectura base`);
@@ -43,6 +46,8 @@ export async function processExtractor(id: string, lease: Date) {
       entry = { archivoId: file.id, archivo: file.file_name, ...document };
       text = extractionText(document);
     }
+    return { entry, text };
+    }, { onRetry: (attempt, error) => console.warn(`[intake] ${id} · ${file.file_name}: fallo de red (${error instanceof Error ? error.message : error}); reintento ${attempt}`) });
     const archivos = [...state.archivos, entry];
     const completed = archivos.length === batch.knowledge_import_files.length;
     const targeted = targetedBatch;

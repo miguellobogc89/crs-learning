@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { knowledgeLibraryWriteWhere } from "@/lib/knowledge/access-control";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
+import { STALE_RUN_MS } from "@/lib/knowledge/intake/transient";
 import { processExtractor, EXTRACTOR_UPLOAD_TYPE, type ExtractorState } from "@/lib/knowledge/intake/extractor/process";
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -22,7 +23,9 @@ export async function GET(_request: Request, context: Context) {
   const state = batch.proposal_json as unknown as ExtractorState;
   // `pipeline` tells which server code answered (useful to detect a stale dev server).
   const stages = state as { lecturaBase?: { status?: string }; clasificacion?: { status?: string } } | null;
-  return NextResponse.json({ loteId: batch.id, pipeline: "lectura_base+clasificacion+extraccion_dirigida", estado: batch.status, fase: "lectura", error: batch.error_message,
+  // A run that died with the server (restart, another computer) is reported as pending, so "continuar" claims it again.
+  const stale = batch.status === "intake_running" && (!batch.processing_started_at || batch.processing_started_at.getTime() < Date.now() - STALE_RUN_MS);
+  return NextResponse.json({ loteId: batch.id, pipeline: "lectura_base+clasificacion+extraccion_dirigida", estado: stale ? "intake_pending" : batch.status, fase: "lectura", error: batch.error_message,
     etapas: { lecturaBase: stages?.lecturaBase?.status ?? null, clasificacion: stages?.clasificacion?.status ?? null },
     resultado: batch.status === "intake_completed" ? state.resultado ?? null : null });
 }
@@ -36,7 +39,7 @@ export async function POST(_request: Request, context: Context) {
     return NextResponse.json({ error: "Espera a que terminen la lectura base y la clasificación" }, { status: 409 });
   }
   const lease = new Date();
-  const claimed = await prisma.knowledge_imports.updateMany({ where: { id: batch.id, OR: [ { status: { in: ["intake_pending", "intake_error"] } }, { status: "intake_running", processing_started_at: { lt: new Date(Date.now()-360000) } } ] },
+  const claimed = await prisma.knowledge_imports.updateMany({ where: { id: batch.id, OR: [ { status: { in: ["intake_pending", "intake_error"] } }, { status: "intake_running", processing_started_at: { lt: new Date(Date.now() - STALE_RUN_MS) } } ] },
     data: { status: "intake_running", processing_started_at: lease, error_message: null } });
   if (claimed.count) after(() => processExtractor(batch.id, lease));
   return NextResponse.json({ estado: "intake_running" }, { status: 202 });

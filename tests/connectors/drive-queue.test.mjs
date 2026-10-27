@@ -60,3 +60,12 @@ test('save clean: only batches without decisions; the rest are left for the pers
  assert.deepEqual(out.guardados,['L1','L3']);assert.deepEqual(out.conDudas,['L2']);assert.deepEqual(out.errores.map(e=>e.id),['L4','L5']);
  assert.ok(!calls.includes('POST L2'),'never saves a batch with pending decisions');assert.deepEqual(progress,[1,2,3,4,5]);
 });
+
+test('queue: a dropped request is retried; only repeated failures mark the batch',async()=>{
+ let n=0;const updates=[];let idle;const done=new Promise(r=>idle=r);
+ const queue=new q.IntakeQueue({advance:async()=>{n++;if(n<3)throw new Error('Failed to fetch');return{status:'waiting',phase:'escritura',error:null};},onUpdate:u=>updates.push(u),onIdle:()=>idle(),sleep:async()=>{}});
+ queue.add(['A']);await done;assert.equal(updates.at(-1).status,'por_guardar');
+ let idle2;const done2=new Promise(r=>idle2=r);const u2=[];
+ const q2=new q.IntakeQueue({advance:async()=>{throw new Error('Failed to fetch');},onUpdate:u=>u2.push(u),onIdle:()=>idle2(),sleep:async()=>{}});
+ q2.add(['B']);await done2;assert.equal(u2.at(-1).status,'error');
+});
