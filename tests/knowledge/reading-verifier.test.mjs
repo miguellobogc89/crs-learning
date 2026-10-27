@@ -108,7 +108,7 @@ function processModule(db,deps){
 const extraction={module:'document_extractor',version:1,loteId:'b',archivos:[{archivoId:'f1',archivo:'factura.pdf',metodo:'pdf_visual',paginas:[page()]},{archivoId:'f2',archivo:'tabla.xlsx',metodo:'hoja_nativa',paginas:[{numero:1,bloques:[],incidencias:['Hoja vacía']}]}]};
 function fakeDb(){
  const db={saves:[],stored:null,knowledge_import_files:{findMany:async()=>[{id:'f1',storage_path:'knowledge/f1.pdf'}]},
-  knowledge_imports:{updateMany:async args=>{assert.equal(args.where.upload_type,'intake-extractor-v1');assert.deepEqual(args.where.status,{not:'intake_running'});
+  knowledge_imports:{updateMany:async args=>{assert.equal(args.where.upload_type,'intake-extractor-v2');assert.deepEqual(args.where.status,{not:'intake_running'});
    if(db.stored&&JSON.stringify(args.where.proposal_json.equals)!==JSON.stringify(db.stored))return {count:0};db.stored=args.data.proposal_json;db.saves.push(args.data.proposal_json);return {count:1};}}};
  return db;
 }

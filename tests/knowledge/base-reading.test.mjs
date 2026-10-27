@@ -39,7 +39,7 @@ test('PDF: positioned words (text layer or OCR) without the vision model; other 
 
 function fakeDb(files){
  const db={saves:[],stored:null,knowledge_import_files:{findMany:async args=>{assert.equal(args.where.import_id,'b');return files;}},
-  knowledge_imports:{updateMany:async args=>{assert.equal(args.where.upload_type,'intake-extractor-v1');
+  knowledge_imports:{updateMany:async args=>{assert.equal(args.where.upload_type,'intake-extractor-v2');
    if(db.stored&&JSON.stringify(args.where.proposal_json.equals)!==JSON.stringify(db.stored))return {count:0};db.stored=args.data.proposal_json;db.saves.push(args.data.proposal_json);return {count:1};}}};
  return db;
 }

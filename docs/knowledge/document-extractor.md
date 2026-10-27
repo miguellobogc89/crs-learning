@@ -20,7 +20,7 @@ There are no business entities, database tables, relationships, classifications 
 
 ## Persistence and scope
 
-No migration: use existing import staging with discriminator `intake-extractor-v1`. Each source is extracted once per persisted batch. A parent-lease claim guards transactional file/result writes. A failed later source does not erase earlier document JSON. Final output is published only after all sources succeed. No Engine catalogue, business records or Knowledge articles are read or modified. Existing classification/discovery checkpoints remain untouched on older batches.
+No migration: use existing import staging with discriminator `intake-extractor-v2` (v1 batches belong to the pipeline before base reading, classification and targeted extraction; a server still running that code never sees v2 batches, so two code versions sharing one database cannot process the same batch). Each source is extracted once per persisted batch. A parent-lease claim guards transactional file/result writes. A failed later source does not erase earlier document JSON. Final output is published only after all sources succeed. No Engine catalogue, business records or Knowledge articles are read or modified. Existing classification/discovery checkpoints remain untouched on older batches.
 
 The app-level queue advances extractor staging while the app is open. Closing all tabs pauses scheduling of subsequent files; the current server extraction can finish. This is not an external worker. Model calls have a 120-second timeout, no hidden retries and a 24,000-token output cap. Each PDF is currently limited to 20 MB. The original stays in private storage. Failed output is surfaced rather than silently falling back to flattened text.
 

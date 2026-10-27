@@ -1,4 +1,5 @@
-export const EXTRACTOR_UPLOAD_TYPE = "intake-extractor-v1";
+/** Versioned on purpose: a server running older pipeline code never sees (or processes) batches of this pipeline. */
+export const EXTRACTOR_UPLOAD_TYPE = "intake-extractor-v2";
 export type TextBlock = { tipo: "texto"; texto: string };
 export type TableBlock = { tipo: "tabla"; columnas: string[]; filas: (string | null)[][] };
 export type Page = { numero: number; bloques: (TextBlock | TableBlock)[]; incidencias: string[] };
