@@ -12,7 +12,8 @@ export const COUNT_LIMIT = 1000;
 
 export type DriveFolder = { id: string; name: string; shared: boolean };
 export type FolderSetting = { id: string; name: string; selectedAt: string; selectedBy: string };
-export type DriveSettings = { folder?: FolderSetting };
+export type LastSync = { at: string; loteId: string | null; importados: number; duplicados: number; omitidos: number };
+export type DriveSettings = { folder?: FolderSetting; lastSync?: LastSync };
 
 export class DriveError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -74,6 +75,38 @@ export async function countDocuments(accessToken: string, folderId: string, fetc
 export function readSettings(value: unknown): DriveSettings {
   const v = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const f = v.folder as Record<string, unknown> | undefined;
-  return f && typeof f.id === "string" && typeof f.name === "string"
-    ? { folder: { id: f.id, name: f.name, selectedAt: String(f.selectedAt ?? ""), selectedBy: String(f.selectedBy ?? "") } } : {};
+  const l = v.lastSync as Record<string, unknown> | undefined;
+  return {
+    ...(f && typeof f.id === "string" && typeof f.name === "string" ? { folder: { id: f.id, name: f.name, selectedAt: String(f.selectedAt ?? ""), selectedBy: String(f.selectedBy ?? "") } } : {}),
+    ...(l && typeof l.at === "string" ? { lastSync: { at: l.at, loteId: typeof l.loteId === "string" ? l.loteId : null,
+      importados: Number(l.importados) || 0, duplicados: Number(l.duplicados) || 0, omitidos: Number(l.omitidos) || 0 } } : {}),
+  };
+}
+
+export type DriveFile = { id: string; name: string; mimeType: string; size: number | null; md5: string | null; modifiedAt: string | null };
+export const LIST_LIMIT = 2000;
+
+/** Readable documents directly in the folder, most recently modified first (up to LIST_LIMIT). */
+export async function listImportableFiles(accessToken: string, folderId: string, fetcher: Fetcher = fetch): Promise<{ files: DriveFile[]; capped: boolean }> {
+  if (!validId(folderId)) throw new DriveError(400, "Carpeta no válida");
+  const mimes = IMPORTABLE_MIME.map(m => `mimeType = '${m}'`).join(" or ");
+  const files: DriveFile[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({ q: `'${folderId}' in parents and trashed = false and (${mimes})`, orderBy: "modifiedTime desc",
+      fields: "nextPageToken, files(id, name, mimeType, size, md5Checksum, modifiedTime)", pageSize: "1000",
+      supportsAllDrives: "true", includeItemsFromAllDrives: "true", ...(pageToken ? { pageToken } : {}) });
+    const json = await call<{ files?: { id: string; name: string; mimeType: string; size?: string; md5Checksum?: string; modifiedTime?: string }[]; nextPageToken?: string }>(`${API}?${params}`, accessToken, fetcher);
+    for (const f of json.files ?? []) files.push({ id: f.id, name: f.name, mimeType: f.mimeType, size: f.size ? Number(f.size) : null, md5: f.md5Checksum ?? null, modifiedAt: f.modifiedTime ?? null });
+    pageToken = json.nextPageToken;
+  } while (pageToken && files.length < LIST_LIMIT);
+  return { files, capped: !!pageToken };
+}
+
+/** The bytes of a file (read-only). */
+export async function downloadFile(accessToken: string, id: string, fetcher: Fetcher = fetch): Promise<Uint8Array> {
+  if (!validId(id)) throw new DriveError(400, "Archivo no válido");
+  const response = await fetcher(`${API}/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`, { headers: { authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) throw new DriveError(response.status, response.status === 403 ? "Drive no permite descargar este archivo" : `Drive respondió ${response.status} al descargar`);
+  return new Uint8Array(await response.arrayBuffer());
 }

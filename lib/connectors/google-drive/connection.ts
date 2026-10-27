@@ -72,9 +72,27 @@ export async function accessToken(workspaceId: string, origin: string, fetcher: 
   }
 }
 
+/** Merges into the stored settings (one key replaced, the others kept). Changing the folder forgets the last sync. */
 export async function saveSettings(workspaceId: string, settings: DriveSettings) {
-  await prisma.workspace_connections.update({ where: { workspace_id_provider: { workspace_id: workspaceId, provider: PROVIDER } },
-    data: { settings_json: settings as Prisma.InputJsonValue, updated_at: new Date() } });
+  const current = readSettings((await findConnection(workspaceId))?.settings_json);
+  const next: DriveSettings = { ...current, ...settings };
+  if (settings.folder && settings.folder.id !== current.folder?.id) delete next.lastSync;
+  // A raw merge keeps keys this code does not know (e.g. the sync lease).
+  await prisma.$executeRaw(Prisma.sql`UPDATE public.workspace_connections SET settings_json = (settings_json - 'lastSync') || ${JSON.stringify(next)}::jsonb, updated_at = now()
+    WHERE workspace_id = ${workspaceId}::uuid AND provider = ${PROVIDER}`);
+}
+
+/** One sync at a time per workspace (also across app instances): a lease in the connection that expires on its own. */
+export async function acquireSyncLease(workspaceId: string, minutes = 5): Promise<boolean> {
+  const rows = await prisma.$executeRaw(Prisma.sql`UPDATE public.workspace_connections
+    SET settings_json = settings_json || jsonb_build_object('syncLeaseUntil', (now() + make_interval(mins => ${minutes}))::text)
+    WHERE workspace_id = ${workspaceId}::uuid AND provider = ${PROVIDER}
+      AND (settings_json->>'syncLeaseUntil' IS NULL OR (settings_json->>'syncLeaseUntil')::timestamptz < now())`);
+  return rows === 1;
+}
+export async function releaseSyncLease(workspaceId: string) {
+  await prisma.$executeRaw(Prisma.sql`UPDATE public.workspace_connections SET settings_json = settings_json - 'syncLeaseUntil'
+    WHERE workspace_id = ${workspaceId}::uuid AND provider = ${PROVIDER}`);
 }
 
 /** Revokes the grant at Google (best effort) and deletes the connection and its tokens. */

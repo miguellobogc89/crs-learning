@@ -20,12 +20,26 @@ pasa a «Hay que reconectar».
 
 Es un permiso aparte del inicio de sesión con Google: conectar o desconectar Drive no cambia la sesión.
 
-Siguiente paso (3): «Sincronizar ahora» → documentos nuevos de la carpeta (sin duplicados por contenido) → importador → se
-paran antes de guardar.
+## Sincronizar (paso 3)
+
+`POST /api/connectors/google-drive/sync {limit?}` (10 por defecto, máximo 50) — `lib/connectors/google-drive/sync.ts`:
+
+1. Un candado en la conexión (`settings_json.syncLeaseUntil`, 5 min) impide dos sincronizaciones a la vez.
+2. Lista los PDF e imágenes de la carpeta, **más recientes primero**, y descarta los ya vistos (`connector_synced_files`,
+   salvo que su contenido haya cambiado en Drive).
+3. Descarga uno a uno (máximo 40 descargas por vez) y calcula el SHA-256. Si ese contenido ya está en cualquier lote del
+   espacio de trabajo (subido a mano o de Drive) → `duplicado`. Los archivos de más de 20 MB o que no se pueden descargar → `omitido`.
+4. Con los nuevos crea **un** lote de importación (`createIntakeBatch`, el mismo que la subida manual, que ahora guarda
+   el `content_hash` de cada archivo). Los lotes antiguos sin huella se calculan una vez.
+5. Registra cada archivo mirado (`importado` con su lote y archivo, `duplicado`, `omitido` con el motivo): nunca se vuelve a descargar.
+6. La tarjeta abre el lote en la ventana de importación, que avanza sola hasta «Guardar en mis datos» y espera a la persona.
+
+`GET …/sync` dice cuántos documentos faltan por traer (sin descargar nada).
 
 ## Puesta en marcha
 
-1. Neon: ejecutar `scripts/neon/20261027_workspace_connections.sql` y después `npx prisma generate`.
+1. Neon: ejecutar `scripts/neon/20261027_workspace_connections.sql` y `scripts/neon/20261027_connector_synced_files.sql`;
+   después `npx prisma generate` (con el servidor parado en Windows).
 2. Google Cloud Console (proyecto del ID de cliente):
    - Activar **Google Drive API**.
    - Credenciales → el cliente OAuth → URI de redirección autorizada:
@@ -48,4 +62,4 @@ paran antes de guardar.
 
 ## Tests
 
-`npm run test:connectors` (sin red: Google se simula).
+`npm run test:connectors` (sin red: Google, el almacenamiento y la base de datos se simulan).

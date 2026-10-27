@@ -3,10 +3,11 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Folder, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DriveFolderPicker } from "./drive-folder-picker";
+import { DriveSyncPanel, type LastSync } from "./drive-sync-panel";
 
 export type DriveCardState = {
   status: "disconnected" | "active" | "error"; email: string | null; name: string | null; connectedAt: string | null; lastError: string | null;
-  folder: { id: string; name: string } | null;
+  folder: { id: string; name: string } | null; lastSync: LastSync | null;
 };
 type Documents = { importable: number; other: number; capped: boolean };
 
@@ -52,7 +53,7 @@ export function DriveConnectorCard({ initial, canManage, flash }: { initial: Dri
       const r = await fetch("/api/connectors/google-drive", { method: "DELETE" });
       const json = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(json.error ?? "No se pudo desconectar");
-      setState({ status: "disconnected", email: null, name: null, connectedAt: null, lastError: null, folder: null });
+      setState({ status: "disconnected", email: null, name: null, connectedAt: null, lastError: null, folder: null, lastSync: null });
       setDocuments(null); setMessage(null);
     } catch (e) { setMessage({ kind: "error", message: e instanceof Error ? e.message : String(e) }); }
     finally { setBusy(false); setConfirming(false); }
@@ -98,9 +99,8 @@ export function DriveConnectorCard({ initial, canManage, flash }: { initial: Dri
       </div>
       {canManage && <Button variant={state.folder ? "outline" : "brand"} size="sm" onClick={() => setPicker(true)}>{state.folder ? "Cambiar carpeta" : "Elegir carpeta"}</Button>}
     </div>}
-    {state.status === "active" && state.folder && <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
-      Próximamente: «Sincronizar ahora» traerá los documentos nuevos de esta carpeta a tus importaciones para revisarlos antes de guardar.</p>}
+    {state.status === "active" && state.folder && !folderError && <DriveSyncPanel folderId={state.folder.id} canManage={canManage} lastSync={state.lastSync} />}
     {canManage && <DriveFolderPicker open={picker} onOpenChange={setPicker}
-      onChosen={r => { setState(s => ({ ...s, folder: r.folder })); setDocuments(r.documents); setFolderError(null); setMessage(null); }} />}
+      onChosen={r => { setState(s => ({ ...s, folder: r.folder, lastSync: s.folder?.id === r.folder.id ? s.lastSync : null })); setDocuments(r.documents); setFolderError(null); setMessage(null); }} />}
   </section>;
 }

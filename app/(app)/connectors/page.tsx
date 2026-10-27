@@ -27,7 +27,7 @@ export default async function ConnectorsPage({ searchParams }: { searchParams: P
       <p className="text-sm text-slate-500">Conecta las aplicaciones de donde salen tus documentos. Las conexiones son del espacio de trabajo <b className="font-medium text-slate-700">{ctx.workspaceName}</b>.</p>
       <DriveConnectorCard canManage={ctx.canManage} flash={flash}
         initial={{ status: view.status, email: view.email, name: view.name, connectedAt: view.connectedAt, lastError: view.lastError,
-          folder: view.settings.folder ? { id: view.settings.folder.id, name: view.settings.folder.name } : null }} />
+          folder: view.settings.folder ? { id: view.settings.folder.id, name: view.settings.folder.name } : null, lastSync: view.settings.lastSync ?? null }} />
       <div>
         <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Próximamente</h2>
         <div className="grid gap-3 sm:grid-cols-3">

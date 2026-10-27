@@ -22,7 +22,7 @@
     "test:knowledge:classifier": "node --test tests/knowledge/document-classifier.test.mjs tests/knowledge/field-sets.test.mjs tests/knowledge/intake-upload-flow.test.mjs",
     "knowledge:replay-verification": "node scripts/knowledge/replay-verification.mjs",
     "test:analytics": "node --test tests/analytics/analytics-compute.test.mjs",
-    "test:connectors": "node --test tests/connectors/google-drive.test.mjs"
+    "test:connectors": "node --test tests/connectors/google-drive.test.mjs tests/connectors/drive-sync.test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
