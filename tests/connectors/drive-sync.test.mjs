@@ -62,7 +62,7 @@ function harness({driveFiles,content,knownHashes=[],seen=[],lease=true,legacy=[]
  const sync=load('lib/connectors/google-drive/sync.ts',{'@/lib/prisma':{prisma},'@/lib/storage/knowledge-storage':{readKnowledgeFile:async p=>Buffer.from('legacy:'+p)},
   '@/lib/knowledge/intake/extractor/contract':{EXTRACTOR_UPLOAD_TYPE:'intake-extractor-v2'},'@/lib/knowledge/intake/create-batch':createBatch,
   './connection':connection,'./drive':drive,'./sync-plan':plan});
- return{state,run:(limit=10)=>sync.syncDrive({workspaceId:'W',userId:'U',origin:'http://l',limit,fetcher}),sync,fetcher,ConnectionError};
+ return{state,run:(limit=10,only)=>sync.syncDrive({workspaceId:'W',userId:'U',origin:'http://l',limit,only,fetcher}),sync,fetcher,ConnectionError};
 }
 
 test('sync: brings only new content, skips what is already imported (any name) and duplicates inside the folder',async()=>{
@@ -103,4 +103,12 @@ test('sync: files of earlier batches without a fingerprint are hashed once and c
  const r=await h.run();
  assert.deepEqual(h.state.hashed,[['OLD',sha('legacy:blob/x')]]);
  assert.equal(r.duplicados,1,'the same document uploaded by hand earlier is not brought again');assert.equal(r.loteId,null);
+});
+
+test('sync: only the files chosen on screen',async()=>{
+ const files=['A','B','C'].map(x=>f(x+'000001'));
+ const h=harness({driveFiles:files,content:{A000001:'a',B000001:'b',C000001:'c'}});
+ const r=await h.run(20,['C000001','A000001']);
+ assert.deepEqual(h.state.batches[0].documents.map(d=>d.fileName),['A000001.pdf','C000001.pdf'],'listing order kept');
+ assert.equal(r.pendientes,0);assert.equal(h.state.recorded.length,2);
 });

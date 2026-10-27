@@ -4,6 +4,7 @@ import { FileStack } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
+import { intakeRequest, readIntakeResponse } from "../intake-request";
 import { advanceIntake, PHASE_NAMES, type IntakeView } from "../advance-intake";
 import { ReadingVerification } from "./reading-verification";
 import { CopyButton } from "./copy-button";
@@ -22,17 +23,8 @@ import type { TargetedResult } from "@/lib/knowledge/intake/targeted/contract";
 import type { ClassificationResult } from "@/lib/knowledge/intake/classifier/contract";
 import type { VerificationReport } from "@/lib/knowledge/intake/verifier/contract";
 import type { KnowledgeImportModalProps } from "./knowledge-import-modal.types";
-async function request(url: string, method?: "POST") {
-  const response = await fetch(url, { method: method ?? "GET", cache: "no-store" });
-  // A stage that is busy or not ready yet (409) is not a failure: the next poll checks again.
-  if (method === "POST" && response.status === 409) return { estado: "ocupado" };
-  return read(response);
-}
-async function read(response: Response) {
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || "No se pudo completar la operación");
-  return body;
-}
+const request = intakeRequest;
+const read = readIntakeResponse;
 export function KnowledgeImportModal({ open, context, onOpenChange, selectedFiles, resumeImportId, stepwise = false }: KnowledgeImportModalProps) {
   const [files, setFiles] = useState<File[]>(selectedFiles ?? []);
   const [id, setId] = useState<string | null>(resumeImportId ?? null);

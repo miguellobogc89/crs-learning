@@ -63,3 +63,16 @@ Es un permiso aparte del inicio de sesión con Google: conectar o desconectar Dr
 ## Tests
 
 `npm run test:connectors` (sin red: Google, el almacenamiento y la base de datos se simulan).
+
+## Documentos de Drive (`/connectors/google-drive`)
+
+Pantalla con **todos** los documentos legibles de la carpeta y su estado, calculado en el servidor
+(`GET /api/connectors/google-drive/files`, `lib/connectors/google-drive/file-status.ts`): sin traer, en proceso (con su
+fase), por guardar, guardado, con error, repetido o no legible. Vale desde cualquier ordenador: el estado está en la base de datos.
+
+- **Traer y procesar**: los documentos marcados se traen en grupos de 20 (`POST …/sync {fileIds}`), cada grupo un lote.
+- **Cola** (`components/connectors/intake-queue.ts`): mientras la página está abierta, avanza los lotes de 2 en 2 hasta
+  «Guardar en mis datos», donde se paran. Al abrir la página continúa los lotes que estaban a medias. Nunca guarda.
+- **Guardar los que no tienen dudas**: tras confirmar, guarda uno a uno los lotes cuyo plan no tiene decisiones
+  pendientes; los que las tienen se abren con «Revisar».
+- **Continuar** en un lote con error de extracción lo reanuda desde el documento que falló.

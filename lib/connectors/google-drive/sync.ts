@@ -15,7 +15,7 @@ import type { Fetcher } from "./oauth";
  */
 const LEGACY_HASH_LIMIT = 300;
 
-async function workspaceLibrary(workspaceId: string, userId: string) {
+export async function workspaceLibrary(workspaceId: string, userId: string) {
   return prisma.knowledge_libraries.findFirst({ where: { workspace_id: workspaceId, owner_user_id: userId, parent_id: null }, select: { id: true }, orderBy: { created_at: "asc" } });
 }
 
@@ -63,7 +63,8 @@ export async function pendingCount(workspaceId: string, origin: string, fetcher:
   return { pendientes: pendingFiles(files, seen).length, listaIncompleta: capped };
 }
 
-export async function syncDrive(input: { workspaceId: string; userId: string; origin: string; limit: number; fetcher?: Fetcher }): Promise<SyncSummary> {
+/** `only`: the Drive file ids chosen on the "Documentos de Drive" screen (otherwise, the most recent pending ones). */
+export async function syncDrive(input: { workspaceId: string; userId: string; origin: string; limit: number; only?: string[]; fetcher?: Fetcher }): Promise<SyncSummary> {
   const { workspaceId, userId, origin, limit } = input;
   const fetcher = input.fetcher ?? fetch;
   const folder = readSettings((await findConnection(workspaceId))?.settings_json).folder;
@@ -74,7 +75,8 @@ export async function syncDrive(input: { workspaceId: string; userId: string; or
   try {
     const token = await accessToken(workspaceId, origin, fetcher);
     const [{ files, capped }, seen, known] = await Promise.all([listImportableFiles(token, folder.id, fetcher), seenFiles(workspaceId), knownHashes(workspaceId)]);
-    const pending = pendingFiles(files, seen);
+    const chosen = input.only ? new Set(input.only) : null;
+    const pending = pendingFiles(files, seen).filter(f => !chosen || chosen.has(f.id));
     const looked: Record_[] = [];
     const documents: (IntakeDocument & { file: DriveFile; hash: string })[] = [];
     let downloads = 0, index = 0;

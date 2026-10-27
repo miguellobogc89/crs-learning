@@ -27,7 +27,9 @@ export async function POST(request: Request) {
   const ctx = await connectorContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   if (!ctx.canManage) return NextResponse.json({ error: "Solo el propietario o un administrador puede sincronizar" }, { status: 403 });
-  const body = await request.json().catch(() => ({})) as { limit?: unknown };
-  try { return NextResponse.json(await syncDrive({ workspaceId: ctx.workspaceId, userId: ctx.userId, origin: new URL(request.url).origin, limit: syncLimit(body.limit) })); }
+  const body = await request.json().catch(() => ({})) as { limit?: unknown; fileIds?: unknown };
+  const only = Array.isArray(body.fileIds) ? body.fileIds.filter((x): x is string => typeof x === "string").slice(0, 50) : undefined;
+  if (Array.isArray(body.fileIds) && !only?.length) return NextResponse.json({ error: "No hay documentos seleccionados" }, { status: 400 });
+  try { return NextResponse.json(await syncDrive({ workspaceId: ctx.workspaceId, userId: ctx.userId, origin: new URL(request.url).origin, limit: syncLimit(body.limit), only })); }
   catch (error) { return failure(error); }
 }

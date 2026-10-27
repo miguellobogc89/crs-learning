@@ -53,7 +53,9 @@ test('modal has one processing action and no rediscovery or test controls',()=>{
 
 test('a busy or not-ready stage (409 on start) keeps the modal polling instead of stopping with an error',()=>{
  const modal=readFileSync('components/knowledge/import/modal/knowledge-import-modal.tsx','utf8');
- assert.match(modal,/method === "POST" && response\.status === 409\) return \{ estado: "ocupado" \}/);
+ const helper=readFileSync('components/knowledge/import/intake-request.ts','utf8');
+ assert.match(modal,/const request = intakeRequest;/,'the modal uses the shared helper');
+ assert.match(helper,/method === "POST" && response\.status === 409\) return \{ estado: "ocupado" \}/);
 });
 
 test('step by step: a stored batch stops at the next pending module and starts only it on "continuar"',async()=>{
