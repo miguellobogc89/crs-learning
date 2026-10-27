@@ -27,6 +27,11 @@ export async function POST(_request: Request, context: Context) {
   const batch = await find(context);
   if (!batch) return NextResponse.json({ error: "Lote no encontrado" }, { status: 404 });
   if (batch.status === "intake_completed") return NextResponse.json({ estado: batch.status });
+  // The vision reading runs after the base reading and the classification (completed, or failed and shown).
+  const stages = batch.proposal_json as { lecturaBase?: { status?: string }; clasificacion?: { status?: string } } | null;
+  if (stages?.lecturaBase?.status !== "completed" || (stages.clasificacion?.status !== "completed" && stages.clasificacion?.status !== "error")) {
+    return NextResponse.json({ error: "Espera a que terminen la lectura base y la clasificación" }, { status: 409 });
+  }
   const lease = new Date();
   const claimed = await prisma.knowledge_imports.updateMany({ where: { id: batch.id, OR: [ { status: { in: ["intake_pending", "intake_error"] } }, { status: "intake_running", processing_started_at: { lt: new Date(Date.now()-360000) } } ] },
     data: { status: "intake_running", processing_started_at: lease, error_message: null } });

@@ -17,7 +17,8 @@ export async function processExtractor(id: string, lease: Date) {
     const document = await extractDocument(await readKnowledgeFile(file.storage_path),file.file_name);
     const archivos = [...state.archivos,{ archivoId: file.id, archivo: file.file_name, ...document }];
     const completed = archivos.length === batch.knowledge_import_files.length;
-    const next: ExtractorState = { version: 1, archivos, ...(completed ? { resultado: extractionResult(id,archivos) } : {}) };
+    // Other modules' checkpoints (base reading, classification) are carried over untouched.
+    const next: ExtractorState = { ...state, version: 1, archivos, ...(completed ? { resultado: extractionResult(id,archivos) } : {}) };
     await prisma.$transaction(async tx => {
       const saved = await tx.knowledge_imports.updateMany({ where: owned, data: { status: completed ? "intake_completed" : "intake_pending", proposal_json: next as unknown as Prisma.InputJsonValue,
         error_message: null, completed_at: completed ? new Date() : null, updated_at: new Date() } });

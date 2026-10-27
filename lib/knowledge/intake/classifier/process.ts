@@ -1,11 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { EXTRACTOR_UPLOAD_TYPE, type ExtractionResult, type ExtractedFile } from "../extractor/contract";
+import { EXTRACTOR_UPLOAD_TYPE } from "../extractor/contract";
+import type { BaseReadingState } from "../base-reading/contract";
 import { classifyFile } from "./classify";
 import { CLASSIFIER_REVISION, classificationResult, type ClassificationState, type ClassifiedFile } from "./contract";
 
-/** Batch payload: the extractor's reading (read-only here), other modules' checkpoints, and this module's own. */
-export type ClassifiableIntake = { version: 1; archivos: ExtractedFile[]; resultado?: ExtractionResult; clasificacion?: ClassificationState; [key: string]: unknown };
+/** Batch payload: the base reading (read-only here), other modules' checkpoints, and this module's own. */
+export type ClassifiableIntake = { lecturaBase?: BaseReadingState; clasificacion?: ClassificationState; [key: string]: unknown };
 
 type Deps = { classifyFile: typeof classifyFile };
 
@@ -18,15 +19,15 @@ export async function runClassification(batchId: string, claimed: ClassifiableIn
   const save = async (state: ClassificationState) => {
     const next = JSON.parse(JSON.stringify({ ...current, clasificacion: state })) as ClassifiableIntake;
     const saved = await prisma.knowledge_imports.updateMany({
-      where: { id: batchId, upload_type: EXTRACTOR_UPLOAD_TYPE, status: "intake_completed", proposal_json: { equals: current as unknown as Prisma.InputJsonValue } },
+      where: { id: batchId, upload_type: EXTRACTOR_UPLOAD_TYPE, status: { not: "intake_running" }, proposal_json: { equals: current as unknown as Prisma.InputJsonValue } },
       data: { proposal_json: next as unknown as Prisma.InputJsonValue, updated_at: new Date() } });
     if (saved.count !== 1) throw new Error("La clasificación ha cambiado; no se sobrescribe");
     current = next;
   };
   const done: ClassifiedFile[] = [...(claimed.clasificacion?.archivos ?? [])];
   try {
-    const reading = claimed.resultado;
-    if (reading?.module !== "document_extractor") throw new Error("Falta la lectura completa del lote");
+    const reading = claimed.lecturaBase?.resultado;
+    if (reading?.module !== "base_reading") throw new Error("Falta la lectura base del lote");
     for (const file of reading.archivos) {
       if (done.some(d => d.archivoId === file.archivoId)) continue;
       done.push(await deps.classifyFile(file));

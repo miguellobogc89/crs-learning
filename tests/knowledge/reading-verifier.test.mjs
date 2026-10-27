@@ -108,7 +108,7 @@ function processModule(db,deps){
 const extraction={module:'document_extractor',version:1,loteId:'b',archivos:[{archivoId:'f1',archivo:'factura.pdf',metodo:'pdf_visual',paginas:[page()]},{archivoId:'f2',archivo:'tabla.xlsx',metodo:'hoja_nativa',paginas:[{numero:1,bloques:[],incidencias:['Hoja vacía']}]}]};
 function fakeDb(){
  const db={saves:[],stored:null,knowledge_import_files:{findMany:async()=>[{id:'f1',storage_path:'knowledge/f1.pdf'}]},
-  knowledge_imports:{updateMany:async args=>{assert.equal(args.where.upload_type,'intake-extractor-v1');assert.equal(args.where.status,'intake_completed');
+  knowledge_imports:{updateMany:async args=>{assert.equal(args.where.upload_type,'intake-extractor-v1');assert.deepEqual(args.where.status,{not:'intake_running'});
    if(db.stored&&JSON.stringify(args.where.proposal_json.equals)!==JSON.stringify(db.stored))return {count:0};db.stored=args.data.proposal_json;db.saves.push(args.data.proposal_json);return {count:1};}}};
  return db;
 }
@@ -265,4 +265,14 @@ test('equal values in one row are matched left to right, not swapped between col
  const ws=[w('Producto',0.05,0.20),w('Precio',0.50,0.20),w('Importe',0.80,0.20),w('39,99',0.80,0.24),w('LONA',0.05,0.24),w('39,99',0.50,0.24)];
  const p={numero:1,incidencias:[],bloques:[{tipo:'tabla',columnas:['Producto','Precio','Importe'],filas:[['LONA','39,99','39,99']]}]};
  assert.equal(compare.verifyPage(p,{numero:1,fuente:'capa_texto',palabras:ws}).columnas.length,0);
+});
+test('verification reuses the positioned words of the base reading: no second read or OCR call',async()=>{
+ const db=fakeDb();
+ const lecturaBase={status:'completed',resultado:{module:'base_reading',version:1,loteId:'b',archivos:[{archivoId:'f1',archivo:'factura.pdf',metodo:'pdf',referencias:[ref()],paginas:[]}]}};
+ const claimed={version:1,archivos:extraction.archivos,resultado:extraction,lecturaBase,verificacion:{status:'running',revision:4,lease:'L',referencias:[]}};
+ db.stored=JSON.parse(JSON.stringify(claimed));
+ await processModule(db,{}).runVerification('b',claimed,'L',{readReference:async()=>{throw Error('must not read again');},readFile:async()=>{throw Error('must not read the original');}});
+ const last=db.saves.at(-1);assert.equal(last.verificacion.status,'completed');
+ assert.deepEqual(last.verificacion.referencias,[],'base words are not duplicated into the verification checkpoint');
+ assert.deepEqual(last.lecturaBase,lecturaBase);
 });

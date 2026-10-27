@@ -30,12 +30,16 @@ function status(state: VerifiableIntake["verificacion"]) {
 export async function GET(_request: Request, context: Context) {
   const batch = await find(context);
   if (!batch) return NextResponse.json({ error: "Lote no encontrado" }, { status: 404 });
-  const state = (batch.proposal_json as VerifiableIntake | null)?.verificacion;
+  const payload = batch.proposal_json as VerifiableIntake | null;
+  const state = payload?.verificacion;
   const estado = status(state);
+  // Independent readings (text layer / OCR words) for diagnosis; only for the batch owner. From the base reading
+  // when it exists; older batches stored their own in the verification checkpoint.
+  const base = (payload?.lecturaBase?.resultado?.archivos ?? []).filter(f => f.metodo === "pdf").map(f => ({ archivoId: f.archivoId, paginas: f.referencias }));
+  const referencias = [...(state?.referencias ?? []), ...base.filter(b => !(state?.referencias ?? []).some(r => r.archivoId === b.archivoId))];
   return NextResponse.json({ fase: "verificacion", estado, error: estado === "error" ? state?.error ?? null : null,
     resultado: estado === "completed" ? state?.resultado ?? null : null,
-    // Independent readings (text layer / OCR words) for diagnosis; only for the batch owner.
-    referencias: estado === "completed" || estado === "error" ? state?.referencias ?? [] : null });
+    referencias: estado === "completed" || estado === "error" ? referencias : null });
 }
 export async function POST(_request: Request, context: Context) {
   const batch = await find(context);

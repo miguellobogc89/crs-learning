@@ -6,6 +6,9 @@ Why: the visual extractor transcribes layout well, but it can silently alter lit
 
 ## Input
 
+Since the pipeline reorganisation, the independent reading comes from the **base reading** module (`base-reading.md`), stored once per batch: the verifier reuses its positioned words and never reads the PDF or calls Google Vision again. Only older batches without a base reading read the originals here.
+
+
 - The completed extractor result stored in the batch (`proposal_json.resultado`, `module: "document_extractor"`).
 - The original files from private storage (only `pdf_visual` files are read).
 

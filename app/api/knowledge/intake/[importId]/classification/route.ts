@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 const LEASE_MS = 360_000;
 type Context = { params: Promise<{ importId: string }> };
-type Payload = ClassifiableIntake & { verificacion?: { status?: string } };
+type Payload = ClassifiableIntake;
 async function find(context: Context) {
   const session = await auth();
   if (!session?.user?.id) return null;
@@ -39,16 +39,16 @@ export async function POST(_request: Request, context: Context) {
   const batch = await find(context);
   if (!batch) return NextResponse.json({ error: "Lote no encontrado" }, { status: 404 });
   const payload = batch.proposal_json as Payload | null;
-  if (batch.status !== "intake_completed" || payload?.resultado?.module !== "document_extractor") return NextResponse.json({ error: "Completa primero la lectura del lote" }, { status: 409 });
+  if (payload?.lecturaBase?.status !== "completed") return NextResponse.json({ error: "Completa primero la lectura base del lote" }, { status: 409 });
   // Modules write the same batch payload with optimistic checks: they run one after another, never at once.
-  if (payload.verificacion?.status !== "completed" && payload.verificacion?.status !== "error") return NextResponse.json({ error: "Espera a que termine la revisión de la lectura" }, { status: 409 });
+  if (batch.status === "intake_running") return NextResponse.json({ error: "Espera a que termine la lectura en curso" }, { status: 409 });
   const estado = status(payload.clasificacion);
   if (estado === "completed" || estado === "running") return NextResponse.json({ estado }, { status: estado === "running" ? 202 : 200 });
   const lease = new Date().toISOString();
   // Files classified under an older revision are classified again; same revision: continue after the last saved file.
   const keep = payload.clasificacion?.revision === CLASSIFIER_REVISION ? payload.clasificacion.archivos ?? [] : [];
   const next = JSON.parse(JSON.stringify({ ...payload, clasificacion: { status: "running", revision: CLASSIFIER_REVISION, lease, archivos: keep } })) as ClassifiableIntake;
-  const claimed = await prisma.knowledge_imports.updateMany({ where: { id: batch.id, status: "intake_completed", proposal_json: { equals: batch.proposal_json as Prisma.InputJsonValue } },
+  const claimed = await prisma.knowledge_imports.updateMany({ where: { id: batch.id, status: { not: "intake_running" }, proposal_json: { equals: batch.proposal_json as Prisma.InputJsonValue } },
     data: { proposal_json: next as unknown as Prisma.InputJsonValue, updated_at: new Date() } });
   if (claimed.count !== 1) return NextResponse.json({ error: "El lote cambió; actualiza su estado" }, { status: 409 });
   after(() => runClassification(batch.id, next, lease));

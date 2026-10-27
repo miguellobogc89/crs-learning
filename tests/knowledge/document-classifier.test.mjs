@@ -84,20 +84,21 @@ function fakeDb(){
  return db;
 }
 function processModule(db){return load('lib/knowledge/intake/classifier/process.ts',{'@prisma/client':{},'@/lib/prisma':{prisma:db},'../extractor/contract':extractorContract,'./classify':{},'./contract':contract});}
-const reading={module:'document_extractor',version:1,loteId:'b',archivos:[file,{...file,archivoId:'f2',archivo:'otro.pdf'}]};
+const reading={module:'base_reading',version:1,loteId:'b',archivos:[file,{...file,archivoId:'f2',archivo:'otro.pdf'}]};
+const base={status:'completed',revision:1,lease:'X',resultado:reading};
 const classified=f=>({archivoId:f.archivoId,archivo:f.archivo,partes:[],incidencias:[]});
-test('classifies file by file, saving each before the next, and never touches the reading or the verification',async()=>{
+test('classifies the base reading file by file, saving each before the next, never touching other checkpoints',async()=>{
  const db=fakeDb();const seen=[];
- const claimed={version:1,archivos:reading.archivos,resultado:reading,verificacion:{status:'completed'},clasificacion:{status:'running',revision:2,lease:'L',archivos:[]}};
+ const claimed={version:1,archivos:[],lecturaBase:base,verificacion:{status:'completed'},clasificacion:{status:'running',revision:3,lease:'L',archivos:[]}};
  db.stored=JSON.parse(JSON.stringify(claimed));
  await processModule(db).runClassification('b',claimed,'L',{classifyFile:async f=>{seen.push(f.archivoId);return classified(f);}});
  assert.deepEqual(seen,['f1','f2']);assert.deepEqual(db.saves.map(s=>s.clasificacion.status),['running','running','completed']);
  const last=db.saves.at(-1);assert.equal(last.clasificacion.resultado.module,'document_classifier');
- assert.deepEqual(last.resultado,reading);assert.deepEqual(last.verificacion,{status:'completed'});
+ assert.deepEqual(last.lecturaBase,base);assert.deepEqual(last.verificacion,{status:'completed'});
 });
 test('a retry continues after the files already classified; errors keep them',async()=>{
  const db=fakeDb();let calls=0;
- const claimed={version:1,archivos:reading.archivos,resultado:reading,clasificacion:{status:'running',revision:1,lease:'L',archivos:[classified(file)]}};
+ const claimed={version:1,archivos:[],lecturaBase:base,clasificacion:{status:'running',revision:3,lease:'L',archivos:[classified(file)]}};
  db.stored=JSON.parse(JSON.stringify(claimed));
  await processModule(db).runClassification('b',claimed,'L',{classifyFile:async()=>{calls++;throw Error('timeout');}});
  assert.equal(calls,1,'only the pending file is sent');
@@ -105,12 +106,18 @@ test('a retry continues after the files already classified; errors keep them',as
 });
 test('a concurrent change of the batch is not overwritten',async()=>{
  const db=fakeDb();db.stored={changed:true};
- const claimed={version:1,archivos:reading.archivos,resultado:reading,clasificacion:{status:'running',revision:1,lease:'L',archivos:[]}};
+ const claimed={version:1,archivos:[],lecturaBase:base,clasificacion:{status:'running',revision:3,lease:'L',archivos:[]}};
  await processModule(db).runClassification('b',claimed,'L',{classifyFile:async f=>classified(f)});
  assert.deepEqual(db.stored,{changed:true});
 });
-test('classification endpoint waits for the verification so modules never write the batch at once',()=>{
+test('classification endpoint needs the base reading and never runs during the vision reading',()=>{
  const route=readFileSync('app/api/knowledge/intake/[importId]/classification/route.ts','utf8');
- assert.match(route,/verificacion\?\.status !== "completed" && payload\.verificacion\?\.status !== "error"/);
- assert.match(route,/proposal_json: \{ equals: batch\.proposal_json/);
+ assert.match(route,/lecturaBase\?\.status !== "completed"/);
+ assert.match(route,/batch\.status === "intake_running"/);
+ assert.match(route,/status: \{ not: "intake_running" \}, proposal_json: \{ equals: batch\.proposal_json/);
+});
+test('a file with no legible text is not sent to the model',async()=>{
+ const c=classifier(()=>{throw Error('no call expected');});
+ const r=await c.classify({archivoId:'x',archivo:'foto.pdf',paginas:[{numero:1,bloques:[],incidencias:['sin clave']}]});
+ assert.deepEqual(r.partes,[]);assert.match(r.incidencias[0],/Sin texto legible/);assert.equal(c.calls.length,0);
 });

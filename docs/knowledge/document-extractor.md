@@ -1,6 +1,6 @@
 # Document extractor: isolated contract
 
-Current upload runs **only this module**. Classification and global schema discovery remain separate, disconnected from upload execution until extractor quality has been validated on real documents. The modal retains one processing action and shows one final JSON or the actual error.
+Since the pipeline reorganisation this module is the **vision reading**: it starts only after the base reading and the classification (see `base-reading.md`), and it carries their checkpoints over when it saves. The new document classifier (`document-classifier.md`) runs before it; the legacy `intake-v1` classification and the global schema discovery remain disconnected from upload execution. The modal retains one processing action and shows the reading JSON (plus classification and verification) or the actual error.
 
 ## Input
 

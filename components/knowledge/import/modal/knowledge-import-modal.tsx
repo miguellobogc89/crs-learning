@@ -52,7 +52,7 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
     } catch(e) { setError(e instanceof Error ? e.message : "Error de subida"); }
     finally { setUploading(false); }
   }
-  const labels: Record<string, string> = { lectura: "Extrayendo contenido de los documentos…", verificacion: "Revisando la lectura contra el documento original…", clasificacion: "Clasificando los documentos…" };
+  const labels: Record<string, string> = { lectura_base: "Leyendo el texto de los documentos…", lectura: "Extrayendo contenido de los documentos…", verificacion: "Revisando la lectura contra el documento original…", clasificacion: "Clasificando los documentos…" };
   return <Dialog open={open} onOpenChange={next => { if (!uploading) onOpenChange(next); }}>
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
       <DialogTitle>Subir documentos</DialogTitle>
@@ -61,7 +61,7 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
         <KnowledgeImportUploadStep files={files} isAnalyzing={uploading} error={error} onFilesChange={setFiles} />
         <Button disabled={uploading || !files.length} onClick={start}>{uploading ? "Subiendo…" : "Procesar documentos"}</Button>
       </>}
-      {id && !error && (!view || view.status === "processing") && <p role="status">{labels[view?.phase ?? "lectura"]}</p>}
+      {id && !error && (!view || view.status === "processing") && <p role="status">{labels[view?.phase ?? "lectura_base"]}</p>}
       {(error || view?.error) && <p role="alert">{error || view?.error}</p>}
       {view?.status === "completed" && view.verification?.status !== "processing" && <div className="flex flex-wrap gap-2">
         <CopyButton label="Copiar todo" text={JSON.stringify({ lectura: view.result, revision: view.verification?.result ?? null,

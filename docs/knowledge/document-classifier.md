@@ -1,14 +1,14 @@
 # Document classifier: isolated contract
 
-A closed module that runs after the reading verifier and before any targeted extraction. It decides **what** each part of each document is and where it belongs, so a later extraction step can go straight to the data that matters for that kind of document. It extracts no values (no amounts, names, dates or records) and never modifies the reading.
+A closed module that runs on the **base reading** (see `base-reading.md`), before the vision reading and before any targeted extraction. It decides **what** each part of each document is and where it belongs, so a later extraction step can go straight to the data that matters for that kind of document. It extracts no values (no amounts, names, dates or records) and never modifies the reading.
 
-Pipeline: reading (visual extractor) → verification (reading verifier) → **classification** → targeted extraction (future) → structure discovery / Engine.
+Pipeline: base reading (no vision model) → **classification** → vision reading (to become targeted extraction) → verification → structure discovery / Engine.
 
 The full reading is kept on purpose: classification can be wrong, and a misclassified document can be reclassified and re-extracted without reading the PDF again; data irrelevant today (a fax number) stays available to Knowledge.
 
 ## Input
 
-The completed extractor result of the batch, one call per file. The model sees each page's blocks numbered (text blocks as text; tables as `cell | cell` rows). Blocks longer than 600 characters are shortened with an explicit `[…]` marker; a file whose input exceeds 150,000 characters fails explicitly instead of being truncated.
+The completed base reading of the batch, one call per file. The model sees each page's blocks numbered: one block per visual line for PDFs; tables as `cell | cell` rows for spreadsheets. Files with no legible text (e.g. image pages without OCR credentials) are not sent to the model and get an explicit incident. Blocks longer than 600 characters are shortened with an explicit `[…]` marker; a file whose input exceeds 150,000 characters fails explicitly instead of being truncated.
 
 The previous classifier (`intake-v1`, Engine/Knowledge/hybrid on the old flattened text) is untouched and disconnected; its destination decision is now one field of this module.
 
@@ -34,11 +34,11 @@ Later, each type will be linked to global catalog types to know which fields to 
 
 ## Persistence and execution
 
-No migration. Checkpoint in `proposal_json.clasificacion` of the extractor batch, next to (never inside) the reading and the verification. `GET/POST /api/knowledge/intake/:id/classification`, owner and active-workspace write access required. POST requires the completed reading **and a finished verification** (completed or error): modules write the same payload with optimistic whole-payload checks, so they run one after another, never at once. Atomic claim, six-minute lease, 202 + Next `after`.
+No migration. Checkpoint in `proposal_json.clasificacion` of the extractor batch, next to (never inside) the reading and the verification. `GET/POST /api/knowledge/intake/:id/classification`, owner and active-workspace write access required. POST requires the completed base reading and never runs while the vision reading holds the batch: modules write the same payload with optimistic whole-payload checks, so they run one after another, never at once. The vision reading waits for this module to finish (completed or failed). Atomic claim, six-minute lease, 202 + Next `after`.
 
 Each classified file is saved before the next; a retry continues after the last saved file. A new `CLASSIFIER_REVISION` reclassifies everything. Model: `OPENAI_DOCUMENT_CLASSIFIER_MODEL`, otherwise `OPENAI_KNOWLEDGE_IMPORT_MODEL`; strict JSON schema, 120 s timeout, no hidden retries, 8,000-token cap; incomplete responses are rejected. Errors are stored and shown; the client never retries automatically.
 
-The upload modal runs reading → verification → classification and shows a plain-language list of parts per file (type, destination, confidence, reason and one quote). "Copiar todo" includes the classification.
+The upload modal and the app queue run base reading → classification → vision reading → verification and shows a plain-language list of parts per file (type, destination, confidence, reason and one quote). "Copiar todo" includes the classification.
 
 ## Checks
 

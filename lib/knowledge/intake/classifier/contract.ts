@@ -1,11 +1,11 @@
-import type { ExtractedFile, Page } from "../extractor/contract";
+import type { Page } from "../extractor/contract";
 import { checkTaxonomy, FAMILIES } from "./taxonomy";
 
 /**
  * Document classifier: decides WHAT each part of a document is (family, type, subtype) and where it belongs
- * (Engine, Knowledge or both), from the verified visual reading. It extracts no values.
+ * (Engine, Knowledge or both), from the base reading (before any vision-model reading). It extracts no values.
  */
-export const CLASSIFIER_REVISION = 2;
+export const CLASSIFIER_REVISION = 3;
 
 export type BlockRange = { pagina: number; desde: number; hasta: number };
 export type Evidence = { pagina: number; bloque: number; texto: string };
@@ -16,6 +16,8 @@ export type Part = {
   confianza: "alta" | "media" | "baja"; evidencia: Evidence[]; motivo: string;
 };
 export type ClassifiedFile = { archivoId: string; archivo: string; partes: Part[]; incidencias: string[] };
+/** Any reading with numbered blocks per page: the base reading (normal flow) or a visual reading. */
+export type ClassifiableFile = { archivoId: string; archivo: string; paginas: Page[] };
 export type ClassificationResult = { module: "document_classifier"; version: typeof CLASSIFIER_REVISION; loteId: string; archivos: ClassifiedFile[] };
 export type ClassificationState = {
   status: "running" | "completed" | "error"; revision: number; lease: string; error?: string;
@@ -34,7 +36,7 @@ export function blockText(block: Page["bloques"][number]) {
 }
 
 /** The reading of one file with numbered blocks per page; long blocks are shortened (evidence must come from the shown text). */
-export function classifierInput(file: ExtractedFile) {
+export function classifierInput(file: ClassifiableFile) {
   return {
     archivo: file.archivo,
     paginas: file.paginas.map(page => ({
@@ -55,7 +57,7 @@ const int = (value: unknown): value is number => Number.isInteger(value);
  * the taxonomy and quotes literal evidence from the blocks it covers. Shape is guaranteed by code; whether the
  * chosen type is semantically right still needs real documents.
  */
-export function validateClassification(raw: unknown, file: ExtractedFile): ClassifiedFile {
+export function validateClassification(raw: unknown, file: ClassifiableFile): ClassifiedFile {
   if (!object(raw) || !Array.isArray(raw.partes) || !Array.isArray(raw.incidencias) || !raw.incidencias.every(i => typeof i === "string")) {
     throw new Error(`${file.archivo}: clasificación con formato inválido`);
   }

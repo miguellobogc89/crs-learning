@@ -5,9 +5,10 @@ import { EXTRACTOR_UPLOAD_TYPE, type ExtractionResult, type ExtractedFile, type 
 import { verifyPage } from "./compare";
 import { VERIFIER_REVISION, verificationReport, type FileReference, type FileReport, type PageReference, type VerificationState } from "./contract";
 import { readReference } from "./reference";
+import type { BaseReadingState } from "../base-reading/contract";
 
 /** Batch payload as stored by the extractor, plus this module's own checkpoint. The extraction is read-only here. */
-export type VerifiableIntake = { version: 1; archivos: ExtractedFile[]; resultado?: ExtractionResult; verificacion?: VerificationState; [key: string]: unknown };
+export type VerifiableIntake = { version: 1; archivos: ExtractedFile[]; resultado?: ExtractionResult; verificacion?: VerificationState; lecturaBase?: BaseReadingState; [key: string]: unknown };
 
 type Deps = { readReference: typeof readReference; readFile: (storagePath: string) => Promise<Buffer> };
 const defaults: Deps = { readReference, readFile: readKnowledgeFile };
@@ -60,16 +61,23 @@ export async function runVerification(batchId: string, claimed: VerifiableIntake
   const save = async (state: VerificationState) => {
     const next = JSON.parse(JSON.stringify({ ...current, verificacion: state })) as VerifiableIntake;
     const saved = await prisma.knowledge_imports.updateMany({
-      where: { id: batchId, upload_type: EXTRACTOR_UPLOAD_TYPE, status: "intake_completed", proposal_json: { equals: current as unknown as Prisma.InputJsonValue } },
+      where: { id: batchId, upload_type: EXTRACTOR_UPLOAD_TYPE, status: { not: "intake_running" }, proposal_json: { equals: current as unknown as Prisma.InputJsonValue } },
       data: { proposal_json: next as unknown as Prisma.InputJsonValue, updated_at: new Date() } });
     if (saved.count !== 1) throw new Error("La revisión ha cambiado; no se sobrescribe");
     current = next;
   };
   const referencias = [...(claimed.verificacion?.referencias ?? [])];
+  // The base reading already holds the positioned words of every PDF page: reused, never read or paid again.
+  const fromBase = (archivoId: string): FileReference | undefined => {
+    const file = claimed.lecturaBase?.resultado?.archivos.find(f => f.archivoId === archivoId && f.metodo === "pdf");
+    return file ? { archivoId, paginas: file.referencias } : undefined;
+  };
+  const referenceOf = (archivoId: string) => referencias.find(r => r.archivoId === archivoId) ?? fromBase(archivoId);
   try {
     const extraction = claimed.resultado;
     if (extraction?.module !== "document_extractor") throw new Error("Falta la lectura completa del lote");
-    const pending = extraction.archivos.filter(f => f.metodo === "pdf_visual" && !referencias.some(r => r.archivoId === f.archivoId));
+    // Only batches without a base reading (older uploads) read the originals here.
+    const pending = extraction.archivos.filter(f => f.metodo === "pdf_visual" && !referenceOf(f.archivoId));
     if (pending.length) {
       const files = await prisma.knowledge_import_files.findMany({ where: { import_id: batchId, id: { in: pending.map(f => f.archivoId) } }, select: { id: true, storage_path: true } });
       for (const file of pending) {
@@ -79,7 +87,7 @@ export async function runVerification(batchId: string, claimed: VerifiableIntake
         await save({ status: "running", revision: VERIFIER_REVISION, lease, referencias });
       }
     }
-    const archivos = extraction.archivos.map(f => verifyFile(f, referencias.find(r => r.archivoId === f.archivoId)));
+    const archivos = extraction.archivos.map(f => verifyFile(f, referenceOf(f.archivoId)));
     await save({ status: "completed", revision: VERIFIER_REVISION, lease, referencias, resultado: verificationReport(batchId, archivos) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error al verificar la lectura";
