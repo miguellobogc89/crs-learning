@@ -2,7 +2,7 @@ import Link from "next/link";
 import { LayoutDashboard, Table2 } from "lucide-react";
 
 const TABLES = [
-  { key: "facturas", label: "Facturas" }, { key: "compras", label: "Productos comprados" }, { key: "proveedores", label: "Proveedores" },
+  { key: "facturas", label: "Facturas" }, { key: "compras", label: "Productos comprados" }, { key: "empresas", label: "Empresas" },
   { key: "suministros", label: "Suministros" }, { key: "consumos", label: "Consumo eléctrico" },
 ];
 

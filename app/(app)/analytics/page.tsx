@@ -7,7 +7,7 @@ import { AppSectionShell } from "@/components/app/section-sidebar";
 import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { ANALYTICS_LIMIT, loadAnalyticsData } from "@/lib/analytics/data";
-import { availableYears, buildTable, CATEGORIES, computeDashboard, MONTH_LABEL, TABLE_KEYS } from "@/lib/analytics/compute";
+import { availableYears, buildTable, CATEGORIES, computeDashboard, computeIncome, computeOverview, computeProducts, MONTH_LABEL, TABLE_KEYS, type Period } from "@/lib/analytics/compute";
 import { AnalyticsNavigation } from "@/components/analytics/analytics-navigation";
 import { GroupedBarChart } from "@/components/analytics/grouped-bar-chart";
 import { RankingList } from "@/components/analytics/ranking-list";
@@ -15,6 +15,13 @@ import { DataTable } from "@/components/analytics/data-table";
 import { CATEGORY_COLOR, SINGLE_SERIES_COLOR, fmtDate, fmtMoney, fmtNumber } from "@/components/analytics/format";
 
 export const dynamic = "force-dynamic";
+
+const TABS = [
+  { key: "general", label: "Visión general" }, { key: "costes", label: "Costes" }, { key: "ingresos", label: "Ingresos" }, { key: "productos", label: "Productos" },
+] as const;
+type Tab = (typeof TABS)[number]["key"];
+/** Income and expenses keep the first two slots of the categorical palette (fixed: colour follows the series). */
+const INCOME_COLOR = "#2a78d6", EXPENSE_COLOR = "#eb6834";
 
 /** A compact dashboard tile: fixed height so the panel reads as a grid (two per row on a laptop screen). */
 function Panel({ title, subtitle, href, children }: { title: string; subtitle?: string; href?: string; children: React.ReactNode }) {
@@ -38,22 +45,51 @@ function Kpi({ label, value, hint, trend }: { label: string; value: string; hint
   </div>;
 }
 
-/** Period selector: a calendar year, or the last 12 months with data. Links, so the page stays a server page. */
-function PeriodSelector({ years, current }: { years: number[]; current: string }) {
-  const options = [...years.map(y => ({ key: String(y), label: String(y) })), { key: "12m", label: "Últimos 12 meses" }];
-  return <nav aria-label="Periodo" className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-slate-200/80 bg-white p-1 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-    {options.map(o => <Link key={o.key} href={`/analytics?periodo=${o.key}`} aria-current={current === o.key ? "page" : undefined}
-      className={"rounded-lg px-3 py-1.5 text-xs font-medium transition-colors " + (current === o.key ? "bg-[#0A58FF] text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")}>{o.label}</Link>)}
-  </nav>;
+function Empty({ children }: { children: React.ReactNode }) {
+  return <div className="flex h-full items-center justify-center px-6 text-center text-sm text-slate-500">{children}</div>;
 }
 
-export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ view?: string; table?: string; periodo?: string }> }) {
+const href = (tab: string, periodo: string) => `/analytics?tab=${tab}&periodo=${periodo}`;
+
+/** Tabs and period selector: links, so the page stays a server page and every view has its own address. */
+function Toolbar({ tab, years, periodo }: { tab: Tab; years: number[]; periodo: string }) {
+  const periods = [...years.map(y => ({ key: String(y), label: String(y) })), { key: "12m", label: "Últimos 12 meses" }];
+  const pill = (active: boolean) => "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors " + (active ? "bg-[#0A58FF] text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900");
+  return <div className="flex flex-wrap items-center justify-between gap-2">
+    <nav aria-label="Vistas" className="flex flex-wrap gap-1 border-b border-slate-200">
+      {TABS.map(t => <Link key={t.key} href={href(t.key, periodo)} aria-current={tab === t.key ? "page" : undefined}
+        className={"-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors " + (tab === t.key ? "border-[#0A58FF] text-[#0A58FF]" : "border-transparent text-slate-500 hover:text-slate-900")}>{t.label}</Link>)}
+    </nav>
+    <nav aria-label="Periodo" className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-slate-200/80 bg-white p-1 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      {periods.map(o => <Link key={o.key} href={href(tab, o.key)} aria-current={periodo === o.key ? "page" : undefined} className={pill(periodo === o.key)}>{o.label}</Link>)}
+    </nav>
+  </div>;
+}
+
+type InvoiceRow = Record<string, string | number | boolean | null>;
+function InvoiceList({ rows, party }: { rows: InvoiceRow[]; party: "emisor" | "receptor" | "auto" }) {
+  if (!rows.length) return <Empty>No hay facturas en este periodo.</Empty>;
+  return <ul className="divide-y divide-slate-100">{rows.map((r, i) => {
+    const who = party === "auto" ? (r.tipo === "Ingreso" ? r.receptor : r.emisor) : r[party];
+    return <li key={i} className="flex items-center justify-between gap-3 py-2 text-[13px]">
+      <div className="min-w-0">
+        <p className="truncate text-slate-800">{typeof who === "string" ? who : r.tipo === "Ingreso" ? "Cliente sin identificar" : "Sin emisor identificado"}</p>
+        <p className="truncate text-[11px] text-slate-500">{typeof r.fecha === "string" ? fmtDate(r.fecha) : "Sin fecha"} · {r.tipo === "Ingreso" ? "Ingreso" : r.categoria}{r.numero ? ` · ${r.numero}` : ""}
+          {typeof r.documento === "string" && <> · <a href={`/api/knowledge/intake/files/${r.documento}`} target="_blank" rel="noreferrer" className="text-[#0A58FF] hover:underline">ver</a></>}</p>
+      </div>
+      <span className={"shrink-0 tabular-nums font-medium " + (r.tipo === "Ingreso" ? "text-slate-900" : "text-slate-900")}>{r.tipo === "Ingreso" ? "+" : ""}{typeof r.total === "number" ? fmtMoney(r.total) : "—"}</span>
+    </li>;
+  })}</ul>;
+}
+
+export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ view?: string; table?: string; periodo?: string; tab?: string }> }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
+  const canEdit = activeWorkspace.role === "owner" || activeWorkspace.role === "admin";
   const params = await searchParams;
   const view = params.view === "tablas" ? "tablas" : "panel";
-  const tableKey = TABLE_KEYS.includes(params.table as (typeof TABLE_KEYS)[number]) ? params.table! : "facturas";
+  const tableKey = params.table === "proveedores" ? "empresas" : TABLE_KEYS.includes(params.table as (typeof TABLE_KEYS)[number]) ? params.table! : "facturas";
   const data = await loadAnalyticsData(activeWorkspace.id);
 
   const notice = data.truncated ? <p className="rounded-lg bg-amber-50 px-4 py-2 text-xs text-amber-800">
@@ -61,70 +97,145 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
   let content: React.ReactNode;
   if (view === "tablas") {
-    const table = buildTable(data, tableKey);
-    content = <div className="space-y-4 pt-4">{notice}<DataTable table={table} /></div>;
+    content = <div className="space-y-4 pt-4">{notice}<DataTable table={buildTable(data, tableKey)} canEdit={canEdit} /></div>;
   } else {
+    const tab: Tab = TABS.some(t => t.key === params.tab) ? params.tab as Tab : "general";
     const years = availableYears(data);
     const periodo = params.periodo === "12m" ? "12m" : years.includes(Number(params.periodo)) ? String(Number(params.periodo)) : years[0] ? String(years[0]) : "12m";
-    const d = computeDashboard(data, periodo === "12m" ? 12 : { year: Number(periodo) });
-    const k = d.kpis;
-    const change = k.previousMonthSpend ? (k.lastMonthSpend - k.previousMonthSpend) / Math.abs(k.previousMonthSpend) * 100 : null;
-    const series = d.categories.map(c => ({ key: c, label: CATEGORIES.find(x => x.key === c)!.label, color: CATEGORY_COLOR[c] }));
-    const excluded = d.excluded.withoutDate + d.excluded.withoutAmount;
-    const byCategory = d.categories.map(c => ({ key: c, total: d.spend.reduce((a, m) => a + m.values[c], 0) })).sort((a, b) => b.total - a.total);
+    const period: Period = periodo === "12m" ? 12 : { year: Number(periodo) };
+    const costs = computeDashboard(data, period);
+    const months = costs.months;
+    const range = months.length ? `${MONTH_LABEL(months[0])} – ${MONTH_LABEL(months.at(-1)!)}` : "";
+    const invoices = buildTable(data, "facturas").rows.filter(r => typeof r.fecha === "string" && months.includes(r.fecha.slice(0, 7)));
+    const byCategory = costs.categories.map(c => ({ key: c, total: costs.spend.reduce((a, m) => a + m.values[c], 0) })).sort((a, b) => b.total - a.total);
     const positive = byCategory.reduce((a, c) => a + Math.max(0, c.total), 0) || 1;
-    const recent = buildTable(data, "facturas").rows.filter(r => typeof r.fecha === "string" && d.months.includes(r.fecha.slice(0, 7))).slice(0, 5);
-    const period = d.months.length ? `${MONTH_LABEL(d.months[0])} – ${MONTH_LABEL(d.months.at(-1)!)}` : "";
+    const categoryRanking = <RankingList compact empty="Sin gasto en el periodo." items={byCategory.map(c => ({ label: CATEGORIES.find(x => x.key === c.key)!.label, value: c.total,
+      display: fmtMoney(c.total), color: CATEGORY_COLOR[c.key], detail: c.total > 0 ? `${fmtNumber(Math.round(c.total / positive * 100))} %` : undefined }))} />;
+    const suppliersRanking = <RankingList compact empty="Sin facturas con proveedor." items={costs.topSuppliers.slice(0, 5).map(s => ({ label: s.name, value: s.spend,
+      display: fmtMoney(s.spend), detail: `${s.invoices} ${s.invoices === 1 ? "factura" : "facturas"}` }))} />;
+    const ownHint = <p className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-2.5 text-xs text-slate-700">
+      Para ver tus <b>ingresos</b>, marca tu empresa como «Mi empresa» en <Link className="font-medium text-[#0A58FF] hover:underline" href="/analytics?view=tablas&table=empresas">Tablas → Empresas</Link>:
+      las facturas que emite pasarán a contar como ingresos. También puedes cambiar el «Tipo» de una factura en <Link className="font-medium text-[#0A58FF] hover:underline" href="/analytics?view=tablas&table=facturas">Tablas → Facturas</Link>.</p>;
+
+    let body: React.ReactNode;
+    if (tab === "general") {
+      const o = computeOverview(data, period);
+      body = <>
+        {!o.hasOwnCompany && o.invoices.ingresos === 0 && ownHint}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Kpi label="Ingresos" value={fmtMoney(o.totals.ingresos)} hint={`${o.invoices.ingresos} ${o.invoices.ingresos === 1 ? "factura" : "facturas"} emitidas`} />
+          <Kpi label="Gastos" value={fmtMoney(o.totals.gastos)} hint={`${o.invoices.gastos} ${o.invoices.gastos === 1 ? "factura" : "facturas"} recibidas`} />
+          <Kpi label="Resultado" value={fmtMoney(o.totals.resultado)} hint={o.totals.margen === null ? "Sin ingresos en el periodo" : `Margen ${fmtNumber(o.totals.margen)} %`}
+            trend={o.totals.margen === null ? null : o.totals.resultado >= 0 ? "up" : "down"} />
+          <Kpi label="Proveedores" value={String(costs.kpis.suppliers)} hint={range} />
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Panel title="Ingresos y gastos por mes" subtitle="Total con impuestos de cada factura, por su fecha" href="/analytics?view=tablas&table=facturas">
+            <GroupedBarChart compact title="Ingresos y gastos por mes" series={[{ key: "ingresos", label: "Ingresos", color: INCOME_COLOR }, { key: "gastos", label: "Gastos", color: EXPENSE_COLOR }]}
+              groups={o.perMonth.map(p => ({ key: p.month, label: MONTH_LABEL(p.month), values: { ingresos: p.ingresos, gastos: p.gastos } }))} />
+          </Panel>
+          <Panel title="Gasto por categoría" subtitle={range ? `Acumulado · ${range}` : undefined} href="/analytics?view=tablas&table=facturas">{categoryRanking}</Panel>
+          <Panel title="Proveedores con más gasto" subtitle={range || undefined} href="/analytics?view=tablas&table=empresas">{suppliersRanking}</Panel>
+          <Panel title="Últimas facturas" href="/analytics?view=tablas&table=facturas"><InvoiceList rows={invoices.slice(0, 5)} party="auto" /></Panel>
+        </div>
+      </>;
+    } else if (tab === "costes") {
+      const k = costs.kpis;
+      const change = k.previousMonthSpend ? (k.lastMonthSpend - k.previousMonthSpend) / Math.abs(k.previousMonthSpend) * 100 : null;
+      const series = costs.categories.map(c => ({ key: c, label: CATEGORIES.find(x => x.key === c)!.label, color: CATEGORY_COLOR[c] }));
+      const excluded = costs.excluded.withoutDate + costs.excluded.withoutAmount;
+      body = <>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Kpi label="Gasto del periodo" value={fmtMoney(k.totalSpend)} hint={range} />
+          <Kpi label="Media mensual" value={fmtMoney(k.monthlyAverage)} />
+          <Kpi label={k.lastMonth ? `Último mes · ${MONTH_LABEL(k.lastMonth)}` : "Último mes"} value={fmtMoney(k.lastMonthSpend)}
+            trend={change === null ? null : change >= 0 ? "up" : "down"} hint={change === null ? undefined : `${change >= 0 ? "+" : ""}${fmtNumber(Math.round(change))} % vs. mes anterior`} />
+          <Kpi label="Facturas · proveedores" value={`${k.invoices} · ${k.suppliers}`} />
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Panel title="Gasto por mes y categoría" subtitle="Total con impuestos de cada factura recibida, por su fecha" href="/analytics?view=tablas&table=facturas">
+            <GroupedBarChart compact title="Gasto por mes y categoría" series={series} groups={costs.spend.map(s => ({ key: s.month, label: MONTH_LABEL(s.month), values: s.values }))} />
+          </Panel>
+          <Panel title="Reparto por categoría" subtitle={range ? `Acumulado · ${range}` : undefined} href="/analytics?view=tablas&table=facturas">{categoryRanking}</Panel>
+          <Panel title="Detalle del gasto" subtitle="Por tipo de factura: luz, agua, teléfono, compras, tickets…" href="/analytics?view=tablas&table=facturas">
+            <RankingList compact empty="Sin gasto en el periodo." items={costs.subcategories.slice(0, 6).map(s => ({ label: s.label, value: s.total, display: fmtMoney(s.total),
+              color: CATEGORY_COLOR[s.category], detail: `${s.invoices} ${s.invoices === 1 ? "factura" : "facturas"}` }))} />
+          </Panel>
+          <Panel title="Proveedores con más gasto" subtitle={range || undefined} href="/analytics?view=tablas&table=empresas">{suppliersRanking}</Panel>
+          {costs.electricity.length > 0 && <Panel title="Consumo eléctrico" subtitle="kWh por mes de fin del periodo facturado" href="/analytics?view=tablas&table=consumos">
+            <GroupedBarChart compact title="Consumo eléctrico por mes" unit="kwh" series={[{ key: "kwh", label: "kWh", color: SINGLE_SERIES_COLOR }]}
+              groups={costs.electricity.map(e => ({ key: e.month, label: MONTH_LABEL(e.month), values: { kwh: e.kwh } }))} />
+          </Panel>}
+          <Panel title="Últimos gastos" href="/analytics?view=tablas&table=facturas"><InvoiceList rows={invoices.filter(r => r.tipo !== "Ingreso").slice(0, 5)} party="emisor" /></Panel>
+        </div>
+        {(excluded > 0 || costs.excluded.withoutCategory > 0) && <p className="text-[11px] text-slate-500">
+          {excluded > 0 && `${excluded} ${excluded === 1 ? "factura no aparece" : "facturas no aparecen"} en los gráficos por no tener fecha o importe. `}
+          {costs.excluded.withoutCategory > 0 && `${costs.excluded.withoutCategory} sin categoría se cuentan en «Otros».`}</p>}
+      </>;
+    } else if (tab === "ingresos") {
+      const inc = computeIncome(data, period);
+      const o = computeOverview(data, period);
+      body = <>
+        {!inc.hasOwnCompany && inc.invoices === 0 && ownHint}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Kpi label="Ingresos del periodo" value={fmtMoney(inc.total)} hint={range} />
+          <Kpi label="Facturas emitidas" value={String(inc.invoices)} />
+          <Kpi label="Factura media" value={fmtMoney(inc.averageInvoice)} />
+          <Kpi label="Clientes" value={String(inc.customers.length)} />
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Panel title="Ingresos por mes" subtitle="Facturas emitidas, por su fecha" href="/analytics?view=tablas&table=facturas">
+            {inc.invoices ? <GroupedBarChart compact title="Ingresos por mes" series={[{ key: "total", label: "Ingresos", color: INCOME_COLOR }]}
+              groups={inc.perMonth.map(p => ({ key: p.month, label: MONTH_LABEL(p.month), values: { total: p.total } }))} /> : <Empty>Todavía no hay facturas emitidas en este periodo.</Empty>}
+          </Panel>
+          <Panel title="Clientes" subtitle="Lo facturado a cada uno" href="/analytics?view=tablas&table=empresas">
+            <RankingList compact empty="Sin facturas emitidas." items={inc.customers.slice(0, 5).map(c => ({ label: c.name, value: c.total, display: fmtMoney(c.total),
+              color: INCOME_COLOR, detail: `${c.invoices} ${c.invoices === 1 ? "factura" : "facturas"}` }))} />
+          </Panel>
+          <Panel title="Ingresos frente a gastos" subtitle="Lo que entra y lo que sale cada mes">
+            <GroupedBarChart compact title="Ingresos frente a gastos" series={[{ key: "ingresos", label: "Ingresos", color: INCOME_COLOR }, { key: "gastos", label: "Gastos", color: EXPENSE_COLOR }]}
+              groups={o.perMonth.map(p => ({ key: p.month, label: MONTH_LABEL(p.month), values: { ingresos: p.ingresos, gastos: p.gastos } }))} />
+          </Panel>
+          <Panel title="Últimas facturas emitidas" href="/analytics?view=tablas&table=facturas"><InvoiceList rows={invoices.filter(r => r.tipo === "Ingreso").slice(0, 5)} party="receptor" /></Panel>
+        </div>
+      </>;
+    } else {
+      const p = computeProducts(data, period);
+      body = <>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Kpi label="Gasto en productos" value={fmtMoney(p.spend)} hint={range} />
+          <Kpi label="Productos distintos" value={String(p.distinct)} />
+          <Kpi label="Líneas de compra" value={String(p.lines)} hint={p.lines ? `${fmtMoney(p.spend / p.lines)} de media` : undefined} />
+          <Kpi label="Proveedores de producto" value={String(p.suppliers)} />
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Panel title="Productos con más gasto" subtitle="Líneas de compra (sin suministros)" href="/analytics?view=tablas&table=compras">
+            <RankingList compact empty="Sin líneas de compra." items={p.bySpend.slice(0, 5).map(x => ({ label: x.name, value: x.spend, display: fmtMoney(x.spend),
+              detail: x.quantity ? `${fmtNumber(x.quantity)} uds.` : undefined }))} />
+          </Panel>
+          <Panel title="Productos más comprados" subtitle="Por unidades" href="/analytics?view=tablas&table=compras">
+            <RankingList compact empty="Sin cantidades en las líneas." items={p.byQuantity.filter(x => x.quantity > 0).slice(0, 5).map(x => ({ label: x.name, value: x.quantity,
+              display: `${fmtNumber(x.quantity)} uds.`, detail: fmtMoney(x.spend) }))} />
+          </Panel>
+          <Panel title="Cambios de precio" subtitle="Precio unitario: primera y última compra del periodo" href="/analytics?view=tablas&table=compras">
+            {p.prices.length ? <ul className="divide-y divide-slate-100">{p.prices.slice(0, 5).map(x => <li key={x.name} className="flex items-center justify-between gap-3 py-2 text-[13px]">
+              <div className="min-w-0"><p className="truncate text-slate-800" title={x.name}>{x.name}</p>
+                <p className="text-[11px] text-slate-500">{fmtMoney(x.first)} → {fmtMoney(x.last)} · {x.purchases} compras{x.suppliers > 1 ? ` · ${x.suppliers} proveedores` : ""}</p></div>
+              <span className="shrink-0 tabular-nums text-xs font-semibold text-slate-900">{x.change > 0 ? "▲ +" : x.change < 0 ? "▼ " : ""}{fmtNumber(x.change)} %</span>
+            </li>)}</ul> : <Empty>Hace falta comprar un producto al menos dos veces con precio unitario para ver su evolución.</Empty>}
+          </Panel>
+          <Panel title="A quién compras los productos" href="/analytics?view=tablas&table=empresas">
+            <RankingList compact empty="Sin compras de producto." items={p.bySupplier.slice(0, 5).map(s => ({ label: s.name, value: s.spend, display: fmtMoney(s.spend),
+              detail: `${s.products} ${s.products === 1 ? "producto" : "productos"}` }))} />
+          </Panel>
+        </div>
+        <p className="text-[11px] text-slate-500">El inventario (existencias) necesita albaranes o recuentos de almacén; cuando los importes, aparecerá aquí.</p>
+      </>;
+    }
     content = <div className="space-y-3 pt-4">
       {notice}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-slate-500">{period ? `Periodo: ${period}` : "Sin facturas con fecha todavía"}</p>
-        <PeriodSelector years={years} current={periodo} />
-      </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label={periodo === "12m" ? "Gasto · últimos 12 meses" : `Gasto ${periodo}`} value={fmtMoney(k.totalSpend)} hint={period} />
-        <Kpi label="Media mensual" value={fmtMoney(k.monthlyAverage)} />
-        <Kpi label={k.lastMonth ? `Último mes · ${MONTH_LABEL(k.lastMonth)}` : "Último mes"} value={fmtMoney(k.lastMonthSpend)}
-          trend={change === null ? null : change >= 0 ? "up" : "down"}
-          hint={change === null ? undefined : `${change >= 0 ? "+" : ""}${fmtNumber(Math.round(change))} % vs. mes anterior`} />
-        <Kpi label="Facturas · proveedores" value={`${k.invoices} · ${k.suppliers}`} />
-      </div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Panel title="Gasto por mes y categoría" subtitle="Total con impuestos de cada factura recibida, por su fecha" href="/analytics?view=tablas&table=facturas">
-          <GroupedBarChart compact title="Gasto por mes y categoría" series={series}
-            groups={d.spend.map(s => ({ key: s.month, label: MONTH_LABEL(s.month), values: s.values }))} />
-        </Panel>
-        <Panel title="Reparto por categoría" subtitle={period ? `Gasto acumulado · ${period}` : undefined} href="/analytics?view=tablas&table=facturas">
-          <RankingList compact empty="Sin gasto en el periodo." items={byCategory.map(c => ({ label: CATEGORIES.find(x => x.key === c.key)!.label, value: c.total,
-            display: fmtMoney(c.total), color: CATEGORY_COLOR[c.key], detail: c.total > 0 ? `${fmtNumber(Math.round(c.total / positive * 100))} %` : undefined }))} />
-        </Panel>
-        <Panel title="Proveedores con más gasto" subtitle={period || undefined} href="/analytics?view=tablas&table=proveedores">
-          <RankingList compact empty="Sin facturas con proveedor." items={d.topSuppliers.slice(0, 5).map(s => ({ label: s.name, value: s.spend, display: fmtMoney(s.spend),
-            detail: `${s.invoices} ${s.invoices === 1 ? "factura" : "facturas"}` }))} />
-        </Panel>
-        <Panel title="Productos con más gasto" subtitle="Líneas de compra (sin suministros)" href="/analytics?view=tablas&table=compras">
-          <RankingList compact empty="Sin líneas de compra." items={d.topProducts.slice(0, 5).map(p => ({ label: p.name, value: p.spend, display: fmtMoney(p.spend),
-            detail: p.quantity ? `${fmtNumber(p.quantity)} uds.` : undefined }))} />
-        </Panel>
-        {d.electricity.length > 0 && <Panel title="Consumo eléctrico" subtitle="kWh por mes de fin del periodo facturado" href="/analytics?view=tablas&table=consumos">
-          <GroupedBarChart compact title="Consumo eléctrico por mes" unit="kwh"
-            series={[{ key: "kwh", label: "kWh", color: SINGLE_SERIES_COLOR }]}
-            groups={d.electricity.map(e => ({ key: e.month, label: MONTH_LABEL(e.month), values: { kwh: e.kwh } }))} />
-        </Panel>}
-        <Panel title="Últimas facturas" href="/analytics?view=tablas&table=facturas">
-          {recent.length ? <ul className="divide-y divide-slate-100">
-            {recent.map((r, i) => <li key={i} className="flex items-center justify-between gap-3 py-2 text-[13px]">
-              <div className="min-w-0">
-                <p className="truncate text-slate-800">{r.proveedor ?? "Sin emisor identificado"}</p>
-                <p className="truncate text-[11px] text-slate-500">{r.fecha ? fmtDate(String(r.fecha)) : "Sin fecha"} · {r.categoria}{r.numero ? ` · ${r.numero}` : ""}</p>
-              </div>
-              <span className="shrink-0 tabular-nums font-medium text-slate-900">{typeof r.total === "number" ? fmtMoney(r.total) : "—"}</span>
-            </li>)}</ul> : <p className="py-6 text-center text-sm text-slate-500">Todavía no hay facturas.</p>}
-        </Panel>
-      </div>
-      {(excluded > 0 || d.excluded.withoutCategory > 0) && <p className="text-[11px] text-slate-500">
-        {excluded > 0 && `${excluded} ${excluded === 1 ? "factura no aparece" : "facturas no aparecen"} en los gráficos por no tener fecha o importe. `}
-        {d.excluded.withoutCategory > 0 && `${d.excluded.withoutCategory} sin categoría se cuentan en «Otros».`}</p>}
+      <Toolbar tab={tab} years={years} periodo={periodo} />
+      {body}
     </div>;
   }
 

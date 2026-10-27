@@ -32,3 +32,23 @@ Paleta categórica fija (el color sigue a la categoría, nunca a su posición): 
 ## Tests
 
 `npm run test:analytics` (datos sintéticos).
+
+## Ingresos y «Mi empresa» (2026-10-27)
+
+Una factura es **ingreso** si está marcada «emitida», **gasto** si está marcada «recibida» y, si no está marcada, ingreso
+cuando su emisor es una empresa con «Mi empresa» (`company.is_own_company`). Se corrige desde Tablas:
+
+- **Empresas**: corregir el nombre (`legal_name`) y marcar «Mi empresa».
+- **Facturas**: «Tipo» (Gasto/Ingreso → `invoice.direction`) y «Categoría» (`expense_category`).
+
+Solo esos campos (`lib/analytics/edit.ts`); cada cambio es una revisión nueva del registro (`updateEngineRecord`).
+Las tablas de facturas y compras enlazan al **documento original** (`GET /api/knowledge/intake/files/<id>`, a partir de
+la evidencia `intake:<lote>/<archivo>/…` de la factura).
+
+## Pestañas del panel
+
+`?tab=general|costes|ingresos|productos` y `?periodo=<año>|12m`.
+- **Visión general**: ingresos, gastos, resultado y margen; ingresos y gastos por mes; gasto por categoría; proveedores; últimas facturas.
+- **Costes**: gasto por mes y categoría, reparto, detalle por tipo (subcategoría), proveedores, consumo eléctrico, últimos gastos.
+- **Ingresos**: por mes, clientes, ingresos frente a gastos, últimas facturas emitidas.
+- **Productos**: más gasto, más unidades, cambios de precio unitario (primera y última compra), a quién se compra.
