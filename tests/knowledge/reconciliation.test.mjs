@@ -45,9 +45,9 @@ test('mentions group by identifier across documents; invoices are issuer + numbe
  assert.ok(!g.entidades.some(e=>e.menciones.some(m=>m.parteId==='p2'&&m.archivo==='enero.pdf')),'knowledge parts are not reconciled');
 });
 
-function fakeDb({types,records}){
+function fakeDb({types,records,catalog=[]}){
  const calls=[];
- return {calls,engine_object_types:{findMany:async a=>{calls.push(['types',a]);return types.filter(t=>a.where.key.in.includes(t.key));}},
+ return {calls,engine_catalog_types:{findFirst:async a=>catalog.includes(a.where.key)?{id:'g-'+a.where.key}:null},engine_object_types:{findMany:async a=>{calls.push(['types',a]);return types.filter(t=>a.where.key.in.includes(t.key));}},
   engine_records:{findMany:async a=>{calls.push(['records',a]);return records.filter(r=>a.where.object_type_id.in.includes(r.type)).slice(0,a.take);}},
   knowledge_imports:{updateMany:async()=>{throw Error('reconciliation never writes records');}}};
 }
@@ -105,4 +105,11 @@ test('a tax id misread by one look-alike character is flagged with the probable 
  assert.ok(wrong,'kept apart: a person confirms');assert.match(wrong.avisos.join(),/probablemente es B00000000 \(PROVEEDOR DEMO, S\.L\.\)/);
  const lone=contract.groupEntities({...result,archivos:[{archivoId:'f5',archivo:'x.pdf',incidencias:[],partes:[invoicePart('p1',{issuerTax:'812345678',issuerName:'X',number:'1'})]}]});
  assert.match(lone.entidades.find(e=>e.ref==='company:812345678').avisos.join(),/9 cifras/);
+});
+
+test('a type of the global catalog not yet used by the workspace means no records: its entities are new',async()=>{
+ const r=await process_.reconcile('b','w1',result,fakeDb({types:[],records:[],catalog:['company','invoice']}));
+ const by=ref=>r.entidades.find(e=>e.ref===ref);
+ assert.equal(by('company:B00000000').estado,'nueva');assert.equal(by('invoice:B00000000/F001').estado,'nueva');
+ assert.equal(by('supply_point:ES0000000000000000AA').estado,'tipo_no_definido','not in the global catalog either');
 });

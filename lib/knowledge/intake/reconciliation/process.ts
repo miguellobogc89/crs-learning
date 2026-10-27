@@ -5,7 +5,7 @@ import { applyLookups, groupEntities, IDENTIFIER_KEYS, normalizeIdentifier, type
 /** A bounded scan cannot prove that a record does not exist: beyond it, entities stay "no comprobada". */
 export const SCAN_LIMIT = 2000;
 
-type Db = Pick<typeof prisma, "engine_object_types" | "engine_records">;
+type Db = Pick<typeof prisma, "engine_object_types" | "engine_records" | "engine_catalog_types">;
 
 /**
  * Reads (never writes) the workspace's Engine records of each reconciled type and indexes them by every
@@ -17,7 +17,13 @@ export async function loadLookups(workspaceId: string, types: ReconciledType[], 
   const defined = await db.engine_object_types.findMany({ where: { workspace_id: workspaceId, key: { in: types }, status: { not: "archived" } }, select: { id: true, key: true } });
   for (const type of types) {
     const ids = defined.filter((t: { key: string }) => t.key === type).map((t: { id: string }) => t.id);
-    if (!ids.length) { lookups.set(type, { tipoDefinido: false, completo: false, candidatos: new Map() }); continue; }
+    if (!ids.length) {
+      // Not used by the workspace yet: if the global catalog defines it, the workspace simply has no records of it
+      // (its table is created on the first write), so every entity of this type is new.
+      const global = await db.engine_catalog_types.findFirst({ where: { key: type, status: "active" }, select: { id: true } });
+      lookups.set(type, { tipoDefinido: Boolean(global), completo: Boolean(global), candidatos: new Map() });
+      continue;
+    }
     const rows = await db.engine_records.findMany({ where: { workspace_id: workspaceId, object_type_id: { in: ids }, status: { not: "archived" } },
       select: { id: true, external_key: true, values_json: true }, take: SCAN_LIMIT + 1, orderBy: { id: "asc" } });
     const candidatos = new Map<string, { id: string; externalKey: string | null }[]>();

@@ -6,7 +6,7 @@ import type { TargetedFile, TargetedResult } from "../targeted/contract";
  * identifiers printed in the document (tax id, invoice number, supply point, telecom line), never from names.
  * Entities without an identifier, or with conflicting candidates, are left for a person to review.
  */
-export const RECONCILIATION_REVISION = 3;
+export const RECONCILIATION_REVISION = 4;
 
 /** Entity kinds reconciled on their own; other extracted entities (lines, charges, tax rows…) are details of their invoice. */
 export const RECONCILED_TYPES = ["company", "invoice", "supply_point", "telecom_line"] as const;
