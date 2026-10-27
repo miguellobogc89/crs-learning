@@ -6,6 +6,8 @@ import { KnowledgeImportUploadStep } from "./knowledge-import-upload-step";
 import { advanceIntake, type IntakeView } from "../advance-intake";
 import { ReadingVerification } from "./reading-verification";
 import { CopyButton } from "./copy-button";
+import { DocumentClassification } from "./document-classification";
+import type { ClassificationResult } from "@/lib/knowledge/intake/classifier/contract";
 import type { VerificationReport } from "@/lib/knowledge/intake/verifier/contract";
 import type { KnowledgeImportModalProps } from "./knowledge-import-modal.types";
 async function read(response: Response) {
@@ -50,7 +52,7 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
     } catch(e) { setError(e instanceof Error ? e.message : "Error de subida"); }
     finally { setUploading(false); }
   }
-  const labels: Record<string, string> = { lectura: "Extrayendo contenido de los documentos…", verificacion: "Revisando la lectura contra el documento original…" };
+  const labels: Record<string, string> = { lectura: "Extrayendo contenido de los documentos…", verificacion: "Revisando la lectura contra el documento original…", clasificacion: "Clasificando los documentos…" };
   return <Dialog open={open} onOpenChange={next => { if (!uploading) onOpenChange(next); }}>
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
       <DialogTitle>Subir documentos</DialogTitle>
@@ -63,10 +65,14 @@ export function KnowledgeImportModal({ open, context, onOpenChange, selectedFile
       {(error || view?.error) && <p role="alert">{error || view?.error}</p>}
       {view?.status === "completed" && view.verification?.status !== "processing" && <div className="flex flex-wrap gap-2">
         <CopyButton label="Copiar todo" text={JSON.stringify({ lectura: view.result, revision: view.verification?.result ?? null,
-          errorRevision: view.verification?.error ?? null, lecturaIndependiente: view.verification?.references ?? null }, null, 2)} />
+          errorRevision: view.verification?.error ?? null, clasificacion: view.classification?.result ?? null,
+          errorClasificacion: view.classification?.error ?? null, lecturaIndependiente: view.verification?.references ?? null }, null, 2)} />
         <CopyButton label="Copiar lectura" text={JSON.stringify(view.result, null, 2)} />
         {view.verification?.status === "completed" && <CopyButton label="Copiar revisión" text={JSON.stringify(view.verification.result, null, 2)} />}
+        {view.classification?.status === "completed" && <CopyButton label="Copiar clasificación" text={JSON.stringify(view.classification.result, null, 2)} />}
       </div>}
+      {view?.classification?.status === "error" && <p role="alert">No se pudo clasificar: {view.classification.error}</p>}
+      {view?.classification?.status === "completed" && <DocumentClassification result={view.classification.result as ClassificationResult} />}
       {view?.verification?.status === "error" && <p role="alert">La lectura está completa, pero no se pudo verificar: {view.verification.error}</p>}
       {view?.verification?.status === "completed" && <ReadingVerification report={view.verification.result as VerificationReport} />}
       {view?.status === "completed" && <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded border p-4 text-xs">{JSON.stringify(view.result, null, 2)}</pre>}

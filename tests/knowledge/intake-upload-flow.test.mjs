@@ -5,20 +5,27 @@ import ts from 'typescript';
 const m={exports:{}};
 new Function('module','exports',ts.transpileModule(readFileSync('components/knowledge/import/advance-intake.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(m,m.exports);
 const {advanceIntake}=m.exports;
-test('fresh upload: reading first, then its verification; no classification or structure calls',async()=>{
- let stage=0,checked=0;const result={module:'document_extractor',version:1,archivos:[{paginas:[]}]};const report={module:'reading_verifier',version:1,resumen:{}};
+test('fresh upload: reading, then verification, then classification; no structure discovery',async()=>{
+ let stage=0,checked=0,classified=0;const result={module:'document_extractor',version:1,archivos:[{paginas:[]}]};
+ const report={module:'reading_verifier',version:4,resumen:{}};const classes={module:'document_classifier',version:1,archivos:[]};
  const request=async(url,method)=>{
   if(url==='/api/knowledge/intake/fresh/verification'){if(method==='POST'){checked=1;return {estado:'running'};}return checked?{estado:'completed',resultado:report}:{estado:'pending'};}
+  if(url==='/api/knowledge/intake/fresh/classification'){assert.equal(checked,1,'classification only after verification');if(method==='POST'){classified=1;return {estado:'running'};}return classified?{estado:'completed',resultado:classes}:{estado:'pending'};}
   assert.equal(url,'/api/knowledge/intake/fresh');if(method==='POST'){stage=1;return {estado:'intake_running'};}return stage?{estado:'intake_completed',resultado:result}:{estado:'intake_pending',fase:'lectura'};};
  assert.equal((await advanceIntake('fresh',request)).status,'processing');
- const verifying=await advanceIntake('fresh',request);assert.equal(verifying.status,'processing');assert.equal(verifying.phase,'verificacion');
- const completed=await advanceIntake('fresh',request);assert.equal(completed.status,'completed');assert.equal(completed.result,result);assert.equal(completed.verification.result,report);
+ const verifying=await advanceIntake('fresh',request);assert.equal(verifying.phase,'verificacion');assert.equal(verifying.status,'processing');
+ const classifying=await advanceIntake('fresh',request);assert.equal(classifying.phase,'clasificacion');assert.equal(classifying.status,'processing');
+ const completed=await advanceIntake('fresh',request);assert.equal(completed.status,'completed');assert.equal(completed.result,result);
+ assert.equal(completed.verification.result,report);assert.equal(completed.classification.result,classes);
 });
-test('a verification error keeps the reading visible and is not retried automatically',async()=>{
+test('a verification error keeps the reading visible, is not retried, and classification still runs',async()=>{
  const urls=[];const result={module:'document_extractor',version:1,archivos:[]};
- const view=await advanceIntake('x',async(url,method)=>{urls.push(`${method??'GET'} ${url}`);return url.endsWith('/verification')?{estado:'error',error:'Google Vision respondió 403'}:{estado:'intake_completed',resultado:result};});
+ const view=await advanceIntake('x',async(url,method)=>{urls.push(`${method??'GET'} ${url}`);
+  if(url.endsWith('/verification'))return {estado:'error',error:'Google Vision respondió 403'};
+  if(url.endsWith('/classification'))return {estado:'error',error:'la clasificación no terminó'};
+  return {estado:'intake_completed',resultado:result};});
  assert.equal(view.status,'completed');assert.equal(view.result,result);assert.equal(view.verification.status,'error');assert.match(view.verification.error,/403/);
- assert.ok(urls.every(u=>u.startsWith('GET')));
+ assert.equal(view.classification.status,'error');assert.ok(urls.every(u=>u.startsWith('GET')),'errors are shown, never retried automatically');
 });
 test('classification results cannot silently pass for extraction output',async()=>{
  await assert.rejects(()=>advanceIntake('old',async()=>({estado:'intake_completed',resultado:{version:2,unidades:[]}})),/extractor/);
