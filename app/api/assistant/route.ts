@@ -211,7 +211,8 @@ const tables = workspaceData?.tables ?? [];
       spaces,
       contextText: retrievedKnowledge.contextText,
     }),
-    tables.length ? dataPrompt(tables, new Set(workspaceData!.ctx.types.filter((t) => t.editable).map((t) => t.tableKey))) : "",
+    tables.length ? dataPrompt(tables, new Set(workspaceData!.ctx.types.filter((t) => t.editable).map((t) => t.tableKey)))
+      : "# Datos del espacio de trabajo\n\nAhora mismo no tienes acceso a las tablas de datos. Si te piden cifras, tablas o cambios en los datos, di que no están disponibles en este momento; no inventes ni propongas nada.",
   ].filter(Boolean).join("\n\n");
 
 console.log("AI INPUT DEBUG", {
@@ -250,6 +251,7 @@ console.log("AI INPUT DEBUG", {
   const dataBlocks: DataBlock[] = [];
   const proposals: Proposal[] = [];
   let nudged = false;
+  let lastProposalErrors: string[] = [];
   let dataQueries = 0;
   let tokensInput = 0;
   let tokensOutput = 0;
@@ -270,8 +272,10 @@ console.log("AI INPUT DEBUG", {
     // The model sometimes describes a proposal it never made: make it actually prepare it (once).
     if (!calls.length && useTools && !nudged && !proposals.length && workspaceData && claimsProposal(response.output_text)) {
       nudged = true;
-      input = [...input, ...(response.output as ResponseInput), { role: "system", content:
-        `Has descrito una propuesta de cambios pero no has llamado a «${CHANGES_TOOL_NAME}», así que no existe y el usuario no puede aplicarla. Llama ahora a «${CHANGES_TOOL_NAME}» con esa propuesta (o, si no procede, responde sin hablar de propuestas).` }];
+      console.info("[assistant] propuesta descrita sin crear; se pide prepararla", JSON.stringify({ errores: lastProposalErrors.slice(0, 3) }));
+      input = [...input, ...(response.output as ResponseInput), { role: "system", content: lastProposalErrors.length
+        ? `Tu propuesta NO se ha creado porque tenía errores: ${lastProposalErrors.join(" · ")}. Corrígela y vuelve a llamar a «${CHANGES_TOOL_NAME}». Si no puedes corregirla, explica al usuario qué falla; no digas que está lista.`
+        : `Has descrito una propuesta de cambios pero no has llamado a «${CHANGES_TOOL_NAME}», así que no existe y el usuario no puede aplicarla. Llama ahora a «${CHANGES_TOOL_NAME}» con esa propuesta (o, si no procede, responde sin hablar de propuestas).` }];
       continue;
     }
     if (!calls.length || !useTools) break;
@@ -282,6 +286,8 @@ console.log("AI INPUT DEBUG", {
         try { args = JSON.parse(call.arguments); } catch { args = {}; }
         const { plan, proposal } = proposeChanges(workspaceData.ctx, args);
         if (proposal) proposals.push(proposal);
+        lastProposalErrors = proposal ? [] : plan.errores;
+        console.info("[assistant] proponer_cambios", JSON.stringify(proposal ? { ok: true, cifras: plan.cifras } : { ok: false, errores: plan.errores.slice(0, 3) }));
         return { type: "function_call_output" as const, call_id: call.call_id, output: JSON.stringify(proposal
           ? { estado: "propuesta mostrada al usuario, PENDIENTE de que pulse «Aplicar»", pasos: plan.pasos.map((p) => ({ paso: p.texto, avisos: p.avisos })), cifras: plan.cifras }
           : { errores: plan.errores }) };
@@ -292,9 +298,17 @@ console.log("AI INPUT DEBUG", {
       dataQueries += 1;
       const result = executeDataTool(tables, call.arguments, `D${dataBlocks.length + 1}`);
       if (result.block) dataBlocks.push(result.block);
+      if (result.output.startsWith('{"error"')) console.info("[assistant] consultar_datos", result.output.slice(0, 300));
       return { type: "function_call_output" as const, call_id: call.call_id, output: result.output };
     });
     input = [...input, ...(response.output as ResponseInput), ...outputs];
+  }
+
+  console.info("[assistant] mensaje", JSON.stringify({ tablas: tables.length, herramientas: dataQueries, propuestas: proposals.length, datos: dataBlocks.length }));
+  // Never leave the person waiting for a card that does not exist.
+  if (!proposals.length && claimsProposal(response.output_text)) {
+    console.warn("[assistant] la respuesta habla de una propuesta que no existe", JSON.stringify({ errores: lastProposalErrors.slice(0, 3) }));
+    response.output_text = `${response.output_text.trim()}\n\n> ⚠️ **No se ha podido preparar la propuesta**, así que no hay nada que aplicar todavía.${lastProposalErrors.length ? ` Motivo: ${lastProposalErrors[0]}` : ""} Pídemela de nuevo, si puede ser con más detalle.`;
   }
 
   let assistantMessage =
