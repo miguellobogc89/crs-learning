@@ -27,11 +27,37 @@ export function normalizeView(raw: unknown, columns?: Column[]): TableView {
   return { hidden, groupBy, sort, pageSize };
 }
 
-export type RowGroup = { key: string; label: string; rows: Record<string, CellValue>[]; totals: Record<string, number> };
+/**
+ * What a group row shows for each column, so a group reads like one summarised row:
+ * the same value in every row → that value; otherwise amounts and quantities are added up, prices shown as a range
+ * (adding prices makes no sense), and anything else as «varios». Empty values are ignored.
+ */
+export type GroupCell =
+  | { type: "same"; value: CellValue }
+  | { type: "sum"; value: number }
+  | { type: "range"; min: number; max: number }
+  | { type: "mixed"; count: number }
+  | { type: "empty" };
+export type RowGroup = { key: string; label: string; rows: Record<string, CellValue>[]; totals: Record<string, number>; cells: Record<string, GroupCell> };
+
+const isPrice = (c: Column) => /precio|price|tarifa|coste unitario|€\/|por unidad/i.test(`${c.key} ${c.label}`);
+
+export function groupCell(rows: Record<string, CellValue>[], c: Column): GroupCell {
+  const values = rows.map(r => r[c.key] ?? null).filter(v => v !== null && v !== "");
+  if (!values.length) return { type: "empty" };
+  const distinct = new Set(values.map(v => typeof v === "string" ? v.trim().toLowerCase() : String(v)));
+  if (distinct.size === 1) return { type: "same", value: values[0] };
+  const numbers = values.filter((v): v is number => typeof v === "number");
+  if ((c.kind === "money" || c.kind === "number") && numbers.length === values.length) {
+    if (isPrice(c)) return { type: "range", min: Math.min(...numbers), max: Math.max(...numbers) };
+    return { type: "sum", value: Math.round(numbers.reduce((a, n) => a + n, 0) * 100) / 100 };
+  }
+  return { type: "mixed", count: distinct.size };
+}
 
 /**
  * Rows grouped by the value of one column, keeping the order they come in (already filtered and sorted) inside each
- * group. Groups go biggest first (then by name); "(vacío)" last. Amount and number columns are added up per group.
+ * group. Groups go biggest first (then by name); "(vacío)" last. Each group carries a summary cell per column.
  */
 export function groupRows(rows: Record<string, CellValue>[], columns: Column[], groupBy: string): RowGroup[] {
   const sums = columns.filter(c => c.kind === "money" || c.kind === "number");
@@ -41,12 +67,13 @@ export function groupRows(rows: Record<string, CellValue>[], columns: Column[], 
     let g = groups.get(key);
     if (!g) {
       const label = key === "__empty" ? "(vacío)" : key === "sí" ? "Sí" : key === "no" ? "No" : key;
-      g = { key, label, rows: [], totals: Object.fromEntries(sums.map(c => [c.key, 0])) };
+      g = { key, label, rows: [], totals: Object.fromEntries(sums.map(c => [c.key, 0])), cells: {} };
       groups.set(key, g);
     }
     g.rows.push(r);
     for (const c of sums) { const n = r[c.key]; if (typeof n === "number") g.totals[c.key] += n; }
   }
+  for (const g of groups.values()) for (const c of columns) if (c.key !== groupBy && c.kind !== "document") g.cells[c.key] = groupCell(g.rows, c);
   return [...groups.values()].sort((a, b) => Number(a.key === "__empty") - Number(b.key === "__empty")
     || b.rows.length - a.rows.length || a.label.localeCompare(b.label, "es", { numeric: true }));
 }

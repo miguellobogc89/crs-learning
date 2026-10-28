@@ -51,3 +51,14 @@ test('tables overview: columns to complete become review items that open the tab
  const items=o.tablesReview({invoices:{rows:[]},duplicatedLines:0,groups:[],tables:[eq]});
  assert.deepEqual(items.map(i=>[i.title,i.href,i.action]),[['Equivalencias: 2 filas por completar','/analytics?view=tablas&table=tabla%3Aequivalencias&pendiente=producto','Completar']]);
 });
+
+test('a group row reads like one summarised row: shared values, added amounts, price ranges, «distintos»',()=>{
+ const cols=[{key:'producto',label:'Producto'},{key:'materia',label:'Materia prima'},{key:'proveedor',label:'Proveedor'},{key:'factura',label:'Factura'},
+  {key:'cantidad',label:'Cantidad',kind:'number'},{key:'precio',label:'Precio unitario',kind:'money'},{key:'importe',label:'Importe',kind:'money'},{key:'nota',label:'Nota'}];
+ const rows=[{producto:'SOLAN DE CABRAS 50CL',materia:'Agua',proveedor:'Makro',factura:'A1',cantidad:24,precio:0.3,importe:7.2,nota:null},
+  {producto:'SOLAN DE CABRAS 50CL',materia:'Agua',proveedor:'Makro',factura:'A2',cantidad:12,precio:0.32,importe:3.84,nota:null}];
+ const [g]=v.groupRows(rows,cols,'producto');
+ assert.deepEqual(g.cells,{materia:{type:'same',value:'Agua'},proveedor:{type:'same',value:'Makro'},factura:{type:'mixed',count:2},
+  cantidad:{type:'sum',value:36},precio:{type:'range',min:0.3,max:0.32},importe:{type:'sum',value:11.04},nota:{type:'empty'}});
+ assert.deepEqual(v.groupCell([{p:1},{p:1}],{key:'p',label:'Precio',kind:'money'}),{type:'same',value:1},'same price: shown once');
+});

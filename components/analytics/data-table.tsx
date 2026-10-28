@@ -42,8 +42,14 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
   const [open, setOpen] = useState<Set<string>>(new Set());
   const { view, update } = useTableView(table.columns);
   const { sort, pageSize, groupBy } = view;
-  const columns = useMemo(() => { const hidden = new Set(view.hidden); const c = table.columns.filter(x => !hidden.has(x.key)); return c.length ? c : table.columns; }, [table.columns, view.hidden]);
   const groupColumn = groupBy ? table.columns.find(c => c.key === groupBy) : undefined;
+  // Grouped, the grouping column goes first (each group row then reads «Producto · cantidades · precios…»).
+  const columns = useMemo(() => {
+    const hidden = new Set(view.hidden);
+    let c = table.columns.filter(x => !hidden.has(x.key));
+    if (!c.length) c = table.columns;
+    return groupColumn ? [groupColumn, ...c.filter(x => x.key !== groupColumn.key)] : c;
+  }, [table.columns, view.hidden, groupColumn]);
 
   const filterable = table.columns.filter(c => c.filter);
   const options = useMemo(() => Object.fromEntries(filterable.map(c => [c.key, filterOptions(table.rows, c)])), [table.rows]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -98,8 +104,6 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
 
   const pages = groups ? groupPages : result.pages, current = groups ? groupPage : result.page, count = groups ? groups.length : result.total;
   const from = count ? (current - 1) * pageSize + 1 : 0, to = Math.min(count, current * pageSize);
-  const sums = columns.findIndex(c => c.kind === "money" || c.kind === "number");
-  const labelSpan = sums > 0 ? sums : columns.length;
   const allOpen = !!groups && shownGroups.every(g => open.has(g.key));
 
   const cells = (r: Row) => columns.map(c => {
@@ -175,16 +179,24 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
         </tr></thead>
         <tbody>{groups ? shownGroups.map(g => {
           const expanded = open.has(g.key);
+          // The group row reads like one summarised row: shared values shown, amounts added, prices as a range.
+          const summary = (c: Column) => {
+            if (c.key === groupColumn!.key) return <span className={cn("font-semibold", g.key === "__empty" ? "text-slate-400" : "text-slate-900")}>{g.label}</span>;
+            const cell = g.cells[c.key];
+            if (!cell || cell.type === "empty") return null;
+            if (cell.type === "same") return show(cell.value, c.kind);
+            if (cell.type === "sum") return <span className="font-semibold text-slate-900">{c.kind === "money" ? fmtMoney(cell.value) : fmtNumber(cell.value)}</span>;
+            if (cell.type === "range") return <span>{c.kind === "money" ? `${fmtMoney(cell.min)} – ${fmtMoney(cell.max)}` : `${fmtNumber(cell.min)} – ${fmtNumber(cell.max)}`}</span>;
+            return <span className="text-xs italic text-slate-400">{cell.count} distintos</span>;
+          };
           return [<tr key={`g:${g.key}`} className="border-t border-slate-200 bg-slate-50/70 hover:bg-slate-100/70">
-            <td colSpan={labelSpan} className="px-4 py-2">
-              <button type="button" onClick={() => toggleGroup(g.key)} aria-expanded={expanded} className="flex w-full items-center gap-2 text-left">
+            {columns.map((c, ci) => <td key={c.key} className={cn("px-4 py-2 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" && "whitespace-nowrap")}>
+              {ci === 0 ? <button type="button" onClick={() => toggleGroup(g.key)} aria-expanded={expanded} className="flex w-full items-center gap-2 text-left">
                 <ChevronDown className={cn("size-4 shrink-0 text-slate-400 transition-transform", !expanded && "-rotate-90")} />
-                <span className={cn("truncate font-semibold", g.key === "__empty" ? "text-slate-400" : "text-slate-900")}>{g.label}</span>
-                <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium tabular-nums text-slate-500 ring-1 ring-slate-200">{g.rows.length.toLocaleString("es-ES")}</span>
-              </button>
-            </td>
-            {columns.slice(labelSpan).map(c => <td key={c.key} className={cn("whitespace-nowrap px-4 py-2 font-semibold tabular-nums text-slate-900", right(c) && "text-right")}>
-              {c.kind === "money" ? fmtMoney(g.totals[c.key] ?? 0) : c.kind === "number" ? fmtNumber(g.totals[c.key] ?? 0) : null}</td>)}
+                <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium tabular-nums text-slate-500 ring-1 ring-slate-200" title="Filas en el grupo">{g.rows.length.toLocaleString("es-ES")}</span>
+                <span className="min-w-0 truncate">{summary(c)}</span>
+              </button> : summary(c)}
+            </td>)}
             {mergeable && <td />}
           </tr>, ...(expanded ? g.rows.map((r, i) => row(r, typeof r._id === "string" ? r._id : `${g.key}-${i}`)) : [])];
         }) : result.rows.map((r, i) => row(r, typeof r._id === "string" ? r._id : `${result.page}-${i}`))}
