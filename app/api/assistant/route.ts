@@ -251,6 +251,7 @@ console.log("AI INPUT DEBUG", {
   const dataBlocks: DataBlock[] = [];
   const proposals: Proposal[] = [];
   let nudged = false;
+  let nudgedAsk = false;
   let lastProposalErrors: string[] = [];
   let dataQueries = 0;
   let tokensInput = 0;
@@ -259,7 +260,7 @@ console.log("AI INPUT DEBUG", {
   for (let round = 0; ; round += 1) {
     const useTools = tables.length > 0 && round < MAX_TOOL_ROUNDS;
     response = await openai.responses.create({
-      model: getOpenAIModel(),
+      model: assistantModel(),
       input,
       stream: false,
       ...(useTools ? { tools: [dataTool, changesTool] } : {}),
@@ -276,6 +277,14 @@ console.log("AI INPUT DEBUG", {
       input = [...input, ...(response.output as ResponseInput), { role: "system", content: lastProposalErrors.length
         ? `Tu propuesta NO se ha creado porque tenía errores: ${lastProposalErrors.join(" · ")}. Corrígela y vuelve a llamar a «${CHANGES_TOOL_NAME}». Si no puedes corregirla, explica al usuario qué falla; no digas que está lista.`
         : `Has descrito una propuesta de cambios pero no has llamado a «${CHANGES_TOOL_NAME}», así que no existe y el usuario no puede aplicarla. Llama ahora a «${CHANGES_TOOL_NAME}» con esa propuesta (o, si no procede, responde sin hablar de propuestas).` }];
+      continue;
+    }
+    // Asking permission instead of building («¿quieres que lo prepare?»): the method says prepare the first step now.
+    if (!calls.length && useTools && !nudgedAsk && !proposals.length && workspaceData && asksPermission(response.output_text)) {
+      nudgedAsk = true;
+      console.info("[assistant] pide permiso en vez de construir; se le pide preparar el primer paso");
+      input = [...input, ...(response.output as ResponseInput), { role: "system", content:
+        `No preguntes si el usuario quiere que lo prepares: según tu método, decide tú la estructura que falta y prepara AHORA la propuesta del primer paso con «${CHANGES_TOOL_NAME}» (indicando «pasos_del_objetivo» y «paso_actual»). Empieza la respuesta explicando en una o dos frases el camino completo y por qué empiezas por ese paso. Si de verdad no hace falta construir nada, responde sin ofrecerlo.` }];
       continue;
     }
     if (!calls.length || !useTools) break;
@@ -367,7 +376,7 @@ const savedAssistantMessage =
       user_id: userId,
       role: "assistant",
       content: assistantMessage,
-      model: getOpenAIModel(),
+      model: assistantModel(),
 
       tokens_input: tokensInput || null,
 
@@ -603,9 +612,19 @@ function extractCitationIds(answer: string) {
   return Array.from(citedIds);
 }
 
+/** The answer offers to build something instead of building it. */
+function asksPermission(text: string) {
+  return /(quieres|te gustar[ií]a|deseas|prefieres)\s+que\s+(te\s+|lo\s+|la\s+|los\s+|las\s+)?(prepare|cree|haga|construya|monte|proponga|organice|configure)|si\s+quieres,?\s+(te\s+)?(puedo|lo\s+preparo|preparo|creo)|puedo\s+ayudarte\s+a\s+(crear|preparar|construir|montar|organizar)/i.test(text);
+}
+
 /** The answer talks about a change proposal ready to apply. */
 function claimsProposal(text: string) {
   return /propuesta/i.test(text) && /(lista|preparad|revis|aplic)/i.test(text) || /pulsa[^.]{0,20}«?aplicar|bot[oó]n[^.]{0,10}«?aplicar/i.test(text);
+}
+
+/** The assistant can use its own (more capable) model: OPENAI_ASSISTANT_MODEL, or the general one. */
+function assistantModel() {
+  return process.env.OPENAI_ASSISTANT_MODEL?.trim() || getOpenAIModel();
 }
 
 function normalizeRole(role: string) {
