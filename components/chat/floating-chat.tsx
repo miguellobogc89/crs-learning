@@ -2,16 +2,12 @@
 "use client";
 
 import {
-  Bot,
+  ArrowUp,
   ChevronDown,
   LoaderCircle,
   Maximize2,
-  MessageCircle,
   Minimize2,
-  MoreHorizontal,
-  Paperclip,
   Plus,
-  Send,
   Sparkles,
   X,
 } from "lucide-react";
@@ -20,7 +16,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/components/chat/chat-message";
@@ -411,6 +407,10 @@ useEffect(() => {
     }
   }
 
+  const panelWidth = isExpanded
+    ? "w-full md:w-[52vw] md:min-w-[640px]"
+    : "w-full sm:w-[440px]";
+
   return (
     <>
       {!hideTrigger && !isOpen && (
@@ -418,375 +418,154 @@ useEffect(() => {
           type="button"
           onClick={openChat}
           aria-label="Abrir asistente"
-          style={{
-            bottom:
-              "var(--floating-chat-bottom)",
-          }}
-          className="
-            group fixed right-6 z-50
-            flex h-14 items-center gap-3
-            overflow-hidden rounded-2xl
-            border border-white/20
-            bg-neutral-950 px-4 text-white
-            shadow-[0_20px_60px_-15px_rgba(0,0,0,0.55)]
-            transition-all duration-300
-            hover:-translate-y-1
-            hover:shadow-[0_24px_70px_-15px_rgba(0,0,0,0.65)]
-            active:translate-y-0
-          "
+          style={{ bottom: "var(--floating-chat-bottom)" }}
+          className="group fixed right-6 z-50 flex h-12 items-center gap-2.5 rounded-2xl bg-[#0A58FF] pl-2 pr-4 text-white shadow-[0_16px_40px_-12px_rgba(10,88,255,0.55)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#0848d6]"
         >
-          <span className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-white/10">
-            <Sparkles className="h-[18px] w-[18px]" />
-
-            <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-neutral-950 bg-emerald-400" />
+          <span className="flex size-8 items-center justify-center rounded-xl bg-white/15">
+            <Sparkles className="size-4" />
           </span>
-
-          <span className="hidden pr-1 text-left sm:block">
-            <span className="block text-sm font-medium leading-none">
-              Pregunta a CRS
-            </span>
-
-            <span className="mt-1 block text-[11px] text-white/55">
-              Tu conocimiento, al instante
-            </span>
-          </span>
+          <span className="hidden text-sm font-semibold sm:block">Asistente</span>
         </button>
       )}
 
-<aside
-  className={cn(
-    `
-      fixed bottom-0 right-0 top-0 z-50
-      flex flex-col
-      border-l border-border/70
-      bg-background/95
-      shadow-[-24px_0_80px_-35px_rgba(0,0,0,0.35)]
-      backdrop-blur-2xl
+      <aside
+        className={cn(
+          "fixed bottom-0 right-0 top-0 z-50 flex flex-col border-l border-slate-200 bg-white shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.25)] transform-gpu transition-[transform,width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+          isOpen ? "translate-x-0" : "translate-x-full",
+          panelWidth,
+        )}
+      >
+        {/* Header: who it is, the current conversation (click to switch) and the actions, in one row. */}
+        <header className="relative flex h-14 shrink-0 items-center gap-2 border-b border-slate-100 px-3">
+          <img src="/email/logo-mark.png" alt="" width={28} height={28} className="size-7 shrink-0 rounded-lg" />
+          <button
+            type="button"
+            onClick={() => setShowConversations((current) => !current)}
+            aria-expanded={showConversations}
+            className="flex min-w-0 flex-1 items-center gap-1 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-slate-50"
+          >
+            <span className="min-w-0">
+              <span className="block text-[13px] font-semibold leading-tight text-slate-900">Asistente</span>
+              <span className="block truncate text-[11px] leading-tight text-slate-500">
+                {activeConversation?.title ?? "Nueva conversación"}
+              </span>
+            </span>
+            <ChevronDown className={cn("size-3.5 shrink-0 text-slate-400 transition-transform", showConversations && "rotate-180")} />
+          </button>
+          <div className="flex shrink-0 items-center">
+            <IconButton label="Nueva conversación" onClick={startNewConversation}><Plus className="size-4" /></IconButton>
+            <IconButton label={isExpanded ? "Reducir panel" : "Ampliar panel"} onClick={toggleExpanded}>
+              {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </IconButton>
+            <IconButton label="Cerrar" onClick={closeChat}><X className="size-4" /></IconButton>
+          </div>
 
-      transform-gpu
-      transition-transform
-      duration-500
-      ease-[cubic-bezier(0.22,1,0.36,1)]
-      will-change-transform
-    `,
-    isOpen
-      ? "translate-x-0"
-      : "translate-x-full",
-    isExpanded
-      ? "w-full md:w-[48vw]"
-      : "w-full sm:w-[430px] xl:w-[25vw] xl:min-w-[400px]",
-  )}
->
-        <header className="flex h-[72px] shrink-0 items-center justify-between border-b border-border/70 px-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-neutral-950 text-white shadow-sm">
-              <Bot className="h-5 w-5" />
-
-              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background bg-emerald-400" />
-            </div>
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="truncate text-sm font-semibold">
-                  CRS Intelligence
-                </h2>
-
-                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600">
-                  Online
-                </span>
+          {showConversations && (
+            <div className="absolute left-2 right-2 top-[calc(100%+4px)] z-30 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_16px_40px_-12px_rgba(15,23,42,0.25)]">
+              <button
+                type="button"
+                onClick={startNewConversation}
+                className="flex w-full items-center gap-2 border-b border-slate-100 px-3 py-2.5 text-left text-[13px] font-medium text-[#0A58FF] hover:bg-slate-50"
+              >
+                <Plus className="size-4" />
+                Nueva conversación
+              </button>
+              <div className="max-h-80 overflow-y-auto p-1">
+                {conversationList.length === 0 ? (
+                  <p className="px-3 py-6 text-center text-xs text-slate-500">Todavía no hay conversaciones.</p>
+                ) : (
+                  conversationList.map((conversation) => (
+                    <button
+                      key={conversation.id}
+                      type="button"
+                      disabled={isLoadingConversation || isSending}
+                      onClick={() => { void loadConversation(conversation.id); }}
+                      className={cn(
+                        "block w-full rounded-lg px-3 py-2 text-left transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50",
+                        conversation.id === conversationId && "bg-[#EDF3FF]",
+                      )}
+                    >
+                      <span className={cn("block truncate text-[13px]", conversation.id === conversationId ? "font-semibold text-[#0A58FF]" : "text-slate-800")}>
+                        {conversation.title}
+                      </span>
+                      <span className="block truncate text-[11px] text-slate-500">{getConversationScopeLabel(conversation)}</span>
+                    </button>
+                  ))
+                )}
               </div>
-
-              <p className="truncate text-xs text-muted-foreground">
-                Conectado al conocimiento de tu
-                empresa
-              </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={toggleExpanded}
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Cambiar tamaño del panel"
-            >
-              {isExpanded ? (
-                <Minimize2 className="h-[17px] w-[17px]" />
-              ) : (
-                <Maximize2 className="h-[17px] w-[17px]" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Más opciones"
-            >
-              <MoreHorizontal className="h-[18px] w-[18px]" />
-            </button>
-
-            <button
-              type="button"
-              onClick={closeChat}
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Cerrar chat"
-            >
-              <X className="h-[18px] w-[18px]" />
-            </button>
-          </div>
+          )}
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="relative border-b border-border/50 px-5 py-3">
-            <button
-              type="button"
-              onClick={() => {
-                setShowConversations(
-                  (current) => !current,
-                );
-              }}
-              className="flex w-full items-center justify-between rounded-xl px-1 py-1 text-left"
-            >
-              <div className="min-w-0">
-                <p className="text-xs font-medium">
-                  Conversación actual
-                </p>
-
-                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                  {activeConversation?.title ??
-                    "Nueva conversación"}
-                </p>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className={cn("mx-auto flex min-h-full w-full flex-col px-4 py-4", isExpanded && "max-w-3xl px-6")}>
+            {isLoadingConversation ? (
+              <div className="flex flex-1 items-center justify-center">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <LoaderCircle className="size-4 animate-spin" />
+                  Cargando conversación…
+                </div>
               </div>
-
-              <ChevronDown
-                className={cn(
-                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
-                  showConversations &&
-                    "rotate-180",
-                )}
-              />
-            </button>
-
-            {showConversations && (
-              <div className="absolute left-4 right-4 top-[calc(100%-4px)] z-30 overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
-                <div className="border-b border-border p-2">
-                  <button
-                    type="button"
-                    onClick={
-                      startNewConversation
-                    }
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted"
-                  >
-                    <Plus className="h-4 w-4 text-brand" />
-                    Nueva conversación
-                  </button>
-                </div>
-
-                <div className="max-h-80 overflow-y-auto p-2">
-                  {conversationList.length ===
-                  0 ? (
-                    <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                      Todavía no hay
-                      conversaciones.
-                    </p>
-                  ) : (
-                    <div className="space-y-1">
-                      {conversationList.map(
-                        (conversation) => (
-                          <button
-                            key={
-                              conversation.id
-                            }
-                            type="button"
-                            disabled={
-                              isLoadingConversation ||
-                              isSending
-                            }
-                            onClick={() => {
-                              void loadConversation(
-                                conversation.id,
-                              );
-                            }}
-                            className={cn(
-                              "w-full rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50",
-                              conversation.id ===
-                                conversationId &&
-                                "bg-brand-soft",
-                            )}
-                          >
-                            <span className="block truncate text-sm font-medium text-foreground">
-                              {
-                                conversation.title
-                              }
-                            </span>
-
-                            <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                              {getConversationScopeLabel(
-                                conversation,
-                              )}
-                            </span>
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  )}
-                </div>
+            ) : messages.length === 0 ? (
+              <EmptyChat onSuggestionClick={setMessage} />
+            ) : (
+              <div className="flex flex-col gap-4">
+                {messages.map((chatMessage) => (
+                  <ChatMessage key={chatMessage.id} message={chatMessage} />
+                ))}
+                {isSending && <TypingIndicator />}
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
+        </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
-            <div
-              className={cn(
-                "flex min-h-full w-full flex-col",
-                isExpanded &&
-                  "px-6 lg:px-10",
-              )}
-            >
-              {isLoadingConversation ? (
-                <div className="flex flex-1 items-center justify-center">
-                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                    <LoaderCircle className="h-6 w-6 animate-spin" />
-
-                    <p className="text-xs">
-                      Cargando conversación...
-                    </p>
-                  </div>
-                </div>
-              ) : messages.length === 0 ? (
-                <EmptyChat
-                  onSuggestionClick={
-                    setMessage
-                  }
-                />
-              ) : (
-                <div className="flex flex-col gap-5">
-{messages.map((chatMessage) => (
-  <ChatMessage
-    key={chatMessage.id}
-    message={chatMessage}
-  />
-))}
-
-                  {isSending && (
-                    <TypingIndicator />
-                  )}
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-          </div>
-
-          <footer className="shrink-0 border-t border-border/70 bg-background/90 p-4 backdrop-blur-xl">
+        <footer className="shrink-0 border-t border-slate-100 bg-white px-3 pb-2 pt-3">
+          <div className={cn("mx-auto w-full", isExpanded && "max-w-3xl")}>
             {errorMessage && (
-              <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                {errorMessage}
-              </div>
+              <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{errorMessage}</div>
             )}
-
-            <div
-              className="
-                rounded-[22px] border
-                border-border bg-card p-2
-                shadow-[0_10px_35px_-20px_rgba(0,0,0,0.3)]
-                transition-shadow
-                focus-within:shadow-[0_14px_40px_-20px_rgba(0,0,0,0.4)]
-              "
-            >
+            <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 pl-3 transition-colors focus-within:border-[#0A58FF]/50 focus-within:ring-4 focus-within:ring-[#0A58FF]/10">
               <textarea
                 rows={1}
                 value={message}
-                disabled={
-                  isSending ||
-                  isLoadingConversation
-                }
-                onChange={(event) => {
-                  setMessage(
-                    event.target.value,
-                  );
-                }}
+                disabled={isSending || isLoadingConversation}
+                onChange={(event) => { setMessage(event.target.value); }}
                 onKeyDown={handleKeyDown}
-                placeholder={
-                  isSending
-                    ? "Consultando el conocimiento..."
-                    : "Pregunta sobre el conocimiento de tu empresa..."
-                }
-                className="
-                  max-h-32 min-h-12 w-full
-                  resize-none bg-transparent
-                  px-3 py-3 text-sm outline-none
-                  placeholder:text-muted-foreground
-                  disabled:cursor-not-allowed
-                  disabled:opacity-60
-                "
+                placeholder={isSending ? "Pensando…" : "Pregunta por tus datos o documentos…"}
+                className="max-h-32 min-h-9 flex-1 resize-none bg-transparent py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
               />
-
-              <div className="flex items-center justify-between px-1 pb-1">
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    className="flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    aria-label="Adjuntar archivo"
-                  >
-                    <Paperclip className="h-[17px] w-[17px]" />
-                  </button>
-
-                  <button
-                    type="button"
-                    className="flex h-9 items-center gap-2 rounded-xl px-3 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Conocimiento
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    void sendMessage();
-                  }}
-                  disabled={
-                    !message.trim() ||
-                    isSending ||
-                    isLoadingConversation
-                  }
-                  className="
-                    flex h-9 w-9 items-center
-                    justify-center rounded-xl
-                    bg-neutral-950 text-white
-                    shadow-sm transition-all
-                    hover:scale-[1.03]
-                    hover:bg-neutral-800
-                    active:scale-95
-                    disabled:cursor-not-allowed
-                    disabled:opacity-40
-                    disabled:hover:scale-100
-                  "
-                  aria-label={
-                    isSending
-                      ? "Enviando mensaje"
-                      : "Enviar mensaje"
-                  }
-                >
-                  {isSending ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => { void sendMessage(); }}
+                disabled={!message.trim() || isSending || isLoadingConversation}
+                aria-label={isSending ? "Enviando mensaje" : "Enviar mensaje"}
+                className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#0A58FF] text-white transition-colors hover:bg-[#0848d6] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+              >
+                {isSending ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
+              </button>
             </div>
-
-            <p className="mt-2 text-center text-[10px] text-muted-foreground">
-              CRS puede cometer errores.
-              Comprueba la documentación
-              enlazada.
+            <p className="mt-1.5 text-center text-[10px] text-slate-400">
+              El asistente puede equivocarse. Revisa los datos importantes.
             </p>
-          </footer>
-        </div>
+          </div>
+        </footer>
       </aside>
     </>
+  );
+}
+
+function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="flex size-8 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -796,72 +575,39 @@ function EmptyChat({
   onSuggestionClick: (value: string) => void;
 }) {
   return (
-    <>
-      <div className="mb-8">
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-brand shadow-sm">
-          <Sparkles className="h-5 w-5" />
-        </div>
-
-        <h3 className="text-xl font-semibold tracking-tight">
-          ¿En qué puedo ayudarte?
-        </h3>
-
-        <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-          Pregunta sobre procesos,
-          documentacion, politicas o cualquier
-          conocimiento disponible en tu organizacion.
-        </p>
-      </div>
-
-      <div className="grid gap-2">
+    <div className="flex flex-1 flex-col justify-center py-6">
+      <span className="flex size-10 items-center justify-center rounded-xl bg-[#0A58FF]/10 text-[#0A58FF]">
+        <Sparkles className="size-5" />
+      </span>
+      <h3 className="mt-3 text-lg font-semibold tracking-tight text-slate-900">¿En qué te ayudo?</h3>
+      <p className="mt-1 text-[13px] leading-5 text-slate-500">
+        Pregunta por tus facturas, gastos, productos o documentos. También puedo crear tablas y enlazarlas; tú decides si se aplican.
+      </p>
+      <div className="mt-4 grid gap-1.5">
         {suggestions.map((suggestion) => (
           <button
             key={suggestion}
             type="button"
-            onClick={() => {
-              onSuggestionClick(suggestion);
-            }}
-            className="
-              group flex items-center
-              justify-between rounded-2xl
-              border border-border/70 bg-card
-              px-4 py-3.5 text-left text-sm
-              transition-all
-              hover:-translate-y-0.5
-              hover:border-border
-              hover:bg-muted/50 hover:shadow-sm
-            "
+            onClick={() => { onSuggestionClick(suggestion); }}
+            className="group flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left text-[13px] text-slate-700 transition-colors hover:border-[#0A58FF]/40 hover:bg-[#0A58FF]/[0.03] hover:text-slate-900"
           >
             <span>{suggestion}</span>
-
-            <MessageCircle className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
+            <ArrowUp className="size-3.5 shrink-0 rotate-45 text-slate-300 transition-colors group-hover:text-[#0A58FF]" />
           </button>
         ))}
       </div>
-
-      <div className="mt-auto pt-8">
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-success" />
-          Respuestas basadas únicamente en
-          contenido autorizado
-        </div>
-      </div>
-    </>
+    </div>
   );
 }
 
-
 function TypingIndicator() {
   return (
-    <div className="flex justify-start">
-      <div className="flex items-center gap-3 rounded-2xl rounded-bl-md border border-border bg-card px-4 py-3 shadow-sm">
-        <Bot className="h-4 w-4 text-brand" />
-
-        <div className="flex items-center gap-1">
-          <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
-          <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
-          <span className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
-        </div>
+    <div className="flex items-center gap-2.5">
+      <img src="/email/logo-mark.png" alt="" width={24} height={24} className="size-6 shrink-0 rounded-md" />
+      <div className="flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-2.5">
+        <span className="size-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]" />
+        <span className="size-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]" />
+        <span className="size-1.5 animate-bounce rounded-full bg-slate-400" />
       </div>
     </div>
   );

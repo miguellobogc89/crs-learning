@@ -62,7 +62,7 @@ export default async function AssistantConversationPage({
           {conversation.title}
         </h1>
         <p className="text-xs text-muted-foreground">
-          Conversación con CRS Assistant
+          Conversación con el asistente
         </p>
       </header>
 
@@ -80,15 +80,15 @@ export default async function AssistantConversationPage({
               <div
                 className={
                   message.role === "user"
-                    ? "flex max-w-[80%] gap-3 rounded-2xl bg-brand px-5 py-4 text-white"
-                    : "flex max-w-[80%] gap-3 rounded-2xl border border-border bg-panel px-5 py-4 text-foreground"
+                    ? "flex max-w-[80%] gap-3 rounded-2xl bg-slate-100 px-4 py-2.5 text-slate-900"
+                    : "flex max-w-[80%] gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-800"
                 }
               >
                 <div className="mt-0.5 shrink-0">
                   {message.role === "user" ? (
                     <User className="h-4 w-4" />
                   ) : (
-                    <Bot className="h-4 w-4 text-brand" />
+                    <Bot className="h-4 w-4 text-[#0A58FF]" />
                   )}
                 </div>
 

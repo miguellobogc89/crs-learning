@@ -7,9 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import {
-  Bot,
   FileText,
-  User,
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
@@ -97,108 +95,53 @@ async function handleFeedback(
   }
 }
 
-  return (
-    <div
-      className={
-        isUser
-          ? "flex justify-end"
-          : "flex justify-start"
-      }
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+        <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-slate-100 px-3.5 py-2 text-sm leading-6 text-slate-900">
+          {message.content}
+        </p>
+      </div>
+    );
+  }
+
+  const feedbackButton = (rating: "positive" | "negative") => (
+    <button
+      type="button"
+      disabled={isSavingFeedback}
+      aria-label={rating === "positive" ? "Respuesta útil" : "Respuesta no útil"}
+      onClick={() => { void handleFeedback(rating); }}
+      className={[
+        "flex size-7 items-center justify-center rounded-md transition-colors",
+        feedback === rating
+          ? rating === "positive" ? "bg-[#0A58FF]/10 text-[#0A58FF]" : "bg-rose-50 text-rose-600"
+          : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
+        isSavingFeedback ? "cursor-not-allowed opacity-50" : "",
+      ].join(" ")}
     >
-      <div
-        className={
-          isUser
-            ? `
-                flex max-w-[78%] gap-3
-                rounded-2xl rounded-br-md
-                border border-border
-                bg-muted/60 px-4 py-3
-                text-foreground
-              `
-            : `
-                flex ${message.dataBlocks?.length || message.proposals?.length ? "w-full min-w-0" : "max-w-[82%]"} gap-3
-                rounded-2xl rounded-bl-md
-                border border-border
-                bg-card px-4 py-3
-                text-foreground shadow-sm
-              `
-        }
-      >
-        <div className="mt-1 shrink-0">
-          {isUser ? (
-            <User className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <Bot className="h-4 w-4 text-brand" />
-          )}
-        </div>
+      {rating === "positive" ? <ThumbsUp className="size-3.5" /> : <ThumbsDown className="size-3.5" />}
+    </button>
+  );
 
-        <div className="min-w-0 flex-1">
-          {isUser ? (
-            <p className="whitespace-pre-wrap text-sm leading-7">
-              {message.content}
-            </p>
-          ) : (
-            <>
-            <AssistantMessageContent
-              text={message.content}
-              sources={message.sources}
-            />
+  return (
+    <div className="group flex gap-2.5">
+      <img src="/email/logo-mark.png" alt="" width={24} height={24} className="mt-0.5 size-6 shrink-0 rounded-md" />
+      <div className="min-w-0 flex-1">
+        <AssistantMessageContent text={message.content} sources={message.sources} />
 
-            {message.dataBlocks?.map((block) => (
-              <DataBlockView key={block.id} block={block} />
-            ))}
+        {message.dataBlocks?.map((block) => (
+          <DataBlockView key={block.id} block={block} />
+        ))}
 
-            {message.proposals?.map((proposal) => (
-              <ProposalCard key={proposal.id} messageId={message.id} proposal={proposal} />
-            ))}
+        {message.proposals?.map((proposal) => (
+          <ProposalCard key={proposal.id} messageId={message.id} proposal={proposal} />
+        ))}
 
-            <ConsultedArticles
-              message={message}
-            />
+        <ConsultedArticles message={message} />
 
-            <div className="mt-3 flex items-center gap-1">
-              <button
-                type="button"
-                disabled={isSavingFeedback}
-                aria-label="Respuesta útil"
-                onClick={() => {
-                  void handleFeedback("positive");
-                }}
-                className={[
-                  "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
-                  feedback === "positive"
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  isSavingFeedback
-                    ? "cursor-not-allowed opacity-50"
-                    : "",
-                ].join(" ")}
-              >
-                <ThumbsUp className="h-4 w-4" />
-              </button>
-
-              <button
-                type="button"
-                disabled={isSavingFeedback}
-                aria-label="Respuesta no útil"
-                onClick={() => {
-                  void handleFeedback("negative");
-                }}
-                className={[
-                  "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
-                  feedback === "negative"
-                    ? "bg-destructive/10 text-destructive"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  isSavingFeedback
-                    ? "cursor-not-allowed opacity-50"
-                    : "",
-                ].join(" ")}
-              >
-                <ThumbsDown className="h-4 w-4" />
-              </button>
-            </div>
-            </>
-          )}
+        <div className={["mt-1 flex items-center gap-0.5 transition-opacity", feedback ? "" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"].join(" ")}>
+          {feedbackButton("positive")}
+          {feedbackButton("negative")}
         </div>
       </div>
     </div>
@@ -215,7 +158,7 @@ function AssistantMessageContent({
   const parts = splitCitationGroups(text);
 
   return (
-    <div className="min-w-0 text-sm leading-7">
+    <div className="min-w-0 text-sm leading-6 text-slate-800">
       {parts.map((part, index) => {
         if (part.type === "citation") {
           const source = findFirstSource(
@@ -258,15 +201,15 @@ function MarkdownContent({
       components={{
         p({ children }) {
           return (
-            <span className="whitespace-pre-wrap">
+            <p className="mb-2 whitespace-pre-wrap last:mb-0">
               {children}
-            </span>
+            </p>
           );
         },
 
         h1({ children }) {
           return (
-            <h1 className="mb-3 mt-4 text-xl font-semibold tracking-tight first:mt-0">
+            <h1 className="mb-2 mt-3 text-base font-semibold first:mt-0">
               {children}
             </h1>
           );
@@ -274,7 +217,7 @@ function MarkdownContent({
 
         h2({ children }) {
           return (
-            <h2 className="mb-2 mt-4 text-lg font-semibold tracking-tight first:mt-0">
+            <h2 className="mb-1.5 mt-3 text-[15px] font-semibold first:mt-0">
               {children}
             </h2>
           );
@@ -282,7 +225,7 @@ function MarkdownContent({
 
         h3({ children }) {
           return (
-            <h3 className="mb-2 mt-3 text-base font-semibold first:mt-0">
+            <h3 className="mb-1 mt-2.5 text-sm font-semibold first:mt-0">
               {children}
             </h3>
           );
@@ -290,7 +233,7 @@ function MarkdownContent({
 
         strong({ children }) {
           return (
-            <strong className="font-semibold text-primary">
+            <strong className="font-semibold text-slate-900">
               {children}
             </strong>
           );
@@ -306,7 +249,7 @@ function MarkdownContent({
 
         ul({ children }) {
           return (
-            <ul className="my-2 list-disc space-y-1 pl-5">
+            <ul className="mb-2 list-disc space-y-0.5 pl-5 last:mb-0">
               {children}
             </ul>
           );
@@ -314,7 +257,7 @@ function MarkdownContent({
 
         ol({ children }) {
           return (
-            <ol className="my-2 list-decimal space-y-1 pl-5">
+            <ol className="mb-2 list-decimal space-y-0.5 pl-5 last:mb-0">
               {children}
             </ol>
           );
@@ -322,7 +265,7 @@ function MarkdownContent({
 
         li({ children }) {
           return (
-            <li className="pl-1">
+            <li className="pl-0.5 marker:text-slate-400">
               {children}
             </li>
           );
@@ -330,7 +273,7 @@ function MarkdownContent({
 
         blockquote({ children }) {
           return (
-            <blockquote className="my-3 border-l-2 border-primary/30 pl-4 text-muted-foreground">
+            <blockquote className="my-2 rounded-r-lg border-l-2 border-amber-400 bg-amber-50/60 py-1.5 pl-3 pr-2 text-slate-700">
               {children}
             </blockquote>
           );
@@ -411,12 +354,20 @@ function MarkdownContent({
           href,
           children,
         }) {
+          // Links inside the app (a table in Analítica…) open here; others in a new tab.
+          if (href?.startsWith("/")) {
+            return (
+              <Link href={href} className="font-medium text-[#0A58FF] hover:underline">
+                {children}
+              </Link>
+            );
+          }
           return (
             <a
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-medium text-primary underline underline-offset-2"
+              className="font-medium text-[#0A58FF] underline underline-offset-2"
             >
               {children}
             </a>

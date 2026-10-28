@@ -19,7 +19,7 @@ export default async function AssistantPage() {
         </div>
 
         <h1 className="mt-4 text-base font-semibold text-foreground">
-          Pregunta a CRS Assistant
+          Pregunta al asistente
         </h1>
 
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
