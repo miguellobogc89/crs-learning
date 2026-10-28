@@ -38,8 +38,11 @@ export async function GET(request: Request) {
       SELECT DISTINCT f->>'archivoId' AS file_id FROM public.knowledge_imports k
       CROSS JOIN LATERAL jsonb_array_elements(coalesce(k.proposal_json->'resultado'->'archivos', '[]'::jsonb)) f
       CROSS JOIN LATERAL jsonb_array_elements(coalesce(f->'partes', '[]'::jsonb)) p
-      WHERE k.id = ANY(${ids}::uuid[]) AND p->>'modo' = 'dirigida'
-      UNION SELECT import_file_id::text FROM public.intake_template_documents WHERE workspace_id = ${ctx.workspaceId}::uuid AND status = 'completed' AND records > 0`)).map(r => r.file_id) : []);
+      WHERE k.id = ANY(${ids}::uuid[]) AND p->>'modo' = 'dirigida'`)).map(r => r.file_id) : []);
+    // Records of templates (the table may not exist yet if its SQL was not run).
+    const templated = await prisma.intake_template_documents.findMany({ where: { workspace_id: ctx.workspaceId, status: "completed", records: { gt: 0 } }, select: { import_file_id: true } })
+      .catch((error: unknown) => { if ((error as { code?: string } | null)?.code === "P2021") return []; throw error; });
+    for (const t of templated as { import_file_id: string }[]) withData.add(t.import_file_id);
     const archivos = fileRows(files, registry, batches, withData);
     return NextResponse.json({ carpeta: folder.name, archivos, recuento: countByStatus(archivos), listaIncompleta: capped, canManage: ctx.canManage });
   } catch (error) {

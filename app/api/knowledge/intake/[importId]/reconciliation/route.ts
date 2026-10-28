@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { refreshIntakeAlerts } from "@/lib/knowledge/intake/alerts/service";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -56,5 +57,7 @@ export async function POST(_request: Request, context: Context) {
   const saved = await prisma.knowledge_imports.updateMany({ where: { id: batch.id, status: "intake_completed", proposal_json: { equals: batch.proposal_json as Prisma.InputJsonValue } },
     data: { proposal_json: next as Prisma.InputJsonValue, updated_at: new Date() } });
   if (saved.count !== 1) return NextResponse.json({ error: "El lote cambió; actualiza su estado" }, { status: 409 });
+  // The batch now waits to be saved (maybe with decisions): the inbox says so.
+  refreshIntakeAlerts(batch.workspaceId);
   return NextResponse.json({ estado: state.status });
 }

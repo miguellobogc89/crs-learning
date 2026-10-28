@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { refreshIntakeAlerts } from "@/lib/knowledge/intake/alerts/service";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -70,12 +71,14 @@ export async function POST(request: Request, context: Context) {
       await tx.knowledge_imports.update({ where: { id: batch.id }, data: { proposal_json: { ...claim, escritura: { ...claim.escritura, resultado: written } } as Prisma.InputJsonValue, updated_at: new Date() } });
       return written;
     }, { timeout: 120_000, maxWait: 15_000 });
+    refreshIntakeAlerts(batch.workspaceId);
     return NextResponse.json({ estado: "completed", resultado });
   } catch (error) {
     // Nothing was written (the transaction rolled back); the error and the decisions are kept for the next try.
     const message = error instanceof Error ? error.message : "No se pudo guardar";
     const next = JSON.parse(JSON.stringify({ ...payload, escritura: { status: "error", revision: WRITER_REVISION, at: new Date().toISOString(), error: message, decisiones } }));
     await prisma.knowledge_imports.updateMany({ where: { id: batch.id, proposal_json: { equals: batch.proposal_json as Prisma.InputJsonValue } }, data: { proposal_json: next, updated_at: new Date() } });
+    refreshIntakeAlerts(batch.workspaceId);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

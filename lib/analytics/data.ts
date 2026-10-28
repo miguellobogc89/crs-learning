@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
+/** Prisma P2021: the table does not exist in the database (a SQL script not run yet). */
+export const missingTable = (error: unknown) => (error as { code?: string } | null)?.code === "P2021";
+
 /** Records of the workspace used by analytics, with the relations that join them (read-only). */
 export type Row = { id: string; values: Record<string, unknown>; revision?: number };
 export type AnalyticsData = {
@@ -40,8 +43,9 @@ export async function loadAnalyticsData(workspaceId: string): Promise<AnalyticsD
     relations[key].push([link.from_record_id, link.to_record_id]);
   }
   // Template tables: their records, read like the others.
+  // Without the templates table (its SQL not run yet) analytics works as before, just without these tables.
   const templateDefs = await prisma.intake_templates.findMany({ where: { workspace_id: workspaceId, status: "active" }, orderBy: { created_at: "asc" },
-    select: { id: true, nombre: true, object_type_key: true, definition_json: true } });
+    select: { id: true, nombre: true, object_type_key: true, definition_json: true } }).catch((error: unknown) => { if (missingTable(error)) return []; throw error; });
   const templateTypes = templateDefs.length ? await prisma.engine_object_types.findMany({ where: { workspace_id: workspaceId, key: { in: templateDefs.map((d: { object_type_key: string }) => d.object_type_key) }, status: "active" }, select: { id: true, key: true } }) : [];
   const templates: TemplateTable[] = [];
   for (const d of templateDefs as { id: string; nombre: string; object_type_key: string; definition_json: unknown }[]) {

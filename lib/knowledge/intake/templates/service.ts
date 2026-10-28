@@ -20,7 +20,9 @@ type Tx = Prisma.TransactionClient;
 type Payload = { lecturaBase?: { resultado?: { archivos?: BaseReadingFile[] } }; clasificacion?: { resultado?: { archivos?: ClassifiedFile[] } } };
 
 export async function listTemplates(workspaceId: string): Promise<TemplateRef[]> {
-  const rows = await prisma.intake_templates.findMany({ where: { workspace_id: workspaceId, status: "active" }, orderBy: { created_at: "asc" } });
+  // Before its SQL is run the table does not exist (Prisma P2021): no templates yet, nothing breaks.
+  const rows = await prisma.intake_templates.findMany({ where: { workspace_id: workspaceId, status: "active" }, orderBy: { created_at: "asc" } })
+    .catch((error: unknown) => { if ((error as { code?: string } | null)?.code === "P2021") return []; throw error; });
   return rows.map((t: { id: string; nombre: string; version: number; definition_json: unknown }) => ({ id: t.id, nombre: t.nombre, version: t.version, definition: t.definition_json as TemplateDefinition }));
 }
 
@@ -35,7 +37,7 @@ async function classifiedDocs(workspaceId: string): Promise<ClassifiedDoc[]> {
 
 export async function templateOverview(workspaceId: string) {
   const [docs, templates] = await Promise.all([classifiedDocs(workspaceId), listTemplates(workspaceId)]);
-  const rows = templates.length ? await prisma.intake_template_documents.findMany({ where: { workspace_id: workspaceId, template_id: { in: templates.map(t => t.id) } },
+  const rows: { template_id: string; import_file_id: string; status: string; template_version: number; records: number; error: string | null }[] = templates.length ? await prisma.intake_template_documents.findMany({ where: { workspace_id: workspaceId, template_id: { in: templates.map(t => t.id) } },
     select: { template_id: true, import_file_id: true, status: true, template_version: true, records: true, error: true } }) : [];
   const states = new Map<string, DocState>(rows.map((r: { template_id: string; import_file_id: string; status: string; template_version: number; records: number; error: string | null }) =>
     [`${r.template_id}|${r.import_file_id}`, { status: r.status as DocState["status"], version: r.template_version, records: r.records, error: r.error }]));

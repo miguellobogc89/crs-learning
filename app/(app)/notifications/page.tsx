@@ -15,6 +15,8 @@ import {
 } from "@/components/app/section-sidebar";
 import { NotificationsPageContent } from "@/components/notifications/notifications-page-content";
 import { getUserNotificationSummary } from "@/lib/services/notification.service";
+import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
+import { syncIntakeAlerts } from "@/lib/knowledge/intake/alerts/service";
 
 export default async function NotificationsPage() {
   const session = await auth();
@@ -22,6 +24,10 @@ export default async function NotificationsPage() {
   if (!session?.user?.id) {
     redirect("/");
   }
+
+  // The import alerts of the active workspace are brought up to date when the inbox is opened.
+  const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
+  await syncIntakeAlerts(activeWorkspace.id).catch(error => console.warn("[intake] alertas:", error instanceof Error ? error.message : error));
 
   const notificationSummary =
     await getUserNotificationSummary(

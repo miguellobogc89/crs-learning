@@ -62,5 +62,9 @@ export async function processExtractor(id: string, lease: Date) {
     });
   } catch(error) {
     await prisma.knowledge_imports.updateMany({ where: owned, data: { status: "intake_error", error_message: error instanceof Error ? error.message : "Error del extractor" } });
+    // The inbox tells the owners (the person may not be watching this import).
+    const library = await prisma.knowledge_imports.findUnique({ where: { id }, select: { knowledge_libraries: { select: { workspace_id: true } } } }).catch(() => null);
+    const workspaceId = library?.knowledge_libraries.workspace_id;
+    if (workspaceId) await import("../alerts/service").then(m => m.syncIntakeAlerts(workspaceId)).catch(e => console.warn("[intake] alertas:", e instanceof Error ? e.message : e));
   }
 }
