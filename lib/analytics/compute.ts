@@ -387,6 +387,22 @@ export function buildTable(data: AnalyticsData, key: string): Table {
   return { ...table, columns, rows };
 }
 
+/**
+ * Tables made by the person or the assistant have no hand-picked filters: a column gets one when its values repeat
+ * (a state, a supplier, a unit: 2 to 40 distinct values, fewer than the rows), and «por completar» columns always,
+ * so their empty rows can be found.
+ */
+export function withAutoFilters(table: Table): Table {
+  const columns = table.columns.map(c => {
+    if (c.filter || c.kind === "document") return c;
+    if (c.completar) return { ...c, filter: true };
+    if (c.kind === "money" || c.kind === "date" || c.kind === "number") return c;
+    const values = new Set(table.rows.map(r => r[c.key]).filter(v => v !== null && v !== ""));
+    return values.size >= 2 && values.size <= 40 && values.size < table.rows.length ? { ...c, filter: true } : c;
+  });
+  return { ...table, columns };
+}
+
 function customTable(key: string, t: CustomTable): Table {
   const kind = (f: CustomTable["campos"][number]): Column["kind"] => f.type === "decimal" ? (f.money ? "money" : "number") : f.type === "integer" ? "number"
     : f.type === "date" ? "date" : f.type === "boolean" ? "boolean" : "text";
@@ -401,19 +417,19 @@ function customTable(key: string, t: CustomTable): Table {
 function buildBaseTable(data: AnalyticsData, key: string): Table {
   const ix = indexes(data);
   const custom = key.startsWith("tabla:") ? data.custom?.find(t => `tabla:${t.typeKey}` === key) : undefined;
-  if (custom) return customTable(key, custom);
+  if (custom) return withAutoFilters(customTable(key, custom));
   const template = key.startsWith("plantilla:") ? data.templates?.find(t => `plantilla:${t.id}` === key) : undefined;
   if (template) {
     const kind = (type: string): Column["kind"] => type === "decimal" ? "number" : type === "integer" ? "number" : type === "date" ? "date" : "text";
     const money = (k: string) => k === template.analitica.importe || /importe|total|bruto|neto|coste|cuota|irpf|base|liquido|líquido|pago/i.test(k);
-    return { key, label: template.nombre, description: template.descripcion || "Tabla creada a partir de tus documentos.",
+    return withAutoFilters({ key, label: template.nombre, description: template.descripcion || "Tabla creada a partir de tus documentos.",
       title: template.campos.find(c => c.type === "text")?.key,
       columns: [...template.campos.map(c => ({ key: c.key, label: c.label, kind: c.type === "decimal" && money(c.key) ? "money" as const : kind(c.type),
         edit: { field: c.key, type: c.type === "date" ? "date" as const : c.type === "decimal" || c.type === "integer" ? "number" as const : "text" as const },
         ...(c.key === template.analitica.tercero ? { filter: true } : {}) })), { key: "documento", label: "Documento", kind: "document" as const }],
       rows: template.rows.map((r): Record<string, CellValue> => ({ _id: r.id, _rev: r.revision ?? null, ...Object.fromEntries(template.campos.map(c => [c.key, c.type === "decimal" || c.type === "integer" ? num(r.values[c.key]) : str(r.values[c.key])])),
         documento: data.documents?.[r.id]?.fileId ?? null }))
-        .sort((a, b) => template.analitica.fecha ? String(b[template.analitica.fecha] ?? "").localeCompare(String(a[template.analitica.fecha] ?? "")) : 0) };
+        .sort((a, b) => template.analitica.fecha ? String(b[template.analitica.fecha] ?? "").localeCompare(String(a[template.analitica.fecha] ?? "")) : 0) });
   }
   const label = (c: string) => CATEGORIES.find(x => x.key === c)?.label ?? c;
   const doc = (invoiceId: string | undefined) => (invoiceId && data.documents?.[invoiceId]?.fileId) || null;

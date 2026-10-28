@@ -41,3 +41,17 @@ test('pages: slices, and a page beyond the end shows the last one',()=>{
  const p=run({pageSize:2,page:2});assert.deepEqual([p.page,p.pages,p.total,p.rows.length],[2,3,5,2]);
  assert.equal(run({pageSize:2,page:9}).page,3);assert.equal(run({search:'nada'}).pages,1);
 });
+
+test("tablas del asistente: filtros automáticos en columnas que se repiten y en las «por completar»", async () => {
+  const { withAutoFilters } = load('lib/analytics/compute.ts', { '@/lib/knowledge/intake/writer/duplicates': load('lib/knowledge/intake/writer/duplicates.ts') });
+  const rows = [
+    { _id: "1", producto: "Leche", estado: "OK", envase: 10, precio: 10.2 },
+    { _id: "2", producto: "Nata", estado: "Revisar", envase: null, precio: 4 },
+    { _id: "3", producto: "Azúcar", estado: "OK", envase: 25, precio: null },
+  ];
+  const t = withAutoFilters({ key: "tabla:x", label: "X", description: "", columns: [
+    { key: "producto", label: "Producto" }, { key: "estado", label: "Estado" },
+    { key: "envase", label: "Envase", kind: "number", completar: true }, { key: "precio", label: "Precio", kind: "money" }], rows });
+  const f = Object.fromEntries(t.columns.map(c => [c.key, !!c.filter]));
+  assert.deepEqual(f, { producto: false, estado: true, envase: true, precio: false });
+});
