@@ -9,6 +9,14 @@ import { prisma } from "@/lib/prisma";
 import { ensureWorkspaceBootstrap } from "@/lib/services/workspace.service";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  // Errors with their real cause (Auth.js hides it behind "InvalidCheck"); no tokens or cookie values are printed.
+  logger: {
+    error(error: Error) {
+      const cause = (error as { cause?: unknown }).cause as { err?: unknown; message?: string } | Error | undefined;
+      const inner = cause instanceof Error ? cause : cause?.err instanceof Error ? cause.err : undefined;
+      console.error(`[auth][error] ${error.name}: ${error.message}${inner ? ` | causa: ${inner.name}: ${inner.message}` : ""}`);
+    },
+  },
   providers: [
     Google({
       clientId: process.env.AUTH_GOOGLE_ID!,
