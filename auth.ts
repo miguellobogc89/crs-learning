@@ -13,6 +13,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.AUTH_GOOGLE_ID!,
       clientSecret: process.env.AUTH_GOOGLE_SECRET!,
+      // Always show Google's account chooser (otherwise it signs in with the last account silently).
+      authorization: { params: { prompt: "select_account" } },
     }),
 
     Credentials({
