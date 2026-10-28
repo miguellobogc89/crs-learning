@@ -69,3 +69,14 @@ se **archiva** (no se borra: conserva historial y evidencias). Si el resultado d
   aviso arriba de Facturas y Productos comprados, y «Quitar las copias» archiva la segunda de cada pareja (se recalcula
   en el servidor). Al importar, `writer/duplicates.ts` ya no guarda la mitad repetida (con subtotal: si suman el doble;
   sin subtotal: solo con 4 líneas o más).
+
+## Tablas: buscar, filtrar, ordenar y páginas
+
+`components/analytics/data-table.tsx` + `lib/analytics/table-query.ts` (puro, con tests), en el navegador:
+- **Buscador**: busca en todo lo visible, sin tildes, todas las palabras («telefonica 01/2026», «1.234,50»).
+- **Filtros** en las columnas marcadas `filter: true` (Facturas: emisor, receptor, tipo, categoría; Productos:
+  proveedor; Empresas: mi empresa; Suministros: tipo), con buscador si hay más de 8 valores.
+- **Ordenar** pulsando la cabecera (asc → desc → sin orden; los vacíos siempre al final).
+- **Páginas** de 25, 50 o 100 filas.
+- Todos los desplegables usan `components/ui/combobox.tsx` (Popover de Radix, mismo estilo que los menús), con
+  buscador opcional y lista corta («escribe para afinar»). Emisor/receptor y «Es la misma que…» lo usan con buscador.

@@ -306,6 +306,8 @@ export function computeProducts(data: AnalyticsData, period: Period = 12): Produ
 export type CellValue = string | number | boolean | null;
 /** `edit`: the cell can be changed from the table (field of the record behind the row, `_id`/`_rev`/`_type`). */
 export type Column = { key: string; label: string; kind?: "money" | "number" | "date" | "text" | "document" | "boolean";
+  /** Offered as a filter above the table (columns with a few repeated values). */
+  filter?: boolean;
   edit?: { field: string; type: "text" | "select" | "boolean" | "party"; options?: { value: string; label: string }[] } };
 export type Table = { key: string; label: string; description: string; columns: Column[]; rows: Record<string, CellValue>[] };
 export const TABLE_KEYS = ["facturas", "compras", "empresas", "suministros", "consumos"] as const;
@@ -321,7 +323,7 @@ export function buildTable(data: AnalyticsData, key: string): Table {
   const doc = (invoiceId: string | undefined) => (invoiceId && data.documents?.[invoiceId]?.fileId) || null;
   switch (key) {
     case "compras": return { key, label: "Productos comprados", description: "Cada línea de compra con su fecha real (la del ticket cuando la factura agrupa varios).",
-      columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "producto", label: "Producto" }, { key: "proveedor", label: "Proveedor" },
+      columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "producto", label: "Producto" }, { key: "proveedor", label: "Proveedor", filter: true },
         { key: "cantidad", label: "Cantidad", kind: "number" }, { key: "precio", label: "Precio unitario", kind: "money" }, { key: "importe", label: "Importe", kind: "money" },
         { key: "factura", label: "Factura" }, { key: "documento", label: "Documento", kind: "document" }],
       rows: data.lines.map(l => {
@@ -345,12 +347,12 @@ export function buildTable(data: AnalyticsData, key: string): Table {
       }).sort((a, b) => Number(b.mia) - Number(a.mia) || (b.gasto + b.ingreso) - (a.gasto + a.ingreso));
       return { key: "empresas", label: "Empresas", description: "Proveedores, clientes y tu propia empresa. Marca «Mi empresa» en la tuya: lo que facture contará como ingreso. El nombre se puede corregir.",
         columns: [{ key: "empresa", label: "Empresa", edit: { field: "legal_name", type: "text" } }, { key: "nif", label: "NIF/CIF" },
-          { key: "mia", label: "Mi empresa", kind: "boolean", edit: { field: "is_own_company", type: "boolean" } },
+          { key: "mia", label: "Mi empresa", kind: "boolean", filter: true, edit: { field: "is_own_company", type: "boolean" } },
           { key: "facturas", label: "Facturas", kind: "number" }, { key: "gasto", label: "Le has comprado", kind: "money" },
           { key: "ingreso", label: "Le has vendido", kind: "money" }, { key: "ultima", label: "Última factura", kind: "date" }], rows };
     }
     case "suministros": return { key, label: "Suministros", description: "Luz, gas, agua y telecomunicaciones contratados, con lo facturado.",
-      columns: [{ key: "tipo", label: "Tipo" }, { key: "identificador", label: "Identificador" }, { key: "tarifa", label: "Tarifa" }, { key: "titular", label: "Titular" },
+      columns: [{ key: "tipo", label: "Tipo", filter: true }, { key: "identificador", label: "Identificador" }, { key: "tarifa", label: "Tarifa" }, { key: "titular", label: "Titular" },
         { key: "facturas", label: "Facturas", kind: "number" }, { key: "gasto", label: "Facturado", kind: "money" }],
       rows: data.supplies.map(s => {
         const invoices = data.relations.invoice_supply_point.filter(([supply]) => supply === s.id).map(([, inv]) => ix.byId.get(inv)).filter((x): x is Row => !!x);
@@ -363,9 +365,9 @@ export function buildTable(data: AnalyticsData, key: string): Table {
         columns: [{ key: "mes", label: "Mes" }, { key: "kwh", label: "kWh", kind: "number" }], rows: electricity.map(e => ({ mes: MONTH_LABEL(e.month), kwh: e.kwh })) };
     }
     default: return { key: "facturas", label: "Facturas", description: "Todas tus facturas guardadas. «Tipo» dice si es un gasto o un ingreso: cámbialo si no es correcto.",
-      columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "numero", label: "Número" }, { key: "emisor", label: "Emisor", edit: { field: "issuer", type: "party" } }, { key: "receptor", label: "Receptor", edit: { field: "customer", type: "party" } },
-        { key: "tipo", label: "Tipo", edit: { field: "direction", type: "select", options: [{ value: "recibida", label: "Gasto" }, { value: "emitida", label: "Ingreso" }] } },
-        { key: "categoria", label: "Categoría", edit: { field: "expense_category", type: "select", options: CATEGORIES.map(c => ({ value: c.key, label: c.label })) } },
+      columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "numero", label: "Número" }, { key: "emisor", label: "Emisor", filter: true, edit: { field: "issuer", type: "party" } }, { key: "receptor", label: "Receptor", filter: true, edit: { field: "customer", type: "party" } },
+        { key: "tipo", label: "Tipo", filter: true, edit: { field: "direction", type: "select", options: [{ value: "recibida", label: "Gasto" }, { value: "emitida", label: "Ingreso" }] } },
+        { key: "categoria", label: "Categoría", filter: true, edit: { field: "expense_category", type: "select", options: CATEGORIES.map(c => ({ value: c.key, label: c.label })) } },
         { key: "base", label: "Base", kind: "money" }, { key: "iva", label: "IVA", kind: "money" }, { key: "total", label: "Total", kind: "money" },
         { key: "documento", label: "Documento", kind: "document" }],
       rows: data.invoices.map(i => ({ _id: i.id, _rev: i.revision ?? null, _type: "invoice", _issuer: ix.issuerOf.get(i.id) ?? null, _customer: ix.customerOf.get(i.id) ?? null, fecha: str(i.values.issue_date), numero: str(i.values.invoice_number),

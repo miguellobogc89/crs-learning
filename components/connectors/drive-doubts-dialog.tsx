@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { Combobox } from "@/components/ui/combobox";
 import { canPick, collectDoubts, decisionsByBatch, EXPLICACION, OPCION, resolvedBatches, sameName, TIPO, validAnswer, type Answer, type Decision, type Doubt, type PlanLike } from "./doubts";
 import { saveClean, type SaveOutcome } from "./intake-queue";
 
@@ -116,7 +117,6 @@ function ranked(companies: Company[], name: string): { close: Company[]; rest: C
 function DoubtCard({ doubt: d, answer, companies, onAnswer }: { doubt: Doubt; answer?: Answer; companies: Company[]; onAnswer: (a: Answer) => void }) {
   const picked = answer?.startsWith("unir:") ? answer.slice(5) : "";
   const options = canPick(d) ? ranked(companies, d.nombre) : null;
-  const label = (c: Company) => `${c.nombre}${c.nif ? ` · ${c.nif}` : ""}`;
   return <section className={cn("rounded-xl border bg-white p-4", validAnswer(d, answer) ? "border-emerald-200" : "border-slate-200")}>
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0">
@@ -134,12 +134,13 @@ function DoubtCard({ doubt: d, answer, companies, onAnswer }: { doubt: Doubt; an
         className={cn("rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
           answer === o ? "border-[#0A58FF] bg-[#EDF3FF] text-[#0A58FF]" : "border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900")}>
         {!d.destino && o === "tal_cual" ? "Guardar igualmente" : OPCION[o]}</button>)}
-      {options && <select value={picked} onChange={e => { if (e.target.value) onAnswer(`unir:${e.target.value}`); }} aria-label="Es la misma que…"
-        className={cn("h-[30px] max-w-[280px] rounded-lg border px-2 text-xs", picked ? "border-[#0A58FF] bg-[#EDF3FF] font-medium text-[#0A58FF]" : "border-slate-200 text-slate-600")}>
-        <option value="">{d.destino ? "Es la misma que otra…" : "Es la misma que…"}</option>
-        {options.close.length > 0 && <optgroup label="Nombres parecidos">{options.close.map(c => <option key={c.id} value={c.id}>{label(c)}</option>)}</optgroup>}
-        {options.rest.length > 0 && <optgroup label="Todas las empresas">{options.rest.map(c => <option key={c.id} value={c.id}>{label(c)}</option>)}</optgroup>}
-      </select>}
+      {options && <Combobox searchable searchPlaceholder="Buscar empresa o NIF…" ariaLabel="Es la misma que…" limit={30}
+        placeholder={d.destino ? "Es la misma que otra…" : "Es la misma que…"} value={picked || null}
+        // Similar names first (marked), then every company.
+        options={[...options.close.map(c => ({ value: c.id, label: c.nombre, hint: `${c.nif ?? ""} · parecida`.replace(/^ · /, "") })),
+          ...options.rest.map(c => ({ value: c.id, label: c.nombre, hint: c.nif }))]}
+        className={cn("h-[30px] max-w-[280px] text-xs", picked && "border-[#0A58FF] bg-[#EDF3FF] font-medium text-[#0A58FF]")}
+        onChange={v => onAnswer(`unir:${v}`)} />}
     </div>
   </section>;
 }
