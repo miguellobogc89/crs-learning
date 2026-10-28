@@ -59,6 +59,7 @@ type ChatConversation = {
 
 type FloatingChatProps = {
   conversations: ChatConversation[];
+  suggestions?: string[];
   hideTrigger?: boolean;
 };
 
@@ -75,7 +76,8 @@ type SendMessageResponse = {
   message: ChatMessageData;
 };
 
-const suggestions = [
+/** Default examples; a workspace can have its own (workspace_preferences.sugerencias_asistente). */
+const DEFAULT_SUGGESTIONS = [
   "¿Cuánto he gastado por proveedor este año?",
   "Muéstrame el gasto por mes y categoría",
   "¿Cuál es el proceso de alta de proveedores?",
@@ -83,6 +85,7 @@ const suggestions = [
 
 export function FloatingChat({
   conversations,
+  suggestions = DEFAULT_SUGGESTIONS,
   hideTrigger = false,
 }: FloatingChatProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -520,7 +523,7 @@ useEffect(() => {
                 </div>
               </div>
             ) : messages.length === 0 ? (
-              <EmptyChat onSuggestionClick={setMessage} />
+              <EmptyChat suggestions={suggestions} onSuggestionClick={setMessage} />
             ) : (
               <div className="flex flex-col gap-4">
                 {messages.map((chatMessage) => (
@@ -583,12 +586,14 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
 }
 
 function EmptyChat({
+  suggestions,
   onSuggestionClick,
 }: {
+  suggestions: string[];
   onSuggestionClick: (value: string) => void;
 }) {
   return (
-    <div className="flex flex-1 flex-col justify-center py-6">
+    <div className={cn("flex flex-1 flex-col py-4", suggestions.length <= 4 && "justify-center")}>
       <span className="flex size-10 items-center justify-center rounded-xl bg-[#0A58FF]/10 text-[#0A58FF]">
         <Sparkles className="size-5" />
       </span>
@@ -596,13 +601,14 @@ function EmptyChat({
       <p className="mt-1 text-[13px] leading-5 text-slate-500">
         Pregunta por tus facturas, gastos, productos o documentos. También puedo crear tablas y enlazarlas; tú decides si se aplican.
       </p>
-      <div className="mt-4 grid gap-1.5">
+      <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Prueba a preguntar</p>
+      <div className="mt-1.5 grid gap-1.5">
         {suggestions.map((suggestion) => (
           <button
             key={suggestion}
             type="button"
             onClick={() => { onSuggestionClick(suggestion); }}
-            className="group flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left text-[13px] text-slate-700 transition-colors hover:border-[#0A58FF]/40 hover:bg-[#0A58FF]/[0.03] hover:text-slate-900"
+            className="group flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-[13px] leading-5 text-slate-700 transition-colors hover:border-[#0A58FF]/40 hover:bg-[#0A58FF]/[0.03] hover:text-slate-900"
           >
             <span>{suggestion}</span>
             <ArrowUp className="size-3.5 shrink-0 rotate-45 text-slate-300 transition-colors group-hover:text-[#0A58FF]" />

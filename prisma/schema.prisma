@@ -1988,3 +1988,10 @@ model user_table_views {
 
   @@unique([user_id, workspace_id, table_key], map: "user_table_views_unique")
 }
+
+/// Preferences of a workspace (e.g. «sugerencias_asistente»: the example questions of the assistant). FK in SQL.
+model workspace_preferences {
+  workspace_id  String   @id @db.Uuid
+  settings_json Json     @default("{}")
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+}

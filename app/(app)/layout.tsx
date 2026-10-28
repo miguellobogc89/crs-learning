@@ -18,6 +18,7 @@ import {
 
 import { AutoBreadcrumb } from "@/components/app/auto-breadcrumb";
 import { FloatingChat } from "@/components/chat/floating-chat";
+import { getAssistantSuggestions } from "@/lib/services/workspace-preferences.service";
 
 
 
@@ -46,6 +47,7 @@ export default async function AppLayout({
     conversations,
     notificationSummary,
     isAdmin,
+    assistantSuggestions,
   ] = await Promise.all([
     listChatConversations(
       session.user.id,
@@ -57,6 +59,8 @@ export default async function AppLayout({
     }),
 
     isUserAdmin(session.user.id),
+
+    getAssistantSuggestions(workspaceContext.activeWorkspace.id),
   ]);
 
   return (
@@ -98,6 +102,7 @@ export default async function AppLayout({
 
           <FloatingChat
             conversations={conversations}
+            suggestions={assistantSuggestions ?? undefined}
             hideTrigger
           />
 
