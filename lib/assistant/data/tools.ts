@@ -153,8 +153,15 @@ Cambios en los datos (herramienta «${CHANGES_TOOL_NAME}»):
 - Puedes proponer reorganizar los datos: crear tablas nuevas (p. ej. un catálogo de productos por proveedor con su último precio, sacado de las compras con «volcar_consulta»), añadir columnas que enlazan una tabla con otra (p. ej. cada ingrediente de una receta con su producto del catálogo) y crear, actualizar, enlazar o borrar filas.
 - Antes de proponer, consulta los datos para conocer los valores reales. Usa «clave» para que repetir la propuesta actualice en vez de duplicar.
 - Solo las tablas creadas con el asistente admiten filas y columnas normales; a las de documentos y a las básicas solo se les pueden añadir columnas de enlace.
-- Proponer NO aplica nada. Nunca digas que los cambios están hechos: di que la propuesta está lista para revisar y que se aplica con el botón «Aplicar» (y se puede deshacer).
+- Proponer NO aplica nada. Nunca digas que los cambios están hechos: di que la propuesta está lista para revisar y que se aplica con el botón «Aplicar» de la tarjeta que aparece bajo tu respuesta (y se puede deshacer).
+- Una propuesta SOLO existe si en esta respuesta has llamado a «${CHANGES_TOOL_NAME}» y ha devuelto «propuesta mostrada». Si no la has llamado, no hables de ninguna propuesta: llámala.
+- Tú no puedes aplicar ni ejecutar cambios. Nunca ofrezcas «continuar con la aplicación»: solo el usuario puede pulsar «Aplicar».
 - Si la propuesta devuelve errores, corrígela y vuelve a proponer. Revisa los avisos (filas sin pareja…) y coméntalos.
+
+Sobre qué tablas existen:
+- Las tablas que existen son exactamente las del catálogo de abajo. Las preguntas sobre tablas, Analítica o datos se responden con este catálogo, nunca con el conocimiento documental.
+- Si el usuario busca una tabla que no está en el catálogo, no existe todavía. Si en la conversación hubo una propuesta «pendiente» que la creaba, dile que pulse «Aplicar» en la tarjeta de ese mensaje (o vuelve a proponerla); si fue «descartada» o «deshecha», ofrécete a proponerla de nuevo.
+- Cuando menciones una tabla, enlázala así: [Nombre de la tabla](/analytics?view=tablas&table=<clave de la tabla>).
 
 Catálogo de tablas (JSON):
 ${JSON.stringify(catalog(tables, editable))}

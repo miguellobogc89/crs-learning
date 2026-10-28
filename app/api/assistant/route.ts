@@ -249,6 +249,7 @@ console.log("AI INPUT DEBUG", {
     ];
   const dataBlocks: DataBlock[] = [];
   const proposals: Proposal[] = [];
+  let nudged = false;
   let dataQueries = 0;
   let tokensInput = 0;
   let tokensOutput = 0;
@@ -266,6 +267,13 @@ console.log("AI INPUT DEBUG", {
     const calls = response.output.filter(
       (item): item is ResponseFunctionToolCall => item.type === "function_call",
     );
+    // The model sometimes describes a proposal it never made: make it actually prepare it (once).
+    if (!calls.length && useTools && !nudged && !proposals.length && workspaceData && claimsProposal(response.output_text)) {
+      nudged = true;
+      input = [...input, ...(response.output as ResponseInput), { role: "system", content:
+        `Has descrito una propuesta de cambios pero no has llamado a «${CHANGES_TOOL_NAME}», así que no existe y el usuario no puede aplicarla. Llama ahora a «${CHANGES_TOOL_NAME}» con esa propuesta (o, si no procede, responde sin hablar de propuestas).` }];
+      continue;
+    }
     if (!calls.length || !useTools) break;
     const outputs = calls.map((call) => {
       if (call.name === CHANGES_TOOL_NAME && workspaceData) {
@@ -578,6 +586,11 @@ function extractCitationIds(answer: string) {
   }
 
   return Array.from(citedIds);
+}
+
+/** The answer talks about a change proposal ready to apply. */
+function claimsProposal(text: string) {
+  return /propuesta/i.test(text) && /(lista|preparad|revis|aplic)/i.test(text) || /pulsa[^.]{0,20}«?aplicar|bot[oó]n[^.]{0,10}«?aplicar/i.test(text);
 }
 
 function normalizeRole(role: string) {
