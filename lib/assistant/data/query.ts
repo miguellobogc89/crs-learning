@@ -16,7 +16,7 @@ export type AggregateFn = "suma" | "media" | "mediana" | "cuenta" | "cuenta_dist
  * A column computed row by row: a op b (b another column or a fixed value), e.g. cantidad × precio; or the pack size
  * read from a product name: {nombre, medida: "<text column>", dato: "cantidad" | "unidad"} («10 LTS» → 10 / "L").
  */
-export type Formula = { nombre: string; a?: string; op?: "+" | "-" | "*" | "/"; b?: string; valor?: number; importe?: boolean; medida?: string; dato?: "cantidad" | "unidad" };
+export type Formula = { nombre: string; a?: string; op?: "+" | "-" | "*" | "/" | "o"; b?: string; valor?: number; importe?: boolean; medida?: string; dato?: "cantidad" | "unidad" };
 
 /**
  * The content of one unit of purchase, read from a product name, in L, Kg or ud: «KEN LECHE ENTERA B·I·BOX 10 LTS.»
@@ -182,10 +182,12 @@ export function runQuery(tables: Table[], q: Query, opts: { maxLimit?: number; k
     if (!isNum(a) || (b && !isNum(b))) throw new QueryError(`La fórmula «${name}» solo opera con importes o números.`);
     const money = f.importe ?? (a.kind === "money" || b?.kind === "money");
     const calc = (x: number, y: number) => f.op === "+" ? x + y : f.op === "-" ? x - y : f.op === "*" ? x * y : y === 0 ? null : x / y;
-    if (!["+", "-", "*", "/"].includes(f.op)) throw new QueryError(`Operador de fórmula no válido «${f.op}».`);
+    if (!["+", "-", "*", "/", "o"].includes(f.op)) throw new QueryError(`Operador de fórmula no válido «${f.op}».`);
     rows = rows.map(r => {
       const x = a.get(r), y = b ? b.get(r) : f.valor!;
-      const v = typeof x === "number" && typeof y === "number" ? calc(x, y) : null;
+      // «o»: the first value that exists (a preferred source with a fallback, e.g. litres from a fixed price, else from the invoice).
+      const v = f.op === "o" ? (typeof x === "number" ? x : typeof y === "number" ? y : null)
+        : typeof x === "number" && typeof y === "number" ? calc(x, y) : null;
       return { ...r, [`=${name}`]: v === null ? null : Math.round(v * 10000) / 10000 };
     });
     base.set(name, { key: name, label: name, kind: money ? "money" : "number", get: r => r[`=${name}`] ?? null });

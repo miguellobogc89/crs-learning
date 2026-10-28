@@ -142,3 +142,12 @@ test('pack size from product names, so prices can be compared per litre or kilo,
  const med=q.runQuery([compras],{tabla:'compras',calcular:[{funcion:'mediana',columna:'importe'}]});
  assert.deepEqual(med.filas,[{mediana_importe:61.2}]);
 });
+
+test('a fixed reference price decides the litres bought (amount ÷ price); without it, invoice quantity × pack size',()=>{
+ const compras={key:'compras',label:'Compras',description:'',columns:[{key:'producto',label:'Producto'},{key:'cantidad',label:'Cantidad',kind:'number'},{key:'importe',label:'Importe',kind:'money'},{key:'precio_fijo',label:'Precio fijado €/L',kind:'money'}],
+  rows:[{producto:'KEN LECHE ENTERA 10 LTS',cantidad:10,importe:61.2,precio_fijo:1.02},{producto:'LECHE ENTERA P6 1L 6X1L',cantidad:2,importe:6,precio_fijo:null}]};
+ const r=q.runQuery([compras],{tabla:'compras',formulas:[
+  {nombre:'por_precio',a:'importe',op:'/',b:'precio_fijo'},{nombre:'contenido',medida:'producto'},{nombre:'por_factura',a:'cantidad',op:'*',b:'contenido'},
+  {nombre:'litros',a:'por_precio',op:'o',b:'por_factura'}],columnas:['producto','litros']});
+ assert.deepEqual(r.filas.map(x=>x.litros),[60,12]);
+});
