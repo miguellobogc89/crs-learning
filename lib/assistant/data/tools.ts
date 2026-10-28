@@ -1,5 +1,4 @@
-import { loadAnalyticsData } from "@/lib/analytics/data";
-import { buildTable, TABLE_KEYS, type CellValue, type Table } from "@/lib/analytics/compute";
+import type { CellValue, Table } from "@/lib/analytics/compute";
 import { catalog, QueryError, runQuery, type Query, type ResultColumn } from "./query";
 
 /**
@@ -22,11 +21,7 @@ const MODEL_ROWS = 100;
 const DISPLAY_ROWS = 200;
 export const DATA_TOOL_NAME = "consultar_datos";
 
-export async function loadWorkspaceTables(workspaceId: string): Promise<Table[]> {
-  const data = await loadAnalyticsData(workspaceId);
-  const keys = [...TABLE_KEYS, ...(data.templates ?? []).map(t => `plantilla:${t.id}`)];
-  return keys.map(key => buildTable(data, key));
-}
+export const CHANGES_TOOL_NAME = "proponer_cambios";
 
 export const dataTool = {
   type: "function" as const,
@@ -65,14 +60,19 @@ export const dataTool = {
               },
             },
           },
+          formulas: {
+            type: "array", description: "Columnas calculadas fila a fila (tras cruzar): a op b, con b otra columna o «valor». P. ej. coste = cantidad * precio.",
+            items: { type: "object", required: ["nombre", "a", "op"], properties: { nombre: { type: "string" }, a: { type: "string" }, op: { type: "string", enum: ["+", "-", "*", "/"] }, b: { type: "string" }, valor: { type: "number" }, importe: { type: "boolean" } } },
+          },
           agrupar_por: { type: "array", items: { type: "string" }, description: "Columnas por las que agrupar (admite «fecha:mes», «fecha:año»…)." },
           calcular: {
             type: "array",
             items: {
               type: "object", required: ["funcion"],
               properties: {
-                funcion: { type: "string", enum: ["suma", "media", "cuenta", "cuenta_distintos", "min", "max"] },
+                funcion: { type: "string", enum: ["suma", "media", "cuenta", "cuenta_distintos", "min", "max", "ultimo", "primero"], description: "«ultimo»/«primero»: el valor de la fila más reciente/antigua según «segun» (p. ej. último precio pagado)." },
                 columna: { type: "string" },
+                segun: { type: "string", description: "Columna de fecha para «ultimo» y «primero»." },
                 nombre: { type: "string", description: "Nombre de la columna resultado." },
               },
             },
@@ -86,7 +86,54 @@ export const dataTool = {
   },
 };
 
-export function dataPrompt(tables: Table[]) {
+const COLUMN_SCHEMA = {
+  type: "object", required: ["columna", "nombre", "tipo"],
+  properties: {
+    columna: { type: "string", description: "Clave corta sin espacios (p. ej. «precio»)." },
+    nombre: { type: "string", description: "Nombre visible." },
+    tipo: { type: "string", enum: ["texto", "texto_largo", "numero", "entero", "importe", "fecha", "si_no", "enlace"] },
+    tabla_enlazada: { type: "string", description: "Solo para «enlace»: clave de la tabla a la que apunta (también una creada antes en la misma propuesta, p. ej. «tabla:catalogo»)." },
+  },
+};
+
+export const changesTool = {
+  type: "function" as const,
+  name: CHANGES_TOOL_NAME,
+  strict: false,
+  description: "Propone cambios en las tablas del usuario: crear tablas, añadir columnas (también columnas que enlazan con otra tabla), crear o actualizar filas (a mano o desde una consulta), enlazar filas y borrar filas. NO aplica nada: devuelve una vista previa y el usuario la aplica con un botón. Si hay errores, corrígelos y vuelve a proponer.",
+  parameters: {
+    type: "object", additionalProperties: false, required: ["titulo", "operaciones"],
+    properties: {
+      titulo: { type: "string", description: "Título corto de la propuesta (p. ej. «Catálogo de productos desde tus compras»)." },
+      explicacion: { type: "string", description: "Una o dos frases: qué se consigue." },
+      operaciones: {
+        type: "array", description: "Se aplican en orden; las siguientes pueden usar tablas y filas creadas por las anteriores.",
+        items: {
+          type: "object", required: ["op", "tabla"],
+          properties: {
+            op: { type: "string", enum: ["crear_tabla", "añadir_columnas", "crear_filas", "volcar_consulta", "actualizar_filas", "enlazar", "borrar_filas"] },
+            tabla: { type: "string", description: "Tabla afectada. En «crear_tabla», el nombre corto de la nueva (su clave será «tabla:<nombre>»)." },
+            nombre: { type: "string", description: "crear_tabla: nombre visible." },
+            descripcion: { type: "string", description: "crear_tabla: para qué sirve." },
+            titulo: { type: "string", description: "crear_tabla: la columna de texto que nombra cada fila (la que se usa para enlazar con ella)." },
+            columnas: { description: "crear_tabla / añadir_columnas: lista de columnas. volcar_consulta: objeto {columna_destino: columna_del_resultado}.", anyOf: [{ type: "array", items: COLUMN_SCHEMA }, { type: "object" }] },
+            filas: { type: "array", items: { type: "object" }, description: "crear_filas: filas {columna: valor}. En columnas de enlace, el nombre de la fila enlazada." },
+            clave: { type: "array", items: { type: "string" }, description: "crear_filas / volcar_consulta: columnas que identifican una fila; si ya existe, se actualiza en vez de duplicarse." },
+            consulta: { type: "object", description: "volcar_consulta: una consulta como la de consultar_datos (puede agrupar, calcular «ultimo» precio, cruzar…)." },
+            donde: { type: "array", items: { type: "object" }, description: "actualizar_filas / borrar_filas: filtros como los de consultar_datos." },
+            valores: { type: "object", description: "actualizar_filas: {columna: valor nuevo}." },
+            columna: { type: "string", description: "enlazar: la columna de enlace." },
+            pares: { type: "array", items: { type: "object", properties: { fila: { type: "string" }, con: { type: "string" } } }, description: "enlazar: pares {fila: nombre de la fila, con: nombre de la fila enlazada}." },
+            por: { type: "object", properties: { columna_origen: { type: "string" }, columna_destino: { type: "string" } }, description: "enlazar: enlaza automáticamente cuando el valor de columna_origen coincide con columna_destino de la tabla enlazada (sin distinguir mayúsculas ni tildes)." },
+            solo_sin_enlace: { type: "boolean", description: "enlazar: no toca las filas que ya tienen enlace." },
+          },
+        },
+      },
+    },
+  },
+};
+
+export function dataPrompt(tables: Table[], editable: Set<string> = new Set()) {
   return `
 # Datos del espacio de trabajo
 
@@ -102,8 +149,15 @@ Normas para los datos:
 - Las afirmaciones basadas en datos no llevan citas [F…]; las citas son solo para el conocimiento documental.
 - Si la consulta devuelve un error, corrígela según el mensaje y vuelve a intentarlo.
 
+Cambios en los datos (herramienta «${CHANGES_TOOL_NAME}»):
+- Puedes proponer reorganizar los datos: crear tablas nuevas (p. ej. un catálogo de productos por proveedor con su último precio, sacado de las compras con «volcar_consulta»), añadir columnas que enlazan una tabla con otra (p. ej. cada ingrediente de una receta con su producto del catálogo) y crear, actualizar, enlazar o borrar filas.
+- Antes de proponer, consulta los datos para conocer los valores reales. Usa «clave» para que repetir la propuesta actualice en vez de duplicar.
+- Solo las tablas creadas con el asistente admiten filas y columnas normales; a las de documentos y a las básicas solo se les pueden añadir columnas de enlace.
+- Proponer NO aplica nada. Nunca digas que los cambios están hechos: di que la propuesta está lista para revisar y que se aplica con el botón «Aplicar» (y se puede deshacer).
+- Si la propuesta devuelve errores, corrígela y vuelve a proponer. Revisa los avisos (filas sin pareja…) y coméntalos.
+
 Catálogo de tablas (JSON):
-${JSON.stringify(catalog(tables))}
+${JSON.stringify(catalog(tables, editable))}
 `.trim();
 }
 

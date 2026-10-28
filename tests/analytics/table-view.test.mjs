@@ -41,5 +41,5 @@ test('tables overview: what needs a look, each linking where it is solved',()=>{
  assert.equal(items[1].href,'/analytics?view=tablas&table=plantilla%3AT1');
  assert.equal(items[0].title,'Nómina: 2 documentos sin tabla');
  assert.deepEqual(o.tablesReview({invoices:{...invoices,rows:[]},duplicatedLines:0,groups:[]}),[]);
- assert.deepEqual(o.tableCards([invoices],new Set()).map(c=>[c.key,c.rows,c.fromDocuments]),[['facturas',3,false]]);
+ assert.deepEqual(o.tableCards([invoices,{...invoices,key:'tabla:catalogo'},{...invoices,key:'plantilla:X'}]).map(c=>[c.key,c.rows,c.origin]),[['facturas',3,'base'],['tabla:catalogo',3,'asistente'],['plantilla:X',3,'documentos']]);
 });

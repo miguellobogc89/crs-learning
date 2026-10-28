@@ -106,7 +106,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const missing = groups.filter(g => !g.plantilla && g.documentos.some(d => d.estado !== "ignorado"));
   const pending = missing.map(g => ({ key: typeKey(g), label: g.label, count: g.documentos.filter(d => d.estado !== "ignorado").length }));
   const unsupported = view === "tablas" && params.sintabla ? missing.find(g => typeKey(g) === params.sintabla) : undefined;
-  const templateTables = (data.templates ?? []).map(t => ({ key: `plantilla:${t.id}`, label: t.nombre }));
+  // Tables beyond the base ones: made from documents (templates) and created with the assistant.
+  const templateTables = [...(data.templates ?? []).map(t => ({ key: `plantilla:${t.id}`, label: t.nombre })),
+    ...(data.custom ?? []).map(t => ({ key: `tabla:${t.typeKey}`, label: t.nombre }))];
   // No (valid) table chosen: the overview of all tables.
   const tableKey = params.table === "proveedores" ? "empresas" : TABLE_KEYS.includes(params.table as (typeof TABLE_KEYS)[number]) || templateTables.some(t => t.key === params.table) ? params.table! : null;
   const table = view === "tablas" && !unsupported && tableKey ? buildTable(data, tableKey) : null;
@@ -127,7 +129,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       <DataTable table={table} canEdit={canEdit} companies={table.key === "facturas" ? companyOptions(data) : []} /></div>;
   } else if (view === "tablas") {
     const all = [...TABLE_KEYS, ...templateTables.map(t => t.key)].map(key => buildTable(data, key));
-    content = <>{notice && <div className="pt-4">{notice}</div>}<TablesOverview tables={tableCards(all, new Set(templateTables.map(t => t.key)))}
+    content = <>{notice && <div className="pt-4">{notice}</div>}<TablesOverview tables={tableCards(all)}
       review={tablesReview({ invoices: all[0], duplicatedLines: duplicatedLineIssues(data).length, groups })} /></>;
   } else {
     const tab: Tab = TABS.some(t => t.key === params.tab) ? params.tab as Tab : "general";

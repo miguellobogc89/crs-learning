@@ -1,4 +1,4 @@
-import type { AnalyticsData, Row } from "./data";
+import type { AnalyticsData, CustomTable, Row } from "./data";
 import { extraCopies } from "@/lib/knowledge/intake/writer/duplicates";
 
 /**
@@ -330,8 +330,11 @@ export type CellValue = string | number | boolean | null;
 export type Column = { key: string; label: string; kind?: "money" | "number" | "date" | "text" | "document" | "boolean";
   /** Offered as a filter above the table (columns with a few repeated values). */
   filter?: boolean;
+  /** Link column: the table its values point to. */
+  link?: string;
   edit?: { field: string; type: "text" | "select" | "boolean" | "party"; options?: { value: string; label: string }[] } };
-export type Table = { key: string; label: string; description: string; columns: Column[]; rows: Record<string, CellValue>[] };
+/** `title`: the column that names each row (used to point at rows: links, the assistant). Rows of records carry `_id`. */
+export type Table = { key: string; label: string; description: string; columns: Column[]; rows: Record<string, CellValue>[]; title?: string };
 export const TABLE_KEYS = ["facturas", "compras", "empresas", "suministros", "consumos"] as const;
 /** Edits allowed from Analítica (record type → fields). Anything else is changed in Tablas of the engine. */
 export const EDITABLE: Record<string, Record<string, "text" | "boolean" | "direction" | "category">> = {
@@ -339,29 +342,77 @@ export const EDITABLE: Record<string, Record<string, "text" | "boolean" | "direc
   invoice: { direction: "direction", expense_category: "category" },
 };
 
+/** Every table of the workspace: the base ones, those made from documents and those created with the assistant. */
+export function allTableKeys(data: AnalyticsData): string[] {
+  return [...TABLE_KEYS, ...(data.templates ?? []).map(t => `plantilla:${t.id}`), ...(data.custom ?? []).map(t => `tabla:${t.typeKey}`)];
+}
+
+/** A table with its link columns (each row shows the name of the row it points to; `_link_<col>` keeps its id). */
 export function buildTable(data: AnalyticsData, key: string): Table {
+  const table = buildBaseTable(data, key);
+  const links = (data.links ?? []).filter(l => l.from === table.key);
+  if (!links.length) return table;
+  const targets = new Map<string, Map<string, CellValue>>();
+  const labelsOf = (to: string) => {
+    if (!targets.has(to)) {
+      const target = buildBaseTable(data, to);
+      targets.set(to, new Map(target.rows.filter(r => typeof r._id === "string").map(r => [r._id as string, target.title ? r[target.title] ?? null : null])));
+    }
+    return targets.get(to)!;
+  };
+  const columns = [...table.columns];
+  const docAt = columns.findIndex(c => c.kind === "document");
+  const linkColumns = links.map(l => ({ key: l.columna, label: l.nombre, filter: true, link: l.to }));
+  columns.splice(docAt >= 0 ? docAt : columns.length, 0, ...linkColumns);
+  const rows = table.rows.map(r => {
+    if (typeof r._id !== "string") return r;
+    const out = { ...r };
+    for (const l of links) {
+      const to = l.pairs.find(([from]) => from === r._id)?.[1] ?? null;
+      out[l.columna] = to ? labelsOf(l.to).get(to) ?? null : null;
+      out[`_link_${l.columna}`] = to;
+    }
+    return out;
+  });
+  return { ...table, columns, rows };
+}
+
+function customTable(key: string, t: CustomTable): Table {
+  const kind = (f: CustomTable["campos"][number]): Column["kind"] => f.type === "decimal" ? (f.money ? "money" : "number") : f.type === "integer" ? "number"
+    : f.type === "date" ? "date" : f.type === "boolean" ? "boolean" : "text";
+  const value = (f: CustomTable["campos"][number], v: unknown): CellValue => f.type === "decimal" || f.type === "integer" ? num(v) : f.type === "boolean" ? (v === true ? true : v === false ? false : null) : str(v);
+  const title = t.titulo && t.campos.some(f => f.key === t.titulo) ? t.titulo : t.campos.find(f => f.type === "text")?.key;
+  return { key, label: t.nombre, description: t.descripcion || "Tabla creada con el asistente.", title,
+    columns: t.campos.map(f => ({ key: f.key, label: f.label, kind: kind(f) })),
+    rows: t.rows.map(r => ({ _id: r.id, _rev: r.revision ?? null, ...Object.fromEntries(t.campos.map(f => [f.key, value(f, r.values[f.key])])) })) };
+}
+
+function buildBaseTable(data: AnalyticsData, key: string): Table {
   const ix = indexes(data);
+  const custom = key.startsWith("tabla:") ? data.custom?.find(t => `tabla:${t.typeKey}` === key) : undefined;
+  if (custom) return customTable(key, custom);
   const template = key.startsWith("plantilla:") ? data.templates?.find(t => `plantilla:${t.id}` === key) : undefined;
   if (template) {
     const kind = (type: string): Column["kind"] => type === "decimal" ? "number" : type === "integer" ? "number" : type === "date" ? "date" : "text";
     const money = (k: string) => k === template.analitica.importe || /importe|total|bruto|neto|coste|cuota|irpf|base|liquido|líquido|pago/i.test(k);
     return { key, label: template.nombre, description: template.descripcion || "Tabla creada a partir de tus documentos.",
+      title: template.campos.find(c => c.type === "text")?.key,
       columns: [...template.campos.map(c => ({ key: c.key, label: c.label, kind: c.type === "decimal" && money(c.key) ? "money" as const : kind(c.type),
         ...(c.key === template.analitica.tercero ? { filter: true } : {}) })), { key: "documento", label: "Documento", kind: "document" as const }],
-      rows: template.rows.map((r): Record<string, CellValue> => ({ ...Object.fromEntries(template.campos.map(c => [c.key, c.type === "decimal" || c.type === "integer" ? num(r.values[c.key]) : str(r.values[c.key])])),
+      rows: template.rows.map((r): Record<string, CellValue> => ({ _id: r.id, _rev: r.revision ?? null, ...Object.fromEntries(template.campos.map(c => [c.key, c.type === "decimal" || c.type === "integer" ? num(r.values[c.key]) : str(r.values[c.key])])),
         documento: data.documents?.[r.id]?.fileId ?? null }))
         .sort((a, b) => template.analitica.fecha ? String(b[template.analitica.fecha] ?? "").localeCompare(String(a[template.analitica.fecha] ?? "")) : 0) };
   }
   const label = (c: string) => CATEGORIES.find(x => x.key === c)?.label ?? c;
   const doc = (invoiceId: string | undefined) => (invoiceId && data.documents?.[invoiceId]?.fileId) || null;
   switch (key) {
-    case "compras": return { key, label: "Productos comprados", description: "Cada línea de compra con su fecha real (la del ticket cuando la factura agrupa varios).",
+    case "compras": return { key, label: "Productos comprados", description: "Cada línea de compra con su fecha real (la del ticket cuando la factura agrupa varios).", title: "producto",
       columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "producto", label: "Producto" }, { key: "proveedor", label: "Proveedor", filter: true },
         { key: "cantidad", label: "Cantidad", kind: "number" }, { key: "precio", label: "Precio unitario", kind: "money" }, { key: "importe", label: "Importe", kind: "money" },
         { key: "factura", label: "Factura" }, { key: "documento", label: "Documento", kind: "document" }],
       rows: data.lines.map(l => {
         const inv = ix.byId.get(ix.invoiceOfLine.get(l.id) ?? "");
-        return { fecha: str(l.values.source_ticket_date) ?? (inv ? str(inv.values.issue_date) : null), producto: str(l.values.description),
+        return { _id: l.id, fecha: str(l.values.source_ticket_date) ?? (inv ? str(inv.values.issue_date) : null), producto: str(l.values.description),
           proveedor: inv ? companyName(ix.byId.get(ix.issuerOf.get(inv.id) ?? "")) : null, cantidad: num(l.values.quantity),
           precio: num(l.values.unit_price_with_tax) ?? num(l.values.unit_price), importe: num(l.values.line_total_with_tax) ?? num(l.values.line_total),
           factura: inv ? str(inv.values.invoice_number) : null, documento: doc(inv?.id),
@@ -378,18 +429,18 @@ export function buildTable(data: AnalyticsData, key: string): Table {
           ingreso: round(venta.reduce((a, i) => a + (invoiceAmount(i) ?? 0), 0)),
           ultima: [...issued, ...received].map(i => str(i.values.issue_date)).filter(Boolean).sort().at(-1) ?? null };
       }).sort((a, b) => Number(b.mia) - Number(a.mia) || (b.gasto + b.ingreso) - (a.gasto + a.ingreso));
-      return { key: "empresas", label: "Empresas", description: "Proveedores, clientes y tu propia empresa. Marca «Mi empresa» en la tuya: lo que facture contará como ingreso. El nombre se puede corregir.",
+      return { key: "empresas", label: "Empresas", title: "empresa", description: "Proveedores, clientes y tu propia empresa. Marca «Mi empresa» en la tuya: lo que facture contará como ingreso. El nombre se puede corregir.",
         columns: [{ key: "empresa", label: "Empresa", edit: { field: "legal_name", type: "text" } }, { key: "nif", label: "NIF/CIF" },
           { key: "mia", label: "Mi empresa", kind: "boolean", filter: true, edit: { field: "is_own_company", type: "boolean" } },
           { key: "facturas", label: "Facturas", kind: "number" }, { key: "gasto", label: "Le has comprado", kind: "money" },
           { key: "ingreso", label: "Le has vendido", kind: "money" }, { key: "ultima", label: "Última factura", kind: "date" }], rows };
     }
-    case "suministros": return { key, label: "Suministros", description: "Luz, gas, agua y telecomunicaciones contratados, con lo facturado.",
+    case "suministros": return { key, label: "Suministros", description: "Luz, gas, agua y telecomunicaciones contratados, con lo facturado.", title: "identificador",
       columns: [{ key: "tipo", label: "Tipo", filter: true }, { key: "identificador", label: "Identificador" }, { key: "tarifa", label: "Tarifa" }, { key: "titular", label: "Titular" },
         { key: "facturas", label: "Facturas", kind: "number" }, { key: "gasto", label: "Facturado", kind: "money" }],
       rows: data.supplies.map(s => {
         const invoices = data.relations.invoice_supply_point.filter(([supply]) => supply === s.id).map(([, inv]) => ix.byId.get(inv)).filter((x): x is Row => !!x);
-        return { tipo: str(s.values.supply_type), identificador: str(s.values.supply_point_id), tarifa: str(s.values.tariff),
+        return { _id: s.id, tipo: str(s.values.supply_type), identificador: str(s.values.supply_point_id), tarifa: str(s.values.tariff),
           titular: companyName(ix.byId.get(ix.holderOfSupply.get(s.id) ?? "")), facturas: invoices.length, gasto: round(invoices.reduce((a, i) => a + (invoiceAmount(i) ?? 0), 0)) };
       }) };
     case "consumos": {
@@ -397,7 +448,7 @@ export function buildTable(data: AnalyticsData, key: string): Table {
       return { key, label: "Consumo eléctrico", description: "kWh facturados por mes (el total impreso de la factura o, si no lo hay, la suma de sus periodos).",
         columns: [{ key: "mes", label: "Mes" }, { key: "kwh", label: "kWh", kind: "number" }], rows: electricity.map(e => ({ mes: MONTH_LABEL(e.month), kwh: e.kwh })) };
     }
-    default: return { key: "facturas", label: "Facturas", description: "Todas tus facturas guardadas. «Tipo» dice si es un gasto o un ingreso: cámbialo si no es correcto.",
+    default: return { key: "facturas", label: "Facturas", title: "numero", description: "Todas tus facturas guardadas. «Tipo» dice si es un gasto o un ingreso: cámbialo si no es correcto.",
       columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "numero", label: "Número" }, { key: "emisor", label: "Emisor", filter: true, edit: { field: "issuer", type: "party" } }, { key: "receptor", label: "Receptor", filter: true, edit: { field: "customer", type: "party" } },
         { key: "tipo", label: "Tipo", filter: true, edit: { field: "direction", type: "select", options: [{ value: "recibida", label: "Gasto" }, { value: "emitida", label: "Ingreso" }] } },
         { key: "categoria", label: "Categoría", filter: true, edit: { field: "expense_category", type: "select", options: CATEGORIES.map(c => ({ value: c.key, label: c.label })) } },

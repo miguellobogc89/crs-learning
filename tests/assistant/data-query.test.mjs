@@ -82,3 +82,17 @@ test('tool: compact answer for the model, a block for the chat only when asked, 
  const prompt=tools.dataPrompt(T);
  assert.match(prompt,/consultar_datos/); assert.match(prompt,/"tabla":"empresas"/);
 });
+
+test('formulas row by row and the latest value of a column (e.g. last price paid per product and supplier)',()=>{
+ const compras={key:'compras',label:'Compras',description:'',columns:[{key:'fecha',label:'Fecha',kind:'date'},{key:'producto',label:'Producto'},{key:'proveedor',label:'Proveedor'},{key:'cantidad',label:'Cantidad',kind:'number'},{key:'precio',label:'Precio',kind:'money'}],
+  rows:[{_id:'l1',fecha:'2026-01-05',producto:'Leche entera',proveedor:'Mercadona',cantidad:6,precio:0.95},{_id:'l2',fecha:'2026-03-01',producto:'Leche entera',proveedor:'Mercadona',cantidad:12,precio:0.99},
+   {_id:'l3',fecha:'2026-02-01',producto:'Jamón',proveedor:'Mercadona',cantidad:1,precio:12.5},{_id:'l4',fecha:'2026-02-10',producto:'Leche entera',proveedor:'Makro',cantidad:24,precio:0.89}]};
+ const last=q.runQuery([compras],{tabla:'compras',agrupar_por:['producto','proveedor'],calcular:[{funcion:'ultimo',columna:'precio',segun:'fecha',nombre:'precio'},{funcion:'max',columna:'fecha',nombre:'ultima_compra'}],ordenar:[{columna:'producto',direccion:'asc'},{columna:'proveedor',direccion:'asc'}]});
+ assert.deepEqual(last.filas,[{producto:'Jamón',proveedor:'Mercadona',precio:12.5,ultima_compra:'2026-02-01'},{producto:'Leche entera',proveedor:'Makro',precio:0.89,ultima_compra:'2026-02-10'},{producto:'Leche entera',proveedor:'Mercadona',precio:0.99,ultima_compra:'2026-03-01'}]);
+ assert.equal(last.columnas[2].kind,'money');
+ const f=q.runQuery([compras],{tabla:'compras',formulas:[{nombre:'coste',a:'cantidad',op:'*',b:'precio'}],calcular:[{funcion:'suma',columna:'coste'}]});
+ assert.deepEqual(f.filas,[{suma_coste:12*0.99+6*0.95+12.5+24*0.89}].map(r=>({suma_coste:Math.round(r.suma_coste*100)/100})));
+ assert.throws(()=>q.runQuery([compras],{tabla:'compras',formulas:[{nombre:'x',a:'producto',op:'*',valor:2}]}),/solo opera/);
+ assert.throws(()=>q.runQuery([compras],{tabla:'compras',calcular:[{funcion:'ultimo',columna:'precio'}]}),/segun/);
+ assert.deepEqual(q.runQuery([compras],{tabla:'compras',columnas:['producto'],limite:1},{keepIds:true}).filas,[{_id:'l1',producto:'Leche entera'}]);
+});

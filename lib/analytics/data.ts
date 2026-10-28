@@ -13,6 +13,25 @@ export type AnalyticsData = {
   documents?: Record<string, { fileId: string; fileName: string }>;
   /** Tables created from templates (payslips, receipts…), with their definition and records. */
   templates?: TemplateTable[];
+  /** Tables created with the assistant (catalogs, recipe lines…), with their columns and records. */
+  custom?: CustomTable[];
+  /** Link columns added to any table: each row points to one row of another table. */
+  links?: LinkColumn[];
+  /** Which engine object type is behind each table key (facturas, plantilla:<id>, tabla:<key>…). */
+  types?: TableType[];
+};
+export type CustomField = { key: string; label: string; type: string; money: boolean };
+export type CustomTable = { typeId: string; typeKey: string; nombre: string; descripcion: string; titulo: string | null; campos: CustomField[]; rows: Row[] };
+/** `pairs`: [row of `from`, the row of `to` it points to]. */
+export type LinkColumn = { from: string; columna: string; nombre: string; to: string; relationId: string; relationKey: string; pairs: [string, string][] };
+export type TableType = { tableKey: string; typeId: string; typeKey: string; editable: boolean; settings: Record<string, unknown> };
+/** Engine type of each base table (the ones whose rows are records). */
+export const BASE_TABLE_TYPES: Record<string, string> = { facturas: "invoice", compras: "invoice_line", empresas: "company", suministros: "supply_point" };
+export type LinkSetting = { columna: string; nombre: string; relacion: string; destino: string };
+export const linkSettings = (settings: unknown): LinkSetting[] => {
+  const list = settings && typeof settings === "object" ? (settings as { enlaces?: unknown }).enlaces : undefined;
+  return Array.isArray(list) ? list.filter((l): l is LinkSetting => !!l && typeof l === "object" && typeof (l as LinkSetting).columna === "string"
+    && typeof (l as LinkSetting).relacion === "string" && typeof (l as LinkSetting).destino === "string") : [];
 };
 export type TemplateTable = { id: string; nombre: string; descripcion: string; campos: { key: string; label: string; type: string }[];
   analitica: { sumar: boolean; categoria: string; importe: string | null; fecha: string | null; tercero: string | null }; rows: Row[] };
@@ -70,5 +89,61 @@ export async function loadAnalyticsData(workspaceId: string): Promise<AnalyticsD
     const names = new Map<string, string>(files.map((f: { id: string; file_name: string }) => [f.id, f.file_name]));
     for (const [record, file] of fileOf) if (names.has(file)) documents[record] = { fileId: file, fileName: names.get(file)! };
   }
-  return { invoices, lines, companies, supplies, consumption, telecom, relations, documents, templates, truncated };
+  const extra = await loadCustomTables(workspaceId, templateDefs as { id: string; object_type_key: string }[]);
+  if (extra.truncated) truncated = true;
+  return { invoices, lines, companies, supplies, consumption, telecom, relations, documents, templates, truncated,
+    custom: extra.custom, links: extra.links, types: extra.types };
+}
+
+const asValues = (v: unknown) => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
+
+/**
+ * Tables created with the assistant (object types with settings.origen = "asistente") and the link columns of any
+ * table (settings.enlaces of its type → a relation definition whose pairs are [row, linked row]).
+ */
+async function loadCustomTables(workspaceId: string, templateDefs: { id: string; object_type_key: string }[]) {
+  const all = await prisma.engine_object_types.findMany({ where: { workspace_id: workspaceId, status: "active" },
+    select: { id: true, key: true, name: true, description: true, settings: true } }) as { id: string; key: string; name: string; description: string | null; settings: unknown }[];
+  const types: TableType[] = [];
+  for (const [tableKey, typeKey] of Object.entries(BASE_TABLE_TYPES)) {
+    const t = all.find(x => x.key === typeKey);
+    if (t) types.push({ tableKey, typeId: t.id, typeKey, editable: false, settings: asValues(t.settings) });
+  }
+  for (const d of templateDefs) {
+    const t = all.find(x => x.key === d.object_type_key);
+    if (t) types.push({ tableKey: `plantilla:${d.id}`, typeId: t.id, typeKey: t.key, editable: false, settings: asValues(t.settings) });
+  }
+  const customTypes = all.filter(t => asValues(t.settings).origen === "asistente");
+  for (const t of customTypes) types.push({ tableKey: `tabla:${t.key}`, typeId: t.id, typeKey: t.key, editable: true, settings: asValues(t.settings) });
+
+  let truncated = false;
+  const custom: CustomTable[] = [];
+  for (const t of customTypes) {
+    const [fields, rows] = await Promise.all([
+      prisma.engine_field_definitions.findMany({ where: { object_type_id: t.id, status: "active" }, orderBy: { sort_order: "asc" },
+        select: { key: true, name: true, field_type: true, configuration: true } }),
+      prisma.engine_records.findMany({ where: { workspace_id: workspaceId, object_type_id: t.id, status: { not: "archived" } },
+        select: { id: true, values_json: true, revision: true }, take: ANALYTICS_LIMIT + 1, orderBy: { created_at: "asc" } }),
+    ]) as [{ key: string; name: string; field_type: string; configuration: unknown }[], { id: string; values_json: unknown; revision: number }[]];
+    if (rows.length > ANALYTICS_LIMIT) truncated = true;
+    const settings = asValues(t.settings);
+    custom.push({ typeId: t.id, typeKey: t.key, nombre: t.name, descripcion: t.description ?? "", titulo: typeof settings.titulo === "string" ? settings.titulo : null,
+      campos: fields.map(f => ({ key: f.key, label: f.name, type: f.field_type, money: asValues(f.configuration).money === true })),
+      rows: rows.slice(0, ANALYTICS_LIMIT).map(r => ({ id: r.id, revision: r.revision, values: asValues(r.values_json) })) });
+  }
+
+  const wanted = types.flatMap(t => linkSettings(t.settings).map(l => ({ from: t.tableKey, ...l })));
+  const defs = wanted.length ? await prisma.engine_relation_definitions.findMany({ where: { workspace_id: workspaceId, key: { in: wanted.map(w => w.relacion) }, status: "active" },
+    select: { id: true, key: true } }) as { id: string; key: string }[] : [];
+  const pairs = defs.length ? await prisma.engine_record_relations.findMany({ where: { workspace_id: workspaceId, relation_definition_id: { in: defs.map(d => d.id) } },
+    select: { relation_definition_id: true, from_record_id: true, to_record_id: true } }) as { relation_definition_id: string; from_record_id: string; to_record_id: string }[] : [];
+  const links: LinkColumn[] = [];
+  for (const w of wanted) {
+    const def = defs.find(d => d.key === w.relacion);
+    if (!def) continue;
+    links.push({ from: w.from, columna: w.columna, nombre: w.nombre, to: w.destino, relationId: def.id, relationKey: def.key,
+      // Stored like the catalog's relations: from the linked row ("one") to the rows that point to it ("many").
+      pairs: pairs.filter(p => p.relation_definition_id === def.id).map(p => [p.to_record_id, p.from_record_id]) });
+  }
+  return { custom, links, types, truncated };
 }

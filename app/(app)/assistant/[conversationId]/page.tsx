@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { ChatComposer } from "@/components/assistant/chat-composer";
 import { DataBlockView } from "@/components/chat/data-block";
 import { extractDataBlocks } from "@/lib/assistant/data/tools";
+import { ProposalCard } from "@/components/chat/proposal-card";
+import { extractProposals } from "@/lib/assistant/changes/service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export default async function AssistantConversationPage({
@@ -96,6 +98,9 @@ export default async function AssistantConversationPage({
                   </p>
                   {extractDataBlocks(message.sources_json).map((block) => (
                     <DataBlockView key={block.id} block={block} />
+                  ))}
+                  {extractProposals(message.sources_json).map((proposal) => (
+                    <ProposalCard key={proposal.id} messageId={message.id} proposal={proposal} />
                   ))}
                 </div>
               </div>

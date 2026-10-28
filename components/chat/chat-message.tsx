@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { rateChatMessageAction } from "@/app/actions/chat-message-feedback.actions";
 import { DataBlockView } from "@/components/chat/data-block";
+import { ProposalCard, type ProposalView } from "@/components/chat/proposal-card";
 import type { DataBlock } from "@/lib/assistant/data/tools";
 
 type ChatSource = {
@@ -35,6 +36,7 @@ type ChatMessageData = {
   content: string;
   sources: ChatSource[];
   dataBlocks?: DataBlock[];
+  proposals?: ProposalView[];
   feedback?: "positive" | "negative" | null;
 };
 
@@ -114,7 +116,7 @@ async function handleFeedback(
                 text-foreground
               `
             : `
-                flex ${message.dataBlocks?.length ? "w-full min-w-0" : "max-w-[82%]"} gap-3
+                flex ${message.dataBlocks?.length || message.proposals?.length ? "w-full min-w-0" : "max-w-[82%]"} gap-3
                 rounded-2xl rounded-bl-md
                 border border-border
                 bg-card px-4 py-3
@@ -144,6 +146,10 @@ async function handleFeedback(
 
             {message.dataBlocks?.map((block) => (
               <DataBlockView key={block.id} block={block} />
+            ))}
+
+            {message.proposals?.map((proposal) => (
+              <ProposalCard key={proposal.id} messageId={message.id} proposal={proposal} />
             ))}
 
             <ConsultedArticles

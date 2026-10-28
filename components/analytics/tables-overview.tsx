@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, CheckCircle2, FileQuestion, FileStack, Sparkles, Table2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, FileQuestion, FileStack, Sparkles, Table2, Wand2 } from "lucide-react";
 import type { ReviewItem, TableCard } from "@/lib/analytics/tables-overview";
 import { cn } from "@/lib/utils";
 
@@ -14,10 +14,10 @@ const n = (v: number) => v.toLocaleString("es-ES");
 /** Analítica → Tablas, with no table chosen: a few figures, what needs a look, and every table. */
 export function TablesOverview({ tables, review }: { tables: TableCard[]; review: ReviewItem[] }) {
   const rows = tables.reduce((s, t) => s + t.rows, 0);
-  const own = tables.filter(t => t.fromDocuments).length;
+  const own = tables.filter(t => t.origin !== "base").length;
   return <div className="space-y-6 pt-4">
     <dl className={cn(card, "grid grid-cols-3 divide-x divide-slate-100")}>
-      {([["Tablas", tables.length, own ? `${n(own)} de tus documentos` : "con tus datos"], ["Filas", rows, "en todas las tablas"],
+      {([["Tablas", tables.length, own ? `${n(own)} creadas por ti` : "con tus datos"], ["Filas", rows, "en todas las tablas"],
         ["Por revisar", review.length, review.length ? "avisos abiertos" : "todo al día"]] as const).map(([k, v, hint]) =>
         <div key={k} className="px-6 py-4">
           <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{k}</dt>
@@ -51,10 +51,10 @@ export function TablesOverview({ tables, review }: { tables: TableCard[]; review
           <Link href={`/analytics?view=tablas&table=${encodeURIComponent(t.key)}`}
             className={cn(card, "group flex h-full flex-col gap-3 p-5 transition-all hover:border-[#0A58FF]/40 hover:shadow-[0_6px_20px_-8px_rgba(10,88,255,0.25)]")}>
             <div className="flex items-start gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#0A58FF]/10 text-[#0A58FF]">{t.fromDocuments ? <FileStack className="size-[18px]" /> : <Table2 className="size-[18px]" />}</span>
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#0A58FF]/10 text-[#0A58FF]">{t.origin === "documentos" ? <FileStack className="size-[18px]" /> : t.origin === "asistente" ? <Wand2 className="size-[18px]" /> : <Table2 className="size-[18px]" />}</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-[#0A58FF]">{t.label}</p>
-                <p className="text-xs text-slate-500">{t.fromDocuments ? "De tus documentos" : "Tabla base"}</p>
+                <p className="text-xs text-slate-500">{t.origin === "documentos" ? "De tus documentos" : t.origin === "asistente" ? "Creada con el asistente" : "Tabla base"}</p>
               </div>
               <ArrowRight className="size-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-[#0A58FF]" />
             </div>

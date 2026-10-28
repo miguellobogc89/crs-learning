@@ -83,7 +83,7 @@ test('useful tables: readable columns, joined names, no relation tables, documen
  assert.equal(a.buildTable(data,'proveedores').key,'empresas','old links keep working');
  assert.equal(e.columns.find(c=>c.key==='empresa').edit.field,'legal_name');
  const s=a.buildTable(data,'suministros');
- assert.deepEqual(s.rows[0],{tipo:'electricidad',identificador:'ES0000',tarifa:'2.0TD',titular:'Mi Negocio',facturas:1,gasto:60.5});
+ assert.deepEqual(s.rows[0],{_id:'s1',tipo:'electricidad',identificador:'ES0000',tarifa:'2.0TD',titular:'Mi Negocio',facturas:1,gasto:60.5});
  assert.deepEqual(a.buildTable(data,'consumos').rows,[{mes:'ene 26',kwh:160}]);
  assert.equal(a.buildTable(data,'otra').key,'facturas');
 });
@@ -170,6 +170,6 @@ test('template tables: their rows sum as costs of their category, and show as a 
  assert.equal(a.computeOverview(withT).totals.gastos,226.5+500+2640.1-500,'overview adds them to expenses (the sale stays income)');
  const t=a.buildTable(withT,'plantilla:T1');
  assert.equal(t.label,'Nóminas');assert.deepEqual(t.columns.map(c=>[c.key,c.kind]),[['trabajador','text'],['fecha_pago','date'],['coste_empresa','money'],['documento','document']]);
- assert.deepEqual(t.rows[0],{trabajador:'Jesús',fecha_pago:'2026-03-31',coste_empresa:1000,documento:null},'newest first');
+ assert.deepEqual(t.rows[0],{_id:'n2',_rev:null,trabajador:'Jesús',fecha_pago:'2026-03-31',coste_empresa:1000,documento:null},'newest first');
  assert.equal(t.rows.find(r=>r.trabajador==='María').documento,'F-N1');
 });

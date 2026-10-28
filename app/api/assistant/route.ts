@@ -2,6 +2,7 @@
  
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import type { Prisma } from "@prisma/client";
 import type {
   Response as ModelResponse,
   ResponseFunctionToolCall,
@@ -21,15 +22,22 @@ import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { resolveRetrievalQuery } from "@/lib/ai/assistant/resolve-retrieval-query";
 import { getOpenAIModel } from "@/lib/ai/openai";
 import {
+  CHANGES_TOOL_NAME,
+  changesTool,
   DATA_TOOL_NAME,
   dataPrompt,
   dataTool,
   executeDataTool,
   extractDataBlocks,
-  loadWorkspaceTables,
   type DataBlock,
 } from "@/lib/assistant/data/tools";
-import type { Table } from "@/lib/analytics/compute";
+import {
+  extractProposals,
+  loadWorkspaceData,
+  proposeChanges,
+  type Proposal,
+  type WorkspaceData,
+} from "@/lib/assistant/changes/service";
 
 /** Tool rounds per message (each round can run several queries). */
 const MAX_TOOL_ROUNDS = 6;
@@ -160,11 +168,14 @@ export async function POST(request: Request) {
   const conversationHistory =
     previousMessages.reverse().map((item: { role: string; content: string; sources_json: unknown }) => {
       const shown = extractDataBlocks(item.sources_json);
+      const proposed = extractProposals(item.sources_json);
+      const notes = [
+        shown.length ? `[Datos mostrados: ${shown.map((b) => `«${b.titulo}» (${b.total} filas, tablas ${b.tablas.join(" + ")})`).join("; ")}]` : "",
+        proposed.length ? `[Propuestas de cambio: ${proposed.map((p) => `«${p.titulo}» (${p.estado})`).join("; ")}]` : "",
+      ].filter(Boolean);
       return {
         role: item.role,
-        content: shown.length
-          ? `${item.content}\n\n[Datos mostrados: ${shown.map((b) => `«${b.titulo}» (${b.total} filas, tablas ${b.tablas.join(" + ")})`).join("; ")}]`
-          : item.content,
+        content: notes.length ? `${item.content}\n\n${notes.join("\n")}` : item.content,
       };
     });
 
@@ -177,18 +188,19 @@ export async function POST(request: Request) {
       history: conversationHistory,
     });
 
-const [retrievedKnowledge, tables] = await Promise.all([
+const [retrievedKnowledge, workspaceData] = await Promise.all([
   retrieveKnowledge(
     userId,
     activeWorkspace.id,
     retrievalQuery,
   ),
   // The workspace's tables (read-only). Without them the assistant still answers from documents.
-  loadWorkspaceTables(activeWorkspace.id).catch((error: unknown): Table[] => {
+  loadWorkspaceData(activeWorkspace.id).catch((error: unknown): WorkspaceData | null => {
     console.warn("[assistant] tablas no disponibles:", error instanceof Error ? error.message : error);
-    return [];
+    return null;
   }),
 ]);
+const tables = workspaceData?.tables ?? [];
 
   const messageSources = buildMessageSources(
     retrievedKnowledge.items,
@@ -199,7 +211,7 @@ const [retrievedKnowledge, tables] = await Promise.all([
       spaces,
       contextText: retrievedKnowledge.contextText,
     }),
-    tables.length ? dataPrompt(tables) : "",
+    tables.length ? dataPrompt(tables, new Set(workspaceData!.ctx.types.filter((t) => t.editable).map((t) => t.tableKey))) : "",
   ].filter(Boolean).join("\n\n");
 
 console.log("AI INPUT DEBUG", {
@@ -236,6 +248,7 @@ console.log("AI INPUT DEBUG", {
       },
     ];
   const dataBlocks: DataBlock[] = [];
+  const proposals: Proposal[] = [];
   let dataQueries = 0;
   let tokensInput = 0;
   let tokensOutput = 0;
@@ -246,7 +259,7 @@ console.log("AI INPUT DEBUG", {
       model: getOpenAIModel(),
       input,
       stream: false,
-      ...(useTools ? { tools: [dataTool] } : {}),
+      ...(useTools ? { tools: [dataTool, changesTool] } : {}),
     });
     tokensInput += response.usage?.input_tokens ?? 0;
     tokensOutput += response.usage?.output_tokens ?? 0;
@@ -255,6 +268,16 @@ console.log("AI INPUT DEBUG", {
     );
     if (!calls.length || !useTools) break;
     const outputs = calls.map((call) => {
+      if (call.name === CHANGES_TOOL_NAME && workspaceData) {
+        dataQueries += 1;
+        let args: Parameters<typeof proposeChanges>[1];
+        try { args = JSON.parse(call.arguments); } catch { args = {}; }
+        const { plan, proposal } = proposeChanges(workspaceData.ctx, args);
+        if (proposal) proposals.push(proposal);
+        return { type: "function_call_output" as const, call_id: call.call_id, output: JSON.stringify(proposal
+          ? { estado: "propuesta mostrada al usuario, PENDIENTE de que pulse «Aplicar»", pasos: plan.pasos.map((p) => ({ paso: p.texto, avisos: p.avisos })), cifras: plan.cifras }
+          : { errores: plan.errores }) };
+      }
       if (call.name !== DATA_TOOL_NAME) {
         return { type: "function_call_output" as const, call_id: call.call_id, output: JSON.stringify({ error: `Herramienta desconocida: ${call.name}` }) };
       }
@@ -267,7 +290,7 @@ console.log("AI INPUT DEBUG", {
   }
 
   let assistantMessage =
-    response.output_text.trim() || (dataBlocks.length ? "Aquí tienes los datos." : "No he podido generar una respuesta.");
+    response.output_text.trim() || (proposals.length ? "He preparado la propuesta: revísala y pulsa «Aplicar» si te parece bien." : dataBlocks.length ? "Aquí tienes los datos." : "No he podido generar una respuesta.");
 
   const availableCitationIds =
     retrievedKnowledge.items.map(
@@ -335,7 +358,8 @@ const savedAssistantMessage =
           finalCitationValidation.isValid,
         dataBlocks,
         dataQueries,
-      },
+        proposals,
+      } as unknown as Prisma.InputJsonValue,
     },
   });
 
@@ -357,6 +381,7 @@ const savedAssistantMessage =
       content: assistantMessage,
       sources: messageSources,
       dataBlocks,
+      proposals: extractProposals({ proposals }),
     },
   });
 }

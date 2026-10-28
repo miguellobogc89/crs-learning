@@ -10,13 +10,17 @@ import type { CellValue, Column, Table } from "@/lib/analytics/compute";
  */
 export type FilterOp = "=" | "!=" | "contiene" | "no_contiene" | ">" | ">=" | "<" | "<=" | "entre" | "en" | "vacio" | "no_vacio";
 export type Filter = { columna: string; op: FilterOp; valor?: string | number | boolean | null; valores?: (string | number)[] };
-export type AggregateFn = "suma" | "media" | "cuenta" | "cuenta_distintos" | "min" | "max";
+export type AggregateFn = "suma" | "media" | "cuenta" | "cuenta_distintos" | "min" | "max" | "ultimo" | "primero";
+/** A column computed row by row: a op b (b another column or a fixed value). E.g. cantidad × precio. */
+export type Formula = { nombre: string; a: string; op: "+" | "-" | "*" | "/"; b?: string; valor?: number; importe?: boolean };
 export type Query = {
   tabla: string;
   cruzar?: { tabla: string; columna_local: string; columna_otra: string; tipo?: "interior" | "izquierda" };
   filtros?: Filter[];
   agrupar_por?: string[];
-  calcular?: { funcion: AggregateFn; columna?: string; nombre?: string }[];
+  formulas?: Formula[];
+  /** "ultimo"/"primero": the value of `columna` in the row with the latest/earliest `segun` (a date). */
+  calcular?: { funcion: AggregateFn; columna?: string; nombre?: string; segun?: string }[];
   columnas?: string[];
   ordenar?: { columna: string; direccion?: "asc" | "desc" }[];
   limite?: number;
@@ -36,15 +40,16 @@ const empty = (v: CellValue | undefined) => v === null || v === undefined || v =
 export const visibleColumns = (t: Table) => t.columns.filter(c => !c.key.startsWith("_") && c.kind !== "document");
 
 /** Short description of every table for the model: columns, kinds, rows and a few real values of the repeated ones. */
-export function catalog(tables: Table[]) {
+export function catalog(tables: Table[], editable: Set<string> = new Set()) {
   return tables.map(t => {
     const cols = visibleColumns(t);
     return {
       tabla: t.key, nombre: t.label, descripcion: t.description, filas: t.rows.length,
+      ...(t.title ? { nombra_filas: t.title } : {}), ...(editable.has(t.key) ? { creada_con_asistente: true } : {}),
       columnas: cols.map(c => {
         const sample = c.filter || (!c.kind || c.kind === "text")
           ? [...new Set(t.rows.map(r => r[c.key]).filter(v => typeof v === "string" && v))].slice(0, c.filter ? 8 : 3) as string[] : undefined;
-        return { columna: c.key, nombre: c.label, tipo: c.kind ?? "text", ...(sample?.length ? { ejemplos: sample } : {}) };
+        return { columna: c.key, nombre: c.label, tipo: c.link ? "enlace" : c.kind ?? "text", ...(c.link ? { enlaza_con: c.link } : {}), ...(sample?.length ? { ejemplos: sample } : {}) };
       }),
     };
   });
@@ -58,7 +63,8 @@ function datePart(value: CellValue, part: DatePart): CellValue {
   return part === "año" ? y : part === "mes" ? `${y}-${String(m).padStart(2, "0")}` : `${y}-T${Math.ceil(m / 3)}`;
 }
 
-export function runQuery(tables: Table[], q: Query): QueryResult {
+/** `maxLimit` lets internal callers (changes from a query) go beyond the chat limit; `keepIds` keeps each row's `_id`. */
+export function runQuery(tables: Table[], q: Query, opts: { maxLimit?: number; keepIds?: boolean } = {}): QueryResult {
   const main = tables.find(t => t.key === q.tabla);
   if (!main) throw new QueryError(`No existe la tabla «${q.tabla}». Tablas: ${tables.map(t => t.key).join(", ")}`);
   const other = q.cruzar ? tables.find(t => t.key === q.cruzar!.tabla) : undefined;
@@ -102,6 +108,25 @@ export function runQuery(tables: Table[], q: Query): QueryResult {
     rows = out;
   }
 
+  // Formulas: new columns computed on each row (after crossing, so they can mix both tables).
+  for (const f of q.formulas ?? []) {
+    const name = String(f.nombre ?? "").trim();
+    if (!name || base.has(name)) throw new QueryError(`La fórmula necesita un nombre nuevo («${name}» no vale).`);
+    const a = column(f.a), b = f.b !== undefined ? column(f.b) : undefined;
+    if (!b && typeof f.valor !== "number") throw new QueryError(`La fórmula «${name}» necesita «b» (otra columna) o «valor».`);
+    const isNum = (c: Resolved) => c.kind === "money" || c.kind === "number";
+    if (!isNum(a) || (b && !isNum(b))) throw new QueryError(`La fórmula «${name}» solo opera con importes o números.`);
+    const money = f.importe ?? (a.kind === "money" || b?.kind === "money");
+    const calc = (x: number, y: number) => f.op === "+" ? x + y : f.op === "-" ? x - y : f.op === "*" ? x * y : y === 0 ? null : x / y;
+    if (!["+", "-", "*", "/"].includes(f.op)) throw new QueryError(`Operador de fórmula no válido «${f.op}».`);
+    rows = rows.map(r => {
+      const x = a.get(r), y = b ? b.get(r) : f.valor!;
+      const v = typeof x === "number" && typeof y === "number" ? calc(x, y) : null;
+      return { ...r, [`=${name}`]: v === null ? null : Math.round(v * 10000) / 10000 };
+    });
+    base.set(name, { key: name, label: name, kind: money ? "money" : "number", get: r => r[`=${name}`] ?? null });
+  }
+
   for (const f of q.filtros ?? []) {
     const c = column(f.columna);
     rows = rows.filter(r => matches(c.get(r), f, c.kind));
@@ -115,13 +140,15 @@ export function runQuery(tables: Table[], q: Query): QueryResult {
     const aggs = (q.calcular?.length ? q.calcular : [{ funcion: "cuenta" as const }]).map((a, i) => {
       const c = a.columna ? column(a.columna) : undefined;
       if (a.funcion !== "cuenta" && !c) throw new QueryError(`«${a.funcion}» necesita una columna.`);
+      const by = a.funcion === "ultimo" || a.funcion === "primero" ? (a.segun ? column(a.segun) : undefined) : undefined;
+      if ((a.funcion === "ultimo" || a.funcion === "primero") && !by) throw new QueryError(`«${a.funcion}» necesita «segun» (una columna de fecha).`);
       if ((a.funcion === "suma" || a.funcion === "media") && c && c.kind !== "money" && c.kind !== "number") throw new QueryError(`«${a.funcion}» solo vale para importes o números («${c.label}» no lo es).`);
-      const verb = { suma: "Suma", media: "Media", cuenta: "Nº de filas", cuenta_distintos: "Distintos", min: "Mínimo", max: "Máximo" }[a.funcion];
+      const verb = { suma: "Suma", media: "Media", cuenta: "Nº de filas", cuenta_distintos: "Distintos", min: "Mínimo", max: "Máximo", ultimo: "Último", primero: "Primero" }[a.funcion];
       let key = a.nombre?.trim() || (c ? `${a.funcion}_${c.key}` : "cuenta");
       while (used.has(key)) key = `${key}_${i + 1}`;
       used.add(key);
       const kind: Column["kind"] = a.funcion === "cuenta" || a.funcion === "cuenta_distintos" ? "number" : c?.kind;
-      return { ...a, c, key, label: a.nombre?.trim() || (c ? `${verb} de ${c.label.toLowerCase()}` : verb), kind };
+      return { ...a, c, by, key, label: a.nombre?.trim() || (c ? `${verb} de ${c.label.toLowerCase()}` : verb), kind };
     });
     const groups = new Map<string, Record<string, CellValue>[]>();
     for (const r of rows) { const k = JSON.stringify(keys.map(k => k.get(r))); groups.set(k, [...(groups.get(k) ?? []), r]); }
@@ -129,7 +156,7 @@ export function runQuery(tables: Table[], q: Query): QueryResult {
     result = [...groups].map(([k, members]) => {
       const values = JSON.parse(k) as CellValue[];
       const row: Record<string, CellValue> = Object.fromEntries(keys.map((c, i) => [c.key, values[i]]));
-      for (const a of aggs) row[a.key] = aggregate(members, a.funcion, a.c);
+      for (const a of aggs) row[a.key] = aggregate(members, a.funcion, a.c, a.by);
       return row;
     });
     columns = [...keys.map(({ key, label, kind }) => ({ key, label, kind })), ...aggs.map(({ key, label, kind }) => ({ key, label, kind }))];
@@ -137,7 +164,7 @@ export function runQuery(tables: Table[], q: Query): QueryResult {
     if (!q.ordenar?.length && aggs.length) result.sort((a, b) => num(b[aggs[0].key]) - num(a[aggs[0].key]));
   } else {
     const chosen = (q.columnas?.length ? q.columnas : visibleColumns(main).map(c => c.key)).map(column);
-    result = rows.map(r => Object.fromEntries(chosen.map(c => [c.key, c.get(r)])));
+    result = rows.map(r => ({ ...(opts.keepIds ? { _id: r._id ?? null } : {}), ...Object.fromEntries(chosen.map(c => [c.key, c.get(r)])) }));
     columns = chosen.map(({ key, label, kind }) => ({ key, label, kind }));
   }
 
@@ -146,7 +173,7 @@ export function runQuery(tables: Table[], q: Query): QueryResult {
     const dir = o.direccion === "asc" ? 1 : -1;
     result = [...result].sort((a, b) => compare(a[o.columna], b[o.columna]) * dir);
   }
-  const limit = Math.min(Math.max(1, Math.floor(q.limite ?? 50)), MAX_LIMIT);
+  const limit = Math.min(Math.max(1, Math.floor(q.limite ?? 50)), opts.maxLimit ?? MAX_LIMIT);
   return { columnas: columns, filas: result.slice(0, limit), total: result.length, truncado: result.length > limit, tablas: other ? [main.key, other.key] : [main.key] };
 }
 
@@ -187,7 +214,13 @@ function matches(value: CellValue, f: Filter, kind?: Column["kind"]): boolean {
   }
 }
 
-function aggregate(rows: Record<string, CellValue>[], fn: AggregateFn, c?: Resolved): CellValue {
+function aggregate(rows: Record<string, CellValue>[], fn: AggregateFn, c?: Resolved, by?: Resolved): CellValue {
+  if (fn === "ultimo" || fn === "primero") {
+    const dated = rows.filter(r => !empty(by!.get(r)) && !empty(c!.get(r)));
+    if (!dated.length) return null;
+    const pick = dated.reduce((best, r) => { const d = compare(by!.get(r), by!.get(best)); return fn === "ultimo" ? (d > 0 ? r : best) : (d < 0 ? r : best); });
+    return c!.get(pick);
+  }
   if (fn === "cuenta") return c ? rows.filter(r => !empty(c.get(r))).length : rows.length;
   const values = rows.map(r => c!.get(r)).filter(v => !empty(v));
   if (fn === "cuenta_distintos") return new Set(values.map(v => fold(v))).size;

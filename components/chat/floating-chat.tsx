@@ -25,6 +25,7 @@ import type { KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/components/chat/chat-message";
 import type { DataBlock } from "@/lib/assistant/data/tools";
+import type { ProposalView } from "@/components/chat/proposal-card";
 
 type ChatSource = {
   citationId: string;
@@ -44,6 +45,7 @@ type ChatMessageData = {
   content: string;
   sources: ChatSource[];
   dataBlocks?: DataBlock[];
+  proposals?: ProposalView[];
 };
 
 type ChatConversation = {

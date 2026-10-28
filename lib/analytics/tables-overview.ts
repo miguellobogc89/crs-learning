@@ -6,7 +6,8 @@ import type { PendingGroup } from "../knowledge/intake/templates/pending";
  * import state in, the summary out. Each item links where it is solved.
  */
 export type ReviewItem = { key: string; tone: "amber" | "rose" | "blue"; title: string; detail: string; href: string; action: string };
-export type TableCard = { key: string; label: string; description: string; rows: number; fromDocuments: boolean };
+export type TableOrigin = "base" | "documentos" | "asistente";
+export type TableCard = { key: string; label: string; description: string; rows: number; origin: TableOrigin };
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("es-ES")} ${n === 1 ? one : many}`;
 const tableHref = (key: string) => `/analytics?view=tablas&table=${encodeURIComponent(key)}`;
@@ -41,6 +42,7 @@ export function tablesReview(input: { invoices: Table; duplicatedLines: number; 
   return items;
 }
 
-export function tableCards(tables: Table[], fromDocuments: Set<string>): TableCard[] {
-  return tables.map(t => ({ key: t.key, label: t.label, description: t.description, rows: t.rows.length, fromDocuments: fromDocuments.has(t.key) }));
+export const tableOrigin = (key: string): TableOrigin => key.startsWith("plantilla:") ? "documentos" : key.startsWith("tabla:") ? "asistente" : "base";
+export function tableCards(tables: Table[]): TableCard[] {
+  return tables.map(t => ({ key: t.key, label: t.label, description: t.description, rows: t.rows.length, origin: tableOrigin(t.key) }));
 }
