@@ -23,8 +23,7 @@ export function UnsupportedTypeView({ group, canEdit }: { group: Group; canEdit:
     <header className="flex flex-wrap items-start gap-4 border-b border-slate-100 px-6 py-5">
       <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600"><FileQuestion className="size-5" /></span>
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Sin tabla</p>
-        <h2 className="mt-0.5 text-lg font-semibold text-slate-900">{group.label}</h2>
+        <p className="text-sm font-semibold text-slate-900">Este tipo de documento todavía no tiene tabla</p>
         <p className="mt-1 max-w-2xl text-sm text-slate-500">Estos documentos se importaron y se leyeron, pero no guardan datos porque su tipo todavía no tiene tabla. Crea la tabla una vez y se procesarán todos, también los que lleguen después.</p>
       </div>
       {canEdit && <Button variant="corporate" disabled={!!running || !kept.length} onClick={() => setEditing(true)}><Sparkles className="size-4" />Crear tabla</Button>}

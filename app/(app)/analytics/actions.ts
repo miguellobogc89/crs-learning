@@ -8,8 +8,10 @@ import { updateEngineRecord, EngineRecordError } from "@/lib/engine/records.serv
 import { editedValues } from "@/lib/analytics/edit";
 import { mergeRecords } from "@/lib/analytics/merge";
 import { archiveLines, setInvoiceParty } from "@/lib/analytics/parties";
-import { loadAnalyticsData } from "@/lib/analytics/data";
+import { loadAnalyticsData, missingTable } from "@/lib/analytics/data";
 import { duplicatedLineIssues } from "@/lib/analytics/compute";
+import { normalizeView } from "@/lib/analytics/table-view";
+import { saveTableView } from "@/lib/analytics/table-view.service";
 
 /** One cell edited in Analítica → Tablas. A new revision of the record (its history keeps the previous value). */
 export async function editAnalyticsCellAction(input: { recordId: string; expectedRevision: number; field: string; value: unknown }) {
@@ -79,5 +81,22 @@ export async function removeDuplicatedLinesAction(input: { invoiceIds: string[] 
     return { ok: true as const, facturas: issues.length, lineas: archived };
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : "No se pudo corregir." };
+  }
+}
+
+/** The person's view of a table (columns, grouping, order, rows per page), remembered for next time. */
+export async function saveTableViewAction(input: { tableKey: string; view: unknown }) {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false as const, error: "Sesión no válida." };
+  if (typeof input.tableKey !== "string" || !input.tableKey || input.tableKey.length > 120) return { ok: false as const, error: "Tabla no válida." };
+  const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
+  const view = normalizeView(input.view);
+  try {
+    await saveTableView(session.user.id, activeWorkspace.id, input.tableKey, view);
+    return { ok: true as const };
+  } catch (error) {
+    if (missingTable(error)) return { ok: false as const, error: "La vista no se puede recordar todavía: falta crear su tabla en Neon (scripts/neon/20261028_user_table_views.sql) y ejecutar npx prisma generate." };
+    console.error("[analytics] guardar vista:", error);
+    return { ok: false as const, error: "No se pudo guardar la vista." };
   }
 }

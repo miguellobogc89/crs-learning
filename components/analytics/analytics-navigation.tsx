@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileQuestion, LayoutDashboard, Table2 } from "lucide-react";
+import { FileQuestion, LayoutDashboard, LayoutGrid, Table2 } from "lucide-react";
 
 const TABLES = [
   { key: "facturas", label: "Facturas" }, { key: "compras", label: "Productos comprados" }, { key: "empresas", label: "Empresas" },
@@ -19,6 +19,7 @@ export function AnalyticsNavigation({ view, table, extra = [], pending = [], sin
   const active = "bg-[#EDF3FF] font-semibold text-[#0A58FF]";
   const inactive = "text-slate-600 hover:bg-[#F0F4FC] hover:text-slate-900";
   const tables = [...TABLES, ...extra];
+  const overview = view === "tablas" && !table && !sintabla;
   const heading = "flex items-center justify-between px-5 pb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500";
   return <div className="flex h-full min-h-0 flex-col overflow-y-auto">
     <div className="border-b border-slate-200/60 px-4 py-4"><h2 className="text-[13px] font-semibold text-slate-900">Analítica</h2></div>
@@ -28,6 +29,8 @@ export function AnalyticsNavigation({ view, table, extra = [], pending = [], sin
     </nav>
     <p className={heading + " pt-4"}>Tablas<span className="font-medium tabular-nums text-slate-400">{tables.length}</span></p>
     <nav aria-label="Tablas" className="space-y-1 px-3 pb-4">
+      <Link href="/analytics?view=tablas" aria-current={overview ? "page" : undefined} className={item + " " + (overview ? active : inactive)}>
+        <LayoutGrid className="h-4 w-4 shrink-0" /> Vista general</Link>
       {tables.map(t => {
         const on = view === "tablas" && !sintabla && table === t.key;
         return <Link key={t.key} href={`/analytics?view=tablas&table=${encodeURIComponent(t.key)}`} aria-current={on ? "page" : undefined} className={item + " " + (on ? active : inactive)}>

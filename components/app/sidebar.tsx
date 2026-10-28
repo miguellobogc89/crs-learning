@@ -15,7 +15,6 @@ import {
   Home,
   Inbox,
   Library,
-  Table2,
   Settings,
   ShieldCheck,
   UsersRound,
@@ -40,11 +39,6 @@ const navItems = [
     href: "/knowledge",
     icon: Library,
     label: "Conocimiento",
-  },
-  {
-    href: "/engine/tables",
-    icon: Table2,
-    label: "Tablas",
   },
   {
     href: "/analytics",

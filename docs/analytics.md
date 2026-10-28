@@ -9,7 +9,9 @@ Sección `/analytics` (menú «Analítica»). Lee los registros ya guardados del
 | `lib/analytics/data.ts` | Carga (solo lectura) facturas, líneas, empresas, suministros, consumos y líneas de teléfono (máx. 5000 por tabla, avisa si hay más) y las relaciones que las unen. |
 | `lib/analytics/compute.ts` | Cálculo puro y testeable: panel (`computeDashboard`) y tablas útiles (`buildTable`). |
 | `components/analytics/*` | Gráfico de barras agrupadas (SVG, leyenda, tooltip, vista tabla), rankings, tabla, navegación. |
-| `app/(app)/analytics/page.tsx` | Página: `?view=panel` (por defecto) o `?view=tablas&table=…`. |
+| `lib/analytics/table-view.ts` · `table-view.service.ts` | Vista de cada tabla por persona (columnas ocultas, agrupar por, orden, filas por página): validación y agrupado puros; guardado en `user_table_views`. |
+| `lib/analytics/tables-overview.ts` | Vista general de Tablas: qué necesita revisión y las tarjetas de tablas (puro). |
+| `app/(app)/analytics/page.tsx` | Página: `?view=panel` (por defecto), `?view=tablas` (vista general), `?view=tablas&table=…` o `?view=tablas&sintabla=…`. |
 
 ## Panel
 
@@ -23,11 +25,23 @@ Las facturas sin fecha o importe no se inventan: se cuentan y se avisa debajo de
 
 ## Tablas
 
-Solo tablas de utilidad, con nombres legibles y los nombres de las relaciones ya resueltos: Facturas, Productos comprados, Proveedores, Suministros, Consumo eléctrico. No se muestran tablas de relaciones ni de impuestos.
+Es el único sitio de tablas de la app (el antiguo apartado «Tablas» del motor, `/engine/tables`, se quitó del menú y
+redirige aquí). Solo tablas de utilidad, con nombres legibles y los nombres de las relaciones ya resueltos: Facturas,
+Productos comprados, Empresas, Suministros, Consumo eléctrico, más las creadas desde tus documentos (plantillas). No se
+muestran tablas de relaciones ni de impuestos.
+
+- **Vista general** (`?view=tablas`): cifras (tablas, filas, avisos), «Necesita revisión» (tipos sin tabla, documentos
+  de plantilla con error o nuevos, facturas sin emisor/receptor, sin total o con líneas repetidas; cada uno enlaza donde
+  se resuelve) y todas las tablas como tarjetas.
+- **Una tabla**: migas «Analítica › Tablas» y la tabla como título. Botón **Ajustes** en la cabecera: columnas visibles
+  y «Agrupar por» (p. ej. facturas por receptor: cada grupo con su número de filas y la suma de los importes,
+  desplegable). Orden y filas por página también se recuerdan. Se guarda por persona, espacio y tabla en
+  `user_table_views` (Neon: `scripts/neon/20261028_user_table_views.sql` + `npx prisma generate`; sin la tabla, la
+  vista funciona pero no se recuerda).
 
 ## Colores
 
-Paleta categórica fija (el color sigue a la categoría, nunca a su posición): suministros #2a78d6, compras #eb6834, servicios #1baf7a, alquiler #eda100, rectificativas #e87ba4, otros #008300.
+Paleta categórica fija (el color sigue a la categoría, nunca a su posición): suministros #0A58FF (azul corporativo), compras #eb6834, servicios #1baf7a, alquiler #eda100, rectificativas #e87ba4, otros #008300.
 
 ## Tests
 

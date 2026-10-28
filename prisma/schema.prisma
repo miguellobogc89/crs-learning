@@ -1975,3 +1975,16 @@ model intake_template_documents {
 
   @@unique([template_id, import_file_id], map: "intake_template_documents_unique")
 }
+
+/// How each person likes to see each Analítica table (columns, grouping, order, rows per page). FKs live in SQL.
+model user_table_views {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String   @db.Uuid
+  workspace_id  String   @db.Uuid
+  table_key     String
+  settings_json Json     @default("{}")
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([user_id, workspace_id, table_key], map: "user_table_views_unique")
+}

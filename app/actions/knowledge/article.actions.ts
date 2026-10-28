@@ -140,7 +140,7 @@ export async function deleteKnowledgeAction(
   await deleteKnowledgeSelection({ userId: session.user.id, workspaceId: activeWorkspace.id, sourceIds: [id] });
 
   revalidatePath("/knowledge", "layout");
-  revalidatePath("/engine/tables");
+  revalidatePath("/analytics");
 }
 
 export async function createKnowledgeAction(
@@ -233,5 +233,5 @@ export async function deleteKnowledgeSelectionAction(sourceIds: string[], folder
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
   await deleteKnowledgeSelection({ userId: session.user.id, workspaceId: activeWorkspace.id, sourceIds, folderIds });
   revalidatePath("/knowledge", "layout");
-  revalidatePath("/engine/tables");
+  revalidatePath("/analytics");
 }

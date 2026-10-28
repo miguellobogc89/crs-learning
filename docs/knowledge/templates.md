@@ -17,8 +17,8 @@ Los tipos con conjunto de campos revisado (facturas, tickets) se extraen y guard
    espacio), valores tipados (`templates/contract.ts`), evidencia por campo y una clave por registro (columnas que
    identifican, o documento+parte+fila) para no duplicar al reprocesar. «No guardar» marca el documento como ignorado.
    Cada resultado queda en `intake_template_documents` (por versión de plantilla).
-5. Al abrir su tabla en Analítica, los documentos nuevos de un tipo con plantilla se procesan solos (barra encima de
-   la tabla: procesados, registros, errores y «Procesar» para reintentar).
+5. Al abrir su tabla en Analítica, los documentos nuevos de un tipo con plantilla se procesan solos (con su progreso
+   encima de la tabla); si alguno falla, un aviso encima permite «Reintentar».
 
 En Analítica la barra lateral tiene una sola lista **Tablas** (las base y las creadas desde tus documentos) y, debajo,
 **Sin tabla**: cada tipo de documento sin tabla con su número de documentos (`?view=tablas&sintabla=familia|tipo|subtipo`,

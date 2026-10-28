@@ -1,9 +1,11 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronLeft, ChevronRight, FileText, GitMerge, Loader2, Pencil, Plus, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, FileText, GitMerge, Loader2, Pencil, Plus, X } from "lucide-react";
 import type { CellValue, Column, Table } from "@/lib/analytics/compute";
-import { filterOptions, queryRows, type Sort } from "@/lib/analytics/table-query";
+import { filterOptions, queryRows } from "@/lib/analytics/table-query";
+import { groupRows, PAGE_SIZES } from "@/lib/analytics/table-view";
+import { useTableView } from "./table-view-context";
 import { editAnalyticsCellAction, mergeCompaniesAction, setInvoicePartyAction } from "@/app/(app)/analytics/actions";
 import { Combobox } from "@/components/ui/combobox";
 import { SearchInput } from "@/components/ui/search-input";
@@ -12,7 +14,6 @@ import { fmtDate, fmtMoney, fmtNumber } from "./format";
 
 type Row = Record<string, CellValue>;
 type Company = { id: string; nombre: string; nif: string | null };
-const PAGE_SIZES = [25, 50, 100];
 
 const right = (c: Column) => c.kind === "money" || c.kind === "number";
 const show = (v: CellValue, kind?: Column["kind"]) => {
@@ -26,7 +27,8 @@ const show = (v: CellValue, kind?: Column["kind"]) => {
 /**
  * A readable table with search, filters, sorting and pages; a link to the original document of each row; and a few
  * cells that can be corrected in place (company name, "Mi empresa", invoice type, category, issuer and customer).
- * Each change is a new revision of the record.
+ * Each change is a new revision of the record. Which columns show, the grouping, the order and the rows per page come
+ * from the person's saved view (header «Ajustes»); grouped, each group shows its rows count and its totals.
  */
 export function DataTable({ table, canEdit = false, companies = [] }: { table: Table; canEdit?: boolean; companies?: Company[] }) {
   const router = useRouter();
@@ -36,19 +38,29 @@ export function DataTable({ table, canEdit = false, companies = [] }: { table: T
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
-  const [sort, setSort] = useState<Sort>(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const { view, update } = useTableView(table.columns);
+  const { sort, pageSize, groupBy } = view;
+  const columns = useMemo(() => { const hidden = new Set(view.hidden); const c = table.columns.filter(x => !hidden.has(x.key)); return c.length ? c : table.columns; }, [table.columns, view.hidden]);
+  const groupColumn = groupBy ? table.columns.find(c => c.key === groupBy) : undefined;
 
   const filterable = table.columns.filter(c => c.filter);
   const options = useMemo(() => Object.fromEntries(filterable.map(c => [c.key, filterOptions(table.rows, c)])), [table.rows]); // eslint-disable-line react-hooks/exhaustive-deps
-  const result = useMemo(() => queryRows(table.rows, table.columns, { search, filters, sort, page, pageSize }), [table, search, filters, sort, page, pageSize]);
+  // Search looks in every column, also the hidden ones.
+  const result = useMemo(() => queryRows(table.rows, table.columns, { search, filters, sort, page: groupColumn ? 1 : page, pageSize: groupColumn ? Number.MAX_SAFE_INTEGER : pageSize }),
+    [table, search, filters, sort, page, pageSize, groupColumn]);
+  const groups = useMemo(() => groupColumn ? groupRows(result.rows, table.columns, groupColumn.key) : null, [result.rows, table.columns, groupColumn]);
+  const groupPages = groups ? Math.max(1, Math.ceil(groups.length / pageSize)) : 1;
+  const groupPage = Math.min(page, groupPages);
+  const shownGroups = groups?.slice((groupPage - 1) * pageSize, groupPage * pageSize) ?? [];
   const active = Object.values(filters).filter(Boolean).length + (search ? 1 : 0);
   const mergeable = canEdit && table.key === "empresas";
 
   function toggleSort(key: string) {
-    setSort(s => !s || s.key !== key ? { key, dir: "asc" } : s.dir === "asc" ? { key, dir: "desc" } : null);
+    update({ sort: !sort || sort.key !== key ? { key, dir: "asc" } : sort.dir === "asc" ? { key, dir: "desc" } : null });
   }
+  const toggleGroup = (key: string) => setOpen(o => { const n = new Set(o); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const refresh = () => startTransition(() => router.refresh());
 
   async function merge(sourceId: string, targetId: string) {
@@ -76,41 +88,13 @@ export function DataTable({ table, canEdit = false, companies = [] }: { table: T
     refresh();
   }
 
-  const from = result.total ? (result.page - 1) * pageSize + 1 : 0, to = Math.min(result.total, result.page * pageSize);
-  return <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-    <div className="space-y-3 border-b border-slate-200 px-5 py-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0"><h2 className="text-base font-semibold text-slate-900">{table.label}</h2><p className="mt-0.5 text-xs text-slate-500">{table.description}</p></div>
-        <span className="flex items-center gap-2 text-xs text-slate-500">{pending && <Loader2 className="size-3.5 animate-spin" />}
-          {result.total === table.rows.length ? `${table.rows.length} filas` : `${result.total} de ${table.rows.length} filas`}</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput className="w-full sm:w-72" placeholder="Buscar en la tabla…" value={search} onChange={v => { setSearch(v); setPage(1); }} />
-        {filterable.map(c => <Combobox key={c.key} ariaLabel={`Filtrar por ${c.label}`} className="h-10 max-w-[220px] rounded-xl" value={filters[c.key] ?? ""}
-          searchable={(options[c.key]?.length ?? 0) > 8} searchPlaceholder={`Buscar ${c.label.toLowerCase()}…`}
-          options={[{ value: "", label: "Todos" }, ...(options[c.key] ?? []).map(o => ({ value: o.value, label: o.label, hint: String(o.count) }))]}
-          renderValue={o => <><span className="text-slate-500">{c.label}:</span> <span className={filters[c.key] ? "font-medium text-slate-900" : ""}>{o?.label ?? "Todos"}</span></>}
-          onChange={v => { setFilters(f => ({ ...f, [c.key]: v })); setPage(1); }} />)}
-        {active > 0 && <button type="button" onClick={() => { setSearch(""); setFilters({}); setPage(1); }}
-          className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900"><X className="size-3.5" />Limpiar</button>}
-      </div>
-    </div>
-    {error && <p className="border-b border-rose-100 bg-rose-50 px-5 py-2 text-sm text-rose-700">{error}</p>}
-    {notice && <p className="border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-800">{notice}</p>}
-    {table.rows.length ? <>
-      <div className="max-h-[65vh] overflow-auto"><table className="w-full min-w-[640px] border-collapse text-left text-sm">
-        <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500"><tr>
-          {table.columns.map(c => <th key={c.key} className={cn("whitespace-nowrap px-4 py-2.5 font-semibold", right(c) && "text-right")}
-            aria-sort={sort?.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}>
-            {c.kind === "document" ? c.label : <button type="button" onClick={() => toggleSort(c.key)}
-              className={cn("inline-flex items-center gap-1 rounded px-1 -mx-1 hover:text-slate-900", sort?.key === c.key && "text-slate-900")}>
-              {c.label}{sort?.key !== c.key ? <ArrowUpDown className="size-3 opacity-40" /> : sort.dir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />}
-            </button>}
-          </th>)}
-          {mergeable && <th className="px-4 py-2.5" />}
-        </tr></thead>
-        <tbody>{result.rows.map((r, i) => <tr key={typeof r._id === "string" ? r._id : `${result.page}-${i}`} className="border-t border-slate-100 hover:bg-slate-50/60">
-          {table.columns.map(c => {
+  const pages = groups ? groupPages : result.pages, current = groups ? groupPage : result.page, count = groups ? groups.length : result.total;
+  const from = count ? (current - 1) * pageSize + 1 : 0, to = Math.min(count, current * pageSize);
+  const sums = columns.findIndex(c => c.kind === "money" || c.kind === "number");
+  const labelSpan = sums > 0 ? sums : columns.length;
+  const allOpen = !!groups && shownGroups.every(g => open.has(g.key));
+
+  const cells = (r: Row) => columns.map(c => {
             const editable = canEdit && !!c.edit && typeof r._id === "string" && typeof r._rev === "number";
             const cellBusy = busy === `${r._id}:${c.key}`;
             return <td key={c.key} className={cn("px-4 py-1.5 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" && "whitespace-nowrap")}>
@@ -130,24 +114,74 @@ export function DataTable({ table, canEdit = false, companies = [] }: { table: T
                 : editable && c.edit!.type === "text" ? <EditableText value={String(r[c.key] ?? "")} busy={cellBusy} onSave={v => save(r, c, v)} />
                 : show(r[c.key] ?? null, c.kind)}
             </td>;
-          })}
-          {mergeable && typeof r._id === "string" && <td className="whitespace-nowrap px-4 py-1.5 text-right">
-            <MergeControl row={r} rows={table.rows} busy={busy === `${r._id}:merge`} onMerge={target => merge(r._id as string, target)} /></td>}
-        </tr>)}
-        {!result.rows.length && <tr><td colSpan={table.columns.length + (mergeable ? 1 : 0)} className="px-4 py-10 text-center text-sm text-slate-500">Ninguna fila coincide con la búsqueda o los filtros.</td></tr>}</tbody>
+          });
+  const row = (r: Row, key: string) => <tr key={key} className="border-t border-slate-100 hover:bg-slate-50/60">
+    {cells(r)}
+    {mergeable && <td className="whitespace-nowrap px-4 py-1.5 text-right">{typeof r._id === "string" &&
+      <MergeControl row={r} rows={table.rows} busy={busy === `${r._id}:merge`} onMerge={target => merge(r._id as string, target)} />}</td>}
+  </tr>;
+
+  return <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+    <div className="border-b border-slate-200 px-5 py-3.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchInput className="w-full sm:w-72" placeholder="Buscar en la tabla…" value={search} onChange={v => { setSearch(v); setPage(1); }} />
+        {filterable.map(c => <Combobox key={c.key} ariaLabel={`Filtrar por ${c.label}`} className="h-10 max-w-[220px] rounded-xl" value={filters[c.key] ?? ""}
+          searchable={(options[c.key]?.length ?? 0) > 8} searchPlaceholder={`Buscar ${c.label.toLowerCase()}…`}
+          options={[{ value: "", label: "Todos" }, ...(options[c.key] ?? []).map(o => ({ value: o.value, label: o.label, hint: String(o.count) }))]}
+          renderValue={o => <><span className="text-slate-500">{c.label}:</span> <span className={filters[c.key] ? "font-medium text-slate-900" : ""}>{o?.label ?? "Todos"}</span></>}
+          onChange={v => { setFilters(f => ({ ...f, [c.key]: v })); setPage(1); }} />)}
+        {active > 0 && <button type="button" onClick={() => { setSearch(""); setFilters({}); setPage(1); }}
+          className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900"><X className="size-3.5" />Limpiar</button>}
+        <span className="ml-auto flex items-center gap-2 text-xs tabular-nums text-slate-500">{pending && <Loader2 className="size-3.5 animate-spin" />}
+          {groupColumn && <span className="rounded-full bg-[#0A58FF]/10 px-2 py-0.5 font-medium text-[#0A58FF]">Agrupado por {groupColumn.label.toLowerCase()}</span>}
+          {result.total === table.rows.length ? `${table.rows.length.toLocaleString("es-ES")} filas` : `${result.total.toLocaleString("es-ES")} de ${table.rows.length.toLocaleString("es-ES")} filas`}</span>
+      </div>
+    </div>
+    {error && <p className="border-b border-rose-100 bg-rose-50 px-5 py-2 text-sm text-rose-700">{error}</p>}
+    {notice && <p className="border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-800">{notice}</p>}
+    {table.rows.length ? <>
+      <div className="max-h-[65vh] overflow-auto"><table className="w-full min-w-[640px] border-collapse text-left text-sm">
+        <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500"><tr>
+          {columns.map(c => <th key={c.key} className={cn("whitespace-nowrap px-4 py-2.5 font-semibold", right(c) && "text-right")}
+            aria-sort={sort?.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}>
+            {c.kind === "document" ? c.label : <button type="button" onClick={() => toggleSort(c.key)}
+              className={cn("inline-flex items-center gap-1 rounded px-1 -mx-1 hover:text-slate-900", sort?.key === c.key && "text-slate-900")}>
+              {c.label}{sort?.key !== c.key ? <ArrowUpDown className="size-3 opacity-40" /> : sort.dir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />}
+            </button>}
+          </th>)}
+          {mergeable && <th className="px-4 py-2.5" />}
+        </tr></thead>
+        <tbody>{groups ? shownGroups.map(g => {
+          const expanded = open.has(g.key);
+          return [<tr key={`g:${g.key}`} className="border-t border-slate-200 bg-slate-50/70 hover:bg-slate-100/70">
+            <td colSpan={labelSpan} className="px-4 py-2">
+              <button type="button" onClick={() => toggleGroup(g.key)} aria-expanded={expanded} className="flex w-full items-center gap-2 text-left">
+                <ChevronDown className={cn("size-4 shrink-0 text-slate-400 transition-transform", !expanded && "-rotate-90")} />
+                <span className={cn("truncate font-semibold", g.key === "__empty" ? "text-slate-400" : "text-slate-900")}>{g.label}</span>
+                <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium tabular-nums text-slate-500 ring-1 ring-slate-200">{g.rows.length.toLocaleString("es-ES")}</span>
+              </button>
+            </td>
+            {columns.slice(labelSpan).map(c => <td key={c.key} className={cn("whitespace-nowrap px-4 py-2 font-semibold tabular-nums text-slate-900", right(c) && "text-right")}>
+              {c.kind === "money" ? fmtMoney(g.totals[c.key] ?? 0) : c.kind === "number" ? fmtNumber(g.totals[c.key] ?? 0) : null}</td>)}
+            {mergeable && <td />}
+          </tr>, ...(expanded ? g.rows.map((r, i) => row(r, typeof r._id === "string" ? r._id : `${g.key}-${i}`)) : [])];
+        }) : result.rows.map((r, i) => row(r, typeof r._id === "string" ? r._id : `${result.page}-${i}`))}
+        {!result.rows.length && <tr><td colSpan={columns.length + (mergeable ? 1 : 0)} className="px-4 py-10 text-center text-sm text-slate-500">Ninguna fila coincide con la búsqueda o los filtros.</td></tr>}</tbody>
       </table></div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-2.5 text-xs text-slate-500">
-        <span className="flex items-center gap-2">Filas por página
-          <Combobox className="h-7 w-[72px]" ariaLabel="Filas por página" value={String(pageSize)} options={PAGE_SIZES.map(n => ({ value: String(n), label: String(n) }))}
-            onChange={v => { setPageSize(Number(v)); setPage(1); }} /></span>
+        <span className="flex items-center gap-2">{groups ? "Grupos" : "Filas"} por página
+          <Combobox className="h-7 w-[72px]" ariaLabel="Por página" value={String(pageSize)} options={PAGE_SIZES.map(n => ({ value: String(n), label: String(n) }))}
+            onChange={v => { update({ pageSize: Number(v) }); setPage(1); }} />
+          {groups && <button type="button" onClick={() => setOpen(o => { const n = new Set(o); for (const g of shownGroups) { if (allOpen) n.delete(g.key); else n.add(g.key); } return n; })}
+            className="ml-2 rounded-lg px-2 py-1 font-medium text-[#0A58FF] hover:bg-[#0A58FF]/5">{allOpen ? "Contraer todo" : "Desplegar todo"}</button>}</span>
         <span className="flex items-center gap-1">
-          <span className="mr-2 tabular-nums">{from}–{to} de {result.total}</span>
-          <button type="button" aria-label="Página anterior" disabled={result.page <= 1} onClick={() => setPage(result.page - 1)}
+          <span className="mr-2 tabular-nums">{from.toLocaleString("es-ES")}–{to.toLocaleString("es-ES")} de {count.toLocaleString("es-ES")}{groups ? (count === 1 ? " grupo" : " grupos") : ""}</span>
+          <button type="button" aria-label="Página anterior" disabled={current <= 1} onClick={() => setPage(current - 1)}
             className="inline-flex size-7 items-center justify-center rounded-lg border border-slate-200 bg-white hover:border-slate-300 disabled:opacity-40"><ChevronLeft className="size-3.5" /></button>
-          {pageNumbers(result.page, result.pages).map((n, i) => n === null ? <span key={`gap${i}`} className="px-1">…</span>
-            : <button key={n} type="button" onClick={() => setPage(n)} aria-current={n === result.page ? "page" : undefined}
-                className={cn("inline-flex h-7 min-w-7 items-center justify-center rounded-lg px-2 tabular-nums", n === result.page ? "bg-[#0A58FF] font-medium text-white" : "hover:bg-slate-100")}>{n}</button>)}
-          <button type="button" aria-label="Página siguiente" disabled={result.page >= result.pages} onClick={() => setPage(result.page + 1)}
+          {pageNumbers(current, pages).map((n, i) => n === null ? <span key={`gap${i}`} className="px-1">…</span>
+            : <button key={n} type="button" onClick={() => setPage(n)} aria-current={n === current ? "page" : undefined}
+                className={cn("inline-flex h-7 min-w-7 items-center justify-center rounded-lg px-2 tabular-nums", n === current ? "bg-[#0A58FF] font-medium text-white" : "hover:bg-slate-100")}>{n}</button>)}
+          <button type="button" aria-label="Página siguiente" disabled={current >= pages} onClick={() => setPage(current + 1)}
             className="inline-flex size-7 items-center justify-center rounded-lg border border-slate-200 bg-white hover:border-slate-300 disabled:opacity-40"><ChevronRight className="size-3.5" /></button>
         </span>
       </div>

@@ -106,7 +106,7 @@ export async function importKnowledgeIntoEngine(input: {
         body: preflight.conflicts.map(conflict => conflict.reason).join("\n").slice(0, 4000),
         entityType: "knowledge_file",
         entityId: knowledgeFileId,
-        href: "/engine/tables",
+        href: "/analytics?view=tablas",
         metadata: {
           workspaceId,
           source: "engine_autonomous_preflight",

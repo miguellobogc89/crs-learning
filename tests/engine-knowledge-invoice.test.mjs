@@ -324,19 +324,6 @@ test("invoice monetary columns format thousands and decimal comma using verified
   assert.equal(invoiceDisplayCurrency({}, "importe neto 3050,00"), null);
 });
 
-test("invoice table places invoice number first, hides ID/currency and shows party source columns", () => {
-  const file = fs.readFileSync(
-    new URL("../app/(app)/engine/tables/page.tsx", import.meta.url), "utf8");
-  assert.match(file, /<th[^>]*>Número de factura<\/th>/);
-  assert.match(file, /<th[^>]*>Emisor<\/th>/);
-  assert.match(file, /<th[^>]*>Cliente<\/th>/);
-  assert.match(file, /field\.key !== "currency"/);
-  assert.match(file, /!isInvoice \? \(/);
-  assert.match(file, /formatEngineNumericValue/);
-  assert.match(file, /sourceTextsByRecord/);
-});
-
-
 test("invoice money conversion preserves JSON decimals and parses Spanish printed numbers", () => {
   const field = { key: "net_amount", field_type: "decimal" };
   assert.equal(formatEngineNumericValue("1133.81", field, "EUR"), "1.133,81 €");

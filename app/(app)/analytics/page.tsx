@@ -14,7 +14,13 @@ import { RankingList } from "@/components/analytics/ranking-list";
 import { DataTable } from "@/components/analytics/data-table";
 import { DuplicateLinesReview } from "@/components/analytics/duplicate-lines-review";
 import { UnsupportedTypeView } from "@/components/knowledge/templates/unsupported-type-view";
-import { TemplateTableBar } from "@/components/knowledge/templates/template-table-bar";
+import { TemplateTableStatus } from "@/components/knowledge/templates/template-table-status";
+import { TablesOverview } from "@/components/analytics/tables-overview";
+import { TableViewProvider } from "@/components/analytics/table-view-context";
+import { TableSettingsButton } from "@/components/analytics/table-settings";
+import { tableCards, tablesReview } from "@/lib/analytics/tables-overview";
+import { normalizeView } from "@/lib/analytics/table-view";
+import { loadTableView } from "@/lib/analytics/table-view.service";
 import { templateOverview } from "@/lib/knowledge/intake/templates/service";
 import type { PendingGroup } from "@/lib/knowledge/intake/templates/pending";
 import { CATEGORY_COLOR, SINGLE_SERIES_COLOR, fmtDate, fmtMoney, fmtNumber } from "@/components/analytics/format";
@@ -101,20 +107,28 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const pending = missing.map(g => ({ key: typeKey(g), label: g.label, count: g.documentos.filter(d => d.estado !== "ignorado").length }));
   const unsupported = view === "tablas" && params.sintabla ? missing.find(g => typeKey(g) === params.sintabla) : undefined;
   const templateTables = (data.templates ?? []).map(t => ({ key: `plantilla:${t.id}`, label: t.nombre }));
-  const tableKey = params.table === "proveedores" ? "empresas" : TABLE_KEYS.includes(params.table as (typeof TABLE_KEYS)[number]) || templateTables.some(t => t.key === params.table) ? params.table! : "facturas";
+  // No (valid) table chosen: the overview of all tables.
+  const tableKey = params.table === "proveedores" ? "empresas" : TABLE_KEYS.includes(params.table as (typeof TABLE_KEYS)[number]) || templateTables.some(t => t.key === params.table) ? params.table! : null;
+  const table = view === "tablas" && !unsupported && tableKey ? buildTable(data, tableKey) : null;
+  const tableView = table ? normalizeView(await loadTableView(session.user.id, activeWorkspace.id, table.key).catch(error => {
+    console.warn("[analytics] vista de tabla:", error instanceof Error ? error.message : error); return null; }), table.columns) : null;
 
   const notice = data.truncated ? <p className="rounded-lg bg-amber-50 px-4 py-2 text-xs text-amber-800">
     Hay más de {fmtNumber(ANALYTICS_LIMIT)} registros en alguna tabla: la analítica usa los {fmtNumber(ANALYTICS_LIMIT)} primeros.</p> : null;
 
   let content: React.ReactNode;
-  const templateGroup = tableKey.startsWith("plantilla:") ? groups.find(g => g.plantilla && `plantilla:${g.plantilla.id}` === tableKey) : undefined;
+  const templateGroup = tableKey?.startsWith("plantilla:") ? groups.find(g => g.plantilla && `plantilla:${g.plantilla.id}` === tableKey) : undefined;
   if (unsupported) {
     content = <div className="pt-4"><UnsupportedTypeView group={unsupported} canEdit={canEdit} /></div>;
-  } else if (view === "tablas") {
+  } else if (table) {
     content = <div className="space-y-4 pt-4">{notice}
-      {templateGroup && <TemplateTableBar group={templateGroup} canEdit={canEdit} />}
-      {(tableKey === "facturas" || tableKey === "compras") && <DuplicateLinesReview issues={duplicatedLineIssues(data)} canEdit={canEdit} />}
-      <DataTable table={buildTable(data, tableKey)} canEdit={canEdit} companies={tableKey === "facturas" ? companyOptions(data) : []} /></div>;
+      {templateGroup && <TemplateTableStatus group={templateGroup} canEdit={canEdit} />}
+      {(table.key === "facturas" || table.key === "compras") && <DuplicateLinesReview issues={duplicatedLineIssues(data)} canEdit={canEdit} />}
+      <DataTable table={table} canEdit={canEdit} companies={table.key === "facturas" ? companyOptions(data) : []} /></div>;
+  } else if (view === "tablas") {
+    const all = [...TABLE_KEYS, ...templateTables.map(t => t.key)].map(key => buildTable(data, key));
+    content = <>{notice && <div className="pt-4">{notice}</div>}<TablesOverview tables={tableCards(all, new Set(templateTables.map(t => t.key)))}
+      review={tablesReview({ invoices: all[0], duplicatedLines: duplicatedLineIssues(data).length, groups })} /></>;
   } else {
     const tab: Tab = TABS.some(t => t.key === params.tab) ? params.tab as Tab : "general";
     const years = availableYears(data);
@@ -256,10 +270,14 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     </div>;
   }
 
-  return <AppSectionShell sidebar={<AnalyticsNavigation view={view} table={tableKey} extra={templateTables} pending={pending} sintabla={unsupported ? params.sintabla : undefined} />}>
-    <AppPageLayout header={<AppPageHeader section={APP_SECTIONS.analytics} title={unsupported ? "Sin tabla" : view === "tablas" ? "Tablas" : "Panel"} />}
-      contentClassName="overflow-y-auto pb-6">
-      {content}
-    </AppPageLayout>
+  // Analítica > Tablas, and the table (or document type) as the title, with its settings next to it.
+  const crumbs = table || unsupported ? [{ label: "Tablas", href: "/analytics?view=tablas" }] : [];
+  const title = table ? table.label : unsupported ? unsupported.label : view === "tablas" ? "Tablas" : "Panel";
+  const page = <AppPageLayout header={<AppPageHeader section={APP_SECTIONS.analytics} items={crumbs} title={title} actions={table ? <TableSettingsButton /> : undefined} />}
+    contentClassName="overflow-y-auto pb-6">
+    {content}
+  </AppPageLayout>;
+  return <AppSectionShell sidebar={<AnalyticsNavigation view={view} table={table?.key} extra={templateTables} pending={pending} sintabla={unsupported ? params.sintabla : undefined} />}>
+    {table && tableView ? <TableViewProvider key={table.key} tableKey={table.key} columns={table.columns} initial={tableView}>{page}</TableViewProvider> : page}
   </AppSectionShell>;
 }
