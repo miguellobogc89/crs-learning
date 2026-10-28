@@ -93,7 +93,7 @@ function InvoiceList({ rows, party }: { rows: InvoiceRow[]; party: "emisor" | "r
   })}</ul>;
 }
 
-export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ view?: string; table?: string; periodo?: string; tab?: string; sintabla?: string }> }) {
+export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ view?: string; table?: string; periodo?: string; tab?: string; sintabla?: string; pendiente?: string }> }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
@@ -126,11 +126,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     content = <div className="space-y-4 pt-4">{notice}
       {templateGroup && <TemplateTableStatus group={templateGroup} canEdit={canEdit} />}
       {(table.key === "facturas" || table.key === "compras") && <DuplicateLinesReview issues={duplicatedLineIssues(data)} canEdit={canEdit} />}
-      <DataTable table={table} canEdit={canEdit} companies={table.key === "facturas" ? companyOptions(data) : []} /></div>;
+      <DataTable key={`${table.key}|${params.pendiente ?? ""}`} table={table} canEdit={canEdit} companies={table.key === "facturas" ? companyOptions(data) : []}
+        initialFilters={params.pendiente && table.columns.some(c => c.key === params.pendiente) ? { [params.pendiente]: "__empty" } : {}} /></div>;
   } else if (view === "tablas") {
     const all = [...TABLE_KEYS, ...templateTables.map(t => t.key)].map(key => buildTable(data, key));
     content = <>{notice && <div className="pt-4">{notice}</div>}<TablesOverview tables={tableCards(all)}
-      review={tablesReview({ invoices: all[0], duplicatedLines: duplicatedLineIssues(data).length, groups })} /></>;
+      review={tablesReview({ invoices: all[0], duplicatedLines: duplicatedLineIssues(data).length, groups, tables: all })} /></>;
   } else {
     const tab: Tab = TABS.some(t => t.key === params.tab) ? params.tab as Tab : "general";
     const years = availableYears(data);

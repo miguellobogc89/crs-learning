@@ -92,7 +92,7 @@ export async function applyActions(input: { workspaceId: string; userId: string;
             versions.set(t.id, next); bumped.add(t.id);
           }
           const created = await tx.engine_field_definitions.create({ data: { workspace_id: workspaceId, object_type_id: t.id, key: a.key, name: a.nombre, field_type: a.tipo,
-            is_required: false, sort_order: a.orden, configuration: { money: a.money, origen: "asistente" } } });
+            is_required: false, sort_order: a.orden, configuration: { money: a.money, origen: "asistente", ...(a.completar ? { completar: true } : {}) } } });
           (await fieldsOf(t.id)).push({ key: a.key, field_type: a.tipo, is_required: false, status: "active", configuration: { money: a.money } });
           undo.campos.push(created.id);
           break;
@@ -108,7 +108,7 @@ export async function applyActions(input: { workspaceId: string; userId: string;
           const current = await tx.engine_object_types.findUniqueOrThrow({ where: { id: from.id }, select: { settings: true } });
           const settings = asValues(current.settings);
           const enlaces = Array.isArray(settings.enlaces) ? settings.enlaces : [];
-          await tx.engine_object_types.update({ where: { id: from.id }, data: { settings: { ...settings, enlaces: [...enlaces, { columna: a.columna, nombre: a.nombre, relacion: key, destino: a.destino }] } as Prisma.InputJsonObject } });
+          await tx.engine_object_types.update({ where: { id: from.id }, data: { settings: { ...settings, enlaces: [...enlaces, { columna: a.columna, nombre: a.nombre, relacion: key, destino: a.destino, ...(a.completar ? { completar: true } : {}) }] } as Prisma.InputJsonObject } });
           relationOf.set(`${a.tabla}|${a.columna}`, created.id);
           undo.relaciones.push({ id: created.id, typeId: from.id, settingsBefore: (current.settings ?? {}) as Prisma.InputJsonValue });
           break;

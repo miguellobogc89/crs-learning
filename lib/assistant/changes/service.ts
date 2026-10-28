@@ -20,6 +20,8 @@ export type Proposal = {
   estado: ProposalState;
   pasos: Plan["pasos"];
   cifras: Plan["cifras"];
+  /** Rows the person will have to complete once applied. */
+  pendientes?: Plan["pendientes"];
   tablas: string[];
   error?: string | null;
   aplicada?: { por: string; en: string } | null;
@@ -54,7 +56,7 @@ export function proposeChanges(ctx: PlanContext, args: { titulo?: string; explic
   if (!plan.ok) return { plan };
   const tablas = [...new Set(plan.acciones.map(a => a.tabla))];
   return { plan, proposal: { id: randomUUID(), titulo: String(args.titulo ?? "Cambios propuestos").slice(0, 120), explicacion: String(args.explicacion ?? "").slice(0, 1000),
-    operaciones, estado: "pendiente", pasos: plan.pasos, cifras: plan.cifras, tablas } };
+    operaciones, estado: "pendiente", pasos: plan.pasos, cifras: plan.cifras, pendientes: plan.pendientes, tablas } };
 }
 
 type MessageRow = { id: string; sources_json: unknown };
@@ -88,7 +90,7 @@ export async function decideProposal(input: { workspaceId: string; userId: strin
       await save(next); return next;
     }
     const undo = await applyActions({ workspaceId: input.workspaceId, userId: input.userId, actions: plan.acciones, ...fresh.apply });
-    const next: Proposal = { ...proposal, estado: "aplicada", pasos: plan.pasos, cifras: plan.cifras, error: null, aplicada: { por: input.userId, en: new Date().toISOString() }, undo };
+    const next: Proposal = { ...proposal, estado: "aplicada", pasos: plan.pasos, cifras: plan.cifras, pendientes: plan.pendientes, error: null, aplicada: { por: input.userId, en: new Date().toISOString() }, undo };
     await save(next); return next;
   }
   if (proposal.estado !== "aplicada" || !proposal.undo) throw new ApplyError("Solo se puede deshacer una propuesta aplicada.");

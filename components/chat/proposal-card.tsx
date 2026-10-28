@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, ChevronDown, Loader2, RotateCcw, Wand2, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Loader2, PencilLine, RotateCcw, Wand2, X } from "lucide-react";
 import type { Proposal } from "@/lib/assistant/changes/service";
 import type { CellValue } from "@/lib/analytics/compute";
 import { fmtDate, fmtMoney, fmtNumber } from "@/components/analytics/format";
@@ -94,6 +94,18 @@ export function ProposalCard({ messageId, proposal: initial }: { messageId: stri
         </div>
       </li>)}
     </ol>
+
+    {!!proposal.pendientes?.length && proposal.estado !== "descartada" && proposal.estado !== "deshecha" && <div className="border-t border-amber-100 bg-amber-50/60 px-4 py-2.5">
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800"><PencilLine className="size-3.5" />Tendrás que completar</p>
+      <ul className="mt-1 space-y-0.5">
+        {proposal.pendientes.map(p => <li key={`${p.tabla}|${p.columna}`} className="flex flex-wrap items-center gap-x-2 text-xs text-amber-900">
+          <span>{p.nombreTabla} · <strong className="font-semibold">{p.nombreColumna}</strong>: {p.filas.toLocaleString("es-ES")} {p.filas === 1 ? "fila" : "filas"}</span>
+          {proposal.estado === "aplicada" && <Link href={`/analytics?view=tablas&table=${encodeURIComponent(p.tabla)}&pendiente=${encodeURIComponent(p.columna)}`}
+            className="font-medium text-[#0A58FF] hover:underline">Completar ahora →</Link>}
+        </li>)}
+      </ul>
+      {proposal.estado === "pendiente" && <p className="mt-1 text-[11px] text-amber-800/80">Cuando apliques, podrás rellenarlas en Analítica › Tablas; te lo recordaremos en «Necesita revisión».</p>}
+    </div>}
 
     {(error || proposal.error) && <p className="border-t border-rose-100 bg-rose-50 px-4 py-2 text-xs text-rose-700">{error ?? proposal.error}</p>}
 

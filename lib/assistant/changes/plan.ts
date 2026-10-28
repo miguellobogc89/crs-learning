@@ -17,7 +17,7 @@ import { QueryError, runQuery, type Filter, type Query, type ResultColumn } from
  * Only tables created with the assistant get rows or plain columns; documents' and base tables only get links.
  */
 export type ColumnType = "texto" | "texto_largo" | "numero" | "entero" | "importe" | "fecha" | "si_no" | "enlace";
-export type ColumnDef = { columna: string; nombre: string; tipo: ColumnType; tabla_enlazada?: string };
+export type ColumnDef = { columna: string; nombre: string; tipo: ColumnType; tabla_enlazada?: string; completar?: boolean };
 export type Operation =
   | { op: "crear_tabla"; tabla: string; nombre: string; descripcion?: string; titulo: string; columnas: ColumnDef[] }
   | { op: "añadir_columnas"; tabla: string; columnas: ColumnDef[] }
@@ -34,8 +34,8 @@ export type EngineType = "text" | "long_text" | "decimal" | "integer" | "date" |
 export type RowRef = string;
 export type Action =
   | { k: "tabla"; tabla: string; typeKey: string; nombre: string; descripcion: string; titulo: string }
-  | { k: "columna"; tabla: string; key: string; nombre: string; tipo: EngineType; money: boolean; orden: number }
-  | { k: "enlace"; tabla: string; columna: string; nombre: string; destino: string }
+  | { k: "columna"; tabla: string; key: string; nombre: string; tipo: EngineType; money: boolean; orden: number; completar: boolean }
+  | { k: "enlace"; tabla: string; columna: string; nombre: string; destino: string; completar: boolean }
   | { k: "insertar"; tabla: string; ref: RowRef; valores: Record<string, CellValue> }
   | { k: "actualizar"; tabla: string; ref: RowRef; valores: Record<string, CellValue> }
   | { k: "enlazar"; tabla: string; columna: string; ref: RowRef; destino: RowRef | null }
@@ -44,8 +44,11 @@ export type Action =
 export type TableInfo = { tableKey: string; typeKey: string | null; editable: boolean; fieldTypes?: Record<string, EngineType> };
 export type PlanContext = { tables: Table[]; types: TableInfo[]; links: { from: string; columna: string; to: string }[]; typeKeys: string[] };
 export type PlanStep = { texto: string; avisos: string[]; muestra?: { columnas: ResultColumn[]; filas: Record<string, CellValue>[] } };
+/** After the proposal: rows the person will have to complete (columns marked «completar» left empty). */
+export type Pending = { tabla: string; nombreTabla: string; columna: string; nombreColumna: string; filas: number };
 export type Plan = {
   ok: boolean;
+  pendientes: Pending[];
   errores: string[];
   pasos: PlanStep[];
   acciones: Action[];
@@ -180,17 +183,17 @@ export function planChanges(ctx: PlanContext, operations: Operation[]): Plan {
         if (!w.info.typeKey && !isNew) { fail(i, `${label(w)} es una tabla calculada: no admite enlaces.`); return null; }
         if (!target.info.typeKey && !target.info.editable) { fail(i, `${label(target)} es una tabla calculada: no se puede enlazar con ella.`); return null; }
         w.links.set(key, target.table.key);
-        w.table.columns.push({ key, label: nombre, filter: true });
+        w.table.columns.push({ key, label: nombre, filter: true, link: target.table.key, ...(c.completar ? { completar: true } : {}) });
         for (const r of w.table.rows) { r[key] = null; r[`_link_${key}`] = null; }
-        acciones.push({ k: "enlace", tabla: w.table.key, columna: key, nombre, destino: target.table.key });
+        acciones.push({ k: "enlace", tabla: w.table.key, columna: key, nombre, destino: target.table.key, completar: c.completar === true });
         notes.push(`«${nombre}» enlaza con ${label(target)}`);
       } else {
         if (!w.info.editable) { fail(i, `${label(w)} no se creó con el asistente: solo admite columnas de enlace.`); return null; }
         const tipo = TYPE_OF[c.tipo]!;
         w.info.fieldTypes![key] = tipo;
-        w.table.columns.push({ key, label: nombre, kind: c.tipo === "importe" ? "money" : KIND_OF[tipo] });
+        w.table.columns.push({ key, label: nombre, kind: c.tipo === "importe" ? "money" : KIND_OF[tipo], ...(c.completar ? { completar: true } : {}) });
         for (const r of w.table.rows) r[key] = null;
-        acciones.push({ k: "columna", tabla: w.table.key, key, nombre, tipo, money: c.tipo === "importe", orden: w.table.columns.length });
+        acciones.push({ k: "columna", tabla: w.table.key, key, nombre, tipo, money: c.tipo === "importe", orden: w.table.columns.length, completar: c.completar === true });
       }
       cifras.columnas += 1;
     }
@@ -417,5 +420,16 @@ export function planChanges(ctx: PlanContext, operations: Operation[]): Plan {
     if (acciones.length > MAX_ACTIONS) { fail(i, "la propuesta es demasiado grande: divídela en varias."); break; }
   }
   if (!operations?.length) errores.push("La propuesta no tiene operaciones.");
-  return { ok: !errores.length, errores, pasos, acciones, cifras };
+  // What the person will have to fill in, in the tables this proposal touches.
+  const touchedTables = new Set(acciones.map(a => a.tabla));
+  const pendientes: Pending[] = [];
+  for (const key of touchedTables) {
+    const w = work.get(key);
+    if (!w) continue;
+    for (const c of w.table.columns.filter(c => c.completar)) {
+      const empty = w.table.rows.filter(r => r[c.key] === null || r[c.key] === undefined || r[c.key] === "").length;
+      if (empty) pendientes.push({ tabla: key, nombreTabla: w.table.label, columna: c.key, nombreColumna: c.label, filas: empty });
+    }
+  }
+  return { ok: !errores.length, errores, pasos, acciones, cifras, pendientes };
 }

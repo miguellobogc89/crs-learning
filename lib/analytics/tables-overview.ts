@@ -13,8 +13,14 @@ const plural = (n: number, one: string, many: string) => `${n.toLocaleString("es
 const tableHref = (key: string) => `/analytics?view=tablas&table=${encodeURIComponent(key)}`;
 const typeKey = (g: PendingGroup) => `${g.familia}|${g.tipo}|${g.subtipo ?? ""}`;
 
-export function tablesReview(input: { invoices: Table; duplicatedLines: number; groups: PendingGroup[] }): ReviewItem[] {
+export function tablesReview(input: { invoices: Table; duplicatedLines: number; groups: PendingGroup[]; tables?: Table[] }): ReviewItem[] {
   const items: ReviewItem[] = [];
+  // Columns the person has to fill in (created with the assistant, e.g. the product of an equivalence).
+  for (const t of input.tables ?? []) for (const c of t.columns.filter(c => c.completar)) {
+    const empty = t.rows.filter(r => r[c.key] === null || r[c.key] === undefined || r[c.key] === "").length;
+    if (empty) items.push({ key: `completar:${t.key}:${c.key}`, tone: "amber", title: `${t.label}: ${plural(empty, "fila", "filas")} por completar`,
+      detail: `Falta «${c.label}». Rellénalo en la propia tabla (se muestran solo las pendientes).`, href: `${tableHref(t.key)}&pendiente=${encodeURIComponent(c.key)}`, action: "Completar" });
+  }
   for (const g of input.groups) {
     if (g.plantilla) continue;
     const docs = g.documentos.filter(d => d.estado !== "ignorado");

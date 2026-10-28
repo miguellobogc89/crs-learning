@@ -1,12 +1,12 @@
 "use client";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, FileText, GitMerge, Loader2, Pencil, Plus, X } from "lucide-react";
 import type { CellValue, Column, Table } from "@/lib/analytics/compute";
 import { filterOptions, queryRows } from "@/lib/analytics/table-query";
 import { groupRows, PAGE_SIZES } from "@/lib/analytics/table-view";
 import { useTableView } from "./table-view-context";
-import { editAnalyticsCellAction, mergeCompaniesAction, setInvoicePartyAction } from "@/app/(app)/analytics/actions";
+import { editAnalyticsCellAction, mergeCompaniesAction, setInvoicePartyAction, setTableLinkAction } from "@/app/(app)/analytics/actions";
 import { Combobox } from "@/components/ui/combobox";
 import { SearchInput } from "@/components/ui/search-input";
 import { cn } from "@/lib/utils";
@@ -30,14 +30,14 @@ const show = (v: CellValue, kind?: Column["kind"]) => {
  * Each change is a new revision of the record. Which columns show, the grouping, the order and the rows per page come
  * from the person's saved view (header «Ajustes»); grouped, each group shows its rows count and its totals.
  */
-export function DataTable({ table, canEdit = false, companies = [] }: { table: Table; canEdit?: boolean; companies?: Company[] }) {
+export function DataTable({ table, canEdit = false, companies = [], initialFilters = {} }: { table: Table; canEdit?: boolean; companies?: Company[]; initialFilters?: Record<string, string> }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<Record<string, string>>(initialFilters);
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const { view, update } = useTableView(table.columns);
@@ -79,6 +79,14 @@ export function DataTable({ table, canEdit = false, companies = [] }: { table: T
     if (!r.ok) { setError(r.error); return false; }
     refresh(); return true;
   }
+  async function saveLink(row: Row, column: Column, targetId: string | null) {
+    if (typeof row._id !== "string") return;
+    setBusy(`${row._id}:${column.key}`); setError(null);
+    const r = await setTableLinkAction({ recordId: row._id, columna: column.key, targetId });
+    setBusy(null);
+    if (!r.ok) { setError(r.error); return; }
+    refresh();
+  }
   async function save(row: Row, column: Column, value: unknown) {
     if (!column.edit || typeof row._id !== "string" || typeof row._rev !== "number") return;
     setBusy(`${row._id}:${column.key}`); setError(null);
@@ -97,7 +105,8 @@ export function DataTable({ table, canEdit = false, companies = [] }: { table: T
   const cells = (r: Row) => columns.map(c => {
             const editable = canEdit && !!c.edit && typeof r._id === "string" && typeof r._rev === "number";
             const cellBusy = busy === `${r._id}:${c.key}`;
-            return <td key={c.key} className={cn("px-4 py-1.5 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" && "whitespace-nowrap")}>
+            const missing = c.completar && (r[c.key] === null || r[c.key] === undefined || r[c.key] === "");
+            return <td key={c.key} className={cn("px-4 py-1.5 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" && "whitespace-nowrap", missing && "bg-amber-50/70")}>
               {c.kind === "document" ? (typeof r[c.key] === "string"
                   ? <a href={`/api/knowledge/intake/files/${r[c.key]}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-[#0A58FF] hover:underline"><FileText className="size-3.5" />Ver</a>
                   : <span className="text-slate-300">—</span>)
@@ -108,10 +117,23 @@ export function DataTable({ table, canEdit = false, companies = [] }: { table: T
                   ? <span className="inline-flex items-center gap-1"><Combobox variant="ghost" className="-ml-2.5 h-7" disabled={cellBusy} ariaLabel={c.label}
                       value={c.edit!.options!.find(o => o.label === r[c.key])?.value ?? null} options={c.edit!.options!} onChange={v => void save(r, c, v)} />
                       {cellBusy && <Loader2 className="size-3 animate-spin text-slate-400" />}</span>
+                : canEdit && c.edit?.type === "link" && typeof r._id === "string"
+                  ? <span className="inline-flex items-center gap-1">
+                      <Combobox variant="ghost" className="-ml-2.5 h-7 max-w-[280px]" searchable searchPlaceholder={`Buscar en ${c.label.toLowerCase()}…`} ariaLabel={c.label} disabled={cellBusy}
+                        value={(r[`_link_${c.key}`] as string | null) ?? "__none"} limit={40}
+                        options={[{ value: "__none", label: "— Sin enlazar" }, ...(c.edit.options ?? [])]}
+                        renderValue={o => !o || o.value === "__none" ? <span className={missing ? "font-medium text-amber-700" : "text-slate-400"}>{missing ? "Por completar" : "Sin enlazar"}</span> : o.label}
+                        onChange={v => { if (v !== ((r[`_link_${c.key}`] as string | null) ?? "__none")) void saveLink(r, c, v === "__none" ? null : v); }} />
+                      {cellBusy && <Loader2 className="size-3 animate-spin text-slate-400" />}</span>
+                : editable && (c.edit!.type === "number" || c.edit!.type === "date")
+                  ? <EditableText value={r[c.key] === null || r[c.key] === undefined ? "" : c.edit!.type === "date" && typeof r[c.key] === "string" ? fmtDate(r[c.key] as string) : String(r[c.key]).replace(".", ",")}
+                      display={missing ? <span className="font-medium text-amber-700">Por completar</span> : show(r[c.key] ?? null, c.kind)} allowEmpty busy={cellBusy} onSave={v => save(r, c, v)} />
                 : canEdit && c.edit?.type === "party" && typeof r._id === "string"
                   ? <PartyCell current={(c.edit.field === "issuer" ? r._issuer : r._customer) as string | null} label={c.label} companies={companies} busy={cellBusy}
                       onSave={choice => saveParty(r, c, choice)} />
-                : editable && c.edit!.type === "text" ? <EditableText value={String(r[c.key] ?? "")} busy={cellBusy} onSave={v => save(r, c, v)} />
+                : editable && c.edit!.type === "text" ? <EditableText value={String(r[c.key] ?? "")} allowEmpty={!!c.completar || table.key.startsWith("tabla:")}
+                    display={missing ? <span className="font-medium text-amber-700">Por completar</span> : undefined} busy={cellBusy} onSave={v => save(r, c, v)} />
+                : missing ? <span className="font-medium text-amber-700">Por completar</span>
                 : show(r[c.key] ?? null, c.kind)}
             </td>;
           });
@@ -196,13 +218,13 @@ function pageNumbers(page: number, pages: number): (number | null)[] {
   return set.flatMap((n, i) => i && n - set[i - 1] > 1 ? [null, n] : [n]);
 }
 
-function EditableText({ value, busy, onSave }: { value: string; busy: boolean; onSave: (v: string) => Promise<void> }) {
+function EditableText({ value, busy, onSave, display, allowEmpty = false }: { value: string; busy: boolean; onSave: (v: string) => Promise<void>; display?: ReactNode; allowEmpty?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
-  if (!editing) return <span className="group inline-flex items-center gap-1.5">{value || <span className="text-slate-300">—</span>}
+  if (!editing) return <span className="group inline-flex items-center gap-1.5">{display ?? (value || <span className="text-slate-300">—</span>)}
     <button type="button" aria-label="Corregir" onClick={() => { setDraft(value); setEditing(true); }} className="rounded p-0.5 text-slate-300 opacity-0 hover:text-[#0A58FF] group-hover:opacity-100 focus:opacity-100"><Pencil className="size-3.5" /></button>
     {busy && <Loader2 className="size-3 animate-spin text-slate-400" />}</span>;
-  const commit = async () => { if (draft.trim() && draft.trim() !== value) await onSave(draft); setEditing(false); };
+  const commit = async () => { if ((draft.trim() || allowEmpty) && draft.trim() !== value) await onSave(draft); setEditing(false); };
   return <span className="inline-flex items-center gap-1">
     <input autoFocus value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void commit(); if (e.key === "Escape") setEditing(false); }}
       className="h-7 w-56 rounded-lg border border-[#0A58FF] px-2 text-sm outline-none" />

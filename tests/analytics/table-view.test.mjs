@@ -43,3 +43,11 @@ test('tables overview: what needs a look, each linking where it is solved',()=>{
  assert.deepEqual(o.tablesReview({invoices:{...invoices,rows:[]},duplicatedLines:0,groups:[]}),[]);
  assert.deepEqual(o.tableCards([invoices,{...invoices,key:'tabla:catalogo'},{...invoices,key:'plantilla:X'}]).map(c=>[c.key,c.rows,c.origin]),[['facturas',3,'base'],['tabla:catalogo',3,'asistente'],['plantilla:X',3,'documentos']]);
 });
+
+test('tables overview: columns to complete become review items that open the table filtered on the empty ones',()=>{
+ const o=load('lib/analytics/tables-overview.ts');
+ const eq={key:'tabla:equivalencias',label:'Equivalencias',description:'',columns:[{key:'ingrediente',label:'Ingrediente'},{key:'producto',label:'Producto',link:'tabla:catalogo',completar:true}],
+  rows:[{ingrediente:'Leche',producto:'LECHE P6'},{ingrediente:'Nata',producto:null},{ingrediente:'Sal',producto:null}]};
+ const items=o.tablesReview({invoices:{rows:[]},duplicatedLines:0,groups:[],tables:[eq]});
+ assert.deepEqual(items.map(i=>[i.title,i.href,i.action]),[['Equivalencias: 2 filas por completar','/analytics?view=tablas&table=tabla%3Aequivalencias&pendiente=producto','Completar']]);
+});

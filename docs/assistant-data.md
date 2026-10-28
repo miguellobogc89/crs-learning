@@ -49,6 +49,23 @@ recetas con él» → `crear_tabla` + `volcar_consulta` (agrupar por producto y 
 + `añadir_columnas` (enlace en Recetas) + `enlazar` por nombre. Después, el coste de una receta es una consulta con
 `formulas` (cantidad × precio) cruzando con el catálogo.
 
+## El asistente como constructor
+
+La app se construye a través del asistente, siempre de forma coherente y guiando a la persona:
+
+- Antes de la tarjeta explica el diseño en palabras sencillas: qué tabla crea o toca y para qué, qué se rellena solo
+  y qué tendrá que completar la persona (cuántas filas y dónde).
+- Cuando dos listas nombran lo mismo de forma distinta (ingredientes frente a productos de factura…) crea una **tabla
+  de equivalencias**: una fila por nombre distinto y una columna de enlace con `completar: true`. Enlaza sola las
+  parejas seguras (`enlazar` por, modo `contiene`; también `parecido`) y deja el resto pendiente.
+- Columnas `completar`: la tarjeta muestra «Tendrás que completar» (y, ya aplicada, «Completar ahora →»); la vista
+  general de Tablas lo lista en «Necesita revisión»; la tabla se abre filtrada (`&pendiente=<columna>`) y las celdas
+  vacías se marcan «Por completar».
+- En Analítica se editan todas las columnas de las tablas creadas con el asistente (texto, número, fecha, sí/no) y
+  las columnas de enlace de cualquier tabla (desplegable con buscador; `setTableLinkAction`, `lib/analytics/links.ts`).
+- Consultas en cadena: `cruzar` admite una lista; una columna de enlace se cruza por el propio enlace (id), así
+  receta → equivalencia → producto → precio no mezcla productos con el mismo nombre de otro proveedor.
+
 ## Seguridad
 
 - Consultas de solo lectura. Los cambios solo se escriben al pulsar «Aplicar» (propietario o administrador) y se pueden deshacer.

@@ -15,7 +15,8 @@ export type AggregateFn = "suma" | "media" | "cuenta" | "cuenta_distintos" | "mi
 export type Formula = { nombre: string; a: string; op: "+" | "-" | "*" | "/"; b?: string; valor?: number; importe?: boolean };
 export type Query = {
   tabla: string;
-  cruzar?: { tabla: string; columna_local: string; columna_otra: string; tipo?: "interior" | "izquierda" };
+  /** One table or several in a chain; a later one can join on a column of an earlier one ("equivalencias.producto"). */
+  cruzar?: Join | Join[];
   filtros?: Filter[];
   agrupar_por?: string[];
   formulas?: Formula[];
@@ -25,6 +26,8 @@ export type Query = {
   ordenar?: { columna: string; direccion?: "asc" | "desc" }[];
   limite?: number;
 };
+/** columna_otra may be omitted when columna_local is a link to that table: rows are matched by the link itself. */
+export type Join = { tabla: string; columna_local: string; columna_otra?: string; tipo?: "interior" | "izquierda" };
 export type ResultColumn = { key: string; label: string; kind?: Column["kind"] };
 export type QueryResult = { columnas: ResultColumn[]; filas: Record<string, CellValue>[]; total: number; truncado: boolean; tablas: string[] };
 export class QueryError extends Error {}
@@ -55,7 +58,7 @@ export function catalog(tables: Table[], editable: Set<string> = new Set()) {
   });
 }
 
-type Resolved = { key: string; label: string; kind?: Column["kind"]; get: (r: Record<string, CellValue>) => CellValue };
+type Resolved = { key: string; label: string; kind?: Column["kind"]; link?: string; get: (r: Record<string, CellValue>) => CellValue; getId?: (r: Record<string, CellValue>) => CellValue };
 
 function datePart(value: CellValue, part: DatePart): CellValue {
   if (typeof value !== "string" || !/^\d{4}-\d{2}/.test(value)) return null;
@@ -67,19 +70,32 @@ function datePart(value: CellValue, part: DatePart): CellValue {
 export function runQuery(tables: Table[], q: Query, opts: { maxLimit?: number; keepIds?: boolean } = {}): QueryResult {
   const main = tables.find(t => t.key === q.tabla);
   if (!main) throw new QueryError(`No existe la tabla «${q.tabla}». Tablas: ${tables.map(t => t.key).join(", ")}`);
-  const other = q.cruzar ? tables.find(t => t.key === q.cruzar!.tabla) : undefined;
-  if (q.cruzar && !other) throw new QueryError(`No existe la tabla «${q.cruzar.tabla}» para cruzar.`);
-  if (other && other.key === main.key) throw new QueryError("Para cruzar hace falta otra tabla distinta.");
-
-  // Every column a query can name, main and crossed (prefixed), plus date parts.
-  const base = new Map<string, Resolved>();
-  for (const c of visibleColumns(main)) base.set(c.key, { key: c.key, label: c.label, kind: c.kind, get: r => r[c.key] ?? null });
-  if (other) for (const c of visibleColumns(other)) {
-    const key = `${other.key}.${c.key}`;
-    base.set(key, { key, label: `${c.label} (${other.label})`, kind: c.kind, get: r => r[key] ?? null });
+  const joins = (Array.isArray(q.cruzar) ? q.cruzar : q.cruzar ? [q.cruzar] : []).slice(0, 4);
+  const others: Table[] = [];
+  for (const j of joins) {
+    const t = tables.find(x => x.key === j?.tabla);
+    if (!t) throw new QueryError(`No existe la tabla «${j?.tabla}» para cruzar.`);
+    if (t.key === main.key || others.some(o => o.key === t.key)) throw new QueryError(`La tabla «${t.key}» ya está en la consulta: cada tabla se cruza una vez.`);
+    others.push(t);
   }
+
+  // Every column a query can name: the main table's, and those of the crossed tables (prefixed), plus date parts.
+  const base = new Map<string, Resolved>();
+  for (const c of visibleColumns(main)) base.set(c.key, { key: c.key, label: c.label, kind: c.kind, link: c.link, get: r => r[c.key] ?? null,
+    ...(c.link ? { getId: (r: Record<string, CellValue>) => r[`_link_${c.key}`] ?? null } : {}) });
+  const addColumns = (other: Table) => {
+    for (const c of visibleColumns(other)) {
+      const key = `${other.key}.${c.key}`;
+      base.set(key, { key, label: `${c.label} (${other.label})`, kind: c.kind, link: c.link, get: r => r[key] ?? null,
+        ...(c.link ? { getId: (r: Record<string, CellValue>) => r[`${other.key}._link_${c.key}`] ?? null } : {}) });
+    }
+  };
   const column = (ref: string): Resolved => {
-    const [raw, part] = ref.split(":") as [string, string | undefined];
+    // Only a trailing :mes / :trimestre / :año is a date part (table keys also contain ":", e.g. "tabla:catalogo.precio").
+    const dp = /:(mes|trimestre|año|[a-zñ]+)$/.exec(ref);
+    const isPart = !!dp && !base.has(ref) && !ref.slice(0, dp.index).endsWith(".") && (dp[1] in DATE_PARTS || base.has(ref.slice(0, dp.index)));
+    const raw = isPart ? ref.slice(0, dp!.index) : ref;
+    const part = isPart ? dp![1] : undefined;
     // "facturas.total" on the main table is just "total".
     const name = raw.startsWith(`${main.key}.`) && !base.has(raw) ? raw.slice(main.key.length + 1) : raw;
     const col = base.get(name);
@@ -89,23 +105,35 @@ export function runQuery(tables: Table[], q: Query, opts: { maxLimit?: number; k
     return { key: ref, label: `${DATE_PARTS[part as DatePart]} (${col.label})`, kind: "text", get: r => datePart(col.get(r), part as DatePart) };
   };
 
-  // Rows (crossed when asked): the other table's values travel prefixed with its key.
+  // Rows, crossed in order: each crossed table's values travel prefixed with its key (and its ids, to follow links).
   let rows: Record<string, CellValue>[] = main.rows;
-  if (other && q.cruzar) {
-    const local = column(q.cruzar.columna_local);
-    const remote = visibleColumns(other).find(c => c.key === q.cruzar!.columna_otra);
-    if (!remote) throw new QueryError(`La tabla «${other.key}» no tiene la columna «${q.cruzar.columna_otra}».`);
+  for (const [n, j] of joins.entries()) {
+    const other = others[n];
+    const local = column(j.columna_local);
+    const byLink = local.link === other.key && !!local.getId;
+    const remote = byLink ? undefined : visibleColumns(other).find(c => c.key === j.columna_otra);
+    if (!byLink && !remote) throw new QueryError(`La tabla «${other.key}» no tiene la columna «${j.columna_otra ?? ""}»${local.link ? ` (o cruza por el enlace «${j.columna_local}», que apunta a «${local.link}»)` : ""}.`);
     const index = new Map<string, Record<string, CellValue>[]>();
-    for (const r of other.rows) { const k = fold(r[remote.key]); if (k) index.set(k, [...(index.get(k) ?? []), r]); }
-    const prefixed = (r: Record<string, CellValue> | null) => Object.fromEntries(visibleColumns(other).map(c => [`${other.key}.${c.key}`, r ? r[c.key] ?? null : null]));
+    for (const r of other.rows) {
+      const k = byLink ? (typeof r._id === "string" ? r._id : "") : fold(r[remote!.key]);
+      if (k) index.set(k, [...(index.get(k) ?? []), r]);
+    }
+    const linkCols = visibleColumns(other).filter(c => c.link);
+    const prefixed = (r: Record<string, CellValue> | null) => ({
+      ...Object.fromEntries(visibleColumns(other).map(c => [`${other.key}.${c.key}`, r ? r[c.key] ?? null : null])),
+      [`${other.key}._id`]: r ? r._id ?? null : null,
+      ...Object.fromEntries(linkCols.map(c => [`${other.key}._link_${c.key}`, r ? r[`_link_${c.key}`] ?? null : null])),
+    });
     const out: Record<string, CellValue>[] = [];
     for (const r of rows) {
-      const matches = index.get(fold(local.get(r))) ?? [];
-      if (!matches.length) { if (q.cruzar.tipo === "izquierda") out.push({ ...r, ...prefixed(null) }); continue; }
+      const key = byLink ? String(local.getId!(r) ?? "") : fold(local.get(r));
+      const matches = key ? index.get(key) ?? [] : [];
+      if (!matches.length) { if (j.tipo === "izquierda") out.push({ ...r, ...prefixed(null) }); continue; }
       for (const m of matches) out.push({ ...r, ...prefixed(m) });
       if (out.length > MAX_JOINED) throw new QueryError("El cruce da demasiadas filas: filtra antes o cruza por una columna más concreta.");
     }
     rows = out;
+    addColumns(other);
   }
 
   // Formulas: new columns computed on each row (after crossing, so they can mix both tables).
@@ -174,7 +202,7 @@ export function runQuery(tables: Table[], q: Query, opts: { maxLimit?: number; k
     result = [...result].sort((a, b) => compare(a[o.columna], b[o.columna]) * dir);
   }
   const limit = Math.min(Math.max(1, Math.floor(q.limite ?? 50)), opts.maxLimit ?? MAX_LIMIT);
-  return { columnas: columns, filas: result.slice(0, limit), total: result.length, truncado: result.length > limit, tablas: other ? [main.key, other.key] : [main.key] };
+  return { columnas: columns, filas: result.slice(0, limit), total: result.length, truncado: result.length > limit, tablas: [main.key, ...others.map(o => o.key)] };
 }
 
 const num = (v: CellValue | undefined) => typeof v === "number" ? v : Number.NEGATIVE_INFINITY;

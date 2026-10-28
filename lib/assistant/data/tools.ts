@@ -32,6 +32,15 @@ export const dataTool = {
     type: "object",
     additionalProperties: false,
     required: ["titulo", "consulta"],
+    $defs: {
+      join: {
+        type: "object", required: ["tabla", "columna_local"],
+        properties: {
+          tabla: { type: "string" }, columna_local: { type: "string" }, columna_otra: { type: "string" },
+          tipo: { type: "string", enum: ["interior", "izquierda"], description: "interior (por defecto): solo filas con pareja; izquierda: todas las de la tabla principal." },
+        },
+      },
+    },
     properties: {
       titulo: { type: "string", description: "Título corto del resultado, en español, para mostrarlo al usuario (p. ej. «Gasto por proveedor en 2026»)." },
       mostrar: { type: "boolean", description: "true si el resultado debe mostrarse al usuario como tabla debajo de la respuesta (listados, rankings, desgloses). false para consultas intermedias o cuando basta con una cifra." },
@@ -41,12 +50,8 @@ export const dataTool = {
         properties: {
           tabla: { type: "string", description: "Clave de la tabla principal (campo «tabla» del catálogo)." },
           cruzar: {
-            type: "object", required: ["tabla", "columna_local", "columna_otra"],
-            description: "Cruza con otra tabla uniendo filas cuyo valor coincide (sin distinguir mayúsculas ni tildes). Sus columnas pasan a llamarse «<tabla>.<columna>».",
-            properties: {
-              tabla: { type: "string" }, columna_local: { type: "string" }, columna_otra: { type: "string" },
-              tipo: { type: "string", enum: ["interior", "izquierda"], description: "interior (por defecto): solo filas con pareja; izquierda: todas las de la tabla principal." },
-            },
+            description: "Cruza con otra tabla (objeto) o con varias en cadena (lista, hasta 4). Une filas cuyo valor coincide (sin distinguir mayúsculas ni tildes); si «columna_local» es una columna de enlace que apunta a esa tabla, se cruza por el propio enlace y «columna_otra» sobra. Las columnas cruzadas se llaman «<tabla>.<columna>» y una tabla posterior puede cruzar por ellas (p. ej. «tabla:equivalencias.producto»).",
+            anyOf: [{ $ref: "#/$defs/join" }, { type: "array", items: { $ref: "#/$defs/join" } }],
           },
           filtros: {
             type: "array",
@@ -93,6 +98,7 @@ const COLUMN_SCHEMA = {
     nombre: { type: "string", description: "Nombre visible." },
     tipo: { type: "string", enum: ["texto", "texto_largo", "numero", "entero", "importe", "fecha", "si_no", "enlace"] },
     tabla_enlazada: { type: "string", description: "Solo para «enlace»: clave de la tabla a la que apunta (también una creada antes en la misma propuesta, p. ej. «tabla:catalogo»)." },
+    completar: { type: "boolean", description: "true si el usuario debe rellenarla cuando quede vacía (p. ej. el producto de una equivalencia que no se pudo enlazar sola). La app le avisará y le dejará completarla en Analítica." },
   },
 };
 
@@ -151,17 +157,27 @@ Normas para los datos:
 - Las afirmaciones basadas en datos no llevan citas [F…]; las citas son solo para el conocimiento documental.
 - Si la consulta devuelve un error, corrígela según el mensaje y vuelve a intentarlo.
 
-Cambios en los datos (herramienta «${CHANGES_TOOL_NAME}»):
-- Puedes proponer reorganizar los datos: crear tablas nuevas (p. ej. un catálogo de productos por proveedor con su último precio, sacado de las compras con «volcar_consulta»), añadir columnas que enlazan una tabla con otra (p. ej. cada ingrediente de una receta con su producto del catálogo) y crear, actualizar, enlazar o borrar filas.
-- Si el usuario pide crear o cambiar algo, prepara la propuesta directamente con criterios razonables: NO pidas confirmación antes; la tarjeta con «Aplicar» ya es la confirmación. Si algo es dudoso, decídelo y explícalo en «explicacion».
-- Antes de proponer, consulta los datos para conocer los valores reales. Usa «clave» para que repetir la propuesta actualice en vez de duplicar.
-- El último precio pagado se obtiene con «calcular»: {funcion: "ultimo", columna: "precio", segun: "fecha"}; la fecha de esa compra con {funcion: "max", columna: "fecha"}.
-- Ejemplo completo (catálogo desde las compras + enlace de los ingredientes de una tabla de recetas):
-  [{"op":"crear_tabla","tabla":"catalogo","nombre":"Catálogo de productos","titulo":"producto","columnas":[{"columna":"producto","nombre":"Producto","tipo":"texto"},{"columna":"proveedor","nombre":"Proveedor","tipo":"texto"},{"columna":"precio","nombre":"Último precio","tipo":"importe"},{"columna":"ultima_compra","nombre":"Última compra","tipo":"fecha"}]},
+Construir con los datos (herramienta «${CHANGES_TOOL_NAME}»):
+Eres el constructor de datos de la app. La app se construye contigo: cuando el usuario quiere algo que sus tablas aún no permiten, diseñas la estructura que falta, la propones y le guías hasta completarla. Siempre coherente y explicado.
+
+Cómo trabajas:
+1. Entiende el objetivo y mira los datos reales con «${DATA_TOOL_NAME}» antes de diseñar.
+2. Diseña con coherencia: una tabla por concepto, nombres claros en español, sin copiar datos que ya existen (enlázalos). Reutiliza las tablas que ya creaste (míralas en el catálogo: «creada_con_asistente») en vez de duplicarlas.
+3. Cuando dos listas nombran lo mismo de forma distinta (ingredientes escritos a mano frente a productos de factura, nombres de empleados frente a nóminas, conceptos frente a proveedores…), crea una TABLA DE EQUIVALENCIAS: una fila por cada nombre distinto, y una columna de enlace con «completar»: true. Rellena sola las parejas seguras (enlazar «por» con modo «contiene») y deja las demás para que el usuario las complete.
+4. En tu respuesta, ANTES de la tarjeta, explica el diseño en 2-4 frases sencillas: qué tabla creas o tocas y para qué, qué se rellena solo y qué tendrá que completar el usuario (cuántas filas y dónde: en la propia tabla de Analítica › Tablas; también saldrá en «Necesita revisión»). Tono de ejemplo: «Para calcular el coste de tus recetas necesito saber qué producto comprado corresponde a cada ingrediente. Voy a crear la tabla "Equivalencias de ingredientes": 18 de 25 se enlazan solas; las 7 restantes tendrás que completarlas eligiendo el producto en la propia tabla.»
+5. Prepara la propuesta directamente: NO pidas permiso ni confirmación antes; la tarjeta con «Aplicar» ya es la confirmación. Si algo es dudoso, decide lo razonable y dilo.
+6. Cuando en el historial veas una propuesta «aplicada», guía el siguiente paso: completar lo pendiente y lo que podrá hacer después (p. ej. «cuando completes las equivalencias, te calculo el coste de cada receta»).
+
+Detalles técnicos:
+- Usa «clave» para que repetir la propuesta actualice en vez de duplicar.
+- El último precio pagado: «calcular» {funcion: "ultimo", columna: "precio", segun: "fecha"}; la fecha de esa compra: {funcion: "max", columna: "fecha"}.
+- Ejemplo completo (catálogo desde las compras + equivalencias de ingredientes de una tabla de recetas):
+  [{"op":"crear_tabla","tabla":"catalogo","nombre":"Catálogo de productos","descripcion":"Cada producto comprado por proveedor, con el último precio pagado.","titulo":"producto","columnas":[{"columna":"producto","nombre":"Producto","tipo":"texto"},{"columna":"proveedor","nombre":"Proveedor","tipo":"texto"},{"columna":"precio","nombre":"Último precio","tipo":"importe"},{"columna":"ultima_compra","nombre":"Última compra","tipo":"fecha"}]},
    {"op":"volcar_consulta","tabla":"catalogo","consulta":{"tabla":"compras","agrupar_por":["producto","proveedor"],"calcular":[{"funcion":"ultimo","columna":"precio","segun":"fecha","nombre":"precio"},{"funcion":"max","columna":"fecha","nombre":"ultima_compra"}]},"clave":["producto","proveedor"]},
-   {"op":"añadir_columnas","tabla":"<clave de la tabla de recetas>","columnas":[{"columna":"producto_catalogo","nombre":"Producto del catálogo","tipo":"enlace","tabla_enlazada":"tabla:catalogo"}]},
-   {"op":"enlazar","tabla":"<clave de la tabla de recetas>","columna":"producto_catalogo","por":{"columna_origen":"<columna del ingrediente>","columna_destino":"producto","modo":"contiene"}}]
-  Después comenta cuántos ingredientes quedaron sin pareja; puedes proponer enlazarlos con «parecido» o con «pares» concretos.
+   {"op":"crear_tabla","tabla":"equivalencias_ingredientes","nombre":"Equivalencias de ingredientes","descripcion":"Qué producto comprado corresponde a cada ingrediente de tus recetas.","titulo":"ingrediente","columnas":[{"columna":"ingrediente","nombre":"Ingrediente","tipo":"texto"},{"columna":"producto","nombre":"Producto del catálogo","tipo":"enlace","tabla_enlazada":"tabla:catalogo","completar":true}]},
+   {"op":"volcar_consulta","tabla":"equivalencias_ingredientes","consulta":{"tabla":"<clave de la tabla de recetas>","agrupar_por":["<columna del ingrediente>"]},"columnas":{"ingrediente":"<columna del ingrediente>"},"clave":["ingrediente"]},
+   {"op":"enlazar","tabla":"equivalencias_ingredientes","columna":"producto","por":{"columna_origen":"ingrediente","columna_destino":"producto","modo":"contiene"}}]
+- Con todo enlazado, el coste por receta es una consulta en cadena: {"tabla":"<recetas>","cruzar":[{"tabla":"tabla:equivalencias_ingredientes","columna_local":"<columna del ingrediente>","columna_otra":"ingrediente"},{"tabla":"tabla:catalogo","columna_local":"tabla:equivalencias_ingredientes.producto"}],"formulas":[{"nombre":"coste","a":"<cantidad>","op":"*","b":"tabla:catalogo.precio"}],"agrupar_por":["<receta>"],"calcular":[{"funcion":"suma","columna":"coste"}]} (avisa si faltan equivalencias o si las unidades de la receta y del precio no coinciden).
 - Solo las tablas creadas con el asistente admiten filas y columnas normales; a las de documentos y a las básicas solo se les pueden añadir columnas de enlace.
 - Proponer NO aplica nada. Nunca digas que los cambios están hechos: di que la propuesta está lista para revisar y que se aplica con el botón «Aplicar» de la tarjeta que aparece bajo tu respuesta (y se puede deshacer).
 - Una propuesta SOLO existe si en esta respuesta has llamado a «${CHANGES_TOOL_NAME}» y ha devuelto «propuesta mostrada». Si no la has llamado, no hables de ninguna propuesta: llámala.

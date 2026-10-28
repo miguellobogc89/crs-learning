@@ -135,7 +135,13 @@ test('year selector: years with spend; a calendar year (the current one up to to
 });
 
 test('edits from Analítica: only a few fields, validated',()=>{
- const e=load('lib/analytics/edit.ts',{'./compute':a});
+ const qy=load('lib/assistant/data/query.ts');const pl=load('lib/assistant/changes/plan.ts',{'@/lib/assistant/data/query':qy});
+ const e=load('lib/analytics/edit.ts',{'./compute':a,'@/lib/assistant/changes/plan':pl});
+ const f=[{key:'nombre',field_type:'text'},{key:'precio',field_type:'decimal'},{key:'fecha',field_type:'date'}];
+ assert.deepEqual(e.editedCustomValues(f,{nombre:'a',precio:1},'precio','1.234,5'),{ok:true,values:{nombre:'a',precio:1234.5}});
+ assert.deepEqual(e.editedCustomValues(f,{nombre:'a',precio:1},'precio',''),{ok:true,values:{nombre:'a'}},'empty clears');
+ assert.deepEqual(e.editedCustomValues(f,{},'fecha','31/12/2026'),{ok:true,values:{fecha:'2026-12-31'}});
+ assert.equal(e.editedCustomValues(f,{},'fecha','mañana').ok,false);assert.equal(e.editedCustomValues(f,{},'otra','x').ok,false);
  assert.deepEqual(e.editedValues('company',{legal_name:'D?PLOCIA',tax_identifier:'B1'},'legal_name','  D’PLOCIA   HELADOS SL '),{ok:true,values:{legal_name:'D’PLOCIA HELADOS SL',tax_identifier:'B1'}});
  assert.equal(e.editedValues('company',{},'legal_name','  ').ok,false);
  assert.deepEqual(e.editedValues('company',{},'is_own_company',true).values,{is_own_company:true});

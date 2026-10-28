@@ -29,7 +29,7 @@ test('catalog from purchases (last price per product and supplier) and recipe li
  assert.deepEqual(inserts.map(a=>a.valores),[{producto:'Jamón serrano',proveedor:'Mercadona',precio:12.5,ultima_compra:'2026-02-01'},{producto:'Leche entera',proveedor:'Mercadona',precio:0.99,ultima_compra:'2026-03-01'},{producto:'Harina',proveedor:'Makro',precio:0.6,ultima_compra:'2026-02-10'}]);
  const links=plan.acciones.filter(a=>a.k==='enlazar');
  assert.deepEqual(links.map(a=>[a.ref,a.destino]),[['r1',inserts[0].ref],['r2',inserts[1].ref]],'accents and case ignored; new rows referenced before they exist');
- assert.deepEqual(plan.acciones.filter(a=>a.k==='enlace'),[{k:'enlace',tabla:'plantilla:R',columna:'producto',nombre:'Producto del catálogo',destino:'tabla:catalogo'}]);
+ assert.deepEqual(plan.acciones.filter(a=>a.k==='enlace'),[{k:'enlace',tabla:'plantilla:R',columna:'producto',nombre:'Producto del catálogo',destino:'tabla:catalogo',completar:false}]);
  assert.match(plan.pasos[3].avisos[0],/1 fila sin pareja/,'Mantequilla is not in the catalog');
  assert.equal(plan.pasos[3].muestra.filas[0].producto,'Jamón serrano','the sample shows the linked name');
 });
@@ -105,4 +105,20 @@ test('link by similar names (invoice descriptions are never exactly the ingredie
  assert.equal(v.cifras.filas_nuevas,3);
  const bad=p.planChanges(ctx,[catalogo[0],{op:'volcar_consulta',tabla:'catalogo',consulta:{tabla:'compras',calcular:[{funcion:'cuenta'}]}}]);
  assert.match(bad.errores[0],/ninguna columna del resultado/);
+});
+
+test('equivalences table: one row per distinct ingredient, the sure ones linked, the rest left «por completar»',()=>{
+ const recetas2={...recetas,rows:[...recetas.rows,{_id:'r4',receta:'Tostada',ingrediente:'Leche entera',cantidad:0.1}]};
+ const ctx3={...ctx,tables:[compras,recetas2,consumos]};
+ const plan=p.planChanges(ctx3,[
+  catalogo[0],catalogo[1],
+  {op:'crear_tabla',tabla:'equivalencias_ingredientes',nombre:'Equivalencias de ingredientes',titulo:'ingrediente',columnas:[{columna:'ingrediente',nombre:'Ingrediente',tipo:'texto'},{columna:'producto',nombre:'Producto del catálogo',tipo:'enlace',tabla_enlazada:'tabla:catalogo',completar:true}]},
+  {op:'volcar_consulta',tabla:'equivalencias_ingredientes',consulta:{tabla:'plantilla:R',agrupar_por:['ingrediente']},columnas:{ingrediente:'ingrediente'},clave:['ingrediente']},
+  {op:'enlazar',tabla:'equivalencias_ingredientes',columna:'producto',por:{columna_origen:'ingrediente',columna_destino:'producto',modo:'contiene'}},
+ ]);
+ assert.equal(plan.ok,true,plan.errores.join(' | '));
+ assert.equal(plan.cifras.filas_nuevas,3+3,'3 catalog products + 3 distinct ingredients (Leche entera twice)');
+ assert.equal(plan.cifras.enlaces,2,'jamon serrano and leche entera');
+ assert.deepEqual(plan.pendientes,[{tabla:'tabla:equivalencias_ingredientes',nombreTabla:'Equivalencias de ingredientes',columna:'producto',nombreColumna:'Producto del catálogo',filas:1}]);
+ assert.ok(plan.acciones.some(a=>a.k==='enlace'&&a.completar===true));
 });

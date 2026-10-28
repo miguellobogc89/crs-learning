@@ -96,3 +96,21 @@ test('formulas row by row and the latest value of a column (e.g. last price paid
  assert.throws(()=>q.runQuery([compras],{tabla:'compras',calcular:[{funcion:'ultimo',columna:'precio'}]}),/segun/);
  assert.deepEqual(q.runQuery([compras],{tabla:'compras',columnas:['producto'],limite:1},{keepIds:true}).filas,[{_id:'l1',producto:'Leche entera'}]);
 });
+
+test('cross a chain of tables following links by id: recipe → equivalence → catalog product → price → cost per recipe',()=>{
+ const recetas={key:'plantilla:R',label:'Recetas',description:'',columns:[{key:'receta',label:'Receta'},{key:'ingrediente',label:'Ingrediente'},{key:'cantidad',label:'Cantidad',kind:'number'}],
+  rows:[{_id:'r1',receta:'Bechamel',ingrediente:'Leche',cantidad:2},{_id:'r2',receta:'Bechamel',ingrediente:'Mantequilla',cantidad:0.1},{_id:'r3',receta:'Batido',ingrediente:'Leche',cantidad:1}]};
+ const eq={key:'tabla:equivalencias',label:'Equivalencias',description:'',title:'ingrediente',columns:[{key:'ingrediente',label:'Ingrediente'},{key:'producto',label:'Producto',link:'tabla:catalogo',completar:true}],
+  rows:[{_id:'e1',ingrediente:'Leche',producto:'LECHE P6',_link_producto:'c1'},{_id:'e2',ingrediente:'Mantequilla',producto:null,_link_producto:null}]};
+ const cat={key:'tabla:catalogo',label:'Catálogo',description:'',title:'producto',columns:[{key:'producto',label:'Producto'},{key:'proveedor',label:'Proveedor'},{key:'precio',label:'Precio',kind:'money'}],
+  rows:[{_id:'c1',producto:'LECHE P6',proveedor:'Mercadona',precio:0.99},{_id:'c2',producto:'LECHE P6',proveedor:'Makro',precio:0.89}]};
+ const T=[recetas,eq,cat];
+ const cost=q.runQuery(T,{tabla:'plantilla:R',cruzar:[{tabla:'tabla:equivalencias',columna_local:'ingrediente',columna_otra:'ingrediente'},{tabla:'tabla:catalogo',columna_local:'tabla:equivalencias.producto'}],
+  formulas:[{nombre:'coste',a:'cantidad',op:'*',b:'tabla:catalogo.precio'}],agrupar_por:['receta'],calcular:[{funcion:'suma',columna:'coste'}]});
+ assert.deepEqual(cost.filas,[{receta:'Bechamel',suma_coste:1.98},{receta:'Batido',suma_coste:0.99}],'by the link id: the Makro row with the same name is not mixed in');
+ assert.deepEqual(cost.tablas,['plantilla:R','tabla:equivalencias','tabla:catalogo']);
+ const missing=q.runQuery(T,{tabla:'plantilla:R',cruzar:[{tabla:'tabla:equivalencias',columna_local:'ingrediente',columna_otra:'ingrediente'},{tabla:'tabla:catalogo',columna_local:'tabla:equivalencias.producto',tipo:'izquierda'}],
+  filtros:[{columna:'tabla:catalogo.producto',op:'vacio'}],columnas:['receta','ingrediente']});
+ assert.deepEqual(missing.filas,[{receta:'Bechamel',ingrediente:'Mantequilla'}],'what still has no product');
+ assert.throws(()=>q.runQuery(T,{tabla:'plantilla:R',cruzar:[{tabla:'tabla:catalogo',columna_local:'ingrediente'}]}),/no tiene la columna/);
+});

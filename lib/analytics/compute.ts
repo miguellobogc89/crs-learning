@@ -332,7 +332,9 @@ export type Column = { key: string; label: string; kind?: "money" | "number" | "
   filter?: boolean;
   /** Link column: the table its values point to. */
   link?: string;
-  edit?: { field: string; type: "text" | "select" | "boolean" | "party"; options?: { value: string; label: string }[] } };
+  /** The person is expected to fill it (rows with it empty are «por completar»). */
+  completar?: boolean;
+  edit?: { field: string; type: "text" | "number" | "date" | "select" | "boolean" | "party" | "link"; options?: { value: string; label: string }[] } };
 /** `title`: the column that names each row (used to point at rows: links, the assistant). Rows of records carry `_id`. */
 export type Table = { key: string; label: string; description: string; columns: Column[]; rows: Record<string, CellValue>[]; title?: string };
 export const TABLE_KEYS = ["facturas", "compras", "empresas", "suministros", "consumos"] as const;
@@ -353,6 +355,8 @@ export function buildTable(data: AnalyticsData, key: string): Table {
   const links = (data.links ?? []).filter(l => l.from === table.key);
   if (!links.length) return table;
   const targets = new Map<string, Map<string, CellValue>>();
+  const optionsOf = (to: string) => [...labelsOf(to)].map(([value, label]) => ({ value, label: label === null ? "(sin nombre)" : String(label) }))
+    .sort((a, b) => a.label.localeCompare(b.label, "es", { numeric: true }));
   const labelsOf = (to: string) => {
     if (!targets.has(to)) {
       const target = buildBaseTable(data, to);
@@ -362,7 +366,8 @@ export function buildTable(data: AnalyticsData, key: string): Table {
   };
   const columns = [...table.columns];
   const docAt = columns.findIndex(c => c.kind === "document");
-  const linkColumns = links.map(l => ({ key: l.columna, label: l.nombre, filter: true, link: l.to }));
+  const linkColumns = links.map((l): Column => ({ key: l.columna, label: l.nombre, filter: true, link: l.to, ...(l.completar ? { completar: true } : {}),
+    edit: { field: l.columna, type: "link", options: optionsOf(l.to) } }));
   columns.splice(docAt >= 0 ? docAt : columns.length, 0, ...linkColumns);
   const rows = table.rows.map(r => {
     if (typeof r._id !== "string") return r;
@@ -383,7 +388,8 @@ function customTable(key: string, t: CustomTable): Table {
   const value = (f: CustomTable["campos"][number], v: unknown): CellValue => f.type === "decimal" || f.type === "integer" ? num(v) : f.type === "boolean" ? (v === true ? true : v === false ? false : null) : str(v);
   const title = t.titulo && t.campos.some(f => f.key === t.titulo) ? t.titulo : t.campos.find(f => f.type === "text")?.key;
   return { key, label: t.nombre, description: t.descripcion || "Tabla creada con el asistente.", title,
-    columns: t.campos.map(f => ({ key: f.key, label: f.label, kind: kind(f) })),
+    columns: t.campos.map((f): Column => ({ key: f.key, label: f.label, kind: kind(f), ...(f.completar ? { completar: true } : {}),
+      edit: { field: f.key, type: f.type === "boolean" ? "boolean" : f.type === "date" ? "date" : f.type === "decimal" || f.type === "integer" ? "number" : "text" } })),
     rows: t.rows.map(r => ({ _id: r.id, _rev: r.revision ?? null, ...Object.fromEntries(t.campos.map(f => [f.key, value(f, r.values[f.key])])) })) };
 }
 

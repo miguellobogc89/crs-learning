@@ -5,7 +5,8 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { updateEngineRecord, EngineRecordError } from "@/lib/engine/records.service";
-import { editedValues } from "@/lib/analytics/edit";
+import { editedCustomValues, editedValues } from "@/lib/analytics/edit";
+import { LinkError, setRecordLink } from "@/lib/analytics/links";
 import { mergeRecords } from "@/lib/analytics/merge";
 import { archiveLines, setInvoiceParty } from "@/lib/analytics/parties";
 import { loadAnalyticsData, missingTable } from "@/lib/analytics/data";
@@ -20,10 +21,13 @@ export async function editAnalyticsCellAction(input: { recordId: string; expecte
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
   if (activeWorkspace.role !== "owner" && activeWorkspace.role !== "admin") return { ok: false as const, error: "Solo el propietario o un administrador puede corregir datos." };
   const record = await prisma.engine_records.findFirst({ where: { id: input.recordId, workspace_id: activeWorkspace.id, status: { not: "archived" } },
-    select: { values_json: true, engine_object_types: { select: { key: true } } } });
+    select: { values_json: true, engine_object_types: { select: { key: true, settings: true, engine_field_definitions: { where: { status: "active" }, select: { key: true, field_type: true } } } } } });
   if (!record) return { ok: false as const, error: "El registro ya no existe." };
   const current = record.values_json && typeof record.values_json === "object" && !Array.isArray(record.values_json) ? record.values_json as Record<string, unknown> : {};
-  const edited = editedValues(record.engine_object_types.key, current, input.field, input.value);
+  // Tables created with the assistant: every column is editable; the rest only the few corrections allowed.
+  const custom = (record.engine_object_types.settings as { origen?: string } | null)?.origen === "asistente";
+  const edited = custom ? editedCustomValues(record.engine_object_types.engine_field_definitions, current, input.field, input.value)
+    : editedValues(record.engine_object_types.key, current, input.field, input.value);
   if (!edited.ok) return { ok: false as const, error: edited.error };
   try {
     await updateEngineRecord({ workspaceId: activeWorkspace.id, userId: session.user.id, recordId: input.recordId, expectedRevision: input.expectedRevision, values: edited.values });
@@ -98,5 +102,22 @@ export async function saveTableViewAction(input: { tableKey: string; view: unkno
     if (missingTable(error)) return { ok: false as const, error: "La vista no se puede recordar todavía: falta crear su tabla en Neon (scripts/neon/20261028_user_table_views.sql) y ejecutar npx prisma generate." };
     console.error("[analytics] guardar vista:", error);
     return { ok: false as const, error: "No se pudo guardar la vista." };
+  }
+}
+
+/** A link cell («Producto del catálogo»…): choose the row it points to, or none. */
+export async function setTableLinkAction(input: { recordId: string; columna: string; targetId: string | null }) {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false as const, error: "Sesión no válida." };
+  const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
+  if (activeWorkspace.role !== "owner" && activeWorkspace.role !== "admin") return { ok: false as const, error: "Solo el propietario o un administrador puede cambiar enlaces." };
+  try {
+    await prisma.$transaction((tx) => setRecordLink(tx, { workspaceId: activeWorkspace.id, userId: session.user!.id!, recordId: input.recordId, columna: input.columna, targetId: input.targetId }));
+    revalidatePath("/analytics");
+    return { ok: true as const };
+  } catch (error) {
+    if (error instanceof LinkError) return { ok: false as const, error: error.message };
+    console.error("[analytics] enlace:", error);
+    return { ok: false as const, error: "No se pudo guardar el enlace." };
   }
 }

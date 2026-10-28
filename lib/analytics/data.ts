@@ -20,14 +20,14 @@ export type AnalyticsData = {
   /** Which engine object type is behind each table key (facturas, plantilla:<id>, tabla:<key>…). */
   types?: TableType[];
 };
-export type CustomField = { key: string; label: string; type: string; money: boolean };
+export type CustomField = { key: string; label: string; type: string; money: boolean; completar: boolean };
 export type CustomTable = { typeId: string; typeKey: string; nombre: string; descripcion: string; titulo: string | null; campos: CustomField[]; rows: Row[] };
 /** `pairs`: [row of `from`, the row of `to` it points to]. */
-export type LinkColumn = { from: string; columna: string; nombre: string; to: string; relationId: string; relationKey: string; pairs: [string, string][] };
+export type LinkColumn = { from: string; columna: string; nombre: string; to: string; relationId: string; relationKey: string; pairs: [string, string][]; completar: boolean };
 export type TableType = { tableKey: string; typeId: string; typeKey: string; editable: boolean; settings: Record<string, unknown> };
 /** Engine type of each base table (the ones whose rows are records). */
 export const BASE_TABLE_TYPES: Record<string, string> = { facturas: "invoice", compras: "invoice_line", empresas: "company", suministros: "supply_point" };
-export type LinkSetting = { columna: string; nombre: string; relacion: string; destino: string };
+export type LinkSetting = { columna: string; nombre: string; relacion: string; destino: string; completar?: boolean };
 export const linkSettings = (settings: unknown): LinkSetting[] => {
   const list = settings && typeof settings === "object" ? (settings as { enlaces?: unknown }).enlaces : undefined;
   return Array.isArray(list) ? list.filter((l): l is LinkSetting => !!l && typeof l === "object" && typeof (l as LinkSetting).columna === "string"
@@ -128,7 +128,7 @@ async function loadCustomTables(workspaceId: string, templateDefs: { id: string;
     if (rows.length > ANALYTICS_LIMIT) truncated = true;
     const settings = asValues(t.settings);
     custom.push({ typeId: t.id, typeKey: t.key, nombre: t.name, descripcion: t.description ?? "", titulo: typeof settings.titulo === "string" ? settings.titulo : null,
-      campos: fields.map(f => ({ key: f.key, label: f.name, type: f.field_type, money: asValues(f.configuration).money === true })),
+      campos: fields.map(f => ({ key: f.key, label: f.name, type: f.field_type, money: asValues(f.configuration).money === true, completar: asValues(f.configuration).completar === true })),
       rows: rows.slice(0, ANALYTICS_LIMIT).map(r => ({ id: r.id, revision: r.revision, values: asValues(r.values_json) })) });
   }
 
@@ -141,7 +141,7 @@ async function loadCustomTables(workspaceId: string, templateDefs: { id: string;
   for (const w of wanted) {
     const def = defs.find(d => d.key === w.relacion);
     if (!def) continue;
-    links.push({ from: w.from, columna: w.columna, nombre: w.nombre, to: w.destino, relationId: def.id, relationKey: def.key,
+    links.push({ from: w.from, columna: w.columna, nombre: w.nombre, to: w.destino, relationId: def.id, relationKey: def.key, completar: w.completar === true,
       // Stored like the catalog's relations: from the linked row ("one") to the rows that point to it ("many").
       pairs: pairs.filter(p => p.relation_definition_id === def.id).map(p => [p.to_record_id, p.from_record_id]) });
   }

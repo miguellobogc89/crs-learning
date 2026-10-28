@@ -289,7 +289,8 @@ console.log("AI INPUT DEBUG", {
         lastProposalErrors = proposal ? [] : plan.errores;
         console.info("[assistant] proponer_cambios", JSON.stringify(proposal ? { ok: true, cifras: plan.cifras } : { ok: false, errores: plan.errores.slice(0, 3) }));
         return { type: "function_call_output" as const, call_id: call.call_id, output: JSON.stringify(proposal
-          ? { estado: "propuesta mostrada al usuario, PENDIENTE de que pulse «Aplicar»", pasos: plan.pasos.map((p) => ({ paso: p.texto, avisos: p.avisos })), cifras: plan.cifras }
+          ? { estado: "propuesta mostrada al usuario, PENDIENTE de que pulse «Aplicar»", pasos: plan.pasos.map((p) => ({ paso: p.texto, avisos: p.avisos })), cifras: plan.cifras,
+              por_completar_por_el_usuario: plan.pendientes.map((x) => `${x.nombreTabla} · ${x.nombreColumna}: ${x.filas} filas (en /analytics?view=tablas&table=${encodeURIComponent(x.tabla)}&pendiente=${encodeURIComponent(x.columna)})`) }
           : { errores: plan.errores }) };
       }
       if (call.name !== DATA_TOOL_NAME) {
