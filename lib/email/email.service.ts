@@ -2,18 +2,11 @@ import { Resend } from "resend";
 
 import { passwordChangedTemplate } from "@/lib/email/templates/password-changed";
 import { resetPasswordTemplate } from "@/lib/email/templates/reset-password";
-import type { EmailTemplate } from "@/lib/email/templates/shared";
+import { getAppUrl, type EmailTemplate } from "@/lib/email/templates/shared";
 import { verifyEmailTemplate } from "@/lib/email/templates/verify-email";
 import { welcomeTemplate } from "@/lib/email/templates/welcome";
 
 let resendClient: Resend | null = null;
-
-function getAppUrl() {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ??
-    "http://localhost:3000"
-  );
-}
 
 function getResendClient() {
   if (!process.env.RESEND_API_KEY) {
@@ -69,6 +62,7 @@ export async function sendWelcomeEmail(data: {
     to: data.to,
     template: welcomeTemplate({
       name: data.name,
+      email: data.to,
     }),
   });
 }
