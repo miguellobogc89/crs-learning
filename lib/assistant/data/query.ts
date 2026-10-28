@@ -10,9 +10,36 @@ import type { CellValue, Column, Table } from "@/lib/analytics/compute";
  */
 export type FilterOp = "=" | "!=" | "contiene" | "no_contiene" | ">" | ">=" | "<" | "<=" | "entre" | "en" | "vacio" | "no_vacio";
 export type Filter = { columna: string; op: FilterOp; valor?: string | number | boolean | null; valores?: (string | number)[] };
-export type AggregateFn = "suma" | "media" | "cuenta" | "cuenta_distintos" | "min" | "max" | "ultimo" | "primero" | "del_minimo" | "del_maximo";
+export type AggregateFn = "suma" | "media" | "mediana" | "cuenta" | "cuenta_distintos" | "min" | "max" | "ultimo" | "primero" | "del_minimo" | "del_maximo";
 /** A column computed row by row: a op b (b another column or a fixed value). E.g. cantidad × precio. */
-export type Formula = { nombre: string; a: string; op: "+" | "-" | "*" | "/"; b?: string; valor?: number; importe?: boolean };
+/**
+ * A column computed row by row: a op b (b another column or a fixed value), e.g. cantidad × precio; or the pack size
+ * read from a product name: {nombre, medida: "<text column>", dato: "cantidad" | "unidad"} («10 LTS» → 10 / "L").
+ */
+export type Formula = { nombre: string; a?: string; op?: "+" | "-" | "*" | "/"; b?: string; valor?: number; importe?: boolean; medida?: string; dato?: "cantidad" | "unidad" };
+
+/**
+ * The content of one unit of purchase, read from a product name, in L, Kg or ud: «KEN LECHE ENTERA B·I·BOX 10 LTS.»
+ * → 10 L; «AZUCAR S/25 KGS» → 25 Kg; «SOLAN DE CABRAS 50CL» → 0,5 L; «6X1L» → 6 L; «CJ/1000 U.» → 1000 ud;
+ * «P6» → 6 ud. A multipack wins, then a count of units in a box, then the last weight or volume. Null if none.
+ */
+export function parseMeasure(text: unknown): { cantidad: number; unidad: "L" | "Kg" | "ud" } | null {
+  const t = String(text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/·/g, " ");
+  const n = (v: string) => Number(v.replace(",", "."));
+  const unit = (u: string): ["L" | "Kg", number] | null =>
+    /^(l|lt|lts|litro|litros)$/.test(u) ? ["L", 1] : u === "ml" || u === "cc" ? ["L", 0.001] : u === "cl" ? ["L", 0.01]
+      : /^(kg|kgs|kilo|kilos)$/.test(u) ? ["Kg", 1] : /^(g|gr|grs|gramos)$/.test(u) ? ["Kg", 0.001] : null;
+  const round = (v: number) => Math.round(v * 10000) / 10000;
+  const multi = /(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(l|lt|lts|litros?|ml|cl|cc|kg|kgs|g|gr|grs)\b/.exec(t);
+  if (multi) { const u = unit(multi[3]); if (u) return { cantidad: round(n(multi[1]) * n(multi[2]) * u[1]), unidad: u[0] }; }
+  const box = /\b(?:cj|caja|c|bl|bolsa|paq|pack)\s*\/?\s*(\d+(?:[.,]\d+)?)\s*(?:u|ud|uds|unid|unidades)\b/.exec(t) ?? /\b(\d+)\s*(?:u|ud|uds|unidades)\b\.?\s*$/.exec(t);
+  if (box) return { cantidad: n(box[1]), unidad: "ud" };
+  const sizes = [...t.matchAll(/(\d+(?:[.,]\d+)?)\s*(l|lt|lts|litros?|ml|cl|cc|kg|kgs|kilos?|g|gr|grs|gramos)\b/g)];
+  for (const m of sizes.reverse()) { const u = unit(m[2]); if (u && n(m[1]) > 0) return { cantidad: round(n(m[1]) * u[1]), unidad: u[0] }; }
+  const pack = /\b(?:p|pack)\s?(\d+)\b/.exec(t);
+  if (pack) return { cantidad: n(pack[1]), unidad: "ud" };
+  return null;
+}
 export type Query = {
   tabla: string;
   /** One table or several in a chain; a later one can join on a column of an earlier one ("equivalencias.producto"). */
@@ -140,6 +167,15 @@ export function runQuery(tables: Table[], q: Query, opts: { maxLimit?: number; k
   for (const f of q.formulas ?? []) {
     const name = String(f.nombre ?? "").trim();
     if (!name || base.has(name)) throw new QueryError(`La fórmula necesita un nombre nuevo («${name}» no vale).`);
+    if (f.medida) {
+      // Pack size read from a text column (a product name).
+      const src = column(f.medida);
+      const what = f.dato === "unidad" ? "unidad" : "cantidad";
+      rows = rows.map(r => { const m = parseMeasure(src.get(r)); return { ...r, [`=${name}`]: m ? m[what] : null }; });
+      base.set(name, { key: name, label: name, kind: what === "unidad" ? "text" : "number", get: r => r[`=${name}`] ?? null });
+      continue;
+    }
+    if (!f.a || !f.op) throw new QueryError(`La fórmula «${name}» necesita «a» y «op» (o «medida»).`);
     const a = column(f.a), b = f.b !== undefined ? column(f.b) : undefined;
     if (!b && typeof f.valor !== "number") throw new QueryError(`La fórmula «${name}» necesita «b» (otra columna) o «valor».`);
     const isNum = (c: Resolved) => c.kind === "money" || c.kind === "number";
@@ -171,8 +207,8 @@ export function runQuery(tables: Table[], q: Query, opts: { maxLimit?: number; k
       const ranked = ["ultimo", "primero", "del_minimo", "del_maximo"].includes(a.funcion);
       const by = ranked ? (a.segun ? column(a.segun) : undefined) : undefined;
       if (ranked && !by) throw new QueryError(`«${a.funcion}» necesita «segun» (la columna que decide la fila: una fecha para último/primero, un precio para del_minimo/del_maximo).`);
-      if ((a.funcion === "suma" || a.funcion === "media") && c && c.kind !== "money" && c.kind !== "number") throw new QueryError(`«${a.funcion}» solo vale para importes o números («${c.label}» no lo es).`);
-      const verb = { suma: "Suma", media: "Media", cuenta: "Nº de filas", cuenta_distintos: "Distintos", min: "Mínimo", max: "Máximo", ultimo: "Último", primero: "Primero", del_minimo: "Del mínimo", del_maximo: "Del máximo" }[a.funcion];
+      if ((a.funcion === "suma" || a.funcion === "media" || a.funcion === "mediana") && c && c.kind !== "money" && c.kind !== "number") throw new QueryError(`«${a.funcion}» solo vale para importes o números («${c.label}» no lo es).`);
+      const verb = { suma: "Suma", media: "Media", mediana: "Mediana", cuenta: "Nº de filas", cuenta_distintos: "Distintos", min: "Mínimo", max: "Máximo", ultimo: "Último", primero: "Primero", del_minimo: "Del mínimo", del_maximo: "Del máximo" }[a.funcion];
       let key = a.nombre?.trim() || (c ? `${a.funcion}_${c.key}` : "cuenta");
       while (used.has(key)) key = `${key}_${i + 1}`;
       used.add(key);
@@ -255,6 +291,12 @@ function aggregate(rows: Record<string, CellValue>[], fn: AggregateFn, c?: Resol
   if (fn === "cuenta") return c ? rows.filter(r => !empty(c.get(r))).length : rows.length;
   const values = rows.map(r => c!.get(r)).filter(v => !empty(v));
   if (fn === "cuenta_distintos") return new Set(values.map(v => fold(v))).size;
+  if (fn === "mediana") {
+    const nums = values.filter((v): v is number => typeof v === "number").sort((x, y) => x - y);
+    if (!nums.length) return null;
+    const mid = Math.floor(nums.length / 2);
+    return Math.round((nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2) * 10000) / 10000;
+  }
   if (fn === "suma" || fn === "media") {
     const nums = values.filter((v): v is number => typeof v === "number");
     if (!nums.length) return null;

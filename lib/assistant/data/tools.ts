@@ -66,8 +66,9 @@ export const dataTool = {
             },
           },
           formulas: {
-            type: "array", description: "Columnas calculadas fila a fila (tras cruzar): a op b, con b otra columna o «valor». P. ej. coste = cantidad * precio.",
-            items: { type: "object", required: ["nombre", "a", "op"], properties: { nombre: { type: "string" }, a: { type: "string" }, op: { type: "string", enum: ["+", "-", "*", "/"] }, b: { type: "string" }, valor: { type: "number" }, importe: { type: "boolean" } } },
+            type: "array", description: "Columnas calculadas fila a fila (tras cruzar), en orden (una puede usar las anteriores): a op b, con b otra columna o «valor» (p. ej. coste = cantidad * precio); o el formato del envase leído del nombre de un producto: {nombre, medida: <columna de texto>, dato: \"cantidad\" | \"unidad\"} («KEN LECHE ENTERA 10 LTS» → 10 y \"L\"; «B/1,25 KGS» → 1,25 y \"Kg\"; «50CL» → 0,5 \"L\"; «CJ/1000 U» → 1000 \"ud\"; null si no se puede leer).",
+            items: { type: "object", required: ["nombre"], properties: { nombre: { type: "string" }, a: { type: "string" }, op: { type: "string", enum: ["+", "-", "*", "/"] }, b: { type: "string" }, valor: { type: "number" }, importe: { type: "boolean" },
+              medida: { type: "string", description: "Columna de texto (nombre del producto) de la que leer el formato del envase." }, dato: { type: "string", enum: ["cantidad", "unidad"] } } },
           },
           agrupar_por: { type: "array", items: { type: "string" }, description: "Columnas por las que agrupar (admite «fecha:mes», «fecha:año»…)." },
           calcular: {
@@ -75,7 +76,7 @@ export const dataTool = {
             items: {
               type: "object", required: ["funcion"],
               properties: {
-                funcion: { type: "string", enum: ["suma", "media", "cuenta", "cuenta_distintos", "min", "max", "ultimo", "primero"], description: "«ultimo»/«primero»: el valor de la fila más reciente/antigua según «segun» (p. ej. último precio pagado)." },
+                funcion: { type: "string", enum: ["suma", "media", "mediana", "cuenta", "cuenta_distintos", "min", "max", "ultimo", "primero", "del_minimo", "del_maximo"], description: "«ultimo»/«primero»: el valor de la fila más reciente/antigua según «segun» (p. ej. último precio pagado). «del_minimo»/«del_maximo»: el de la fila con «segun» mínimo/máximo (p. ej. el proveedor más barato). «mediana»: el valor típico, para detectar precios fuera de lo normal." },
                 columna: { type: "string" },
                 segun: { type: "string", description: "Columna de fecha para «ultimo» y «primero»." },
                 nombre: { type: "string", description: "Nombre de la columna resultado." },
@@ -171,10 +172,16 @@ Método (piénsalo antes de responder):
    - Equivalencias: cuando dos listas nombran lo mismo de forma distinta (lo que escribe el usuario frente a lo que aparece en facturas o documentos); una fila por nombre distinto y una columna de enlace con «completar»: true.
    - Maestro: el concepto genérico que agrupa variantes (el mismo producto en distintos proveedores o formatos), para poder comparar.
    Una tabla por concepto, nombres claros en español; no copies datos que ya existen: enlázalos. Reutiliza lo que ya creaste («creada_con_asistente»).
-4. Calidad de los datos, siempre, sin que te lo pidan: duplicados (quédate con el más reciente y dilo), ofertas y descuentos (usa lo que realmente se pagó, p. ej. «precio_pagado» = importe ÷ cantidad, y avisa de las compras con descuento), unidades y formatos de envase (para comparar precios hace falta el precio por kg, litro o unidad; si el formato no se puede deducir, deja una columna «completar»), datos que faltan.
-5. Construye POR PASOS: propón SOLO el paso actual (con «pasos_del_objetivo» y «paso_actual»). Cuando el usuario aplique, la app le confirmará lo hecho y le preguntará si seguimos; si dice «sí», «ok», «adelante» o similar, propón el siguiente paso.
-6. Prepara la propuesta directamente con «${CHANGES_TOOL_NAME}»; no preguntes antes si quiere que la prepares.
-7. CÓMO RESPONDES cuando propones (muy importante):
+4. Calidad de los datos, siempre, sin que te lo pidan:
+   - Duplicados: quédate con el más reciente y dilo.
+   - Ofertas y descuentos: usa lo que realmente se pagó («precio_pagado» = importe ÷ cantidad) y avisa de las compras con descuento.
+   - Unidad de compra frente a unidad de uso: en una factura la cantidad va en envases (cajas, bolsas, packs) y lo que se usa o compara va en litros, kilos o unidades. Lee el formato del envase del nombre del producto (fórmula «medida»): cantidad real = cantidad × contenido del envase; precio comparable = importe ÷ cantidad real, en €/L, €/Kg o €/ud. Guarda el formato (contenido y unidad) en una tabla puente por producto, para no deducirlo cada vez y que el usuario pueda corregirlo; si no se puede leer o es ambiguo (p. ej. «P6»: ¿6 litros o 6 unidades?), déjalo con «completar».
+   - Valores fuera de lo normal: compara el precio comparable de cada compra con el típico del mismo producto («mediana»); si se aleja mucho (p. ej. más de un 30 %), probablemente se leyó mal la cantidad o el importe: señálalo y propón revisarlo, no lo uses a ciegas.
+   - Datos que faltan: no los inventes; déjalos para completar.
+5. Pregunta antes de construir cuando haya dudas que cambian el diseño (máximo 3-4 preguntas cortas, en una lista breve, y nada más; sin tarjeta). Las dudas que no bloquean (precio con o sin IVA, qué entra en un coste…) decide un criterio razonable, dilo en una frase y sigue. Cuando el usuario responda, propón el paso.
+6. Construye POR PASOS: propón SOLO el paso actual (con «pasos_del_objetivo» y «paso_actual»). Cuando el usuario aplique, la app le confirmará lo hecho y le preguntará si seguimos; si dice «sí», «ok», «adelante» o similar, propón el siguiente paso.
+7. Cuando no haya dudas bloqueantes, prepara la propuesta directamente con «${CHANGES_TOOL_NAME}»; no preguntes si quiere que la prepares.
+8. CÓMO RESPONDES cuando propones (muy importante):
    - Breve, cercano y positivo: 1-3 frases cortas, sin listas, sin títulos, sin negritas.
    - Empieza en positivo («¡Perfecto!», «¡Claro!», «Muy bien.»).
    - Di en una frase qué vas a crear en este paso y para qué, con palabras sencillas (sin nombres técnicos de columnas).
@@ -183,7 +190,7 @@ Método (piénsalo antes de responder):
    - Termina pidiendo su visto bueno: «¿Te parece bien que la cree?».
    - NO describas la tarjeta, ni enumeres tablas, columnas, filas o pasos: la tarjeta ya lo muestra.
    Ejemplo: «¡Perfecto! Para saber cuánto te cuesta cada receta, empezaremos con una tabla que relacione tus ingredientes con los productos que compras; después le añadiremos los precios de cada proveedor. ¿Te parece bien que la cree?»
-8. Si para completar los datos haría falta información de fuera (p. ej. precios en webs de otros proveedores), proponlo como mejora futura: ahora mismo no puedes consultar internet.
+9. Si para completar los datos haría falta información de fuera (p. ej. precios en webs de otros proveedores), proponlo como mejora futura: ahora mismo no puedes consultar internet.
 
 Detalles técnicos:
 - Usa «clave» para que repetir una propuesta actualice en vez de duplicar (así un catálogo se refresca con las compras nuevas).

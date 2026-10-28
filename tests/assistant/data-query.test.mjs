@@ -121,3 +121,24 @@ test('which row holds the minimum: the cheapest supplier of each product, and th
  const r=q.runQuery([compras],{tabla:'compras',agrupar_por:['producto'],calcular:[{funcion:'min',columna:'precio_pagado',nombre:'mejor'},{funcion:'del_minimo',columna:'proveedor',segun:'precio_pagado',nombre:'donde'},{funcion:'max',columna:'precio_pagado',nombre:'peor'},{funcion:'del_maximo',columna:'proveedor',segun:'precio_pagado',nombre:'peor_en'}]});
  assert.deepEqual(r.filas,[{producto:'Leche',mejor:0.85,donde:'Makro',peor:0.99,peor_en:'Mercadona'}]);
 });
+
+test('pack size from product names, so prices can be compared per litre or kilo, and the median to spot odd prices',()=>{
+ const m=q.parseMeasure;
+ assert.deepEqual(m('KEN LECHE ENTERA B·I·BOX 10 LTS.'),{cantidad:10,unidad:'L'});
+ assert.deepEqual(m('AZUCAR BLANCA S/25 KGS.'),{cantidad:25,unidad:'Kg'});
+ assert.deepEqual(m('QUELLA G (SIN AZUCAR) LT/6 KGS. 14780'),{cantidad:6,unidad:'Kg'},'the reference number is not a size');
+ assert.deepEqual(m('FRUTA DEL BOSQUE 500 FAST C/T B/1,25 KGS. 08072A'),{cantidad:1.25,unidad:'Kg'});
+ assert.deepEqual(m('SOLAN DE CABRAS 50CL'),{cantidad:0.5,unidad:'L'});
+ assert.deepEqual(m('AGUA 6X1,5L'),{cantidad:9,unidad:'L'});
+ assert.deepEqual(m('TARRINA D´PLOCIA T12 (120 CC) CJ/2000 U.'),{cantidad:2000,unidad:'ud'});
+ assert.deepEqual(m('NUECES U.S.A CP/1500 G.'),{cantidad:1.5,unidad:'Kg'});
+ assert.deepEqual(m('LECHE ENTERA P6'),{cantidad:6,unidad:'ud'});
+ assert.equal(m('LEJIA NORMAL'),null);
+ const compras={key:'compras',label:'Compras',description:'',columns:[{key:'producto',label:'Producto'},{key:'cantidad',label:'Cantidad',kind:'number'},{key:'importe',label:'Importe',kind:'money'}],
+  rows:[{producto:'KEN LECHE ENTERA B·I·BOX 10 LTS.',cantidad:10,importe:102},{producto:'KEN LECHE ENTERA B·I·BOX 10 LTS.',cantidad:6,importe:61.2},{producto:'KEN LECHE ENTERA B·I·BOX 10 LTS.',cantidad:10,importe:61.2}]};
+ const r=q.runQuery([compras],{tabla:'compras',formulas:[{nombre:'contenido',medida:'producto'},{nombre:'unidad_base',medida:'producto',dato:'unidad'},{nombre:'litros',a:'cantidad',op:'*',b:'contenido'},{nombre:'precio_litro',a:'importe',op:'/',b:'litros',importe:true}],
+  columnas:['cantidad','unidad_base','litros','precio_litro']});
+ assert.deepEqual(r.filas,[{cantidad:10,unidad_base:'L',litros:100,precio_litro:1.02},{cantidad:6,unidad_base:'L',litros:60,precio_litro:1.02},{cantidad:10,unidad_base:'L',litros:100,precio_litro:0.612}]);
+ const med=q.runQuery([compras],{tabla:'compras',calcular:[{funcion:'mediana',columna:'importe'}]});
+ assert.deepEqual(med.filas,[{mediana_importe:61.2}]);
+});
