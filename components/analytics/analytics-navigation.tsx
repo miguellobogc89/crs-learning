@@ -7,7 +7,7 @@ const TABLES = [
 ];
 
 /** Analytics side navigation: the dashboard and the useful tables (no relation or tax tables). */
-export function AnalyticsNavigation({ view, table }: { view: "panel" | "tablas"; table?: string }) {
+export function AnalyticsNavigation({ view, table, extra = [] }: { view: "panel" | "tablas"; table?: string; extra?: { key: string; label: string }[] }) {
   const item = "flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors";
   const active = "bg-[#EDF3FF] font-semibold text-[#0A58FF]";
   const inactive = "text-slate-600 hover:bg-[#F0F4FC] hover:text-slate-900";
@@ -23,5 +23,13 @@ export function AnalyticsNavigation({ view, table }: { view: "panel" | "tablas";
         className={item + " " + (view === "tablas" && table === t.key ? active : inactive)}>
         <Table2 className="h-4 w-4 shrink-0" /> {t.label}</Link>)}
     </nav>
+    {extra.length > 0 && <>
+      <p className="px-5 pb-2 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">De tus documentos</p>
+      <nav aria-label="Tablas de tus documentos" className="space-y-1 px-3 pb-4">
+        {extra.map(t => <Link key={t.key} href={`/analytics?view=tablas&table=${encodeURIComponent(t.key)}`} aria-current={view === "tablas" && table === t.key ? "page" : undefined}
+          className={item + " " + (view === "tablas" && table === t.key ? active : inactive)}>
+          <Table2 className="h-4 w-4 shrink-0" /> <span className="min-w-0 truncate">{t.label}</span></Link>)}
+      </nav>
+    </>}
   </div>;
 }

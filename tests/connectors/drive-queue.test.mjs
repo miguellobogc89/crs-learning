@@ -28,7 +28,10 @@ test('file rows: not brought, changed in Drive, repeated, unreadable, and the st
  const rows=st.fileRows([f('a'),f('b'),f('c'),f('d'),f('e'),f('g')],reg,new Map([['L1',{estado:'por_guardar',fase:'escritura',error:null}]]));
  assert.deepEqual(rows.map(r=>r.estado),['sin_traer','por_guardar','repetido','no_legible','sin_traer','error']);
  assert.equal(rows[1].loteId,'L1');assert.match(rows[4].detalle,/Cambió en Drive/);assert.match(rows[5].detalle,/ya no existe/);
- assert.deepEqual(st.countByStatus(rows),{sin_traer:2,procesando:0,por_guardar:1,guardado:0,error:1,repetido:1,no_legible:1});
+ assert.deepEqual(st.countByStatus(rows),{sin_traer:2,procesando:0,por_guardar:1,guardado:0,sin_datos:0,error:1,repetido:1,no_legible:1});
+ const saved=st.fileRows([f('b')],new Map([['b',{outcome:'importado',detail:null,md5:'m',importId:'L2',importFileId:'IF-B',syncedAt:'t'}]]),new Map([['L2',{estado:'guardado',fase:'completado',error:null}]]),new Set());
+ assert.equal(saved[0].estado,'sin_datos','saved, but nothing kept: its type has no table');
+ assert.equal(st.fileRows([f('b')],new Map([['b',{outcome:'importado',detail:null,md5:'m',importId:'L2',importFileId:'IF-B',syncedAt:'t'}]]),new Map([['L2',{estado:'guardado',fase:'completado',error:null}]]),new Set(['IF-B']))[0].estado,'guardado');
  assert.deepEqual(st.chunks([1,2,3,4,5],2),[[1,2],[3,4],[5]]);
 });
 

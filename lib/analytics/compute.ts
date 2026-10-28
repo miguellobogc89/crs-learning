@@ -11,7 +11,8 @@ import { extraCopies } from "@/lib/knowledge/intake/writer/duplicates";
  */
 export const CATEGORIES = [
   { key: "suministros", label: "Suministros" }, { key: "compras", label: "Compras" }, { key: "servicios", label: "Servicios" },
-  { key: "alquiler", label: "Alquiler" }, { key: "rectificativas", label: "Rectificativas" }, { key: "otros", label: "Otros" },
+  { key: "alquiler", label: "Alquiler" }, { key: "personal", label: "Personal" }, { key: "impuestos", label: "Impuestos" },
+  { key: "rectificativas", label: "Rectificativas" }, { key: "otros", label: "Otros" },
 ] as const;
 export type CategoryKey = (typeof CATEGORIES)[number]["key"];
 export const SUBCATEGORY_LABEL: Record<string, string> = {
@@ -76,6 +77,15 @@ export function isIncome(inv: Row, ix: { issuerOf: Map<string, string>; customer
  * December; the current year stops at the current month, so future months are not shown as zero).
  */
 export type Period = number | { monthsBack?: number; year?: number; today?: Date };
+
+/** Costs from template tables marked "sumar como gasto" (payslips, rent receipts…): one per record with date and amount. */
+export function templateCosts(data: AnalyticsData): { month: string; amount: number; category: CategoryKey; templateId: string; label: string }[] {
+  return (data.templates ?? []).filter(t => t.analitica.sumar && t.analitica.importe && t.analitica.fecha).flatMap(t => t.rows.flatMap(r => {
+    const m = month(r.values[t.analitica.fecha!]), amount = num(r.values[t.analitica.importe!]);
+    const category = (CATEGORIES.some(c => c.key === t.analitica.categoria) ? t.analitica.categoria : "otros") as CategoryKey;
+    return m && amount !== null ? [{ month: m, amount, category, templateId: t.id, label: t.nombre }] : [];
+  }));
+}
 
 const datedInvoices = (data: AnalyticsData) => data.invoices.filter(i => month(i.values.issue_date) && invoiceAmount(i) !== null);
 
@@ -158,9 +168,11 @@ export function computeDashboard(data: AnalyticsData, period: Period = 12): Dash
   const expenses = data.invoices.filter(i => !isIncome(i, ix));
   const dated = expenses.filter(i => month(i.values.issue_date) && invoiceAmount(i) !== null);
   const inRange = dated.filter(i => months.includes(month(i.values.issue_date)!));
+  const extra = templateCosts(data).filter(c => months.includes(c.month));
   const spend = months.map(m => {
     const values = Object.fromEntries(CATEGORIES.map(c => [c.key, 0])) as Record<CategoryKey, number>;
     for (const inv of inRange.filter(i => month(i.values.issue_date) === m)) values[category(inv)] += invoiceAmount(inv)!;
+    for (const c of extra.filter(x => x.month === m)) values[c.category] += c.amount;
     for (const k of Object.keys(values) as CategoryKey[]) values[k] = round(values[k]);
     return { month: m, values, total: round(Object.values(values).reduce((a, b) => a + b, 0)) };
   });
@@ -178,6 +190,12 @@ export function computeDashboard(data: AnalyticsData, period: Period = 12): Dash
     const s = subcats.get(sub) ?? { key: sub, label: SUBCATEGORY_LABEL[sub] ?? sub.replace(/_/g, " "), category: category(inv), total: 0, invoices: 0 };
     s.total = round(s.total + invoiceAmount(inv)!); s.invoices++;
     subcats.set(sub, s);
+  }
+
+  for (const c of extra) {
+    const s = subcats.get(`plantilla:${c.templateId}`) ?? { key: `plantilla:${c.templateId}`, label: c.label, category: c.category, total: 0, invoices: 0 };
+    s.total = round(s.total + c.amount); s.invoices++;
+    subcats.set(s.key, s);
   }
 
   const products = new Map<string, { name: string; quantity: number; spend: number; lines: number }>();
@@ -224,6 +242,10 @@ export function computeOverview(data: AnalyticsData, period: Period = 12): Overv
     const income = isIncome(inv, ix);
     if (income) { slot.ingresos = round(slot.ingresos + invoiceAmount(inv)!); counts.ingresos++; }
     else { slot.gastos = round(slot.gastos + invoiceAmount(inv)!); counts.gastos++; }
+  }
+  for (const c of templateCosts(data)) {
+    const slot = perMonth.find(p => p.month === c.month);
+    if (slot) { slot.gastos = round(slot.gastos + c.amount); counts.gastos++; }
   }
   const ingresos = round(perMonth.reduce((a, p) => a + p.ingresos, 0)), gastos = round(perMonth.reduce((a, p) => a + p.gastos, 0));
   return { months, perMonth, totals: { ingresos, gastos, resultado: round(ingresos - gastos), margen: ingresos ? round((ingresos - gastos) / ingresos * 100) : null },
@@ -319,6 +341,17 @@ export const EDITABLE: Record<string, Record<string, "text" | "boolean" | "direc
 
 export function buildTable(data: AnalyticsData, key: string): Table {
   const ix = indexes(data);
+  const template = key.startsWith("plantilla:") ? data.templates?.find(t => `plantilla:${t.id}` === key) : undefined;
+  if (template) {
+    const kind = (type: string): Column["kind"] => type === "decimal" ? "number" : type === "integer" ? "number" : type === "date" ? "date" : "text";
+    const money = (k: string) => k === template.analitica.importe || /importe|total|bruto|neto|coste|cuota|irpf|base|liquido|líquido|pago/i.test(k);
+    return { key, label: template.nombre, description: template.descripcion || "Tabla creada a partir de tus documentos.",
+      columns: [...template.campos.map(c => ({ key: c.key, label: c.label, kind: c.type === "decimal" && money(c.key) ? "money" as const : kind(c.type),
+        ...(c.key === template.analitica.tercero ? { filter: true } : {}) })), { key: "documento", label: "Documento", kind: "document" as const }],
+      rows: template.rows.map((r): Record<string, CellValue> => ({ ...Object.fromEntries(template.campos.map(c => [c.key, c.type === "decimal" || c.type === "integer" ? num(r.values[c.key]) : str(r.values[c.key])])),
+        documento: data.documents?.[r.id]?.fileId ?? null }))
+        .sort((a, b) => template.analitica.fecha ? String(b[template.analitica.fecha] ?? "").localeCompare(String(a[template.analitica.fecha] ?? "")) : 0) };
+  }
   const label = (c: string) => CATEGORIES.find(x => x.key === c)?.label ?? c;
   const doc = (invoiceId: string | undefined) => (invoiceId && data.documents?.[invoiceId]?.fileId) || null;
   switch (key) {

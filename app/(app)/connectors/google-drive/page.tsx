@@ -7,6 +7,7 @@ import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { connectionView, connectorContext } from "@/lib/connectors/google-drive/connection";
 import { workspaceLibrary } from "@/lib/connectors/google-drive/sync";
 import { DriveFilesManager } from "@/components/connectors/drive-files-manager";
+import { TemplateManager } from "@/components/knowledge/templates/template-manager";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function DriveDocumentsPage() {
         Carpeta <b className="font-medium text-slate-700">{view.settings.folder.name}</b> de {view.email}. <Link href="/connectors" className="text-[#0A58FF] hover:underline">Volver a Conectores</Link>
       </p>
       {!library && ctx.canManage && <p className="rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-800">Crea primero una biblioteca propia en Conocimiento: las importaciones se guardan allí.</p>}
+      <TemplateManager />
       <DriveFilesManager libraryId={library?.id ?? null} />
     </div>
   </AppPageLayout>;

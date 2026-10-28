@@ -156,3 +156,20 @@ test('review: invoices whose lines add up to exactly twice the net, in pairs',()
  assert.equal(a.buildTable(dup,'facturas').columns.find(c=>c.key==='emisor').edit.type,'party');
  assert.deepEqual(a.companyOptions(data).map(c=>c.nombre),['Eléctrica Sur SA','Lácteos Norte SL','Mi Negocio']);
 });
+
+test('template tables: their rows sum as costs of their category, and show as a table with the document',()=>{
+ const nominas={id:'T1',nombre:'Nóminas',descripcion:'',campos:[{key:'trabajador',label:'Trabajador',type:'text'},{key:'fecha_pago',label:'Fecha de pago',type:'date'},{key:'coste_empresa',label:'Coste empresa',type:'decimal'}],
+  analitica:{sumar:true,categoria:'personal',importe:'coste_empresa',fecha:'fecha_pago',tercero:'trabajador'},
+  rows:[{id:'n1',values:{trabajador:'María',fecha_pago:'2026-01-31',coste_empresa:'1640.10'}},{id:'n2',values:{trabajador:'Jesús',fecha_pago:'2026-03-31',coste_empresa:'1000'}},{id:'n3',values:{trabajador:'X',coste_empresa:'5'}}]};
+ const iva={...nominas,id:'T2',nombre:'IVA',analitica:{...nominas.analitica,sumar:false},rows:[{id:'v1',values:{fecha_pago:'2026-01-20',coste_empresa:'999'}}]};
+ const withT={...data,templates:[nominas,iva],documents:{n1:{fileId:'F-N1',fileName:'nomina.pdf'}}};
+ const d=a.computeDashboard(withT);
+ assert.equal(d.spend[0].values.personal,1640.1);assert.equal(d.spend[2].values.personal,1000);
+ assert.equal(d.kpis.totalSpend,226.5+2640.1,'a row without date does not count; a table not marked «sumar» neither');
+ assert.ok(d.categories.includes('personal'));assert.deepEqual(d.subcategories.find(s=>s.key==='plantilla:T1'),{key:'plantilla:T1',label:'Nóminas',category:'personal',total:2640.1,invoices:2});
+ assert.equal(a.computeOverview(withT).totals.gastos,226.5+500+2640.1-500,'overview adds them to expenses (the sale stays income)');
+ const t=a.buildTable(withT,'plantilla:T1');
+ assert.equal(t.label,'Nóminas');assert.deepEqual(t.columns.map(c=>[c.key,c.kind]),[['trabajador','text'],['fecha_pago','date'],['coste_empresa','money'],['documento','document']]);
+ assert.deepEqual(t.rows[0],{trabajador:'Jesús',fecha_pago:'2026-03-31',coste_empresa:1000,documento:null},'newest first');
+ assert.equal(t.rows.find(r=>r.trabajador==='María').documento,'F-N1');
+});

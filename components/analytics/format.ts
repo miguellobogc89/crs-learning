@@ -14,5 +14,6 @@ export const fmtDate = (iso: string) => {
 /** Fixed category → colour (categorical palette, slot order; colour follows the category, never its rank). */
 export const CATEGORY_COLOR: Record<string, string> = {
   suministros: "#2a78d6", compras: "#eb6834", servicios: "#1baf7a", alquiler: "#eda100", rectificativas: "#e87ba4", otros: "#008300",
+  personal: "#6250d6", impuestos: "#e34948",
 };
 export const SINGLE_SERIES_COLOR = "#2a78d6";

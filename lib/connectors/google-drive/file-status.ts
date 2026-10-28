@@ -24,14 +24,18 @@ export function batchState(b: BatchRow): BatchState {
   return { estado: "procesando", fase, error: null };
 }
 
-export type FileStatus = "sin_traer" | "procesando" | "por_guardar" | "guardado" | "error" | "repetido" | "no_legible";
-export type RegistryRow = { outcome: string; detail: string | null; md5: string | null; importId: string | null; syncedAt: string };
+export type FileStatus = "sin_traer" | "procesando" | "por_guardar" | "guardado" | "sin_datos" | "error" | "repetido" | "no_legible";
+export type RegistryRow = { outcome: string; detail: string | null; md5: string | null; importId: string | null; syncedAt: string; importFileId?: string | null };
 export type FileRow = {
   id: string; nombre: string; modificado: string | null; tamano: number | null;
   estado: FileStatus; fase: string | null; detalle: string | null; loteId: string | null; traido: string | null;
 };
 
-export function fileRows(files: DriveFile[], registry: Map<string, RegistryRow>, batches: Map<string, BatchState>): FileRow[] {
+/**
+ * `withData`: import files that saved something (an invoice or ticket read with a reviewed field set, or a template's
+ * records). A saved import whose file is not among them was read but kept no data: its type has no table yet.
+ */
+export function fileRows(files: DriveFile[], registry: Map<string, RegistryRow>, batches: Map<string, BatchState>, withData?: Set<string>): FileRow[] {
   return files.map(f => {
     const base = { id: f.id, nombre: f.name, modificado: f.modifiedAt, tamano: f.size, fase: null, detalle: null, loteId: null, traido: null };
     const r = registry.get(f.id);
@@ -42,12 +46,14 @@ export function fileRows(files: DriveFile[], registry: Map<string, RegistryRow>,
     if (r.outcome === "omitido") return { ...seen, estado: "no_legible" as const, detalle: r.detail };
     const batch = r.importId ? batches.get(r.importId) : undefined;
     if (!batch) return { ...seen, estado: "error" as const, detalle: "Su importación ya no existe" };
+    if (batch.estado === "guardado" && withData && r.importFileId && !withData.has(r.importFileId))
+      return { ...seen, estado: "sin_datos" as const, fase: batch.fase, detalle: "Su tipo de documento todavía no tiene tabla: créala en «Documentos sin tabla»", loteId: r.importId };
     return { ...seen, estado: batch.estado, fase: batch.fase, detalle: batch.error, loteId: r.importId };
   });
 }
 
 export function countByStatus(rows: FileRow[]): Record<FileStatus, number> {
-  const counts = { sin_traer: 0, procesando: 0, por_guardar: 0, guardado: 0, error: 0, repetido: 0, no_legible: 0 };
+  const counts = { sin_traer: 0, procesando: 0, por_guardar: 0, guardado: 0, sin_datos: 0, error: 0, repetido: 0, no_legible: 0 };
   for (const r of rows) counts[r.estado]++;
   return counts;
 }

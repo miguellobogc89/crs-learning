@@ -13,6 +13,7 @@ import { GroupedBarChart } from "@/components/analytics/grouped-bar-chart";
 import { RankingList } from "@/components/analytics/ranking-list";
 import { DataTable } from "@/components/analytics/data-table";
 import { DuplicateLinesReview } from "@/components/analytics/duplicate-lines-review";
+import { TemplateManager } from "@/components/knowledge/templates/template-manager";
 import { CATEGORY_COLOR, SINGLE_SERIES_COLOR, fmtDate, fmtMoney, fmtNumber } from "@/components/analytics/format";
 
 export const dynamic = "force-dynamic";
@@ -90,8 +91,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const canEdit = activeWorkspace.role === "owner" || activeWorkspace.role === "admin";
   const params = await searchParams;
   const view = params.view === "tablas" ? "tablas" : "panel";
-  const tableKey = params.table === "proveedores" ? "empresas" : TABLE_KEYS.includes(params.table as (typeof TABLE_KEYS)[number]) ? params.table! : "facturas";
   const data = await loadAnalyticsData(activeWorkspace.id);
+  const templateTables = (data.templates ?? []).map(t => ({ key: `plantilla:${t.id}`, label: t.nombre }));
+  const tableKey = params.table === "proveedores" ? "empresas" : TABLE_KEYS.includes(params.table as (typeof TABLE_KEYS)[number]) || templateTables.some(t => t.key === params.table) ? params.table! : "facturas";
 
   const notice = data.truncated ? <p className="rounded-lg bg-amber-50 px-4 py-2 text-xs text-amber-800">
     Hay más de {fmtNumber(ANALYTICS_LIMIT)} registros en alguna tabla: la analítica usa los {fmtNumber(ANALYTICS_LIMIT)} primeros.</p> : null;
@@ -99,6 +101,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   let content: React.ReactNode;
   if (view === "tablas") {
     content = <div className="space-y-4 pt-4">{notice}
+      {canEdit && <TemplateManager />}
       {(tableKey === "facturas" || tableKey === "compras") && <DuplicateLinesReview issues={duplicatedLineIssues(data)} canEdit={canEdit} />}
       <DataTable table={buildTable(data, tableKey)} canEdit={canEdit} companies={tableKey === "facturas" ? companyOptions(data) : []} /></div>;
   } else {
@@ -242,7 +245,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     </div>;
   }
 
-  return <AppSectionShell sidebar={<AnalyticsNavigation view={view} table={tableKey} />}>
+  return <AppSectionShell sidebar={<AnalyticsNavigation view={view} table={tableKey} extra={templateTables} />}>
     <AppPageLayout header={<AppPageHeader section={APP_SECTIONS.analytics} title={view === "tablas" ? "Tablas" : "Panel"} />}
       contentClassName="overflow-y-auto pb-6">
       {content}

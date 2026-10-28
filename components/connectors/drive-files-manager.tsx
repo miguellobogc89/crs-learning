@@ -9,17 +9,17 @@ import { cn } from "@/lib/utils";
 import { IntakeQueue, saveClean, type QueueItem, type SaveOutcome } from "./intake-queue";
 import { DriveDoubtsDialog } from "./drive-doubts-dialog";
 
-type FileStatus = "sin_traer" | "procesando" | "por_guardar" | "guardado" | "error" | "repetido" | "no_legible";
+type FileStatus = "sin_traer" | "procesando" | "por_guardar" | "guardado" | "sin_datos" | "error" | "repetido" | "no_legible";
 type Row = { id: string; nombre: string; modificado: string | null; tamano: number | null; estado: FileStatus; fase: string | null; detalle: string | null; loteId: string | null; traido: string | null };
 type Data = { carpeta: string; archivos: Row[]; recuento: Record<FileStatus, number>; listaIncompleta: boolean; canManage: boolean };
 
 const GROUP = 20;
-const LABEL: Record<FileStatus, string> = { sin_traer: "Sin traer", procesando: "En proceso", por_guardar: "Por guardar", guardado: "Guardado", error: "Con error", repetido: "Repetido", no_legible: "No legible" };
+const LABEL: Record<FileStatus, string> = { sin_traer: "Sin traer", procesando: "En proceso", por_guardar: "Por guardar", guardado: "Guardado", sin_datos: "Sin datos (sin tabla)", error: "Con error", repetido: "Repetido", no_legible: "No legible" };
 const CHIP: Record<FileStatus, string> = {
   sin_traer: "bg-slate-100 text-slate-600", procesando: "bg-blue-50 text-[#0A58FF]", por_guardar: "bg-amber-50 text-amber-700",
-  guardado: "bg-emerald-50 text-emerald-700", error: "bg-rose-50 text-rose-700", repetido: "bg-slate-50 text-slate-500", no_legible: "bg-slate-50 text-slate-500",
+  guardado: "bg-emerald-50 text-emerald-700", sin_datos: "bg-amber-50 text-amber-700", error: "bg-rose-50 text-rose-700", repetido: "bg-slate-50 text-slate-500", no_legible: "bg-slate-50 text-slate-500",
 };
-const FILTERS: (FileStatus | "todos")[] = ["todos", "sin_traer", "procesando", "por_guardar", "guardado", "error", "repetido", "no_legible"];
+const FILTERS: (FileStatus | "todos")[] = ["todos", "sin_traer", "procesando", "por_guardar", "guardado", "sin_datos", "error", "repetido", "no_legible"];
 const day = (iso: string | null) => iso ? new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const chunks = <T,>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));
@@ -69,12 +69,12 @@ export function DriveFilesManager({ libraryId }: { libraryId: string | null }) {
   const rows = useMemo(() => (data?.archivos ?? []).map(r => {
     const live = r.loteId ? queue.get(r.loteId) : undefined;
     // The queue knows sooner than the last listing.
-    if (!live || live.status === "en_cola") return r;
+    if (!live || live.status === "en_cola" || (live.status === "guardado" && r.estado === "sin_datos")) return r;
     const estado: FileStatus = live.status === "procesando" ? "procesando" : live.status;
     return { ...r, estado, fase: live.phase || r.fase, detalle: live.error ?? (estado === r.estado ? r.detalle : null) };
   }), [data, queue]);
   const counts = useMemo(() => {
-    const c = { sin_traer: 0, procesando: 0, por_guardar: 0, guardado: 0, error: 0, repetido: 0, no_legible: 0 } as Record<FileStatus, number>;
+    const c = { sin_traer: 0, procesando: 0, por_guardar: 0, guardado: 0, sin_datos: 0, error: 0, repetido: 0, no_legible: 0 } as Record<FileStatus, number>;
     for (const r of rows) c[r.estado]++;
     return c;
   }, [rows]);
