@@ -354,10 +354,10 @@ function MarkdownContent({
           href,
           children,
         }) {
-          // Links inside the app (a table in Analítica…) open here; others in a new tab.
+          // Links inside the app (a table in Analítica…) open in a new tab, so the chat stays where it is.
           if (href?.startsWith("/")) {
             return (
-              <Link href={href} className="font-medium text-[#0A58FF] hover:underline">
+              <Link href={href} target="_blank" rel="noopener" className="font-medium text-[#0A58FF] hover:underline">
                 {children}
               </Link>
             );

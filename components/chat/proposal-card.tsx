@@ -111,8 +111,8 @@ export function ProposalCard({ messageId, proposal: initial }: { messageId: stri
       </>}
       {proposal.estado === "aplicada" && <>
         <span className="flex items-center gap-1 text-xs font-medium text-emerald-700"><Check className="size-3.5" />Hecho</span>
-        {tables.slice(0, 2).map(t => <Link key={t} href={`/analytics?view=tablas&table=${encodeURIComponent(t)}`} className="text-xs font-medium text-[#0A58FF] hover:underline">Ver tabla</Link>)}
-        {pending > 0 && proposal.pendientes?.[0] && <Link href={`/analytics?view=tablas&table=${encodeURIComponent(proposal.pendientes[0].tabla)}&pendiente=${encodeURIComponent(proposal.pendientes[0].columna)}`}
+        {tables.slice(0, 2).map(t => <Link key={t} href={`/analytics?view=tablas&table=${encodeURIComponent(t)}`} target="_blank" rel="noopener" className="text-xs font-medium text-[#0A58FF] hover:underline">Ver tabla</Link>)}
+        {pending > 0 && proposal.pendientes?.[0] && <Link href={`/analytics?view=tablas&table=${encodeURIComponent(proposal.pendientes[0].tabla)}&pendiente=${encodeURIComponent(proposal.pendientes[0].columna)}`} target="_blank" rel="noopener"
           className="text-xs font-medium text-amber-700 hover:underline">Completar ({pending})</Link>}
         <button type="button" disabled={!!busy} onClick={() => void decide("deshacer")}
           className="ml-auto inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50">

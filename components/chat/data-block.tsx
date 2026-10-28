@@ -53,6 +53,6 @@ export function DataBlockView({ block }: { block: DataBlock }) {
       </table>
     </div>
     {href && <div className="border-t border-slate-100 px-3 py-1.5 text-right">
-      <Link href={href} className="text-[11px] font-medium text-[#0A58FF] hover:underline">Abrir la tabla en Analítica →</Link></div>}
+      <Link href={href} target="_blank" rel="noopener" className="text-[11px] font-medium text-[#0A58FF] hover:underline">Abrir la tabla en Analítica →</Link></div>}
   </div>;
 }
