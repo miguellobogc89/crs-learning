@@ -16,7 +16,7 @@ type Data = { carpeta: string; archivos: Row[]; recuento: Record<FileStatus, num
 const GROUP = 20;
 const LABEL: Record<FileStatus, string> = { sin_traer: "Sin traer", procesando: "En proceso", por_guardar: "Por guardar", guardado: "Guardado", sin_datos: "Sin datos (sin tabla)", error: "Con error", repetido: "Repetido", no_legible: "No legible" };
 const CHIP: Record<FileStatus, string> = {
-  sin_traer: "bg-slate-100 text-slate-600", procesando: "bg-blue-50 text-[#0A58FF]", por_guardar: "bg-amber-50 text-amber-700",
+  sin_traer: "bg-slate-100 text-slate-600", procesando: "bg-[#0A58FF]/10 text-[#0A58FF]", por_guardar: "bg-amber-50 text-amber-700",
   guardado: "bg-emerald-50 text-emerald-700", sin_datos: "bg-amber-50 text-amber-700", error: "bg-rose-50 text-rose-700", repetido: "bg-slate-50 text-slate-500", no_legible: "bg-slate-50 text-slate-500",
 };
 const FILTERS: (FileStatus | "todos")[] = ["todos", "sin_traer", "procesando", "por_guardar", "guardado", "sin_datos", "error", "repetido", "no_legible"];
@@ -153,12 +153,12 @@ export function DriveFilesManager({ libraryId }: { libraryId: string | null }) {
           : "Marca los documentos que quieras traer, o selecciónalos todos."}
       </p>
       {canManage && notBrought.length > 0 && <Button variant="outline" size="sm" disabled={!!bringing} onClick={() => setSelected(new Set(notBrought))}>Seleccionar los {notBrought.length} sin traer</Button>}
-      {canManage && <Button variant="brand" size="sm" disabled={!!bringing || !selected.size} onClick={enqueue}>Traer y procesar ({selected.size})</Button>}
+      {canManage && <Button variant="corporate" size="sm" disabled={!!bringing || !selected.size} onClick={enqueue}>Traer y procesar ({selected.size})</Button>}
       {canManage && toSave.length > 0 && (confirmSave
         ? <><span className="text-xs text-slate-600">Se guardarán los lotes sin decisiones pendientes. ¿Seguro?</span>
-            <Button variant="brand" size="sm" onClick={saveAll}>Sí, guardar</Button><Button variant="ghost" size="sm" onClick={() => setConfirmSave(false)}>Cancelar</Button></>
+            <Button variant="corporate" size="sm" onClick={saveAll}>Sí, guardar</Button><Button variant="ghost" size="sm" onClick={() => setConfirmSave(false)}>Cancelar</Button></>
         : <Button variant="outline" size="sm" disabled={!!saving || !!bringing} onClick={() => setConfirmSave(true)}>Guardar los que no tienen dudas ({plural(toSave.length, "lote", "lotes")})</Button>)}
-      {canManage && toSave.length > 0 && <Button variant="brand" size="sm" disabled={!!saving || !!bringing} onClick={() => setDoubtsFor(toSave)}>Resolver dudas y guardar</Button>}
+      {canManage && toSave.length > 0 && <Button variant="corporate" size="sm" disabled={!!saving || !!bringing} onClick={() => setDoubtsFor(toSave)}>Resolver dudas y guardar</Button>}
       {canManage && failed.length > 0 && <Button variant="outline" size="sm" disabled={!!bringing} onClick={() => void resumeAll()}>Continuar los que fallaron ({plural(failed.length, "lote", "lotes")})</Button>}
       <Button variant="ghost" size="sm" onClick={() => void load()} aria-label="Actualizar"><RefreshCw className="size-3.5" /></Button>
     </div>

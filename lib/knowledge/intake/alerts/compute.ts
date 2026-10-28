@@ -36,18 +36,18 @@ export function computeAlerts(input: { batches: BatchSummary[]; groups: PendingG
       if (!docs.length) continue;
       alerts.push({ key: `sin_tabla:${typeKey}`, type: "intake.sin_tabla", count: docs.length, items: docs.map(d => d.importFileId).sort(),
         title: `${plural(docs.length, "documento", "documentos")} de tipo «${g.label}» sin guardar`,
-        body: `Se importaron pero no guardan datos porque su tipo todavía no tiene tabla (${sample(docs.map(d => d.archivo))}). Créala en «Documentos sin tabla».`,
-        href: "/analytics?view=tablas" });
+        body: `Se importaron pero no guardan datos porque su tipo todavía no tiene tabla (${sample(docs.map(d => d.archivo))}). Créala desde Analítica → Sin tabla.`,
+        href: `/analytics?view=tablas&sintabla=${encodeURIComponent(typeKey)}` });
       continue;
     }
     const pending = g.documentos.filter(d => d.estado === "pendiente");
     if (pending.length) alerts.push({ key: `plantilla_pendiente:${g.plantilla.id}`, type: "intake.plantilla_pendiente", count: pending.length, items: pending.map(d => d.importFileId).sort(),
       title: `${plural(pending.length, "documento nuevo", "documentos nuevos")} para «${g.plantilla.nombre}»`,
-      body: `${sample(pending.map(d => d.archivo))}. Se procesan al abrir «Documentos sin tabla».`, href: "/analytics?view=tablas" });
+      body: `${sample(pending.map(d => d.archivo))}. Se procesan al abrir su tabla en Analítica.`, href: `/analytics?view=tablas&table=${encodeURIComponent(`plantilla:${g.plantilla.id}`)}` });
     const failed = g.documentos.filter(d => d.estado === "error");
     if (failed.length) alerts.push({ key: `plantilla_error:${g.plantilla.id}`, type: "intake.plantilla_error", count: failed.length, items: failed.map(d => d.importFileId).sort(),
       title: `${plural(failed.length, "documento", "documentos")} de «${g.plantilla.nombre}» no se pudieron procesar`,
-      body: `${sample(failed.map(d => `${d.archivo}${d.error ? ` (${d.error})` : ""}`), 2)}. Vuelve a intentarlo con «Procesar pendientes».`, href: "/analytics?view=tablas" });
+      body: `${sample(failed.map(d => `${d.archivo}${d.error ? ` (${d.error})` : ""}`), 2)}. Vuelve a intentarlo desde su tabla en Analítica.`, href: `/analytics?view=tablas&table=${encodeURIComponent(`plantilla:${g.plantilla.id}`)}` });
   }
 
   const failed = input.batches.filter(b => b.estado === "error");

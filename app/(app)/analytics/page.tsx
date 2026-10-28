@@ -13,7 +13,10 @@ import { GroupedBarChart } from "@/components/analytics/grouped-bar-chart";
 import { RankingList } from "@/components/analytics/ranking-list";
 import { DataTable } from "@/components/analytics/data-table";
 import { DuplicateLinesReview } from "@/components/analytics/duplicate-lines-review";
-import { TemplateManager } from "@/components/knowledge/templates/template-manager";
+import { UnsupportedTypeView } from "@/components/knowledge/templates/unsupported-type-view";
+import { TemplateTableBar } from "@/components/knowledge/templates/template-table-bar";
+import { templateOverview } from "@/lib/knowledge/intake/templates/service";
+import type { PendingGroup } from "@/lib/knowledge/intake/templates/pending";
 import { CATEGORY_COLOR, SINGLE_SERIES_COLOR, fmtDate, fmtMoney, fmtNumber } from "@/components/analytics/format";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +26,7 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 /** Income and expenses keep the first two slots of the categorical palette (fixed: colour follows the series). */
-const INCOME_COLOR = "#2a78d6", EXPENSE_COLOR = "#eb6834";
+const INCOME_COLOR = "#0A58FF", EXPENSE_COLOR = "#eb6834";
 
 /** A compact dashboard tile: fixed height so the panel reads as a grid (two per row on a laptop screen). */
 function Panel({ title, subtitle, href, children }: { title: string; subtitle?: string; href?: string; children: React.ReactNode }) {
@@ -84,14 +87,19 @@ function InvoiceList({ rows, party }: { rows: InvoiceRow[]; party: "emisor" | "r
   })}</ul>;
 }
 
-export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ view?: string; table?: string; periodo?: string; tab?: string }> }) {
+export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ view?: string; table?: string; periodo?: string; tab?: string; sintabla?: string }> }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
   const canEdit = activeWorkspace.role === "owner" || activeWorkspace.role === "admin";
   const params = await searchParams;
   const view = params.view === "tablas" ? "tablas" : "panel";
-  const data = await loadAnalyticsData(activeWorkspace.id);
+  const [data, groups] = await Promise.all([loadAnalyticsData(activeWorkspace.id),
+    templateOverview(activeWorkspace.id).then(o => o.grupos as PendingGroup[]).catch(error => { console.warn("[analytics] sin tabla:", error instanceof Error ? error.message : error); return [] as PendingGroup[]; })]);
+  const typeKey = (g: PendingGroup) => `${g.familia}|${g.tipo}|${g.subtipo ?? ""}`;
+  const missing = groups.filter(g => !g.plantilla && g.documentos.some(d => d.estado !== "ignorado"));
+  const pending = missing.map(g => ({ key: typeKey(g), label: g.label, count: g.documentos.filter(d => d.estado !== "ignorado").length }));
+  const unsupported = view === "tablas" && params.sintabla ? missing.find(g => typeKey(g) === params.sintabla) : undefined;
   const templateTables = (data.templates ?? []).map(t => ({ key: `plantilla:${t.id}`, label: t.nombre }));
   const tableKey = params.table === "proveedores" ? "empresas" : TABLE_KEYS.includes(params.table as (typeof TABLE_KEYS)[number]) || templateTables.some(t => t.key === params.table) ? params.table! : "facturas";
 
@@ -99,9 +107,12 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     Hay más de {fmtNumber(ANALYTICS_LIMIT)} registros en alguna tabla: la analítica usa los {fmtNumber(ANALYTICS_LIMIT)} primeros.</p> : null;
 
   let content: React.ReactNode;
-  if (view === "tablas") {
+  const templateGroup = tableKey.startsWith("plantilla:") ? groups.find(g => g.plantilla && `plantilla:${g.plantilla.id}` === tableKey) : undefined;
+  if (unsupported) {
+    content = <div className="pt-4"><UnsupportedTypeView group={unsupported} canEdit={canEdit} /></div>;
+  } else if (view === "tablas") {
     content = <div className="space-y-4 pt-4">{notice}
-      {canEdit && <TemplateManager />}
+      {templateGroup && <TemplateTableBar group={templateGroup} canEdit={canEdit} />}
       {(tableKey === "facturas" || tableKey === "compras") && <DuplicateLinesReview issues={duplicatedLineIssues(data)} canEdit={canEdit} />}
       <DataTable table={buildTable(data, tableKey)} canEdit={canEdit} companies={tableKey === "facturas" ? companyOptions(data) : []} /></div>;
   } else {
@@ -119,7 +130,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       display: fmtMoney(c.total), color: CATEGORY_COLOR[c.key], detail: c.total > 0 ? `${fmtNumber(Math.round(c.total / positive * 100))} %` : undefined }))} />;
     const suppliersRanking = <RankingList compact empty="Sin facturas con proveedor." items={costs.topSuppliers.slice(0, 5).map(s => ({ label: s.name, value: s.spend,
       display: fmtMoney(s.spend), detail: `${s.invoices} ${s.invoices === 1 ? "factura" : "facturas"}` }))} />;
-    const ownHint = <p className="rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-2.5 text-xs text-slate-700">
+    const ownHint = <p className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-700">
       Para ver tus <b>ingresos</b>, marca tu empresa como «Mi empresa» en <Link className="font-medium text-[#0A58FF] hover:underline" href="/analytics?view=tablas&table=empresas">Tablas → Empresas</Link>:
       las facturas que emite pasarán a contar como ingresos. También puedes cambiar el «Tipo» de una factura en <Link className="font-medium text-[#0A58FF] hover:underline" href="/analytics?view=tablas&table=facturas">Tablas → Facturas</Link>.</p>;
 
@@ -245,8 +256,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     </div>;
   }
 
-  return <AppSectionShell sidebar={<AnalyticsNavigation view={view} table={tableKey} extra={templateTables} />}>
-    <AppPageLayout header={<AppPageHeader section={APP_SECTIONS.analytics} title={view === "tablas" ? "Tablas" : "Panel"} />}
+  return <AppSectionShell sidebar={<AnalyticsNavigation view={view} table={tableKey} extra={templateTables} pending={pending} sintabla={unsupported ? params.sintabla : undefined} />}>
+    <AppPageLayout header={<AppPageHeader section={APP_SECTIONS.analytics} title={unsupported ? "Sin tabla" : view === "tablas" ? "Tablas" : "Panel"} />}
       contentClassName="overflow-y-auto pb-6">
       {content}
     </AppPageLayout>

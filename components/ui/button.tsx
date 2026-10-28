@@ -12,6 +12,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        // Corporate electric blue (#0A58FF): primary actions of Analítica, Conectores and imports.
+        corporate:
+          "bg-[#0A58FF] text-white hover:bg-[#0848d6] active:bg-[#0740c0] focus-visible:ring-[#0A58FF]/30",
         brand:
           "bg-brand text-brand-foreground hover:bg-brand-hover active:bg-brand-active focus-visible:border-brand-border focus-visible:ring-brand/30",
         outline:

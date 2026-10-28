@@ -97,7 +97,7 @@ export function DriveConnectorCard({ initial, canManage, flash }: { initial: Dri
           <p className="text-xs text-slate-500">{folderError ? <span className="text-rose-600">{folderError}</span> : documents ? docsText(documents) : "Comprobando la carpeta…"}</p>
         </> : <p className="text-sm text-slate-500">Todavía no has elegido carpeta.</p>}
       </div>
-      {canManage && <Button variant={state.folder ? "outline" : "brand"} size="sm" onClick={() => setPicker(true)}>{state.folder ? "Cambiar carpeta" : "Elegir carpeta"}</Button>}
+      {canManage && <Button variant={state.folder ? "outline" : "corporate"} size="sm" onClick={() => setPicker(true)}>{state.folder ? "Cambiar carpeta" : "Elegir carpeta"}</Button>}
     </div>}
     {state.status === "active" && state.folder && !folderError && <DriveSyncPanel folderId={state.folder.id} canManage={canManage} lastSync={state.lastSync} />}
     {canManage && <DriveFolderPicker open={picker} onOpenChange={setPicker}

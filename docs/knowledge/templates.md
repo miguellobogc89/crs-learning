@@ -17,10 +17,17 @@ Los tipos con conjunto de campos revisado (facturas, tickets) se extraen y guard
    espacio), valores tipados (`templates/contract.ts`), evidencia por campo y una clave por registro (columnas que
    identifican, o documento+parte+fila) para no duplicar al reprocesar. «No guardar» marca el documento como ignorado.
    Cada resultado queda en `intake_template_documents` (por versión de plantilla).
-5. Con la página abierta, los documentos nuevos de un tipo con plantilla se procesan solos.
+5. Al abrir su tabla en Analítica, los documentos nuevos de un tipo con plantilla se procesan solos (barra encima de
+   la tabla: procesados, registros, errores y «Procesar» para reintentar).
 
-En Drive, los documentos importados sin datos aparecen como **«Sin datos (sin tabla)»**. En Analítica, las tablas de
-plantillas salen en «De tus documentos» y, si suman como gasto, entran en los paneles con su categoría (nuevas:
-**Personal** e **Impuestos**).
+En Analítica la barra lateral tiene una sola lista **Tablas** (las base y las creadas desde tus documentos) y, debajo,
+**Sin tabla**: cada tipo de documento sin tabla con su número de documentos (`?view=tablas&sintabla=familia|tipo|subtipo`,
+`components/knowledge/templates/unsupported-type-view.tsx`). Desde ahí «Crear tabla»; al procesarse, el tipo sube a
+Tablas y la página abre su tabla. Si suman como gasto, entran en los paneles con su categoría (nuevas: **Personal** e
+**Impuestos**). En Drive, los documentos importados sin datos aparecen como **«Sin datos (sin tabla)»** y la tarjeta
+«Documentos sin tabla» enlaza a Analítica.
+
+Importes: siempre con punto de millar y dos decimales (`1.234,50 €`; `components/analytics/format.ts` fuerza la
+agrupación, que es-ES omite por debajo de 10.000).
 
 Neon: `scripts/neon/20261028_intake_templates.sql` y `npx prisma generate`.

@@ -90,7 +90,7 @@ export function DriveDoubtsDialog({ open, onOpenChange, batchIds, onDone }: {
           {saving ? `Guardando ${saving.done} de ${saving.total} lotes…`
             : plans ? `${doubts.length ? `${answered} de ${doubts.length} respondidas · ` : ""}se guardarán ${plural(ready.length, "lote", "lotes")}${plans.length - ready.length ? ` (${plans.length - ready.length} siguen esperando)` : ""}` : ""}
         </p>
-        <Button variant="brand" disabled={!plans || !ready.length || !!saving} onClick={apply}>
+        <Button variant="corporate" disabled={!plans || !ready.length || !!saving} onClick={apply}>
           {saving ? <><Loader2 className="size-4 animate-spin" />Guardando…</> : `Aplicar y guardar ${plural(ready.length, "lote", "lotes")}`}</Button>
       </div>
     </DialogContent>

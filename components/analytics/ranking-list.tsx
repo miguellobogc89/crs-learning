@@ -14,7 +14,7 @@ export function RankingList({ items, empty, compact = false }: {
       </div>
       <div className="flex items-center gap-2">
         <div className={(compact ? "h-1" : "h-1.5") + " flex-1 rounded-full bg-slate-100"}>
-          <div className={(compact ? "h-1" : "h-1.5") + " rounded-full"} style={{ width: `${Math.max(2, Math.abs(item.value) / max * 100)}%`, background: item.color ?? "#2a78d6" }} />
+          <div className={(compact ? "h-1" : "h-1.5") + " rounded-full"} style={{ width: `${Math.max(2, Math.abs(item.value) / max * 100)}%`, background: item.color ?? "#0A58FF" }} />
         </div>
         {item.detail && <span className="shrink-0 text-[11px] text-slate-500">{item.detail}</span>}
       </div>

@@ -51,7 +51,7 @@ export function DriveSyncPanel({ folderId, canManage, lastSync: initialLast }: {
         <p className="text-xs text-slate-500">Cada sincronización trae hasta {BATCH} documentos nuevos (los más recientes primero) y los deja listos para revisar antes de guardar. Lo repetido se salta.</p>
       </div>
       <a href="/connectors/google-drive" className="text-sm font-medium text-[#0A58FF] hover:underline">Ver todos los documentos</a>
-      {canManage && <Button variant="brand" size="sm" disabled={syncing || pending?.pendientes === 0} onClick={sync}>
+      {canManage && <Button variant="corporate" size="sm" disabled={syncing || pending?.pendientes === 0} onClick={sync}>
         {syncing ? <><Loader2 className="size-3.5 animate-spin" />Trayendo de Drive…</> : <><RefreshCw className="size-3.5" />Sincronizar ahora</>}</Button>}
     </div>
     {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}

@@ -83,7 +83,7 @@ export function DriveFolderPicker({ open, onOpenChange, onChosen }: {
       </div>
       <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/60 px-5 py-3">
         <span className="min-w-0 truncate text-xs text-slate-500">{current.id === "shared" ? "Entra en una carpeta compartida para elegirla" : <>Carpeta: <b className="text-slate-800">{current.name}</b></>}</span>
-        <Button variant="brand" disabled={saving || current.id === "shared"} onClick={choose}>{saving ? "Guardando…" : "Usar esta carpeta"}</Button>
+        <Button variant="corporate" disabled={saving || current.id === "shared"} onClick={choose}>{saving ? "Guardando…" : "Usar esta carpeta"}</Button>
       </div>
     </DialogContent>
   </Dialog>;
