@@ -29,6 +29,20 @@ const BATCH = 500;
 
 export class ApplyError extends Error {}
 
+/**
+ * Engine keys must match ^[a-z][a-z0-9_]*$ (and relation keys ≤ 80 characters): a link's relation is
+ * «enlace_<table>_<column>», shortened with a hash when too long.
+ */
+export function relationKey(typeKey: string, columna: string) {
+  const key = `enlace_${typeKey}_${columna}`.replace(/[^a-z0-9_]/g, "_");
+  if (key.length <= 80) return key;
+  let h = 0;
+  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return `${key.slice(0, 70)}_${h.toString(36)}`.slice(0, 80);
+}
+/** A retired key frees the name for a new table/column/link, keeping the engine's key format. */
+export const retiredKey = (key: string, stamp: string, max = 80) => `${key.slice(0, max - stamp.length - 10)}_deshecho_${stamp}`;
+
 export async function applyActions(input: { workspaceId: string; userId: string; actions: Action[]; tables: ApplyTable[]; links: ApplyLink[] }): Promise<UndoLog> {
   const { workspaceId, userId } = input;
   const undo: UndoLog = { tipos: [], campos: [], relaciones: [], insertados: [], actualizados: [], enlaces: { creados: [], quitados: [] }, borrados: [] };
@@ -99,7 +113,7 @@ export async function applyActions(input: { workspaceId: string; userId: string;
         }
         case "enlace": {
           const from = type(a.tabla), to = type(a.destino);
-          const key = `enlace:${from.key}:${a.columna}`;
+          const key = relationKey(from.key, a.columna);
           const clash = await tx.engine_relation_definitions.findUnique({ where: { workspace_id_key: { workspace_id: workspaceId, key } }, select: { id: true } });
           if (clash) throw new ApplyError(`Ya existe el enlace «${key}».`);
           // Like the catalog's relations: from the linked row (one) to the rows pointing at it (many).
@@ -187,15 +201,15 @@ export async function undoActions(input: { workspaceId: string; userId: string; 
     for (const r of [...undo.relaciones].reverse()) {
       await tx.engine_object_types.update({ where: { id: r.typeId }, data: { settings: r.settingsBefore } });
       const def = await tx.engine_relation_definitions.findUnique({ where: { id: r.id }, select: { key: true } });
-      if (def) await tx.engine_relation_definitions.update({ where: { id: r.id }, data: { status: "archived", key: `${def.key}~deshecho~${stamp}` } });
+      if (def) await tx.engine_relation_definitions.update({ where: { id: r.id }, data: { status: "archived", key: retiredKey(def.key, stamp) } });
     }
     for (const id of undo.campos) {
       const f = await tx.engine_field_definitions.findUnique({ where: { id }, select: { key: true } });
-      if (f) await tx.engine_field_definitions.update({ where: { id }, data: { status: "archived", key: `${f.key}~deshecho~${stamp}` } });
+      if (f) await tx.engine_field_definitions.update({ where: { id }, data: { status: "archived", key: retiredKey(f.key, stamp) } });
     }
     for (const id of undo.tipos) {
       const t = await tx.engine_object_types.findUnique({ where: { id }, select: { key: true } });
-      if (t) await tx.engine_object_types.update({ where: { id }, data: { status: "archived", key: `${t.key}~deshecho~${stamp}` } });
+      if (t) await tx.engine_object_types.update({ where: { id }, data: { status: "archived", key: retiredKey(t.key, stamp) } });
     }
   }, { timeout: 180_000, maxWait: 15_000 });
 }

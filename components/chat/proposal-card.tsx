@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, ChevronDown, Loader2, PencilLine, RotateCcw, Wand2, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Loader2, RotateCcw, Wand2 } from "lucide-react";
 import type { Proposal } from "@/lib/assistant/changes/service";
 import type { CellValue } from "@/lib/analytics/compute";
 import { fmtDate, fmtMoney, fmtNumber } from "@/components/analytics/format";
@@ -61,75 +61,63 @@ export function ProposalCard({ messageId, proposal: initial }: { messageId: stri
   }
 
   const tables = proposal.tablas.filter(t => t.startsWith("tabla:") || t.startsWith("plantilla:") || ["facturas", "compras", "empresas", "suministros"].includes(t));
-  return <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
-    <div className="flex items-start gap-3 border-b border-slate-100 px-4 py-3">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#0A58FF]/10 text-[#0A58FF]"><Wand2 className="size-4" /></span>
+  const warnings = proposal.pasos.reduce((n, p) => n + p.avisos.length, 0);
+  const pending = (proposal.pendientes ?? []).reduce((n, p) => n + p.filas, 0);
+  const closed = proposal.estado === "descartada" || proposal.estado === "deshecha";
+  return <div className={cn("mt-2 overflow-hidden rounded-xl border bg-white", closed ? "border-slate-200 opacity-70" : "border-slate-200")}>
+    <div className="flex items-start gap-2.5 px-3 py-2.5">
+      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-[#0A58FF]/10 text-[#0A58FF]"><Wand2 className="size-3.5" /></span>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-semibold text-slate-900">{proposal.titulo}</p>
-          {proposal.objetivo && <span className="rounded-full bg-[#0A58FF]/10 px-2 py-0.5 text-[11px] font-medium text-[#0A58FF]">Paso {proposal.objetivo.actual} de {proposal.objetivo.pasos.length}</span>}
-          <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", state.chip)}>{state.label}</span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <p className="text-[13px] font-semibold text-slate-900">{proposal.titulo}</p>
+          {proposal.objetivo && <span className="rounded-full bg-[#0A58FF]/10 px-1.5 py-px text-[10px] font-medium text-[#0A58FF]">Paso {proposal.objetivo.actual} de {proposal.objetivo.pasos.length}</span>}
+          {proposal.estado !== "pendiente" && <span className={cn("rounded-full px-1.5 py-px text-[10px] font-medium", state.chip)}>{state.label}</span>}
         </div>
-        {proposal.explicacion && <p className="mt-0.5 text-xs text-slate-500">{proposal.explicacion}</p>}
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {figures(proposal.cifras).map(f => <span key={f} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-600">{f}</span>)}
+        {proposal.explicacion && <p className="mt-0.5 text-xs leading-5 text-slate-500">{proposal.explicacion}</p>}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          {figures(proposal.cifras).map(f => <span key={f} className="rounded bg-slate-100 px-1.5 py-px text-[10px] font-medium tabular-nums text-slate-600">{f}</span>)}
+          {pending > 0 && !closed && <span className="rounded bg-amber-50 px-1.5 py-px text-[10px] font-medium tabular-nums text-amber-700">{pending.toLocaleString("es-ES")} por completar</span>}
+          {warnings > 0 && <span className="rounded bg-amber-50 px-1.5 py-px text-[10px] font-medium text-amber-700">{warnings} {warnings === 1 ? "aviso" : "avisos"}</span>}
+          <button type="button" onClick={() => setOpen(open === null ? -1 : null)} className="inline-flex items-center gap-0.5 px-1 text-[11px] font-medium text-[#0A58FF] hover:underline">
+            <ChevronDown className={cn("size-3 transition-transform", open === null && "-rotate-90")} />{open === null ? "Ver detalle" : "Ocultar detalle"}</button>
         </div>
       </div>
     </div>
 
-    <ol className="divide-y divide-slate-100">
-      {proposal.pasos.map((p, i) => <li key={i} className="px-4 py-2.5">
-        <div className="flex items-start gap-2.5">
-          <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">{i + 1}</span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-slate-800">{p.texto}</p>
-            {p.avisos.map((a, j) => <p key={j} className="mt-1 flex items-start gap-1 text-[11px] text-amber-700"><AlertTriangle className="mt-px size-3 shrink-0" />{a}</p>)}
-            {p.muestra && <button type="button" onClick={() => setOpen(open === i ? null : i)} className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-[#0A58FF] hover:underline">
-              <ChevronDown className={cn("size-3 transition-transform", open !== i && "-rotate-90")} />{open === i ? "Ocultar ejemplo" : "Ver ejemplo"}</button>}
-            {open === i && p.muestra && <div className="mt-2 overflow-auto rounded-lg border border-slate-100">
-              <table className="w-full text-[11px]">
-                <thead className="bg-slate-50 text-slate-500"><tr>{p.muestra.columnas.map(c => <th key={c.key} className="whitespace-nowrap px-2 py-1 text-left font-semibold">{c.label}</th>)}</tr></thead>
-                <tbody>{p.muestra.filas.map((r, k) => <tr key={k} className="border-t border-slate-100">{p.muestra!.columnas.map(c =>
-                  <td key={c.key} className={cn("whitespace-nowrap px-2 py-1 text-slate-700", (c.kind === "money" || c.kind === "number") && "text-right tabular-nums")}>{cell(r[c.key] ?? null, c.kind)}</td>)}</tr>)}</tbody>
-              </table>
-            </div>}
-          </div>
-        </div>
+    {open !== null && <ol className="divide-y divide-slate-100 border-t border-slate-100 bg-slate-50/40">
+      {proposal.pasos.map((p, i) => <li key={i} className="px-3 py-2">
+        <p className="text-[11px] text-slate-700"><span className="mr-1 font-semibold text-slate-400">{i + 1}.</span>{p.texto}</p>
+        {p.avisos.map((a, j) => <p key={j} className="mt-0.5 flex items-start gap-1 text-[11px] text-amber-700"><AlertTriangle className="mt-px size-3 shrink-0" />{a}</p>)}
+        {p.muestra && <div className="mt-1.5 overflow-auto rounded-md border border-slate-100 bg-white">
+          <table className="w-full text-[11px]">
+            <thead className="bg-slate-50 text-slate-500"><tr>{p.muestra.columnas.map(c => <th key={c.key} className="whitespace-nowrap px-2 py-1 text-left font-semibold">{c.label}</th>)}</tr></thead>
+            <tbody>{p.muestra.filas.map((r, k) => <tr key={k} className="border-t border-slate-100">{p.muestra!.columnas.map(c =>
+              <td key={c.key} className={cn("whitespace-nowrap px-2 py-1 text-slate-700", (c.kind === "money" || c.kind === "number") && "text-right tabular-nums")}>{cell(r[c.key] ?? null, c.kind)}</td>)}</tr>)}</tbody>
+          </table>
+        </div>}
       </li>)}
-    </ol>
+    </ol>}
 
-    {!!proposal.pendientes?.length && proposal.estado !== "descartada" && proposal.estado !== "deshecha" && <div className="border-t border-amber-100 bg-amber-50/60 px-4 py-2.5">
-      <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800"><PencilLine className="size-3.5" />Tendrás que completar</p>
-      <ul className="mt-1 space-y-0.5">
-        {proposal.pendientes.map(p => <li key={`${p.tabla}|${p.columna}`} className="flex flex-wrap items-center gap-x-2 text-xs text-amber-900">
-          <span>{p.nombreTabla} · <strong className="font-semibold">{p.nombreColumna}</strong>: {p.filas.toLocaleString("es-ES")} {p.filas === 1 ? "fila" : "filas"}</span>
-          {proposal.estado === "aplicada" && <Link href={`/analytics?view=tablas&table=${encodeURIComponent(p.tabla)}&pendiente=${encodeURIComponent(p.columna)}`}
-            className="font-medium text-[#0A58FF] hover:underline">Completar ahora →</Link>}
-        </li>)}
-      </ul>
-      {proposal.estado === "pendiente" && <p className="mt-1 text-[11px] text-amber-800/80">Cuando apliques, podrás rellenarlas en Analítica › Tablas; te lo recordaremos en «Necesita revisión».</p>}
-    </div>}
+    {(error || proposal.error) && <p className="border-t border-rose-100 bg-rose-50 px-3 py-1.5 text-xs text-rose-700">{error ?? proposal.error}</p>}
 
-    {(error || proposal.error) && <p className="border-t border-rose-100 bg-rose-50 px-4 py-2 text-xs text-rose-700">{error ?? proposal.error}</p>}
-
-    <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 bg-slate-50/60 px-4 py-2.5">
+    {!closed && proposal.estado !== "error" && <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-3 py-2">
       {proposal.estado === "pendiente" && <>
         <button type="button" disabled={!!busy} onClick={() => void decide("aplicar")}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0A58FF] px-3 text-xs font-semibold text-white hover:bg-[#0848d6] disabled:opacity-50">
-          {busy === "aplicar" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}Aplicar</button>
+          className="inline-flex h-7 items-center gap-1 rounded-lg bg-[#0A58FF] px-2.5 text-xs font-semibold text-white hover:bg-[#0848d6] disabled:opacity-50">
+          {busy === "aplicar" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}Sí, créalo</button>
         <button type="button" disabled={!!busy} onClick={() => void decide("descartar")}
-          className="inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-slate-500 hover:bg-white hover:text-slate-900 disabled:opacity-50"><X className="size-3.5" />Descartar</button>
-        <span className="ml-auto text-[11px] text-slate-500">Queda en el historial y se puede deshacer.</span>
+          className="inline-flex h-7 items-center rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50">No</button>
+        <span className="ml-auto text-[10px] text-slate-400">Se puede deshacer</span>
       </>}
       {proposal.estado === "aplicada" && <>
-        <span className="flex items-center gap-1 text-xs font-medium text-emerald-700"><Check className="size-3.5" />Aplicada{proposal.aplicada?.en ? ` el ${new Date(proposal.aplicada.en).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}` : ""}</span>
-        {tables.slice(0, 3).map(t => <Link key={t} href={`/analytics?view=tablas&table=${encodeURIComponent(t)}`} className="text-xs font-medium text-[#0A58FF] hover:underline">Ver tabla →</Link>)}
+        <span className="flex items-center gap-1 text-xs font-medium text-emerald-700"><Check className="size-3.5" />Hecho</span>
+        {tables.slice(0, 2).map(t => <Link key={t} href={`/analytics?view=tablas&table=${encodeURIComponent(t)}`} className="text-xs font-medium text-[#0A58FF] hover:underline">Ver tabla</Link>)}
+        {pending > 0 && proposal.pendientes?.[0] && <Link href={`/analytics?view=tablas&table=${encodeURIComponent(proposal.pendientes[0].tabla)}&pendiente=${encodeURIComponent(proposal.pendientes[0].columna)}`}
+          className="text-xs font-medium text-amber-700 hover:underline">Completar ({pending})</Link>}
         <button type="button" disabled={!!busy} onClick={() => void decide("deshacer")}
-          className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900 disabled:opacity-50">
+          className="ml-auto inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50">
           {busy === "deshacer" ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}Deshacer</button>
       </>}
-      {(proposal.estado === "descartada" || proposal.estado === "deshecha" || proposal.estado === "error") &&
-        <span className="text-[11px] text-slate-500">{proposal.estado === "error" ? "Pide al asistente que la vuelva a preparar con los datos actuales." : "No se ha cambiado nada en tus datos."}</span>}
-    </div>
+    </div>}
   </div>;
 }

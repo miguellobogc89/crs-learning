@@ -19,7 +19,7 @@ function fakeDb(){
   findUniqueOrThrow:async({where,select})=>{const r=t[name].find(r=>ok(r,where));if(!r)throw Error('nf');return pick(r,select);},
   findFirst:async({where,select})=>{const r=t[name].find(r=>ok(r,where));return r?pick(r,select):null;},
   findMany:async({where,select}={})=>t[name].filter(r=>ok(r,where)).map(r=>pick(r,select)),
-  create:async({data})=>{const r={id:randomUUID(),status:'active',schema_version:1,revision:1,settings:{},...data};t[name].push(r);return r;},
+  create:async({data})=>{if('key' in data&&name!=='engine_records'&&!/^[a-z][a-z0-9_]*$/.test(data.key))throw Error(`check constraint: key «${data.key}»`);const r={id:randomUUID(),status:'active',schema_version:1,revision:1,settings:{},...data};t[name].push(r);return r;},
   createMany:async({data})=>{for(const d of data)t[name].push({id:randomUUID(),status:'active',...d});return{count:data.length};},
   update:async({where,data})=>{const r=t[name].find(r=>ok(r,where));apply(r,data);return r;},
   updateMany:async({where,data})=>{const rs=t[name].filter(r=>ok(r,where));rs.forEach(r=>apply(r,data));return{count:rs.length};},
@@ -59,7 +59,8 @@ test('apply creates the table, its columns, rows and links in one go; undo leave
  assert.deepEqual(t.engine_field_definitions.map(f=>[f.key,f.field_type,f.configuration.money]),[['producto','text',false],['precio','decimal',true]]);
  const rows=t.engine_records.filter(r=>r.object_type_id===catalogType.id);
  assert.deepEqual(rows.map(r=>[r.values_json,r.status]),[[{producto:'Leche',precio:1.05},'active'],[{producto:'Jamón',precio:12.5},'active']]);
- assert.deepEqual(recipesType.settings.enlaces,[{columna:'producto',nombre:'Producto',relacion:'enlace:doc_recetas:producto',destino:'tabla:catalogo'}]);
+ assert.deepEqual(recipesType.settings.enlaces,[{columna:'producto',nombre:'Producto',relacion:'enlace_doc_recetas_producto',destino:'tabla:catalogo'}]);
+ const KEY=/^[a-z][a-z0-9_]*$/;assert.ok([...t.engine_object_types,...t.engine_field_definitions,...t.engine_relation_definitions].every(x=>KEY.test(x.key)),'engine key format');
  const rel=t.engine_relation_definitions[0];
  assert.deepEqual([rel.from_object_type_id,rel.to_object_type_id,rel.cardinality],[catalogType.id,recipesType.id,'one_to_many']);
  assert.deepEqual(t.engine_record_relations.map(l=>[l.to_record_id,rows.find(r=>r.id===l.from_record_id).values_json.producto]),[['r1','Leche'],['r2','Jamón']]);
@@ -69,7 +70,8 @@ test('apply creates the table, its columns, rows and links in one go; undo leave
  assert.equal(t.engine_record_relations.length,0);
  assert.ok(rows.every(r=>r.status==='archived'));
  assert.deepEqual(recipesType.settings,{template_id:'R'});
- assert.match(catalogType.key,/^catalogo~deshecho~/);assert.equal(catalogType.status,'archived');
+ assert.match(catalogType.key,/^catalogo_deshecho_[a-z0-9]+$/);
+ assert.ok([...t.engine_object_types,...t.engine_field_definitions,...t.engine_relation_definitions].every(x=>/^[a-z][a-z0-9_]*$/.test(x.key)&&x.key.length<=80),'retired keys keep the format');assert.equal(catalogType.status,'archived');
  assert.ok(t.engine_field_definitions.every(f=>f.status==='archived'));
  assert.equal(rel.status,'archived');
  assert.deepEqual(t.engine_records.filter(r=>r.object_type_id===recipesType.id).map(r=>r.values_json),before.filter(r=>r.object_type_id===recipesType.id).map(r=>r.values_json));
@@ -103,9 +105,7 @@ test('after «Aplicar» the assistant says what was done, where to see it, what 
  const svc=load('lib/assistant/changes/service.ts',{'node:crypto':{randomUUID},'@prisma/client':{Prisma:{}},'@/lib/prisma':{prisma:stub},'@/lib/analytics/data':{},'@/lib/analytics/compute':{},'./plan':{},'./apply':{ApplyError:Error}});
  const text=svc.followUpText({titulo:'Catálogo de precios por proveedor',pendientes:[{tabla:'tabla:catalogo',nombreTabla:'Catálogo',columna:'formato',nombreColumna:'Contenido del envase',filas:12}],
   objetivo:{pasos:['Catálogo de precios por proveedor','Productos comparables entre proveedores','Coste y ahorro por receta'],actual:1}},[{key:'tabla:catalogo',label:'Catálogo'}]);
- assert.match(text,/\*\*Hecho: Catálogo de precios por proveedor\.\*\* Puedes consultarla aquí: \[Catálogo\]\(\/analytics\?view=tablas&table=tabla%3Acatalogo\)/);
- assert.match(text,/12 filas por completar\*\* en «Contenido del envase»/);
- assert.match(text,/paso 2 de 3: Productos comparables entre proveedores\*\*\. Dime «adelante»/);
- assert.match(svc.followUpText({titulo:'X',objetivo:{pasos:['a','b'],actual:2}},[]),/terminado todos los pasos/);
- assert.match(svc.followUpText({titulo:'X'},[],true),/He deshecho «X»/);
+ assert.equal(text,'¡Listo! Ya puedes ver la tabla aquí: [Catálogo](/analytics?view=tablas&table=tabla%3Acatalogo). Te quedan 12 por completar: [complétalas aquí](/analytics?view=tablas&table=tabla%3Acatalogo&pendiente=formato). El siguiente paso es productos comparables entre proveedores. ¿Lo hago?');
+ assert.match(svc.followUpText({titulo:'X',objetivo:{pasos:['a','b'],actual:2}},[]),/ya está todo/);
+ assert.match(svc.followUpText({titulo:'X'},[],true),/lo he deshecho/);
 });

@@ -74,13 +74,17 @@ function goalOf(args: { pasos_del_objetivo?: unknown; paso_actual?: unknown }) {
  */
 export function followUpText(p: Pick<Proposal, "titulo" | "pendientes" | "objetivo">, tables: { key: string; label: string }[], undone = false) {
   const link = (t: { key: string; label: string }) => `[${t.label}](/analytics?view=tablas&table=${encodeURIComponent(t.key)})`;
-  if (undone) return `He deshecho «${p.titulo}»: tus datos están como antes. Si quieres, preparo otra versión.`;
-  const lines = [`**Hecho: ${p.titulo}.** ${tables.length ? `Puedes consultarl${tables.length === 1 ? "a" : "as"} aquí: ${tables.map(link).join(", ")}.` : ""}`.trim()];
-  for (const x of p.pendientes ?? []) lines.push(`Te quedan **${x.filas.toLocaleString("es-ES")} ${x.filas === 1 ? "fila" : "filas"} por completar** en «${x.nombreColumna}» de ${x.nombreTabla}: [complétalas aquí](/analytics?view=tablas&table=${encodeURIComponent(x.tabla)}&pendiente=${encodeURIComponent(x.columna)}).`);
+  if (undone) return "Hecho, lo he deshecho: tus datos están como antes. Si quieres, lo planteamos de otra forma.";
+  const parts = [tables.length ? `¡Listo! Ya puedes ver ${tables.length === 1 ? "la tabla" : "las tablas"} aquí: ${tables.map(link).join(", ")}.` : "¡Listo!"];
+  const pending = (p.pendientes ?? []).reduce((n, x) => n + x.filas, 0);
+  if (pending) {
+    const first = p.pendientes![0];
+    parts.push(`Te quedan ${pending.toLocaleString("es-ES")} por completar: [complétalas aquí](/analytics?view=tablas&table=${encodeURIComponent(first.tabla)}&pendiente=${encodeURIComponent(first.columna)}).`);
+  }
   const goal = p.objetivo;
-  if (goal && goal.actual < goal.pasos.length) lines.push(`Cuando quieras, seguimos con el **paso ${goal.actual + 1} de ${goal.pasos.length}: ${goal.pasos[goal.actual]}**. Dime «adelante».`);
-  else if (goal) lines.push("Con esto hemos terminado todos los pasos. ¿Qué quieres consultar ahora?");
-  return lines.join("\n\n");
+  if (goal && goal.actual < goal.pasos.length) parts.push(`El siguiente paso es ${goal.pasos[goal.actual].charAt(0).toLowerCase()}${goal.pasos[goal.actual].slice(1)}. ¿Lo hago?`);
+  else if (goal) parts.push("Con esto ya está todo; pregúntame lo que querías saber.");
+  return parts.join(" ");
 }
 
 type MessageRow = { id: string; sources_json: unknown; conversation_id: string };

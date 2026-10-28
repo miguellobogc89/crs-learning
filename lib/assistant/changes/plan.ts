@@ -88,7 +88,8 @@ export function bestMatch(name: unknown, candidates: { id: string; text: unknown
   return best.length === 1 ? { id: best[0].id } : { missing: !best.length, ambiguous: best.length > 1 };
 }
 
-export const slug = (s: string) => fold(s).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48);
+/** An engine key: lowercase letters, digits and «_», starting with a letter (^[a-z][a-z0-9_]*$). */
+export const slug = (s: string) => { const k = fold(s).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48); return k && !/^[a-z]/.test(k) ? `c_${k}`.slice(0, 48) : k; };
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("es-ES")} ${n === 1 ? one : many}`;
 
 /** A value as the column stores it ("1.234,50" → 1234.5; "31/12/2026" → "2026-12-31"; "sí" → true), or an error. */
