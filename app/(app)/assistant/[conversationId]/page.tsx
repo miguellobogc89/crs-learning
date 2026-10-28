@@ -5,6 +5,8 @@ import { Bot, User } from "lucide-react";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { ChatComposer } from "@/components/assistant/chat-composer";
+import { DataBlockView } from "@/components/chat/data-block";
+import { extractDataBlocks } from "@/lib/assistant/data/tools";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 
 export default async function AssistantConversationPage({
@@ -88,9 +90,14 @@ export default async function AssistantConversationPage({
                   )}
                 </div>
 
-                <p className="whitespace-pre-wrap text-sm leading-6">
-                  {message.content}
-                </p>
+                <div className="min-w-0">
+                  <p className="whitespace-pre-wrap text-sm leading-6">
+                    {message.content}
+                  </p>
+                  {extractDataBlocks(message.sources_json).map((block) => (
+                    <DataBlockView key={block.id} block={block} />
+                  ))}
+                </div>
               </div>
             </div>
           ))}

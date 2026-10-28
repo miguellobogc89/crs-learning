@@ -24,6 +24,7 @@ import type { KeyboardEvent } from "react";
 
 import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/components/chat/chat-message";
+import type { DataBlock } from "@/lib/assistant/data/tools";
 
 type ChatSource = {
   citationId: string;
@@ -42,6 +43,7 @@ type ChatMessageData = {
   role: "user" | "assistant";
   content: string;
   sources: ChatSource[];
+  dataBlocks?: DataBlock[];
 };
 
 type ChatConversation = {
@@ -76,9 +78,9 @@ type SendMessageResponse = {
 };
 
 const suggestions = [
+  "¿Cuánto he gastado por proveedor este año?",
+  "Muéstrame el gasto por mes y categoría",
   "¿Cuál es el proceso de alta de proveedores?",
-  "Resume las políticas de teletrabajo",
-  "Busca contradicciones en Compras",
 ];
 
 export function FloatingChat({

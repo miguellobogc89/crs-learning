@@ -1,5 +1,6 @@
 // app/api/assistant/[conversationId]/route.ts
 
+import { extractDataBlocks } from "@/lib/assistant/data/tools";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
@@ -72,6 +73,7 @@ export async function GET(
           content: message.content,
           createdAt: message.created_at,
           sources: extractSources(message.sources_json),
+          dataBlocks: extractDataBlocks(message.sources_json),
           feedback:
             message.chat_message_feedback[0]?.rating ?? null,
         }),

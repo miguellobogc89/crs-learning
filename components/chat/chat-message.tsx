@@ -14,6 +14,8 @@ import {
   ThumbsUp,
 } from "lucide-react";
 import { rateChatMessageAction } from "@/app/actions/chat-message-feedback.actions";
+import { DataBlockView } from "@/components/chat/data-block";
+import type { DataBlock } from "@/lib/assistant/data/tools";
 
 type ChatSource = {
   citationId: string;
@@ -32,6 +34,7 @@ type ChatMessageData = {
   role: "user" | "assistant";
   content: string;
   sources: ChatSource[];
+  dataBlocks?: DataBlock[];
   feedback?: "positive" | "negative" | null;
 };
 
@@ -111,7 +114,7 @@ async function handleFeedback(
                 text-foreground
               `
             : `
-                flex max-w-[82%] gap-3
+                flex ${message.dataBlocks?.length ? "w-full min-w-0" : "max-w-[82%]"} gap-3
                 rounded-2xl rounded-bl-md
                 border border-border
                 bg-card px-4 py-3
@@ -138,6 +141,10 @@ async function handleFeedback(
               text={message.content}
               sources={message.sources}
             />
+
+            {message.dataBlocks?.map((block) => (
+              <DataBlockView key={block.id} block={block} />
+            ))}
 
             <ConsultedArticles
               message={message}

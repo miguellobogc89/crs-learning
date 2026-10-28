@@ -2,6 +2,11 @@
  
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import type {
+  Response as ModelResponse,
+  ResponseFunctionToolCall,
+  ResponseInput,
+} from "openai/resources/responses/responses";
 
 import { auth } from "@/auth";
 import { buildChatSystemPrompt } from "@/lib/ai/assistant/assistant-personality";
@@ -15,6 +20,19 @@ import { recordResourceAccess } from "@/lib/services/resource-access.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { resolveRetrievalQuery } from "@/lib/ai/assistant/resolve-retrieval-query";
 import { getOpenAIModel } from "@/lib/ai/openai";
+import {
+  DATA_TOOL_NAME,
+  dataPrompt,
+  dataTool,
+  executeDataTool,
+  extractDataBlocks,
+  loadWorkspaceTables,
+  type DataBlock,
+} from "@/lib/assistant/data/tools";
+import type { Table } from "@/lib/analytics/compute";
+
+/** Tool rounds per message (each round can run several queries). */
+const MAX_TOOL_ROUNDS = 6;
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -134,11 +152,21 @@ export async function POST(request: Request) {
       select: {
         role: true,
         content: true,
+        sources_json: true,
       },
     });
 
+  // Data shown in earlier answers is named in the history, so follow-ups ("¿y de esos…?") keep their context.
   const conversationHistory =
-    previousMessages.reverse();
+    previousMessages.reverse().map((item: { role: string; content: string; sources_json: unknown }) => {
+      const shown = extractDataBlocks(item.sources_json);
+      return {
+        role: item.role,
+        content: shown.length
+          ? `${item.content}\n\n[Datos mostrados: ${shown.map((b) => `«${b.titulo}» (${b.total} filas, tablas ${b.tablas.join(" + ")})`).join("; ")}]`
+          : item.content,
+      };
+    });
 
   const spaces =
     await listAccessibleKnowledgeSpaces(userId);
@@ -149,21 +177,30 @@ export async function POST(request: Request) {
       history: conversationHistory,
     });
 
-const retrievedKnowledge =
-  await retrieveKnowledge(
+const [retrievedKnowledge, tables] = await Promise.all([
+  retrieveKnowledge(
     userId,
     activeWorkspace.id,
     retrievalQuery,
-  );
+  ),
+  // The workspace's tables (read-only). Without them the assistant still answers from documents.
+  loadWorkspaceTables(activeWorkspace.id).catch((error: unknown): Table[] => {
+    console.warn("[assistant] tablas no disponibles:", error instanceof Error ? error.message : error);
+    return [];
+  }),
+]);
 
   const messageSources = buildMessageSources(
     retrievedKnowledge.items,
   );
 
-  const systemPrompt = buildSystemPrompt({
-    spaces,
-    contextText: retrievedKnowledge.contextText,
-  });
+  const systemPrompt = [
+    buildSystemPrompt({
+      spaces,
+      contextText: retrievedKnowledge.contextText,
+    }),
+    tables.length ? dataPrompt(tables) : "",
+  ].filter(Boolean).join("\n\n");
 
 console.log("AI INPUT DEBUG", {
   systemPromptChars: systemPrompt.length,
@@ -179,9 +216,8 @@ console.log("AI INPUT DEBUG", {
 
 
 
-  const response = await openai.responses.create({
-    model: getOpenAIModel(),
-    input: [
+  // The model may query the data (one or more rounds) before answering.
+  let input: ResponseInput = [
       {
         role: "system",
         content: systemPrompt,
@@ -198,11 +234,40 @@ console.log("AI INPUT DEBUG", {
           message,
         }),
       },
-    ],
-  });
+    ];
+  const dataBlocks: DataBlock[] = [];
+  let dataQueries = 0;
+  let tokensInput = 0;
+  let tokensOutput = 0;
+  let response: ModelResponse;
+  for (let round = 0; ; round += 1) {
+    const useTools = tables.length > 0 && round < MAX_TOOL_ROUNDS;
+    response = await openai.responses.create({
+      model: getOpenAIModel(),
+      input,
+      stream: false,
+      ...(useTools ? { tools: [dataTool] } : {}),
+    });
+    tokensInput += response.usage?.input_tokens ?? 0;
+    tokensOutput += response.usage?.output_tokens ?? 0;
+    const calls = response.output.filter(
+      (item): item is ResponseFunctionToolCall => item.type === "function_call",
+    );
+    if (!calls.length || !useTools) break;
+    const outputs = calls.map((call) => {
+      if (call.name !== DATA_TOOL_NAME) {
+        return { type: "function_call_output" as const, call_id: call.call_id, output: JSON.stringify({ error: `Herramienta desconocida: ${call.name}` }) };
+      }
+      dataQueries += 1;
+      const result = executeDataTool(tables, call.arguments, `D${dataBlocks.length + 1}`);
+      if (result.block) dataBlocks.push(result.block);
+      return { type: "function_call_output" as const, call_id: call.call_id, output: result.output };
+    });
+    input = [...input, ...(response.output as ResponseInput), ...outputs];
+  }
 
   let assistantMessage =
-    response.output_text.trim();
+    response.output_text.trim() || (dataBlocks.length ? "Aquí tienes los datos." : "No he podido generar una respuesta.");
 
   const availableCitationIds =
     retrievedKnowledge.items.map(
@@ -215,7 +280,9 @@ console.log("AI INPUT DEBUG", {
       availableCitationIds,
     );
 
+  // An answer built from the data has no [F…] citations by design: never "repair" it against the documents.
   if (
+    dataQueries === 0 &&
     retrievedKnowledge.items.length > 0 &&
     !citationValidation.isValid
   ) {
@@ -256,11 +323,9 @@ const savedAssistantMessage =
       content: assistantMessage,
       model: getOpenAIModel(),
 
-      tokens_input:
-        response.usage?.input_tokens ?? null,
+      tokens_input: tokensInput || null,
 
-      tokens_output:
-        response.usage?.output_tokens ?? null,
+      tokens_output: tokensOutput || null,
 
       sources_json: {
         retrievedKnowledge: messageSources,
@@ -268,6 +333,8 @@ const savedAssistantMessage =
           finalCitationValidation.citedIds,
         citationsValid:
           finalCitationValidation.isValid,
+        dataBlocks,
+        dataQueries,
       },
     },
   });
@@ -289,6 +356,7 @@ const savedAssistantMessage =
       role: "assistant",
       content: assistantMessage,
       sources: messageSources,
+      dataBlocks,
     },
   });
 }
