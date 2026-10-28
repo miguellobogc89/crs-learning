@@ -98,7 +98,7 @@ async function handleFeedback(
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-slate-100 px-3.5 py-2 text-sm leading-6 text-slate-900">
+        <p className="max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-slate-100 px-3 py-1.5 text-sm leading-6 text-slate-900">
           {message.content}
         </p>
       </div>
@@ -124,8 +124,8 @@ async function handleFeedback(
   );
 
   return (
-    <div className="group flex gap-2.5">
-      <img src="/email/logo-mark.png" alt="" width={24} height={24} className="mt-0.5 size-6 shrink-0 rounded-md" />
+    <div className="group flex gap-2">
+      <img src="/email/logo-mark.png" alt="" width={20} height={20} className="mt-0.5 size-5 shrink-0 rounded-[5px]" />
       <div className="min-w-0 flex-1">
         <AssistantMessageContent text={message.content} sources={message.sources} />
 

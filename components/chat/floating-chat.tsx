@@ -116,6 +116,9 @@ const [messages, setMessages] = useState<
   const [errorMessage, setErrorMessage] =
     useState<string>();
 
+  const scrollAreaRef =
+    useRef<HTMLDivElement>(null);
+
   const messagesEndRef =
     useRef<HTMLDivElement>(null);
 
@@ -138,10 +141,9 @@ useEffect(() => {
     return;
   }
 
-  messagesEndRef.current?.scrollIntoView({
-    behavior: "smooth",
-    block: "end",
-  });
+  // Scroll only the conversation (never the page behind the panel).
+  const area = scrollAreaRef.current;
+  if (area) area.scrollTo({ top: area.scrollHeight, behavior: "smooth" });
 }, [
   isOpen,
   messages,
@@ -497,8 +499,8 @@ useEffect(() => {
           )}
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className={cn("mx-auto flex min-h-full w-full flex-col px-4 py-4", isExpanded && "max-w-3xl px-6")}>
+        <div ref={scrollAreaRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+          <div className={cn("mx-auto flex min-h-full w-full flex-col px-3 py-3", isExpanded && "max-w-[920px] px-5")}>
             {isLoadingConversation ? (
               <div className="flex flex-1 items-center justify-center">
                 <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -520,8 +522,8 @@ useEffect(() => {
           </div>
         </div>
 
-        <footer className="shrink-0 border-t border-slate-100 bg-white px-3 pb-2 pt-3">
-          <div className={cn("mx-auto w-full", isExpanded && "max-w-3xl")}>
+        <footer className="shrink-0 border-t border-slate-100 bg-white px-3 pb-2 pt-2.5">
+          <div className={cn("mx-auto w-full", isExpanded && "max-w-[920px] px-2")}>
             {errorMessage && (
               <div className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{errorMessage}</div>
             )}
@@ -602,8 +604,8 @@ function EmptyChat({
 
 function TypingIndicator() {
   return (
-    <div className="flex items-center gap-2.5">
-      <img src="/email/logo-mark.png" alt="" width={24} height={24} className="size-6 shrink-0 rounded-md" />
+    <div className="flex items-center gap-2">
+      <img src="/email/logo-mark.png" alt="" width={20} height={20} className="size-5 shrink-0 rounded-[5px]" />
       <div className="flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-2.5">
         <span className="size-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]" />
         <span className="size-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]" />

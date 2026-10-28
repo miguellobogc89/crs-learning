@@ -32,7 +32,7 @@ export function DataBlockView({ block }: { block: DataBlock }) {
     a.href = url; a.download = `${block.titulo.replace(/[^\p{L}\p{N} _-]+/gu, "").trim() || "datos"}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
-  return <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+  return <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
     <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
       <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-[#0A58FF]/10 text-[#0A58FF]"><Table2 className="size-3.5" /></span>
       <p className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-900">{block.titulo}</p>

@@ -59,7 +59,7 @@ export function ProposalCard({ messageId, proposal: initial }: { messageId: stri
   }
 
   const tables = proposal.tablas.filter(t => t.startsWith("tabla:") || t.startsWith("plantilla:") || ["facturas", "compras", "empresas", "suministros"].includes(t));
-  return <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+  return <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
     <div className="flex items-start gap-3 border-b border-slate-100 px-4 py-3">
       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#0A58FF]/10 text-[#0A58FF]"><Wand2 className="size-4" /></span>
       <div className="min-w-0 flex-1">
