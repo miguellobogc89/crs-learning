@@ -314,7 +314,7 @@ console.log("AI INPUT DEBUG", {
     input = [...input, ...(response.output as ResponseInput), ...outputs];
   }
 
-  console.info("[assistant] mensaje", JSON.stringify({ tablas: tables.length, herramientas: dataQueries, propuestas: proposals.length, datos: dataBlocks.length }));
+  console.info("[assistant] mensaje", JSON.stringify({ modelo: assistantModel(), tablas: tables.length, herramientas: dataQueries, propuestas: proposals.length, datos: dataBlocks.length }));
   // Never leave the person waiting for a card that does not exist.
   if (!proposals.length && claimsProposal(response.output_text)) {
     console.warn("[assistant] la respuesta habla de una propuesta que no existe", JSON.stringify({ errores: lastProposalErrors.slice(0, 3) }));
