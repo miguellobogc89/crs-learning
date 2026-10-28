@@ -80,3 +80,29 @@ test('clear refusals: no rows or plain columns in tables not created with the as
  assert.equal(p.planChanges(ctx,[]).ok,false);
  assert.deepEqual([p.coerce('0,5','decimal'),p.coerce('3','integer'),p.coerce('2,5','integer'),p.coerce('sí','boolean'),p.coerce('2026-02-30','date')].map(x=>x.ok?x.value:'X'),[0.5,3,'X',true,'X']);
 });
+
+test('link by similar names (invoice descriptions are never exactly the ingredient) and query results mapped by name',()=>{
+ const m=(n,c,mode)=>p.bestMatch(n,c.map((t,i)=>({id:`c${i}`,text:t})),mode);
+ const catalog=['KEN LECHE ENTERA B·I·BOX 10 LTS.','LECHE ENTERA P6','LECHE ENTERA S/LACT','AZUCAR BLANCA S/25 KGS.','NUECES U.S.A CP/1500 G.','KEN NATA 35% UHT BT/1 LT.'];
+ assert.deepEqual(m('Leche entera',catalog,'contiene'),{id:'c1'},'fewest extra words wins');
+ assert.deepEqual(m('azúcar',catalog,'contiene'),{id:'c3'});
+ assert.deepEqual(m('nata',catalog,'contiene'),{id:'c5'});
+ assert.equal('id' in m('mantequilla',catalog,'parecido'),false);
+ assert.deepEqual(m('nuez',['NUECES U.S.A'],'parecido'),{missing:true,ambiguous:false},'different words are not forced');
+ assert.deepEqual(m('leche',['LECHE A','LECHE B'],'contiene'),{missing:false,ambiguous:true});
+ const cat={key:'tabla:catalogo',label:'Catálogo',description:'',title:'producto',columns:[{key:'producto',label:'Producto'},{key:'proveedor',label:'Proveedor'},{key:'precio',label:'Precio',kind:'money'},{key:'fecha',label:'Fecha',kind:'date'}],
+  rows:catalog.map((t,i)=>({_id:`c${i}`,producto:t,proveedor:'X',precio:1,fecha:null}))};
+ const ctx2={...ctx,tables:[...ctx.tables,cat],types:[...ctx.types,{tableKey:'tabla:catalogo',typeKey:'catalogo',editable:true,fieldTypes:{producto:'text',proveedor:'text',precio:'decimal',fecha:'date'}}],typeKeys:[...ctx.typeKeys,'catalogo']};
+ const plan=p.planChanges(ctx2,[
+  {op:'añadir_columnas',tabla:'plantilla:R',columnas:[{columna:'producto',nombre:'Producto',tipo:'enlace',tabla_enlazada:'tabla:catalogo'}]},
+  {op:'enlazar',tabla:'plantilla:R',columna:'producto',por:{columna_origen:'ingrediente',columna_destino:'producto',modo:'contiene'}},
+ ]);
+ assert.equal(plan.ok,true,plan.errores.join(' | '));
+ assert.deepEqual(plan.acciones.filter(a=>a.k==='enlazar').map(a=>[a.ref,a.destino]),[['r2','c1']],'Leche entera → LECHE ENTERA P6; jamón and mantequilla not in this catalog');
+ // volcar_consulta without «columnas»: result columns named like the table's.
+ const v=p.planChanges(ctx,[catalogo[0],{op:'volcar_consulta',tabla:'catalogo',consulta:{tabla:'compras',agrupar_por:['producto','proveedor'],calcular:[{funcion:'ultimo',columna:'precio',segun:'fecha',nombre:'precio'},{funcion:'max',columna:'fecha',nombre:'ultima_compra'}]},clave:['producto','proveedor']}]);
+ assert.equal(v.ok,true,v.errores.join(' | '));
+ assert.equal(v.cifras.filas_nuevas,3);
+ const bad=p.planChanges(ctx,[catalogo[0],{op:'volcar_consulta',tabla:'catalogo',consulta:{tabla:'compras',calcular:[{funcion:'cuenta'}]}}]);
+ assert.match(bad.errores[0],/ninguna columna del resultado/);
+});

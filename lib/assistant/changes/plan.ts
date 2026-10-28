@@ -22,11 +22,13 @@ export type Operation =
   | { op: "crear_tabla"; tabla: string; nombre: string; descripcion?: string; titulo: string; columnas: ColumnDef[] }
   | { op: "añadir_columnas"; tabla: string; columnas: ColumnDef[] }
   | { op: "crear_filas"; tabla: string; filas: Record<string, CellValue>[]; clave?: string[] }
-  | { op: "volcar_consulta"; tabla: string; consulta: Query; columnas: Record<string, string>; clave?: string[] }
+  | { op: "volcar_consulta"; tabla: string; consulta: Query; columnas?: Record<string, string> | string[]; clave?: string[] }
   | { op: "actualizar_filas"; tabla: string; donde: Filter[]; valores: Record<string, CellValue> }
-  | { op: "enlazar"; tabla: string; columna: string; pares?: { fila: string; con: string }[]; por?: { columna_origen: string; columna_destino: string }; solo_sin_enlace?: boolean }
+  | { op: "enlazar"; tabla: string; columna: string; pares?: { fila: string; con: string }[]; por?: { columna_origen: string; columna_destino: string; modo?: MatchMode }; solo_sin_enlace?: boolean }
   | { op: "borrar_filas"; tabla: string; donde: Filter[] };
 
+/** How «enlazar por» compares names: exactly, all words of the origin inside the destination, or most of them. */
+export type MatchMode = "exacto" | "contiene" | "parecido";
 export type EngineType = "text" | "long_text" | "decimal" | "integer" | "date" | "boolean";
 /** A row id: a saved record, or `nuevo:<n>` for a row this same proposal creates. */
 export type RowRef = string;
@@ -57,6 +59,32 @@ const TYPE_OF: Record<ColumnType, EngineType | null> = { texto: "text", texto_la
 const KIND_OF: Record<EngineType, Column["kind"]> = { text: "text", long_text: "text", decimal: "number", integer: "number", date: "date", boolean: "boolean" };
 
 const fold = (v: unknown) => String(v ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/\s+/g, " ");
+const STOP = new Set(["de", "del", "la", "el", "los", "las", "con", "sin", "y", "en", "para", "al", "a", "un", "una"]);
+/** Meaningful words of a name (no articles, no bare numbers). */
+export const words = (v: unknown) => fold(v).split(/[^a-z0-9]+/).filter(w => w.length >= 2 && !STOP.has(w) && !/^\d+$/.test(w));
+const sameWord = (a: string, b: string) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)));
+/**
+ * The destination that best matches a name: "contiene" needs every word of the name in the destination; "parecido"
+ * at least 60% of them. Among candidates, the one with the most shared and fewest extra words; a tie is ambiguous.
+ */
+export function bestMatch(name: unknown, candidates: { id: string; text: unknown }[], mode: Exclude<MatchMode, "exacto">): { id: string } | { missing: boolean; ambiguous: boolean } {
+  const source = words(name);
+  if (!source.length) return { missing: true, ambiguous: false };
+  let best: { id: string; score: number }[] = [];
+  for (const c of candidates) {
+    const target = words(c.text);
+    if (!target.length) continue;
+    const shared = source.filter(w => target.some(t => sameWord(w, t))).length;
+    const coverage = shared / source.length;
+    if (mode === "contiene" ? coverage < 1 : coverage < 0.6) continue;
+    // Shared words first, then fewest extra words, then the shortest name (the plain version of the product).
+    const score = coverage * 100 - (target.length - shared) - fold(c.text).length / 1000;
+    if (!best.length || score > best[0].score) best = [{ id: c.id, score }];
+    else if (score === best[0].score && !best.some(b => b.id === c.id)) best.push({ id: c.id, score });
+  }
+  return best.length === 1 ? { id: best[0].id } : { missing: !best.length, ambiguous: best.length > 1 };
+}
+
 export const slug = (s: string) => fold(s).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48);
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("es-ES")} ${n === 1 ? one : many}`;
 
@@ -289,14 +317,22 @@ export function planChanges(ctx: PlanContext, operations: Operation[]): Plan {
       case "volcar_consulta": {
         const w = get(op.tabla);
         if (!w) { fail(i, `no existe la tabla «${op.tabla}».`); break; }
-        if (!op.columnas || typeof op.columnas !== "object" || !Object.keys(op.columnas).length) { fail(i, "falta «columnas» (columna de destino → columna del resultado)."); break; }
         let result;
         try { result = runQuery([...work.values()].map(x => x.table), op.consulta, { maxLimit: MAX_ROWS_PER_OP }); }
         catch (e) { if (e instanceof QueryError) { fail(i, `la consulta falla: ${e.message}`); break; } throw e; }
         if (result.truncado) { fail(i, `la consulta da ${result.total} filas; el máximo es ${MAX_ROWS_PER_OP}.`); break; }
-        const missing = Object.values(op.columnas).filter(src => !result.columnas.some(c => c.key === src));
+        // Mapping destination → result column. Omitted (or a list of names): columns with the same name.
+        const own = (k: string) => w.table.columns.find(c => c.key === k || c.key === slug(k));
+        let mapping: Record<string, string>;
+        if (op.columnas && !Array.isArray(op.columnas) && typeof op.columnas === "object" && Object.keys(op.columnas).length) mapping = op.columnas;
+        else {
+          const names = Array.isArray(op.columnas) && op.columnas.length ? op.columnas.map(String) : result.columnas.map(c => c.key);
+          mapping = Object.fromEntries(names.filter(n => own(n) && result.columnas.some(c => c.key === n)).map(n => [own(n)!.key, n]));
+        }
+        if (!Object.keys(mapping).length) { fail(i, `ninguna columna del resultado (${result.columnas.map(c => c.key).join(", ")}) coincide con las de ${label(w)} (${w.table.columns.map(c => c.key).join(", ")}): indica «columnas» {destino: columna_del_resultado} o pon «nombre» en «calcular» igual que la columna de destino.`); break; }
+        const missing = Object.values(mapping).filter(src => !result.columnas.some(c => c.key === src));
         if (missing.length) { fail(i, `el resultado no tiene ${missing.map(m => `«${m}»`).join(", ")} (tiene ${result.columnas.map(c => c.key).join(", ")}).`); break; }
-        upsertRows(i, w, result.filas.map(r => Object.fromEntries(Object.entries(op.columnas).map(([dest, src]) => [dest, r[src] ?? null]))), op.clave, "Datos de la consulta");
+        upsertRows(i, w, result.filas.map(r => Object.fromEntries(Object.entries(mapping).map(([dest, src]) => [dest, r[src] ?? null]))), op.clave, "Datos de la consulta");
         break;
       }
       case "actualizar_filas": {
@@ -330,14 +366,19 @@ export function planChanges(ctx: PlanContext, operations: Operation[]): Plan {
           const src = op.por.columna_origen, dst = op.por.columna_destino;
           if (!w.table.columns.some(c => c.key === src)) { fail(i, `${label(w)} no tiene la columna «${src}».`); break; }
           if (!target.table.columns.some(c => c.key === dst)) { fail(i, `${label(target)} no tiene la columna «${dst}».`); break; }
+          const mode = op.por.modo ?? "exacto";
           const index = new Map<string, string[]>();
           for (const r of target.table.rows) { const k = fold(r[dst]); if (k && typeof r._id === "string") index.set(k, [...(index.get(k) ?? []), r._id]); }
+          const candidates = target.table.rows.filter(r => typeof r._id === "string").map(r => ({ id: r._id as string, text: r[dst] }));
           for (const r of pending) {
-            const ids = index.get(fold(r[src])) ?? [];
-            if (ids.length !== 1) { if (ids.length) many += 1; else none += 1; continue; }
-            if (r[`_link_${columna}`] === ids[0]) continue;
-            if (ids[0] === r._id) continue;
-            setLink(w, columna, r, ids[0]); linked += 1; touched.push(r);
+            const exact = index.get(fold(r[src])) ?? [];
+            let id: string | null = exact.length === 1 ? exact[0] : null;
+            if (!id && mode !== "exacto" && exact.length === 0) {
+              const m = bestMatch(r[src], candidates, mode);
+              if ("id" in m) id = m.id; else { if (m.ambiguous) many += 1; else none += 1; continue; }
+            } else if (!id) { if (exact.length) many += 1; else none += 1; continue; }
+            if (r[`_link_${columna}`] === id || id === r._id) continue;
+            setLink(w, columna, r, id); linked += 1; touched.push(r);
           }
         } else if (Array.isArray(op.pares) && op.pares.length) {
           const own = byTitle(w);

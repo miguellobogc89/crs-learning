@@ -116,7 +116,7 @@ export const changesTool = {
             nombre: { type: "string", description: "crear_tabla: nombre visible." },
             descripcion: { type: "string", description: "crear_tabla: para qué sirve." },
             titulo: { type: "string", description: "crear_tabla: la columna de texto que nombra cada fila (la que se usa para enlazar con ella)." },
-            columnas: { description: "crear_tabla / añadir_columnas: lista de columnas. volcar_consulta: objeto {columna_destino: columna_del_resultado}.", anyOf: [{ type: "array", items: COLUMN_SCHEMA }, { type: "object" }] },
+            columnas: { description: "crear_tabla / añadir_columnas: lista de columnas. volcar_consulta: objeto {columna_destino: columna_del_resultado}; si se omite, se usan las columnas del resultado que se llaman igual que las de la tabla (pon en «calcular» el «nombre» de la columna de destino).", anyOf: [{ type: "array", items: COLUMN_SCHEMA }, { type: "object" }] },
             filas: { type: "array", items: { type: "object" }, description: "crear_filas: filas {columna: valor}. En columnas de enlace, el nombre de la fila enlazada." },
             clave: { type: "array", items: { type: "string" }, description: "crear_filas / volcar_consulta: columnas que identifican una fila; si ya existe, se actualiza en vez de duplicarse." },
             consulta: { type: "object", description: "volcar_consulta: una consulta como la de consultar_datos (puede agrupar, calcular «ultimo» precio, cruzar…)." },
@@ -124,7 +124,9 @@ export const changesTool = {
             valores: { type: "object", description: "actualizar_filas: {columna: valor nuevo}." },
             columna: { type: "string", description: "enlazar: la columna de enlace." },
             pares: { type: "array", items: { type: "object", properties: { fila: { type: "string" }, con: { type: "string" } } }, description: "enlazar: pares {fila: nombre de la fila, con: nombre de la fila enlazada}." },
-            por: { type: "object", properties: { columna_origen: { type: "string" }, columna_destino: { type: "string" } }, description: "enlazar: enlaza automáticamente cuando el valor de columna_origen coincide con columna_destino de la tabla enlazada (sin distinguir mayúsculas ni tildes)." },
+            por: { type: "object", properties: { columna_origen: { type: "string" }, columna_destino: { type: "string" },
+              modo: { type: "string", enum: ["exacto", "contiene", "parecido"], description: "exacto: mismo texto. contiene: todas las palabras del origen están en el destino (p. ej. «leche entera» → «LECHE ENTERA P6»). parecido: la mayoría de las palabras. Para nombres escritos a mano frente a descripciones de factura usa «contiene» y, para los que queden sin pareja, «parecido»." } },
+              description: "enlazar: enlaza automáticamente comparando columna_origen con columna_destino de la tabla enlazada (sin distinguir mayúsculas ni tildes)." },
             solo_sin_enlace: { type: "boolean", description: "enlazar: no toca las filas que ya tienen enlace." },
           },
         },
@@ -151,7 +153,15 @@ Normas para los datos:
 
 Cambios en los datos (herramienta «${CHANGES_TOOL_NAME}»):
 - Puedes proponer reorganizar los datos: crear tablas nuevas (p. ej. un catálogo de productos por proveedor con su último precio, sacado de las compras con «volcar_consulta»), añadir columnas que enlazan una tabla con otra (p. ej. cada ingrediente de una receta con su producto del catálogo) y crear, actualizar, enlazar o borrar filas.
+- Si el usuario pide crear o cambiar algo, prepara la propuesta directamente con criterios razonables: NO pidas confirmación antes; la tarjeta con «Aplicar» ya es la confirmación. Si algo es dudoso, decídelo y explícalo en «explicacion».
 - Antes de proponer, consulta los datos para conocer los valores reales. Usa «clave» para que repetir la propuesta actualice en vez de duplicar.
+- El último precio pagado se obtiene con «calcular»: {funcion: "ultimo", columna: "precio", segun: "fecha"}; la fecha de esa compra con {funcion: "max", columna: "fecha"}.
+- Ejemplo completo (catálogo desde las compras + enlace de los ingredientes de una tabla de recetas):
+  [{"op":"crear_tabla","tabla":"catalogo","nombre":"Catálogo de productos","titulo":"producto","columnas":[{"columna":"producto","nombre":"Producto","tipo":"texto"},{"columna":"proveedor","nombre":"Proveedor","tipo":"texto"},{"columna":"precio","nombre":"Último precio","tipo":"importe"},{"columna":"ultima_compra","nombre":"Última compra","tipo":"fecha"}]},
+   {"op":"volcar_consulta","tabla":"catalogo","consulta":{"tabla":"compras","agrupar_por":["producto","proveedor"],"calcular":[{"funcion":"ultimo","columna":"precio","segun":"fecha","nombre":"precio"},{"funcion":"max","columna":"fecha","nombre":"ultima_compra"}]},"clave":["producto","proveedor"]},
+   {"op":"añadir_columnas","tabla":"<clave de la tabla de recetas>","columnas":[{"columna":"producto_catalogo","nombre":"Producto del catálogo","tipo":"enlace","tabla_enlazada":"tabla:catalogo"}]},
+   {"op":"enlazar","tabla":"<clave de la tabla de recetas>","columna":"producto_catalogo","por":{"columna_origen":"<columna del ingrediente>","columna_destino":"producto","modo":"contiene"}}]
+  Después comenta cuántos ingredientes quedaron sin pareja; puedes proponer enlazarlos con «parecido» o con «pares» concretos.
 - Solo las tablas creadas con el asistente admiten filas y columnas normales; a las de documentos y a las básicas solo se les pueden añadir columnas de enlace.
 - Proponer NO aplica nada. Nunca digas que los cambios están hechos: di que la propuesta está lista para revisar y que se aplica con el botón «Aplicar» de la tarjeta que aparece bajo tu respuesta (y se puede deshacer).
 - Una propuesta SOLO existe si en esta respuesta has llamado a «${CHANGES_TOOL_NAME}» y ha devuelto «propuesta mostrada». Si no la has llamado, no hables de ninguna propuesta: llámala.
