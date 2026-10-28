@@ -49,6 +49,18 @@ recetas con él» → `crear_tabla` + `volcar_consulta` (agrupar por producto y 
 + `añadir_columnas` (enlace en Recetas) + `enlazar` por nombre. Después, el coste de una receta es una consulta con
 `formulas` (cantidad × precio) cruzando con el catálogo.
 
+## Construcción por pasos
+
+- El asistente sigue un método general (no recetas por caso): objetivo → qué hace falta → tablas puente (resumen o
+  catálogo, equivalencias, maestro) → calidad de datos (duplicados: el más reciente; ofertas: `precio_pagado` =
+  importe ÷ cantidad; formatos y unidades; datos que faltan) → construcción por pasos.
+- Para objetivos grandes explica el camino y propone solo el paso actual (`pasos_del_objetivo`, `paso_actual`); la
+  tarjeta muestra «Paso N de M».
+- Al aplicar (o deshacer), la app publica en la conversación un mensaje de seguimiento (`followUpText`): qué se hizo,
+  enlaces a las tablas, filas por completar y el siguiente paso («Dime "adelante"»). El chat lo recibe con el evento
+  `crs:assistant-message`.
+- `calcular` admite `del_minimo` / `del_maximo` (p. ej. el proveedor más barato) además de `ultimo` / `primero`.
+
 ## El asistente como constructor
 
 La app se construye a través del asistente, siempre de forma coherente y guiando a la persona:

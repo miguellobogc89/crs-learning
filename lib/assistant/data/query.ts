@@ -10,7 +10,7 @@ import type { CellValue, Column, Table } from "@/lib/analytics/compute";
  */
 export type FilterOp = "=" | "!=" | "contiene" | "no_contiene" | ">" | ">=" | "<" | "<=" | "entre" | "en" | "vacio" | "no_vacio";
 export type Filter = { columna: string; op: FilterOp; valor?: string | number | boolean | null; valores?: (string | number)[] };
-export type AggregateFn = "suma" | "media" | "cuenta" | "cuenta_distintos" | "min" | "max" | "ultimo" | "primero";
+export type AggregateFn = "suma" | "media" | "cuenta" | "cuenta_distintos" | "min" | "max" | "ultimo" | "primero" | "del_minimo" | "del_maximo";
 /** A column computed row by row: a op b (b another column or a fixed value). E.g. cantidad × precio. */
 export type Formula = { nombre: string; a: string; op: "+" | "-" | "*" | "/"; b?: string; valor?: number; importe?: boolean };
 export type Query = {
@@ -168,10 +168,11 @@ export function runQuery(tables: Table[], q: Query, opts: { maxLimit?: number; k
     const aggs = (q.calcular?.length ? q.calcular : [{ funcion: "cuenta" as const }]).map((a, i) => {
       const c = a.columna ? column(a.columna) : undefined;
       if (a.funcion !== "cuenta" && !c) throw new QueryError(`«${a.funcion}» necesita una columna.`);
-      const by = a.funcion === "ultimo" || a.funcion === "primero" ? (a.segun ? column(a.segun) : undefined) : undefined;
-      if ((a.funcion === "ultimo" || a.funcion === "primero") && !by) throw new QueryError(`«${a.funcion}» necesita «segun» (una columna de fecha).`);
+      const ranked = ["ultimo", "primero", "del_minimo", "del_maximo"].includes(a.funcion);
+      const by = ranked ? (a.segun ? column(a.segun) : undefined) : undefined;
+      if (ranked && !by) throw new QueryError(`«${a.funcion}» necesita «segun» (la columna que decide la fila: una fecha para último/primero, un precio para del_minimo/del_maximo).`);
       if ((a.funcion === "suma" || a.funcion === "media") && c && c.kind !== "money" && c.kind !== "number") throw new QueryError(`«${a.funcion}» solo vale para importes o números («${c.label}» no lo es).`);
-      const verb = { suma: "Suma", media: "Media", cuenta: "Nº de filas", cuenta_distintos: "Distintos", min: "Mínimo", max: "Máximo", ultimo: "Último", primero: "Primero" }[a.funcion];
+      const verb = { suma: "Suma", media: "Media", cuenta: "Nº de filas", cuenta_distintos: "Distintos", min: "Mínimo", max: "Máximo", ultimo: "Último", primero: "Primero", del_minimo: "Del mínimo", del_maximo: "Del máximo" }[a.funcion];
       let key = a.nombre?.trim() || (c ? `${a.funcion}_${c.key}` : "cuenta");
       while (used.has(key)) key = `${key}_${i + 1}`;
       used.add(key);
@@ -243,10 +244,12 @@ function matches(value: CellValue, f: Filter, kind?: Column["kind"]): boolean {
 }
 
 function aggregate(rows: Record<string, CellValue>[], fn: AggregateFn, c?: Resolved, by?: Resolved): CellValue {
-  if (fn === "ultimo" || fn === "primero") {
-    const dated = rows.filter(r => !empty(by!.get(r)) && !empty(c!.get(r)));
-    if (!dated.length) return null;
-    const pick = dated.reduce((best, r) => { const d = compare(by!.get(r), by!.get(best)); return fn === "ultimo" ? (d > 0 ? r : best) : (d < 0 ? r : best); });
+  // The value of `c` in the row with the highest/lowest `by` (latest date, lowest price…).
+  if (fn === "ultimo" || fn === "primero" || fn === "del_minimo" || fn === "del_maximo") {
+    const ranked = rows.filter(r => !empty(by!.get(r)) && !empty(c!.get(r)));
+    if (!ranked.length) return null;
+    const highest = fn === "ultimo" || fn === "del_maximo";
+    const pick = ranked.reduce((best, r) => { const d = compare(by!.get(r), by!.get(best)); return highest ? (d > 0 ? r : best) : (d < 0 ? r : best); });
     return c!.get(pick);
   }
   if (fn === "cuenta") return c ? rows.filter(r => !empty(c.get(r))).length : rows.length;

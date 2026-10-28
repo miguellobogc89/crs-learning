@@ -97,3 +97,15 @@ test('updating saved rows keeps the old values for undo; links replaced and rest
  assert.equal(t.engine_records.find(r=>r.id==='c2').status,'active');
  await assert.rejects(ap.applyActions({workspaceId:'W',userId:'U',actions:[{k:'actualizar',tabla:'tabla:catalogo',ref:'c1',valores:{precio:'mucho'}}],tables:[{tableKey:'tabla:catalogo',typeId:cat.id,typeKey:'catalogo'}],links:[]}),/Valores no válidos/);
 });
+
+test('after «Aplicar» the assistant says what was done, where to see it, what to complete and the next step',()=>{
+ const stub=new Proxy({},{get:()=>()=>{}});
+ const svc=load('lib/assistant/changes/service.ts',{'node:crypto':{randomUUID},'@prisma/client':{Prisma:{}},'@/lib/prisma':{prisma:stub},'@/lib/analytics/data':{},'@/lib/analytics/compute':{},'./plan':{},'./apply':{ApplyError:Error}});
+ const text=svc.followUpText({titulo:'Catálogo de precios por proveedor',pendientes:[{tabla:'tabla:catalogo',nombreTabla:'Catálogo',columna:'formato',nombreColumna:'Contenido del envase',filas:12}],
+  objetivo:{pasos:['Catálogo de precios por proveedor','Productos comparables entre proveedores','Coste y ahorro por receta'],actual:1}},[{key:'tabla:catalogo',label:'Catálogo'}]);
+ assert.match(text,/\*\*Hecho: Catálogo de precios por proveedor\.\*\* Puedes consultarla aquí: \[Catálogo\]\(\/analytics\?view=tablas&table=tabla%3Acatalogo\)/);
+ assert.match(text,/12 filas por completar\*\* en «Contenido del envase»/);
+ assert.match(text,/paso 2 de 3: Productos comparables entre proveedores\*\*\. Dime «adelante»/);
+ assert.match(svc.followUpText({titulo:'X',objetivo:{pasos:['a','b'],actual:2}},[]),/terminado todos los pasos/);
+ assert.match(svc.followUpText({titulo:'X'},[],true),/He deshecho «X»/);
+});

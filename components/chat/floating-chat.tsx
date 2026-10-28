@@ -180,6 +180,17 @@ useEffect(() => {
   };
 }, []);
 
+  // Messages posted by the app itself (e.g. the assistant's follow-up after «Aplicar»).
+  useEffect(() => {
+    function handleAssistantMessage(event: Event) {
+      const detail = (event as CustomEvent<ChatMessageData>).detail;
+      if (!detail?.id) return;
+      setMessages((current) => current.some((m) => m.id === detail.id) ? current : [...current, { ...detail, sources: detail.sources ?? [] }]);
+    }
+    window.addEventListener("crs:assistant-message", handleAssistantMessage);
+    return () => window.removeEventListener("crs:assistant-message", handleAssistantMessage);
+  }, []);
+
   function closeChat() {
     setIsOpen(false);
     setIsExpanded(false);

@@ -171,7 +171,7 @@ export async function POST(request: Request) {
       const proposed = extractProposals(item.sources_json);
       const notes = [
         shown.length ? `[Datos mostrados: ${shown.map((b) => `«${b.titulo}» (${b.total} filas, tablas ${b.tablas.join(" + ")})`).join("; ")}]` : "",
-        proposed.length ? `[Propuestas de cambio: ${proposed.map((p) => `«${p.titulo}» (${p.estado})`).join("; ")}]` : "",
+        proposed.length ? `[Propuestas de cambio: ${proposed.map((p) => `«${p.titulo}» (${p.estado}${p.objetivo ? `, paso ${p.objetivo.actual} de ${p.objetivo.pasos.length}: ${p.objetivo.pasos.join(" → ")}` : ""})`).join("; ")}]` : "",
       ].filter(Boolean);
       return {
         role: item.role,

@@ -114,3 +114,10 @@ test('cross a chain of tables following links by id: recipe → equivalence → 
  assert.deepEqual(missing.filas,[{receta:'Bechamel',ingrediente:'Mantequilla'}],'what still has no product');
  assert.throws(()=>q.runQuery(T,{tabla:'plantilla:R',cruzar:[{tabla:'tabla:catalogo',columna_local:'ingrediente'}]}),/no tiene la columna/);
 });
+
+test('which row holds the minimum: the cheapest supplier of each product, and the real price paid after offers',()=>{
+ const compras={key:'compras',label:'Compras',description:'',columns:[{key:'producto',label:'Producto'},{key:'proveedor',label:'Proveedor'},{key:'precio_pagado',label:'Precio pagado',kind:'money'}],
+  rows:[{producto:'Leche',proveedor:'Mercadona',precio_pagado:0.99},{producto:'Leche',proveedor:'Makro',precio_pagado:0.85},{producto:'Leche',proveedor:'López',precio_pagado:0.92}]};
+ const r=q.runQuery([compras],{tabla:'compras',agrupar_por:['producto'],calcular:[{funcion:'min',columna:'precio_pagado',nombre:'mejor'},{funcion:'del_minimo',columna:'proveedor',segun:'precio_pagado',nombre:'donde'},{funcion:'max',columna:'precio_pagado',nombre:'peor'},{funcion:'del_maximo',columna:'proveedor',segun:'precio_pagado',nombre:'peor_en'}]});
+ assert.deepEqual(r.filas,[{producto:'Leche',mejor:0.85,donde:'Makro',peor:0.99,peor_en:'Mercadona'}]);
+});

@@ -53,6 +53,8 @@ export function ProposalCard({ messageId, proposal: initial }: { messageId: stri
       const json = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(json.error ?? "No se pudo completar.");
       setProposal(json.proposal);
+      // The assistant's follow-up («Hecho… puedes verla aquí… siguiente paso») appears in the open chat.
+      if (json.message) window.dispatchEvent(new CustomEvent("crs:assistant-message", { detail: json.message }));
       if (accion !== "descartar") router.refresh();
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(null); }
@@ -65,6 +67,7 @@ export function ProposalCard({ messageId, proposal: initial }: { messageId: stri
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-semibold text-slate-900">{proposal.titulo}</p>
+          {proposal.objetivo && <span className="rounded-full bg-[#0A58FF]/10 px-2 py-0.5 text-[11px] font-medium text-[#0A58FF]">Paso {proposal.objetivo.actual} de {proposal.objetivo.pasos.length}</span>}
           <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", state.chip)}>{state.label}</span>
         </div>
         {proposal.explicacion && <p className="mt-0.5 text-xs text-slate-500">{proposal.explicacion}</p>}

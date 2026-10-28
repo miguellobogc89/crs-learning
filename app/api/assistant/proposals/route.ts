@@ -16,11 +16,11 @@ export async function POST(request: Request) {
   }
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
   try {
-    const proposal = await decideProposal({ workspaceId: activeWorkspace.id, userId: session.user.id,
+    const { proposal, message } = await decideProposal({ workspaceId: activeWorkspace.id, userId: session.user.id,
       canWrite: activeWorkspace.role === "owner" || activeWorkspace.role === "admin",
       messageId: body.messageId, proposalId: body.proposalId, accion: body.accion as "aplicar" | "descartar" | "deshacer" });
     const { undo: _undo, operaciones: _ops, ...visible } = proposal;
-    return NextResponse.json({ proposal: visible });
+    return NextResponse.json({ proposal: visible, message: message ?? null });
   } catch (error) {
     if (error instanceof ApplyError) return NextResponse.json({ error: error.message }, { status: 409 });
     console.error("[assistant] propuesta:", error);

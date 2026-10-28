@@ -412,15 +412,20 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
   const label = (c: string) => CATEGORIES.find(x => x.key === c)?.label ?? c;
   const doc = (invoiceId: string | undefined) => (invoiceId && data.documents?.[invoiceId]?.fileId) || null;
   switch (key) {
-    case "compras": return { key, label: "Productos comprados", description: "Cada línea de compra con su fecha real (la del ticket cuando la factura agrupa varios).", title: "producto",
+    case "compras": return { key, label: "Productos comprados", description: "Cada línea de compra con su fecha real (la del ticket cuando la factura agrupa varios) y lo que se pagó de verdad por unidad (descuentos y ofertas incluidos).", title: "producto",
       columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "producto", label: "Producto" }, { key: "proveedor", label: "Proveedor", filter: true },
-        { key: "cantidad", label: "Cantidad", kind: "number" }, { key: "precio", label: "Precio unitario", kind: "money" }, { key: "importe", label: "Importe", kind: "money" },
+        { key: "cantidad", label: "Cantidad", kind: "number" }, { key: "unidad", label: "Unidad" }, { key: "precio", label: "Precio unitario", kind: "money" },
+        { key: "descuento", label: "Descuento", kind: "money" }, { key: "importe", label: "Importe", kind: "money" },
+        { key: "precio_pagado", label: "Precio pagado por unidad", kind: "money" }, { key: "referencia", label: "Referencia" },
         { key: "factura", label: "Factura" }, { key: "documento", label: "Documento", kind: "document" }],
       rows: data.lines.map(l => {
         const inv = ix.byId.get(ix.invoiceOfLine.get(l.id) ?? "");
         return { _id: l.id, fecha: str(l.values.source_ticket_date) ?? (inv ? str(inv.values.issue_date) : null), producto: str(l.values.description),
           proveedor: inv ? companyName(ix.byId.get(ix.issuerOf.get(inv.id) ?? "")) : null, cantidad: num(l.values.quantity),
           precio: num(l.values.unit_price_with_tax) ?? num(l.values.unit_price), importe: num(l.values.line_total_with_tax) ?? num(l.values.line_total),
+          unidad: str(l.values.unit), descuento: num(l.values.discount_amount), referencia: str(l.values.product_reference),
+          // What was really paid per unit (after discounts and offers): amount ÷ quantity.
+          precio_pagado: (() => { const q = num(l.values.quantity), t = num(l.values.line_total_with_tax) ?? num(l.values.line_total); return q && t !== null ? Math.round((t / q) * 10000) / 10000 : null; })(),
           factura: inv ? str(inv.values.invoice_number) : null, documento: doc(inv?.id),
           _skip: inv ? category(inv) === "suministros" || isIncome(inv, ix) : false };
       }).filter(r => !r._skip).map(({ _skip, ...r }) => r).sort((a, b) => String(b.fecha ?? "").localeCompare(String(a.fecha ?? ""))) };
