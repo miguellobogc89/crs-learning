@@ -343,6 +343,11 @@ export const EDITABLE: Record<string, Record<string, "text" | "boolean" | "direc
   company: { legal_name: "text", is_own_company: "boolean" },
   invoice: { direction: "direction", expense_category: "category" },
 };
+/** Plain fields of base records that can be corrected from Analítica (validated by the field's own type). */
+export const PLAIN_EDITABLE: Record<string, string[]> = {
+  invoice: ["invoice_number", "issue_date", "net_amount", "tax_amount", "total_amount"],
+  invoice_line: ["description", "quantity", "unit", "unit_price", "unit_price_with_tax", "discount_amount", "line_total", "line_total_with_tax", "product_reference", "source_ticket_date"],
+};
 
 /** Every table of the workspace: the base ones, those made from documents and those created with the assistant. */
 export function allTableKeys(data: AnalyticsData): string[] {
@@ -404,6 +409,7 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
     return { key, label: template.nombre, description: template.descripcion || "Tabla creada a partir de tus documentos.",
       title: template.campos.find(c => c.type === "text")?.key,
       columns: [...template.campos.map(c => ({ key: c.key, label: c.label, kind: c.type === "decimal" && money(c.key) ? "money" as const : kind(c.type),
+        edit: { field: c.key, type: c.type === "date" ? "date" as const : c.type === "decimal" || c.type === "integer" ? "number" as const : "text" as const },
         ...(c.key === template.analitica.tercero ? { filter: true } : {}) })), { key: "documento", label: "Documento", kind: "document" as const }],
       rows: template.rows.map((r): Record<string, CellValue> => ({ _id: r.id, _rev: r.revision ?? null, ...Object.fromEntries(template.campos.map(c => [c.key, c.type === "decimal" || c.type === "integer" ? num(r.values[c.key]) : str(r.values[c.key])])),
         documento: data.documents?.[r.id]?.fileId ?? null }))
@@ -413,14 +419,19 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
   const doc = (invoiceId: string | undefined) => (invoiceId && data.documents?.[invoiceId]?.fileId) || null;
   switch (key) {
     case "compras": return { key, label: "Productos comprados", description: "Cada línea de compra con su fecha real (la del ticket cuando la factura agrupa varios) y lo que se pagó de verdad por unidad (descuentos y ofertas incluidos).", title: "producto",
-      columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "producto", label: "Producto" }, { key: "proveedor", label: "Proveedor", filter: true },
-        { key: "cantidad", label: "Cantidad", kind: "number" }, { key: "unidad", label: "Unidad" }, { key: "precio", label: "Precio unitario", kind: "money" },
-        { key: "descuento", label: "Descuento", kind: "money" }, { key: "importe", label: "Importe", kind: "money" },
-        { key: "precio_pagado", label: "Precio pagado por unidad", kind: "money" }, { key: "referencia", label: "Referencia" },
+      columns: [{ key: "fecha", label: "Fecha", kind: "date", edit: { field: "source_ticket_date", type: "date" } }, { key: "producto", label: "Producto", edit: { field: "description", type: "text" } },
+        { key: "proveedor", label: "Proveedor", filter: true },
+        { key: "cantidad", label: "Cantidad", kind: "number", edit: { field: "quantity", type: "number" } }, { key: "unidad", label: "Unidad", edit: { field: "unit", type: "text" } },
+        { key: "precio", label: "Precio unitario", kind: "money", edit: { field: "unit_price", type: "number" } },
+        { key: "descuento", label: "Descuento", kind: "money", edit: { field: "discount_amount", type: "number" } }, { key: "importe", label: "Importe", kind: "money", edit: { field: "line_total", type: "number" } },
+        { key: "precio_pagado", label: "Precio pagado por unidad", kind: "money" }, { key: "referencia", label: "Referencia", edit: { field: "product_reference", type: "text" } },
         { key: "factura", label: "Factura" }, { key: "documento", label: "Documento", kind: "document" }],
       rows: data.lines.map(l => {
         const inv = ix.byId.get(ix.invoiceOfLine.get(l.id) ?? "");
-        return { _id: l.id, fecha: str(l.values.source_ticket_date) ?? (inv ? str(inv.values.issue_date) : null), producto: str(l.values.description),
+        // The price and amount shown may come from the «with tax» field: editing writes back to that same field.
+        return { _id: l.id, _rev: l.revision ?? null, _type: "invoice_line",
+          _src_precio: num(l.values.unit_price_with_tax) !== null ? "unit_price_with_tax" : "unit_price",
+          _src_importe: num(l.values.line_total_with_tax) !== null ? "line_total_with_tax" : "line_total", fecha: str(l.values.source_ticket_date) ?? (inv ? str(inv.values.issue_date) : null), producto: str(l.values.description),
           proveedor: inv ? companyName(ix.byId.get(ix.issuerOf.get(inv.id) ?? "")) : null, cantidad: num(l.values.quantity),
           precio: num(l.values.unit_price_with_tax) ?? num(l.values.unit_price), importe: num(l.values.line_total_with_tax) ?? num(l.values.line_total),
           unidad: str(l.values.unit), descuento: num(l.values.discount_amount), referencia: str(l.values.product_reference),
@@ -460,10 +471,12 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
         columns: [{ key: "mes", label: "Mes" }, { key: "kwh", label: "kWh", kind: "number" }], rows: electricity.map(e => ({ mes: MONTH_LABEL(e.month), kwh: e.kwh })) };
     }
     default: return { key: "facturas", label: "Facturas", title: "numero", description: "Todas tus facturas guardadas. «Tipo» dice si es un gasto o un ingreso: cámbialo si no es correcto.",
-      columns: [{ key: "fecha", label: "Fecha", kind: "date" }, { key: "numero", label: "Número" }, { key: "emisor", label: "Emisor", filter: true, edit: { field: "issuer", type: "party" } }, { key: "receptor", label: "Receptor", filter: true, edit: { field: "customer", type: "party" } },
+      columns: [{ key: "fecha", label: "Fecha", kind: "date", edit: { field: "issue_date", type: "date" } }, { key: "numero", label: "Número", edit: { field: "invoice_number", type: "text" } },
+        { key: "emisor", label: "Emisor", filter: true, edit: { field: "issuer", type: "party" } }, { key: "receptor", label: "Receptor", filter: true, edit: { field: "customer", type: "party" } },
         { key: "tipo", label: "Tipo", filter: true, edit: { field: "direction", type: "select", options: [{ value: "recibida", label: "Gasto" }, { value: "emitida", label: "Ingreso" }] } },
         { key: "categoria", label: "Categoría", filter: true, edit: { field: "expense_category", type: "select", options: CATEGORIES.map(c => ({ value: c.key, label: c.label })) } },
-        { key: "base", label: "Base", kind: "money" }, { key: "iva", label: "IVA", kind: "money" }, { key: "total", label: "Total", kind: "money" },
+        { key: "base", label: "Base", kind: "money", edit: { field: "net_amount", type: "number" } }, { key: "iva", label: "IVA", kind: "money", edit: { field: "tax_amount", type: "number" } },
+        { key: "total", label: "Total", kind: "money", edit: { field: "total_amount", type: "number" } },
         { key: "documento", label: "Documento", kind: "document" }],
       rows: data.invoices.map(i => ({ _id: i.id, _rev: i.revision ?? null, _type: "invoice", _issuer: ix.issuerOf.get(i.id) ?? null, _customer: ix.customerOf.get(i.id) ?? null, fecha: str(i.values.issue_date), numero: str(i.values.invoice_number),
         emisor: companyName(ix.byId.get(ix.issuerOf.get(i.id) ?? "")), receptor: companyName(ix.byId.get(ix.customerOf.get(i.id) ?? "")),

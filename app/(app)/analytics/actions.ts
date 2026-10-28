@@ -10,7 +10,7 @@ import { LinkError, setRecordLink } from "@/lib/analytics/links";
 import { mergeRecords } from "@/lib/analytics/merge";
 import { archiveLines, setInvoiceParty } from "@/lib/analytics/parties";
 import { loadAnalyticsData, missingTable } from "@/lib/analytics/data";
-import { duplicatedLineIssues } from "@/lib/analytics/compute";
+import { duplicatedLineIssues, PLAIN_EDITABLE } from "@/lib/analytics/compute";
 import { normalizeView } from "@/lib/analytics/table-view";
 import { saveTableView } from "@/lib/analytics/table-view.service";
 
@@ -25,8 +25,11 @@ export async function editAnalyticsCellAction(input: { recordId: string; expecte
   if (!record) return { ok: false as const, error: "El registro ya no existe." };
   const current = record.values_json && typeof record.values_json === "object" && !Array.isArray(record.values_json) ? record.values_json as Record<string, unknown> : {};
   // Tables created with the assistant: every column is editable; the rest only the few corrections allowed.
-  const custom = (record.engine_object_types.settings as { origen?: string } | null)?.origen === "asistente";
-  const edited = custom ? editedCustomValues(record.engine_object_types.engine_field_definitions, current, input.field, input.value)
+  // Tables from documents or created with the assistant: every column. Base records: their plain fields, and the
+  // few special corrections (company name, «Mi empresa», invoice type and category).
+  const origen = (record.engine_object_types.settings as { origen?: string } | null)?.origen;
+  const plain = origen === "asistente" || origen === "plantilla" || PLAIN_EDITABLE[record.engine_object_types.key]?.includes(input.field);
+  const edited = plain ? editedCustomValues(record.engine_object_types.engine_field_definitions, current, input.field, input.value)
     : editedValues(record.engine_object_types.key, current, input.field, input.value);
   if (!edited.ok) return { ok: false as const, error: edited.error };
   try {

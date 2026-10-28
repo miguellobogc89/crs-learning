@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, FileText, GitMerge, Loader2, Pencil, Plus, X } from "lucide-react";
 import type { CellValue, Column, Table } from "@/lib/analytics/compute";
@@ -96,7 +96,9 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
   async function save(row: Row, column: Column, value: unknown) {
     if (!column.edit || typeof row._id !== "string" || typeof row._rev !== "number") return;
     setBusy(`${row._id}:${column.key}`); setError(null);
-    const r = await editAnalyticsCellAction({ recordId: row._id, expectedRevision: row._rev, field: column.edit.field, value });
+    // A column can be backed by a different field per row (e.g. the price «with tax» when that is what was read).
+    const field = typeof row[`_src_${column.key}`] === "string" ? row[`_src_${column.key}`] as string : column.edit.field;
+    const r = await editAnalyticsCellAction({ recordId: row._id, expectedRevision: row._rev, field, value });
     setBusy(null);
     if (!r.ok) { setError(r.error); return; }
     refresh();
@@ -135,7 +137,7 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
                 : canEdit && c.edit?.type === "party" && typeof r._id === "string"
                   ? <PartyCell current={(c.edit.field === "issuer" ? r._issuer : r._customer) as string | null} label={c.label} companies={companies} busy={cellBusy}
                       onSave={choice => saveParty(r, c, choice)} />
-                : editable && c.edit!.type === "text" ? <EditableText value={String(r[c.key] ?? "")} allowEmpty={!!c.completar || table.key.startsWith("tabla:")}
+                : editable && c.edit!.type === "text" ? <EditableText value={String(r[c.key] ?? "")} allowEmpty={!!c.completar || table.key.startsWith("tabla:") || table.key.startsWith("plantilla:")}
                     display={missing ? <span className="font-medium text-amber-700">Por completar</span> : undefined} busy={cellBusy} onSave={v => save(r, c, v)} />
                 : missing ? <span className="font-medium text-amber-700">Por completar</span>
                 : show(r[c.key] ?? null, c.kind)}
@@ -233,15 +235,20 @@ function pageNumbers(page: number, pages: number): (number | null)[] {
 function EditableText({ value, busy, onSave, display, allowEmpty = false }: { value: string; busy: boolean; onSave: (v: string) => Promise<void>; display?: ReactNode; allowEmpty?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
-  if (!editing) return <span className="group inline-flex items-center gap-1.5">{display ?? (value || <span className="text-slate-300">—</span>)}
-    <button type="button" aria-label="Corregir" onClick={() => { setDraft(value); setEditing(true); }} className="rounded p-0.5 text-slate-300 opacity-0 hover:text-[#0A58FF] group-hover:opacity-100 focus:opacity-100"><Pencil className="size-3.5" /></button>
+  const done = useRef(false);
+  const start = () => { done.current = false; setDraft(value); setEditing(true); };
+  const cancel = () => { done.current = true; setEditing(false); };
+  // Double click on the value (or the pencil) to correct it; Enter saves, Esc cancels.
+  if (!editing) return <span className="group inline-flex cursor-text items-center gap-1.5 rounded px-0.5 -mx-0.5 hover:bg-[#0A58FF]/5" onDoubleClick={start} title="Doble clic para editar">{display ?? (value || <span className="text-slate-300">—</span>)}
+    <button type="button" aria-label="Corregir" onClick={start} className="rounded p-0.5 text-slate-300 opacity-0 hover:text-[#0A58FF] group-hover:opacity-100 focus:opacity-100"><Pencil className="size-3.5" /></button>
     {busy && <Loader2 className="size-3 animate-spin text-slate-400" />}</span>;
-  const commit = async () => { if ((draft.trim() || allowEmpty) && draft.trim() !== value) await onSave(draft); setEditing(false); };
+  // Saved once: Enter, the tick, or leaving the field (unless cancelled with Esc or the cross).
+  const commit = async () => { if (done.current) return; done.current = true; if ((draft.trim() || allowEmpty) && draft.trim() !== value) await onSave(draft); setEditing(false); };
   return <span className="inline-flex items-center gap-1">
-    <input autoFocus value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void commit(); if (e.key === "Escape") setEditing(false); }}
+    <input autoFocus onFocus={e => e.target.select()} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void commit(); if (e.key === "Escape") cancel(); }} onBlur={() => void commit()}
       className="h-7 w-56 rounded-lg border border-[#0A58FF] px-2 text-sm outline-none" />
-    <button type="button" aria-label="Guardar" onClick={() => void commit()} className="rounded p-1 text-emerald-600 hover:bg-emerald-50"><Check className="size-3.5" /></button>
-    <button type="button" aria-label="Cancelar" onClick={() => setEditing(false)} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="size-3.5" /></button>
+    <button type="button" aria-label="Guardar" onMouseDown={e => e.preventDefault()} onClick={() => void commit()} className="rounded p-1 text-emerald-600 hover:bg-emerald-50"><Check className="size-3.5" /></button>
+    <button type="button" aria-label="Cancelar" onMouseDown={e => e.preventDefault()} onClick={cancel} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="size-3.5" /></button>
   </span>;
 }
 
