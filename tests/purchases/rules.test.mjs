@@ -4,7 +4,6 @@ import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 function load(file,deps={}){const m={exports:{}};new Function('require','module','exports',ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(n=>{if(n in deps)return deps[n];throw Error(n);},m,m.exports);return m.exports;}
 const r=load('lib/purchases/rules.ts');
-const q=load('lib/purchases/questions.ts');
 
 // Synthetic lines (no customer data).
 const L=(id,o)=>({id,grupo:'g',factura:id,fecha:'2026-09-22',proveedor:'Proveedor S.L.',producto:'PRODUCTO',documento:null,cantidad:null,precio:null,descuento:null,importe:null,iva:10,unidad:null,envase:null,unidadEnvase:null,...o});
@@ -22,9 +21,7 @@ test('cajas: cuadra tal cual; la cantidad mal leída se corrige sola solo si el 
   const n=r.normalizeLines(lines);
   assert.equal(n.get('a').estado,'ok'); assert.equal(n.get('a').cantidad_real,200); assert.equal(n.get('a').precio_final,1.02);
   assert.equal(n.get('c').estado,'auto'); assert.equal(n.get('c').unidades,6); assert.equal(n.get('c').cantidad_real,60);
-  assert.equal(n.get('d').estado,'pregunta');
-  const qs=q.buildQuestions(lines,n);
-  assert.equal(qs.length,1); assert.equal(qs[0].lineId,'d'); assert.equal(qs[0].pide,'unidades'); assert.match(qs[0].titulo,/Cuántas/);
+  assert.equal(n.get('d').estado,'no_cuadra');
 });
 
 test('regalos y cifras que faltan pero se deducen: no se pregunta', () => {
@@ -32,24 +29,6 @@ test('regalos y cifras que faltan pero se deducen: no se pregunta', () => {
     L('t',{grupo:'t',cantidad:3,precio:2,importe:null}),L('x',{grupo:'x',cantidad:null,precio:null,importe:12})]);
   assert.equal(n.get('g').estado,'regalo'); assert.equal(n.get('g').ahorro,18.65);
   assert.equal(n.get('t').estado,'auto'); assert.match(n.get('t').nota,/importe/);
-  assert.equal(n.get('x').estado,'pregunta'); assert.equal(n.get('x').falta,'cantidad');
-  const s=r.summarize(n); assert.equal(s.pregunta,1); assert.equal(s.regalo,1);
-});
-
-test('la respuesta de la persona manda, y «no lo sé» deja de preguntarse', () => {
-  const d=L('d',{...caja,cantidad:10,precio:11.7,importe:61.2});
-  const n=r.normalizeLines([d],{d:{unidades:6}});
-  assert.equal(n.get('d').estado,'confirmada'); assert.equal(n.get('d').cantidad_real,60); assert.equal(n.get('d').precio_final,1.02);
-  assert.equal(r.normalizeLines([d],{d:{ignorar:true}}).get('d').estado,'ignorada');
-});
-
-test('respuestas escritas: número, «no lo sé», «saltar» y lo que no se entiende', () => {
-  const a=load('lib/purchases/answers.ts');
-  const n=t=>a.readNumber(t);
-  assert.equal(n('12'),12); assert.equal(n('fueron 12 cajas'),12); assert.equal(n('12,5'),12.5); assert.equal(n('1.234,50 €'),1234.5); assert.equal(n('1.500'),1500); assert.equal(n('1.5'),1.5); assert.equal(n('no'),null);
-  assert.deepEqual(a.readAnswer('Fueron 6 cajas','unidades').decision,{unidades:6});
-  assert.deepEqual(a.readAnswer('18,50','importe').decision,{importe:18.5});
-  assert.equal(a.readAnswer('No lo sé','unidades').tipo,'no_lo_se');
-  assert.equal(a.readAnswer('saltar','unidades').tipo,'saltar');
-  assert.equal(a.readAnswer('ni puñetera','unidades').tipo,'no_entendido');
+  assert.equal(n.get('x').estado,'no_cuadra');
+  const s=r.summarize(n); assert.equal(s.no_cuadra,1); assert.equal(s.regalo,1);
 });

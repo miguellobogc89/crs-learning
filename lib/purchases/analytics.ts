@@ -46,7 +46,7 @@ export function purchaseLines(data: AnalyticsData): Line[] {
 
 export function normalizePurchases(data: AnalyticsData): { lines: Line[]; normalized: Map<string, Normalized> } {
   const lines = purchaseLines(data);
-  return { lines, normalized: normalizeLines(lines, data.purchaseDecisions ?? {}) };
+  return { lines, normalized: normalizeLines(lines) };
 }
 
 /** The columns «Productos comprados» adds: what was really bought and what it really cost. */
@@ -55,12 +55,12 @@ export const PURCHASE_COLUMNS: Column[] = [
   { key: "cantidad_real", label: "Cantidad real", kind: "number" }, { key: "unidad_real", label: "Ud." },
   { key: "descuento_pct", label: "Dto. %", kind: "number" }, { key: "precio_final", label: "Precio final", kind: "money" },
   { key: "ahorro", label: "Ahorro (regalo)", kind: "money" },
-  { key: "por_confirmar", label: "Por confirmar", filter: true }, { key: "detalle", label: "Detalle" },
+  { key: "no_cuadra", label: "No cuadra", filter: true }, { key: "detalle", label: "Detalle" },
 ];
 
 export function purchaseCells(n: Normalized | undefined): Record<string, CellValue> {
   if (!n) return {};
   return { tipo: n.estado === "regalo" ? "Regalo" : "Compra", cantidad_real: n.cantidad_real, unidad_real: n.unidad_real, descuento_pct: n.descuento_pct,
-    precio_final: n.precio_final, ahorro: n.ahorro, por_confirmar: n.estado === "pregunta" ? "Sí" : null, detalle: n.nota || null,
-    _attention: n.estado === "pregunta" ? n.nota : null };
+    precio_final: n.precio_final, ahorro: n.ahorro, no_cuadra: n.estado === "no_cuadra" ? "Sí" : null, detalle: n.nota || null,
+    _attention: n.estado === "no_cuadra" ? n.nota : null };
 }

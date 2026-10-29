@@ -1995,14 +1995,3 @@ model workspace_preferences {
   settings_json Json     @default("{}")
   updated_at    DateTime @default(now()) @db.Timestamptz(6)
 }
-
-/// What the person accepted or corrected for a purchase line (kept apart from what was read from the invoice).
-model purchase_line_reviews {
-  line_id            String   @id @db.Uuid
-  workspace_id       String   @db.Uuid
-  review_json        Json     @default("{}")
-  decided_by_user_id String?  @db.Uuid
-  updated_at         DateTime @default(now()) @db.Timestamptz(6)
-
-  @@index([workspace_id], map: "purchase_line_reviews_workspace")
-}

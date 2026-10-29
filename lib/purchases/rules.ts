@@ -5,7 +5,7 @@
  * always the import that did not understand the invoice (the discount is a %, the amount has VAT, the quantity counts
  * packs and the price is per kilo…). If an explanation makes it add up to the cent, the line is fixed AUTOMATICALLY —
  * nothing is asked. Free units (no amount) are marked as gifts. Missing figures that follow from the others are
- * filled in. Only what no explanation fits becomes a QUESTION for the person, in plain words (see questions.ts).
+ * filled in. What no explanation fits is left as read and flagged («no_cuadra»).
  * What was read from the invoice is never changed: these are figures computed on top of it.
  */
 export type Line = {
@@ -30,22 +30,15 @@ export type Line = {
   unidadEnvase: "L" | "Kg" | "ud" | null;
 };
 
-/** The person's answer to a question about a line. */
-export type Decision = { unidades?: number; importe?: number; ignorar?: boolean; por?: string; en?: string };
 
 export type State =
   | "ok"          // adds up as read
   | "auto"        // fixed automatically (an explanation makes it add up to the cent)
   | "regalo"      // free units
-  | "pregunta"    // nothing fits: ask the person
-  | "confirmada"  // the person answered
-  | "ignorada";   // the person did not know: left as read, not asked again
-export type Missing = "cantidad" | "importe" | "las_cifras";
+  | "no_cuadra";  // nothing explains it: left as read, flagged
 
 export type Normalized = {
   estado: State;
-  /** For «pregunta»: what to ask (the units bought, or what was paid). */
-  falta?: Missing;
   unidades: number | null;
   cantidad_real: number | null;
   unidad_real: "L" | "Kg" | "ud" | null;
@@ -98,16 +91,14 @@ function explain(l: { cantidad: number; precio: number; importe: number; descuen
 }
 
 /** Normalizes every line at once (a product priced per kilo on one line is read that way on all of them). */
-export function normalizeLines(lines: Line[], decisions: Record<string, Decision> = {}): Map<string, Normalized> {
+export function normalizeLines(lines: Line[]): Map<string, Normalized> {
   // The usual unit price of each product: what the lines that add up as read were charged.
   const okPrices = new Map<string, number[]>();
   for (const l of lines) if (l.cantidad && l.precio && l.importe && near(l.cantidad * l.precio - (l.descuento ?? 0), l.importe)) okPrices.set(l.grupo, [...(okPrices.get(l.grupo) ?? []), l.precio]);
   const typical = new Map([...okPrices].map(([g, v]) => [g, median(v)]));
-  const withDecision = (l: Line): Line => { const d = decisions[l.id]; return d ? { ...l, cantidad: d.unidades ?? l.cantidad, importe: d.importe ?? l.importe } : l; };
   const hits = new Map<string, Hit | null>();
   const perMeasure = new Set<string>();
-  for (const raw of lines) {
-    const l = withDecision(raw);
+  for (const l of lines) {
     const h = l.cantidad && l.precio && l.importe ? explain({ ...l, cantidad: l.cantidad, precio: l.precio, importe: l.importe }, typical.get(l.grupo) ?? null) : null;
     hits.set(l.id, h);
     if (h?.base === "medida" || isMeasureUnit(l.unidad)) perMeasure.add(l.grupo);
@@ -117,41 +108,34 @@ export function normalizeLines(lines: Line[], decisions: Record<string, Decision
   for (const l of lines) if (l.cantidad && l.importe && l.importe > 0) for (const k of [`${l.factura}|${l.grupo}`, l.grupo]) paid.set(k, [...(paid.get(k) ?? []), l.importe / l.cantidad]);
 
   const out = new Map<string, Normalized>();
-  for (const raw of lines) {
-    const decision = decisions[raw.id];
-    const l = withDecision(raw);
+  for (const l of lines) {
     const ref = median(paid.get(`${l.factura}|${l.grupo}`) ?? []) ?? median(paid.get(l.grupo) ?? []);
-    out.set(l.id, one(l, hits.get(l.id) ?? null, perMeasure.has(l.grupo), ref, decision));
+    out.set(l.id, one(l, hits.get(l.id) ?? null, perMeasure.has(l.grupo), ref));
   }
   return out;
 }
 
-function one(l: Line, hit: Hit | null, perMeasure: boolean, ref: number | null, decision: Decision | undefined): Normalized {
+function one(l: Line, hit: Hit | null, perMeasure: boolean, ref: number | null): Normalized {
   const blank = { unidades: null, cantidad_real: null, unidad_real: null, descuento_pct: null, precio_final: null, ahorro: null };
   const content = l.envase && l.unidadEnvase ? { e: l.envase, u: l.unidadEnvase } : null;
-  if (decision?.ignorar) return { ...blank, estado: "ignorada", nota: "Sin confirmar: se deja como viene en la factura." };
   // Free units: a quantity and nothing charged.
   if (l.cantidad && l.cantidad > 0 && (l.importe === 0 || (l.importe === null && !l.precio))) {
     const ahorro = ref !== null ? round(l.cantidad * ref, 2) : null;
     return { ...blank, estado: "regalo", unidades: l.cantidad, cantidad_real: content ? round(l.cantidad * content.e) : null, unidad_real: content?.u ?? null, ahorro,
       nota: ahorro !== null ? `Regalo: ${qty(l.cantidad)} sin cobrar, valorado en ${money(ahorro)} €.` : "Regalo: sin cobrar." };
   }
-  // Missing figures that follow from the others are filled in; with two missing, ask.
+  // Missing figures that follow from the others are filled in; with two missing, the line is flagged.
   let { cantidad: q, precio: p, importe: t } = l;
   const filled: string[] = [];
   if (t === null && q && p) { const pct = l.descuento && l.descuento < 100 ? l.descuento : null; t = round(pct ? q * p * (1 - pct / 100) : q * p - (l.descuento ?? 0), 2); filled.push("el importe"); }
   else if (q === null && t && p) { const n = t / p; if (Math.abs(n - Math.round(n)) < 0.01 && n >= 1) { q = Math.round(n); filled.push("la cantidad"); } }
   else if (p === null && q && t) { p = t / q; filled.push("el precio"); }
-  if (!q || t === null) return { ...blank, estado: decision ? "confirmada" : "pregunta", falta: !q && t !== null ? "cantidad" : q ? "importe" : "las_cifras",
+  if (!q || t === null) return { ...blank, estado: "no_cuadra",
     nota: `No se pudo leer ${[!q && "la cantidad", t === null && "el importe"].filter(Boolean).join(" ni ")}.` };
   if (filled.length && !hit && p) hit = { kind: "cuadra", pct: null, unidades: q, base: null };
 
-  if (!hit) {
-    // Nothing fits. If the person already answered, their word goes: the figures come from what they said.
-    if (!decision) return { ...blank, estado: "pregunta", falta: "cantidad", unidades: q,
-      nota: `No cuadra: ${qty(q)} × ${money(p ?? 0)} €${l.descuento ? ` − ${money(l.descuento)}` : ""} no da ${money(t)} €.` };
-    hit = { kind: "cuadra", pct: null, unidades: q, base: null };
-  }
+  if (!hit) return { ...blank, estado: "no_cuadra", unidades: q,
+    nota: `No cuadra: ${qty(q)} × ${money(p ?? 0)} €${l.descuento ? ` − ${money(l.descuento)}` : ""} no da ${money(t)} €.` };
   const unidades = hit.unidades;
   let cantidad_real: number | null = null, unidad_real: Normalized["unidad_real"] = null;
   if (content) {
@@ -163,16 +147,16 @@ function one(l: Line, hit: Hit | null, perMeasure: boolean, ref: number | null, 
   const precio_final = cantidad_real ? round(t / cantidad_real) : unidades ? round(t / unidades) : null;
   const unit = unidad_real && unidad_real !== "ud" ? `/${unidad_real}` : "/ud";
   const parts = [
-    decision ? "Confirmado por ti." : hit.kind === "cuadra" ? "" : `Corregido automáticamente: ${WHY[hit.kind]}.`,
+    hit.kind === "cuadra" ? "" : `Corregido automáticamente: ${WHY[hit.kind]}.`,
     filled.length ? `Calculado ${filled.join(" y ")} con las otras cifras.` : "",
     hit.kind === "cantidad" ? `Se leyó ${qty(q)}; son ${qty(unidades)}.` : "",
     precio_final !== null && (hit.kind !== "cuadra" || cantidad_real) ? `Precio final ${money(precio_final)} €${unit}${descuento_pct ? ` (con ${money(descuento_pct)} % de descuento)` : ""}.` : "",
   ].filter(Boolean);
-  return { estado: decision ? "confirmada" : hit.kind === "cuadra" && !filled.length ? "ok" : "auto", unidades, cantidad_real, unidad_real, descuento_pct, precio_final, ahorro: null, nota: parts.join(" ") };
+  return { estado: hit.kind === "cuadra" && !filled.length ? "ok" : "auto", unidades, cantidad_real, unidad_real, descuento_pct, precio_final, ahorro: null, nota: parts.join(" ") };
 }
 
 export function summarize(n: Map<string, Normalized>) {
-  const count: Record<State, number> = { ok: 0, auto: 0, regalo: 0, pregunta: 0, confirmada: 0, ignorada: 0 };
+  const count: Record<State, number> = { ok: 0, auto: 0, regalo: 0, no_cuadra: 0 };
   for (const x of n.values()) count[x.estado] += 1;
   return { total: n.size, ...count };
 }

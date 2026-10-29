@@ -22,7 +22,6 @@ import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/components/chat/chat-message";
 import type { DataBlock } from "@/lib/assistant/data/tools";
 import type { ProposalView } from "@/components/chat/proposal-card";
-import { PURCHASE_QUESTIONS_TITLE, PurchaseAlert, PurchaseQuestionsBanner, usePurchaseQuestions } from "@/components/purchases/purchase-questions";
 
 type ChatSource = {
   citationId: string;
@@ -125,21 +124,6 @@ const [messages, setMessages] = useState<
 
   const messagesEndRef =
     useRef<HTMLDivElement>(null);
-
-  // The questions about the purchases: their own conversation, opened by itself the first time the chat opens.
-  const purchase = usePurchaseQuestions(isOpen);
-  const openedQuestions = useRef(false);
-  useEffect(() => {
-    const id = purchase.conversationId;
-    if (!id) return;
-    setConversationList(list => list.some(c => c.id === id) ? list : [{ id, title: PURCHASE_QUESTIONS_TITLE, scope_type: "all", scope_library_id: null,
-      created_at: new Date(), updated_at: new Date(), knowledge_libraries: null }, ...list]);
-    if (purchase.pendientes > 0 && !openedQuestions.current && !conversationId && messages.length === 0) {
-      openedQuestions.current = true;
-      void loadConversation(id);
-    }
-  }, [purchase.conversationId, purchase.pendientes]); // eslint-disable-line react-hooks/exhaustive-deps
-  const pendingAlert = (id: string) => purchase.pendientes > 0 && id === purchase.conversationId;
 
   const activeConversation =
     conversationList.find(
@@ -436,8 +420,6 @@ useEffect(() => {
       );
     } finally {
       setIsSending(false);
-      // An answer in the questions conversation: the alert follows what is still pending.
-      if (previousConversationId && previousConversationId === purchase.conversationId) void purchase.refresh();
     }
   }
 
@@ -484,7 +466,6 @@ useEffect(() => {
                 {activeConversation?.title ?? "Nueva conversación"}
               </span>
             </span>
-            {purchase.pendientes > 0 && conversationId !== purchase.conversationId && <PurchaseAlert />}
             <ChevronDown className={cn("size-3.5 shrink-0 text-slate-400 transition-transform", showConversations && "rotate-180")} />
           </button>
           <div className="flex shrink-0 items-center">
@@ -521,7 +502,6 @@ useEffect(() => {
                       )}
                     >
                       <span className={cn("flex items-center gap-1.5 truncate text-[13px]", conversation.id === conversationId ? "font-semibold text-[#0A58FF]" : "text-slate-800")}>
-                        {pendingAlert(conversation.id) && <PurchaseAlert />}
                         <span className="truncate">{conversation.title}</span>
                       </span>
                       <span className="block truncate text-[11px] text-slate-500">{getConversationScopeLabel(conversation)}</span>
@@ -543,8 +523,7 @@ useEffect(() => {
                 </div>
               </div>
             ) : messages.length === 0 ? (
-              <EmptyChat suggestions={suggestions} onSuggestionClick={setMessage}
-                banner={purchase.conversationId && <PurchaseQuestionsBanner pendientes={purchase.pendientes} onOpen={() => { void loadConversation(purchase.conversationId!); }} />} />
+              <EmptyChat suggestions={suggestions} onSuggestionClick={setMessage} />
             ) : (
               <div className="flex flex-col gap-4">
                 {messages.map((chatMessage) => (
@@ -609,11 +588,9 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
 function EmptyChat({
   suggestions,
   onSuggestionClick,
-  banner,
 }: {
   suggestions: string[];
   onSuggestionClick: (value: string) => void;
-  banner?: ReactNode;
 }) {
   return (
     <div className={cn("flex flex-1 flex-col py-4", suggestions.length <= 4 && "justify-center")}>
@@ -624,7 +601,6 @@ function EmptyChat({
       <p className="mt-1 text-[13px] leading-5 text-slate-500">
         Pregunta por tus facturas, gastos, productos o documentos. También puedo crear tablas y enlazarlas; tú decides si se aplican.
       </p>
-      {banner}
       <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Prueba a preguntar</p>
       <div className="mt-1.5 grid gap-1.5">
         {suggestions.map((suggestion) => (

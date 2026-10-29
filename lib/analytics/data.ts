@@ -1,5 +1,3 @@
-import { loadDecisions } from "@/lib/purchases/decisions.service";
-import type { Decision } from "@/lib/purchases/rules";
 import { prisma } from "@/lib/prisma";
 
 /** Prisma P2021: the table does not exist in the database (a SQL script not run yet). */
@@ -21,8 +19,6 @@ export type AnalyticsData = {
   links?: LinkColumn[];
   /** Which engine object type is behind each table key (facturas, plantilla:<id>, tabla:<key>…). */
   types?: TableType[];
-  /** The person's answers about purchase lines (lib/purchases). */
-  purchaseDecisions?: Record<string, Decision>;
 };
 export type CustomField = { key: string; label: string; type: string; money: boolean; completar: boolean };
 export type CustomTable = { typeId: string; typeKey: string; nombre: string; descripcion: string; titulo: string | null; campos: CustomField[]; rows: Row[] };
@@ -93,10 +89,10 @@ export async function loadAnalyticsData(workspaceId: string): Promise<AnalyticsD
     const names = new Map<string, string>(files.map((f: { id: string; file_name: string }) => [f.id, f.file_name]));
     for (const [record, file] of fileOf) if (names.has(file)) documents[record] = { fileId: file, fileName: names.get(file)! };
   }
-  const [extra, purchaseDecisions] = await Promise.all([loadCustomTables(workspaceId, templateDefs as { id: string; object_type_key: string }[]), loadDecisions(workspaceId)]);
+  const extra = await loadCustomTables(workspaceId, templateDefs as { id: string; object_type_key: string }[]);
   if (extra.truncated) truncated = true;
   return { invoices, lines, companies, supplies, consumption, telecom, relations, documents, templates, truncated,
-    custom: extra.custom, links: extra.links, types: extra.types, purchaseDecisions };
+    custom: extra.custom, links: extra.links, types: extra.types };
 }
 
 const asValues = (v: unknown) => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
