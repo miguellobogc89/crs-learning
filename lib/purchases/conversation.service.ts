@@ -19,7 +19,7 @@ type Meta = { workspaceId: string; lineId?: string; pide?: Question["pide"]; sal
 async function currentQuestions(workspaceId: string) {
   const { lines, normalized } = normalizePurchases(await loadAnalyticsData(workspaceId));
   const s = summarize(normalized);
-  return { questions: buildQuestions(lines, normalized), fixed: s.auto + s.regalo };
+  return { questions: buildQuestions(lines, normalized), fixed: s.auto + s.regalo, summary: s };
 }
 
 const metaOf = (sources: unknown): Meta | null => {
@@ -56,8 +56,15 @@ async function findConversation(userId: string, workspaceId: string) {
  * something to ask. Returns its id and how many questions are pending (0: nothing to do).
  */
 export async function ensureQuestionsConversation(userId: string, workspaceId: string): Promise<{ conversationId: string | null; pendientes: number }> {
-  const [{ questions, fixed }, existing] = await Promise.all([currentQuestions(workspaceId), findConversation(userId, workspaceId)]);
-  if (!questions.length) return { conversationId: existing?.id ?? null, pendientes: 0 };
+  const [{ questions, fixed, summary }, existing] = await Promise.all([currentQuestions(workspaceId), findConversation(userId, workspaceId)]);
+  if (!summary.total) return { conversationId: existing?.id ?? null, pendientes: 0 };
+  // Nothing to ask: the conversation is there anyway (with what was fixed), so the person always finds it.
+  if (!questions.length) {
+    if (existing) return { conversationId: existing.id, pendientes: 0 };
+    const created = await prisma.chat_conversations.create({ data: { owner_user_id: userId, created_by_user_id: userId, updated_by_user_id: userId, title: QUESTIONS_TITLE } });
+    await postAssistant(created.id, userId, `He revisado tus facturas (${count(summary.total, "compra", "compras")}).${fixed ? ` ${count(fixed, "no cuadraba y la he arreglado yo", "no cuadraban y las he arreglado yo")}.` : ""} Ahora mismo no tengo dudas; si llega alguna factura con algo raro, te preguntaré aquí.`, { workspaceId });
+    return { conversationId: created.id, pendientes: 0 };
+  }
   // Already asking something still open: leave it as it is.
   if (existing?.pending?.lineId && questions.some(q => q.lineId === existing.pending!.lineId)) return { conversationId: existing.id, pendientes: questions.length };
   const first = questions[0];
@@ -106,4 +113,10 @@ export async function answerQuestion(input: { userId: string; workspaceId: strin
   const position = saltadas.length + 1;
   return { content: `${done}\n\n${questionText(q, position, questions.length)}`,
     sources: { compras: { workspaceId: input.workspaceId, lineId: q.lineId, pide: q.pide, saltadas } } as unknown as Prisma.InputJsonValue };
+}
+
+/** For checking: where the purchases stand and which conversation holds the questions (nothing is created). */
+export async function questionsStatus(userId: string, workspaceId: string) {
+  const [{ questions, summary }, existing] = await Promise.all([currentQuestions(workspaceId), findConversation(userId, workspaceId)]);
+  return { compras: summary, preguntas: questions.length, conversacion: existing?.id ?? null, preguntando: existing?.pending?.lineId ?? null };
 }

@@ -15,8 +15,10 @@ export function usePurchaseQuestions(chatOpen: boolean) {
   const refresh = useCallback(async () => {
     try {
       const r = await fetch("/api/purchases/conversation", { method: "POST" });
-      if (r.ok) setState(await r.json() as PurchaseQuestionsState);
-    } catch { /* the chat works the same without it */ }
+      const d = r.ok ? await r.json() as PurchaseQuestionsState & { error?: string } : null;
+      if (d?.error) console.warn("[compras] preguntas:", d.error);
+      if (d) setState({ conversationId: d.conversationId, pendientes: d.pendientes });
+    } catch (e) { console.warn("[compras] preguntas:", e); /* the chat works the same without it */ }
   }, []);
   useEffect(() => { if (chatOpen) void refresh(); }, [chatOpen, refresh]);
   return { ...state, refresh };
