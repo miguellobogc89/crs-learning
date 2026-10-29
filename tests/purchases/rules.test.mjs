@@ -38,3 +38,17 @@ test('lo que el lector ya separa (descuento % y contenido por envase) cuenta com
   const a=n.get('a'); assert.equal(a.estado,'ok'); assert.equal(a.cantidad_real,50); assert.equal(a.descuento_pct,20); assert.ok(Math.abs(a.precio_final-1.544)<0.001);
   assert.doesNotMatch(a.nota,/Corregido/);
 });
+
+test('casos reales de facturas: descuento que coincide, contenido leído como cantidad, precio redondeado', () => {
+  const bote={producto:'FRUTA B/1,25 KGS.',envase:1.25,unidadEnvase:'Kg'};
+  const n=r.normalizeLines([
+    // 10 botes × 1,25 kg × 17,95 €/kg − 20 % = 179,50 (que coincide con 10 × 17,95: el descuento no se ignora).
+    L('a',{...bote,grupo:'b',cantidad:10,precio:17.95,descuento:20,importe:179.5}),
+    // Se leyó 1,25 (lo que trae el bote) como cantidad: 93,25 € son 5 botes.
+    L('b',{...bote,grupo:'f',cantidad:1.25,precio:18.65,descuento:20,importe:93.25}),
+    // 2.000 tarrinas a 0,09 € (precio redondeado) con 15 %: 158,67 €.
+    L('c',{grupo:'t',producto:'TARRINA CJ/2000 U.',envase:2000,unidadEnvase:'ud',cantidad:2000,precio:0.09,descuento:15,importe:158.67})]);
+  assert.equal(n.get('a').caso,'envases'); assert.equal(n.get('a').descuento_pct,20); assert.equal(n.get('a').cantidad_real,12.5);
+  assert.equal(n.get('b').caso,'contenido'); assert.equal(n.get('b').unidades,5); assert.equal(n.get('b').cantidad_real,6.25);
+  assert.equal(n.get('c').caso,'pct'); assert.equal(n.get('c').cantidad_real,2000); assert.equal(n.get('c').estado,'auto');
+});

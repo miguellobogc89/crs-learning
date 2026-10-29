@@ -25,6 +25,7 @@ export function cleanupPlan(data: AnalyticsData): Fix[] {
     const content = l.envase && l.unidadEnvase && !l.envaseLeido ? { package_content: l.envase, package_unit: UNIT[l.unidadEnvase] } : null;
     if (n.caso === "envases" && content) { Object.assign(valores, content, { package_count: l.cantidad }); motivo = "envases"; }
     else if (n.caso === "precio_envase" && content && n.unidades) { Object.assign(valores, content, { quantity: r4(n.unidades), package_count: r4(n.unidades) }); motivo = "envases"; }
+    else if (n.caso === "contenido" && n.unidades && l.envase && l.unidadEnvase) { Object.assign(valores, { quantity: n.unidades, package_count: n.unidades, package_content: l.envase, package_unit: UNIT[l.unidadEnvase] }); motivo = "cantidad"; }
     else if (n.caso === "cantidad" && n.unidades) { valores.quantity = n.unidades; motivo = "cantidad"; }
     if (motivo && Object.keys(valores).length) out.push({ lineId: l.id, producto: l.producto, valores, motivo });
   }

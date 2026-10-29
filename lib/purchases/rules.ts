@@ -62,10 +62,11 @@ const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.02, Math.ab
 const isMeasureUnit = (u: string | null) => !!u && /^(l|lt|lts|litros?|kg|kgs|kilos?)\.?$/i.test(u.trim());
 const median = (v: number[]) => { if (!v.length) return null; const s = [...v].sort((a, b) => a - b); return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
 
-export type Hit = { kind: "cuadra" | "pct" | "iva" | "envases" | "precio_envase" | "cantidad"; pct: number | null; unidades: number; base: "medida" | "envase" | null };
+export type Hit = { kind: "cuadra" | "pct" | "iva" | "envases" | "precio_envase" | "contenido" | "cantidad"; pct: number | null; unidades: number; base: "medida" | "envase" | null };
 const WHY: Record<Hit["kind"], string> = {
   cuadra: "", pct: "el descuento es un porcentaje", iva: "el importe lleva IVA",
   envases: "la cantidad son envases y el precio va por kilo o litro", precio_envase: "la cantidad va en kilos o litros y el precio por envase",
+  contenido: "se leyó como cantidad lo que trae cada envase; el importe indica cuántos envases son",
   cantidad: "la cantidad se leyó mal: el importe indica otra",
 };
 
@@ -77,9 +78,15 @@ function explain(l: { cantidad: number; precio: number; importe: number; descuen
   const read = l.descuentoPct !== null && l.descuentoPct !== undefined && l.descuentoPct > 0 && l.descuentoPct < 100 ? l.descuentoPct : null;
   const d = read !== null ? 0 : l.descuento ?? 0;
   const pct = read ?? (l.descuento !== null && l.descuento > 0 && l.descuento < 100 ? l.descuento : null);
+  // A price printed with 2 decimals is rounded: on big quantities (2.000 tarrinas a 0,09 €) that is several euros.
+  const rounded = Math.abs(p * 100 - Math.round(p * 100)) < 1e-9 ? q * 0.005 : 0;
+  const asRead = (calc: number, k: number | null) => Math.abs(calc - t) <= Math.max(0.02, Math.abs(t) * 0.005, rounded * (1 - (k ?? 0) / 100));
+  // As read (discount in euros, or a %): the closer of the two when both are within the rounding.
+  const plain = q * p - d, withPct = pct !== null ? q * p * (1 - pct / 100) : null;
+  const okPlain = asRead(plain, null), okPct = withPct !== null && asRead(withPct, pct);
+  if (okPlain && (!okPct || Math.abs(plain - t) <= Math.abs(withPct! - t))) return { kind: "cuadra", pct: null, unidades: q, base: null };
+  if (okPct) return { kind: "pct", pct, unidades: q, base: null };
   const tries: [Hit["kind"], number | null, number | null, number | null, Hit["base"]][] = [
-    ["cuadra", q * p - d, null, q, null], ["cuadra", q * p, null, q, null],
-    ["pct", pct !== null ? q * p * (1 - pct / 100) : null, pct, q, null],
     ["iva", (q * p - d) * (1 + iva / 100), null, q, null],
     ["iva", pct !== null ? q * p * (1 - pct / 100) * (1 + iva / 100) : null, pct, q, null],
     ["envases", e ? q * e * p - d : null, null, q, "medida"],
@@ -87,6 +94,15 @@ function explain(l: { cantidad: number; precio: number; importe: number; descuen
     ["precio_envase", e ? (q / e) * p - d : null, null, e ? q / e : null, "envase"],
     ["precio_envase", e && pct !== null ? (q / e) * p * (1 - pct / 100) : null, pct, e ? q / e : null, "envase"],
   ];
+  // What each pack holds was read as the quantity («1,25» for «B/1,25 KGS»): the amount says how many packs.
+  if (e && Math.abs(q - e) < 1e-6) {
+    for (const k of [pct, null]) {
+      const n = t / (e * p * (1 - (k ?? 0) / 100));
+      if (n >= 1 && Math.abs(n - Math.round(n)) < 0.01) tries.push(["contenido", Math.round(n) * e * p * (1 - (k ?? 0) / 100), k, Math.round(n), "medida"]);
+    }
+  }
+  // Last: the amount is quantity × price, ignoring a discount that was printed (least likely).
+  tries.push(["cuadra", q * p, null, q, null]);
   for (const [kind, calc, pctUsed, unidades, base] of tries) if (calc !== null && unidades !== null && Number.isFinite(calc) && near(calc, t)) return { kind, pct: pctUsed, unidades, base };
   // The quantity was misread: the amount is a whole number of units at the usual price of this product. Only when the
   // price read is that usual price (otherwise it could be the price that is wrong): then it is safe to fix.
@@ -150,7 +166,10 @@ function one(l: Line, hit: Hit | null, perMeasure: boolean, ref: number | null):
   if (content) {
     unidad_real = content.u;
     // Packs × content; or the quantity already is kilos/litres (price per pack read per kilo, or a product priced per kilo).
-    cantidad_real = hit.kind === "precio_envase" ? round(q) : perMeasure && hit.kind !== "envases" ? round(unidades) : round(unidades * content.e);
+    // A count of units that is a whole number of boxes of units («2.000» of «CJ/2000 U.») already is the units.
+    const inUnits = content.u === "ud" && hit.kind !== "envases" && hit.kind !== "contenido" && unidades >= content.e && Math.abs(unidades / content.e - Math.round(unidades / content.e)) < 1e-9;
+    cantidad_real = hit.kind === "precio_envase" || inUnits ? round(hit.kind === "precio_envase" ? q : unidades)
+      : perMeasure && hit.kind !== "envases" && hit.kind !== "contenido" ? round(unidades) : round(unidades * content.e);
   }
   const descuento_pct = hit.pct ?? (hit.kind === "cuadra" && l.descuento && q && p ? round((1 - t / (q * p)) * 100, 2) : null);
   const precio_final = cantidad_real ? round(t / cantidad_real) : unidades ? round(t / unidades) : null;
