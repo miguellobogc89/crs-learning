@@ -17,6 +17,8 @@ export type UndoLog = {
   actualizados: { id: string; antes: Prisma.InputJsonValue }[];
   enlaces: { creados: string[]; quitados: { relationId: string; from: string; to: string }[] };
   borrados: string[];
+  /** Purchase-line reviews written (line id → the review before, or null if there was none). */
+  revisiones?: { id: string; antes: Prisma.InputJsonValue | null }[];
 };
 /** What apply needs about the tables that already exist. */
 export type ApplyTable = { tableKey: string; typeId: string; typeKey: string };
@@ -28,6 +30,14 @@ const asValues = (v: unknown) => v && typeof v === "object" && !Array.isArray(v)
 const BATCH = 500;
 
 export class ApplyError extends Error {}
+
+/** The reviews table (optional until its SQL is run). */
+type ReviewsModel = {
+  findUnique(a: unknown): Promise<{ review_json: unknown } | null>;
+  upsert(a: unknown): Promise<unknown>;
+  deleteMany(a: unknown): Promise<unknown>;
+  updateMany(a: unknown): Promise<unknown>;
+};
 
 /**
  * Engine keys must match ^[a-z][a-z0-9_]*$ (and relation keys ≤ 80 characters): a link's relation is
@@ -168,6 +178,20 @@ export async function applyActions(input: { workspaceId: string; userId: string;
           }
           break;
         }
+        case "revision": {
+          // Kept apart from the invoice line (purchase_line_reviews): what was read stays as it was.
+          const line = await tx.engine_records.findFirst({ where: { id: a.ref, workspace_id: workspaceId, status: { not: "archived" } }, select: { id: true } });
+          if (!line) throw new ApplyError("Una de las compras a revisar ya no existe.");
+          const reviews = (tx as unknown as { purchase_line_reviews?: ReviewsModel }).purchase_line_reviews;
+          if (!reviews) throw new ApplyError("Falta preparar la base de datos para guardar revisiones (script 20261029_purchase_line_reviews.sql).");
+          const before = await reviews.findUnique({ where: { line_id: line.id }, select: { review_json: true } });
+          const value = { ...a.valores, por: userId, en: new Date().toISOString() } as Prisma.InputJsonObject;
+          await reviews.upsert({ where: { line_id: line.id }, create: { line_id: line.id, workspace_id: workspaceId, review_json: value, decided_by_user_id: userId },
+            update: { review_json: value, decided_by_user_id: userId, updated_at: new Date() } });
+          undo.revisiones ??= [];
+          if (!undo.revisiones.some(r => r.id === line.id)) undo.revisiones.push({ id: line.id, antes: (before?.review_json ?? null) as Prisma.InputJsonValue | null });
+          break;
+        }
         case "borrar": {
           const id = ref(a.ref);
           const changed = await tx.engine_records.updateMany({ where: { id, workspace_id: workspaceId, status: { in: ["draft", "active"] } },
@@ -189,6 +213,12 @@ export async function undoActions(input: { workspaceId: string; userId: string; 
   const stamp = Date.now().toString(36);
   await prisma.$transaction(async (tx: Tx) => {
     await tx.$queryRaw(Prisma.sql`SELECT 1::integer FROM pg_advisory_xact_lock(hashtext(${"assistant-changes:" + workspaceId}))`);
+    const reviews = (tx as unknown as { purchase_line_reviews?: ReviewsModel }).purchase_line_reviews;
+    for (const r of undo.revisiones ?? []) {
+      if (!reviews) break;
+      if (r.antes === null) await reviews.deleteMany({ where: { line_id: r.id, workspace_id: workspaceId } });
+      else await reviews.updateMany({ where: { line_id: r.id, workspace_id: workspaceId }, data: { review_json: r.antes, updated_at: new Date() } });
+    }
     if (undo.enlaces.creados.length) await tx.engine_record_relations.deleteMany({ where: { workspace_id: workspaceId, id: { in: undo.enlaces.creados } } });
     if (undo.enlaces.quitados.length) await tx.engine_record_relations.createMany({ skipDuplicates: true,
       data: undo.enlaces.quitados.map(l => ({ workspace_id: workspaceId, relation_definition_id: l.relationId, from_record_id: l.from, to_record_id: l.to, reviewed_by_user_id: userId })) });

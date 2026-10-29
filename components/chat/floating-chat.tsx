@@ -4,6 +4,7 @@
 import {
   ArrowUp,
   ChevronDown,
+  AlertTriangle,
   LoaderCircle,
   Maximize2,
   Minimize2,
@@ -89,6 +90,8 @@ export function FloatingChat({
   hideTrigger = false,
 }: FloatingChatProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // The purchase review, brought up when the chat opens empty (only when something needs the person).
+  const [review, setReview] = useState<ReviewSummary | null>(null);
   const [isExpanded, setIsExpanded] =
     useState(false);
 
@@ -153,6 +156,13 @@ useEffect(() => {
   isSending,
   isLoadingConversation,
 ]);
+
+useEffect(() => {
+  if (!isOpen || review) return;
+  let cancelled = false;
+  fetch("/api/assistant/review-summary").then(r => r.ok ? r.json() : null).then((s: ReviewSummary | null) => { if (!cancelled && s) setReview(s); }).catch(() => undefined);
+  return () => { cancelled = true; };
+}, [isOpen, review]);
 
 function openChat() {
   setIsOpen(true);
@@ -284,8 +294,8 @@ useEffect(() => {
     }
   }
 
-  async function sendMessage() {
-    const content = message.trim();
+  async function sendMessage(text?: string) {
+    const content = (text ?? message).trim();
 
     if (
       !content ||
@@ -523,7 +533,8 @@ useEffect(() => {
                 </div>
               </div>
             ) : messages.length === 0 ? (
-              <EmptyChat suggestions={suggestions} onSuggestionClick={setMessage} />
+              <EmptyChat suggestions={suggestions} onSuggestionClick={setMessage} review={review}
+                onReview={() => { void sendMessage("Revisa mis compras: dime qué has encontrado y propón las correcciones."); }} />
             ) : (
               <div className="flex flex-col gap-4">
                 {messages.map((chatMessage) => (
@@ -585,13 +596,20 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
   );
 }
 
+type ReviewSummary = { total: number; correcciones: number; dudas: number };
+
 function EmptyChat({
   suggestions,
   onSuggestionClick,
+  review,
+  onReview,
 }: {
   suggestions: string[];
   onSuggestionClick: (value: string) => void;
+  review: ReviewSummary | null;
+  onReview: () => void;
 }) {
+  const pending = review && (review.correcciones > 0 || review.dudas > 0);
   return (
     <div className={cn("flex flex-1 flex-col py-4", suggestions.length <= 4 && "justify-center")}>
       <span className="flex size-10 items-center justify-center rounded-xl bg-[#0A58FF]/10 text-[#0A58FF]">
@@ -601,6 +619,18 @@ function EmptyChat({
       <p className="mt-1 text-[13px] leading-5 text-slate-500">
         Pregunta por tus facturas, gastos, productos o documentos. También puedo crear tablas y enlazarlas; tú decides si se aplican.
       </p>
+      {pending && (
+        <button type="button" onClick={onReview}
+          className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5 text-left transition-colors hover:border-amber-300 hover:bg-amber-50">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700" />
+          <span className="min-w-0 flex-1 text-[13px] leading-5 text-slate-700">
+            <span className="font-semibold text-slate-900">He revisado tus compras.</span>{" "}
+            {review.correcciones > 0 && <>Puedo corregir {review.correcciones.toLocaleString("es-ES")}{review.dudas > 0 ? " y " : "."}</>}
+            {review.dudas > 0 && <>tengo {review.dudas.toLocaleString("es-ES")} {review.dudas === 1 ? "duda" : "dudas"}.</>}
+            <span className="mt-0.5 block font-medium text-[#0A58FF]">Revisar ahora</span>
+          </span>
+        </button>
+      )}
       <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Prueba a preguntar</p>
       <div className="mt-1.5 grid gap-1.5">
         {suggestions.map((suggestion) => (

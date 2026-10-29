@@ -43,7 +43,7 @@ test('pages: slices, and a page beyond the end shows the last one',()=>{
 });
 
 test("tablas del asistente: filtros automáticos en columnas que se repiten y en las «por completar»", async () => {
-  const { withAutoFilters } = load('lib/analytics/compute.ts', { '@/lib/knowledge/intake/writer/duplicates': load('lib/knowledge/intake/writer/duplicates.ts') });
+  const { withAutoFilters } = load('lib/analytics/compute.ts', { '@/lib/knowledge/intake/writer/duplicates': load('lib/knowledge/intake/writer/duplicates.ts'), '@/lib/assistant/data/query': load('lib/assistant/data/query.ts'), '@/lib/purchases/review': load('lib/purchases/review.ts') });
   const rows = [
     { _id: "1", producto: "Leche", estado: "OK", envase: 10, precio: 10.2 },
     { _id: "2", producto: "Nata", estado: "Revisar", envase: null, precio: 4 },

@@ -1,5 +1,7 @@
 import type { AnalyticsData, CustomTable, Row } from "./data";
 import { extraCopies } from "@/lib/knowledge/intake/writer/duplicates";
+import { parseMeasure } from "@/lib/assistant/data/query";
+import { reviewLines, STATE_LABEL, type Review, type ReviewLine } from "@/lib/purchases/review";
 
 /**
  * Pure analytics over the workspace's records: income and expenses, costs by category, products and prices,
@@ -328,6 +330,8 @@ export function computeProducts(data: AnalyticsData, period: Period = 12): Produ
 export type CellValue = string | number | boolean | null;
 /** `edit`: the cell can be changed from the table (field of the record behind the row, `_id`/`_rev`/`_type`). */
 export type Column = { key: string; label: string; kind?: "money" | "number" | "date" | "text" | "document" | "boolean";
+  /** Shown as a coloured chip (the review state); the row's `_review_nota` explains it. */
+  status?: boolean;
   /** Offered as a filter above the table (columns with a few repeated values). */
   filter?: boolean;
   /** Link column: the table its values point to. */
@@ -403,6 +407,33 @@ export function withAutoFilters(table: Table): Table {
   return { ...table, columns };
 }
 
+const unitOf = (u: string | null): ReviewLine["unidadEnvase"] => !u ? null : /^l/i.test(u) ? "L" : /^k/i.test(u) ? "Kg" : /^u/i.test(u) ? "ud" : null;
+/**
+ * The review of every purchase line (see lib/purchases/review), with the content of one unit taken from the catalog
+ * when the line is linked to it (a table linked from «compras» with an «envase» column), or read from the name.
+ */
+export function purchaseReviews(data: AnalyticsData): Map<string, Review> {
+  const ix = indexes(data);
+  const link = (data.links ?? []).find(l => l.from === "compras" && (data.custom ?? []).some(c => `tabla:${c.typeKey}` === l.to && c.campos.some(f => f.key === "envase")));
+  const catalog = link ? (data.custom ?? []).find(c => `tabla:${c.typeKey}` === link.to) : undefined;
+  const catalogRow = new Map((catalog?.rows ?? []).map(r => [r.id, r]));
+  const catalogOf = new Map(link?.pairs ?? []);
+  const lines: ReviewLine[] = data.lines.map(l => {
+    const invoiceId = ix.invoiceOfLine.get(l.id) ?? null;
+    const inv = ix.byId.get(invoiceId ?? "");
+    const producto = str(l.values.description);
+    const proveedor = inv ? companyName(ix.byId.get(ix.issuerOf.get(inv.id) ?? "")) : null;
+    const c = catalogRow.get(catalogOf.get(l.id) ?? "");
+    const fromCatalog = c && num(c.values.envase) && unitOf(str(c.values.unidad)) ? { cantidad: num(c.values.envase)!, unidad: unitOf(str(c.values.unidad))! } : null;
+    const measure = fromCatalog ?? parseMeasure(producto);
+    return { id: l.id, grupo: `${(proveedor ?? "").toLowerCase()}|${(producto ?? "").toLowerCase().replace(/\s+/g, " ")}`, factura: invoiceId, producto,
+      cantidad: num(l.values.quantity), precio: num(l.values.unit_price) ?? num(l.values.unit_price_with_tax), descuento: num(l.values.discount_amount) !== null ? Math.abs(num(l.values.discount_amount)!) : null,
+      importe: num(l.values.line_total) ?? num(l.values.line_total_with_tax), iva: num(l.values.tax_rate), unidad: str(l.values.unit),
+      envase: measure?.cantidad ?? null, unidadEnvase: measure?.unidad ?? null };
+  });
+  return reviewLines(lines, data.reviews ?? {});
+}
+
 function customTable(key: string, t: CustomTable): Table {
   const kind = (f: CustomTable["campos"][number]): Column["kind"] => f.type === "decimal" ? (f.money ? "money" : "number") : f.type === "integer" ? "number"
     : f.type === "date" ? "date" : f.type === "boolean" ? "boolean" : "text";
@@ -434,15 +465,22 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
   const label = (c: string) => CATEGORIES.find(x => x.key === c)?.label ?? c;
   const doc = (invoiceId: string | undefined) => (invoiceId && data.documents?.[invoiceId]?.fileId) || null;
   switch (key) {
-    case "compras": return { key, label: "Productos comprados", description: "Cada línea de compra con su fecha real (la del ticket cuando la factura agrupa varios) y lo que se pagó de verdad por unidad (descuentos y ofertas incluidos).", title: "producto",
+    case "compras": { const reviews = purchaseReviews(data); return { key, label: "Productos comprados", description: "Cada línea de compra con su fecha real (la del ticket cuando la factura agrupa varios) y lo que se pagó de verdad por unidad (descuentos y ofertas incluidos).", title: "producto",
       columns: [{ key: "fecha", label: "Fecha", kind: "date", edit: { field: "source_ticket_date", type: "date" } }, { key: "producto", label: "Producto", edit: { field: "description", type: "text" } },
         { key: "proveedor", label: "Proveedor", filter: true },
         { key: "cantidad", label: "Cantidad", kind: "number", edit: { field: "quantity", type: "number" } }, { key: "unidad", label: "Unidad", edit: { field: "unit", type: "text" } },
         { key: "precio", label: "Precio unitario", kind: "money", edit: { field: "unit_price", type: "number" } },
         { key: "descuento", label: "Descuento", kind: "money", edit: { field: "discount_amount", type: "number" } }, { key: "importe", label: "Importe", kind: "money", edit: { field: "line_total", type: "number" } },
-        { key: "precio_pagado", label: "Precio pagado por unidad", kind: "money" }, { key: "referencia", label: "Referencia", edit: { field: "product_reference", type: "text" } },
+        { key: "precio_pagado", label: "Precio pagado por unidad", kind: "money" },
+        // The review of each line (lib/purchases/review): what was really bought and what it really cost.
+        { key: "revision", label: "Revisión", filter: true, status: true }, { key: "tipo", label: "Tipo", filter: true },
+        { key: "cantidad_real", label: "Cantidad real", kind: "number" }, { key: "unidad_real", label: "Ud. real" },
+        { key: "descuento_pct", label: "Dto. %", kind: "number" }, { key: "precio_final", label: "Precio final (€/L·Kg)", kind: "money" },
+        { key: "ahorro", label: "Ahorro en regalos", kind: "money" }, { key: "revision_nota", label: "Detalle de la revisión" },
+        { key: "referencia", label: "Referencia", edit: { field: "product_reference", type: "text" } },
         { key: "factura", label: "Factura" }, { key: "documento", label: "Documento", kind: "document" }],
       rows: data.lines.map(l => {
+        const rv = reviews.get(l.id);
         const inv = ix.byId.get(ix.invoiceOfLine.get(l.id) ?? "");
         // The price and amount shown may come from the «with tax» field: editing writes back to that same field.
         return { _id: l.id, _rev: l.revision ?? null, _type: "invoice_line",
@@ -453,9 +491,12 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
           unidad: str(l.values.unit), descuento: num(l.values.discount_amount), referencia: str(l.values.product_reference),
           // What was really paid per unit (after discounts and offers): amount ÷ quantity.
           precio_pagado: (() => { const q = num(l.values.quantity), t = num(l.values.line_total_with_tax) ?? num(l.values.line_total); return q && t !== null ? Math.round((t / q) * 10000) / 10000 : null; })(),
+          revision: rv ? STATE_LABEL[rv.estado] : null, _review: rv?.estado ?? null, _review_nota: rv?.nota ?? null, _review_caso: rv?.caso ?? null,
+          tipo: rv ? (rv.caso === "regalo" ? "Regalo" : "Compra") : null, cantidad_real: rv?.cantidad_real ?? null, unidad_real: rv?.unidad_real ?? null,
+          descuento_pct: rv?.descuento_pct ?? null, precio_final: rv?.precio_final ?? null, ahorro: rv?.ahorro ?? null, revision_nota: rv?.nota || null,
           factura: inv ? str(inv.values.invoice_number) : null, documento: doc(inv?.id),
           _skip: inv ? category(inv) === "suministros" || isIncome(inv, ix) : false };
-      }).filter(r => !r._skip).map(({ _skip, ...r }) => r).sort((a, b) => String(b.fecha ?? "").localeCompare(String(a.fecha ?? ""))) };
+      }).filter(r => !r._skip).map(({ _skip, ...r }) => r).sort((a, b) => String(b.fecha ?? "").localeCompare(String(a.fecha ?? ""))) }; }
     case "proveedores":
     case "empresas": {
       const rows = data.companies.map(c => {

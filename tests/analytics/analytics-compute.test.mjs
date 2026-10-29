@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 function load(file,deps={}){const m={exports:{}};new Function('require','module','exports',ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(n=>{if(n in deps)return deps[n];throw Error(n);},m,m.exports);return m.exports;}
-const a=load('lib/analytics/compute.ts',{'@/lib/knowledge/intake/writer/duplicates':load('lib/knowledge/intake/writer/duplicates.ts')});
+const a=load('lib/analytics/compute.ts',{'@/lib/knowledge/intake/writer/duplicates':load('lib/knowledge/intake/writer/duplicates.ts'),'@/lib/assistant/data/query':load('lib/assistant/data/query.ts'),'@/lib/purchases/review':load('lib/purchases/review.ts')});
 
 // Synthetic workspace (no customer data).
 const row=(id,values)=>({id,values});

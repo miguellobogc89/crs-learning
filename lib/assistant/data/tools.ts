@@ -120,7 +120,7 @@ export const changesTool = {
         items: {
           type: "object", required: ["op", "tabla"],
           properties: {
-            op: { type: "string", enum: ["crear_tabla", "añadir_columnas", "crear_filas", "volcar_consulta", "actualizar_filas", "enlazar", "borrar_filas"] },
+            op: { type: "string", enum: ["crear_tabla", "añadir_columnas", "crear_filas", "volcar_consulta", "actualizar_filas", "enlazar", "borrar_filas", "revisar_compras"] },
             tabla: { type: "string", description: "Tabla afectada. En «crear_tabla», el nombre corto de la nueva (su clave será «tabla:<nombre>»)." },
             nombre: { type: "string", description: "crear_tabla: nombre visible." },
             descripcion: { type: "string", description: "crear_tabla: para qué sirve." },
@@ -137,6 +137,12 @@ export const changesTool = {
               modo: { type: "string", enum: ["exacto", "contiene", "parecido"], description: "exacto: mismo texto. contiene: todas las palabras del origen están en el destino (p. ej. «leche entera» → «LECHE ENTERA P6»). parecido: la mayoría de las palabras. Para nombres escritos a mano frente a descripciones de factura usa «contiene» y, para los que queden sin pareja, «parecido»." } },
               description: "enlazar: enlaza automáticamente comparando columna_origen con columna_destino de la tabla enlazada (sin distinguir mayúsculas ni tildes)." },
             solo_sin_enlace: { type: "boolean", description: "enlazar: no toca las filas que ya tienen enlace." },
+            casos: { type: "array", items: { type: "string", enum: ["descuento_pct", "con_iva", "envases", "precio_por_envase", "cantidad_mal_leida", "regalo", "duda", "faltan_datos"] },
+              description: "revisar_compras: qué casos aceptar (sin indicar: todas las correcciones propuestas y regalos)." },
+            productos: { type: "array", items: { type: "string" }, description: "revisar_compras: limita a estos productos (nombre como aparece en compras). Obligatorio con «ajustes»." },
+            proveedor: { type: "string", description: "revisar_compras: limita a un proveedor." },
+            ajustes: { type: "object", description: "revisar_compras: la respuesta del usuario a una duda. contenido = L/Kg/ud que trae cada unidad comprada; unidad = L | Kg | ud; descuento_pct; precio_final = precio real fijado por L/Kg/ud (la cantidad real sale de importe ÷ precio_final); nota = explicación corta.",
+              properties: { contenido: { type: "number" }, unidad: { type: "string", enum: ["L", "Kg", "ud"] }, descuento_pct: { type: "number" }, precio_final: { type: "number" }, nota: { type: "string" } } },
           },
         },
       },
@@ -208,6 +214,7 @@ Detalles técnicos:
 - Tú no puedes aplicar ni ejecutar cambios. Nunca ofrezcas «continuar con la aplicación»: solo el usuario puede pulsar «Aplicar».
 - Si la propuesta devuelve errores, corrígela y vuelve a proponer. Revisa los avisos (filas sin pareja…) y coméntalos.
 
+${reviewSection(tables)}
 Sobre qué tablas existen:
 - Las tablas que existen son exactamente las del catálogo de abajo. Las preguntas sobre tablas, Analítica o datos se responden con este catálogo, nunca con el conocimiento documental.
 - Si el usuario busca una tabla que no está en el catálogo, no existe todavía. Si en la conversación hubo una propuesta «pendiente» que la creaba, dile que pulse «Aplicar» en la tarjeta de ese mensaje (o vuelve a proponerla); si fue «descartada» o «deshecha», ofrécete a proponerla de nuevo.
@@ -250,4 +257,23 @@ export function extractDataBlocks(value: unknown): DataBlock[] {
   if (!Array.isArray(blocks)) return [];
   return blocks.filter((b): b is DataBlock => !!b && typeof b === "object" && typeof (b as DataBlock).id === "string"
     && Array.isArray((b as DataBlock).columnas) && Array.isArray((b as DataBlock).filas));
+}
+
+/** The purchase review (lib/purchases/review) as the assistant sees it: where it stands and how to lead it. */
+function reviewSection(tables: Table[]) {
+  const compras = tables.find(t => t.key === "compras" && t.columns.some(c => c.key === "revision"));
+  if (!compras || !compras.rows.length) return "";
+  const count = (f: (r: Table["rows"][number]) => boolean) => compras.rows.filter(f).length;
+  const byCase = new Map<string, number>();
+  for (const r of compras.rows) if (r._review === "corregible") byCase.set(String(r._review_caso), (byCase.get(String(r._review_caso)) ?? 0) + 1);
+  return `Revisión de compras (cada línea debe cumplir cantidad × precio − descuento = importe):
+- Estado ahora: ${compras.rows.length} compras · ${count(r => r._review === "ok")} cuadran · ${count(r => r._review === "corregible")} con corrección propuesta (${[...byCase].map(([k, v]) => `${k}: ${v}`).join(", ") || "ninguna"}) · ${count(r => r._review === "regalo")} regalos · ${count(r => r._review === "duda")} dudas · ${count(r => r._review === "faltan")} con datos que faltan · ${count(r => r._review === "revisada")} ya revisadas.
+- En la tabla «compras», la columna «revision» dice el estado (OK, Corrección propuesta, Regalo, Duda, Faltan datos, Revisada) y «revision_nota» qué se ha visto; «cantidad_real», «unidad_real», «descuento_pct» y «precio_final» son lo que de verdad se compró y costó.
+- Cuando el usuario pida revisar sus compras (o pregunte si sus datos están bien):
+  1. Resume en 1-2 frases cuántas cuadran, cuántas puedes corregir y cuántas dudas hay.
+  2. Propón aceptar las correcciones claras con «${CHANGES_TOOL_NAME}»: [{"op":"revisar_compras"}] (o por casos). Nada se guarda sin su «Sí». Lo leído en las facturas no se toca.
+  3. Después, las dudas UNA A UNA, agrupadas por producto y proveedor (consulta «compras» con revision = "Duda" o "Faltan datos", agrupando por producto). Para cada una pregunta de forma concreta y cerrada lo más probable, con las cifras: «La leche en polvo de López Aragón: ¿son 6,13 €/kg con un 25 % de descuento, es decir, 4,60 €/kg?». Con su respuesta, propón [{"op":"revisar_compras","productos":["<producto>"],"proveedor":"<proveedor>","ajustes":{...}}].
+  4. Los regalos (unidades sin cobrar) se guardan como tales: su ahorro se suma aparte y no cambian el precio del catálogo.
+- Si el usuario fija un precio («la leche de X a 1,02 €/L»), usa «revisar_compras» con ajustes.precio_final: la cantidad real de esas compras sale de importe ÷ precio.
+`;
 }

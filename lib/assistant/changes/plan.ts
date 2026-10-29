@@ -14,6 +14,8 @@ import { QueryError, runQuery, type Filter, type Query, type ResultColumn } from
  * - actualizar_filas: change values of the rows that match some filters.
  * - enlazar: point rows to rows of another table, by pairs of names or by matching a column.
  * - borrar_filas: remove rows (kept in history; undoable).
+ * - revisar_compras: keep the review of purchase lines (lib/purchases/review) — the corrections found, or the
+ *   person's answer to a doubt (content of the pack, fixed final price…). Stored apart; the invoice stays as read.
  * Only tables created with the assistant get rows or plain columns; documents' and base tables only get links.
  */
 export type ColumnType = "texto" | "texto_largo" | "numero" | "entero" | "importe" | "fecha" | "si_no" | "enlace";
@@ -25,7 +27,14 @@ export type Operation =
   | { op: "volcar_consulta"; tabla: string; consulta: Query; columnas?: Record<string, string> | string[]; clave?: string[] }
   | { op: "actualizar_filas"; tabla: string; donde: Filter[]; valores: Record<string, CellValue> }
   | { op: "enlazar"; tabla: string; columna: string; pares?: { fila: string; con: string }[]; por?: { columna_origen: string; columna_destino: string; modo?: MatchMode }; solo_sin_enlace?: boolean }
-  | { op: "borrar_filas"; tabla: string; donde: Filter[] };
+  | { op: "borrar_filas"; tabla: string; donde: Filter[] }
+  | { op: "revisar_compras"; tabla?: string; casos?: string[]; productos?: string[]; proveedor?: string; ajustes?: ReviewAdjust };
+
+/** The person's answer to a doubt: the content of one unit bought, the discount, or the real final price per L/Kg/ud. */
+export type ReviewAdjust = { contenido?: number; unidad?: "L" | "Kg" | "ud"; descuento_pct?: number; precio_final?: number; nota?: string };
+/** What is stored for a reviewed purchase line. */
+export type ReviewValues = { caso: string; unidades: number | null; cantidad_real: number | null; unidad_real: string | null; descuento_pct: number | null;
+  precio_final: number | null; ahorro: number | null; nota: string };
 
 /** How «enlazar por» compares names: exactly, all words of the origin inside the destination, or most of them. */
 export type MatchMode = "exacto" | "contiene" | "parecido";
@@ -39,7 +48,8 @@ export type Action =
   | { k: "insertar"; tabla: string; ref: RowRef; valores: Record<string, CellValue> }
   | { k: "actualizar"; tabla: string; ref: RowRef; valores: Record<string, CellValue> }
   | { k: "enlazar"; tabla: string; columna: string; ref: RowRef; destino: RowRef | null }
-  | { k: "borrar"; tabla: string; ref: RowRef };
+  | { k: "borrar"; tabla: string; ref: RowRef }
+  | { k: "revision"; tabla: string; ref: RowRef; valores: ReviewValues };
 
 export type TableInfo = { tableKey: string; typeKey: string | null; editable: boolean; fieldTypes?: Record<string, EngineType> };
 export type PlanContext = { tables: Table[]; types: TableInfo[]; links: { from: string; columna: string; to: string }[]; typeKeys: string[] };
@@ -414,6 +424,57 @@ export function planChanges(ctx: PlanContext, operations: Operation[]): Plan {
         w.table.rows = w.table.rows.filter(r => !gone.has(r._id));
         cifras.filas_borradas += rows.length;
         pasos.push({ texto: `Borrar ${plural(rows.length, "fila", "filas")} de ${label(w)} (quedan en el historial).`, avisos: [], muestra: shown });
+        break;
+      }
+      case "revisar_compras": {
+        const w = get(op.tabla || "compras");
+        if (!w || !w.table.columns.some(c => c.key === "revision")) { fail(i, "no hay tabla de compras con revisión."); break; }
+        const casos = Array.isArray(op.casos) ? op.casos.map(fold) : [];
+        const productos = Array.isArray(op.productos) ? op.productos.map(fold).filter(Boolean) : [];
+        const proveedor = op.proveedor ? fold(op.proveedor) : "";
+        const adjust = op.ajustes && typeof op.ajustes === "object" ? op.ajustes : null;
+        if (adjust && !productos.length) { fail(i, "para corregir a mano indica «productos» (los nombres tal como aparecen en compras)."); break; }
+        const n = (v: unknown): number | null => { if (v === null || v === undefined || v === "") return null; const c = coerce(v, "decimal"); return c.ok && typeof c.value === "number" && c.value > 0 ? c.value : null; };
+        if (adjust && [adjust.contenido, adjust.precio_final, adjust.descuento_pct].every(v => n(v) === null)) { fail(i, "«ajustes» necesita contenido, precio_final o descuento_pct."); break; }
+        const rows = w.table.rows.filter(r => {
+          if (typeof r._id !== "string" || r._review === "revisada" && !adjust) return false;
+          if (!adjust && r._review !== "corregible" && r._review !== "regalo") return false;
+          if (casos.length && !casos.includes(fold(r._review_caso))) return false;
+          if (proveedor && !fold(r.proveedor).includes(proveedor)) return false;
+          if (productos.length && !productos.some(p => fold(r.producto) === p || fold(r.producto).includes(p))) return false;
+          return true;
+        });
+        if (!rows.length) { fail(i, "ninguna compra coincide (revisa «casos», «productos» y «proveedor»; las ya revisadas no se repiten)."); break; }
+        if (rows.length > MAX_ROWS_PER_OP) { fail(i, `son ${rows.length} compras; el máximo es ${MAX_ROWS_PER_OP}.`); break; }
+        const num = (v: CellValue) => typeof v === "number" ? v : null;
+        const r4 = (v: number) => Math.round(v * 10000) / 10000;
+        const counts = new Map<string, number>();
+        for (const r of rows) {
+          let valores: ReviewValues;
+          if (adjust) {
+            const importe = num(r.importe), cantidad = num(r.cantidad);
+            const contenido = n(adjust.contenido), fijo = n(adjust.precio_final), pct = n(adjust.descuento_pct);
+            const unidad = adjust.unidad ?? (typeof r.unidad_real === "string" ? r.unidad_real : null);
+            let real = num(r.cantidad_real);
+            if (fijo && importe !== null) real = r4(importe / fijo);
+            else if (contenido && cantidad !== null) real = r4(cantidad * contenido);
+            const final = fijo ?? (real && importe !== null ? r4(importe / real) : num(r.precio_final));
+            valores = { caso: String(r._review_caso ?? "duda"), unidades: cantidad, cantidad_real: real, unidad_real: unidad, descuento_pct: pct ?? num(r.descuento_pct),
+              precio_final: final, ahorro: num(r.ahorro), nota: String(adjust.nota ?? (fijo ? `Precio final fijado: ${fijo.toLocaleString("es-ES")} €${unidad ? `/${unidad}` : ""}.` : contenido ? `Contenido por unidad: ${contenido.toLocaleString("es-ES")}${unidad ? ` ${unidad}` : ""}.` : "Corregido.")).slice(0, 300) };
+          } else {
+            valores = { caso: String(r._review_caso), unidades: null, cantidad_real: num(r.cantidad_real), unidad_real: typeof r.unidad_real === "string" ? r.unidad_real : null,
+              descuento_pct: num(r.descuento_pct), precio_final: num(r.precio_final), ahorro: num(r.ahorro), nota: String(r._review_nota ?? "") };
+          }
+          acciones.push({ k: "revision", tabla: w.table.key, ref: r._id as string, valores });
+          Object.assign(r, { cantidad_real: valores.cantidad_real, unidad_real: valores.unidad_real, descuento_pct: valores.descuento_pct, precio_final: valores.precio_final, revision: "Revisada", _review: "revisada" });
+          const label = adjust ? "corregidas a mano" : r._review_caso === "regalo" ? "regalos" : "correcciones";
+          counts.set(label, (counts.get(label) ?? 0) + 1);
+        }
+        cifras.filas_cambiadas += rows.length;
+        const shown = ["producto", "proveedor", "cantidad", "importe", "cantidad_real", "unidad_real", "descuento_pct", "precio_final", "revision"];
+        pasos.push({ texto: `Guardar la revisión de ${plural(rows.length, "compra", "compras")} de ${label(w)} (${[...counts].map(([k, v]) => `${v.toLocaleString("es-ES")} ${k}`).join(", ")}). Lo leído en las facturas no se toca.`,
+          avisos: [], muestra: { columnas: w.table.columns.filter(c => shown.includes(c.key)).map(c => ({ key: c.key, label: c.label, kind: c.kind })),
+            filas: rows.slice(0, SAMPLE).map(r => Object.fromEntries(shown.map(k => [k, r[k] ?? null]))) } });
         break;
       }
       default: fail(i, `operación desconocida «${(op as { op?: string }).op}».`);

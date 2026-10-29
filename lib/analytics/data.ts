@@ -1,3 +1,4 @@
+import type { StoredReview } from "@/lib/purchases/review";
 import { prisma } from "@/lib/prisma";
 
 /** Prisma P2021: the table does not exist in the database (a SQL script not run yet). */
@@ -19,6 +20,8 @@ export type AnalyticsData = {
   links?: LinkColumn[];
   /** Which engine object type is behind each table key (facturas, plantilla:<id>, tabla:<key>…). */
   types?: TableType[];
+  /** Reviews of purchase lines accepted by the person (line id → review). */
+  reviews?: Record<string, StoredReview>;
 };
 export type CustomField = { key: string; label: string; type: string; money: boolean; completar: boolean };
 export type CustomTable = { typeId: string; typeKey: string; nombre: string; descripcion: string; titulo: string | null; campos: CustomField[]; rows: Row[] };
@@ -89,10 +92,19 @@ export async function loadAnalyticsData(workspaceId: string): Promise<AnalyticsD
     const names = new Map<string, string>(files.map((f: { id: string; file_name: string }) => [f.id, f.file_name]));
     for (const [record, file] of fileOf) if (names.has(file)) documents[record] = { fileId: file, fileName: names.get(file)! };
   }
-  const extra = await loadCustomTables(workspaceId, templateDefs as { id: string; object_type_key: string }[]);
+  const [extra, reviews] = await Promise.all([loadCustomTables(workspaceId, templateDefs as { id: string; object_type_key: string }[]), loadReviews(workspaceId)]);
   if (extra.truncated) truncated = true;
   return { invoices, lines, companies, supplies, consumption, telecom, relations, documents, templates, truncated,
-    custom: extra.custom, links: extra.links, types: extra.types };
+    custom: extra.custom, links: extra.links, types: extra.types, reviews };
+}
+
+/** Accepted reviews of purchase lines. Without their table (SQL not run yet) there are simply none. */
+async function loadReviews(workspaceId: string): Promise<Record<string, StoredReview>> {
+  const model = (prisma as unknown as { purchase_line_reviews?: { findMany: (a: unknown) => Promise<{ line_id: string; review_json: unknown }[]> } }).purchase_line_reviews;
+  if (!model) return {};
+  const rows = await model.findMany({ where: { workspace_id: workspaceId }, select: { line_id: true, review_json: true } })
+    .catch((error: unknown) => { if (missingTable(error)) return []; throw error; });
+  return Object.fromEntries(rows.map(r => [r.line_id, { ...asValues(r.review_json), estado: "revisada" } as StoredReview]));
 }
 
 const asValues = (v: unknown) => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};

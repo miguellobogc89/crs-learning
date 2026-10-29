@@ -122,3 +122,20 @@ test('equivalences table: one row per distinct ingredient, the sure ones linked,
  assert.deepEqual(plan.pendientes,[{tabla:'tabla:equivalencias_ingredientes',nombreTabla:'Equivalencias de ingredientes',columna:'producto',nombreColumna:'Producto del catálogo',filas:1}]);
  assert.ok(plan.acciones.some(a=>a.k==='enlace'&&a.completar===true));
 });
+
+test('revisar_compras: acepta las correcciones propuestas y, con ajustes, fija el precio final de un producto', () => {
+ const cols=[{key:'producto',label:'Producto'},{key:'proveedor',label:'Proveedor'},{key:'cantidad',label:'Cantidad',kind:'number'},{key:'importe',label:'Importe',kind:'money'},
+  {key:'revision',label:'Revisión',status:true},{key:'cantidad_real',label:'Cantidad real',kind:'number'},{key:'unidad_real',label:'Ud. real'},{key:'descuento_pct',label:'Dto. %',kind:'number'},{key:'precio_final',label:'Precio final',kind:'money'},{key:'ahorro',label:'Ahorro',kind:'money'}];
+ const rows=[
+  {_id:'a',producto:'SACO 25 KG',proveedor:'P',cantidad:1,importe:114.94,revision:'Corrección propuesta',_review:'corregible',_review_caso:'envases',_review_nota:'x',cantidad_real:25,unidad_real:'Kg',descuento_pct:25,precio_final:4.5976,ahorro:null},
+  {_id:'b',producto:'CAJA 10 L',proveedor:'P',cantidad:10,importe:61.2,revision:'Duda',_review:'duda',_review_caso:'duda',cantidad_real:null,unidad_real:null,descuento_pct:null,precio_final:null,ahorro:null},
+  {_id:'c',producto:'OTRO',proveedor:'P',cantidad:2,importe:4,revision:'OK',_review:'ok',_review_caso:'cuadra'}];
+ const c2={tables:[{key:'compras',label:'Productos comprados',description:'',title:'producto',columns:cols,rows}],types:[{tableKey:'compras',typeKey:'invoice_line',editable:false}],links:[],typeKeys:[]};
+ const all=p.planChanges(c2,[{op:'revisar_compras'}]);
+ assert.equal(all.ok,true,all.errores.join(' | '));
+ assert.deepEqual(all.acciones.map(a=>[a.k,a.ref,a.valores.cantidad_real]),[['revision','a',25]]);
+ const fixed=p.planChanges(c2,[{op:'revisar_compras',productos:['caja 10 l'],ajustes:{precio_final:1.02,unidad:'L'}}]);
+ assert.equal(fixed.ok,true,fixed.errores.join(' | '));
+ assert.equal(fixed.acciones.length,1); assert.equal(fixed.acciones[0].valores.cantidad_real,60); assert.equal(fixed.acciones[0].valores.unidad_real,'L');
+ assert.equal(p.planChanges(c2,[{op:'revisar_compras',ajustes:{precio_final:1}}]).ok,false);
+});
