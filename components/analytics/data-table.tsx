@@ -113,8 +113,7 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
             const cellBusy = busy === `${r._id}:${c.key}`;
             const missing = c.completar && (r[c.key] === null || r[c.key] === undefined || r[c.key] === "");
             return <td key={c.key} className={cn("px-4 py-1.5 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" && "whitespace-nowrap", missing && "bg-amber-50/70")}>
-              {c.status ? <ReviewChip state={typeof r._review === "string" ? r._review : null} label={r[c.key] ?? null} note={typeof r._review_nota === "string" ? r._review_nota : null} />
-              : c.kind === "document" ? (typeof r[c.key] === "string"
+              {c.kind === "document" ? (typeof r[c.key] === "string"
                   ? <a href={`/api/knowledge/intake/files/${r[c.key]}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-[#0A58FF] hover:underline"><FileText className="size-3.5" />Ver</a>
                   : <span className="text-slate-300">—</span>)
                 : c.kind === "boolean" ? (editable
@@ -144,8 +143,9 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
                 : show(r[c.key] ?? null, c.kind)}
             </td>;
           });
-  // Lines the review could not explain (a doubt, missing data) stand out in light yellow.
-  const row = (r: Row, key: string) => <tr key={key} className={cn("border-t border-slate-100", r._review === "duda" || r._review === "faltan" ? "bg-amber-50/60 hover:bg-amber-50" : "hover:bg-slate-50/60")}>
+  // A row that needs the person (`_attention`: why) stands out in light yellow.
+  const row = (r: Row, key: string) => <tr key={key} title={typeof r._attention === "string" ? r._attention : undefined}
+    className={cn("border-t border-slate-100", typeof r._attention === "string" ? "bg-amber-50/60 hover:bg-amber-50" : "hover:bg-slate-50/60")}>
     {cells(r)}
     {mergeable && <td className="whitespace-nowrap px-4 py-1.5 text-right">{typeof r._id === "string" &&
       <MergeControl row={r} rows={table.rows} busy={busy === `${r._id}:merge`} onMerge={target => merge(r._id as string, target)} />}</td>}
@@ -299,15 +299,4 @@ function PartyCell({ current, label, companies, busy, onSave }: { current: strin
       onChange={v => { if (v !== (current ?? "__none")) void onSave({ companyId: v === "__none" ? null : v }); }} />
     {busy && <Loader2 className="size-3 animate-spin text-slate-400" />}
   </span>;
-}
-
-const CHIP: Record<string, string> = {
-  ok: "bg-emerald-50 text-emerald-700 ring-emerald-200", revisada: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  corregible: "bg-[#0A58FF]/5 text-[#0A58FF] ring-[#0A58FF]/20", regalo: "bg-violet-50 text-violet-700 ring-violet-200",
-  duda: "bg-amber-100 text-amber-800 ring-amber-300", faltan: "bg-amber-100 text-amber-800 ring-amber-300",
-};
-/** The review state of a purchase line, with what was found on hover. */
-function ReviewChip({ state, label, note }: { state: string | null; label: CellValue; note: string | null }) {
-  if (!state || label === null) return <span className="text-slate-300">—</span>;
-  return <span title={note ?? undefined} className={cn("inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ring-1", CHIP[state] ?? "bg-slate-50 text-slate-600 ring-slate-200")}>{String(label)}</span>;
 }
