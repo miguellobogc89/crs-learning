@@ -1,5 +1,6 @@
 //app/api/assistant/route.ts
  
+import { answerQuestion } from "@/lib/purchases/conversation.service";
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import type { Prisma } from "@prisma/client";
@@ -144,6 +145,17 @@ export async function POST(request: Request) {
     resourceId: conversation.id,
     interactionType: "messaged",
   });
+
+  // An answer to a question about the purchases (lib/purchases): saved, and the next question follows.
+  if (conversationId) {
+    const answered = await answerQuestion({ userId, workspaceId: activeWorkspace.id, conversationId: conversation.id, userMessageId: userMessage.id, text: message,
+      canWrite: activeWorkspace.role === "owner" || activeWorkspace.role === "admin" });
+    if (answered) {
+      const saved = await prisma.chat_messages.create({ data: { conversation_id: conversation.id, user_id: userId, role: "assistant", content: answered.content, sources_json: answered.sources } });
+      await prisma.chat_conversations.update({ where: { id: conversation.id }, data: { updated_at: new Date(), updated_by_user_id: userId } });
+      return NextResponse.json({ conversationId: conversation.id, message: { id: saved.id, role: "assistant", content: answered.content, sources: [], dataBlocks: [], proposals: [] } });
+    }
+  }
 
   const previousMessages =
     await prisma.chat_messages.findMany({

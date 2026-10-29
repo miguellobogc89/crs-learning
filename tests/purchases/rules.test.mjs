@@ -42,3 +42,14 @@ test('la respuesta de la persona manda, y «no lo sé» deja de preguntarse', ()
   assert.equal(n.get('d').estado,'confirmada'); assert.equal(n.get('d').cantidad_real,60); assert.equal(n.get('d').precio_final,1.02);
   assert.equal(r.normalizeLines([d],{d:{ignorar:true}}).get('d').estado,'ignorada');
 });
+
+test('respuestas escritas: número, «no lo sé», «saltar» y lo que no se entiende', () => {
+  const a=load('lib/purchases/answers.ts');
+  const n=t=>a.readNumber(t);
+  assert.equal(n('12'),12); assert.equal(n('fueron 12 cajas'),12); assert.equal(n('12,5'),12.5); assert.equal(n('1.234,50 €'),1234.5); assert.equal(n('1.500'),1500); assert.equal(n('1.5'),1.5); assert.equal(n('no'),null);
+  assert.deepEqual(a.readAnswer('Fueron 6 cajas','unidades').decision,{unidades:6});
+  assert.deepEqual(a.readAnswer('18,50','importe').decision,{importe:18.5});
+  assert.equal(a.readAnswer('No lo sé','unidades').tipo,'no_lo_se');
+  assert.equal(a.readAnswer('saltar','unidades').tipo,'saltar');
+  assert.equal(a.readAnswer('ni puñetera','unidades').tipo,'no_entendido');
+});
