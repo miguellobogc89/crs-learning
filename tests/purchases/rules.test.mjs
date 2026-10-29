@@ -32,3 +32,9 @@ test('regalos y cifras que faltan pero se deducen: no se pregunta', () => {
   assert.equal(n.get('x').estado,'no_cuadra');
   const s=r.summarize(n); assert.equal(s.no_cuadra,1); assert.equal(s.regalo,1);
 });
+
+test('lo que el lector ya separa (descuento % y contenido por envase) cuenta como leído, no como corrección', () => {
+  const n=r.normalizeLines([L('a',{...saco,cantidad:2,precio:1.93,descuento:null,descuentoPct:20,importe:77.2,envaseLeido:true})]);
+  const a=n.get('a'); assert.equal(a.estado,'ok'); assert.equal(a.cantidad_real,50); assert.equal(a.descuento_pct,20); assert.ok(Math.abs(a.precio_final-1.544)<0.001);
+  assert.doesNotMatch(a.nota,/Corregido/);
+});

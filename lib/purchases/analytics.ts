@@ -33,12 +33,14 @@ export function purchaseLines(data: AnalyticsData): Line[] {
     const producto = str(l.values.description);
     const c = catalogRow.get(catalogOf.get(l.id) ?? "");
     const fromCatalog = c && num(c.values.envase) && unitOf(str(c.values.unidad)) ? { cantidad: num(c.values.envase)!, unidad: unitOf(str(c.values.unidad))! } : null;
-    const measure = fromCatalog ?? parseMeasure(producto);
+    // Content per pack: as read from the invoice first, then the catalog, then the product name.
+    const read = num(l.values.package_content) && unitOf(str(l.values.package_unit)) ? { cantidad: num(l.values.package_content)!, unidad: unitOf(str(l.values.package_unit))! } : null;
+    const measure = read ?? fromCatalog ?? parseMeasure(producto);
     const discount = num(l.values.discount_amount);
     return { id: l.id, grupo: `${(proveedor ?? "").toLowerCase()}|${(producto ?? "").toLowerCase().replace(/\s+/g, " ")}`, factura: invoiceId,
       fecha: str(l.values.source_ticket_date) ?? (inv ? str(inv.values.issue_date) : null), proveedor, producto,
       documento: (invoiceId && data.documents?.[invoiceId]?.fileId) || null,
-      cantidad: num(l.values.quantity), precio: num(l.values.unit_price) ?? num(l.values.unit_price_with_tax), descuento: discount !== null ? Math.abs(discount) : null,
+      cantidad: num(l.values.quantity) ?? num(l.values.package_count), descuentoPct: num(l.values.discount_percent), envaseLeido: !!read, precio: num(l.values.unit_price) ?? num(l.values.unit_price_with_tax), descuento: discount !== null ? Math.abs(discount) : null,
       importe: num(l.values.line_total) ?? num(l.values.line_total_with_tax), iva: num(l.values.tax_rate), unidad: str(l.values.unit),
       envase: measure?.cantidad ?? null, unidadEnvase: measure?.unidad ?? null };
   });

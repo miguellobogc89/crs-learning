@@ -5,9 +5,9 @@ import { STANDARD_CATALOG_REVISION, STANDARD_RELATIONS, STANDARD_TYPES } from ".
  * - Missing types: created with a published version 1.
  * - Existing types: only the fields they lack are added, in a new published version that clones the previous one;
  *   an existing field with a different type stops the script (nothing is retyped). Workspaces already bound to the
- *   type receive the new optional columns and move to the new version.
+ *   type receive the new optional columns and move to the new version, and so do their records (new revision).
  * - Relations: created when missing; an existing one with other endpoints is reported, never changed.
- * Never touches engine_records, their history or other catalog types.
+ * Never changes the values of engine_records nor other catalog types.
  */
 export function standardCatalogSql(): string {
   const spec = JSON.stringify({ types: STANDARD_TYPES, relations: STANDARD_RELATIONS });
@@ -16,7 +16,7 @@ export function standardCatalogSql(): string {
   return `-- CRS Engine · Standard global catalog ${STANDARD_CATALOG_REVISION}
 -- GENERATED from lib/engine/catalog/standard-catalog.ts (npm run engine:standard-catalog-sql). Do not edit by hand.
 -- Run in the Neon SQL Editor. Re-runnable: creates missing types and relations, adds missing fields to existing
--- types in a new published version, never renames, retypes or removes anything, never touches engine_records.
+-- types in a new published version (their records move to it, same values), never renames, retypes or removes anything.
 BEGIN;
 
 DO $$
@@ -102,6 +102,12 @@ BEGIN
     UPDATE public.engine_object_types o SET schema_version = o.schema_version + 1, updated_at = now()
       FROM public.engine_workspace_catalog_bindings b
       WHERE b.catalog_type_id = v_tid AND b.local_object_type_id = o.id AND b.status = 'active';
+    -- Their records move to that version too (a new revision with the same values: the new fields are optional),
+    -- so they stay editable.
+    UPDATE public.engine_records r SET schema_version = o.schema_version, revision = r.revision + 1, updated_at = now()
+      FROM public.engine_object_types o
+      JOIN public.engine_workspace_catalog_bindings b ON b.local_object_type_id = o.id AND b.catalog_type_id = v_tid AND b.status = 'active'
+      WHERE r.object_type_id = o.id AND r.schema_version < o.schema_version;
     UPDATE public.engine_workspace_catalog_bindings SET catalog_version = v_next, updated_at = now()
       WHERE catalog_type_id = v_tid AND catalog_version < v_next;
     RAISE NOTICE 'Tipo ampliado: % v% → v% (+% campos)', v_type->>'key', v_latest, v_next, jsonb_array_length(v_missing);

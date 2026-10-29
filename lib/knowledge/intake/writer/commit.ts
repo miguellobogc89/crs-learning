@@ -6,7 +6,7 @@ import type { PlannedRecord, WritePlan } from "./plan";
  * workspace (local table, fields, binding, relation definitions), creates the new records with a first revision and
  * the printed evidence of every value, reuses existing ones, and creates the relations. Records are matched by
  * external key inside the transaction too, so a concurrent or repeated save never duplicates a master record.
- * Nothing existing is modified. Fails as a whole if anything does not fit (no partial writes).
+ * Existing values are never modified (records only move to a grown table's new version). Fails as a whole if anything does not fit (no partial writes).
  */
 export type WriteResult = {
   module: "record_writer"; version: number; loteId: string;
@@ -43,7 +43,12 @@ async function bindType(tx: Tx, workspaceId: string, key: string) {
       field_type: field.field_type, is_required: false, configuration: (field.configuration ?? {}) as Prisma.InputJsonObject, sort_order: field.sort_order } });
     added = true;
   }
-  if (added && local.engine_field_definitions.length) await tx.engine_object_types.update({ where: { id: local.id }, data: { schema_version: { increment: 1 }, updated_at: new Date() } });
+  if (added && local.engine_field_definitions.length) {
+    const grown = await tx.engine_object_types.update({ where: { id: local.id }, data: { schema_version: { increment: 1 }, updated_at: new Date() } });
+    // Its records move to the new version (new revision, same values: the new fields are optional), so they stay editable.
+    await tx.engine_records.updateMany({ where: { workspace_id: workspaceId, object_type_id: local.id, schema_version: { lt: grown.schema_version } },
+      data: { schema_version: grown.schema_version, revision: { increment: 1 }, updated_at: new Date() } });
+  }
   const binding = await tx.engine_workspace_catalog_bindings.findUnique({ where: { workspace_id_catalog_type_id: { workspace_id: workspaceId, catalog_type_id: catalog.id } } });
   if (binding && (binding.status !== "active" || (binding.local_object_type_id && binding.local_object_type_id !== local.id) || binding.catalog_version > version.version))
     throw new Error(`Vinculación de catálogo incompatible: ${key}`);

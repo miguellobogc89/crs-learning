@@ -20,6 +20,8 @@ export type Line = {
   cantidad: number | null;
   precio: number | null;
   descuento: number | null;
+  /** Discount % as read from the invoice (when the reader told it apart from a discount in euros). */
+  descuentoPct?: number | null;
   importe: number | null;
   /** VAT % (10 when unknown). */
   iva: number | null;
@@ -28,6 +30,8 @@ export type Line = {
   /** Content of one unit bought (catalog, or read from the name) and its unit. */
   envase: number | null;
   unidadEnvase: "L" | "Kg" | "ud" | null;
+  /** The content per pack was read from the invoice (its column or the name), not guessed. */
+  envaseLeido?: boolean;
 };
 
 
@@ -39,6 +43,8 @@ export type State =
 
 export type Normalized = {
   estado: State;
+  /** For «auto»: which explanation made it add up (what a cleanup can write back into the line). */
+  caso?: Hit["kind"];
   unidades: number | null;
   cantidad_real: number | null;
   unidad_real: "L" | "Kg" | "ud" | null;
@@ -56,7 +62,7 @@ const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.02, Math.ab
 const isMeasureUnit = (u: string | null) => !!u && /^(l|lt|lts|litros?|kg|kgs|kilos?)\.?$/i.test(u.trim());
 const median = (v: number[]) => { if (!v.length) return null; const s = [...v].sort((a, b) => a - b); return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
 
-type Hit = { kind: "cuadra" | "pct" | "iva" | "envases" | "precio_envase" | "cantidad"; pct: number | null; unidades: number; base: "medida" | "envase" | null };
+export type Hit = { kind: "cuadra" | "pct" | "iva" | "envases" | "precio_envase" | "cantidad"; pct: number | null; unidades: number; base: "medida" | "envase" | null };
 const WHY: Record<Hit["kind"], string> = {
   cuadra: "", pct: "el descuento es un porcentaje", iva: "el importe lleva IVA",
   envases: "la cantidad son envases y el precio va por kilo o litro", precio_envase: "la cantidad va en kilos o litros y el precio por envase",
@@ -64,10 +70,13 @@ const WHY: Record<Hit["kind"], string> = {
 };
 
 /** The explanation that makes the line add up, if any (most plausible first). */
-function explain(l: { cantidad: number; precio: number; importe: number; descuento: number | null; iva: number | null; envase: number | null }, typicalPrice: number | null): Hit | null {
+function explain(l: { cantidad: number; precio: number; importe: number; descuento: number | null; descuentoPct?: number | null; iva: number | null; envase: number | null }, typicalPrice: number | null): Hit | null {
   const { cantidad: q, precio: p, importe: t } = l;
-  const d = l.descuento ?? 0, iva = l.iva ?? 10, e = l.envase;
-  const pct = l.descuento !== null && l.descuento > 0 && l.descuento < 100 ? l.descuento : null;
+  const iva = l.iva ?? 10, e = l.envase;
+  // A discount % read as such is used as a %; otherwise a small «discount» may be a % saved as euros.
+  const read = l.descuentoPct !== null && l.descuentoPct !== undefined && l.descuentoPct > 0 && l.descuentoPct < 100 ? l.descuentoPct : null;
+  const d = read !== null ? 0 : l.descuento ?? 0;
+  const pct = read ?? (l.descuento !== null && l.descuento > 0 && l.descuento < 100 ? l.descuento : null);
   const tries: [Hit["kind"], number | null, number | null, number | null, Hit["base"]][] = [
     ["cuadra", q * p - d, null, q, null], ["cuadra", q * p, null, q, null],
     ["pct", pct !== null ? q * p * (1 - pct / 100) : null, pct, q, null],
@@ -127,7 +136,7 @@ function one(l: Line, hit: Hit | null, perMeasure: boolean, ref: number | null):
   // Missing figures that follow from the others are filled in; with two missing, the line is flagged.
   let { cantidad: q, precio: p, importe: t } = l;
   const filled: string[] = [];
-  if (t === null && q && p) { const pct = l.descuento && l.descuento < 100 ? l.descuento : null; t = round(pct ? q * p * (1 - pct / 100) : q * p - (l.descuento ?? 0), 2); filled.push("el importe"); }
+  if (t === null && q && p) { const pct = l.descuentoPct ?? (l.descuento && l.descuento < 100 ? l.descuento : null); t = round(pct ? q * p * (1 - pct / 100) : q * p - (l.descuento ?? 0), 2); filled.push("el importe"); }
   else if (q === null && t && p) { const n = t / p; if (Math.abs(n - Math.round(n)) < 0.01 && n >= 1) { q = Math.round(n); filled.push("la cantidad"); } }
   else if (p === null && q && t) { p = t / q; filled.push("el precio"); }
   if (!q || t === null) return { ...blank, estado: "no_cuadra",
@@ -146,13 +155,15 @@ function one(l: Line, hit: Hit | null, perMeasure: boolean, ref: number | null):
   const descuento_pct = hit.pct ?? (hit.kind === "cuadra" && l.descuento && q && p ? round((1 - t / (q * p)) * 100, 2) : null);
   const precio_final = cantidad_real ? round(t / cantidad_real) : unidades ? round(t / unidades) : null;
   const unit = unidad_real && unidad_real !== "ud" ? `/${unidad_real}` : "/ud";
+  // What the invoice says (a discount % or a content per pack read as such) is not a correction.
+  const asRead = hit.kind === "cuadra" || (hit.kind === "pct" && !!l.descuentoPct) || (hit.kind === "envases" && !!l.envaseLeido);
   const parts = [
-    hit.kind === "cuadra" ? "" : `Corregido automáticamente: ${WHY[hit.kind]}.`,
+    asRead ? "" : `Corregido automáticamente: ${WHY[hit.kind]}.`,
     filled.length ? `Calculado ${filled.join(" y ")} con las otras cifras.` : "",
     hit.kind === "cantidad" ? `Se leyó ${qty(q)}; son ${qty(unidades)}.` : "",
     precio_final !== null && (hit.kind !== "cuadra" || cantidad_real) ? `Precio final ${money(precio_final)} €${unit}${descuento_pct ? ` (con ${money(descuento_pct)} % de descuento)` : ""}.` : "",
   ].filter(Boolean);
-  return { estado: hit.kind === "cuadra" && !filled.length ? "ok" : "auto", unidades, cantidad_real, unidad_real, descuento_pct, precio_final, ahorro: null, nota: parts.join(" ") };
+  return { estado: asRead && !filled.length ? "ok" : "auto", caso: hit.kind, unidades, cantidad_real, unidad_real, descuento_pct, precio_final, ahorro: null, nota: parts.join(" ") };
 }
 
 export function summarize(n: Map<string, Normalized>) {

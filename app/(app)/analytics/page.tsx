@@ -18,6 +18,8 @@ import { TemplateTableStatus } from "@/components/knowledge/templates/template-t
 import { TablesOverview } from "@/components/analytics/tables-overview";
 import { TableViewProvider } from "@/components/analytics/table-view-context";
 import { TableSettingsButton } from "@/components/analytics/table-settings";
+import { PurchasesCleanup } from "@/components/purchases/purchases-cleanup";
+import { cleanupPlan, cleanupSummary } from "@/lib/purchases/cleanup";
 import { tableCards, tablesReview } from "@/lib/analytics/tables-overview";
 import { normalizeView } from "@/lib/analytics/table-view";
 import { loadTableView } from "@/lib/analytics/table-view.service";
@@ -126,6 +128,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     content = <div className="space-y-4 pt-4">{notice}
       {templateGroup && <TemplateTableStatus group={templateGroup} canEdit={canEdit} />}
       {(table.key === "facturas" || table.key === "compras") && <DuplicateLinesReview issues={duplicatedLineIssues(data)} canEdit={canEdit} />}
+      {table.key === "compras" && <PurchasesCleanup summary={cleanupSummary(cleanupPlan(data))} canEdit={canEdit} />}
       <DataTable key={`${table.key}|${params.pendiente ?? ""}`} table={table} canEdit={canEdit} companies={table.key === "facturas" ? companyOptions(data) : []}
         initialFilters={params.pendiente && table.columns.some(c => c.key === params.pendiente) ? { [params.pendiente]: "__empty" } : {}} /></div>;
   } else if (view === "tablas") {

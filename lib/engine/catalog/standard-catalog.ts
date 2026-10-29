@@ -5,7 +5,8 @@
  *
  * The SQL that publishes it (`scripts/neon/20261027_standard_catalog.sql`) is GENERATED from this file
  * (`npm run engine:standard-catalog-sql`) and is idempotent: types that already exist only receive the fields
- * they lack, in a new published version; nothing is renamed, retyped or removed; no record is touched.
+ * they lack, in a new published version; nothing is renamed, retyped or removed. Records of the workspaces bound to
+ * a type that grows move to its new version (a new revision, same values: the new fields are optional).
  *
  * Relations go from owner to owned ("one_to_many": one company issues many invoices), as the Engine expects.
  */
@@ -15,7 +16,7 @@ export type CatalogType = { key: string; name: string; description: string; fiel
 export type CatalogRelation = { key: string; name: string; from: string; to: string; cardinality: "one_to_one" | "one_to_many" | "many_to_many"; description: string };
 
 /** Bump when this file changes: the SQL records it in the version notes. */
-export const STANDARD_CATALOG_REVISION = "2026-10-27.4";
+export const STANDARD_CATALOG_REVISION = "2026-10-29.1";
 
 const f = (key: string, name: string, type: CatalogFieldType, description?: string, extra: { required?: true; unique?: true } = {}): CatalogField =>
   ({ key, name, type, ...(description ? { description } : {}), ...extra });
@@ -104,6 +105,11 @@ export const STANDARD_TYPES: CatalogType[] = [
     f("calculation_detail", "Detalle del cálculo", "long_text", "Cantidades y precios del cálculo tal como aparecen (12 kW x 31 días…)."),
     f("source_ticket_number", "Ticket de origen", "text", "Ticket o factura simplificada de la que procede la línea, si la factura agrupa varios."),
     f("source_ticket_date", "Fecha del ticket de origen", "date", "Fecha de compra de la línea (gasto por producto y mes)."),
+    // How the line was bought: packs (boxes, sacks…) and what each one holds, so kilos/litres and prices per kilo are right.
+    f("package_count", "Envases", "decimal", "Número de envases, cajas, sacos o bultos de la línea."),
+    f("package_content", "Contenido por envase", "decimal", "Unidades, kilos o litros que trae cada envase."),
+    f("package_unit", "Unidad del contenido", "text", "kg, l o ud."),
+    f("discount_percent", "Descuento (%)", "decimal", "Porcentaje de descuento de la línea."),
   ] },
   { key: "invoice_tax_line", name: "Desglose de impuestos", description: "Base, tipo y cuota de cada impuesto de una factura.", fields: [
     f("tax_type", "Impuesto", "text", "IVA, IGIC, recargo de equivalencia, IRPF…"), f("tax_rate", "Tipo (%)", "decimal"),
@@ -243,6 +249,8 @@ export const FIELD_SET_MAPPING: Record<string, Record<string, { type: string; fi
     unit_price_with_tax: { type: "invoice_line", field: "unit_price_with_tax" }, line_total_with_tax: { type: "invoice_line", field: "line_total_with_tax" },
     line_total_basis: { type: "invoice_line", field: "line_total_basis" }, source_ticket_number: { type: "invoice_line", field: "source_ticket_number" },
     source_ticket_date: { type: "invoice_line", field: "source_ticket_date" },
+    package_count: { type: "invoice_line", field: "package_count" }, package_content: { type: "invoice_line", field: "package_content" },
+    package_unit: { type: "invoice_line", field: "package_unit" }, discount_percent: { type: "invoice_line", field: "discount_percent" },
   },
   power: { period: { type: "contracted_power", field: "period" }, power_kw: { type: "contracted_power", field: "power_kw" } },
   consumption: { period: { type: "energy_consumption", field: "period" }, energy_kwh: { type: "energy_consumption", field: "energy_kwh" } },

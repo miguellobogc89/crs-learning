@@ -102,7 +102,8 @@ export async function applyActions(input: { workspaceId: string; userId: string;
           if (!undo.tipos.includes(t.id) && !bumped.has(t.id)) {
             const next = (await versionOf(t.id)) + 1;
             await tx.engine_object_types.update({ where: { id: t.id }, data: { schema_version: next, updated_at: new Date() } });
-            await tx.engine_records.updateMany({ where: { workspace_id: workspaceId, object_type_id: t.id }, data: { schema_version: next } });
+            // A new revision each (the history trigger requires revision + 1 on every update).
+            await tx.engine_records.updateMany({ where: { workspace_id: workspaceId, object_type_id: t.id }, data: { schema_version: next, revision: { increment: 1 }, updated_at: new Date() } });
             versions.set(t.id, next); bumped.add(t.id);
           }
           const created = await tx.engine_field_definitions.create({ data: { workspace_id: workspaceId, object_type_id: t.id, key: a.key, name: a.nombre, field_type: a.tipo,
