@@ -40,6 +40,16 @@ export type Configuration = {
   appId: string;
   configId: string;
   version: string;
+  checks?: {
+    appId: boolean;
+    appSecret: boolean;
+    configId: boolean;
+    encryptionKey: boolean;
+    webhookVerifyToken: boolean;
+  };
+  missing?: string[];
+  invalid?: string[];
+  webhookMissing?: string[];
   ready: boolean;
   webhookReady: boolean;
   webhookPath: string;

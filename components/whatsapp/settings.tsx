@@ -98,7 +98,18 @@ export function WhatsAppSettings({
         </div>
         {!config.ready && (
           <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-            La integración con Meta está pendiente de configurar en el servidor.
+            {config.canManage && config.missing?.length
+              ? `Faltan variables en este despliegue: ${config.missing.join(", ")}.`
+              : "La integración con Meta está pendiente de configurar en el servidor."}
+            {config.canManage && config.invalid?.map((issue) => (
+              <span key={issue} className="mt-1 block">{issue}.</span>
+            ))}
+            {config.canManage && (
+              <span className="mt-2 block">
+                Configura las variables en el entorno de este despliegue y vuelve a desplegar.
+                En local, reinicia el servidor.
+              </span>
+            )}
           </p>
         )}
         {!config.canManage && (
@@ -194,7 +205,9 @@ export function WhatsAppSettings({
         <p className="mt-3 text-xs text-slate-500">
           {config.webhookReady
             ? "Credenciales del webhook configuradas. La entrega debe comprobarse con un mensaje real."
-            : "Faltan las credenciales del webhook en el servidor."}
+            : config.canManage && config.webhookMissing?.length
+              ? `Faltan variables para recibir mensajes: ${config.webhookMissing.join(", ")}.`
+              : "Faltan las credenciales del webhook en el servidor."}
         </p>
       </section>
     </div>

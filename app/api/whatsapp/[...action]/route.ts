@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { connectorContext } from "@/lib/connectors/context";
-import { decrypt, encrypt } from "@/lib/connectors/crypto";
+import { connectorKey, decrypt, encrypt } from "@/lib/connectors/crypto";
 import {
   accountFor,
   accountSelect,
@@ -60,6 +60,29 @@ async function handle(req: Request, route: RouteContext) {
       );
     if (req.method === "GET" && action === "accounts") {
       const c = metaConfig();
+      const checks = {
+        appId: Boolean(c.appId?.trim()),
+        appSecret: Boolean(c.secret?.trim()),
+        configId: Boolean(c.configId?.trim()),
+        encryptionKey: Boolean(process.env.CONNECTORS_ENCRYPTION_KEY?.trim()),
+        webhookVerifyToken: Boolean(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN?.trim()),
+      };
+      const missing = [
+        ...(!checks.appId ? ["META_APP_ID"] : []),
+        ...(!checks.appSecret ? ["META_APP_SECRET"] : []),
+        ...(!checks.configId ? ["META_WHATSAPP_CONFIG_ID"] : []),
+        ...(!checks.encryptionKey ? ["CONNECTORS_ENCRYPTION_KEY"] : []),
+      ];
+      const invalid: string[] = [];
+      if (checks.encryptionKey) {
+        try { connectorKey(); } catch {
+          invalid.push("CONNECTORS_ENCRYPTION_KEY debe contener 32 bytes en base64");
+        }
+      }
+      const webhookMissing = [
+        ...(!checks.appSecret ? ["META_APP_SECRET"] : []),
+        ...(!checks.webhookVerifyToken ? ["WHATSAPP_WEBHOOK_VERIFY_TOKEN"] : []),
+      ];
       return NextResponse.json({
         items: await prisma.whatsapp_accounts.findMany({
           where: { workspace_id: workspaceId },
@@ -70,15 +93,9 @@ async function handle(req: Request, route: RouteContext) {
           appId: c.appId,
           configId: c.configId,
           version: c.version,
-          ready: Boolean(
-            c.appId &&
-            c.secret &&
-            c.configId &&
-            process.env.CONNECTORS_ENCRYPTION_KEY,
-          ),
-          webhookReady: Boolean(
-            c.secret && process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
-          ),
+          ready: missing.length === 0 && invalid.length === 0,
+          webhookReady: webhookMissing.length === 0,
+          ...(ctx.canManage ? { checks, missing, invalid, webhookMissing } : {}),
           webhookPath: "/api/webhooks/whatsapp",
           canManage: ctx.canManage,
         },

@@ -82,7 +82,7 @@ test("repository scopes every lookup to the authenticated workspace", async () =
         },
       },
     },
-    "@/lib/connectors/crypto": {},
+    "@/lib/connectors/crypto": load("lib/connectors/crypto.ts"),
     "./rules": rules,
   });
   await assert.rejects(repo.accountFor(ws, id), (e) => e.status === 404);
@@ -94,13 +94,14 @@ test("repository scopes every lookup to the authenticated workspace", async () =
 function route(
   prisma = {},
   context = { workspaceId: ws, userId: id, canManage: false },
+  config = {},
 ) {
   return load("app/api/whatsapp/[...action]/route.ts", {
     "next/server": { NextResponse: { json } },
     "next/headers": { cookies: async () => ({}) },
     "@/lib/prisma": { prisma },
     "@/lib/connectors/context": { connectorContext: async () => context },
-    "@/lib/connectors/crypto": {},
+    "@/lib/connectors/crypto": load("lib/connectors/crypto.ts"),
     "@/lib/whatsapp/repository": {
       accountSelect: {
         id: true,
@@ -109,7 +110,7 @@ function route(
         status: true,
       },
     },
-    "@/lib/whatsapp/meta": { metaConfig: () => ({}) },
+    "@/lib/whatsapp/meta": { metaConfig: () => config },
     "@/lib/whatsapp/service": {},
     "@/lib/whatsapp/rules": rules,
   });
@@ -426,5 +427,38 @@ test("Meta signup rejects forged origins and stops after cancellation", async ()
   } finally {
     flow.cancel();
     mock.restore();
+  }
+});
+
+test("configuration diagnoses missing and invalid variables without exposing secrets", async () => {
+  const keys = ["CONNECTORS_ENCRYPTION_KEY", "WHATSAPP_WEBHOOK_VERIFY_TOKEN"];
+  const previous = keys.map(k => process.env[k]);
+  const read = async (config, canManage = true) => {
+    const api = route({ whatsapp_accounts: { findMany: async () => [] } },
+      { workspaceId: ws, userId: id, canManage }, config);
+    return (await (await api.GET(new Request("https://crs.test/api/whatsapp/accounts"), params("accounts"))).json()).configuration;
+  };
+  try {
+    for (const k of keys) delete process.env[k];
+    const missing = await read({ appId: "123", configId: "456", secret: "", version: "v24.0" });
+    assert.deepEqual(missing.missing, ["META_APP_SECRET", "CONNECTORS_ENCRYPTION_KEY"]);
+    assert.equal(missing.ready, false);
+    assert.deepEqual(missing.webhookMissing, ["META_APP_SECRET", "WHATSAPP_WEBHOOK_VERIFY_TOKEN"]);
+    const config = { appId: "123", configId: "456", secret: "secret-never-expose", version: "v24.0" };
+    process.env.CONNECTORS_ENCRYPTION_KEY = "invalid-key";
+    assert.equal((await read(config)).invalid.length, 1);
+    process.env.CONNECTORS_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+    process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN = "webhook-never-expose";
+    const ready = await read(config);
+    assert.equal(ready.ready, true);
+    assert.equal(ready.webhookReady, true);
+    assert.deepEqual(ready.missing, []);
+    for (const value of [config.secret, ...keys.map(k => process.env[k])])
+      assert.ok(!JSON.stringify(ready).includes(value));
+    const member = await read(config, false);
+    for (const field of ["checks", "missing", "invalid", "webhookMissing"])
+      assert.equal(member[field], undefined);
+  } finally {
+    keys.forEach((k, i) => { if (previous[i] === undefined) delete process.env[k]; else process.env[k] = previous[i]; });
   }
 });
