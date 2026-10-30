@@ -1995,3 +1995,61 @@ model workspace_preferences {
   settings_json Json     @default("{}")
   updated_at    DateTime @default(now()) @db.Timestamptz(6)
 }
+
+/// Workspace-scoped WhatsApp numbers. Tokens encrypted with the shared connector cipher. FKs in SQL.
+model whatsapp_accounts {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @db.Uuid
+  phone_number_id String @unique
+  waba_id String
+  display_phone String
+  verified_name String?
+  token_enc String
+  status String @default("active")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([workspace_id, id])
+}
+model whatsapp_conversations {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @db.Uuid
+  account_id String @db.Uuid
+  contact_phone String
+  contact_name String?
+  unread_count Int @default(0)
+  last_message_at DateTime @default(now()) @db.Timestamptz(6)
+  last_inbound_at DateTime? @db.Timestamptz(6)
+  @@unique([account_id, contact_phone])
+  @@unique([workspace_id, id])
+  @@index([workspace_id, account_id, last_message_at(sort: Desc)])
+}
+model whatsapp_messages {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @db.Uuid
+  conversation_id String @db.Uuid
+  provider_id String? @unique
+  request_id String? @db.Uuid
+  direction String
+  kind String
+  text String
+  status String
+  error String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([workspace_id, request_id])
+  @@index([workspace_id, conversation_id, created_at])
+}
+model whatsapp_templates {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @db.Uuid
+  account_id String @db.Uuid
+  provider_id String
+  name String
+  language String
+  category String
+  status String
+  components Json
+  is_favorite Boolean @default(false)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([account_id, provider_id])
+  @@unique([workspace_id, id])
+}

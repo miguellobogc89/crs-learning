@@ -1,7 +1,5 @@
 import { Prisma } from "@prisma/client";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { decrypt, encrypt } from "../crypto";
 import { oauthConfig, refreshAccessToken, revoke, TokenError, type Fetcher, type Tokens } from "./oauth";
 import { readSettings, type DriveSettings } from "./drive";
@@ -10,17 +8,8 @@ import { readSettings, type DriveSettings } from "./drive";
 export const PROVIDER = "google_drive";
 const SKEW_MS = 60_000;
 
-export type ConnectorContext = { userId: string; workspaceId: string; workspaceName: string; canManage: boolean };
-
-/** Who is asking and whether they may connect, disconnect or choose the folder (workspace owner or admin). */
-export async function connectorContext(): Promise<ConnectorContext | null> {
-  const session = await auth();
-  if (!session?.user?.id) return null;
-  const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
-  return { userId: session.user.id, workspaceId: activeWorkspace.id, workspaceName: activeWorkspace.name,
-    canManage: activeWorkspace.role === "owner" || activeWorkspace.role === "admin" };
-}
-
+export { connectorContext } from "../context";
+export type { ConnectorContext } from "../context";
 export type DriveConnectionView = {
   status: "disconnected" | "active" | "error"; email: string | null; name: string | null;
   connectedAt: string | null; lastError: string | null; settings: DriveSettings;

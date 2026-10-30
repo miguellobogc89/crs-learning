@@ -2,6 +2,7 @@
 import {
   BarChart3,
   Plug,
+  MessageCircle,
   GraduationCap,
   Grid2X2,
   Home,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 
 export const APP_SECTIONS = {
+  whatsapp: { label: "WhatsApp", href: "/whatsapp", icon: MessageCircle },
   dashboard: {
     label: "Inicio",
     href: "/dashboard",

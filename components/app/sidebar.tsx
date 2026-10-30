@@ -11,6 +11,7 @@ import { SheetClose } from "@/components/ui/sheet";
 import {
   BarChart3,
   Plug,
+  MessageCircle,
   GraduationCap,
   Home,
   Inbox,
@@ -50,6 +51,7 @@ const navItems = [
     icon: Plug,
     label: "Conectores",
   },
+  { href: "/whatsapp", icon: MessageCircle, label: "WhatsApp" },
   {
     href: "/courses",
     icon: GraduationCap,
