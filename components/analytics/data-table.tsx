@@ -224,7 +224,7 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
     {cells(r)}
     {mergeable && <td className="whitespace-nowrap px-4 py-1.5 text-right">{typeof r._id === "string" &&
       <MergeControl row={r} rows={table.rows} busy={busy === `${r._id}:merge`} onMerge={target => merge(r._id as string, target)} />}</td>}
-    {recordRows && <td className="w-10 px-2 py-1.5 text-right">{typeof r._id === "string" && typeof r._rev === "number" &&
+    {recordRows && <td className="sticky right-0 w-10 bg-white/95 px-2 py-1.5 text-right shadow-[-6px_0_8px_-6px_rgba(15,23,42,0.12)]">{typeof r._id === "string" && typeof r._rev === "number" &&
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button type="button" aria-label={`Acciones de ${titleOf(r)}`} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
@@ -275,7 +275,7 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
               onHide={columns.length > 1 ? () => update({ hidden: [...view.hidden, c.key] }) : undefined} />}
           </th>)}
           {mergeable && <th className="px-4 py-2.5" />}
-          {recordRows && <th className="w-10 px-2 py-2.5" />}
+          {recordRows && <th className="sticky right-0 w-10 bg-slate-50 px-2 py-2.5" />}
         </tr></thead>
         <tbody>{groups ? shownGroups.map(g => {
           const expanded = open.has(g.key);
