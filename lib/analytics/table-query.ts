@@ -6,7 +6,12 @@ import type { CellValue, Column } from "./compute";
  * values of the filterable columns; sorting compares numbers as numbers and dates as dates, empty values last.
  */
 export type Sort = { key: string; dir: "asc" | "desc" } | null;
-export type Query = { search: string; filters: Record<string, string>; sort: Sort; page: number; pageSize: number };
+/**
+ * Filter chosen from a column header: some of its values (as `filterValue` gives them, «__empty» for empty cells),
+ * and/or a range for numbers and dates (`min`/`max` as typed: "2,5", "2026-01-31"; either may be left out).
+ */
+export type ColumnFilter = { values?: string[]; min?: string; max?: string };
+export type Query = { search: string; filters: Record<string, string>; sort: Sort; page: number; pageSize: number; columnFilters?: Record<string, ColumnFilter> };
 type RowT = Record<string, CellValue>;
 
 const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -32,6 +37,27 @@ export function filterOptions(rows: RowT[], column: Column): { value: string; la
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "es"));
 }
 
+const parseBound = (v: string | undefined, kind?: Column["kind"]): number | string | null => {
+  const t = v?.trim();
+  if (!t) return null;
+  if (kind === "date") { const es = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t); return es ? `${es[3]}-${es[2].padStart(2, "0")}-${es[1].padStart(2, "0")}` : t; }
+  const n = Number(/,\d+$/.test(t) ? t.replace(/\./g, "").replace(",", ".") : t.replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+};
+
+/** Whether a value passes a column-header filter. A range never lets empty values through. */
+export function passesColumnFilter(value: CellValue, filter: ColumnFilter, kind?: Column["kind"]): boolean {
+  if (filter.values && !filter.values.includes(filterValue(value))) return false;
+  const min = parseBound(filter.min, kind), max = parseBound(filter.max, kind);
+  if (min === null && max === null) return true;
+  if (value === null || value === "") return false;
+  const v = kind === "date" ? String(value) : typeof value === "number" ? value : Number(value);
+  if (min !== null && v < min) return false;
+  if (max !== null && v > max) return false;
+  return true;
+}
+export const activeColumnFilter = (f: ColumnFilter | undefined) => !!f && (!!f.values || !!f.min?.trim() || !!f.max?.trim());
+
 function compare(a: CellValue, b: CellValue): number {
   const empty = (v: CellValue) => v === null || v === "";
   if (empty(a) || empty(b)) return empty(a) && empty(b) ? 0 : empty(a) ? 1 : -1;
@@ -43,8 +69,11 @@ function compare(a: CellValue, b: CellValue): number {
 export function queryRows(rows: RowT[], columns: Column[], q: Query): { rows: RowT[]; total: number; pages: number; page: number } {
   const terms = fold(q.search.trim()).split(/\s+/).filter(Boolean);
   const visible = columns.filter(c => c.kind !== "document");
+  const kinds = new Map(columns.map(c => [c.key, c.kind]));
+  const headerFilters = Object.entries(q.columnFilters ?? {}).filter(([, f]) => activeColumnFilter(f));
   let out = rows.filter(r => {
     for (const [key, value] of Object.entries(q.filters)) if (value && filterValue(r[key] ?? null) !== value) return false;
+    for (const [key, f] of headerFilters) if (!passesColumnFilter(r[key] ?? null, f, kinds.get(key))) return false;
     if (!terms.length) return true;
     const text = fold(visible.map(c => cellText(r[c.key] ?? null, c.kind)).join(" "));
     return terms.every(t => text.includes(t));

@@ -1,21 +1,32 @@
 "use client";
-import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, FileText, GitMerge, Loader2, Pencil, Plus, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileText, GitMerge, History, Loader2, MoreHorizontal, Pencil, Plus, Trash2, Undo2, X } from "lucide-react";
 import type { CellValue, Column, Table } from "@/lib/analytics/compute";
-import { filterOptions, queryRows } from "@/lib/analytics/table-query";
+import { activeColumnFilter, queryRows, type ColumnFilter } from "@/lib/analytics/table-query";
+import { groupEdits, rowCapabilities, type PendingEdit } from "@/lib/analytics/table-rows";
 import { groupRows, PAGE_SIZES } from "@/lib/analytics/table-view";
 import { useTableView } from "./table-view-context";
-import { editAnalyticsCellAction, mergeCompaniesAction, setInvoicePartyAction, setTableLinkAction } from "@/app/(app)/analytics/actions";
+import { addTableRowAction, deleteTableRowsAction, mergeCompaniesAction, restoreTableRowsAction, saveTableChangesAction, setInvoicePartyAction, setTableLinkAction } from "@/app/(app)/analytics/actions";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ColumnMenu, describeFilter } from "./column-menu";
+import { RecordForm, formValues } from "./record-form";
+import { RecordHistory } from "./record-history";
 import { Combobox } from "@/components/ui/combobox";
 import { SearchInput } from "@/components/ui/search-input";
 import { cn } from "@/lib/utils";
 import { fmtDate, fmtMoney, fmtNumber } from "./format";
 
 type Row = Record<string, CellValue>;
+/** A correction typed in a cell, not saved yet: shown in yellow until «Guardar». */
+type Edit = PendingEdit & { label: string; rowTitle: string; before: CellValue; kind?: Column["kind"]; text: string; error?: string };
 type Company = { id: string; nombre: string; nif: string | null };
 
 const right = (c: Column) => c.kind === "money" || c.kind === "number";
+/** A value as the cell editor shows it: "12,5", "31/12/2026". */
+const editText = (v: CellValue, c: Column) => v === null || v === undefined ? "" : c.edit?.type === "date" && typeof v === "string" ? fmtDate(v)
+  : typeof v === "number" ? String(v).replace(".", ",") : String(v);
 const show = (v: CellValue, kind?: Column["kind"]) => {
   if (v === null || v === "") return <span className="text-slate-300">—</span>;
   if (kind === "money" && typeof v === "number") return fmtMoney(v);
@@ -30,14 +41,24 @@ const show = (v: CellValue, kind?: Column["kind"]) => {
  * Each change is a new revision of the record. Which columns show, the grouping, the order and the rows per page come
  * from the person's saved view (header «Ajustes»); grouped, each group shows its rows count and its totals.
  */
-export function DataTable({ table, canEdit = false, companies = [], initialFilters = {} }: { table: Table; canEdit?: boolean; companies?: Company[]; initialFilters?: Record<string, string> }) {
+export function DataTable({ table, canEdit = false, canManage = false, companies = [], initialFilters = {} }: { table: Table; canEdit?: boolean; canManage?: boolean; companies?: Company[]; initialFilters?: Record<string, string> }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<Record<string, string>>(initialFilters);
+  // Filters chosen in the column headers (a link like «?pendiente=col» opens with the empty ones of that column).
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilter>>(
+    () => Object.fromEntries(Object.entries(initialFilters).filter(([, v]) => v).map(([k, v]) => [k, { values: [v] }])));
+  const [edits, setEdits] = useState<Map<string, Edit>>(new Map());
+  const [reviewing, setReviewing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<{ title: string; initial: Record<string, string | boolean> } | null>(null);
+  const [history, setHistory] = useState<Row | null>(null);
+  const [removing, setRemoving] = useState<Row | null>(null);
+  const [undo, setUndo] = useState<{ ids: string[]; text: string } | null>(null);
+  const caps = rowCapabilities(table.key);
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const { view, update } = useTableView(table.columns);
@@ -51,21 +72,29 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
     return groupColumn ? [groupColumn, ...c.filter(x => x.key !== groupColumn.key)] : c;
   }, [table.columns, view.hidden, groupColumn]);
 
-  const filterable = table.columns.filter(c => c.filter);
-  const options = useMemo(() => Object.fromEntries(filterable.map(c => [c.key, filterOptions(table.rows, c)])), [table.rows]); // eslint-disable-line react-hooks/exhaustive-deps
   // Search looks in every column, also the hidden ones.
-  const result = useMemo(() => queryRows(table.rows, table.columns, { search, filters, sort, page: groupColumn ? 1 : page, pageSize: groupColumn ? Number.MAX_SAFE_INTEGER : pageSize }),
-    [table, search, filters, sort, page, pageSize, groupColumn]);
+  const result = useMemo(() => queryRows(table.rows, table.columns, { search, filters: {}, columnFilters, sort, page: groupColumn ? 1 : page, pageSize: groupColumn ? Number.MAX_SAFE_INTEGER : pageSize }),
+    [table, search, columnFilters, sort, page, pageSize, groupColumn]);
   const groups = useMemo(() => groupColumn ? groupRows(result.rows, table.columns, groupColumn.key) : null, [result.rows, table.columns, groupColumn]);
   const groupPages = groups ? Math.max(1, Math.ceil(groups.length / pageSize)) : 1;
   const groupPage = Math.min(page, groupPages);
   const shownGroups = groups?.slice((groupPage - 1) * pageSize, groupPage * pageSize) ?? [];
-  const active = Object.values(filters).filter(Boolean).length + (search ? 1 : 0);
-  const mergeable = canEdit && table.key === "empresas";
+  const activeFilters = Object.entries(columnFilters).filter(([, f]) => activeColumnFilter(f));
+  const active = activeFilters.length + (search ? 1 : 0);
+  const mergeable = canManage && table.key === "empresas";
+  const titleOf = (r: Row) => { const t = table.title ? r[table.title] : columns.map(c => r[c.key]).find(v => typeof v === "string" && v); return typeof t === "string" && t ? t : "Fila sin nombre"; };
+  const recordRows = canEdit && table.rows.some(r => typeof r._id === "string" && typeof r._rev === "number");
+  const setFilter = (key: string, f: ColumnFilter | undefined) => { setColumnFilters(old => { const n = { ...old }; if (f) n[key] = f; else delete n[key]; return n; }); setPage(1); };
 
-  function toggleSort(key: string) {
-    update({ sort: !sort || sort.key !== key ? { key, dir: "asc" } : sort.dir === "asc" ? { key, dir: "desc" } : null });
-  }
+  // Leaving the page with corrections not saved asks first.
+  useEffect(() => {
+    if (!edits.size) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [edits.size]);
+
+  const setSort = (key: string, dir: "asc" | "desc" | null) => update({ sort: dir ? { key, dir } : null });
   const toggleGroup = (key: string) => setOpen(o => { const n = new Set(o); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const refresh = () => startTransition(() => router.refresh());
 
@@ -93,15 +122,58 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
     if (!r.ok) { setError(r.error); return; }
     refresh();
   }
+  /** A cell changed: kept as a pending correction (or dropped if it is back to the saved value). */
   async function save(row: Row, column: Column, value: unknown) {
     if (!column.edit || typeof row._id !== "string" || typeof row._rev !== "number") return;
-    setBusy(`${row._id}:${column.key}`); setError(null);
     // A column can be backed by a different field per row (e.g. the price «with tax» when that is what was read).
     const field = typeof row[`_src_${column.key}`] === "string" ? row[`_src_${column.key}`] as string : column.edit.field;
-    const r = await editAnalyticsCellAction({ recordId: row._id, expectedRevision: row._rev, field, value });
+    const key = `${row._id}:${column.key}`;
+    const text = typeof value === "boolean" ? (value ? "Sí" : "No") : column.edit.type === "select" ? column.edit.options?.find(o => o.value === value)?.label ?? String(value ?? "") : String(value ?? "");
+    const same = column.edit.type === "select" ? text === (row[column.key] ?? "") : typeof value === "boolean" ? value === (row[column.key] === true)
+      : text.trim() === editText(row[column.key] ?? null, column);
+    setEdits(old => {
+      const n = new Map(old);
+      if (same) n.delete(key);
+      else n.set(key, { recordId: row._id as string, revision: row._rev as number, columnKey: column.key, field, value, label: column.label,
+        rowTitle: titleOf(row), before: row[column.key] ?? null, kind: column.kind, text });
+      return n;
+    });
+  }
+  async function saveAll() {
+    setSaving(true); setError(null); setNotice(null);
+    const list = [...edits.values()];
+    const r = await saveTableChangesAction({ changes: groupEdits(list) });
+    setSaving(false);
+    if (!r.ok) { setError(r.error); return; }
+    const failed = new Map(r.results.filter(x => !x.ok).map(x => [x.recordId, (x as { error: string }).error]));
+    setEdits(new Map([...edits].filter(([, e]) => failed.has(e.recordId)).map(([k, e]) => [k, { ...e, error: failed.get(e.recordId) }])));
+    const saved = list.filter(e => !failed.has(e.recordId)).length;
+    if (saved) setNotice(`${saved} ${saved === 1 ? "cambio guardado" : "cambios guardados"}. Puedes verlos en el historial de cada fila.`);
+    if (failed.size) { setError(`${failed.size} ${failed.size === 1 ? "fila no se pudo guardar" : "filas no se pudieron guardar"}: revisa los cambios marcados en rojo.`); setReviewing(true); }
+    else setReviewing(false);
+    refresh();
+  }
+  async function addRow(values: Record<string, string | boolean>) {
+    const r = await addTableRowAction({ tableKey: table.key, values });
+    if (!r.ok) return r.error;
+    setForm(null); setNotice("Registro añadido."); refresh();
+    return null;
+  }
+  async function removeRow(row: Row) {
+    setBusy(`${row._id}:remove`); setError(null);
+    const r = await deleteTableRowsAction({ tableKey: table.key, records: [{ id: row._id, revision: row._rev }] });
+    setBusy(null); setRemoving(null);
+    if (!r.ok) { setError(r.error); return; }
+    setEdits(old => new Map([...old].filter(([, e]) => e.recordId !== row._id)));
+    setUndo({ ids: r.ids, text: `«${titleOf(row)}» eliminado.` }); refresh();
+  }
+  async function undoRemove() {
+    if (!undo) return;
+    setBusy("undo");
+    const r = await restoreTableRowsAction({ tableKey: table.key, ids: undo.ids });
     setBusy(null);
     if (!r.ok) { setError(r.error); return; }
-    refresh();
+    setUndo(null); setNotice("Fila recuperada."); refresh();
   }
 
   const pages = groups ? groupPages : result.pages, current = groups ? groupPage : result.page, count = groups ? groups.length : result.total;
@@ -111,34 +183,37 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
   const cells = (r: Row) => columns.map(c => {
             const editable = canEdit && !!c.edit && typeof r._id === "string" && typeof r._rev === "number";
             const cellBusy = busy === `${r._id}:${c.key}`;
-            const missing = c.completar && (r[c.key] === null || r[c.key] === undefined || r[c.key] === "");
-            return <td key={c.key} className={cn("px-4 py-1.5 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" && "whitespace-nowrap", missing && "bg-amber-50/70")}>
+            const p = edits.get(`${r._id}:${c.key}`);
+            const missing = !p && c.completar && (r[c.key] === null || r[c.key] === undefined || r[c.key] === "");
+            const staged = p ? <span className="font-medium text-slate-900">{p.text || <span className="italic text-slate-400">vacío</span>}</span> : undefined;
+            return <td key={c.key} title={p ? (p.error ?? `Antes: ${editText(p.before, c) || "vacío"} · sin guardar`) : undefined}
+              className={cn("px-4 py-1.5 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" && "whitespace-nowrap", missing && "bg-amber-50/70",
+                p && (p.error ? "bg-rose-100/70" : "bg-amber-100/80"))}>
               {c.kind === "document" ? (typeof r[c.key] === "string"
                   ? <a href={`/api/knowledge/intake/files/${r[c.key]}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-[#0A58FF] hover:underline"><FileText className="size-3.5" />Ver</a>
                   : <span className="text-slate-300">—</span>)
                 : c.kind === "boolean" ? (editable
-                  ? <label className="inline-flex items-center gap-1.5 text-xs"><input type="checkbox" className="size-4 accent-[#0A58FF]" checked={r[c.key] === true} disabled={cellBusy} onChange={e => void save(r, c, e.target.checked)} />{cellBusy && <Loader2 className="size-3 animate-spin" />}</label>
+                  ? <label className="inline-flex items-center gap-1.5 text-xs"><input type="checkbox" className="size-4 accent-[#0A58FF]" checked={p ? p.value === true : r[c.key] === true} onChange={e => void save(r, c, e.target.checked)} /></label>
                   : r[c.key] === true ? <Check className="size-4 text-emerald-600" /> : <span className="text-slate-300">—</span>)
                 : editable && c.edit!.type === "select"
-                  ? <span className="inline-flex items-center gap-1"><Combobox variant="ghost" className="-ml-2.5 h-7" disabled={cellBusy} ariaLabel={c.label}
-                      value={c.edit!.options!.find(o => o.label === r[c.key])?.value ?? null} options={c.edit!.options!} onChange={v => void save(r, c, v)} />
-                      {cellBusy && <Loader2 className="size-3 animate-spin text-slate-400" />}</span>
+                  ? <Combobox variant="ghost" className="-ml-2.5 h-7" ariaLabel={c.label}
+                      value={p ? String(p.value) : c.edit!.options!.find(o => o.label === r[c.key])?.value ?? null} options={c.edit!.options!} onChange={v => void save(r, c, v)} />
                 : canEdit && c.edit?.type === "link" && typeof r._id === "string"
                   ? <span className="inline-flex items-center gap-1">
                       <Combobox variant="ghost" className="-ml-2.5 h-7 max-w-[280px]" searchable searchPlaceholder={`Buscar en ${c.label.toLowerCase()}…`} ariaLabel={c.label} disabled={cellBusy}
                         value={(r[`_link_${c.key}`] as string | null) ?? "__none"} limit={40}
                         options={[{ value: "__none", label: "— Sin enlazar" }, ...(c.edit.options ?? [])]}
-                        renderValue={o => !o || o.value === "__none" ? <span className={missing ? "font-medium text-amber-700" : "text-slate-400"}>{missing ? "Por completar" : "Sin enlazar"}</span> : o.label}
+                        renderValue={o => !o || o.value === "__none" ? <span className={c.completar ? "font-medium text-amber-700" : "text-slate-400"}>{c.completar ? "Por completar" : "Sin enlazar"}</span> : o.label}
                         onChange={v => { if (v !== ((r[`_link_${c.key}`] as string | null) ?? "__none")) void saveLink(r, c, v === "__none" ? null : v); }} />
                       {cellBusy && <Loader2 className="size-3 animate-spin text-slate-400" />}</span>
                 : editable && (c.edit!.type === "number" || c.edit!.type === "date")
-                  ? <EditableText value={r[c.key] === null || r[c.key] === undefined ? "" : c.edit!.type === "date" && typeof r[c.key] === "string" ? fmtDate(r[c.key] as string) : String(r[c.key]).replace(".", ",")}
-                      display={missing ? <span className="font-medium text-amber-700">Por completar</span> : show(r[c.key] ?? null, c.kind)} allowEmpty busy={cellBusy} onSave={v => save(r, c, v)} />
+                  ? <EditableText value={p ? p.text : editText(r[c.key] ?? null, c)}
+                      display={staged ?? (missing ? <span className="font-medium text-amber-700">Por completar</span> : show(r[c.key] ?? null, c.kind))} allowEmpty busy={false} onSave={v => save(r, c, v)} />
                 : canEdit && c.edit?.type === "party" && typeof r._id === "string"
                   ? <PartyCell current={(c.edit.field === "issuer" ? r._issuer : r._customer) as string | null} label={c.label} companies={companies} busy={cellBusy}
                       onSave={choice => saveParty(r, c, choice)} />
-                : editable && c.edit!.type === "text" ? <EditableText value={String(r[c.key] ?? "")} allowEmpty={!!c.completar || table.key.startsWith("tabla:") || table.key.startsWith("plantilla:")}
-                    display={missing ? <span className="font-medium text-amber-700">Por completar</span> : undefined} busy={cellBusy} onSave={v => save(r, c, v)} />
+                : editable && c.edit!.type === "text" ? <EditableText value={p ? p.text : String(r[c.key] ?? "")} allowEmpty={!!c.completar || table.key.startsWith("tabla:") || table.key.startsWith("plantilla:")}
+                    display={staged ?? (missing ? <span className="font-medium text-amber-700">Por completar</span> : undefined)} busy={false} onSave={v => save(r, c, v)} />
                 : missing ? <span className="font-medium text-amber-700">Por completar</span>
                 : show(r[c.key] ?? null, c.kind)}
             </td>;
@@ -149,24 +224,45 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
     {cells(r)}
     {mergeable && <td className="whitespace-nowrap px-4 py-1.5 text-right">{typeof r._id === "string" &&
       <MergeControl row={r} rows={table.rows} busy={busy === `${r._id}:merge`} onMerge={target => merge(r._id as string, target)} />}</td>}
+    {recordRows && <td className="w-10 px-2 py-1.5 text-right">{typeof r._id === "string" && typeof r._rev === "number" &&
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" aria-label={`Acciones de ${titleOf(r)}`} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+            {busy === `${r._id}:remove` ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}</button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuItem onSelect={() => setHistory(r)}><History className="size-4" />Historial</DropdownMenuItem>
+          {caps.add && <DropdownMenuItem onSelect={() => setForm({ title: "Duplicar registro", initial: formValues(table.columns, r) })}><Copy className="size-4" />Duplicar</DropdownMenuItem>}
+          {caps.remove && <><DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onSelect={() => setRemoving(r)}><Trash2 className="size-4" />Eliminar</DropdownMenuItem></>}
+        </DropdownMenuContent>
+      </DropdownMenu>}</td>}
   </tr>;
 
-  return <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+  return <section className="overflow-clip rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
     <div className="border-b border-slate-200 px-5 py-3.5">
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput className="w-full sm:w-72" placeholder="Buscar en la tabla…" value={search} onChange={v => { setSearch(v); setPage(1); }} />
-        {filterable.map(c => <Combobox key={c.key} ariaLabel={`Filtrar por ${c.label}`} className="h-10 max-w-[220px] rounded-xl" value={filters[c.key] ?? ""}
-          searchable={(options[c.key]?.length ?? 0) > 8} searchPlaceholder={`Buscar ${c.label.toLowerCase()}…`}
-          options={[{ value: "", label: "Todos" }, ...(options[c.key] ?? []).map(o => ({ value: o.value, label: o.label, hint: String(o.count) }))]}
-          renderValue={o => <><span className="text-slate-500">{c.label}:</span> <span className={filters[c.key] ? "font-medium text-slate-900" : ""}>{o?.label ?? "Todos"}</span></>}
-          onChange={v => { setFilters(f => ({ ...f, [c.key]: v })); setPage(1); }} />)}
-        {active > 0 && <button type="button" onClick={() => { setSearch(""); setFilters({}); setPage(1); }}
+        {active > 0 && <button type="button" onClick={() => { setSearch(""); setColumnFilters({}); setPage(1); }}
           className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900"><X className="size-3.5" />Limpiar</button>}
+        {canEdit && caps.add && <button type="button" onClick={() => setForm({ title: "Añadir registro", initial: {} })}
+          className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#0A58FF] px-3.5 text-sm font-medium text-white hover:bg-[#0848d6]"><Plus className="size-4" />Añadir registro</button>}
         <span className="ml-auto flex items-center gap-2 text-xs tabular-nums text-slate-500">{pending && <Loader2 className="size-3.5 animate-spin" />}
           {groupColumn && <span className="rounded-full bg-[#0A58FF]/10 px-2 py-0.5 font-medium text-[#0A58FF]">Agrupado por {groupColumn.label.toLowerCase()}</span>}
           {result.total === table.rows.length ? `${table.rows.length.toLocaleString("es-ES")} filas` : `${result.total.toLocaleString("es-ES")} de ${table.rows.length.toLocaleString("es-ES")} filas`}</span>
       </div>
+      {activeFilters.length > 0 && <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        {activeFilters.map(([key, f]) => { const c = table.columns.find(x => x.key === key); if (!c) return null;
+          return <span key={key} className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#0A58FF]/10 py-0.5 pl-2.5 pr-1 text-xs font-medium text-[#0A58FF]">
+            <span className="truncate">{describeFilter(c, f, table.rows)}</span>
+            <button type="button" aria-label={`Quitar filtro de ${c.label}`} onClick={() => setFilter(key, undefined)} className="rounded-full p-0.5 hover:bg-[#0A58FF]/15"><X className="size-3" /></button>
+          </span>; })}
+      </div>}
     </div>
+    {undo && <p className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-5 py-2 text-sm text-slate-700">{undo.text}
+      <button type="button" onClick={() => void undoRemove()} disabled={busy === "undo"} className="inline-flex items-center gap-1 font-medium text-[#0A58FF] hover:underline">
+        {busy === "undo" ? <Loader2 className="size-3.5 animate-spin" /> : <Undo2 className="size-3.5" />}Deshacer</button>
+      <button type="button" aria-label="Cerrar" onClick={() => setUndo(null)} className="ml-auto rounded p-0.5 text-slate-400 hover:bg-slate-200"><X className="size-3.5" /></button></p>}
     {error && <p className="border-b border-rose-100 bg-rose-50 px-5 py-2 text-sm text-rose-700">{error}</p>}
     {notice && <p className="border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-800">{notice}</p>}
     {table.rows.length ? <>
@@ -174,12 +270,12 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
         <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500"><tr>
           {columns.map(c => <th key={c.key} className={cn("whitespace-nowrap px-4 py-2.5 font-semibold", right(c) && "text-right")}
             aria-sort={sort?.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}>
-            {c.kind === "document" ? c.label : <button type="button" onClick={() => toggleSort(c.key)}
-              className={cn("inline-flex items-center gap-1 rounded px-1 -mx-1 hover:text-slate-900", sort?.key === c.key && "text-slate-900")}>
-              {c.label}{sort?.key !== c.key ? <ArrowUpDown className="size-3 opacity-40" /> : sort.dir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />}
-            </button>}
+            {c.kind === "document" ? c.label : <ColumnMenu column={c} rows={table.rows} sort={sort} filter={columnFilters[c.key]} alignRight={right(c)}
+              onSort={dir => setSort(c.key, dir)} onFilter={f => setFilter(c.key, f)}
+              onHide={columns.length > 1 ? () => update({ hidden: [...view.hidden, c.key] }) : undefined} />}
           </th>)}
           {mergeable && <th className="px-4 py-2.5" />}
+          {recordRows && <th className="w-10 px-2 py-2.5" />}
         </tr></thead>
         <tbody>{groups ? shownGroups.map(g => {
           const expanded = open.has(g.key);
@@ -202,9 +298,10 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
               </button> : summary(c)}
             </td>)}
             {mergeable && <td />}
+            {recordRows && <td />}
           </tr>, ...(expanded ? g.rows.map((r, i) => row(r, typeof r._id === "string" ? r._id : `${g.key}-${i}`)) : [])];
         }) : result.rows.map((r, i) => row(r, typeof r._id === "string" ? r._id : `${result.page}-${i}`))}
-        {!result.rows.length && <tr><td colSpan={columns.length + (mergeable ? 1 : 0)} className="px-4 py-10 text-center text-sm text-slate-500">Ninguna fila coincide con la búsqueda o los filtros.</td></tr>}</tbody>
+        {!result.rows.length && <tr><td colSpan={columns.length + (mergeable ? 1 : 0) + (recordRows ? 1 : 0)} className="px-4 py-10 text-center text-sm text-slate-500">Ninguna fila coincide con la búsqueda o los filtros.</td></tr>}</tbody>
       </table></div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-2.5 text-xs text-slate-500">
         <span className="flex items-center gap-2">{groups ? "Grupos" : "Filas"} por página
@@ -223,7 +320,71 @@ export function DataTable({ table, canEdit = false, companies = [], initialFilte
             className="inline-flex size-7 items-center justify-center rounded-lg border border-slate-200 bg-white hover:border-slate-300 disabled:opacity-40"><ChevronRight className="size-3.5" /></button>
         </span>
       </div>
-    </> : <p className="px-5 py-10 text-center text-sm text-slate-500">Todavía no hay datos. Importa documentos desde Conocimiento o desde Drive.</p>}
+    </> : <p className="px-5 py-10 text-center text-sm text-slate-500">{caps.add && canEdit ? "La tabla está vacía. Usa «Añadir registro» para empezar." : "Todavía no hay datos. Importa documentos desde Conocimiento o desde Drive."}</p>}
+
+    {edits.size > 0 && <div className="sticky bottom-0 z-20 flex flex-wrap items-center gap-2 border-t border-amber-200 bg-amber-50 px-5 py-2.5 text-sm">
+      <span className="font-medium text-amber-900">{edits.size} {edits.size === 1 ? "cambio sin guardar" : "cambios sin guardar"}</span>
+      <button type="button" onClick={() => setReviewing(true)} className="font-medium text-[#0A58FF] hover:underline">Revisar</button>
+      <span className="ml-auto flex gap-2">
+        <button type="button" disabled={saving} onClick={() => setEdits(new Map())} className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-amber-100">Descartar</button>
+        <button type="button" disabled={saving} onClick={() => setReviewing(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#0A58FF] px-3.5 py-1.5 font-medium text-white hover:bg-[#0848d6] disabled:opacity-50">
+          {saving && <Loader2 className="size-3.5 animate-spin" />}Guardar cambios</button>
+      </span>
+    </div>}
+
+    <Dialog open={reviewing && edits.size > 0} onOpenChange={o => { if (!o && !saving) setReviewing(false); }}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>¿Guardar estos cambios?</DialogTitle>
+          <DialogDescription>Cada fila guarda una versión nueva; la anterior queda en su historial y se puede restaurar.</DialogDescription>
+        </DialogHeader>
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs text-slate-500"><tr>
+              <th className="px-3 py-2 font-medium">Fila</th><th className="px-3 py-2 font-medium">Columna</th>
+              <th className="px-3 py-2 font-medium">Antes</th><th className="px-3 py-2 font-medium">Después</th><th className="w-8" />
+            </tr></thead>
+            <tbody>{[...edits].map(([key, e]) => <tr key={key} className={cn("border-t border-slate-100 align-top", e.error && "bg-rose-50")}>
+              <td className="max-w-[180px] truncate px-3 py-2 font-medium text-slate-800" title={e.rowTitle}>{e.rowTitle}</td>
+              <td className="px-3 py-2 text-slate-600">{e.label}</td>
+              <td className="px-3 py-2 text-slate-400 line-through">{show(e.before, e.kind)}</td>
+              <td className="px-3 py-2 text-slate-900">{e.text || <span className="italic text-slate-400">vacío</span>}
+                {e.error && <p className="mt-0.5 text-xs text-rose-700">{e.error}</p>}</td>
+              <td className="px-1 py-1.5"><button type="button" aria-label="Quitar este cambio" disabled={saving}
+                onClick={() => setEdits(old => { const n = new Map(old); n.delete(key); return n; })} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X className="size-3.5" /></button></td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" disabled={saving} onClick={() => setReviewing(false)} className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100">Seguir editando</button>
+          <button type="button" disabled={saving} onClick={() => void saveAll()}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#0A58FF] px-4 py-2 text-sm font-medium text-white hover:bg-[#0848d6] disabled:opacity-50">
+            {saving && <Loader2 className="size-4 animate-spin" />}Guardar {edits.size} {edits.size === 1 ? "cambio" : "cambios"}</button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={!!removing} onOpenChange={o => { if (!o) setRemoving(null); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>¿Eliminar esta fila?</DialogTitle>
+          <DialogDescription>«{removing ? titleOf(removing) : ""}» sale de la tabla. Su historial se conserva y podrás deshacerlo justo después.</DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={() => setRemoving(null)} className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100">Cancelar</button>
+          <button type="button" disabled={!!busy} onClick={() => removing && void removeRow(removing)}
+            className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50">
+            {busy?.endsWith(":remove") && <Loader2 className="size-4 animate-spin" />}Eliminar</button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {form && <RecordForm key={form.title + JSON.stringify(form.initial)} open title={form.title} columns={table.columns} initial={form.initial}
+      onClose={() => setForm(null)} onSubmit={addRow} />}
+    {history && typeof history._id === "string" && typeof history._rev === "number" &&
+      <RecordHistory recordId={history._id} title={titleOf(history)} columns={table.columns} currentRevision={history._rev}
+        onClose={() => setHistory(null)} onRestored={() => { setHistory(null); setNotice("Versión restaurada."); refresh(); }} />}
   </section>;
 }
 

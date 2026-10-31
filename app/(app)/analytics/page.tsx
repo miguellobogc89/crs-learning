@@ -129,7 +129,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       {templateGroup && <TemplateTableStatus group={templateGroup} canEdit={canEdit} />}
       {(table.key === "facturas" || table.key === "compras") && <DuplicateLinesReview issues={duplicatedLineIssues(data)} canEdit={canEdit} />}
       {table.key === "compras" && <PurchasesCleanup summary={cleanupSummary(cleanupPlan(data))} canEdit={canEdit} />}
-      <DataTable key={`${table.key}|${params.pendiente ?? ""}`} table={table} canEdit={canEdit} companies={table.key === "facturas" ? companyOptions(data) : []}
+      <DataTable key={`${table.key}|${params.pendiente ?? ""}`} table={table} canEdit canManage={canEdit} companies={table.key === "facturas" ? companyOptions(data) : []}
         initialFilters={params.pendiente && table.columns.some(c => c.key === params.pendiente) ? { [params.pendiente]: "__empty" } : {}} /></div>;
   } else if (view === "tablas") {
     const all = [...TABLE_KEYS, ...templateTables.map(t => t.key)].map(key => buildTable(data, key));

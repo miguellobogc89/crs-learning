@@ -9,11 +9,12 @@ export class EngineRecordError extends Error {
   }
 }
 
+/** `write`: false = read; true = owner/admin; "member" = any active member (table corrections from Analítica). */
 async function checkMembership(
   tx: Prisma.TransactionClient,
   workspaceId: string,
   userId: string,
-  write: boolean,
+  write: boolean | "member",
 ) {
   const workspace = await tx.workspaces.findFirst({
     where: { id: workspaceId, status: "active" },
@@ -30,7 +31,7 @@ async function checkMembership(
   if (!workspace || (!isOwner && !role)) {
     throw new EngineRecordError("FORBIDDEN", "Active workspace membership required.");
   }
-  if (write && !isOwner && !["owner", "admin"].includes(role ?? "")) {
+  if (write === true && !isOwner && !["owner", "admin"].includes(role ?? "")) {
     throw new EngineRecordError("FORBIDDEN", "Workspace owner or admin required for writes.");
   }
 }
@@ -117,12 +118,14 @@ export async function updateEngineRecord(input: {
   expectedRevision: number;
   values: unknown;
   draftOnly?: boolean;
+  /** Any active member may write (otherwise owner/admin only). */
+  membersCanWrite?: boolean;
 }) {
   if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 1) {
     throw new EngineRecordError("INVALID", "La revisión del registro no es válida.");
   }
   return prisma.$transaction(async (tx) => {
-    await checkMembership(tx, input.workspaceId, input.userId, true);
+    await checkMembership(tx, input.workspaceId, input.userId, input.membersCanWrite ? "member" : true);
     const record = await tx.engine_records.findFirst({
       where: { id: input.recordId, workspace_id: input.workspaceId },
       select: { id: true, object_type_id: true, status: true, revision: true, schema_version: true, values_json: true },

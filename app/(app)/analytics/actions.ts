@@ -4,41 +4,60 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
-import { updateEngineRecord, EngineRecordError } from "@/lib/engine/records.service";
-import { editedCustomValues, editedValues } from "@/lib/analytics/edit";
+import { addTableRow, deleteTableRows, editCell, recordHistory, restoreRevision, restoreTableRows, saveTableChanges, TableRowsError } from "@/lib/analytics/table-rows.service";
 import { LinkError, setRecordLink } from "@/lib/analytics/links";
 import { mergeRecords } from "@/lib/analytics/merge";
 import { archiveLines, setInvoiceParty } from "@/lib/analytics/parties";
 import { loadAnalyticsData, missingTable } from "@/lib/analytics/data";
-import { duplicatedLineIssues, PLAIN_EDITABLE } from "@/lib/analytics/compute";
+import { duplicatedLineIssues } from "@/lib/analytics/compute";
 import { normalizeView } from "@/lib/analytics/table-view";
 import { saveTableView } from "@/lib/analytics/table-view.service";
 
 /** One cell edited in Analítica → Tablas. A new revision of the record (its history keeps the previous value). */
 export async function editAnalyticsCellAction(input: { recordId: string; expectedRevision: number; field: string; value: unknown }) {
+  return rowsAction(async (workspaceId, userId) => {
+    await editCell({ workspaceId, userId, recordId: input.recordId, expectedRevision: input.expectedRevision, field: input.field, value: input.value });
+    return {};
+  });
+}
+
+/** Any active member of the workspace can correct table data (each change stays in the record's history). */
+async function rowsAction<T extends object>(run: (workspaceId: string, userId: string) => Promise<T>) {
   const session = await auth();
   if (!session?.user?.id) return { ok: false as const, error: "Sesión no válida." };
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
-  if (activeWorkspace.role !== "owner" && activeWorkspace.role !== "admin") return { ok: false as const, error: "Solo el propietario o un administrador puede corregir datos." };
-  const record = await prisma.engine_records.findFirst({ where: { id: input.recordId, workspace_id: activeWorkspace.id, status: { not: "archived" } },
-    select: { values_json: true, engine_object_types: { select: { key: true, settings: true, engine_field_definitions: { where: { status: "active" }, select: { key: true, field_type: true } } } } } });
-  if (!record) return { ok: false as const, error: "El registro ya no existe." };
-  const current = record.values_json && typeof record.values_json === "object" && !Array.isArray(record.values_json) ? record.values_json as Record<string, unknown> : {};
-  // Tables created with the assistant: every column is editable; the rest only the few corrections allowed.
-  // Tables from documents or created with the assistant: every column. Base records: their plain fields, and the
-  // few special corrections (company name, «Mi empresa», invoice type and category).
-  const origen = (record.engine_object_types.settings as { origen?: string } | null)?.origen;
-  const plain = origen === "asistente" || origen === "plantilla" || PLAIN_EDITABLE[record.engine_object_types.key]?.includes(input.field);
-  const edited = plain ? editedCustomValues(record.engine_object_types.engine_field_definitions, current, input.field, input.value)
-    : editedValues(record.engine_object_types.key, current, input.field, input.value);
-  if (!edited.ok) return { ok: false as const, error: edited.error };
   try {
-    await updateEngineRecord({ workspaceId: activeWorkspace.id, userId: session.user.id, recordId: input.recordId, expectedRevision: input.expectedRevision, values: edited.values });
+    const result = await run(activeWorkspace.id, session.user.id);
     revalidatePath("/analytics");
-    return { ok: true as const };
+    return { ok: true as const, ...result };
   } catch (error) {
-    return { ok: false as const, error: error instanceof EngineRecordError ? error.message : "No se pudo guardar el cambio." };
+    if (error instanceof TableRowsError) return { ok: false as const, error: error.message };
+    console.error("[analytics] filas:", error);
+    return { ok: false as const, error: "No se pudo completar la operación." };
   }
+}
+
+/** The pending corrections of a table, saved together (each record on its own: see the per-record results). */
+export async function saveTableChangesAction(input: { changes: unknown }) {
+  return rowsAction(async (workspaceId, userId) => ({ results: await saveTableChanges({ workspaceId, userId, changes: input.changes }) }));
+}
+export async function addTableRowAction(input: { tableKey: string; values: unknown }) {
+  return rowsAction((workspaceId, userId) => addTableRow({ workspaceId, userId, tableKey: String(input.tableKey), values: input.values }));
+}
+export async function deleteTableRowsAction(input: { tableKey: string; records: unknown }) {
+  return rowsAction((workspaceId, userId) => deleteTableRows({ workspaceId, userId, tableKey: String(input.tableKey), records: input.records }));
+}
+export async function restoreTableRowsAction(input: { tableKey: string; ids: unknown }) {
+  return rowsAction((workspaceId, userId) => restoreTableRows({ workspaceId, userId, tableKey: String(input.tableKey), ids: input.ids }));
+}
+export async function recordHistoryAction(input: { recordId: string }) {
+  return rowsAction(async workspaceId => ({ revisions: await recordHistory({ workspaceId, recordId: input.recordId }) }));
+}
+export async function restoreRevisionAction(input: { recordId: string; expectedRevision: number; revision: number }) {
+  return rowsAction(async (workspaceId, userId) => {
+    await restoreRevision({ workspaceId, userId, recordId: input.recordId, expectedRevision: Number(input.expectedRevision), revision: Number(input.revision) });
+    return {};
+  });
 }
 
 /** "Unir con…": the duplicate company's invoices and relations move to the one that stays; the duplicate is archived. */
@@ -62,7 +81,6 @@ export async function setInvoicePartyAction(input: { invoiceId: string; role: "i
   const session = await auth();
   if (!session?.user?.id) return { ok: false as const, error: "Sesión no válida." };
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
-  if (activeWorkspace.role !== "owner" && activeWorkspace.role !== "admin") return { ok: false as const, error: "Solo el propietario o un administrador puede corregir datos." };
   if (input.role !== "issuer" && input.role !== "customer") return { ok: false as const, error: "Dato no válido." };
   try {
     const result = await prisma.$transaction(tx => setInvoiceParty(tx, { workspaceId: activeWorkspace.id, userId: session.user!.id!, invoiceId: input.invoiceId,
@@ -113,7 +131,6 @@ export async function setTableLinkAction(input: { recordId: string; columna: str
   const session = await auth();
   if (!session?.user?.id) return { ok: false as const, error: "Sesión no válida." };
   const { activeWorkspace } = await getActiveWorkspaceContext(session.user.id);
-  if (activeWorkspace.role !== "owner" && activeWorkspace.role !== "admin") return { ok: false as const, error: "Solo el propietario o un administrador puede cambiar enlaces." };
   try {
     await prisma.$transaction((tx) => setRecordLink(tx, { workspaceId: activeWorkspace.id, userId: session.user!.id!, recordId: input.recordId, columna: input.columna, targetId: input.targetId }));
     revalidatePath("/analytics");
