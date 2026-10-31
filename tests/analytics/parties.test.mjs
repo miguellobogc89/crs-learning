@@ -10,7 +10,12 @@ test('a new company: name required; NIF optional, stored in comparable form',()=
  assert.deepEqual(p.newCompanyValues({nombre:'  Aguas de  Cádiz '}),{ok:true,values:{legal_name:'Aguas de Cádiz'},key:null});
  assert.deepEqual(p.newCompanyValues({nombre:'Leroy',nif:'CIF B-84818442'}),{ok:true,values:{legal_name:'Leroy',tax_identifier:'B84818442'},key:'B84818442'});
  assert.equal(p.newCompanyValues({nombre:' '}).ok,false);
- assert.match(p.newCompanyValues({nombre:'X',nif:'hola'}).error,/no es un NIF/);
+ assert.match(p.newCompanyValues({nombre:'X',nif:'hola'}).error,/no tiene forma de NIF/);
+ // Aguas de Cádiz: typed, or pasted from a PDF with an invisible space or a Cyrillic «А».
+ for (const nif of ['A11355518','A-11.355.518','ES A11355518','A11355518\u200b','\u0410113555 18'])
+  assert.equal(p.newCompanyValues({nombre:'Aguas de Cádiz',nif}).key,'A11355518',JSON.stringify(nif));
+ assert.match(p.newCompanyValues({nombre:'X',nif:'A11355519'}).error,/control no cuadra/);
+ assert.match(p.newCompanyValues({nombre:'X',nif:'A1135551€'}).error,/caracteres que no son letras ni números/);
 });
 
 function fakeTx({existingByKey=null}={}){

@@ -18,7 +18,12 @@ export function newCompanyValues(input: { nombre: string; nif?: string | null })
   const raw = input.nif?.trim();
   if (!raw) return { ok: true, values: { legal_name: nombre }, key: null };
   const nif = normalizeIdentifier("company", raw);
-  if (spanishTaxIdValid(nif) === null) return { ok: false, error: `«${raw}» no es un NIF/CIF válido` };
+  const valid = spanishTaxIdValid(nif);
+  // Say why, so the person can fix it: odd characters left, an unknown shape, or a wrong control character.
+  if (valid === null) return { ok: false, error: /[^A-Z0-9]/.test(nif)
+    ? `«${raw}» lleva caracteres que no son letras ni números; escríbelo a mano en lugar de pegarlo`
+    : `«${raw}» no tiene forma de NIF, NIE ni CIF español (letra + 7 cifras + control, u 8 cifras + letra)` };
+  if (valid === false) return { ok: false, error: `«${raw}» no es válido: su dígito o letra de control no cuadra. Revisa que esté bien copiado` };
   return { ok: true, values: { legal_name: nombre, tax_identifier: nif }, key: nif };
 }
 

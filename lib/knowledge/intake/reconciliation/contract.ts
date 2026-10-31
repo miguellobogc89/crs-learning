@@ -68,8 +68,18 @@ export function spanishTaxIdValid(id: string): boolean | null {
 }
 
 /** Comparable form of an identifier. Tax ids drop spaces, dots, dashes and an "ES" VAT prefix; lines keep digits. */
+/**
+ * Text pasted from a PDF or a web page can carry invisible characters (zero-width spaces, soft hyphens) or letters
+ * that only look Latin (Cyrillic «А», Greek «Β»…): an identifier that reads right but never matches. They are cleaned.
+ */
+const INVISIBLE = /[\u00AD\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/g;
+const LOOKALIKE: Record<string, string> = { "А": "A", "В": "B", "С": "C", "Е": "E", "Н": "H", "К": "K", "М": "M", "О": "O", "Р": "P", "Т": "T", "Х": "X",
+  "Α": "A", "Β": "B", "Ε": "E", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Χ": "X", "Υ": "Y", "Ζ": "Z" };
+export const plainIdentifier = (raw: string) =>
+  raw.normalize("NFKC").replace(INVISIBLE, "").toUpperCase().replace(/[\u0370-\u03FF\u0400-\u04FF]/g, ch => LOOKALIKE[ch] ?? ch);
+
 export function normalizeIdentifier(type: ReconciledType, raw: string): string {
-  const compact = raw.normalize("NFKC").toUpperCase().replace(/\s+/g, "");
+  const compact = plainIdentifier(raw).replace(/\s+/g, "");
   if (type === "company") {
     let id = compact.replace(/[.\-/:]/g, "");
     // A printed label glued to the number ("CIF B84818442", "NIF:…", "DNI 31246253V") is not part of it.
