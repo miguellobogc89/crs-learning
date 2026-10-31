@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { Ban, ChevronDown, ExternalLink, Globe, Loader2, Mail, MapPin, ShieldCheck, Star, X } from "lucide-react";
+import { Ban, Check, ChevronDown, ExternalLink, Globe, Loader2, Mail, MapPin, ShieldCheck, Star, X } from "lucide-react";
 import { waApi, errorText, fieldClass } from "./api";
 import { ChatThread } from "./chat";
 import { classificationTone, shortDate, stageTone } from "./contacts";
@@ -38,6 +38,7 @@ export function ContactPanel({
   const [saving, setSaving] = useState(false);
   const [showData, setShowData] = useState(false);
   const [notes, setNotes] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -69,6 +70,8 @@ export function ContactPanel({
       await waApi("contacts/update", { id: contactId, ...patch });
       await load();
       onChanged();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -80,7 +83,7 @@ export function ContactPanel({
   return (
     <aside
       aria-label="Ficha del contacto"
-      className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-slate-200 bg-white shadow-2xl sm:w-[520px]"
+      className="fixed bottom-0 right-0 top-[68px] z-40 flex w-full flex-col border-l border-t border-slate-200 bg-white shadow-2xl sm:w-[520px] sm:rounded-tl-xl"
     >
       <header className="flex shrink-0 items-start gap-3 border-b border-slate-100 px-5 py-4">
         <div className="min-w-0 flex-1">
@@ -123,7 +126,16 @@ export function ContactPanel({
                   <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /> {c.rating.toFixed(1)}
                 </span>
               )}
-              {saving && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+              ) : (
+                saved && (
+                  <span role="status" className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                    <Check className="h-3.5 w-3.5" /> Guardado
+                  </span>
+                )
+              )}
+              <span className="ml-auto text-[11px] text-slate-400">Los cambios se guardan solos</span>
             </div>
 
             <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1.5 text-xs">
@@ -199,10 +211,19 @@ export function ContactPanel({
                 value={notes || ""}
                 maxLength={5000}
                 onChange={(e) => setNotes(e.target.value)}
-                onBlur={() => (notes || "") !== (c.notes || "") && update({ notes })}
                 placeholder="Apuntes sobre este contacto…"
               />
             </label>
+            {(notes || "") !== (c.notes || "") && (
+              <div className="-mt-1 flex justify-end gap-2">
+                <button className="rounded-lg px-3 py-1 text-xs text-slate-500 hover:bg-slate-100" disabled={saving} onClick={() => setNotes(c.notes || "")}>
+                  Descartar
+                </button>
+                <button className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700" disabled={saving} onClick={() => update({ notes })}>
+                  Guardar nota
+                </button>
+              </div>
+            )}
 
             {data.sends.length > 0 && (
               <div className="text-xs">
