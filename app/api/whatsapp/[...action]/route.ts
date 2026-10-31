@@ -16,8 +16,22 @@ import {
   syncTemplates,
 } from "@/lib/whatsapp/service";
 import { required, uuid, WhatsAppError } from "@/lib/whatsapp/rules";
+import {
+  campaignProgress,
+  contactFacets,
+  contactIds,
+  createCampaign,
+  deleteContacts,
+  getContact,
+  importContacts,
+  listContacts,
+  previewCampaign,
+  runCampaign,
+  updateContacts,
+} from "@/lib/whatsapp/contacts-service";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 type RouteContext = { params: Promise<{ action: string[] }> };
 const PENDING_COOKIE = "crs_wa_pending";
 async function handle(req: Request, route: RouteContext) {
@@ -35,7 +49,8 @@ async function handle(req: Request, route: RouteContext) {
     let body: Record<string, unknown> = {};
     if (req.method !== "GET") {
       const raw = await req.text();
-      if (raw.length > 65536)
+      // CSV imports carry the whole file; every other operation is a small JSON body.
+      if (raw.length > (action === "contacts/import" ? 4_500_000 : 65536))
         throw new WhatsAppError("Petición demasiado grande", 413);
       const parsed: unknown = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
@@ -48,6 +63,7 @@ async function handle(req: Request, route: RouteContext) {
       "disconnect",
       "templates/sync",
       "templates/create",
+      "contacts/delete",
     ];
     if (
       req.method !== "GET" &&
@@ -180,8 +196,38 @@ async function handle(req: Request, route: RouteContext) {
         }),
       });
     }
+    if (req.method === "GET" && action === "contacts")
+      return NextResponse.json(await listContacts(workspaceId, url));
+    if (req.method === "GET" && action === "contacts/facets")
+      return NextResponse.json(await contactFacets(workspaceId));
+    if (req.method === "GET" && action === "contacts/ids")
+      return NextResponse.json({ ids: await contactIds(workspaceId, url) });
+    if (req.method === "GET" && action === "contacts/one")
+      return NextResponse.json(
+        await getContact(
+          workspaceId,
+          uuid(url.searchParams.get("id")),
+          url.searchParams.get("accountId"),
+        ),
+      );
+    if (req.method === "GET" && action === "campaigns/progress")
+      return NextResponse.json(
+        await campaignProgress(workspaceId, uuid(url.searchParams.get("campaignId"))),
+      );
     if (req.method !== "POST")
       throw new WhatsAppError("Ruta no encontrada", 404);
+    if (action === "contacts/import")
+      return NextResponse.json(await importContacts(workspaceId, ctx.userId, body));
+    if (action === "contacts/update")
+      return NextResponse.json(await updateContacts(workspaceId, body));
+    if (action === "contacts/delete")
+      return NextResponse.json(await deleteContacts(workspaceId, body));
+    if (action === "campaigns/preview")
+      return NextResponse.json(await previewCampaign(workspaceId, body));
+    if (action === "campaigns/create")
+      return NextResponse.json(await createCampaign(workspaceId, ctx.userId, body));
+    if (action === "campaigns/run")
+      return NextResponse.json(await runCampaign(workspaceId, body));
     if (action === "connect/code") {
       const token = await exchangeCode(
         required(body.code, "Autorización", 4096),

@@ -3,10 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { waApi, errorText, fieldClass } from "./api";
-import { WhatsAppNavigation } from "./navigation";
 import { WhatsAppChat } from "./chat";
 import { WhatsAppTemplates } from "./templates";
 import { WhatsAppSettings } from "./settings";
+import { WhatsAppContacts } from "./contacts";
 import type { Account, Configuration } from "@/lib/whatsapp/types";
 export function WhatsAppWorkspace({ tab }: { tab: string }) {
   const [accounts, setAccounts] = useState<Account[]>([]),
@@ -54,9 +54,9 @@ export function WhatsAppWorkspace({ tab }: { tab: string }) {
       });
     return () => c.abort();
   }, [apply]);
+  const active = accounts.filter((a) => a.status === "active");
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      <WhatsAppNavigation compact />
+    <div className="flex h-full min-h-0 flex-col gap-3">
       {error && (
         <p
           role="alert"
@@ -76,11 +76,18 @@ export function WhatsAppWorkspace({ tab }: { tab: string }) {
           <Loader2 className="h-4 w-4 animate-spin" />
           Cargando WhatsApp…
         </div>
-      ) : tab === "leads" ? (
-        <div aria-label="Leads" className="min-h-0 flex-1" />
       ) : (
         <>
-          {tab !== "settings" && selected && (
+          {tab !== "settings" && selected && active.length === 1 && (
+            <p className="shrink-0 text-xs text-slate-500">
+              Enviando desde{" "}
+              <span className="font-medium text-slate-700">
+                {active[0].display_phone}
+                {active[0].verified_name ? ` · ${active[0].verified_name}` : ""}
+              </span>
+            </p>
+          )}
+          {tab !== "settings" && selected && active.length > 1 && (
             <label className="flex shrink-0 items-center gap-3 text-sm text-slate-500">
               Número
               <select
@@ -89,9 +96,7 @@ export function WhatsAppWorkspace({ tab }: { tab: string }) {
                 value={selected}
                 onChange={(e) => setSelected(e.target.value)}
               >
-                {accounts
-                  .filter((a) => a.status === "active")
-                  .map((a) => (
+                {active.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.display_phone}
                       {a.verified_name ? ` · ${a.verified_name}` : ""}
@@ -106,6 +111,12 @@ export function WhatsAppWorkspace({ tab }: { tab: string }) {
               config={config}
               onRefresh={refresh}
             />
+          ) : tab === "contacts" ? (
+            <WhatsAppContacts
+              key={selected || "none"}
+              accountId={selected}
+              canManage={Boolean(config?.canManage)}
+            />
           ) : !selected ? (
             <div className="grid flex-1 place-content-center gap-3 text-center text-sm text-slate-500">
               <p>Conecta un número para empezar.</p>
@@ -113,7 +124,7 @@ export function WhatsAppWorkspace({ tab }: { tab: string }) {
                 href="/whatsapp/settings"
                 className="font-medium text-blue-600"
               >
-                Ir a Configuración
+                Ir a Números
               </Link>
             </div>
           ) : tab === "chat" ? (

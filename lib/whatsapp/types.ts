@@ -55,3 +55,53 @@ export type Configuration = {
   webhookPath: string;
   canManage: boolean;
 };
+export type ContactRow = {
+  id: string;
+  name: string;
+  category: string | null;
+  specialty: string | null;
+  city: string | null;
+  province: string | null;
+  phone: string | null;
+  email: string | null;
+  rating: number | null;
+  classification: string | null;
+  stage: string;
+  do_not_contact: boolean;
+  consent: boolean;
+  last_contacted_at: string | null;
+  last_reply_at: string | null;
+  conversation: {
+    id: string;
+    unread_count: number;
+    last_message_at: string;
+  } | null;
+};
+export type ContactDetail = ContactRow & {
+  website: string | null;
+  maps_url: string | null;
+  consent_source: string | null;
+  consent_at: string | null;
+  notes: string | null;
+  attributes: Record<string, string>;
+  created_at: string;
+};
+export type Facet = { value: string | null; count: number };
+export type ContactFacets = {
+  facets: Record<string, Facet[]>;
+  columns: string[];
+};
+export type CampaignSummary = {
+  total: number;
+  ready: number;
+  withoutConsent: number;
+  overLimit: number;
+  limit: number;
+  reasons: Record<string, number>;
+  sample: { name: string; text: string } | null;
+};
+export type CampaignProgress = {
+  counts: Record<string, number>;
+  done: boolean;
+  failures: { contact_id: string; error: string | null }[];
+};

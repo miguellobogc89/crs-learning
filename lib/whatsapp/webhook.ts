@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { precedingStatuses } from "./rules";
+import { DEFAULT_STAGE, isOptOut } from "./contacts";
 
 type Inbound = {
   id: string;
@@ -103,7 +104,7 @@ export async function processWebhook(body: {
           m.document?.caption ||
           m.document?.filename ||
           `[${m.type}: contenido no disponible en esta vista]`;
-        await prisma.$transaction(async (tx) => {
+        const isNew = await prisma.$transaction(async (tx) => {
           const conversation = await tx.whatsapp_conversations.upsert({
             where: {
               account_id_contact_phone: {
@@ -135,7 +136,7 @@ export async function processWebhook(body: {
             ],
             skipDuplicates: true,
           });
-          if (!inserted.count) return;
+          if (!inserted.count) return false;
           await tx.whatsapp_conversations.update({
             where: { id: conversation.id },
             data: { unread_count: { increment: 1 } },
@@ -154,7 +155,43 @@ export async function processWebhook(body: {
             where: { id: conversation.id, last_message_at: { lt: date } },
             data: { last_message_at: date },
           });
+          return true;
         });
+        // The message is already stored; a failure here must not make Meta resend it.
+        if (isNew)
+          await recordReply(account.workspace_id, m.from, date, isOptOut(text)).catch(
+            (e) => console.error("[whatsapp] Contact reply update failed", e instanceof Error ? e.name : "unknown"),
+          );
       }
     }
+}
+
+/** Moves imported prospects forward when they answer, and honours "BAJA"/"STOP". */
+async function recordReply(
+  workspaceId: string,
+  phone: string,
+  date: Date,
+  optOut: boolean,
+) {
+  await prisma.whatsapp_contacts.updateMany({
+    where: {
+      workspace_id: workspaceId,
+      phone,
+      stage: { in: [DEFAULT_STAGE, "Contactado"] },
+    },
+    data: { stage: "Respondió" },
+  });
+  await prisma.whatsapp_contacts.updateMany({
+    where: {
+      workspace_id: workspaceId,
+      phone,
+      OR: [{ last_reply_at: null }, { last_reply_at: { lt: date } }],
+    },
+    data: { last_reply_at: date },
+  });
+  if (optOut)
+    await prisma.whatsapp_contacts.updateMany({
+      where: { workspace_id: workspaceId, phone },
+      data: { do_not_contact: true, updated_at: new Date() },
+    });
 }

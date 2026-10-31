@@ -1,6 +1,6 @@
 # WhatsApp en CRS Learning
 
-Adaptación del módulo de `Crussader/main` a `crs-learning/dev`. Entrada: `/whatsapp` (redirige a `/whatsapp/chat`). Chat, Plantillas, Configuración y Leads; Leads se mantiene vacía.
+Adaptación del módulo de `Crussader/main` a `crs-learning/dev`. Entrada: `/whatsapp` (redirige a `/whatsapp/contacts`). Menú lateral: **Contactos** (consola de prospectos importados por CSV), **Conversaciones** (chat) y **Configuración › Números / Plantillas**. `/whatsapp/leads` redirige a Contactos.
 
 ## Instalación
 
@@ -9,6 +9,8 @@ Adaptación del módulo de `Crussader/main` a `crs-learning/dev`. Entrada: `/wha
    ```sh
    psql "$DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f prisma/migrations/20261030080000_whatsapp/migration.sql
    ```
+
+   Después, la migración aditiva de contactos y envíos masivos, igual: `prisma/migrations/20261031100000_whatsapp_contacts/migration.sql` (cuatro tablas nuevas, sin tocar datos existentes).
 
    El repositorio tiene un historial parcial de migraciones; no ejecutar `migrate reset` ni aplicar todas las migraciones a una base existente. La migración nueva crea cuatro tablas y sus índices/FKs; no modifica datos anteriores. No se ha aplicado a una base remota desde esta implementación.
 
@@ -56,8 +58,18 @@ El estado «Conectado» significa que Meta autorizó el número y se guardaron s
 - Plantillas: sincronización paginada con Meta, búsqueda y filtros por estado/categoría/idioma, favoritas y vista previa. Creación de plantillas de texto de utilidad o marketing con variables numéricas y ejemplos. Chat envía plantillas aprobadas de cuerpo/pie de texto; plantillas multimedia/con botones siguen visibles pero requieren ampliar el compositor antes de enviarlas.
 - Adjuntos entrantes muestran tipo y texto/caption cuando existe; no se descargan ni se envían adjuntos. No se importa el historial ni la base de datos de Crussader. Desconectar borra el token local y conserva el historial; no revoca una suscripción WABA compartida con otros números.
 
+## Contactos y envíos masivos
+
+- **Importar CSV** (máx. 4 MB / 20.000 filas): el navegador lee el archivo, detecta las columnas por su nombre (Empresa, Categoría, Especialidad, Localidad, Provincia, Teléfono móvil, WhatsApp confirmado, Estrellas, Clasificación, Google Maps, Autorización, Fuente del permiso, Fecha de autorización, No contactar, Seguimiento…) y deja corregir la asignación antes de importar. Todas las columnas originales se guardan en `attributes` y se pueden usar como variables de plantilla.
+- Teléfono de WhatsApp: «WhatsApp confirmado» (incluidos enlaces `wa.me/…`) y, si falta, el móvil; números de 9 cifras sin prefijo se consideran españoles (+34). El fijo no se usa para WhatsApp.
+- Identidad para reimportar: ficha de Google Maps; si no hay, teléfono; si no, nombre + localidad. Reimportar actualiza los datos descriptivos pero no deshace «No contactar», la autorización ni un seguimiento avanzado en la app. Se avisa de teléfonos compartidos entre fichas (comparten conversación).
+- Consola: búsqueda, filtros por categoría, especialidad, provincia, localidad, clasificación, seguimiento, WhatsApp, autorización y estado de contacto; orden por empresa, localidad, estrellas o último envío; selección por página o de toda la lista filtrada; cambio de seguimiento, «No contactar» y borrado (admin) en bloque. La ficha lateral muestra datos, enlaces, notas, plantillas enviadas y la conversación de WhatsApp del contacto.
+- **Enviar plantilla** a la selección: cada variable `{{n}}` se toma de un campo del contacto, de una columna del CSV o de un texto fijo. Nunca se envía a contactos sin WhatsApp, con «No contactar», con clasificación o seguimiento «Descartado», ni dos veces al mismo teléfono en una tanda; por defecto tampoco a los ya contactados. Máximo 250 envíos por tanda. Si hay destinatarios sin autorización registrada, el servidor exige confirmación explícita (409 sin ella).
+- El envío se procesa por lotes desde el navegador (`campaigns/run`), con progreso, pausa y reanudación. Cada destinatario reserva su UUID como `requestId` del mensaje, así que una repetición o un lote interrumpido nunca envía dos veces. Rechazo de Meta = «Error»; respuesta perdida = «Sin confirmar» (no se reintenta).
+- Seguimiento automático: un envío correcto pasa «Sin contactar» → «Contactado»; una respuesta entrante pasa a «Respondió» y registra la fecha; responder BAJA/STOP marca «No contactar».
+
 ## Validación
 
-`npm run test:whatsapp` cubre firma, aislamiento, permisos, ventana de 24 horas, correlación/duplicados, fallos ambiguos y orden de callbacks de Meta. Ejecutar también `npm run test:connectors`, TypeScript y ESLint de los archivos del módulo.
+`npm run test:whatsapp` cubre lectura del CSV, detección de columnas, normalización de teléfonos, reimportación, planificación y ejecución de envíos masivos, bajas por respuesta, firma, aislamiento, permisos, ventana de 24 horas, correlación/duplicados, fallos ambiguos y orden de callbacks de Meta. Ejecutar también `npm run test:connectors`, TypeScript y ESLint de los archivos del módulo.
 
 Se ha probado adicionalmente el SQL nuevo en PostgreSQL embebido aislado, incluyendo FKs entre espacios, unicidad de mensajes y borrado en cascada. Ningún test envía mensajes reales ni altera conexiones externas.

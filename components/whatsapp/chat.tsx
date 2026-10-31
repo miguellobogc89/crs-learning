@@ -198,13 +198,14 @@ export function WhatsAppChat({ accountId }: { accountId: string }) {
     </div>
   );
 }
-function ChatThread({
+export function ChatThread({
   accountId,
   conversation,
   to,
   onTo,
   onBack,
   onSent,
+  embedded = false,
 }: {
   accountId: string;
   conversation: Conversation | null;
@@ -212,6 +213,8 @@ function ChatThread({
   onTo: (v: string) => void;
   onBack: () => void;
   onSent: () => void;
+  /** Inside a contact panel: the phone comes from the contact and there is no list to go back to. */
+  embedded?: boolean;
 }) {
   const [messages, setMessages] = useState<Message[]>([]),
     [templates, setTemplates] = useState<Template[]>([]),
@@ -362,7 +365,7 @@ function ChatThread({
   }
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-slate-100 px-4">
+      {!embedded && <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-slate-100 px-4">
         <button
           aria-label="Volver a conversaciones"
           onClick={onBack}
@@ -382,8 +385,8 @@ function ChatThread({
               : "Envía una plantilla aprobada para iniciar el contacto"}
           </p>
         </div>
-      </header>
-      {!conversation && (
+      </header>}
+      {!conversation && !embedded && (
         <label className="p-4 text-xs text-slate-500">
           Teléfono con prefijo internacional
           <input

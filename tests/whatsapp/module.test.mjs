@@ -112,6 +112,7 @@ function route(
     },
     "@/lib/whatsapp/meta": { metaConfig: () => config },
     "@/lib/whatsapp/service": {},
+    "@/lib/whatsapp/contacts-service": {},
     "@/lib/whatsapp/rules": rules,
   });
 }
@@ -322,6 +323,7 @@ test("duplicate inbound webhook does not increment unread count or reopen servic
       },
     },
     "./rules": rules,
+    "./contacts": load("lib/whatsapp/contacts.ts"),
   });
   await wh.processWebhook({
     object: "whatsapp_business_account",

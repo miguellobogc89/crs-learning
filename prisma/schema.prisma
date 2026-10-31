@@ -2053,3 +2053,77 @@ model whatsapp_templates {
   @@unique([account_id, provider_id])
   @@unique([workspace_id, id])
 }
+/// Prospects imported from CSV, one per business. Original columns kept in attributes. FKs in SQL.
+model whatsapp_contacts {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @db.Uuid
+  external_key String
+  name String
+  category String?
+  specialty String?
+  city String?
+  province String?
+  phone String?
+  email String?
+  website String?
+  maps_url String?
+  rating Float?
+  classification String?
+  stage String @default("Sin contactar")
+  do_not_contact Boolean @default(false)
+  consent Boolean @default(false)
+  consent_source String?
+  consent_at DateTime? @db.Timestamptz(6)
+  notes String?
+  attributes Json @default("{}")
+  import_id String? @db.Uuid
+  last_contacted_at DateTime? @db.Timestamptz(6)
+  last_reply_at DateTime? @db.Timestamptz(6)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([workspace_id, external_key])
+  @@unique([workspace_id, id])
+  @@index([workspace_id, phone])
+  @@index([workspace_id, name])
+}
+model whatsapp_contact_imports {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @db.Uuid
+  file_name String
+  mapping Json
+  total Int
+  created Int
+  updated Int
+  skipped Int
+  created_by String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  @@index([workspace_id, created_at(sort: Desc)])
+}
+/// A bulk template send. Each recipient row reserves the request id used for the message.
+model whatsapp_campaigns {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @db.Uuid
+  account_id String @db.Uuid
+  template_id String @db.Uuid
+  template_name String
+  variables Json
+  created_by String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([workspace_id, id])
+  @@index([workspace_id, created_at(sort: Desc)])
+}
+model whatsapp_campaign_recipients {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @db.Uuid
+  campaign_id String @db.Uuid
+  contact_id String @db.Uuid
+  phone String?
+  parameters Json
+  status String
+  reason String?
+  error String?
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  @@unique([campaign_id, contact_id])
+  @@index([workspace_id, campaign_id, status])
+  @@index([workspace_id, contact_id])
+}

@@ -317,6 +317,7 @@ export async function sendMessage(
         data: { last_message_at: new Date() },
       }),
     ]);
+    await markContacted(workspaceId, conversation.contact_phone);
     return { ...message, status: "sent" };
   } catch (error) {
     const definitive = error instanceof MetaError;
@@ -334,5 +335,22 @@ export async function sendMessage(
       "Envío sin confirmar. No se reintentará automáticamente para evitar duplicados.",
       502,
     );
+  }
+}
+
+/** Imported prospects with this phone move from "Sin contactar" to "Contactado". Best effort. */
+async function markContacted(workspaceId: string, contactPhone: string) {
+  try {
+    const now = new Date();
+    await prisma.whatsapp_contacts.updateMany({
+      where: { workspace_id: workspaceId, phone: contactPhone, stage: "Sin contactar" },
+      data: { stage: "Contactado" },
+    });
+    await prisma.whatsapp_contacts.updateMany({
+      where: { workspace_id: workspaceId, phone: contactPhone },
+      data: { last_contacted_at: now },
+    });
+  } catch (error) {
+    console.error("[whatsapp] Contact update after send failed", error instanceof Error ? error.name : "unknown");
   }
 }
