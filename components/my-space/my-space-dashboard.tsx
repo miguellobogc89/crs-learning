@@ -1,6 +1,9 @@
 // components/my-space/my-space-dashboard.tsx
 "use client";
 
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { useState, type ElementType } from "react";
 import {
   Activity,
@@ -57,24 +60,22 @@ export function MySpaceDashboard({
 
   return (
     <>
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-7xl px-8 py-8">
-        <div className="mb-8 flex items-start justify-between gap-6">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Mi espacio
-            </h1>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Gestiona tu actividad, equipos, cursos y aportaciones dentro de la plataforma.
-            </p>
-          </div>
-
-          <Button onClick={() => setShowCreateTeam((value) => !value)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo grupo
-          </Button>
-        </div>
-
+    <AppPageLayout
+      header={
+        <AppPageHeader
+          section={APP_SECTIONS.mySpace}
+          title="Mi espacio"
+          description="Gestiona tu actividad, equipos, cursos y aportaciones dentro de la plataforma."
+          actions={
+            <Button onClick={() => setShowCreateTeam((value) => !value)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo grupo
+            </Button>
+          }
+        />
+      }
+    >
+      <div className="max-w-7xl pb-8 pt-4">
         {showCreateTeam && (
           <form
             action={async (formData) => {
@@ -302,7 +303,7 @@ export function MySpaceDashboard({
           </section>
         </div>
       </div>
-    </div>
+    </AppPageLayout>
     <PlanLimitDialog
       open={Boolean(planLimit)}
       limit={planLimit}

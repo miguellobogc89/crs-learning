@@ -1,3 +1,6 @@
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, ShieldCheck, UsersRound } from "lucide-react";
@@ -17,20 +20,17 @@ export default async function WorkspacesPage() {
   const workspaces = await listWorkspaceAdminItems(session.user.id);
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-6xl px-8 py-8">
-        <div className="mb-8 flex items-start justify-between gap-6">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Workspaces
-            </h1>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Administra tus espacios personales y los workspaces compartidos a
-              los que tienes acceso.
-            </p>
-          </div>
-        </div>
-
+    <AppPageLayout
+      header={
+        <AppPageHeader
+          section={APP_SECTIONS.mySpace}
+          items={[{ label: "Workspaces" }]}
+          title="Workspaces"
+          description="Administra tus espacios personales y los workspaces compartidos a los que tienes acceso."
+        />
+      }
+    >
+      <div className="max-w-6xl pb-8 pt-4">
         <div className="grid gap-4">
           {workspaces.map((workspace) => {
             const isOwner = workspace.role === "owner";
@@ -99,6 +99,6 @@ export default async function WorkspacesPage() {
           </div>
         ) : null}
       </div>
-    </div>
+    </AppPageLayout>
   );
 }

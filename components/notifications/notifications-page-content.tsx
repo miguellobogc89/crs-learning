@@ -270,17 +270,10 @@ export function NotificationsPageContent({
   }
 
   return (
-    <main className="h-full min-h-0 bg-transparent px-6 pb-6 lg:px-8">
-      <section
-        className="
-          mx-auto flex h-full min-h-0 max-w-7xl flex-col
-          overflow-hidden rounded-2xl border border-slate-200
-          bg-white
-          shadow-[0_1px_2px_rgba(15,23,42,0.025)]
-        "
-      >
+    <main className="h-full min-h-0 bg-white">
+      <section className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
         {/* Cabecera */}
-        <div className="shrink-0 px-6 py-5 lg:px-8">
+        <div className="shrink-0 px-5 pb-3 pt-4 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

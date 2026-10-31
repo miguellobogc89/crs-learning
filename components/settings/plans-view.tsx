@@ -2,6 +2,9 @@
 
 "use client";
 
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -54,19 +57,17 @@ export function PlansView({
     useState<BillingPeriod>("annual");
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto">
-      <main className="mx-auto w-full max-w-[1500px] px-6 py-8 pb-20 lg:px-8 lg:py-10 lg:pb-24">
-        <header className="max-w-2xl">
-
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground">
-            Elige cómo quieres trabajar con CRS
-          </h1>
-
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            Empieza de forma individual y amplía CRS a tu equipo o a toda tu
-            organización cuando lo necesites.
-          </p>
-        </header>
+    <AppPageLayout
+      header={
+        <AppPageHeader
+          section={APP_SECTIONS.settings}
+          items={[{ label: "Plan y facturación" }]}
+          title="Elige cómo quieres trabajar con CRS"
+          description="Empieza de forma individual y amplía CRS a tu equipo o a toda tu organización cuando lo necesites."
+        />
+      }
+    >
+      <div className="max-w-[1500px] pb-12 pt-2">
 
         {currentPlan ? (
           <CurrentPlanSummary currentPlan={currentPlan} />
@@ -137,8 +138,8 @@ export function PlansView({
           Los planes, precios y límites mostrados pueden cambiar mientras CRS
           LAB continúa en desarrollo.
         </p>
-      </main>
-    </div>
+      </div>
+    </AppPageLayout>
   );
 }
 

@@ -1,10 +1,12 @@
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   ArrowRight,
   Search,
-  UsersRound,
 } from "lucide-react";
 
 import { auth } from "@/auth";
@@ -37,24 +39,16 @@ export default async function UsersDirectoryPage({
   });
 
   return (
-    <main className="h-full overflow-y-auto bg-background">
-      <div className="mx-auto max-w-6xl px-8 py-8">
-        <header className="border-b border-border pb-6">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface text-muted-foreground">
-              <UsersRound className="h-5 w-5" />
-            </span>
-
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-                Usuarios
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Directorio interno de usuarios visibles para ti.
-              </p>
-            </div>
-          </div>
-        </header>
+    <AppPageLayout
+      header={
+        <AppPageHeader
+          section={APP_SECTIONS.users}
+          title="Usuarios"
+          description="Directorio interno de usuarios visibles para ti."
+        />
+      }
+    >
+      <div className="max-w-6xl pb-8 pt-2">
 
         <form
           action="/users"
@@ -105,7 +99,7 @@ export default async function UsersDirectoryPage({
           )}
         </section>
       </div>
-    </main>
+    </AppPageLayout>
   );
 }
 

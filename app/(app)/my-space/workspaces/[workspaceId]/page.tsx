@@ -1,8 +1,9 @@
-import Link from "next/link";
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import {
-  ArrowLeft,
   Mail,
   ShieldCheck,
   Trash2,
@@ -48,33 +49,25 @@ export default async function WorkspaceDetailPage({
   const isOwner = detail.role === "owner";
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-6xl px-8 py-8">
-        <div className="mb-6">
-          <Button asChild variant="outline" size="sm">
-            <Link href="/my-space/workspaces">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Volver a Workspaces
-            </Link>
-          </Button>
-        </div>
-
-        <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {detail.workspace.name}
-              </h1>
+    <AppPageLayout
+      header={
+        <AppPageHeader
+          section={APP_SECTIONS.mySpace}
+          items={[{ label: "Workspaces", href: "/my-space/workspaces" }, { label: detail.workspace.name }]}
+          title={detail.workspace.name}
+          description={
+            <span className="inline-flex flex-wrap items-center gap-2">
               <Badge variant={isOwner ? "default" : "outline"}>
                 {isOwner ? "Propio" : "Compartido"}
               </Badge>
               <Badge variant="secondary">{detail.role}</Badge>
-            </div>
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              {detail.workspace.description || "Sin descripcion."}
-            </p>
-          </div>
-        </header>
+              {detail.workspace.description || "Sin descripción."}
+            </span>
+          }
+        />
+      }
+    >
+      <div className="max-w-6xl pb-8 pt-4">
 
         <div className="grid gap-6">
           <section className="rounded-lg border border-border bg-card p-6">
@@ -297,7 +290,7 @@ export default async function WorkspaceDetailPage({
           </section>
         </div>
       </div>
-    </div>
+    </AppPageLayout>
   );
 }
 

@@ -14,6 +14,7 @@ type AppPageHeaderProps = {
   title: string;
   items?: SectionBreadcrumbItem[];
   actions?: ReactNode;
+  description?: ReactNode;
 };
 
 export function AppPageHeader({
@@ -21,6 +22,7 @@ export function AppPageHeader({
   title,
   items = [],
   actions,
+  description,
 }: AppPageHeaderProps) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-6">
@@ -33,6 +35,12 @@ export function AppPageHeader({
 <h1 className="mt-3 min-w-0 truncate text-[26px] font-semibold leading-[1.2] tracking-tight text-slate-950">
   {title}
 </h1>
+
+        {description ? (
+          <p className="mt-1 max-w-3xl text-sm text-slate-500">
+            {description}
+          </p>
+        ) : null}
       </div>
 
       {actions ? (

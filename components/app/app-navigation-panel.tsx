@@ -183,11 +183,10 @@ useEffect(() => {
     <div
       className={`
         relative hidden min-h-0 shrink-0
-        overflow-hidden rounded-[20px]
-        border border-slate-200/70
-        bg-[#FCFDFF]
-        shadow-[0_8px_32px_rgba(15,23,42,0.07)]
-        lg:my-3 lg:ml-3 lg:flex
+        overflow-hidden rounded-none
+        border-r border-slate-200/70
+        bg-white
+        lg:flex
       `}
     >
       {/* Barra principal */}

@@ -1,3 +1,4 @@
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -54,8 +55,8 @@ export default async function UserProfilePage({
     profile.user.name ?? profile.user.email;
 
   return (
-    <main className="h-full overflow-y-auto bg-background">
-      <div className="mx-auto max-w-5xl px-8 py-8">
+    <AppPageLayout contentClassName="pt-4">
+      <div className="max-w-5xl pb-8">
         <AppBreadcrumb
           items={[
             {
@@ -282,7 +283,7 @@ export default async function UserProfilePage({
           ) : null}
         </div>
       </div>
-    </main>
+    </AppPageLayout>
   );
 }
 

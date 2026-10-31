@@ -197,7 +197,7 @@ export function AppWorkspaceLayout({
         <div
           className="
             relative flex min-h-0 min-w-0 flex-1 flex-col
-            bg-transparent
+            bg-white
           "
         >
           {topbar}
@@ -205,7 +205,8 @@ export function AppWorkspaceLayout({
           <main
             className="
               min-h-0 min-w-0 flex-1
-              overflow-hidden border-0 bg-transparent
+              overflow-hidden rounded-none
+              border-t border-slate-200/70 bg-white
             "
           >
             {children}

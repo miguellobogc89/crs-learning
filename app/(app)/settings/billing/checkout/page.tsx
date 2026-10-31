@@ -1,9 +1,11 @@
 // app/(app)/settings/billing/checkout/page.tsx
 
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
-  ArrowLeft,
   Building2,
   Check,
   CheckCircle2,
@@ -97,30 +99,19 @@ export default async function CheckoutPage({
 
   return (
     <SettingsShell>
-      <div className="h-full min-h-0 overflow-y-auto bg-background text-foreground">
-        <main className="mx-auto w-full max-w-6xl px-5 pb-20 pt-6 sm:px-6 lg:px-8">
-          <Link
-            href="/settings/plans"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Volver a planes
-          </Link>
-
-          <header className="mt-3 mb-6 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p
-                className="text-xs font-bold uppercase tracking-wider"
-                style={{ color: BRAND }}
-              >
-                Finalizar contratación
-              </p>
-
-              <h1 className="mt-0.5 text-2xl font-bold tracking-tight">
-                Plan {plan.name}
-              </h1>
-            </div>
-          </header>
+      <AppPageLayout
+        header={
+          <AppPageHeader
+            section={APP_SECTIONS.settings}
+            items={[
+              { label: "Plan y facturación", href: "/settings/plans" },
+              { label: "Finalizar contratación" },
+            ]}
+            title={`Plan ${plan.name}`}
+          />
+        }
+      >
+        <div className="max-w-6xl pb-12 pt-4">
 
           <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
             <div className="flex min-w-0 flex-col gap-5">
@@ -432,8 +423,8 @@ export default async function CheckoutPage({
             variar según el país y los datos fiscales indicados
             cuando se habilite la contratación.
           </p>
-        </main>
-      </div>
+        </div>
+      </AppPageLayout>
     </SettingsShell>
   );
 }

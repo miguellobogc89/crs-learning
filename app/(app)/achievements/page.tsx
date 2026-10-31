@@ -1,4 +1,7 @@
 // app/(app)/achievements/page.tsx
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import {
   AppSectionShell,
 } from "@/components/app/section-sidebar";
@@ -8,9 +11,13 @@ export default function AchievementsPage() {
     <AppSectionShell
       sidebar={<AchievementsSidebar />}
     >
-      <div className="h-full overflow-y-auto p-8">
-        Achievements
-      </div>
+      <AppPageLayout
+        header={
+          <AppPageHeader section={APP_SECTIONS.achievements} title="Logros" />
+        }
+      >
+        <p className="pt-2 text-sm text-slate-500">Próximamente.</p>
+      </AppPageLayout>
     </AppSectionShell>
   );
 }

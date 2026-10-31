@@ -10,6 +10,8 @@ import {
   Library,
   Settings,
   UserRound,
+  UsersRound,
+  ShieldCheck,
 } from "lucide-react";
 
 export const APP_SECTIONS = {
@@ -53,6 +55,16 @@ export const APP_SECTIONS = {
     label: "Mi espacio",
     href: "/my-space",
     icon: UserRound,
+  },
+  users: {
+    label: "Usuarios",
+    href: "/users",
+    icon: UsersRound,
+  },
+  admin: {
+    label: "Administración",
+    href: "/admin",
+    icon: ShieldCheck,
   },
   settings: {
     label: "Configuración",

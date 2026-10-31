@@ -1,5 +1,8 @@
 // app/(app)/settings/page.tsx
 
+import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -26,18 +29,16 @@ export default async function SettingsPage() {
 
   return (
     <SettingsShell>
-      <main className="mx-auto w-full max-w-5xl px-6 py-8 lg:px-8 lg:py-10">
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Configuracion
-          </h1>
-
-          <p className="mt-1 text-sm text-muted-foreground">
-            Gestiona tu cuenta, tu plan y las preferencias de CRS LAB.
-          </p>
-        </header>
-
-        <div className="mt-10 space-y-10">
+      <AppPageLayout
+        header={
+          <AppPageHeader
+            section={APP_SECTIONS.settings}
+            title="Configuración"
+            description="Gestiona tu cuenta, tu plan y las preferencias de CRS LAB."
+          />
+        }
+      >
+        <div className="max-w-5xl space-y-10 pt-4">
           <section>
             <div className="mb-4">
               <h2 className="text-sm font-semibold text-foreground">
@@ -196,7 +197,7 @@ export default async function SettingsPage() {
             </div>
           </section>
         </div>
-      </main>
+      </AppPageLayout>
     </SettingsShell>
   );
 }

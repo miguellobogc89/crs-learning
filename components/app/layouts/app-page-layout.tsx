@@ -39,17 +39,14 @@ export function AppPageLayout({
     >
       <div
         className="
-          mx-4 mb-4 mt-0
           flex min-h-0 min-w-0 flex-1 flex-col
-          overflow-hidden
-          rounded-lg border border-slate-200
-          bg-white shadow-sm
+          overflow-hidden bg-white
         "
       >
         {header ? (
           <header
             className={cn(
-              "shrink-0 px-5 py-3 sm:px-6",
+              "shrink-0 px-5 pb-3 pt-4 sm:px-6 lg:px-8",
               headerClassName,
             )}
           >
@@ -73,9 +70,9 @@ export function AppPageLayout({
       {showAside ? (
         <aside
           className={cn(
-            "mb-4 mr-4 mt-0 hidden min-h-0 w-[280px] shrink-0",
-            "overflow-hidden rounded-lg border border-slate-200",
-            "bg-white shadow-sm",
+            "hidden min-h-0 w-[280px] shrink-0",
+            "overflow-hidden border-l border-slate-200/70",
+            "bg-white",
             "xl:flex xl:flex-col 2xl:w-[300px]",
             asideClassName,
           )}

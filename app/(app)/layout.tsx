@@ -70,9 +70,7 @@ export default async function AppLayout({
         <div
           className="
             flex h-screen min-h-0 overflow-hidden
-            text-foreground
-            bg-[#f8faff]
-            [background-image:radial-gradient(ellipse_65%_55%_at_18%_8%,rgba(59,130,246,0.12),transparent_75%),radial-gradient(ellipse_55%_65%_at_88%_18%,rgba(37,99,235,0.09),transparent_75%),radial-gradient(ellipse_70%_60%_at_55%_95%,rgba(96,165,250,0.07),transparent_80%)]
+            bg-white text-foreground
           "
         >
           <AppWorkspaceLayout

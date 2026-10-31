@@ -2,6 +2,9 @@
 
 import type { ReactNode } from "react";
 
+import { AppPageHeader } from "@/components/app/layouts/app-page-header";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
+
 type AdminPageProps = {
   title: string;
   subtitle?: string;
@@ -19,25 +22,12 @@ export function AdminPage({
 }: AdminPageProps) {
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            {title}
-          </h1>
-
-          {subtitle ? (
-            <p className="mt-2 text-muted-foreground">
-              {subtitle}
-            </p>
-          ) : null}
-        </div>
-
-        {actions ? (
-          <div className="shrink-0">
-            {actions}
-          </div>
-        ) : null}
-      </div>
+      <AppPageHeader
+        section={APP_SECTIONS.admin}
+        title={title}
+        description={subtitle}
+        actions={actions}
+      />
 
       {summary ? <div>{summary}</div> : null}
 
