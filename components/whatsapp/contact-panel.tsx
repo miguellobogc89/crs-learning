@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Ban, Check, ChevronDown, ExternalLink, Globe, Loader2, Mail, MapPin, ShieldCheck, Star, X } from "lucide-react";
 import { waApi, errorText, fieldClass } from "./api";
 import { ChatThread } from "./chat";
-import { classificationTone, shortDate, stageTone } from "./contacts";
+import { classificationTone, PermissionPill, shortDate, stageTone } from "./contacts";
 import { STAGES } from "@/lib/whatsapp/contacts";
 import type { ContactDetail, Conversation } from "@/lib/whatsapp/types";
 
@@ -167,15 +167,13 @@ export function ContactPanel({
                 )}
                 {!c.website && !c.maps_url && <span className="text-slate-400">—</span>}
               </dd>
-              <dt className="text-slate-400">Autorización</dt>
-              <dd className="text-slate-700">
-                {c.consent ? (
-                  <span className="inline-flex items-center gap-1 text-emerald-700">
-                    <ShieldCheck className="h-3.5 w-3.5" /> Sí{c.consent_source ? ` · ${c.consent_source}` : ""}
-                    {c.consent_at ? ` · ${new Date(c.consent_at).toLocaleDateString("es-ES")}` : ""}
+              <dt className="text-slate-400">Permiso</dt>
+              <dd className="flex flex-wrap items-center gap-2 text-slate-500">
+                <PermissionPill contact={c} />
+                {c.consent && (c.consent_source || c.consent_at) && (
+                  <span>
+                    {[c.consent_source, c.consent_at && new Date(c.consent_at).toLocaleDateString("es-ES")].filter(Boolean).join(" · ")}
                   </span>
-                ) : (
-                  <span className="text-amber-700">No registrada</span>
                 )}
               </dd>
             </dl>

@@ -35,7 +35,7 @@ const FILTERS: { key: string; label: string; more?: boolean }[] = [
 ];
 const STATE_FILTERS: { key: string; label: string; options: [string, string][] }[] = [
   { key: "whatsapp", label: "WhatsApp", options: [["yes", "Con WhatsApp"], ["no", "Sin WhatsApp"]] },
-  { key: "consent", label: "Autorización", options: [["yes", "Con autorización"], ["no", "Sin autorización"]] },
+  { key: "consent", label: "Autorización", options: [["yes", "Autorizado"], ["no", "Sin autorización"]] },
   {
     key: "contacted",
     label: "Contacto",
@@ -317,7 +317,7 @@ export function WhatsAppContacts({
       )}
 
       <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full min-w-[860px] text-sm">
+        <table className="w-full min-w-[960px] text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50 text-left text-xs text-slate-500">
             <tr>
               <th className="w-10 px-3 py-2">
@@ -342,6 +342,7 @@ export function WhatsAppContacts({
               <SortHeader label="Estrellas" k="rating" sort={sort} onSort={toggleSort} />
               <th className="px-3 py-2 font-medium">Clasificación</th>
               <th className="px-3 py-2 font-medium">Seguimiento</th>
+              <th className="px-3 py-2 font-medium">Permiso</th>
               <th className="px-3 py-2 font-medium">WhatsApp</th>
               <SortHeader label="Último envío" k="recent" sort={sort} onSort={toggleSort} />
             </tr>
@@ -349,14 +350,14 @@ export function WhatsAppContacts({
           <tbody>
             {!data && (
               <tr>
-                <td colSpan={8} className="px-3 py-10 text-center text-slate-400">
+                <td colSpan={9} className="px-3 py-10 text-center text-slate-400">
                   <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Cargando contactos…
                 </td>
               </tr>
             )}
             {data && !items.length && (
               <tr>
-                <td colSpan={8} className="px-3 py-10 text-center text-slate-400">
+                <td colSpan={9} className="px-3 py-10 text-center text-slate-400">
                   Ningún contacto coincide con la búsqueda o los filtros.
                 </td>
               </tr>
@@ -407,21 +408,14 @@ export function WhatsAppContacts({
                 </td>
                 <td className="px-3 py-2">
                   <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${stageTone[c.stage] || "bg-slate-100 text-slate-600"}`}>{c.stage}</span>
-                  {c.do_not_contact && (
-                    <span className="ml-1 whitespace-nowrap rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">No contactar</span>
-                  )}
+                </td>
+                <td className="px-3 py-2">
+                  <PermissionPill contact={c} />
                 </td>
                 <td className="whitespace-nowrap px-3 py-2">
                   {c.phone ? (
                     <span className="inline-flex items-center gap-1.5 text-slate-700">
                       +{c.phone}
-                      {c.consent ? (
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-label="Con autorización" />
-                      ) : (
-                        <span className="rounded bg-amber-50 px-1 text-[10px] font-medium text-amber-700" title="Sin autorización registrada para recibir WhatsApp">
-                          sin permiso
-                        </span>
-                      )}
                       {c.conversation?.unread_count ? (
                         <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">
                           <MessageCircle className="h-3 w-3" />
@@ -489,6 +483,27 @@ export function WhatsAppContacts({
         />
       )}
     </div>
+  );
+}
+
+/** One place for whether a contact may receive WhatsApp: a block always wins over consent. */
+export function PermissionPill({ contact }: { contact: { do_not_contact: boolean; consent: boolean } }) {
+  if (contact.do_not_contact)
+    return (
+      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700" title="No se le envía nada">
+        <Ban className="h-3 w-3" /> No contactar
+      </span>
+    );
+  if (contact.consent)
+    return (
+      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700" title="Ha autorizado recibir WhatsApp">
+        <ShieldCheck className="h-3 w-3" /> Autorizado
+      </span>
+    );
+  return (
+    <span className="whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700" title="Sin autorización registrada para recibir WhatsApp">
+      Sin autorización
+    </span>
   );
 }
 
