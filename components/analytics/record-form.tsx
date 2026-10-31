@@ -2,6 +2,8 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { CellValue, Column } from "@/lib/analytics/compute";
+import type { ExtraField } from "@/lib/analytics/table-rows";
+import { Combobox } from "@/components/ui/combobox";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { fmtDate } from "./format";
 
@@ -23,8 +25,10 @@ export function formValues(columns: Column[], row: Record<string, CellValue> | n
 }
 
 /** «Añadir registro» / «Duplicar»: a side panel with one field per column, checked by the server before it is saved. */
-export function RecordForm({ open, title, columns, initial, onClose, onSubmit }: {
-  open: boolean; title: string; columns: Column[]; initial: Record<string, string | boolean>;
+export type FormExtra = ExtraField & { options?: { value: string; label: string; hint?: string | null }[] };
+
+export function RecordForm({ open, title, columns, extras = [], initial, onClose, onSubmit }: {
+  open: boolean; title: string; columns: Column[]; extras?: FormExtra[]; initial: Record<string, string | boolean>;
   onClose: () => void; onSubmit: (values: Record<string, string | boolean>) => Promise<string | null>;
 }) {
   const [values, setValues] = useState(initial);
@@ -63,12 +67,20 @@ export function RecordForm({ open, title, columns, initial, onClose, onSubmit }:
                     placeholder={c.edit!.type === "date" ? "DD/MM/AAAA" : c.edit!.type === "number" ? "0,00" : undefined} />}
             </label>;
           })}
-          {!fields.length && <p className="text-sm text-slate-500">Esta tabla no tiene columnas que se puedan rellenar a mano.</p>}
+          {extras.map(x => <label key={x.field} className="block text-xs font-medium text-slate-600">
+            {x.label}{x.required && " *"}
+            {x.type === "text" ? <input className={input + " mt-1"} value={typeof values[x.field] === "string" ? values[x.field] as string : ""} onChange={e => set(x.field, e.target.value)} />
+              : <Combobox className="mt-1 h-9 w-full" searchable searchPlaceholder={x.type === "company" ? "Buscar empresa o NIF…" : "Buscar factura…"} limit={40}
+                  ariaLabel={x.label} placeholder="— Ninguna" value={typeof values[x.field] === "string" && values[x.field] ? values[x.field] as string : "__none"}
+                  options={[{ value: "__none", label: "— Ninguna" }, ...(x.options ?? [])]} onChange={v => set(x.field, v === "__none" ? "" : v)} />}
+            {x.hint && <span className="mt-1 block font-normal text-slate-400">{x.hint}</span>}
+          </label>)}
+          {!fields.length && !extras.length && <p className="text-sm text-slate-500">Esta tabla no tiene columnas que se puedan rellenar a mano.</p>}
         </div>
         {error && <p role="alert" className="mx-5 mb-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
         <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
           <button type="button" onClick={onClose} disabled={busy} className="rounded-lg px-4 py-2 text-sm text-slate-600 hover:bg-slate-100">Cancelar</button>
-          <button type="submit" disabled={busy || !fields.length} className="inline-flex items-center gap-2 rounded-lg bg-[#0A58FF] px-4 py-2 text-sm font-medium text-white hover:bg-[#0848d6] disabled:opacity-50">
+          <button type="submit" disabled={busy || (!fields.length && !extras.length)} className="inline-flex items-center gap-2 rounded-lg bg-[#0A58FF] px-4 py-2 text-sm font-medium text-white hover:bg-[#0848d6] disabled:opacity-50">
             {busy && <Loader2 className="size-4 animate-spin" />}Guardar registro</button>
         </div>
       </form>

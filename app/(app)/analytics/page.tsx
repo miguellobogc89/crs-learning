@@ -7,7 +7,7 @@ import { AppSectionShell } from "@/components/app/section-sidebar";
 import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { ANALYTICS_LIMIT, loadAnalyticsData } from "@/lib/analytics/data";
-import { availableYears, buildTable, companyOptions, duplicatedLineIssues, CATEGORIES, computeDashboard, computeIncome, computeOverview, computeProducts, MONTH_LABEL, TABLE_KEYS, type Period } from "@/lib/analytics/compute";
+import { availableYears, buildTable, companyOptions, invoiceOptions, duplicatedLineIssues, CATEGORIES, computeDashboard, computeIncome, computeOverview, computeProducts, MONTH_LABEL, TABLE_KEYS, type Period } from "@/lib/analytics/compute";
 import { AnalyticsNavigation } from "@/components/analytics/analytics-navigation";
 import { GroupedBarChart } from "@/components/analytics/grouped-bar-chart";
 import { RankingList } from "@/components/analytics/ranking-list";
@@ -130,6 +130,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       {(table.key === "facturas" || table.key === "compras") && <DuplicateLinesReview issues={duplicatedLineIssues(data)} canEdit={canEdit} />}
       {table.key === "compras" && <PurchasesCleanup summary={cleanupSummary(cleanupPlan(data))} canEdit={canEdit} />}
       <DataTable key={`${table.key}|${params.pendiente ?? ""}`} table={table} canEdit canManage={canEdit} companies={table.key === "facturas" ? companyOptions(data) : []}
+        invoices={table.key === "compras" ? invoiceOptions(data) : []}
         initialFilters={params.pendiente && table.columns.some(c => c.key === params.pendiente) ? { [params.pendiente]: "__empty" } : {}} /></div>;
   } else if (view === "tablas") {
     const all = [...TABLE_KEYS, ...templateTables.map(t => t.key)].map(key => buildTable(data, key));

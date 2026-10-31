@@ -525,6 +525,15 @@ export function duplicatedLineIssues(data: AnalyticsData): DuplicatedLines[] {
 }
 
 /** Companies to choose from when correcting an invoice's issuer or customer. */
+/** Invoices to pick from when adding a purchase line by hand: «Número · Emisor · fecha», newest first. */
+export function invoiceOptions(data: AnalyticsData): { value: string; label: string; hint: string | null }[] {
+  const ix = indexes(data);
+  return data.invoices.map(i => ({ value: i.id, date: str(i.values.issue_date) ?? "",
+    label: [str(i.values.invoice_number) ?? "Sin número", companyName(ix.byId.get(ix.issuerOf.get(i.id) ?? ""))].filter(Boolean).join(" · "),
+    hint: str(i.values.issue_date) ? str(i.values.issue_date)!.split("-").reverse().join("/") : null }))
+    .sort((a, b) => b.date.localeCompare(a.date)).map(({ date: _date, ...o }) => o);
+}
+
 export function companyOptions(data: AnalyticsData): { id: string; nombre: string; nif: string | null }[] {
   return data.companies.map(c => ({ id: c.id, nombre: companyName(c) ?? "Sin nombre", nif: str(c.values.tax_identifier) }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));

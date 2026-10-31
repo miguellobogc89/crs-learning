@@ -8,8 +8,30 @@ import { coerce, type EngineType } from "@/lib/assistant/changes/plan";
  */
 export function rowCapabilities(tableKey: string) {
   const own = tableKey.startsWith("tabla:") || tableKey.startsWith("plantilla:");
-  return { add: own, remove: own || tableKey === "compras" };
+  // «Consumo eléctrico» is calculated from the invoices: it has no rows of its own.
+  return { add: tableKey !== "consumos", remove: own || tableKey === "compras" };
 }
+
+/**
+ * Fields of the «Añadir registro» form that are not columns of the table: the relations a new row needs
+ * (who issued an invoice, the invoice a purchase line belongs to) and data the table only shows (a company's NIF,
+ * a supply's identifier). `options` is filled in the browser: companies or invoices of the workspace.
+ */
+export type ExtraField = { field: string; label: string; type: "text" | "company" | "invoice"; required?: boolean; hint?: string };
+export function addExtras(tableKey: string): ExtraField[] {
+  if (tableKey === "facturas") return [
+    { field: "issuer", label: "Emisor", type: "company", hint: "Si la empresa no existe, créala antes en Empresas." },
+    { field: "customer", label: "Receptor", type: "company" }];
+  if (tableKey === "empresas") return [{ field: "tax_identifier", label: "NIF/CIF", type: "text", hint: "Opcional. Si lo pones, debe ser válido." }];
+  if (tableKey === "compras") return [{ field: "invoice", label: "Factura", type: "invoice", hint: "La factura de la que es esta línea (su proveedor y fecha)." }];
+  if (tableKey === "suministros") return [
+    { field: "supply_type", label: "Tipo", type: "text", hint: "Electricidad, gas, agua, telecomunicaciones…" },
+    { field: "supply_point_id", label: "Identificador", type: "text", required: true, hint: "CUPS, número de contrato o de póliza." },
+    { field: "tariff", label: "Tarifa", type: "text" }];
+  return [];
+}
+/** Form defaults: a new invoice is an expense unless said otherwise. */
+export const addDefaults = (tableKey: string): Record<string, string | boolean> => tableKey === "facturas" ? { direction: "recibida" } : {};
 
 export type FieldDef = { key: string; name?: string | null; field_type: string; is_required?: boolean };
 
@@ -23,7 +45,7 @@ export function newRecordValues(fields: FieldDef[], input: Record<string, unknow
     if (!def) { errors.push(`${key}: no existe en esta tabla`); continue; }
     const value = typeof raw === "string" ? raw.trim() : raw;
     if (value === "" || value === null || value === undefined) continue;
-    const c = coerce(value, def.field_type as EngineType);
+    const c = coerce(value, def.field_type as EngineType) ?? { ok: false as const };
     const label = def.name || def.key;
     if (!c.ok) { errors.push(`${label}: ${def.field_type === "date" ? "fecha no válida (DD/MM/AAAA)" : def.field_type === "decimal" || def.field_type === "integer" ? "número no válido" : "valor no válido"}`); continue; }
     if (typeof c.value === "string" && c.value.length > 2000) { errors.push(`${label}: máximo 2000 caracteres`); continue; }

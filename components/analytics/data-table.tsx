@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileText, GitMerge, History, Loader2, MoreHorizontal, Pencil, Plus, Trash2, Undo2, X } from "lucide-react";
 import type { CellValue, Column, Table } from "@/lib/analytics/compute";
 import { activeColumnFilter, queryRows, type ColumnFilter } from "@/lib/analytics/table-query";
-import { groupEdits, rowCapabilities, type PendingEdit } from "@/lib/analytics/table-rows";
+import { addDefaults, addExtras, groupEdits, rowCapabilities, type PendingEdit } from "@/lib/analytics/table-rows";
 import { groupRows, PAGE_SIZES } from "@/lib/analytics/table-view";
 import { useTableView } from "./table-view-context";
 import { addTableRowAction, deleteTableRowsAction, mergeCompaniesAction, restoreTableRowsAction, saveTableChangesAction, setInvoicePartyAction, setTableLinkAction } from "@/app/(app)/analytics/actions";
@@ -41,7 +41,8 @@ const show = (v: CellValue, kind?: Column["kind"]) => {
  * Each change is a new revision of the record. Which columns show, the grouping, the order and the rows per page come
  * from the person's saved view (header «Ajustes»); grouped, each group shows its rows count and its totals.
  */
-export function DataTable({ table, canEdit = false, canManage = false, companies = [], initialFilters = {} }: { table: Table; canEdit?: boolean; canManage?: boolean; companies?: Company[]; initialFilters?: Record<string, string> }) {
+export function DataTable({ table, canEdit = false, canManage = false, companies = [], invoices = [], initialFilters = {} }: { table: Table; canEdit?: boolean; canManage?: boolean; companies?: Company[];
+  invoices?: { value: string; label: string; hint: string | null }[]; initialFilters?: Record<string, string> }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -59,6 +60,9 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
   const [removing, setRemoving] = useState<Row | null>(null);
   const [undo, setUndo] = useState<{ ids: string[]; text: string } | null>(null);
   const caps = rowCapabilities(table.key);
+  // Fields of the «Añadir registro» form beyond the columns (an invoice's issuer, a line's invoice, a company's NIF…).
+  const extras = useMemo(() => addExtras(table.key).map(x => ({ ...x,
+    options: x.type === "company" ? companies.map(c => ({ value: c.id, label: c.nombre, hint: c.nif })) : x.type === "invoice" ? invoices : undefined })), [table.key, companies, invoices]);
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const { view, update } = useTableView(table.columns);
@@ -232,7 +236,7 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
           <DropdownMenuItem onSelect={() => setHistory(r)}><History className="size-4" />Historial</DropdownMenuItem>
-          {caps.add && <DropdownMenuItem onSelect={() => setForm({ title: "Duplicar registro", initial: formValues(table.columns, r) })}><Copy className="size-4" />Duplicar</DropdownMenuItem>}
+          {caps.add && <DropdownMenuItem onSelect={() => setForm({ title: "Duplicar registro", initial: { ...addDefaults(table.key), ...formValues(table.columns, r) } })}><Copy className="size-4" />Duplicar</DropdownMenuItem>}
           {caps.remove && <><DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => setRemoving(r)}><Trash2 className="size-4" />Eliminar</DropdownMenuItem></>}
         </DropdownMenuContent>
@@ -245,7 +249,7 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
         <SearchInput className="w-full sm:w-72" placeholder="Buscar en la tabla…" value={search} onChange={v => { setSearch(v); setPage(1); }} />
         {active > 0 && <button type="button" onClick={() => { setSearch(""); setColumnFilters({}); setPage(1); }}
           className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900"><X className="size-3.5" />Limpiar</button>}
-        {canEdit && caps.add && <button type="button" onClick={() => setForm({ title: "Añadir registro", initial: {} })}
+        {canEdit && caps.add && <button type="button" onClick={() => setForm({ title: "Añadir registro", initial: addDefaults(table.key) })}
           className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#0A58FF] px-3.5 text-sm font-medium text-white hover:bg-[#0848d6]"><Plus className="size-4" />Añadir registro</button>}
         <span className="ml-auto flex items-center gap-2 text-xs tabular-nums text-slate-500">{pending && <Loader2 className="size-3.5 animate-spin" />}
           {groupColumn && <span className="rounded-full bg-[#0A58FF]/10 px-2 py-0.5 font-medium text-[#0A58FF]">Agrupado por {groupColumn.label.toLowerCase()}</span>}
@@ -380,7 +384,7 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
       </DialogContent>
     </Dialog>
 
-    {form && <RecordForm key={form.title + JSON.stringify(form.initial)} open title={form.title} columns={table.columns} initial={form.initial}
+    {form && <RecordForm key={form.title + JSON.stringify(form.initial)} open title={form.title} columns={table.columns} extras={extras} initial={form.initial}
       onClose={() => setForm(null)} onSubmit={addRow} />}
     {history && typeof history._id === "string" && typeof history._rev === "number" &&
       <RecordHistory recordId={history._id} title={titleOf(history)} columns={table.columns} currentRevision={history._rev}

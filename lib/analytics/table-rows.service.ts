@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { updateEngineRecord, EngineRecordError } from "@/lib/engine/records.service";
 import { validateEngineRecordValues } from "@/lib/engine/validation";
 import { editedCustomValues, editedValues } from "./edit";
-import { PLAIN_EDITABLE } from "./compute";
+import { EDITABLE, PLAIN_EDITABLE } from "./compute";
+import { newCompanyValues, setInvoiceParty } from "./parties";
 import { BASE_TABLE_TYPES } from "./data";
 import { newRecordValues, rowCapabilities, type Revision } from "./table-rows";
 
@@ -95,6 +96,7 @@ export async function saveTableChanges(input: { workspaceId: string; userId: str
 export async function addTableRow(input: { workspaceId: string; userId: string; tableKey: string; values: unknown }) {
   if (!rowCapabilities(input.tableKey).add) throw new TableRowsError("En esta tabla no se pueden añadir filas a mano.");
   const type = await tableObjectType(input.workspaceId, input.tableKey);
+  if (BASE_TABLE_TYPES[input.tableKey]) return addBaseRow(input, type);
   if (type.engine_field_definitions.some(f => f.is_unique)) throw new TableRowsError("Esta tabla tiene columnas únicas: añade las filas desde el asistente.");
   const built = newRecordValues(type.engine_field_definitions, asValues(input.values));
   if (!built.ok) throw new TableRowsError(built.error);
@@ -104,6 +106,71 @@ export async function addTableRow(input: { workspaceId: string; userId: string; 
     schema_version: type.schema_version, revision: 1, values_json: valid.values as Prisma.InputJsonObject,
     created_by_user_id: input.userId, updated_by_user_id: input.userId }, select: { id: true } });
   return { id: created.id };
+}
+
+/** Fields of the base records a person can type when adding one by hand (the rest come from documents). */
+const BASE_ADDABLE: Record<string, string[]> = {
+  supply_point: ["supply_type", "supply_point_id", "tariff"],
+};
+const RELATION_FIELDS = new Set(["issuer", "customer", "invoice", "tax_identifier"]);
+type ObjectType = Awaited<ReturnType<typeof tableObjectType>>;
+
+/**
+ * An invoice, company, purchase line or supply typed by hand (e.g. a handwritten invoice that could not be read):
+ * checked with the same rules as the corrections, saved with the relations it needs (issuer and customer of an
+ * invoice, the invoice of a line), under the same lock as imports so they never mix.
+ */
+async function addBaseRow(input: { workspaceId: string; userId: string; tableKey: string; values: unknown }, type: ObjectType) {
+  const raw = asValues(input.values);
+  const allowed = new Set([...(PLAIN_EDITABLE[type.key] ?? []), ...Object.keys(EDITABLE[type.key] ?? {}), ...(BASE_ADDABLE[type.key] ?? [])]);
+  let values: Record<string, unknown> = {};
+  const errors: string[] = [];
+  const label = (field: string) => type.engine_field_definitions.find(f => f.key === field)?.name ?? field;
+  for (const [field, value] of Object.entries(raw)) {
+    if (RELATION_FIELDS.has(field)) continue;
+    if (!allowed.has(field)) { errors.push(`${label(field)}: no se puede rellenar a mano`); continue; }
+    if (value === "" || value === null || value === undefined) continue;
+    const r = EDITABLE[type.key]?.[field] ? editedValues(type.key, values, field, value) : editedCustomValues(type.engine_field_definitions, values, field, value);
+    if (!r.ok) errors.push(`${label(field)}: ${r.error}`); else values = r.values;
+  }
+  let externalKey: string | null = null;
+  if (type.key === "company") {
+    const checked = newCompanyValues({ nombre: typeof values.legal_name === "string" ? values.legal_name : "", nif: typeof raw.tax_identifier === "string" ? raw.tax_identifier : null });
+    if (!checked.ok) errors.push(checked.error); else { values = { ...values, ...checked.values }; externalKey = checked.key; }
+  }
+  if (type.key === "supply_point" && !values.supply_point_id) errors.push("Identificador: es obligatorio");
+  if (errors.length) throw new TableRowsError(errors.join(" · "));
+  const valid = validateEngineRecordValues(values, type.engine_field_definitions);
+  if (!valid.ok) throw new TableRowsError(valid.issues.map(i => `${label(i.field)}: ${i.code === "required" ? "es obligatorio" : "no válido"}`).join(" · "));
+  const id = (v: unknown) => typeof v === "string" && v ? uuid(v) : null;
+
+  return prisma.$transaction(async tx => {
+    await tx.$queryRaw(Prisma.sql`SELECT 1::integer FROM pg_advisory_xact_lock(hashtext(${"engine-intake-write:" + input.workspaceId}))`);
+    if (externalKey && await tx.engine_records.findFirst({ where: { workspace_id: input.workspaceId, object_type_id: type.id, external_key: externalKey, status: { not: "archived" } }, select: { id: true } }))
+      throw new TableRowsError("Ya existe una empresa con ese NIF/CIF.");
+    if (type.key === "supply_point" && await tx.engine_records.findFirst({ where: { workspace_id: input.workspaceId, object_type_id: type.id, status: { not: "archived" },
+      values_json: { path: ["supply_point_id"], equals: valid.values.supply_point_id as string } }, select: { id: true } }))
+      throw new TableRowsError("Ya existe un suministro con ese identificador.");
+    const created = await tx.engine_records.create({ data: { workspace_id: input.workspaceId, object_type_id: type.id, status: "active", external_key: externalKey,
+      schema_version: type.schema_version, revision: 1, values_json: valid.values as Prisma.InputJsonObject,
+      created_by_user_id: input.userId, updated_by_user_id: input.userId }, select: { id: true } });
+    if (type.key === "invoice")
+      for (const role of ["issuer", "customer"] as const) {
+        const companyId = id(raw[role]);
+        if (companyId) await setInvoiceParty(tx, { workspaceId: input.workspaceId, userId: input.userId, invoiceId: created.id, role, companyId });
+      }
+    const invoiceId = type.key === "invoice_line" ? id(raw.invoice) : null;
+    if (invoiceId) {
+      const invoice = await tx.engine_records.findFirst({ where: { id: invoiceId, workspace_id: input.workspaceId, status: { not: "archived" },
+        engine_object_types: { key: "invoice" } }, select: { id: true } });
+      if (!invoice) throw new TableRowsError("La factura elegida ya no existe.");
+      const definition = await tx.engine_relation_definitions.findUnique({ where: { workspace_id_key: { workspace_id: input.workspaceId, key: "invoice_lines" } }, select: { id: true, status: true } });
+      if (!definition || definition.status !== "active") throw new TableRowsError("La relación de factura y líneas no está definida.");
+      await tx.engine_record_relations.create({ data: { workspace_id: input.workspaceId, relation_definition_id: definition.id,
+        from_record_id: invoice.id, to_record_id: created.id, reviewed_by_user_id: input.userId } });
+    }
+    return { id: created.id };
+  }, { timeout: 30_000, maxWait: 15_000 });
 }
 
 function recordsInput(raw: unknown) {
