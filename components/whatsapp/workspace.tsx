@@ -78,6 +78,14 @@ export function WhatsAppWorkspace({ tab }: { tab: string }) {
         </div>
       ) : (
         <>
+          {tab !== "settings" && !selected && (
+            <p className="flex shrink-0 flex-wrap items-center gap-x-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              No hay ningún número de WhatsApp conectado: puedes ver la interfaz, pero no enviar ni sincronizar.
+              <Link href="/whatsapp/settings" className="font-medium underline">
+                Conectar en Números
+              </Link>
+            </p>
+          )}
           {tab !== "settings" && selected && active.length === 1 && (
             <p className="shrink-0 text-xs text-slate-500">
               Enviando desde{" "}
@@ -105,33 +113,29 @@ export function WhatsAppWorkspace({ tab }: { tab: string }) {
               </select>
             </label>
           )}
-          {tab === "settings" && config ? (
-            <WhatsAppSettings
-              accounts={accounts}
-              config={config}
-              onRefresh={refresh}
-            />
+          {tab === "settings" ? (
+            config ? (
+              <WhatsAppSettings
+                accounts={accounts}
+                config={config}
+                onRefresh={refresh}
+              />
+            ) : (
+              <p className="text-sm text-slate-500">
+                No se pudo cargar la configuración de WhatsApp.
+              </p>
+            )
           ) : tab === "contacts" ? (
             <WhatsAppContacts
               key={selected || "none"}
               accountId={selected}
               canManage={Boolean(config?.canManage)}
             />
-          ) : !selected ? (
-            <div className="grid flex-1 place-content-center gap-3 text-center text-sm text-slate-500">
-              <p>Conecta un número para empezar.</p>
-              <Link
-                href="/whatsapp/settings"
-                className="font-medium text-blue-600"
-              >
-                Ir a Números
-              </Link>
-            </div>
           ) : tab === "chat" ? (
-            <WhatsAppChat key={selected} accountId={selected} />
+            <WhatsAppChat key={selected || "none"} accountId={selected} />
           ) : (
             <WhatsAppTemplates
-              key={selected}
+              key={selected || "none"}
               accountId={selected}
               canManage={Boolean(config?.canManage)}
             />

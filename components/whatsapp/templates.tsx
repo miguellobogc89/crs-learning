@@ -34,6 +34,10 @@ export function WhatsAppTemplates({
     );
   }
   useEffect(() => {
+    if (!accountId) {
+      const t = setTimeout(() => setLoading(false), 0);
+      return () => clearTimeout(t);
+    }
     const c = new AbortController();
     void waApi<{ items: Template[] }>(
       `templates?accountId=${accountId}`,
@@ -100,7 +104,7 @@ export function WhatsAppTemplates({
           <div className="flex gap-2">
             <button
               onClick={sync}
-              disabled={busy}
+              disabled={busy || !accountId}
               className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
             >
               <RefreshCw className={`h-4 w-4 ${busy ? "animate-spin" : ""}`} />
@@ -108,7 +112,7 @@ export function WhatsAppTemplates({
             </button>
             <button
               onClick={() => setCreating(true)}
-              disabled={busy}
+              disabled={busy || !accountId}
               className={buttonClass}
             >
               <Plus className="h-4 w-4" />

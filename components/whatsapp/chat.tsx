@@ -27,6 +27,11 @@ export function WhatsAppChat({ accountId }: { accountId: string }) {
     [phone, setPhone] = useState("");
   const [revision, setRevision] = useState(0);
   useEffect(() => {
+    // Without a connected number the interface is shown empty instead of calling the API.
+    if (!accountId) {
+      const t = setTimeout(() => setLoading(false), 0);
+      return () => clearTimeout(t);
+    }
     const controller = new AbortController();
     let timeout: ReturnType<typeof setTimeout>;
     let first = true;
@@ -94,8 +99,10 @@ export function WhatsAppChat({ accountId }: { accountId: string }) {
         <div className="flex items-center justify-between border-b border-slate-100 p-4">
           <h2 className="text-sm font-semibold">Conversaciones</h2>
           <button
-            title="Nueva conversación"
+            title={accountId ? "Nueva conversación" : "Conecta un número para escribir"}
             aria-label="Nueva conversación"
+            disabled={!accountId}
+            className="disabled:opacity-40"
             onClick={() => {
               setSelected(null);
               setDraft(true);
