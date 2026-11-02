@@ -81,7 +81,9 @@ function service(db){
  class EngineRecordError extends Error{}
  const prisma={
   intake_templates:{findFirst:async()=>null},
-  engine_object_types:{findFirst:async({where})=>where.workspace_id===WS&&db.types[where.key]?{id:TYPE,key:where.key,schema_version:1,settings:db.types[where.key],engine_field_definitions:db.fields}:null},
+  // Like the database: each field definition comes back with only the columns the query selects.
+  engine_object_types:{findFirst:async({where,select})=>where.workspace_id===WS&&db.types[where.key]?{id:TYPE,key:where.key,schema_version:1,settings:db.types[where.key],
+   engine_field_definitions:(db.fieldsOf?.[where.key]??db.fields).map(f=>Object.fromEntries(Object.keys(select.engine_field_definitions.select).filter(k=>k in {...f,status:1}).map(k=>[k,k==='status'?'active':f[k]])))}:null},
   engine_records:{
    findFirst:async({where})=>{ if(where.external_key) return db.taken?.includes(where.external_key)?{id:'other'}:null;
      if(where.engine_object_types) return db.invoices?.includes(where.id)?{id:where.id}:null;
@@ -100,7 +102,7 @@ function service(db){
  };
  const svc=load('lib/analytics/table-rows.service.ts',{'@prisma/client':{Prisma:{sql:(...a)=>a}},'@/lib/prisma':{prisma},
   '@/lib/engine/records.service':{EngineRecordError,updateEngineRecord:async q=>{ if(db.conflict===q.recordId) throw new EngineRecordError('El registro ha cambiado. Actualiza la tabla antes de guardar.'); calls.saved=[...(calls.saved??[]),q];}},
-  '@/lib/engine/validation':{validateEngineRecordValues:(v)=>({ok:true,values:v})},
+  '@/lib/engine/validation':load('lib/engine/validation.ts'),
   './edit':edit,'./compute':compute,'./parties':parties,'./data':{BASE_TABLE_TYPES:{compras:'invoice_line',facturas:'invoice',empresas:'company',suministros:'supply_point'}},'./table-rows':rows});
  return {svc,calls};
 }
@@ -146,9 +148,10 @@ test('add row by hand in base tables: invoice with its parties, line with its in
  const fields=[{key:'invoice_number',name:'Número de factura',field_type:'text',is_required:true},{key:'issue_date',name:'Fecha',field_type:'date'},
   {key:'total_amount',name:'Total',field_type:'decimal'},{key:'direction',field_type:'text'},{key:'expense_category',field_type:'text'},
   {key:'description',field_type:'text'},{key:'unit_price',field_type:'decimal'},{key:'legal_name',field_type:'text'},{key:'tax_identifier',field_type:'text'},
-  {key:'supply_point_id',name:'Identificador',field_type:'text'},{key:'supply_type',field_type:'text'}];
+  {key:'supply_point_id',name:'Identificador',field_type:'text'},{key:'supply_type',field_type:'text'},{key:'is_own_company',field_type:'boolean'}];
+ const optional=fields.map(f=>({...f,is_required:false}));
  const C='33333333-3333-4333-8333-333333333333', INV='44444444-4444-4444-8444-444444444444';
- const db={types:{invoice:{},invoice_line:{},company:{},supply_point:{}},fields,records:{},invoices:[INV],taken:['B11111111'],supplies:['ES001']};
+ const db={types:{invoice:{},invoice_line:{},company:{},supply_point:{}},fields,fieldsOf:{invoice_line:optional,company:optional,supply_point:optional},records:{},invoices:[INV],taken:['B11111111'],supplies:['ES001']};
  const {svc,calls}=service(db);
  await svc.addTableRow({workspaceId:WS,userId:'u',tableKey:'facturas',values:{invoice_number:'AG-2026-07',issue_date:'15/07/2026',total_amount:'48,20',direction:'recibida',expense_category:'suministros',issuer:C,customer:''}});
  assert.deepEqual(calls.created.values_json,{invoice_number:'AG-2026-07',issue_date:'2026-07-15',total_amount:48.2,direction:'recibida',expense_category:'suministros'});
@@ -166,6 +169,11 @@ test('add row by hand in base tables: invoice with its parties, line with its in
  await assert.rejects(()=>svc.addTableRow({workspaceId:WS,userId:'u',tableKey:'suministros',values:{supply_type:'Agua'}}),/Identificador: es obligatorio/);
  await assert.rejects(()=>svc.addTableRow({workspaceId:WS,userId:'u',tableKey:'suministros',values:{supply_point_id:'ES001'}}),/Ya existe un suministro/);
  await assert.rejects(()=>svc.addTableRow({workspaceId:WS,userId:'u',tableKey:'consumos',values:{}}),/no se pueden añadir/);
+ await assert.rejects(()=>svc.addTableRow({workspaceId:WS,userId:'u',tableKey:'facturas',values:{total_amount:'5'}}),/Número de factura: es obligatorio/);
+ // An empty NIF is fine: the company is saved by name.
+ await svc.addTableRow({workspaceId:WS,userId:'u',tableKey:'empresas',values:{legal_name:'Aguas de Cádiz',tax_identifier:'',is_own_company:false}});
+ assert.deepEqual(calls.created.values_json,{legal_name:'Aguas de Cádiz',is_own_company:false});
+ assert.equal(calls.created.external_key,null);
 });
 
 test('add row only in own tables, values converted',async()=>{

@@ -15,6 +15,12 @@ import { newRecordValues, rowCapabilities, type Revision } from "./table-rows";
  */
 export class TableRowsError extends Error {}
 
+const ISSUE: Record<string, string> = { required: "es obligatorio", invalid_type: "tiene un valor no válido", invalid_option: "no es una opción permitida",
+  unknown_field: "no existe en esta tabla", unsupported_type: "no se puede rellenar desde aquí" };
+/** The engine's validation problems in words, one per field. */
+const describeIssues = (issues: { field: string; code: string }[], label: (field: string) => string) =>
+  issues.map(i => `${label(i.field)}: ${ISSUE[i.code] ?? "no válido"}`).join(" · ");
+
 const asValues = (v: unknown) => v && typeof v === "object" && !Array.isArray(v) ? { ...(v as Record<string, unknown>) } : {};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuid = (v: unknown) => { if (typeof v !== "string" || !UUID.test(v)) throw new TableRowsError("Identificador no válido."); return v; };
@@ -29,7 +35,7 @@ export async function tableObjectType(workspaceId: string, tableKey: string) {
   if (!typeKey) throw new TableRowsError("Tabla no encontrada.");
   const type = await prisma.engine_object_types.findFirst({ where: { workspace_id: workspaceId, key: typeKey, status: "active" },
     select: { id: true, key: true, schema_version: true, settings: true,
-      engine_field_definitions: { where: { status: "active" }, select: { key: true, name: true, field_type: true, is_required: true, is_unique: true } } } });
+      engine_field_definitions: { where: { status: "active" }, select: { key: true, name: true, field_type: true, is_required: true, is_unique: true, status: true, configuration: true } } } });
   if (!type || (tableKey.startsWith("tabla:") && asValues(type.settings).origen !== "asistente")) throw new TableRowsError("Tabla no encontrada.");
   return type;
 }
@@ -101,7 +107,7 @@ export async function addTableRow(input: { workspaceId: string; userId: string; 
   const built = newRecordValues(type.engine_field_definitions, asValues(input.values));
   if (!built.ok) throw new TableRowsError(built.error);
   const valid = validateEngineRecordValues(built.values, type.engine_field_definitions);
-  if (!valid.ok) throw new TableRowsError(valid.issues.map(i => `${type.engine_field_definitions.find(f => f.key === i.field)?.name ?? i.field}: no válido`).join(" · "));
+  if (!valid.ok) throw new TableRowsError(describeIssues(valid.issues, field => type.engine_field_definitions.find(f => f.key === field)?.name ?? field));
   const created = await prisma.engine_records.create({ data: { workspace_id: input.workspaceId, object_type_id: type.id, status: "active",
     schema_version: type.schema_version, revision: 1, values_json: valid.values as Prisma.InputJsonObject,
     created_by_user_id: input.userId, updated_by_user_id: input.userId }, select: { id: true } });
@@ -141,7 +147,7 @@ async function addBaseRow(input: { workspaceId: string; userId: string; tableKey
   if (type.key === "supply_point" && !values.supply_point_id) errors.push("Identificador: es obligatorio");
   if (errors.length) throw new TableRowsError(errors.join(" · "));
   const valid = validateEngineRecordValues(values, type.engine_field_definitions);
-  if (!valid.ok) throw new TableRowsError(valid.issues.map(i => `${label(i.field)}: ${i.code === "required" ? "es obligatorio" : "no válido"}`).join(" · "));
+  if (!valid.ok) throw new TableRowsError(describeIssues(valid.issues, label));
   const id = (v: unknown) => typeof v === "string" && v ? uuid(v) : null;
 
   return prisma.$transaction(async tx => {
