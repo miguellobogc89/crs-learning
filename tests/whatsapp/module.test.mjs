@@ -465,3 +465,61 @@ test("configuration diagnoses missing and invalid variables without exposing sec
     keys.forEach((k, i) => { if (previous[i] === undefined) delete process.env[k]; else process.env[k] = previous[i]; });
   }
 });
+
+test("Meta signup accepts every finish event and falls back to the authorization when Meta says nothing", async (t) => {
+  for (const [event, data, expected] of [
+    ["FINISH_ONLY_WABA", { waba_id: "456" }, { wabaId: "456" }],
+    ["FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", { waba_id: "456", phone_number_id: "123" }, { wabaId: "456", phoneNumberId: "123" }],
+  ]) {
+    const calls = [];
+    const mock = mockSignup(async (path, body) => { calls.push({ path, body }); return path === "connect/finish" ? { warning: null } : {}; });
+    const flow = mock.sdk.signup({ configId: "config" });
+    try {
+      mock.event({ type: "WA_EMBEDDED_SIGNUP", event, data }, "https://business.facebook.com");
+      mock.callback({ authResponse: { code: "c" } });
+      assert.equal(await flow.promise, null);
+      assert.deepEqual(calls[1].body, expected, event);
+    } finally { flow.cancel(); mock.restore(); }
+  }
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const calls = [];
+  const mock = mockSignup(async (path, body) => { calls.push({ path, body }); return path === "connect/finish" ? { warning: "pendiente" } : {}; });
+  const flow = mock.sdk.signup({ configId: "config" });
+  try {
+    mock.callback({ authResponse: { code: "c" } });
+    await new Promise(setImmediate);
+    assert.equal(calls.length, 1, "waits for Meta's message first");
+    t.mock.timers.tick(8000);
+    assert.equal(await flow.promise, "pendiente");
+    assert.deepEqual(calls[1], { path: "connect/finish", body: {} });
+  } finally { flow.cancel(); mock.restore(); }
+});
+
+test("signup without a number: the accounts come from the authorization, every number is connected and registered", async () => {
+  process.env.META_APP_ID ??= "app";
+  const graphCalls = [];
+  const graph = async (path, token, method, body) => {
+    graphCalls.push({ path, token, method, body });
+    if (path.startsWith("debug_token")) return { data: { granular_scopes: [{ scope: "whatsapp_business_management", target_ids: ["456"] }] } };
+    if (path.startsWith("456/phone_numbers?fields=id&limit")) return { data: [{ id: "123" }] };
+    if (path.startsWith("456/phone_numbers")) return { data: [{ id: "123", display_phone_number: "+1 555 0100" }] };
+    return {};
+  };
+  const s = load("lib/whatsapp/service.ts", {
+    "@prisma/client": { Prisma: {} },
+    "@/lib/prisma": { prisma: { whatsapp_accounts: { findUnique: async () => null, create: async () => ({}) } } },
+    "@/lib/connectors/crypto": { encrypt: (x) => "sealed:" + x, connectorKey: () => Buffer.alloc(32, 7) },
+    "./repository": { accountFor: async () => ({}), conversationFor: async () => ({}) },
+    "./meta": { graph, MetaError: class extends rules.WhatsAppError {}, metaConfig: () => ({ appId: "app", secret: "shh" }), listTemplates: async () => [] },
+    "./rules": rules,
+  });
+  const done = await s.connectFromSignup(ws, "user-token", {});
+  assert.deepEqual(done, [{ phone: "+1 555 0100", registerProblem: null }]);
+  assert.equal(graphCalls[0].token, "app|shh", "debug_token is read with the app's credentials");
+  const register = graphCalls.find((c) => c.path === "123/register");
+  assert.equal(register.method, "POST");
+  assert.match(register.body.pin, /^\d{6}$/);
+  assert.equal(s.registrationPin("123", Buffer.alloc(32, 7)), register.body.pin, "same PIN every time for the same number");
+  assert.notEqual(s.registrationPin("124", Buffer.alloc(32, 7)), register.body.pin);
+  await assert.rejects(() => s.connectFromSignup(ws, "t", { wabaId: "abc" }), /no válido/);
+});

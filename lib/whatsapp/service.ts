@@ -1,9 +1,10 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { encrypt } from "@/lib/connectors/crypto";
+import { createHmac } from "node:crypto";
+import { connectorKey, encrypt } from "@/lib/connectors/crypto";
 import { accountFor, conversationFor } from "./repository";
-import { graph, listTemplates, MetaError, type MetaTemplate } from "./meta";
+import { graph, listTemplates, metaConfig, MetaError, type MetaTemplate } from "./meta";
 import {
   bodyParameters,
   metaId,
@@ -13,6 +14,63 @@ import {
   uuid,
   WhatsAppError,
 } from "./rules";
+
+/**
+ * The end of Meta's signup. Meta normally says which account and number were chosen; some flows (a number Meta
+ * provides, an account without a number yet, a lost browser message) only say the account, or nothing. Then the
+ * accounts this authorization covers are read from Meta itself, and every number in them is connected.
+ */
+export async function connectFromSignup(workspaceId: string, token: string, input: Record<string, unknown>) {
+  if (input.wabaId && input.phoneNumberId) return [await connectNumber(workspaceId, token, input)];
+  const wabaIds = input.wabaId ? [metaId(input.wabaId)] : await authorizedWabas(token);
+  if (!wabaIds.length) throw new WhatsAppError("Meta no ha dado acceso a ninguna cuenta de WhatsApp. Vuelve a conectar y elige la cuenta.", 422);
+  const results = [];
+  for (const wabaId of wabaIds) {
+    const numbers = await graph<{ data: { id: string }[] }>(`${wabaId}/phone_numbers?fields=id&limit=100`, token);
+    for (const n of numbers.data) results.push(await connectNumber(workspaceId, token, { wabaId, phoneNumberId: n.id }));
+  }
+  if (!results.length) throw new WhatsAppError("La cuenta de WhatsApp no tiene ningún número todavía. Añádelo en WhatsApp Manager o vuelve a conectar.", 422);
+  return results;
+}
+
+/** WhatsApp accounts the token was granted (Meta's debug_token, read with the app's own credentials). */
+async function authorizedWabas(token: string): Promise<string[]> {
+  const c = metaConfig();
+  const info = await graph<{ data?: { granular_scopes?: { scope: string; target_ids?: string[] }[] } }>(
+    `debug_token?input_token=${encodeURIComponent(token)}`, `${c.appId}|${c.secret}`);
+  const ids = info.data?.granular_scopes?.filter(s => s.scope === "whatsapp_business_management" || s.scope === "whatsapp_business_messaging")
+    .flatMap(s => s.target_ids ?? []) ?? [];
+  return [...new Set(ids)].filter(id => /^\d+$/.test(id));
+}
+
+/** Stable 6-digit two-step PIN per number, derived from the server key: nothing extra to store, same on retries. */
+export function registrationPin(phoneNumberId: string, key: Buffer = connectorKey()) {
+  const n = createHmac("sha256", key).update(`whatsapp-pin:${phoneNumberId}`).digest().readUInt32BE(0) % 1_000_000;
+  return String(n).padStart(6, "0");
+}
+
+/**
+ * Registers the number for Cloud API (Meta asks the partner to do it within 90 days; until then it cannot send).
+ * Registering again with the same PIN is harmless. A failure does not undo the connection: it is reported.
+ */
+export async function registerNumber(token: string, phoneNumberId: string): Promise<string | null> {
+  try {
+    await graph(`${phoneNumberId}/register`, token, "POST", { messaging_product: "whatsapp", pin: registrationPin(phoneNumberId) });
+    return null;
+  } catch (error) {
+    const code = error instanceof MetaError ? error.code : 0;
+    console.error("[whatsapp] register failed", code);
+    return code === 133005
+      ? "El número tiene un PIN de verificación en dos pasos distinto. Quítalo en WhatsApp Manager y pulsa «Registrar»."
+      : `Meta no ha registrado el número todavía (código ${code || "desconocido"}). Pulsa «Registrar» más tarde.`;
+  }
+}
+
+export async function registerAccount(workspaceId: string, accountId: string) {
+  const account = await accountFor(workspaceId, accountId);
+  const problem = await registerNumber(account.token, account.phone_number_id);
+  if (problem) throw new WhatsAppError(problem, 502);
+}
 
 export async function connectNumber(
   workspaceId: string,
@@ -70,6 +128,7 @@ export async function connectNumber(
     await prisma.whatsapp_accounts.create({
       data: { workspace_id: workspaceId, phone_number_id: phoneId, ...data },
     });
+  return { phone: found.display_phone_number, registerProblem: await registerNumber(token, phoneId) };
 }
 
 export async function syncTemplates(workspaceId: string, accountId: string) {

@@ -57,13 +57,14 @@ export function loadMeta(config: Configuration) {
   });
   return sdkPromise;
 }
+/** Resolves with a warning to show (e.g. the number connected but Meta did not register it yet), or null. */
 export function signup(config: Configuration): {
-  promise: Promise<void>;
+  promise: Promise<string | null>;
   cancel: () => void;
 } {
   let cleanup = () => {};
   let cancel = () => {};
-  const promise = new Promise<void>((resolve, reject) => {
+  const promise = new Promise<string | null>((resolve, reject) => {
     const sdk = (window as MetaWindow).FB;
     if (!sdk) {
       reject(new Error("Facebook todavía no está listo"));
@@ -72,34 +73,30 @@ export function signup(config: Configuration): {
     let finished = false,
       authorized = false,
       finishing = false;
-    let ids: { phoneNumberId: string; wabaId: string } | null = null;
-    const stop = (error?: Error) => {
+    // Which account and number Meta says were chosen; {} = not said, the server reads them from the authorization.
+    let ids: { phoneNumberId?: string; wabaId?: string } | null = null;
+    let fallback: ReturnType<typeof setTimeout> | undefined;
+    const stop = (error?: Error, warning: string | null = null) => {
       if (finished) return;
       finished = true;
       cleanup();
+      clearTimeout(fallback);
       if (error) reject(error);
-      else resolve();
+      else resolve(warning);
     };
     cancel = () => stop(new Error("Conexión cancelada"));
     const complete = async () => {
       if (finished || finishing || !authorized || !ids) return;
       finishing = true;
       try {
-        await waApi("connect/finish", ids);
-        stop();
+        const r = await waApi<{ warning?: string | null }>("connect/finish", ids);
+        stop(undefined, r?.warning ?? null);
       } catch (e) {
         stop(e instanceof Error ? e : new Error("No se pudo conectar"));
       }
     };
     const onMessage = (event: MessageEvent) => {
-      if (
-        ![
-          "https://www.facebook.com",
-          "https://web.facebook.com",
-          "https://business.facebook.com",
-        ].includes(event.origin)
-      )
-        return;
+      if (!/^https:\/\/([a-z0-9-]+\.)*facebook\.com$/.test(event.origin)) return;
       let data;
       try {
         data =
@@ -109,21 +106,16 @@ export function signup(config: Configuration): {
       }
       if (data?.type !== "WA_EMBEDDED_SIGNUP") return;
       if (data.event === "ERROR" || data.event === "CANCEL") {
-        stop(new Error("Se ha cancelado la conexión con Meta"));
+        const detail = typeof data.data?.error_message === "string" ? `: ${data.data.error_message}` : "";
+        stop(new Error(`Se ha cancelado la conexión con Meta${detail}`));
         return;
       }
-      if (data.event !== "FINISH") return;
-      if (!data.data?.phone_number_id || !data.data?.waba_id) {
-        stop(
-          new Error(
-            "Meta no devolvió un número verificado. Completa el alta del número en Meta.",
-          ),
-        );
-        return;
-      }
+      // FINISH, FINISH_ONLY_WABA, FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING… all end the flow.
+      if (typeof data.event !== "string" || !data.event.startsWith("FINISH")) return;
+      const waba = data.data?.waba_id, phone = data.data?.phone_number_id;
       ids = {
-        phoneNumberId: data.data.phone_number_id,
-        wabaId: data.data.waba_id,
+        ...(typeof waba === "string" && /^\d+$/.test(waba) ? { wabaId: waba } : {}),
+        ...(typeof phone === "string" && /^\d+$/.test(phone) ? { phoneNumberId: phone } : {}),
       };
       void complete();
     };
@@ -149,6 +141,10 @@ export function signup(config: Configuration): {
           .then(() => {
             authorized = true;
             void complete();
+            // If Meta's message never reaches this page, ask the server to find the account from the authorization.
+            fallback = setTimeout(() => {
+              if (!ids) { ids = {}; void complete(); }
+            }, 8000);
           })
           .catch((e) =>
             stop(e instanceof Error ? e : new Error("No se pudo autorizar")),

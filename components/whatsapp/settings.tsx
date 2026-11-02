@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Plus, Unplug, Copy, Loader2 } from "lucide-react";
+import { BadgeCheck, Plus, Unplug, Copy, Loader2 } from "lucide-react";
 import { waApi, buttonClass, errorText } from "./api";
 import { loadMeta, signup } from "./meta-signup";
 import type { Account, Configuration } from "@/lib/whatsapp/types";
@@ -17,6 +17,8 @@ export function WhatsAppSettings({
   const [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [warning, setWarning] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
   const [confirm, setConfirm] = useState(""),
     [copied, setCopied] = useState(false);
   const url = useSyncExternalStore(
@@ -46,9 +48,23 @@ export function WhatsAppSettings({
     const flow = signup(config);
     cleanup.current = flow.cancel;
     void flow.promise
-      .then(onRefresh)
+      .then(async (warning) => { setWarning(warning); await onRefresh(); })
       .catch((e) => setError(errorText(e)))
       .finally(() => setBusy(false));
+  }
+  async function register(accountId: string) {
+    setBusy(true);
+    setError("");
+    setWarning(null);
+    try {
+      await waApi("register", { accountId });
+      setWarning(null);
+      setNotice("Número registrado en Meta: ya puede enviar y recibir.");
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
   }
   async function disconnect(accountId: string) {
     setBusy(true);
@@ -71,6 +87,14 @@ export function WhatsAppSettings({
           className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
         >
           {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>
+      )}
+      {warning && (
+        <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+          Número conectado, pero falta un paso en Meta. {warning}
         </p>
       )}
       <section className="rounded-xl border border-slate-200 p-5">
@@ -133,6 +157,17 @@ export function WhatsAppSettings({
                 >
                   {a.status === "active" ? "Conectado" : "Desconectado"}
                 </span>
+                {config.canManage && a.status === "active" && (
+                  <button
+                    disabled={busy}
+                    onClick={() => register(a.id)}
+                    title="Registra el número en Meta para poder enviar y recibir (se puede repetir sin problema)"
+                    className="flex items-center gap-1 text-xs text-blue-600"
+                  >
+                    <BadgeCheck className="h-4 w-4" />
+                    Registrar
+                  </button>
+                )}
                 {config.canManage &&
                   a.status === "active" &&
                   (confirm === a.id ? (

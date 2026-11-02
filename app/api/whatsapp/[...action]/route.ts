@@ -10,7 +10,8 @@ import {
 } from "@/lib/whatsapp/repository";
 import { exchangeCode, metaConfig } from "@/lib/whatsapp/meta";
 import {
-  connectNumber,
+  connectFromSignup,
+  registerAccount,
   createTemplate,
   sendMessage,
   syncTemplates,
@@ -62,6 +63,7 @@ async function handle(req: Request, route: RouteContext) {
       "connect/code",
       "connect/finish",
       "disconnect",
+      "register",
       "templates/sync",
       "templates/create",
       "contacts/delete",
@@ -271,8 +273,12 @@ async function handle(req: Request, route: RouteContext) {
         pending.expires < Date.now()
       )
         throw new WhatsAppError("Autorización no válida", 403);
-      await connectNumber(workspaceId, pending.token, body);
+      const connected = await connectFromSignup(workspaceId, pending.token, body);
       jar.delete({ name: PENDING_COOKIE, path: "/api/whatsapp" });
+      const problems = connected.filter(c => c.registerProblem).map(c => `${c.phone}: ${c.registerProblem}`);
+      return NextResponse.json({ ok: true, connected: connected.map(c => c.phone), warning: problems.join(" ") || null });
+    } else if (action === "register") {
+      await registerAccount(workspaceId, uuid(body.accountId));
     } else if (action === "disconnect") {
       const account = await accountFor(workspaceId, uuid(body.accountId));
       // Local disconnect keeps history and cannot revoke a shared WABA subscription used by another number.
