@@ -249,11 +249,11 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
         <SearchInput className="w-full sm:w-72" placeholder="Buscar en la tabla…" value={search} onChange={v => { setSearch(v); setPage(1); }} />
         {active > 0 && <button type="button" onClick={() => { setSearch(""); setColumnFilters({}); setPage(1); }}
           className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900"><X className="size-3.5" />Limpiar</button>}
-        {canEdit && caps.add && <button type="button" onClick={() => setForm({ title: "Añadir registro", initial: addDefaults(table.key) })}
-          className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#0A58FF] px-3.5 text-sm font-medium text-white hover:bg-[#0848d6]"><Plus className="size-4" />Añadir registro</button>}
         <span className="ml-auto flex items-center gap-2 text-xs tabular-nums text-slate-500">{pending && <Loader2 className="size-3.5 animate-spin" />}
           {groupColumn && <span className="rounded-full bg-[#0A58FF]/10 px-2 py-0.5 font-medium text-[#0A58FF]">Agrupado por {groupColumn.label.toLowerCase()}</span>}
           {result.total === table.rows.length ? `${table.rows.length.toLocaleString("es-ES")} filas` : `${result.total.toLocaleString("es-ES")} de ${table.rows.length.toLocaleString("es-ES")} filas`}</span>
+        {canEdit && caps.add && <button type="button" onClick={() => setForm({ title: "Añadir registro", initial: addDefaults(table.key) })}
+          className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[#0A58FF] px-3.5 text-sm font-medium text-white hover:bg-[#0848d6]"><Plus className="size-4" />Añadir</button>}
       </div>
       {activeFilters.length > 0 && <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         {activeFilters.map(([key, f]) => { const c = table.columns.find(x => x.key === key); if (!c) return null;

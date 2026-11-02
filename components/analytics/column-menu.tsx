@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { Popover } from "radix-ui";
-import { ArrowDown, ArrowDownUp, ArrowUp, ChevronDown, EyeOff, Filter, X } from "lucide-react";
+import { ArrowDown, ArrowDownUp, ArrowUp, EyeOff, Filter, X } from "lucide-react";
 import type { CellValue, Column } from "@/lib/analytics/compute";
 import { activeColumnFilter, filterOptions, type ColumnFilter, type Sort } from "@/lib/analytics/table-query";
 import { cn } from "@/lib/utils";
@@ -38,19 +38,16 @@ export function ColumnMenu({ column, rows, sort, filter, onSort, onFilter, onHid
   const item = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-slate-700 hover:bg-slate-100";
 
   return <Popover.Root onOpenChange={o => { if (!o) setQuery(""); }}>
-    <span className={cn("inline-flex items-center gap-0.5", alignRight && "flex-row-reverse")}>
-      <button type="button" onClick={() => onSort(sorted === "asc" ? "desc" : sorted === "desc" ? null : "asc")}
-        className={cn("inline-flex items-center gap-1 rounded px-1 -mx-1 hover:text-slate-900", (sorted || filtered) && "text-slate-900")}>
-        {column.label}
+    {/* The whole header opens the menu (sort and filter), like a spreadsheet's column filter. */}
+    <Popover.Trigger asChild>
+      <button type="button" aria-label={`Ordenar y filtrar ${column.label}`} title="Ordenar y filtrar"
+        className={cn("group/col inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 -mx-1.5 hover:bg-slate-200/60 hover:text-slate-900 data-[state=open]:bg-slate-200/70 data-[state=open]:text-slate-900",
+          alignRight && "flex-row-reverse", (sorted || filtered) && "text-slate-900")}>
+        <span>{column.label}</span>
         {sorted === "asc" ? <ArrowUp className="size-3" /> : sorted === "desc" ? <ArrowDown className="size-3" /> : null}
+        <Filter className={cn("size-3.5", filtered ? "fill-[#0A58FF] text-[#0A58FF]" : "text-slate-300 group-hover/col:text-slate-500")} />
       </button>
-      <Popover.Trigger asChild>
-        <button type="button" aria-label={`Opciones de ${column.label}`}
-          className={cn("rounded p-0.5 hover:bg-slate-200/70 hover:text-slate-900", filtered ? "text-[#0A58FF]" : "text-slate-400")}>
-          {filtered ? <Filter className="size-3.5 fill-current" /> : <ChevronDown className="size-3.5" />}
-        </button>
-      </Popover.Trigger>
-    </span>
+    </Popover.Trigger>
     <Popover.Portal>
       <Popover.Content align={alignRight ? "end" : "start"} sideOffset={6}
         className="z-50 w-64 rounded-xl border border-slate-200 bg-white p-1.5 text-sm font-normal normal-case text-slate-700 shadow-lg outline-none">
