@@ -368,7 +368,7 @@ export async function deleteContacts(workspaceId: string, input: Record<string, 
 
 // ---------- Bulk template sends ----------
 
-const SOURCE = /^(field:(name|category|specialty|city|province|email|website)|attr:.{1,200}|text:.{1,200})$/s;
+const SOURCE = /^(field:(name|category|specialty|city|province|email|website)|attr:[\s\S]{1,200}|text:[\s\S]{1,200})$/;
 
 async function campaignInput(workspaceId: string, input: Record<string, unknown>) {
   const accountId = uuid(input.accountId);
