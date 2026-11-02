@@ -29,6 +29,7 @@ import {
   runCampaign,
   updateContacts,
 } from "@/lib/whatsapp/contacts-service";
+import { adoptConversation, leadIds, leadsOverview } from "@/lib/whatsapp/leads-service";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -210,6 +211,10 @@ async function handle(req: Request, route: RouteContext) {
           url.searchParams.get("accountId"),
         ),
       );
+    if (req.method === "GET" && action === "leads")
+      return NextResponse.json(await leadsOverview(workspaceId, url));
+    if (req.method === "GET" && action === "leads/ids")
+      return NextResponse.json({ ids: await leadIds(workspaceId, url) });
     if (req.method === "GET" && action === "campaigns/progress")
       return NextResponse.json(
         await campaignProgress(workspaceId, uuid(url.searchParams.get("campaignId"))),
@@ -218,6 +223,8 @@ async function handle(req: Request, route: RouteContext) {
       throw new WhatsAppError("Ruta no encontrada", 404);
     if (action === "contacts/import")
       return NextResponse.json(await importContacts(workspaceId, ctx.userId, body));
+    if (action === "leads/adopt")
+      return NextResponse.json(await adoptConversation(workspaceId, body));
     if (action === "contacts/update")
       return NextResponse.json(await updateContacts(workspaceId, body));
     if (action === "contacts/delete")

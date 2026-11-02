@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { waApi, errorText, fieldClass } from "./api";
-import { WhatsAppChat } from "./chat";
+import { WhatsAppLeads } from "./leads";
 import { WhatsAppTemplates } from "./templates";
 import { WhatsAppSettings } from "./settings";
 import { WhatsAppContacts } from "./contacts";
@@ -131,8 +131,8 @@ export function WhatsAppWorkspace({ tab }: { tab: string }) {
               accountId={selected}
               canManage={Boolean(config?.canManage)}
             />
-          ) : tab === "chat" ? (
-            <WhatsAppChat key={selected || "none"} accountId={selected} />
+          ) : tab === "leads" ? (
+            <WhatsAppLeads key={selected || "none"} accountId={selected} />
           ) : (
             <WhatsAppTemplates
               key={selected || "none"}

@@ -9,14 +9,14 @@ import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 export const dynamic = "force-dynamic";
 const TITLES: Record<string, string> = {
   contacts: "Contactos",
-  chat: "Conversaciones",
+  leads: "Leads",
   settings: "Números",
   templates: "Plantillas",
 };
 export default async function Page({ params }: { params: Promise<{ tab: string }> }) {
   const { tab } = await params;
-  if (tab === "leads") redirect("/whatsapp/contacts");
-  if (!["contacts", "chat", "templates", "settings"].includes(tab)) notFound();
+  if (tab === "chat") redirect("/whatsapp/leads");
+  if (!["contacts", "leads", "templates", "settings"].includes(tab)) notFound();
   const ctx = await connectorContext();
   if (!ctx) redirect("/");
   return <AppSectionShell sidebar={<div><h2 className="border-b border-slate-200/60 px-5 py-4 text-sm font-semibold">WhatsApp</h2><WhatsAppNavigation /></div>}>

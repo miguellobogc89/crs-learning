@@ -113,6 +113,7 @@ function route(
     "@/lib/whatsapp/meta": { metaConfig: () => config },
     "@/lib/whatsapp/service": {},
     "@/lib/whatsapp/contacts-service": {},
+    "@/lib/whatsapp/leads-service": {},
     "@/lib/whatsapp/rules": rules,
   });
 }

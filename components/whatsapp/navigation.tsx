@@ -12,7 +12,7 @@ export const whatsappSections = [
     title: null,
     items: [
       { key: "contacts", label: "Contactos", icon: UsersRound },
-      { key: "chat", label: "Conversaciones", icon: MessageCircle },
+      { key: "leads", label: "Leads", icon: MessageCircle },
     ],
   },
   {

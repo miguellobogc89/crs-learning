@@ -213,6 +213,7 @@ export function ChatThread({
   onBack,
   onSent,
   embedded = false,
+  prefill,
 }: {
   accountId: string;
   conversation: Conversation | null;
@@ -222,6 +223,8 @@ export function ChatThread({
   onSent: () => void;
   /** Inside a contact panel: the phone comes from the contact and there is no list to go back to. */
   embedded?: boolean;
+  /** Values offered for the template variables in order ({{1}} = the business name…); editable before sending. */
+  prefill?: string[];
 }) {
   const [messages, setMessages] = useState<Message[]>([]),
     [templates, setTemplates] = useState<Template[]>([]),
@@ -475,7 +478,7 @@ export function ChatThread({
           onChange={(e) => {
             setTemplateId(e.target.value);
             const t = templates.find((t) => t.id === e.target.value);
-            setValues(t ? templateVariables(t).map(() => "") : []);
+            setValues(t ? templateVariables(t).map((_, i) => prefill?.[i] ?? "") : []);
           }}
           className={fieldClass}
         >

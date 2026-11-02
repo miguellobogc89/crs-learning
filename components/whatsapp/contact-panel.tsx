@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { Ban, Check, ChevronDown, ExternalLink, Globe, Loader2, Mail, MapPin, ShieldCheck, Star, X } from "lucide-react";
+import { Ban, Check, ChevronDown, ExternalLink, MessageCircle, Globe, Loader2, Mail, MapPin, ShieldCheck, Star, X } from "lucide-react";
 import { waApi, errorText, fieldClass } from "./api";
 import { ChatThread } from "./chat";
 import { classificationTone, PermissionPill, shortDate, stageTone } from "./contacts";
@@ -94,6 +94,8 @@ export function ContactPanel({
             </p>
           )}
         </div>
+        <a href={`/whatsapp/leads?lead=${contactId}`} className="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50">
+          <MessageCircle className="h-3.5 w-3.5" />Abrir en Leads</a>
         <button aria-label="Cerrar ficha" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
           <X className="h-5 w-5" />
         </button>
