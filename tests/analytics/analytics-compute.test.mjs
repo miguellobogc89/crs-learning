@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 function load(file,deps={}){const m={exports:{}};new Function('require','module','exports',ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(n=>{if(n in deps)return deps[n];throw Error(n);},m,m.exports);return m.exports;}
-const a=load('lib/analytics/compute.ts',{'@/lib/knowledge/intake/writer/duplicates':load('lib/knowledge/intake/writer/duplicates.ts'),'@/lib/purchases/analytics':load('lib/purchases/analytics.ts',{'@/lib/assistant/data/query':load('lib/assistant/data/query.ts'),'./rules':load('lib/purchases/rules.ts')})});
+const pa=load('lib/purchases/analytics.ts',{'@/lib/assistant/data/query':load('lib/assistant/data/query.ts'),'./rules':load('lib/purchases/rules.ts')});
+const a=load('lib/analytics/compute.ts',{'@/lib/knowledge/intake/writer/duplicates':load('lib/knowledge/intake/writer/duplicates.ts'),'@/lib/purchases/analytics':pa,'@/lib/purchases/catalog':load('lib/purchases/catalog.ts',{'./analytics':pa})});
 
 // Synthetic workspace (no customer data).
 const row=(id,values)=>({id,values});
@@ -178,4 +179,18 @@ test('template tables: their rows sum as costs of their category, and show as a 
  assert.equal(t.label,'Nóminas');assert.deepEqual(t.columns.map(c=>[c.key,c.kind]),[['trabajador','text'],['fecha_pago','date'],['coste_empresa','money'],['documento','document']]);
  assert.deepEqual(t.rows[0],{_id:'n2',_rev:null,trabajador:'Jesús',fecha_pago:'2026-03-31',coste_empresa:1000,documento:null},'newest first');
  assert.equal(t.rows.find(r=>r.trabajador==='María').documento,'F-N1');
+});
+
+test('catálogo de productos: su resumen de compras se ve en vivo y no se edita a mano', () => {
+  const row=(id,values)=>({id,values});
+  const d={companies:[row('s',{legal_name:'Proveedor S.L.'})],invoices:[row('f1',{issue_date:'2026-09-01'})],
+    lines:[row('l1',{description:'AZUCAR S/25 KGS.',quantity:'1',unit_price:'38.60',line_total:'38.60'})],
+    supplies:[],consumption:[],telecom:[],relations:{invoice_lines:[['f1','l1']],invoice_issuer:[['s','f1']],invoice_customer:[],invoice_supply_point:[],invoice_energy_consumption:[],supply_point_holder:[]},
+    custom:[{typeId:'t',typeKey:'catalogo',nombre:'Catálogo',descripcion:'',titulo:'producto',
+      campos:[{key:'producto',label:'Producto',type:'text'},{key:'envase',label:'Envase',type:'decimal'},{key:'unidad',label:'Unidad',type:'text'},{key:'precio_envase',label:'Precio envase',type:'decimal'},{key:'estado',label:'Estado',type:'text'}],
+      rows:[row('p',{producto:'AZUCAR S/25 KGS.',envase:25,unidad:'Kg',precio_envase:1.54,estado:'Revisar'})]}],
+    links:[{from:'compras',columna:'cat',nombre:'Producto',to:'tabla:catalogo',relationId:'r',relationKey:'r',completar:false,pairs:[['l1','p']]}]};
+  const t=a.buildTable(d,'tabla:catalogo');
+  assert.equal(t.rows[0].precio_envase,38.6); assert.equal(t.rows[0].estado,'OK'); assert.equal(t.rows[0].envase,25);
+  assert.equal(t.columns.find(c=>c.key==='precio_envase').edit,undefined); assert.ok(t.columns.find(c=>c.key==='envase').edit);
 });

@@ -12,15 +12,24 @@ const num = (v: unknown): number | null => typeof v === "number" && Number.isFin
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const unitOf = (u: string | null): Line["unidadEnvase"] => !u ? null : /^l/i.test(u) ? "L" : /^k/i.test(u) ? "Kg" : /^u/i.test(u) ? "ud" : null;
 
+/**
+ * The product catalog of the purchases: the table (made with the assistant) that «Productos comprados» links to and
+ * that says what each pack holds («envase»). `catalogOf`: purchase line → its catalog row.
+ */
+export function purchaseCatalog(data: AnalyticsData) {
+  const link = (data.links ?? []).find(l => l.from === "compras" && (data.custom ?? []).some(c => `tabla:${c.typeKey}` === l.to && c.campos.some(f => f.key === "envase")));
+  const catalog = link ? (data.custom ?? []).find(c => `tabla:${c.typeKey}` === link.to) : undefined;
+  return catalog ? { catalog, catalogOf: new Map(link!.pairs) } : null;
+}
+
 /** Every purchase line (not supplies, not income), with the content of one unit from the catalog linked to it (or read from the product name). */
 export function purchaseLines(data: AnalyticsData): Line[] {
   const byId = new Map([...data.invoices, ...data.companies].map(r => [r.id, r]));
   const invoiceOf = new Map(data.relations.invoice_lines?.map(([invoice, line]) => [line, invoice]) ?? []);
   const issuerOf = new Map(data.relations.invoice_issuer?.map(([company, invoice]) => [invoice, company]) ?? []);
-  const link = (data.links ?? []).find(l => l.from === "compras" && (data.custom ?? []).some(c => `tabla:${c.typeKey}` === l.to && c.campos.some(f => f.key === "envase")));
-  const catalog = link ? (data.custom ?? []).find(c => `tabla:${c.typeKey}` === link.to) : undefined;
-  const catalogRow = new Map((catalog?.rows ?? []).map(r => [r.id, r]));
-  const catalogOf = new Map(link?.pairs ?? []);
+  const linked = purchaseCatalog(data);
+  const catalogRow = new Map((linked?.catalog.rows ?? []).map(r => [r.id, r]));
+  const catalogOf = linked?.catalogOf ?? new Map<string, string>();
   // Only purchases: not supplies (they have their own analysis) nor invoices the workspace issued.
   const own = new Set(data.companies.filter(c => c.values.is_own_company === true || c.values.is_own_company === "true").map(c => c.id));
   const isPurchase = (inv: AnalyticsData["invoices"][number] | undefined) => !inv || (str(inv.values.expense_category) !== "suministros"
@@ -42,6 +51,8 @@ export function purchaseLines(data: AnalyticsData): Line[] {
       documento: (invoiceId && data.documents?.[invoiceId]?.fileId) || null,
       cantidad: num(l.values.quantity) ?? num(l.values.package_count), descuentoPct: num(l.values.discount_percent), envaseLeido: !!read, precio: num(l.values.unit_price) ?? num(l.values.unit_price_with_tax), descuento: discount !== null ? Math.abs(discount) : null,
       importe: num(l.values.line_total) ?? num(l.values.line_total_with_tax), iva: num(l.values.tax_rate), unidad: str(l.values.unit),
+      // Only when the amount without VAT was read too: then the one with VAT can confirm it.
+      importeConIva: num(l.values.line_total) !== null ? num(l.values.line_total_with_tax) : null,
       envase: measure?.cantidad ?? null, unidadEnvase: measure?.unidad ?? null };
   });
 }

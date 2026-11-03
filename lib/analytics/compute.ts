@@ -1,6 +1,7 @@
 import type { AnalyticsData, CustomTable, Row } from "./data";
 import { extraCopies } from "@/lib/knowledge/intake/writer/duplicates";
-import { normalizePurchases, PURCHASE_COLUMNS, purchaseCells } from "@/lib/purchases/analytics";
+import { normalizePurchases, PURCHASE_COLUMNS, purchaseCatalog, purchaseCells } from "@/lib/purchases/analytics";
+import { LIVE_CATALOG_FIELDS, liveCatalog, type LiveCatalog } from "@/lib/purchases/catalog";
 
 /**
  * Pure analytics over the workspace's records: income and expenses, costs by category, products and prices,
@@ -404,21 +405,26 @@ export function withAutoFilters(table: Table): Table {
   return { ...table, columns };
 }
 
-function customTable(key: string, t: CustomTable): Table {
+function customTable(key: string, t: CustomTable, live?: LiveCatalog | null): Table {
   const kind = (f: CustomTable["campos"][number]): Column["kind"] => f.type === "decimal" ? (f.money ? "money" : "number") : f.type === "integer" ? "number"
     : f.type === "date" ? "date" : f.type === "boolean" ? "boolean" : "text";
   const value = (f: CustomTable["campos"][number], v: unknown): CellValue => f.type === "decimal" || f.type === "integer" ? num(v) : f.type === "boolean" ? (v === true ? true : v === false ? false : null) : str(v);
   const title = t.titulo && t.campos.some(f => f.key === t.titulo) ? t.titulo : t.campos.find(f => f.type === "text")?.key;
+  // The product catalog's purchase summary is computed from the purchases, not typed: shown live, not editable.
+  const computed = live && live.typeKey === t.typeKey ? new Set<string>(LIVE_CATALOG_FIELDS) : null;
   return { key, label: t.nombre, description: t.descripcion || "Tabla creada con el asistente.", title,
     columns: t.campos.map((f): Column => ({ key: f.key, label: f.label, kind: kind(f), ...(f.completar ? { completar: true } : {}),
-      edit: { field: f.key, type: f.type === "boolean" ? "boolean" : f.type === "date" ? "date" : f.type === "decimal" || f.type === "integer" ? "number" : "text" } })),
-    rows: t.rows.map(r => ({ _id: r.id, _rev: r.revision ?? null, ...Object.fromEntries(t.campos.map(f => [f.key, value(f, r.values[f.key])])) })) };
+      ...(computed?.has(f.key) ? {} : { edit: { field: f.key, type: f.type === "boolean" ? "boolean" : f.type === "date" ? "date" : f.type === "decimal" || f.type === "integer" ? "number" : "text" } }) })),
+    rows: t.rows.map(r => {
+      const own = computed ? live!.values.get(r.id) ?? {} : {};
+      return { _id: r.id, _rev: r.revision ?? null, ...Object.fromEntries(t.campos.map(f => [f.key, computed?.has(f.key) && f.key in own ? own[f.key as keyof typeof own] ?? null : value(f, r.values[f.key])])) };
+    }) };
 }
 
 function buildBaseTable(data: AnalyticsData, key: string): Table {
   const ix = indexes(data);
   const custom = key.startsWith("tabla:") ? data.custom?.find(t => `tabla:${t.typeKey}` === key) : undefined;
-  if (custom) return withAutoFilters(customTable(key, custom));
+  if (custom) return withAutoFilters(customTable(key, custom, purchaseCatalog(data)?.catalog.typeKey === custom.typeKey ? liveCatalog(data) : null));
   const template = key.startsWith("plantilla:") ? data.templates?.find(t => `plantilla:${t.id}` === key) : undefined;
   if (template) {
     const kind = (type: string): Column["kind"] => type === "decimal" ? "number" : type === "integer" ? "number" : type === "date" ? "date" : "text";

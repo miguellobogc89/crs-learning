@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import { Loader2, Wand2 } from "lucide-react";
 
 /** Above «Productos comprados»: the lines whose own figures prove they were misread, fixed with one click. */
-export function PurchasesCleanup({ summary, canEdit }: { summary: { total: number; descuentos: number; envases: number; cantidades: number }; canEdit: boolean }) {
+export function PurchasesCleanup({ summary, canEdit }: { summary: { total: number; descuentos: number; envases: number; cantidades: number; ivas: number; importes: number }; canEdit: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   if (!summary.total && !result) return null;
   const parts = [summary.descuentos && `${summary.descuentos.toLocaleString("es-ES")} con el descuento en %`, summary.envases && `${summary.envases.toLocaleString("es-ES")} con envases y su contenido`,
-    summary.cantidades && `${summary.cantidades.toLocaleString("es-ES")} con la cantidad mal leída`].filter(Boolean);
+    summary.cantidades && `${summary.cantidades.toLocaleString("es-ES")} con la cantidad mal leída`,
+    summary.ivas && `${summary.ivas.toLocaleString("es-ES")} con el precio leído con IVA`,
+    summary.importes && `${summary.importes.toLocaleString("es-ES")} con el importe de una sola unidad`].filter(Boolean);
   async function run() {
     setBusy(true); setResult(null);
     const r = await fetch("/api/purchases/cleanup", { method: "POST" });

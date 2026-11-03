@@ -25,6 +25,8 @@ export type Line = {
   importe: number | null;
   /** VAT % (10 when unknown). */
   iva: number | null;
+  /** Amount WITH VAT printed on the invoice, when it prints both (it can confirm what the amount without VAT hides). */
+  importeConIva?: number | null;
   /** Unit printed on the invoice (kg, l, ud…). */
   unidad: string | null;
   /** Content of one unit bought (catalog, or read from the name) and its unit. */
@@ -51,6 +53,8 @@ export type Normalized = {
   descuento_pct: number | null;
   precio_final: number | null;
   ahorro: number | null;
+  /** For «importe_unidad»: the real amount of the line (without VAT), computed from the amount with VAT. */
+  importe_corregido?: number | null;
   /** What was done, in plain words. */
   nota: string;
 };
@@ -62,16 +66,19 @@ const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.02, Math.ab
 const isMeasureUnit = (u: string | null) => !!u && /^(l|lt|lts|litros?|kg|kgs|kilos?)\.?$/i.test(u.trim());
 const median = (v: number[]) => { if (!v.length) return null; const s = [...v].sort((a, b) => a - b); return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
 
-export type Hit = { kind: "cuadra" | "pct" | "iva" | "envases" | "precio_envase" | "contenido" | "cantidad"; pct: number | null; unidades: number; base: "medida" | "envase" | null };
+export type Hit = { kind: "cuadra" | "pct" | "iva" | "iva_incluido" | "importe_unidad" | "envases" | "precio_envase" | "contenido" | "cantidad"; pct: number | null; unidades: number; base: "medida" | "envase" | null;
+  /** «importe_unidad»: the line's real amount (the one read was the price of one unit). */
+  importe?: number };
 const WHY: Record<Hit["kind"], string> = {
   cuadra: "", pct: "el descuento es un porcentaje", iva: "el importe lleva IVA",
+  iva_incluido: "el precio leído ya llevaba IVA", importe_unidad: "el importe leído era el de una sola unidad; el importe con IVA indica el de todas",
   envases: "la cantidad son envases y el precio va por kilo o litro", precio_envase: "la cantidad va en kilos o litros y el precio por envase",
   contenido: "se leyó como cantidad lo que trae cada envase; el importe indica cuántos envases son",
   cantidad: "la cantidad se leyó mal: el importe indica otra",
 };
 
 /** The explanation that makes the line add up, if any (most plausible first). */
-function explain(l: { cantidad: number; precio: number; importe: number; descuento: number | null; descuentoPct?: number | null; iva: number | null; envase: number | null }, typicalPrice: number | null): Hit | null {
+function explain(l: { cantidad: number; precio: number; importe: number; descuento: number | null; descuentoPct?: number | null; iva: number | null; importeConIva?: number | null; envase: number | null }, typicalPrice: number | null): Hit | null {
   const { cantidad: q, precio: p, importe: t } = l;
   const iva = l.iva ?? 10, e = l.envase;
   // A discount % read as such is used as a %; otherwise a small «discount» may be a % saved as euros.
@@ -86,9 +93,20 @@ function explain(l: { cantidad: number; precio: number; importe: number; descuen
   const okPlain = asRead(plain, null), okPct = withPct !== null && asRead(withPct, pct);
   if (okPlain && (!okPct || Math.abs(plain - t) <= Math.abs(withPct! - t))) return { kind: "cuadra", pct: null, unidades: q, base: null };
   if (okPct) return { kind: "pct", pct, unidades: q, base: null };
+  // The invoice also prints the amount WITH VAT: it confirms two misreadings that nothing else can tell apart.
+  const tc = l.importeConIva ?? null;
+  if (tc !== null && tc > t && q > 0) {
+    // The price read already had VAT: quantity × price is the amount with VAT; the amount read is the one without it.
+    for (const k of [pct, null]) if (near(k !== null ? q * p * (1 - k / 100) : q * p - d, tc)) return { kind: "iva_incluido", pct: k, unidades: q, base: null };
+    // The amount read is the price of ONE unit: the amount with VAT is that of all of them (needs the VAT rate read).
+    if (l.iva !== null && q > 1 && near(t, p) && near(q * p * (1 + l.iva / 100), tc))
+      return { kind: "importe_unidad", pct: null, unidades: q, base: null, importe: round(tc / (1 + l.iva / 100), 2) };
+  }
   const tries: [Hit["kind"], number | null, number | null, number | null, Hit["base"]][] = [
     ["iva", (q * p - d) * (1 + iva / 100), null, q, null],
     ["iva", pct !== null ? q * p * (1 - pct / 100) * (1 + iva / 100) : null, pct, q, null],
+    // The price read had VAT (only with the VAT rate read: a guessed 10 % could fit by chance).
+    ["iva_incluido", l.iva !== null ? (q * p - d) / (1 + l.iva / 100) : null, null, q, null],
     ["envases", e ? q * e * p - d : null, null, q, "medida"],
     ["envases", e && pct !== null ? q * e * p * (1 - pct / 100) : null, pct, q, "medida"],
     ["precio_envase", e ? (q / e) * p - d : null, null, e ? q / e : null, "envase"],
@@ -161,6 +179,8 @@ function one(l: Line, hit: Hit | null, perMeasure: boolean, ref: number | null):
 
   if (!hit) return { ...blank, estado: "no_cuadra", unidades: q,
     nota: `No cuadra: ${qty(q)} × ${money(p ?? 0)} €${l.descuento ? ` − ${money(l.descuento)}` : ""} no da ${money(t)} €.` };
+  const leido = t;
+  if (hit.importe !== undefined) t = hit.importe;
   const unidades = hit.unidades;
   let cantidad_real: number | null = null, unidad_real: Normalized["unidad_real"] = null;
   if (content) {
@@ -180,9 +200,11 @@ function one(l: Line, hit: Hit | null, perMeasure: boolean, ref: number | null):
     asRead ? "" : `Corregido automáticamente: ${WHY[hit.kind]}.`,
     filled.length ? `Calculado ${filled.join(" y ")} con las otras cifras.` : "",
     hit.kind === "cantidad" ? `Se leyó ${qty(q)}; son ${qty(unidades)}.` : "",
+    hit.kind === "importe_unidad" ? `Se leyó ${money(leido)} €; son ${money(t)} €.` : "",
     precio_final !== null && (hit.kind !== "cuadra" || cantidad_real) ? `Precio final ${money(precio_final)} €${unit}${descuento_pct ? ` (con ${money(descuento_pct)} % de descuento)` : ""}.` : "",
   ].filter(Boolean);
-  return { estado: asRead && !filled.length ? "ok" : "auto", caso: hit.kind, unidades, cantidad_real, unidad_real, descuento_pct, precio_final, ahorro: null, nota: parts.join(" ") };
+  return { estado: asRead && !filled.length ? "ok" : "auto", caso: hit.kind, unidades, cantidad_real, unidad_real, descuento_pct, precio_final, ahorro: null,
+    ...(hit.importe !== undefined ? { importe_corregido: hit.importe } : {}), nota: parts.join(" ") };
 }
 
 export function summarize(n: Map<string, Normalized>) {

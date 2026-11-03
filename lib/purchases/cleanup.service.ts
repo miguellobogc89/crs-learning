@@ -10,7 +10,8 @@ import { cleanupPlan } from "./cleanup";
  */
 export class CleanupError extends Error {}
 const asObject = (v: unknown) => v && typeof v === "object" && !Array.isArray(v) ? { ...(v as Record<string, unknown>) } : {};
-const WHY = { descuento: "el descuento es un porcentaje", envases: "la cantidad son envases; contenido por envase leído del producto", cantidad: "la cantidad se leyó mal: el importe indica otra" };
+const WHY = { descuento: "el descuento es un porcentaje", envases: "la cantidad son envases; contenido por envase leído del producto", cantidad: "la cantidad se leyó mal: el importe indica otra",
+  iva: "el precio leído ya llevaba IVA", importe: "el importe leído era el de una sola unidad; el importe con IVA indica el de todas" };
 
 export async function applyCleanup(input: { workspaceId: string; userId: string }) {
   const fixes = cleanupPlan(await loadAnalyticsData(input.workspaceId));

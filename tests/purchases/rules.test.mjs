@@ -52,3 +52,21 @@ test('casos reales de facturas: descuento que coincide, contenido leído como ca
   assert.equal(n.get('b').caso,'contenido'); assert.equal(n.get('b').unidades,5); assert.equal(n.get('b').cantidad_real,6.25);
   assert.equal(n.get('c').caso,'pct'); assert.equal(n.get('c').cantidad_real,2000); assert.equal(n.get('c').estado,'auto');
 });
+
+test('precio leído con IVA: lo confirma el importe con IVA, o el tipo de IVA leído', () => {
+  const n=r.normalizeLines([L('a',{grupo:'t',cantidad:20,precio:0.5,importe:8.26,iva:null,importeConIva:10}),
+    L('b',{grupo:'c',cantidad:10,precio:0.85,importe:7.02,iva:21}),
+    L('c',{grupo:'d',cantidad:10,precio:0.85,importe:7.02,iva:null})]);
+  const a=n.get('a'); assert.equal(a.estado,'auto'); assert.equal(a.caso,'iva_incluido'); assert.equal(a.precio_final,0.413); assert.match(a.nota,/ya llevaba IVA/);
+  assert.equal(n.get('b').caso,'iva_incluido');
+  // Without the rate read nor the amount with VAT, a guessed 10 % is not enough.
+  assert.equal(n.get('c').estado,'no_cuadra');
+});
+
+test('importe de una sola unidad: solo si el importe con IVA lo confirma', () => {
+  const n=r.normalizeLines([L('a',{grupo:'m',cantidad:2,precio:4.95,importe:4.95,iva:21,importeConIva:11.98}),
+    L('b',{grupo:'n',cantidad:2,precio:2.04,importe:2.04,iva:21})]);
+  const a=n.get('a'); assert.equal(a.estado,'auto'); assert.equal(a.caso,'importe_unidad'); assert.equal(a.importe_corregido,9.9); assert.equal(a.precio_final,4.95);
+  assert.match(a.nota,/Se leyó 4,95 €; son 9,90 €/);
+  assert.equal(n.get('b').estado,'no_cuadra');
+});
