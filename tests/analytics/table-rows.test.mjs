@@ -98,6 +98,7 @@ function service(db){
   $queryRaw:async()=>[],
   engine_relation_definitions:{findUnique:async()=>({id:'def-lines',status:'active'})},
   engine_record_relations:{create:async q=>{calls.relations=[...(calls.relations??[]),q.data];}},
+  engine_record_provenance:{createMany:async q=>{calls.manual=[...(calls.manual??[]),...q.data];return{count:q.data.length};}},
   $transaction:async fn=>fn(prisma),
  };
  const svc=load('lib/analytics/table-rows.service.ts',{'@prisma/client':{Prisma:{sql:(...a)=>a}},'@/lib/prisma':{prisma},
@@ -120,6 +121,8 @@ test('batch save: one revision per record with all its fields, members allowed, 
  assert.deepEqual(calls.saved[0].values,{nombre:'Vainilla',precio:2.5});
  assert.equal(calls.saved[0].expectedRevision,3);
  assert.equal(calls.saved[0].membersCanWrite,true);
+ // Corrected by hand: marked field by field on the new revision (automatic fixes never overwrite it).
+ assert.deepEqual(calls.manual.map(m=>[m.field_key,m.revision,m.origin_type]),[['nombre',4,'manual'],['precio',4,'manual']]);
  const bad=await svc.saveTableChanges({workspaceId:WS,userId:'u',changes:[{recordId:R1,expectedRevision:3,edits:[{field:'precio',value:'abc'}]}]});
  assert.equal(bad[0].ok,false);
  await assert.rejects(()=>svc.saveTableChanges({workspaceId:WS,userId:'u',changes:[]}));

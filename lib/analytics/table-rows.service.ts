@@ -56,7 +56,8 @@ async function saveRecordEdits(input: { workspaceId: string; userId: string; rec
   const record = await prisma.engine_records.findFirst({ where: { id: uuid(input.recordId), workspace_id: input.workspaceId, status: { not: "archived" } },
     select: { values_json: true, engine_object_types: { select: { key: true, settings: true, engine_field_definitions: { where: { status: "active" }, select: { key: true, field_type: true } } } } } });
   if (!record) throw new TableRowsError("El registro ya no existe.");
-  let values = asValues(record.values_json);
+  const before = asValues(record.values_json);
+  let values = before;
   for (const e of input.edits) {
     if (typeof e.field !== "string" || !e.field) throw new TableRowsError("Columna no válida.");
     const t = record.engine_object_types;
@@ -70,6 +71,17 @@ async function saveRecordEdits(input: { workspaceId: string; userId: string; rec
   } catch (error) {
     if (error instanceof EngineRecordError) throw new TableRowsError(error.message);
     throw error;
+  }
+  // What a person corrects by hand is marked as such: automatic fixes (cleanup, the correction agent) never overwrite it.
+  const changed = Object.keys(values).filter(k => JSON.stringify(values[k]) !== JSON.stringify(before[k]));
+  if (!changed.length) return;
+  try {
+    await prisma.engine_record_provenance.createMany({ data: changed.map(k => ({ workspace_id: input.workspaceId, record_id: input.recordId,
+      revision: input.expectedRevision + 1, field_key: k, source_locator: "tabla:edicion", evidence_text: "Corregido a mano en la tabla.",
+      origin_type: "manual", created_by_user_id: input.userId })) });
+  } catch (error) {
+    // The edit is saved; only the «by hand» mark failed.
+    console.error("[analytics] marcar edición manual:", error);
   }
 }
 

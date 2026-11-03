@@ -20,6 +20,9 @@ import { TableViewProvider } from "@/components/analytics/table-view-context";
 import { TableSettingsButton } from "@/components/analytics/table-settings";
 import { PurchasesCleanup } from "@/components/purchases/purchases-cleanup";
 import { cleanupPlan, cleanupSummary } from "@/lib/purchases/cleanup";
+import { reviewPurchases } from "@/lib/purchases/agent";
+import { purchaseCatalog } from "@/lib/purchases/analytics";
+import { CorrectionAgent } from "@/components/purchases/correction-agent";
 import { tableCards, tablesReview } from "@/lib/analytics/tables-overview";
 import { normalizeView } from "@/lib/analytics/table-view";
 import { loadTableView } from "@/lib/analytics/table-view.service";
@@ -129,6 +132,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       {templateGroup && <TemplateTableStatus group={templateGroup} canEdit={canEdit} />}
       {(table.key === "facturas" || table.key === "compras") && <DuplicateLinesReview issues={duplicatedLineIssues(data)} canEdit={canEdit} />}
       {table.key === "compras" && <PurchasesCleanup summary={cleanupSummary(cleanupPlan(data))} canEdit={canEdit} />}
+      {(table.key === "compras" || table.key === `tabla:${purchaseCatalog(data)?.catalog.typeKey}`) && <CorrectionAgent proposals={reviewPurchases(data)} canEdit={canEdit} />}
       <DataTable key={`${table.key}|${params.pendiente ?? ""}`} table={table} canEdit canManage={canEdit} companies={table.key === "facturas" ? companyOptions(data) : []}
         invoices={table.key === "compras" ? invoiceOptions(data) : []}
         initialFilters={params.pendiente && table.columns.some(c => c.key === params.pendiente) ? { [params.pendiente]: "__empty" } : {}} /></div>;
