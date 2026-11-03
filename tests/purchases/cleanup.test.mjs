@@ -36,3 +36,19 @@ test('limpieza: precio leído con IVA e importe de una sola unidad', () => {
   assert.deepEqual(by.a.valores,{unit_price:0.4132,unit_price_with_tax:0.5,unit_price_basis:'sin_impuestos',tax_rate:21}); assert.equal(by.a.motivo,'iva');
   assert.deepEqual(by.b.valores,{line_total:9.9}); assert.equal(by.b.motivo,'importe');
 });
+
+test('corrección al importar: solo las líneas nuevas', async () => {
+  const d={companies:[row('s',{legal_name:'Proveedor S.L.'})],invoices:[row('f1',{issue_date:'2026-09-01'}),row('f2',{issue_date:'2026-09-02'})],
+    lines:[row('a',{description:'PAPEL TERMICO',quantity:'20',unit_price:'0.50',line_total:'8.26',line_total_with_tax:'10.00'}),
+      row('b',{description:'CIERRE DE LEVA',quantity:'2',unit_price:'4.95',line_total:'4.95',line_total_with_tax:'11.98',tax_rate:'21.00'})],
+    supplies:[],consumption:[],telecom:[],relations:{invoice_lines:[['f1','a'],['f2','b']],invoice_issuer:[['s','f1'],['s','f2']]}};
+  const touched=[];
+  const tx={engine_records:{findFirst:async({where})=>({id:where.id,values_json:{},revision:1,schema_version:1}),updateMany:async q=>{touched.push(q.where.id);return{count:1};}},
+    engine_record_provenance:{createMany:async()=>({count:1})}};
+  const fields=['quantity','unit_price','unit_price_with_tax','unit_price_basis','tax_rate','line_total','package_count','package_content','package_unit','discount_percent','discount_amount'].map(key=>({key,field_type:/unit_price_basis|package_unit/.test(key)?'text':'decimal',is_required:false,status:'active'}));
+  const prisma={engine_object_types:{findFirst:async()=>({id:'t',schema_version:1,engine_field_definitions:fields})},$transaction:async fn=>fn(tx)};
+  const svc=load('lib/purchases/cleanup.service.ts',{'@prisma/client':{Prisma:{}},'@/lib/prisma':{prisma},'@/lib/engine/validation':load('lib/engine/validation.ts'),
+    '@/lib/analytics/data':{loadAnalyticsData:async()=>d},'./cleanup':c});
+  assert.deepEqual(await svc.applyCleanup({workspaceId:'w',userId:'u',lineIds:['b']}),{corregidas:1});
+  assert.deepEqual(touched,['b']);
+});

@@ -13,8 +13,10 @@ const asObject = (v: unknown) => v && typeof v === "object" && !Array.isArray(v)
 const WHY = { descuento: "el descuento es un porcentaje", envases: "la cantidad son envases; contenido por envase leído del producto", cantidad: "la cantidad se leyó mal: el importe indica otra",
   iva: "el precio leído ya llevaba IVA", importe: "el importe leído era el de una sola unidad; el importe con IVA indica el de todas" };
 
-export async function applyCleanup(input: { workspaceId: string; userId: string }) {
-  const fixes = cleanupPlan(await loadAnalyticsData(input.workspaceId));
+/** `lineIds`: only those lines (the ones an import just wrote); without it, every line that needs it. */
+export async function applyCleanup(input: { workspaceId: string; userId: string; lineIds?: string[] }) {
+  const only = input.lineIds ? new Set(input.lineIds) : null;
+  const fixes = cleanupPlan(await loadAnalyticsData(input.workspaceId)).filter(f => !only || only.has(f.lineId));
   if (!fixes.length) return { corregidas: 0 };
   const type = await prisma.engine_object_types.findFirst({ where: { workspace_id: input.workspaceId, key: "invoice_line", status: "active" },
     include: { engine_field_definitions: { where: { status: "active" } } } });
