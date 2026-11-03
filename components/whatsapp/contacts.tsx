@@ -9,6 +9,7 @@ import {
   Filter,
   Loader2,
   MessageCircle,
+  Plus,
   Search,
   Send,
   ShieldCheck,
@@ -21,6 +22,7 @@ import { waApi, buttonClass, errorText, fieldClass } from "./api";
 import { ContactImport } from "./contact-import";
 import { ContactPanel } from "./contact-panel";
 import { CampaignDialog } from "./campaign-dialog";
+import { NewLeadDialog } from "./new-lead";
 import { STAGES } from "@/lib/whatsapp/contacts";
 import type { ContactFacets, ContactRow, Facet } from "@/lib/whatsapp/types";
 
@@ -99,6 +101,7 @@ export function WhatsAppContacts({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [sending, setSending] = useState(false);
   const [more, setMore] = useState(false);
   const [error, setError] = useState("");
@@ -188,9 +191,15 @@ export function WhatsAppContacts({
             Sube un CSV con tus prospectos. Podrás filtrarlos por tipo, ver su historial de WhatsApp y enviarles plantillas.
           </p>
         </div>
-        <button className={buttonClass + " mx-auto"} onClick={() => setImporting(true)}>
-          <Upload className="h-4 w-4" /> Importar CSV
-        </button>
+        <div className="mx-auto flex gap-2">
+          <button className={buttonClass} onClick={() => setImporting(true)}>
+            <Upload className="h-4 w-4" /> Importar CSV
+          </button>
+          <button className={ghost} onClick={() => setCreating(true)}>
+            <Plus className="h-4 w-4" /> Nuevo lead
+          </button>
+        </div>
+        <NewLeadDialog open={creating} onClose={() => setCreating(false)} onCreated={id => { setCreating(false); setOpenId(id); reload(); }} />
       </div>
     );
 
@@ -213,7 +222,11 @@ export function WhatsAppContacts({
         <button className={ghost} onClick={() => setImporting(true)}>
           <Upload className="h-4 w-4" /> Importar CSV
         </button>
+        <button className={buttonClass} onClick={() => setCreating(true)}>
+          <Plus className="h-4 w-4" /> Nuevo lead
+        </button>
       </div>
+      <NewLeadDialog open={creating} onClose={() => setCreating(false)} onCreated={id => { setCreating(false); setOpenId(id); reload(); }} />
 
       {more && (
         <div className="grid shrink-0 grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-3 lg:grid-cols-5">

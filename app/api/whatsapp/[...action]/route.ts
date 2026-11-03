@@ -22,6 +22,7 @@ import {
   contactFacets,
   contactIds,
   createCampaign,
+  createContact,
   deleteContacts,
   getContact,
   importContacts,
@@ -227,6 +228,8 @@ async function handle(req: Request, route: RouteContext) {
       return NextResponse.json(await importContacts(workspaceId, ctx.userId, body));
     if (action === "leads/adopt")
       return NextResponse.json(await adoptConversation(workspaceId, body));
+    if (action === "contacts/create")
+      return NextResponse.json(await createContact(workspaceId, body));
     if (action === "contacts/update")
       return NextResponse.json(await updateContacts(workspaceId, body));
     if (action === "contacts/delete")

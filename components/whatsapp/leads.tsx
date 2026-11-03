@@ -2,12 +2,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  ArrowRight, Ban, Check, ExternalLink, Globe, Inbox, Loader2, MapPin, MessageCircle, Search, Send, ShieldCheck, Star,
+  ArrowRight, Ban, Check, ExternalLink, Globe, Inbox, Loader2, MapPin, MessageCircle, Plus, Search, Send, ShieldCheck, Star,
   ThumbsDown, ThumbsUp, UserPlus, X,
 } from "lucide-react";
 import { waApi, buttonClass, errorText, fieldClass } from "./api";
 import { ChatThread } from "./chat";
 import { CampaignDialog } from "./campaign-dialog";
+import { NewLeadDialog } from "./new-lead";
 import { classificationTone, PermissionPill, shortDate, stageTone } from "./contacts";
 import { LEAD_GROUPS, type GroupKey, type Lead } from "@/lib/whatsapp/leads";
 import { STAGES } from "@/lib/whatsapp/contacts";
@@ -37,6 +38,7 @@ export function WhatsAppLeads({ accountId }: { accountId: string }) {
   const [sending, setSending] = useState<string[] | null>(null);
   const [facets, setFacets] = useState<ContactFacets | null>(null);
   const [revision, setRevision] = useState(0);
+  const [creating, setCreating] = useState(false);
   const reload = useCallback(() => setRevision(n => n + 1), []);
 
   useEffect(() => { const t = setTimeout(() => { setQ(search); setOffset(0); }, 300); return () => clearTimeout(t); }, [search]);
@@ -94,10 +96,14 @@ export function WhatsAppLeads({ accountId }: { accountId: string }) {
         <select aria-label="Grupo" className={fieldClass + " lg:hidden"} value={group} onChange={e => { setGroup(e.target.value as GroupKey); setOffset(0); }}>
           {LEAD_GROUPS.map(g => <option key={g.key} value={g.key}>{g.label}{data ? ` (${data.counts[g.key]})` : ""}</option>)}
         </select>
-        <label className="relative block">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-          <input aria-label="Buscar lead" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar lead" className={fieldClass + " pl-8"} />
-        </label>
+        <div className="flex gap-2">
+          <label className="relative block min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <input aria-label="Buscar lead" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar lead" className={fieldClass + " pl-8"} />
+          </label>
+          <button type="button" onClick={() => setCreating(true)} title="Nuevo lead"
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-2.5 text-sm font-medium text-white hover:bg-blue-700"><Plus className="size-4" />Nuevo</button>
+        </div>
         <div className="flex items-center justify-between text-xs text-slate-500">
           <span>{data ? `${data.total} ${data.total === 1 ? "lead" : "leads"}` : "Cargando…"}</span>
           {selected.size > 0
@@ -136,6 +142,8 @@ export function WhatsAppLeads({ accountId }: { accountId: string }) {
           </div>}
     </div>
 
+    <NewLeadDialog open={creating} onClose={() => setCreating(false)}
+      onCreated={id => { setCreating(false); setGroup("todos"); setOffset(0); setSearch(""); setQ(""); setCurrent(id); reload(); }} />
     {sending && <CampaignDialog accountId={accountId} contactIds={sending} columns={facets?.columns ?? []}
       onClose={() => setSending(null)} onDone={() => { setSelected(new Set()); reload(); }} />}
   </div>;

@@ -278,3 +278,31 @@ test("an inbound reply moves the prospect forward and BAJA marks it as do-not-co
   assert.equal(updates.length, 3);
   assert.equal(updates[2].data.do_not_contact, true);
 });
+
+test("a lead created by hand needs only a name; the phone is normalised and never duplicated", async () => {
+  const created = [];
+  const prisma = {
+    whatsapp_contacts: {
+      findFirst: async ({ where }) => (where.phone === "34611000001" ? { name: "Sonido Uno" } : null),
+      create: async ({ data }) => { created.push(data); return { id: ids(42) }; },
+    },
+  };
+  const svc = load("lib/whatsapp/contacts-service.ts", {
+    "@prisma/client": { Prisma: {} }, "@/lib/prisma": { prisma }, "./repository": {}, "./meta": { MetaError: class {} },
+    "./service": {}, "./rules": rules, "./contacts": contacts,
+  });
+  assert.deepEqual(await svc.createContact(ws, { name: "  Miguel (pruebas) ", phone: "600 123 456", consent: true }), { id: ids(42) });
+  assert.equal(created[0].name, "Miguel (pruebas)");
+  assert.equal(created[0].phone, "34600123456");
+  assert.equal(created[0].external_key, "tel:34600123456");
+  assert.equal(created[0].consent, true);
+  assert.equal(created[0].consent_source, "Alta manual");
+  await svc.createContact(ws, { name: "Sin teléfono" });
+  assert.equal(created[1].phone, null);
+  assert.match(created[1].external_key, /^manual:/);
+  assert.equal(created[1].consent, false);
+  await assert.rejects(() => svc.createContact(ws, { name: "Otro", phone: "+34 611 000 001" }), /Ya existe «Sonido Uno»/);
+  await assert.rejects(() => svc.createContact(ws, { name: "X", phone: "hola" }), /Teléfono no válido/);
+  await assert.rejects(() => svc.createContact(ws, { name: "X", email: "no-es-email" }), /Email no válido/);
+  await assert.rejects(() => svc.createContact(ws, { name: " " }), /Nombre no válido/);
+});

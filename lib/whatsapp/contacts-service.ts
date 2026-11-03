@@ -9,6 +9,7 @@ import {
   CAMPAIGN_LIMIT,
   CONTACT_FIELDS,
   mergeForUpdate,
+  normalizePhone,
   parseCsv,
   planImport,
   planRecipients,
@@ -326,7 +327,7 @@ export async function getContact(workspaceId: string, id: string, accountId: str
 }
 
 function optionalText(value: unknown, label: string, max: number) {
-  if (value === null || value === "") return null;
+  if (value === null || value === undefined || value === "") return null;
   if (typeof value !== "string" || value.length > max) throw new WhatsAppError(`${label} no válido`);
   return value.trim() || null;
 }
@@ -355,6 +356,40 @@ export async function updateContacts(workspaceId: string, input: Record<string, 
     data,
   });
   return { updated: result.count };
+}
+
+/**
+ * A lead typed by hand (like a CRM's «New lead»): only the name is required. The phone is normalised like an
+ * import (9 digits → +34) and must not belong to another contact, so its conversation stays one.
+ */
+export async function createContact(workspaceId: string, input: Record<string, unknown>) {
+  const name = required(input.name, "Nombre", 300);
+  const rawPhone = optionalText(input.phone, "Teléfono", 40);
+  const phone = rawPhone ? normalizePhone(rawPhone) : null;
+  if (rawPhone && !phone) throw new WhatsAppError("Teléfono no válido: escríbelo con prefijo (+34 600 000 000) o 9 cifras españolas");
+  const email = optionalText(input.email, "Email", 320);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new WhatsAppError("Email no válido");
+  if (phone) {
+    const same = await prisma.whatsapp_contacts.findFirst({ where: { workspace_id: workspaceId, phone }, select: { name: true } });
+    if (same) throw new WhatsAppError(`Ya existe «${same.name}» con ese teléfono`, 409);
+  }
+  const consent = input.consent === true;
+  const created = await prisma.whatsapp_contacts.create({
+    data: {
+      workspace_id: workspaceId,
+      external_key: phone ? `tel:${phone}` : `manual:${crypto.randomUUID()}`,
+      name, phone, email,
+      category: optionalText(input.category, "Categoría", 200),
+      specialty: optionalText(input.specialty, "Especialidad", 200),
+      city: optionalText(input.city, "Localidad", 200),
+      notes: optionalText(input.notes, "Notas", 5000),
+      consent,
+      ...(consent ? { consent_source: "Alta manual", consent_at: new Date() } : {}),
+      attributes: { Origen: "Alta manual" },
+    },
+    select: { id: true },
+  });
+  return { id: created.id };
 }
 
 export async function deleteContacts(workspaceId: string, input: Record<string, unknown>) {
