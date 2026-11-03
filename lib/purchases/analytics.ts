@@ -19,7 +19,7 @@ const unitOf = (u: string | null): Line["unidadEnvase"] => !u ? null : /^l/i.tes
 export function purchaseCatalog(data: AnalyticsData) {
   const link = (data.links ?? []).find(l => l.from === "compras" && (data.custom ?? []).some(c => `tabla:${c.typeKey}` === l.to && c.campos.some(f => f.key === "envase")));
   const catalog = link ? (data.custom ?? []).find(c => `tabla:${c.typeKey}` === link.to) : undefined;
-  return catalog ? { catalog, catalogOf: new Map(link!.pairs) } : null;
+  return catalog ? { catalog, catalogOf: new Map(link!.pairs), relationId: link!.relationId } : null;
 }
 
 /** Every purchase line (not supplies, not income), with the content of one unit from the catalog linked to it (or read from the product name). */

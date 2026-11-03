@@ -27,7 +27,19 @@ const num = (v: unknown): number | null => typeof v === "number" && Number.isFin
 const money = (n: number) => n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const dmy = (d: string | null) => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "sin fecha";
 
-export type LiveCatalog = { typeKey: string; values: Map<string, Partial<Record<(typeof LIVE_CATALOG_FIELDS)[number], CellValue>>> };
+/** A list price that moved more than TARIFF_JUMP between the last two purchases that add up. */
+export type TariffJump = { change: number; prevFecha: string | null; lastFecha: string | null; lastLineId: string };
+export type LiveCatalog = { typeKey: string; values: Map<string, Partial<Record<(typeof LIVE_CATALOG_FIELDS)[number], CellValue>>>; jumps: Map<string, TariffJump> };
+
+/** The id of a tariff jump in the correction agent (a newer purchase makes it a new one). */
+export const tariffJumpId = (rowId: string, lastLineId: string) => `tarifa:${rowId}:${lastLineId}`;
+
+/** What an owner already answered in the correction agent (kept in the catalog table's settings). */
+export function agentDismissed(data: AnalyticsData, typeKey: string): Set<string> {
+  const settings = (data.types ?? []).find(t => t.tableKey === `tabla:${typeKey}`)?.settings as { agente?: { descartadas?: unknown } } | undefined;
+  const list = settings?.agente?.descartadas;
+  return new Set(Array.isArray(list) ? list.filter((x): x is string => typeof x === "string") : []);
+}
 
 export function liveCatalog(data: AnalyticsData): LiveCatalog | null {
   const linked = purchaseCatalog(data);
@@ -39,6 +51,8 @@ export function liveCatalog(data: AnalyticsData): LiveCatalog | null {
     if (row) byRow.set(row, [...(byRow.get(row) ?? []), l]);
   }
   const values: LiveCatalog["values"] = new Map();
+  const jumps: LiveCatalog["jumps"] = new Map();
+  const dismissed = agentDismissed(data, linked.catalog.typeKey);
   for (const row of linked.catalog.rows) {
     const own = byRow.get(row.id) ?? [];
     const envase = num(row.values.envase);
@@ -51,7 +65,7 @@ export function liveCatalog(data: AnalyticsData): LiveCatalog | null {
       const base = x.cantidad_real || x.unidades, importe = x.importe_corregido ?? l.importe;
       const unit = importe !== null && base ? importe / base : x.precio_final;
       const tarifa = x.descuento_pct && x.descuento_pct < 100 ? unit / (1 - x.descuento_pct / 100) : unit;
-      return [{ fecha: l.fecha, unit, tarifa }];
+      return [{ id: l.id, fecha: l.fecha, unit, tarifa }];
     }).sort((a, b) => (a.fecha ?? "").localeCompare(b.fecha ?? ""));
     const last = paid.at(-1);
     const out: Partial<Record<(typeof LIVE_CATALOG_FIELDS)[number], CellValue>> = { compras: own.length, no_cuadran: noCuadran.length };
@@ -69,8 +83,10 @@ export function liveCatalog(data: AnalyticsData): LiveCatalog | null {
         out.desde = desde;
         const prev = paid[paid.length - 2];
         const change = prev.tarifa > 0 ? last.tarifa / prev.tarifa - 1 : 0;
-        if (Math.abs(change) > TARIFF_JUMP) {
+        // An owner who confirmed the new price in the correction agent has answered it: no longer «Revisar».
+        if (Math.abs(change) > TARIFF_JUMP && !dismissed.has(tariffJumpId(row.id, last.id))) {
           revisar = true;
+          jumps.set(row.id, { change, prevFecha: prev.fecha, lastFecha: last.fecha, lastLineId: last.id });
           notes.push(`La tarifa ha ${change > 0 ? "subido" : "bajado"} un ${Math.round(Math.abs(change) * 100)} % respecto a la compra del ${dmy(prev.fecha)}: revisar.`);
         }
       } else out.desde = null;
@@ -81,5 +97,5 @@ export function liveCatalog(data: AnalyticsData): LiveCatalog | null {
     out.estado = revisar ? "Revisar" : gifts ? "Regalo" : "OK";
     values.set(row.id, out);
   }
-  return { typeKey: linked.catalog.typeKey, values };
+  return { typeKey: linked.catalog.typeKey, values, jumps };
 }
