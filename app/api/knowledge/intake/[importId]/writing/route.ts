@@ -10,6 +10,7 @@ import type { TargetedResult } from "@/lib/knowledge/intake/targeted/contract";
 import { RECONCILIATION_REVISION, type ReconciliationState } from "@/lib/knowledge/intake/reconciliation/contract";
 import { buildWritePlan, MANUAL_JOIN, WRITER_REVISION, type DecisionValue as Decision } from "@/lib/knowledge/intake/writer/plan";
 import { commitWritePlan, type WriteResult } from "@/lib/knowledge/intake/writer/commit";
+import { applyCleanup } from "@/lib/purchases/cleanup.service";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -72,7 +73,12 @@ export async function POST(request: Request, context: Context) {
       return written;
     }, { timeout: 120_000, maxWait: 15_000 });
     refreshIntakeAlerts(batch.workspaceId);
-    return NextResponse.json({ estado: "completed", resultado });
+    // The correction agent's automatic part: the new purchase lines whose own figures prove a misreading are fixed
+    // now (lib/purchases/cleanup). The import is already saved: if this fails, «Corregir» can still do it later.
+    const nuevas = resultado.registros.filter(r => r.tipo === "invoice_line" && r.accion === "creado").map(r => r.registroId);
+    const corregidas = nuevas.length ? await applyCleanup({ workspaceId: batch.workspaceId, userId: batch.userId, lineIds: nuevas })
+      .then(r => r.corregidas).catch((error: unknown) => { console.warn("[intake] corrección automática:", error instanceof Error ? error.message : error); return 0; }) : 0;
+    return NextResponse.json({ estado: "completed", resultado, corregidas });
   } catch (error) {
     // Nothing was written (the transaction rolled back); the error and the decisions are kept for the next try.
     const message = error instanceof Error ? error.message : "No se pudo guardar";
