@@ -19,6 +19,8 @@ export type AnalyticsData = {
   links?: LinkColumn[];
   /** Which engine object type is behind each table key (facturas, plantilla:<id>, tabla:<key>…). */
   types?: TableType[];
+  /** record id → fields a person has corrected by hand (automatic fixes never overwrite them). */
+  manual?: Record<string, string[]>;
 };
 export type CustomField = { key: string; label: string; type: string; money: boolean; completar: boolean };
 export type CustomTable = { typeId: string; typeKey: string; nombre: string; descripcion: string; titulo: string | null; campos: CustomField[]; rows: Row[] };
@@ -91,8 +93,13 @@ export async function loadAnalyticsData(workspaceId: string): Promise<AnalyticsD
   }
   const extra = await loadCustomTables(workspaceId, templateDefs as { id: string; object_type_key: string }[]);
   if (extra.truncated) truncated = true;
+  // Fields corrected by hand (purchase lines and the tables made with the assistant, such as the product catalog).
+  const manual: Record<string, string[]> = {};
+  const edited = await prisma.engine_record_provenance.findMany({ where: { workspace_id: workspaceId, origin_type: "manual", field_key: { not: null } },
+    distinct: ["record_id", "field_key"], select: { record_id: true, field_key: true } }) as { record_id: string; field_key: string | null }[];
+  for (const e of edited) if (e.field_key) (manual[e.record_id] ??= []).push(e.field_key);
   return { invoices, lines, companies, supplies, consumption, telecom, relations, documents, templates, truncated,
-    custom: extra.custom, links: extra.links, types: extra.types };
+    custom: extra.custom, links: extra.links, types: extra.types, manual };
 }
 
 const asValues = (v: unknown) => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};

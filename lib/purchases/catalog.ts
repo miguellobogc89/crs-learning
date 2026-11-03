@@ -10,13 +10,15 @@ import { normalizePurchases, purchaseCatalog } from "./analytics";
  * - compras: purchase lines linked to the product (gifts included).
  * - precio_envase / precio_unidad: what the LAST purchase that adds up really cost (discounts in), per pack and per
  *   kilo, litre or unit. Gifts and lines that do not add up never set a price.
+ * - precio_tarifa: the list price of that same purchase, per pack, before the discount and without VAT: the price
+ *   that identifies the product and the one compared between purchases.
  * - desde: since when that price holds (first of the latest run of purchases at the same price).
  * - no_cuadran / notas: the purchases that do not add up, by date.
  * - estado: «Revisar» when no purchase gives a price, or when the list price (before discount) moved more than 10 %
  *   from the purchase before; «Regalo» when it only came as a gift; otherwise «OK». A different discount is not a
  *   change of price.
  */
-export const LIVE_CATALOG_FIELDS = ["compras", "no_cuadran", "notas", "estado", "precio_envase", "precio_unidad", "desde"] as const;
+export const LIVE_CATALOG_FIELDS = ["compras", "no_cuadran", "notas", "estado", "precio_envase", "precio_unidad", "precio_tarifa", "desde"] as const;
 /** A list price that moves more than this (from one purchase to the next) is flagged. */
 export const TARIFF_JUMP = 0.1;
 
@@ -59,6 +61,8 @@ export function liveCatalog(data: AnalyticsData): LiveCatalog | null {
     if (last) {
       out.precio_unidad = envase ? r(last.unit, 4) : null;
       out.precio_envase = envase ? r(last.unit * envase, 2) : r(last.unit, last.unit < 1 ? 4 : 2);
+      const tarifa = envase ? last.tarifa * envase : last.tarifa;
+      out.precio_tarifa = r(tarifa, tarifa < 1 ? 4 : 2);
       if (paid.length >= 2) {
         let desde = last.fecha;
         for (const p of [...paid].reverse()) { if (Math.abs(p.unit - last.unit) <= 0.005 && p.fecha) desde = p.fecha; else break; }

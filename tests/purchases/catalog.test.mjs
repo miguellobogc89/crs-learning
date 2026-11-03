@@ -30,7 +30,7 @@ test('catálogo en vivo: último precio que cuadra, desde cuándo, y un descuent
   const d=workspace(lines,[row('p',{producto:'BASE B/1,6 KG.',envase:1.6,unidad:'Kg',compras:1,precio_envase:99,estado:'Revisar'})],[['a','p'],['b','p'],['g','p']]);
   const v=c.liveCatalog(d).values.get('p');
   assert.equal(v.compras,3); assert.equal(v.no_cuadran,0); assert.equal(v.estado,'OK');
-  assert.equal(v.precio_unidad,21.075); assert.equal(v.precio_envase,33.72); assert.equal(v.desde,'2026-06-10'); assert.equal(v.notas,null);
+  assert.equal(v.precio_unidad,21.075); assert.equal(v.precio_envase,33.72); assert.equal(v.precio_tarifa,44.96); assert.equal(v.desde,'2026-06-10'); assert.equal(v.notas,null);
 });
 
 test('catálogo en vivo: subida de tarifa > 10 %, compras que no cuadran y producto sin precio', () => {
@@ -52,4 +52,11 @@ test('catálogo en vivo: lo que solo llegó como regalo no se marca para revisar
   const d=workspace([{id:'g',date:'2026-09-04',values:{description:'MUFFIN',quantity:'1',unit_price:'0'}}],[row('m',{producto:'MUFFIN'})],[['g','m']]);
   const m=c.liveCatalog(d).values.get('m');
   assert.equal(m.estado,'Regalo'); assert.match(m.notas,/regalo/);
+});
+
+test('limpieza: lo corregido a mano no se toca', () => {
+  const cl=load('lib/purchases/cleanup.ts',{'./analytics':analytics});
+  const d=workspace([{id:'b',date:'2026-05-20',values:{description:'CIERRE',quantity:'2',unit_price:'4.95',line_total:'4.95',line_total_with_tax:'11.98',tax_rate:'21'}}],[row('p',{producto:'CIERRE'})],[['b','p']]);
+  assert.equal(cl.cleanupPlan(d).length,1);
+  assert.equal(cl.cleanupPlan({...d,manual:{b:['line_total']}}).length,0);
 });

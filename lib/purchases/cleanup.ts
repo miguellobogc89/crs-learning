@@ -5,7 +5,8 @@ import { normalizePurchases } from "./analytics";
  * Cleanup of purchases already imported (pure plan): what the reader now reads apart — discount %, packs and the
  * content of each pack, a price read with VAT, an amount that was the price of one unit — is written back into the
  * lines whose figures PROVE it (they add up to the cent with it).
- * Only those cases; the previous values stay in the record's history. Lines read correctly are not touched.
+ * Only those cases; the previous values stay in the record's history. Lines read correctly are not touched, and
+ * neither is a field a person corrected by hand (it is theirs: a fix that would change it is left out).
  */
 export type Fix = { lineId: string; producto: string | null; valores: Record<string, number | string | null>; motivo: "descuento" | "envases" | "cantidad" | "iva" | "importe" };
 const UNIT: Record<string, string> = { L: "l", Kg: "kg", ud: "ud" };
@@ -39,6 +40,8 @@ export function cleanupPlan(data: AnalyticsData): Fix[] {
       }
     }
     else if (n.caso === "importe_unidad" && n.importe_corregido) { valores.line_total = r2(n.importe_corregido); motivo = "importe"; }
+    const byHand = new Set(data.manual?.[l.id] ?? []);
+    if (Object.keys(valores).some(k => byHand.has(k))) continue;
     if (motivo && Object.keys(valores).length) out.push({ lineId: l.id, producto: l.producto, valores, motivo });
   }
   return out;
