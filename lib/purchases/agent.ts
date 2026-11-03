@@ -12,7 +12,7 @@ import { agentDismissed, liveCatalog, tariffJumpId } from "./catalog";
  */
 export type AgentAction =
   | { k: "unir"; destino: string; origen: string }          // merge two catalog rows: origen's purchases go to destino
-  | { k: "cantidad"; lineId: string; quantity: number }      // correct a purchase line's quantity
+  | { k: "cantidad"; lineId: string; quantity: number; factor: number } // correct a line's quantity (its unit price ÷ factor: the amount stays)
   | { k: "archivar"; productId: string };                    // take a row that is not a product out of the catalog
 export type Proposal = {
   id: string;
@@ -64,7 +64,7 @@ export function reviewPurchases(data: AnalyticsData): Proposal[] {
     if (!NOT_A_PRODUCT.test(plain(nameOf(r))) && !negative) continue;
     notProducts.add(r.id);
     out.push({ id: `noprod:${r.id}`, kind: "no_producto", nivel: "propone", titulo: `«${nameOf(r)}» no parece un producto`,
-      detalle: `Parece un descuento, un portes o un ticket de parking. Se quita del catálogo (se archiva); la línea sigue en su factura.`,
+      detalle: `Parece un descuento, unos portes o un ticket de parking. Se quita del catálogo (se archiva); la línea sigue en su factura.`,
       accion: { k: "archivar", productId: r.id } });
   }
 
@@ -107,7 +107,7 @@ export function reviewPurchases(data: AnalyticsData): Proposal[] {
       out.push({ id: `cant:${l.id}:${quantity}`, kind: "cantidad", nivel: "propone",
         titulo: `«${l.producto ?? nameOf(rows.find(x => x.id === rowId)!)}» del ${dmy(l.fecha)}: ¿${quantity} en vez de ${l.cantidad}?`,
         detalle: `Se pagaron ${money(l.importe!)} € por ${l.cantidad}; lo habitual de este producto es ${money(median(others))} € cada uno, justo ${k} veces menos.`,
-        accion: { k: "cantidad", lineId: l.id, quantity } });
+        accion: { k: "cantidad", lineId: l.id, quantity, factor: k } });
       quantityRows.add(rowId);
     }
   }
