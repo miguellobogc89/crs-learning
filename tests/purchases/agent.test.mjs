@@ -45,7 +45,7 @@ test('agente: no productos, cantidad sospechosa, tarifa > 10 % y lo que no cuadr
   const d=workspace(lines,rows,[['k','p'],['h1','h'],['h2','h'],['h3','h'],['x1','x'],['x2','x'],['x3','x']]);
   const ps=agent.reviewPurchases(d), by=k=>ps.filter(p=>p.kind===k);
   assert.deepEqual(by('no_producto').map(p=>p.accion),[{k:'archivar',productId:'p'}]);
-  assert.deepEqual(by('cantidad').map(p=>p.accion),[{k:'cantidad',lineId:'h2',quantity:2}]);
+  assert.deepEqual(by('cantidad').map(p=>p.accion),[{k:'cantidad',lineId:'h2',quantity:2,factor:2}]);
   assert.equal(by('tarifa').length,1); assert.match(by('tarifa')[0].titulo,/FRIEGASUELOS.*subido un 27 %/); assert.equal(by('tarifa')[0].accion,null);
   assert.deepEqual(by('no_cuadra').map(p=>p.id),['nocuadra:x3']);
   // Answered: it does not come back, and the catalog no longer shows it as «Revisar».
@@ -88,4 +88,20 @@ test('agente (servicio): «unir» pasa las compras, guarda el alias y archiva el
   assert.deepEqual(calls.prov.map(p=>[p.field_key,p.origin_type]),[['alias','integration']]);
   assert.deepEqual(calls.settings.agente.descartadas,[id]);
   await assert.rejects(()=>svc.answerProposal({workspaceId:'w',userId:'u',id:'dup:x:y',decision:'aplicar'}),/ya no está pendiente/);
+});
+
+test('agente (servicio): «cantidad» corrige la cantidad y baja el precio unitario: la línea sigue cuadrando', async () => {
+  const rows=[row('h',{producto:'PAPEL HIGIENICO',proveedor:P})];
+  const lines=[1.90,3.72,1.94].map((v,i)=>({id:`h${i}`,date:`2026-0${i+3}-01`,values:{description:'PAPEL HIGIENICO',quantity:'1',unit_price:String(v),line_total:String(v)}}));
+  const d=workspace(lines,rows,lines.map(l=>[l.id,'h']));
+  const upd=[];
+  const fields=['description','quantity','unit_price','unit_price_with_tax','line_total'].map(key=>({key,field_type:key==='description'?'text':'decimal',is_required:false,status:'active'}));
+  const tx={engine_object_types:{findFirst:async()=>({id:'li',schema_version:1,engine_field_definitions:fields}),findUniqueOrThrow:async()=>({settings:{}}),update:async()=>({})},
+    engine_records:{findFirst:async()=>({id:'h1',values_json:{description:'PAPEL HIGIENICO',quantity:'1',unit_price:'3.72',unit_price_with_tax:'4.50',line_total:'3.72'},revision:1,schema_version:1}),
+      updateMany:async q=>{upd.push(q.data.values_json);return{count:1};}},
+    engine_record_provenance:{createMany:async()=>({count:1})}};
+  const svc=load('lib/purchases/agent.service.ts',{'@prisma/client':{Prisma:{}},'@/lib/prisma':{prisma:{$transaction:async fn=>fn(tx)}},
+    '@/lib/engine/validation':load('lib/engine/validation.ts'),'@/lib/analytics/data':{loadAnalyticsData:async()=>d},'./analytics':analytics,'./agent':agent});
+  await svc.answerProposal({workspaceId:'w',userId:'u',id:'cant:h1:2',decision:'aplicar'});
+  assert.equal(upd[0].quantity,2); assert.equal(upd[0].unit_price,1.86); assert.equal(upd[0].unit_price_with_tax,2.25); assert.equal(Number(upd[0].line_total),3.72);
 });

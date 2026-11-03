@@ -56,9 +56,16 @@ async function apply(tx: Tx, input: { workspaceId: string; userId: string }, pro
       const record = type && await tx.engine_records.findFirst({ where: { id: action.lineId, workspace_id: ws, object_type_id: type.id, status: { not: "archived" } },
         select: { id: true, values_json: true, revision: true, schema_version: true } });
       if (!type || !record || record.schema_version !== type.schema_version) throw new AgentError("La compra ha cambiado o ya no está. Actualiza la página.");
-      const valid = validateEngineRecordValues({ ...asObject(record.values_json), quantity: action.quantity }, type.engine_field_definitions);
+      // The amount paid was right: more units means each one cost less (the unit prices go down by the same factor).
+      const values = asObject(record.values_json), changed = ["quantity"];
+      values.quantity = action.quantity;
+      for (const k of ["unit_price", "unit_price_with_tax"]) {
+        const v = typeof values[k] === "number" ? values[k] as number : typeof values[k] === "string" && /^-?\d+(\.\d+)?$/.test((values[k] as string).trim()) ? Number(values[k]) : null;
+        if (v !== null) { values[k] = Math.round((v / action.factor) * 10000) / 10000; changed.push(k); }
+      }
+      const valid = validateEngineRecordValues(values, type.engine_field_definitions);
       if (!valid.ok) throw new AgentError("La cantidad no se puede guardar en esta compra.");
-      await save(tx, input, record, valid.values, ["quantity"], `Agente: ${proposal.detalle}`);
+      await save(tx, input, record, valid.values, changed, `Agente: ${proposal.detalle}`);
       return;
     }
     case "unir": {
