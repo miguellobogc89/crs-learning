@@ -133,7 +133,8 @@ export function signup(config: Configuration): {
         if (finished) return;
         const code = response.authResponse?.code;
         if (!code) {
-          stop(new Error("Meta no ha autorizado la conexión"));
+          // Meta answers without a code when its window is closed early, or when another signup window takes over.
+          stop(new Error("Meta no ha devuelto la autorización. Si la ventana de Meta sigue abierta, termina en ella y después pulsa «Añadir número» otra vez eligiendo la cuenta ya creada: será inmediato."));
           return;
         }
         // Exchange immediately: the code is short-lived; the session event may arrive in either order.
