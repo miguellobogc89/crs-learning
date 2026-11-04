@@ -1,8 +1,9 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, RefreshCw, Star, Loader2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Plus, RefreshCw, Star } from "lucide-react";
 import { waApi, buttonClass, errorText, fieldClass } from "./api";
 import { templateBody } from "./template-utils";
+import { TemplateEditor } from "./template-editor";
 import type { Template } from "@/lib/whatsapp/types";
 export function WhatsAppTemplates({
   accountId,
@@ -267,7 +268,7 @@ export function WhatsAppTemplates({
         )}
       </div>
       {creating && (
-        <CreateTemplate
+        <TemplateEditor
           accountId={accountId}
           onClose={() => setCreating(false)}
           onCreated={async () => {
@@ -277,167 +278,5 @@ export function WhatsAppTemplates({
         />
       )}
     </div>
-  );
-}
-function CreateTemplate({
-  accountId,
-  onClose,
-  onCreated,
-}: {
-  accountId: string;
-  onClose: () => void;
-  onCreated: () => Promise<void>;
-}) {
-  const [name, setName] = useState(""),
-    [text, setText] = useState(""),
-    [language, setLanguage] = useState("es"),
-    [category, setCategory] = useState("UTILITY");
-  const [examples, setExamples] = useState<Record<string, string>>({}),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const element = dialog.current;
-    element?.showModal();
-    return () => element?.close();
-  }, []);
-  const variables = [
-    ...new Set([...text.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]))),
-  ].sort((a, b) => a - b);
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      await waApi("templates/create", {
-        accountId,
-        name,
-        text,
-        language,
-        category,
-        examples: variables.map((v) => examples[String(v)] || ""),
-      });
-      await onCreated();
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <dialog
-      ref={dialog}
-      onCancel={(e) => {
-        if (busy) e.preventDefault();
-        else onClose();
-      }}
-      aria-labelledby="wa-template-title"
-      className="m-auto w-[min(36rem,92vw)] max-h-[90vh] overflow-y-auto rounded-2xl p-6 shadow-xl backdrop:bg-slate-950/30"
-    >
-      <form onSubmit={submit} className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 id="wa-template-title" className="font-semibold">
-            Nueva plantilla
-          </h2>
-          <button
-            type="button"
-            aria-label="Cerrar"
-            disabled={busy}
-            onClick={onClose}
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <p className="text-sm text-slate-500">
-          Meta debe aprobar la plantilla antes de que puedas enviarla.
-        </p>
-        {error && (
-          <p role="alert" className="text-sm text-red-600">
-            {error}
-          </p>
-        )}
-        <label className="block text-xs text-slate-600">
-          Nombre
-          <input
-            required
-            maxLength={512}
-            pattern="[a-z][a-z0-9_]*"
-            placeholder="seguimiento_cliente"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={busy}
-            className={fieldClass + " mt-1"}
-          />
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="text-xs text-slate-600">
-            Idioma
-            <input
-              required
-              value={language}
-              maxLength={10}
-              onChange={(e) => setLanguage(e.target.value)}
-              disabled={busy}
-              className={fieldClass + " mt-1"}
-            />
-          </label>
-          <label className="text-xs text-slate-600">
-            Categoría
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              disabled={busy}
-              className={fieldClass + " mt-1"}
-            >
-              <option value="UTILITY">Utilidad</option>
-              <option value="MARKETING">Marketing</option>
-            </select>
-          </label>
-        </div>
-        <label className="block text-xs text-slate-600">
-          Mensaje
-          <textarea
-            required
-            rows={5}
-            maxLength={1024}
-            placeholder="Hola {{1}}, tenemos novedades para ti."
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            disabled={busy}
-            className={fieldClass + " mt-1"}
-          />
-        </label>
-        {variables.map((v) => (
-          <label key={v} className="block text-xs text-slate-600">
-            Ejemplo de la variable {v}
-            <input
-              required
-              maxLength={200}
-              value={examples[String(v)] || ""}
-              onChange={(e) =>
-                setExamples((old) => ({ ...old, [String(v)]: e.target.value }))
-              }
-              disabled={busy}
-              className={fieldClass + " mt-1"}
-            />
-          </label>
-        ))}
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onClose}
-            className="px-3 text-sm text-slate-500"
-          >
-            Cancelar
-          </button>
-          <button type="submit" disabled={busy} className={buttonClass}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}Enviar a
-            aprobación
-          </button>
-        </div>
-      </form>
-    </dialog>
   );
 }

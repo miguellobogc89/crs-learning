@@ -196,12 +196,15 @@ export async function createTemplate(
     : [];
   if (examples.length !== count)
     throw new WhatsAppError("Añade un ejemplo por variable");
+  const footer = typeof input.footer === "string" && input.footer.trim() ? required(input.footer, "Pie", 60) : null;
+  if (footer && /\{\{/.test(footer)) throw new WhatsAppError("El pie no admite variables");
   const components = [
     {
       type: "BODY",
       text,
       ...(count ? { example: { body_text: [examples] } } : {}),
     },
+    ...(footer ? [{ type: "FOOTER", text: footer }] : []),
   ];
   const created = await graph<{ id: string; status: string }>(
     `${account.waba_id}/message_templates`,
