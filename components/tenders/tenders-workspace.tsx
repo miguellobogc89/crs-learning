@@ -60,8 +60,13 @@ type SyncSummary = {
   open: number;
   target: string;
 };
+const FEED_LABELS: Record<string, string> = {
+  licitaciones: "Plataforma estatal",
+  agregadas: "plataformas autonómicas",
+  menores: "contratos menores",
+};
 /** Tope de pasadas por pulsación (~45 s cada una). */
-const MAX_SYNC_ROUNDS = 40;
+const MAX_SYNC_ROUNDS = 80;
 type Filters = {
   q: string;
   kind: string;
@@ -184,17 +189,21 @@ export function TendersWorkspace() {
         const r = await api<SyncSummary>("sync", {});
         const errors = r.feeds.filter((f) => f.error);
         const pages = r.feeds.reduce((n, f) => n + f.pages, 0);
-        const main = r.feeds.find((f) => f.feed === "licitaciones");
+        // Progreso del primer feed que aún esté en carga inicial.
+        const main = r.feeds.find((f) => !f.backfillDone && f.feed !== "menores");
         const pending = r.feeds.some((f) => !f.backfillDone);
         await load();
-        if (errors.length) {
-          setSyncMessage(`Error al leer la Plataforma: ${errors.map((f) => f.error).join(" · ")}`);
+        // Un fallo puntual de un feed no detiene la carga si los demás siguen avanzando.
+        if (errors.length && pages === 0) {
+          setSyncMessage(`Error al leer la Plataforma: ${errors.map((f) => `${FEED_LABELS[f.feed] ?? f.feed}: ${f.error}`).join(" · ")}`);
           break;
         }
         const progress =
-          main && !main.backfillDone && main.reached
-            ? ` Carga inicial: leído hasta el ${dayFmt.format(new Date(main.reached))} (objetivo: ${dayFmt.format(new Date(r.target))}).`
-            : "";
+          main && main.reached
+            ? ` Carga inicial (${FEED_LABELS[main.feed] ?? main.feed}): leído hasta el ${dayFmt.format(new Date(main.reached))} (objetivo: ${dayFmt.format(new Date(r.target))}).`
+            : main
+              ? ` Carga inicial (${FEED_LABELS[main.feed] ?? main.feed}): empezando.`
+              : "";
         if (!pending) {
           setSyncMessage(`Actualizado. ${r.open.toLocaleString("es-ES")} licitaciones en plazo.`);
           break;
@@ -341,7 +350,7 @@ export function TendersWorkspace() {
         <div className="border border-slate-200 bg-white p-6 text-sm text-slate-600">
           Todavía no se ha leído la Plataforma de Contratación.{" "}
           {data?.canSync
-            ? "Pulsa Actualizar para hacer la primera carga. Lee unos 60 días hacia atrás y puede tardar varios minutos; puedes seguir usando la página mientras tanto."
+            ? "Pulsa Actualizar para hacer la primera carga. Lee unos 45 días hacia atrás y puede tardar varios minutos; puedes seguir usando la página mientras tanto."
             : "Pide a un administrador del espacio que pulse Actualizar."}
         </div>
       )}

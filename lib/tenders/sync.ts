@@ -2,6 +2,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import {
+  PLACSP_AGGREGATED_FEED_URL,
   PLACSP_FEED_URL,
   PLACSP_MINOR_FEED_URL,
   isOpenOpportunity,
@@ -13,10 +14,14 @@ import { walkFeed, type WalkState } from "./walker";
 
 const FEEDS = [
   { key: "licitaciones", url: PLACSP_FEED_URL },
+  { key: "agregadas", url: PLACSP_AGGREGATED_FEED_URL },
   { key: "menores", url: PLACSP_MINOR_FEED_URL },
 ] as const;
-/** La carga inicial baja hasta aquí: más atrás casi nada sigue en plazo. */
-const BACKFILL_DAYS = 60;
+/**
+ * La carga inicial baja hasta aquí. Los simplificados abren plazo de 10 a 20 días hábiles,
+ * así que lo publicado hace más de 45 días casi nunca sigue en plazo.
+ */
+const BACKFILL_DAYS = 45;
 const REQUEST_TIMEOUT_MS = 25_000;
 
 export type SyncSummary = {
@@ -151,8 +156,9 @@ export async function syncTenders(budgetMs = 45_000): Promise<SyncSummary> {
   // Deja margen para una petición más (descarga + guardado) antes del límite.
   const hasTime = () => Date.now() < deadline - 8_000;
 
-  // Licitaciones va primero y usa todo el tiempo que necesite; los contratos menores
-  // (casi siempre ya adjudicados) aprovechan lo que sobre.
+  // Van en orden y cada uno usa todo el tiempo que necesite: primero las licitaciones de la
+  // Plataforma, luego las autonómicas agregadas y, con lo que sobre, los contratos menores
+  // (casi siempre ya adjudicados).
   for (const feed of FEEDS) {
     const stored = await prisma.tender_sync_state.findUnique({ where: { feed: feed.key } });
     const previous = (stored?.last_result ?? {}) as { reached?: string | null };

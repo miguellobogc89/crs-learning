@@ -16,7 +16,7 @@ export default async function Page() {
         <AppPageHeader
           section={APP_SECTIONS.tenders}
           title="Licitaciones abiertas"
-          description="Contratos públicos en plazo de toda España: simplificados abreviados (menos de 60.000 €), simplificados (hasta 140.000 €) y contratos menores publicados con plazo. Fuente: Plataforma de Contratación del Sector Público."
+          description="Contratos públicos en plazo de toda España: simplificados abreviados (menos de 60.000 €), simplificados (hasta 140.000 €) y contratos menores publicados con plazo. Fuente: Plataforma de Contratación del Sector Público, incluidas las plataformas autonómicas agregadas."
         />
       }
       contentClassName="!pb-6"

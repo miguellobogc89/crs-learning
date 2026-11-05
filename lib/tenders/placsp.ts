@@ -6,9 +6,12 @@ import { XMLParser } from "fast-xml-parser";
 /** Feed de licitaciones publicadas en perfiles de contratante (sin contratos menores). */
 export const PLACSP_FEED_URL =
   "https://contrataciondelsectorpublico.gob.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto3.atom";
+/** Licitaciones de plataformas autonómicas publicadas por agregación (Cataluña, País Vasco, Madrid, Andalucía…). */
+export const PLACSP_AGGREGATED_FEED_URL =
+  "https://contrataciondelsectorpublico.gob.es/sindicacion/sindicacion_1044/PlataformasAgregadasSinMenores.atom";
 /** Feed de contratos menores (normalmente ya adjudicados; solo nos quedamos con los que siguen en plazo). */
 export const PLACSP_MINOR_FEED_URL =
-  "https://contrataciondelsectorpublico.gob.es/sindicacion/sindicacion_1044/contratosMenoresPerfilesContratantes.atom";
+  "https://contrataciondelsectorpublico.gob.es/sindicacion/sindicacion_1143/contratosMenoresPerfilesContratantes.atom";
 
 /** Tipos de procedimiento que mostramos. Los demás se ignoran al sincronizar. */
 export type TenderKind = "menor" | "abreviado" | "simplificado";
