@@ -22,9 +22,19 @@ export type WalkDeps = {
   hasTime: () => boolean;
   /** Hasta qué fecha bajar en la carga inicial. */
   backfillUntil: Date;
+  /** No volver a leer la cabecera (se leyó hace poco y hay trabajo pendiente más atrás). */
+  skipHead?: boolean;
 };
 
-export type WalkResult = { state: WalkState; pages: number; tenders: number };
+export type WalkResult = {
+  state: WalkState;
+  pages: number;
+  tenders: number;
+  /** Fecha más antigua alcanzada en esta ejecución por la carga inicial. */
+  reached: Date | null;
+  /** Si una petición falla, se devuelve lo avanzado hasta ese momento y el motivo. */
+  error: string | null;
+};
 
 function newest(page: ParsedFeedPage): Date | null {
   return page.tenders.reduce<Date | null>(
@@ -40,6 +50,7 @@ export async function walkFeed(initial: WalkState, deps: WalkDeps): Promise<Walk
   const state: WalkState = { ...initial };
   let pages = 0;
   let tenders = 0;
+  let reachedAt: Date | null = null;
   const read = async (url: string) => {
     const page = await deps.fetchPage(url);
     await deps.applyPage(page);
@@ -48,47 +59,53 @@ export async function walkFeed(initial: WalkState, deps: WalkDeps): Promise<Walk
     return page;
   };
 
-  // 1. Terminar primero un hueco pendiente de una lectura de cabecera cortada.
-  while (state.gapUrl && deps.hasTime()) {
-    const page = await read(state.gapUrl);
-    if (reached(page, state.gapUntil) || !page.nextUrl) {
-      state.gapUrl = null;
-      state.gapUntil = null;
-    } else state.gapUrl = page.nextUrl;
-  }
+  let error: string | null = null;
+  try {
+    // 1. Terminar primero un hueco pendiente de una lectura de cabecera cortada.
+    while (state.gapUrl && deps.hasTime()) {
+      const page = await read(state.gapUrl);
+      if (reached(page, state.gapUntil) || !page.nextUrl) {
+        state.gapUrl = null;
+        state.gapUntil = null;
+      } else state.gapUrl = page.nextUrl;
+    }
 
-  // 2. Novedades desde la cabecera del feed (solo si no queda hueco pendiente).
-  if (!state.gapUrl && deps.hasTime()) {
-    const previous = state.headSeenAt;
-    const first = await read(deps.feedUrl);
-    state.headSeenAt = newest(first) ?? previous;
-    if (!previous) {
-      // Primera vez: la cabecera es la primera página y el resto lo hace la carga inicial.
-      state.backfillUrl = first.nextUrl;
-      state.backfillDone = !first.nextUrl;
-    } else {
-      let page = first;
-      while (!reached(page, previous) && page.nextUrl) {
-        if (!deps.hasTime()) {
-          state.gapUrl = page.nextUrl;
-          state.gapUntil = previous;
-          break;
+    // 2. Novedades desde la cabecera del feed (solo si no queda hueco pendiente).
+    if (!state.gapUrl && (!deps.skipHead || !state.headSeenAt) && deps.hasTime()) {
+      const previous = state.headSeenAt;
+      const first = await read(deps.feedUrl);
+      state.headSeenAt = newest(first) ?? previous;
+      if (!previous) {
+        // Primera vez: la cabecera es la primera página y el resto lo hace la carga inicial.
+        state.backfillUrl = first.nextUrl;
+        state.backfillDone = !first.nextUrl;
+      } else {
+        let page = first;
+        while (!reached(page, previous) && page.nextUrl) {
+          if (!deps.hasTime()) {
+            state.gapUrl = page.nextUrl;
+            state.gapUntil = previous;
+            break;
+          }
+          page = await read(page.nextUrl);
         }
-        page = await read(page.nextUrl);
       }
     }
+
+    // 3. Carga inicial hacia atrás con el tiempo que sobre.
+    while (!state.backfillDone && state.backfillUrl && deps.hasTime()) {
+      const page = await read(state.backfillUrl);
+      if (page.oldestUpdate) reachedAt = page.oldestUpdate;
+      const tooOld =
+        !!page.oldestUpdate && page.oldestUpdate.getTime() < deps.backfillUntil.getTime();
+      if (tooOld || !page.nextUrl) {
+        state.backfillDone = true;
+        state.backfillUrl = null;
+      } else state.backfillUrl = page.nextUrl;
+    }
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
   }
 
-  // 3. Carga inicial hacia atrás con el tiempo que sobre.
-  while (!state.backfillDone && state.backfillUrl && deps.hasTime()) {
-    const page = await read(state.backfillUrl);
-    const tooOld =
-      !!page.oldestUpdate && page.oldestUpdate.getTime() < deps.backfillUntil.getTime();
-    if (tooOld || !page.nextUrl) {
-      state.backfillDone = true;
-      state.backfillUrl = null;
-    } else state.backfillUrl = page.nextUrl;
-  }
-
-  return { state, pages, tenders };
+  return { state, pages, tenders, reached: reachedAt, error };
 }

@@ -102,3 +102,31 @@ test("si las novedades se cortan, queda un hueco que se termina después", async
   assert.deepEqual(second.visited, ["p2", "p3", "p4", "head"]);
   assert.equal(r2.state.gapUrl, null);
 });
+
+test("con skipHead la carga inicial no gasta tiempo en releer la cabecera", async () => {
+  const pages = feed();
+  const state = { ...empty, headSeenAt: day(0), backfillUrl: "p2" };
+  const { visited, deps: d } = deps(pages, { budget: 2 });
+  const r = await walkFeed(state, { ...d, skipHead: true });
+  assert.deepEqual(visited, ["p2", "p3"]);
+  assert.equal(r.state.backfillUrl, "p4");
+  assert.equal(r.reached.getTime(), day(3).getTime());
+});
+
+test("si una petición falla se conserva lo avanzado", async () => {
+  const pages = feed();
+  const state = { ...empty, headSeenAt: day(0), backfillUrl: "p1" };
+  const { deps: d } = deps(pages);
+  const failing = {
+    ...d,
+    skipHead: true,
+    fetchPage: async (url) => {
+      if (url === "p3") throw new Error("PLACSP respondió 503");
+      return pages[url];
+    },
+  };
+  const r = await walkFeed(state, failing);
+  assert.equal(r.error, "PLACSP respondió 503");
+  assert.equal(r.state.backfillUrl, "p3");
+  assert.equal(r.pages, 2);
+});

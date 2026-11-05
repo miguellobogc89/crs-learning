@@ -1,5 +1,5 @@
 "use client";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronLeft,
@@ -47,6 +47,21 @@ type ListResponse = {
   sync: SyncFeed[];
   canSync: boolean;
 };
+type SyncSummary = {
+  feeds: {
+    feed: string;
+    pages: number;
+    tenders: number;
+    backfillDone: boolean;
+    reached: string | null;
+    skipped?: boolean;
+    error?: string;
+  }[];
+  open: number;
+  target: string;
+};
+/** Tope de pasadas por pulsación (~45 s cada una). */
+const MAX_SYNC_ROUNDS = 40;
 type Filters = {
   q: string;
   kind: string;
@@ -154,23 +169,48 @@ export function TendersWorkspace() {
     setPage(1);
   };
 
+  const [stopRequested, setStopRequested] = useState(false);
+  const stopRef = useRef(false);
+
+  // Una sola pulsación sigue leyendo (en tramos de ~45 s) hasta terminar la carga inicial.
   const sync = async () => {
     setSyncing(true);
     setSyncMessage(null);
+    stopRef.current = false;
+    setStopRequested(false);
+    const dayFmt = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", timeZone: "Europe/Madrid" });
     try {
-      const r = await api<{
-        feeds: { feed: string; pages: number; tenders: number; backfillDone: boolean; error?: string }[];
-        open: number;
-      }>("sync", {});
-      const errors = r.feeds.filter((f) => f.error);
-      const pages = r.feeds.reduce((n, f) => n + f.pages, 0);
-      const pending = r.feeds.some((f) => !f.backfillDone);
-      setSyncMessage(
-        errors.length
-          ? `Error al leer la Plataforma: ${errors.map((f) => f.error).join(" · ")}`
-          : `Leídas ${pages} páginas del feed. ${r.open} licitaciones en plazo.${pending ? " La carga inicial aún no ha terminado: vuelve a pulsar Actualizar." : ""}`,
-      );
-      await load();
+      for (let round = 1; round <= MAX_SYNC_ROUNDS; round++) {
+        const r = await api<SyncSummary>("sync", {});
+        const errors = r.feeds.filter((f) => f.error);
+        const pages = r.feeds.reduce((n, f) => n + f.pages, 0);
+        const main = r.feeds.find((f) => f.feed === "licitaciones");
+        const pending = r.feeds.some((f) => !f.backfillDone);
+        await load();
+        if (errors.length) {
+          setSyncMessage(`Error al leer la Plataforma: ${errors.map((f) => f.error).join(" · ")}`);
+          break;
+        }
+        const progress =
+          main && !main.backfillDone && main.reached
+            ? ` Carga inicial: leído hasta el ${dayFmt.format(new Date(main.reached))} (objetivo: ${dayFmt.format(new Date(r.target))}).`
+            : "";
+        if (!pending) {
+          setSyncMessage(`Actualizado. ${r.open.toLocaleString("es-ES")} licitaciones en plazo.`);
+          break;
+        }
+        if (stopRef.current) {
+          setSyncMessage(`Detenido.${progress} Pulsa Actualizar para continuar.`);
+          break;
+        }
+        if (pages === 0) {
+          setSyncMessage(`No se pudo avanzar en esta pasada.${progress} Vuelve a intentarlo en unos minutos.`);
+          break;
+        }
+        setSyncMessage(
+          `Leyendo… pasada ${round}, ${pages} páginas en la última.${progress} ${r.open.toLocaleString("es-ES")} licitaciones en plazo hasta ahora.`,
+        );
+      }
     } catch (e) {
       setSyncMessage(errorText(e));
     } finally {
@@ -264,10 +304,25 @@ export function TendersWorkspace() {
           )}
         </div>
         {data?.canSync && (
-          <button type="button" className={ghost} onClick={sync} disabled={syncing}>
-            {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            {syncing ? "Leyendo la Plataforma…" : "Actualizar"}
-          </button>
+          <div className="flex items-center gap-2">
+            {syncing && (
+              <button
+                type="button"
+                className={ghost}
+                disabled={stopRequested}
+                onClick={() => {
+                  stopRef.current = true;
+                  setStopRequested(true);
+                }}
+              >
+                {stopRequested ? "Deteniendo al terminar la pasada…" : "Detener"}
+              </button>
+            )}
+            <button type="button" className={ghost} onClick={sync} disabled={syncing}>
+              {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {syncing ? "Leyendo la Plataforma…" : "Actualizar"}
+            </button>
+          </div>
         )}
       </div>
 
@@ -286,7 +341,7 @@ export function TendersWorkspace() {
         <div className="border border-slate-200 bg-white p-6 text-sm text-slate-600">
           Todavía no se ha leído la Plataforma de Contratación.{" "}
           {data?.canSync
-            ? "Pulsa Actualizar para hacer la primera carga. Lee unos 60 días hacia atrás y puede necesitar varias pulsaciones."
+            ? "Pulsa Actualizar para hacer la primera carga. Lee unos 60 días hacia atrás y puede tardar varios minutos; puedes seguir usando la página mientras tanto."
             : "Pide a un administrador del espacio que pulse Actualizar."}
         </div>
       )}

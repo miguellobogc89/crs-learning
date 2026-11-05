@@ -20,8 +20,19 @@ const BACKFILL_DAYS = 60;
 const REQUEST_TIMEOUT_MS = 25_000;
 
 export type SyncSummary = {
-  feeds: { feed: string; pages: number; tenders: number; backfillDone: boolean; error?: string }[];
+  feeds: {
+    feed: string;
+    pages: number;
+    tenders: number;
+    backfillDone: boolean;
+    /** Hasta qué fecha ha bajado la carga inicial. */
+    reached: string | null;
+    skipped?: boolean;
+    error?: string;
+  }[];
   open: number;
+  /** Fecha hasta la que baja la carga inicial. */
+  target: string;
 };
 
 async function fetchPage(url: string): Promise<ParsedFeedPage> {
@@ -136,28 +147,41 @@ export async function syncTenders(budgetMs = 45_000): Promise<SyncSummary> {
   const started = Date.now();
   const deadline = started + budgetMs;
   const backfillUntil = new Date(started - BACKFILL_DAYS * 86_400_000);
-  const summary: SyncSummary = { feeds: [], open: 0 };
+  const summary: SyncSummary = { feeds: [], open: 0, target: backfillUntil.toISOString() };
+  // Deja margen para una petición más (descarga + guardado) antes del límite.
+  const hasTime = () => Date.now() < deadline - 8_000;
 
-  for (const [index, feed] of FEEDS.entries()) {
-    // Reparte el tiempo que queda entre los feeds pendientes; el de licitaciones va primero.
-    const feedsLeft = FEEDS.length - index;
-    const feedDeadline = Date.now() + Math.max(0, deadline - Date.now()) / feedsLeft;
+  // Licitaciones va primero y usa todo el tiempo que necesite; los contratos menores
+  // (casi siempre ya adjudicados) aprovechan lo que sobre.
+  for (const feed of FEEDS) {
     const stored = await prisma.tender_sync_state.findUnique({ where: { feed: feed.key } });
-    let result = { state: toWalkState(stored), pages: 0, tenders: 0 };
-    let error: string | undefined;
-    try {
-      result = await walkFeed(result.state, {
-        feedUrl: feed.url,
-        fetchPage,
-        applyPage: (page) => applyPage(page),
-        // Deja margen para una petición más (lectura + guardado) antes del límite.
-        hasTime: () => Date.now() < feedDeadline - 8_000,
-        backfillUntil,
+    const previous = (stored?.last_result ?? {}) as { reached?: string | null };
+    if (!hasTime()) {
+      summary.feeds.push({
+        feed: feed.key,
+        pages: 0,
+        tenders: 0,
+        backfillDone: stored?.backfill_done ?? false,
+        reached: previous.reached ?? null,
+        skipped: true,
       });
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      continue;
     }
+    const state = toWalkState(stored);
+    const pendingBehind = !!state.gapUrl || (!state.backfillDone && !!state.backfillUrl);
+    const readRecently =
+      !!stored?.last_run_at && Date.now() - stored.last_run_at.getTime() < 20 * 60_000;
+    const result = await walkFeed(state, {
+      feedUrl: feed.url,
+      fetchPage,
+      applyPage: (page) => applyPage(page),
+      hasTime,
+      backfillUntil,
+      // Mientras dura la carga inicial no hace falta releer la cabecera en cada pulsación.
+      skipHead: pendingBehind && readRecently,
+    });
     const s = result.state;
+    const reached = result.reached?.toISOString() ?? previous.reached ?? null;
     const data = {
       head_seen_at: s.headSeenAt,
       gap_url: s.gapUrl,
@@ -165,7 +189,7 @@ export async function syncTenders(budgetMs = 45_000): Promise<SyncSummary> {
       backfill_url: s.backfillUrl,
       backfill_done: s.backfillDone,
       last_run_at: new Date(),
-      last_result: { pages: result.pages, tenders: result.tenders, error: error ?? null },
+      last_result: { pages: result.pages, tenders: result.tenders, reached, error: result.error },
     };
     await prisma.tender_sync_state.upsert({
       where: { feed: feed.key },
@@ -177,7 +201,8 @@ export async function syncTenders(budgetMs = 45_000): Promise<SyncSummary> {
       pages: result.pages,
       tenders: result.tenders,
       backfillDone: s.backfillDone,
-      ...(error ? { error } : {}),
+      reached,
+      ...(result.error ? { error: result.error } : {}),
     });
   }
 
