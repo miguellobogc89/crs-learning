@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:at="http://purl.org/atompub/tombstones/1.0"
+      xmlns:cbc="urn:dgpe:names:draft:codice:schema:xsd:CommonBasicComponents-2"
+      xmlns:cac="urn:dgpe:names:draft:codice:schema:xsd:CommonAggregateComponents-2"
+      xmlns:cbc-place-ext="urn:dgpe:names:draft:codice-place-ext:schema:xsd:CommonBasicComponents-2"
+      xmlns:cac-place-ext="urn:dgpe:names:draft:codice-place-ext:schema:xsd:CommonAggregateComponents-2">
+  <id>https://contrataciondelestado.es/sindicacion/licitacionesPerfilContratante.atom</id>
+  <title>Licitaciones publicadas</title>
+  <updated>2026-11-05T10:00:00+01:00</updated>
+  <link rel="self" href="https://contrataciondelsectorpublico.gob.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto3.atom"/>
+  <link rel="next" href="https://contrataciondelsectorpublico.gob.es/sindicacion/sindicacion_643/licitacionesPerfilesContratanteCompleto3_20261105_090000.atom"/>
+  <at:deleted-entry ref="https://contrataciondelestado.es/sindicacion/licitacionesPerfilContratante/999" when="2026-11-05T09:30:00+01:00"/>
+  <entry>
+    <id>https://contrataciondelestado.es/sindicacion/licitacionesPerfilContratante/101</id>
+    <link href="https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&amp;idEvl=abc101"/>
+    <summary type="text">Id licitación: 2026/00142; Órgano de Contratación: Ayuntamiento de Ejemplo; Importe: 42000.00 EUR; Estado: PUB</summary>
+    <title>Desarrollo de una aplicación web de cita previa</title>
+    <updated>2026-11-05T09:55:00.123+01:00</updated>
+    <cac-place-ext:ContractFolderStatus>
+      <cbc:ContractFolderID>2026/00142</cbc:ContractFolderID>
+      <cbc-place-ext:ContractFolderStatusCode listURI="https://contrataciondelestado.es/codice/cl/2.04/SyndicationContractFolderStatusCode-2.04.gc">PUB</cbc-place-ext:ContractFolderStatusCode>
+      <cac-place-ext:LocatedContractingParty>
+        <cac:Party>
+          <cac:PartyName><cbc:Name>Ayuntamiento de Ejemplo</cbc:Name></cac:PartyName>
+        </cac:Party>
+      </cac-place-ext:LocatedContractingParty>
+      <cac:ProcurementProject>
+        <cbc:Name>Desarrollo de una aplicación web de cita previa</cbc:Name>
+        <cbc:TypeCode listURI="https://contrataciondelestado.es/codice/cl/2.08/ContractCode-2.08.gc">2</cbc:TypeCode>
+        <cac:BudgetAmount>
+          <cbc:EstimatedOverallContractAmount currencyID="EUR">42000.00</cbc:EstimatedOverallContractAmount>
+          <cbc:TotalAmount currencyID="EUR">50820.00</cbc:TotalAmount>
+          <cbc:TaxExclusiveAmount currencyID="EUR">42000.00</cbc:TaxExclusiveAmount>
+        </cac:BudgetAmount>
+        <cac:RequiredCommodityClassification>
+          <cbc:ItemClassificationCode listURI="https://contrataciondelestado.es/codice/cl/1.04/CPV2007-1.04.gc">72200000</cbc:ItemClassificationCode>
+        </cac:RequiredCommodityClassification>
+        <cac:RequiredCommodityClassification>
+          <cbc:ItemClassificationCode listURI="https://contrataciondelestado.es/codice/cl/1.04/CPV2007-1.04.gc">72212000</cbc:ItemClassificationCode>
+        </cac:RequiredCommodityClassification>
+        <cac:RealizedLocation>
+          <cbc:CountrySubentity>Sevilla</cbc:CountrySubentity>
+          <cbc:CountrySubentityCode listURI="https://contrataciondelestado.es/codice/cl/1.04/NUTS-2021.gc">ES618</cbc:CountrySubentityCode>
+          <cac:Address><cbc:CityName>Dos Hermanas</cbc:CityName></cac:Address>
+        </cac:RealizedLocation>
+      </cac:ProcurementProject>
+      <cac:TenderingProcess>
+        <cbc:ProcedureCode listURI="https://contrataciondelestado.es/codice/cl/2.07/SyndicationTenderingProcessCode-2.07.gc">9</cbc:ProcedureCode>
+        <cac:TenderSubmissionDeadlinePeriod>
+          <cbc:EndDate>2026-11-20</cbc:EndDate>
+          <cbc:EndTime>14:00:00</cbc:EndTime>
+        </cac:TenderSubmissionDeadlinePeriod>
+      </cac:TenderingProcess>
+    </cac-place-ext:ContractFolderStatus>
+  </entry>
+  <entry>
+    <id>https://contrataciondelestado.es/sindicacion/licitacionesPerfilContratante/102</id>
+    <link href="https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&amp;idEvl=abc102"/>
+    <title>Alquiler e instalación de carpa para fiestas</title>
+    <updated>2026-11-05T09:40:00+01:00</updated>
+    <cac-place-ext:ContractFolderStatus>
+      <cbc:ContractFolderID>583004/2026</cbc:ContractFolderID>
+      <cbc-place-ext:ContractFolderStatusCode>PUB</cbc-place-ext:ContractFolderStatusCode>
+      <cac-place-ext:LocatedContractingParty>
+        <cac:Party><cac:PartyName><cbc:Name>Ayuntamiento de Zaragoza</cbc:Name></cac:PartyName></cac:Party>
+      </cac-place-ext:LocatedContractingParty>
+      <cac:ProcurementProject>
+        <cbc:Name>Alquiler e instalación de carpa para fiestas</cbc:Name>
+        <cbc:TypeCode>2</cbc:TypeCode>
+        <cac:BudgetAmount>
+          <cbc:EstimatedOverallContractAmount currencyID="EUR">95000</cbc:EstimatedOverallContractAmount>
+        </cac:BudgetAmount>
+        <cac:RequiredCommodityClassification>
+          <cbc:ItemClassificationCode>39522530</cbc:ItemClassificationCode>
+        </cac:RequiredCommodityClassification>
+      </cac:ProcurementProject>
+      <cac:TenderingProcess>
+        <cbc:ProcedureCode>9</cbc:ProcedureCode>
+        <cac:TenderSubmissionDeadlinePeriod><cbc:EndDate>2026-11-15</cbc:EndDate></cac:TenderSubmissionDeadlinePeriod>
+      </cac:TenderingProcess>
+    </cac-place-ext:ContractFolderStatus>
+  </entry>
+  <entry>
+    <id>https://contrataciondelestado.es/sindicacion/licitacionesPerfilContratante/103</id>
+    <link href="https://contrataciondelestado.es/wps/poc?uri=deeplink:detalle_licitacion&amp;idEvl=abc103"/>
+    <title>Mantenimiento de servidores</title>
+    <updated>2026-11-04T18:00:00+01:00</updated>
+    <cac-place-ext:ContractFolderStatus>
+      <cbc-place-ext:ContractFolderStatusCode>ADJ</cbc-place-ext:ContractFolderStatusCode>
+      <cac:ProcurementProject>
+        <cbc:Name>Mantenimiento de servidores</cbc:Name>
+        <cbc:TypeCode>2</cbc:TypeCode>
+        <cac:BudgetAmount><cbc:EstimatedOverallContractAmount currencyID="EUR">500000</cbc:EstimatedOverallContractAmount></cac:BudgetAmount>
+      </cac:ProcurementProject>
+      <cac:ProcurementProjectLot>
+        <cbc:ID>1</cbc:ID>
+        <cac:ProcurementProject>
+          <cac:RequiredCommodityClassification><cbc:ItemClassificationCode>72500000</cbc:ItemClassificationCode></cac:RequiredCommodityClassification>
+        </cac:ProcurementProject>
+      </cac:ProcurementProjectLot>
+      <cac:TenderingProcess><cbc:ProcedureCode>1</cbc:ProcedureCode></cac:TenderingProcess>
+    </cac-place-ext:ContractFolderStatus>
+  </entry>
+</feed>

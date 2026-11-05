@@ -15,6 +15,7 @@ import {
   GraduationCap,
   Home,
   Inbox,
+  Landmark,
   Library,
   Settings,
   ShieldCheck,
@@ -52,6 +53,7 @@ const navItems = [
     label: "Conectores",
   },
   { href: "/whatsapp", icon: MessageCircle, label: "WhatsApp" },
+  { href: "/tenders", icon: Landmark, label: "Licitaciones" },
   {
     href: "/courses",
     icon: GraduationCap,

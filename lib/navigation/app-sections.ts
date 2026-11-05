@@ -7,6 +7,7 @@ import {
   Grid2X2,
   Home,
   Inbox,
+  Landmark,
   Library,
   Settings,
   UserRound,
@@ -16,6 +17,7 @@ import {
 
 export const APP_SECTIONS = {
   whatsapp: { label: "WhatsApp", href: "/whatsapp", icon: MessageCircle },
+  tenders: { label: "Licitaciones", href: "/tenders", icon: Landmark },
   dashboard: {
     label: "Inicio",
     href: "/dashboard",

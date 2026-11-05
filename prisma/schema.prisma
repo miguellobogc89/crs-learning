@@ -2127,3 +2127,55 @@ model whatsapp_campaign_recipients {
   @@index([workspace_id, campaign_id, status])
   @@index([workspace_id, contact_id])
 }
+/// Licitaciones públicas abiertas leídas del feed oficial de PLACSP. Son datos públicos, comunes a todos los espacios.
+model public_tenders {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  external_id String @unique
+  folder_id String?
+  title String
+  url String?
+  status String?
+  kind String
+  is_software Boolean @default(false)
+  contracting_body String?
+  contract_type String?
+  procedure_code String?
+  estimated_amount Decimal? @db.Decimal(14, 2)
+  budget_without_tax Decimal? @db.Decimal(14, 2)
+  budget_with_tax Decimal? @db.Decimal(14, 2)
+  cpv_codes String[] @default([])
+  province String?
+  city String?
+  deadline DateTime? @db.Timestamptz(6)
+  source_updated_at DateTime? @db.Timestamptz(6)
+  summary String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  reviews tender_reviews[]
+  @@index([status, deadline])
+  @@index([kind, is_software, deadline])
+}
+/// Valoración de una licitación por parte de un espacio de trabajo.
+model tender_reviews {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @db.Uuid
+  tender_id String @db.Uuid
+  status String @default("Nueva")
+  notes String?
+  updated_by String?
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  tender public_tenders @relation(fields: [tender_id], references: [id], onDelete: Cascade)
+  @@unique([workspace_id, tender_id])
+  @@index([workspace_id, status])
+}
+/// Punto por el que va la lectura de cada feed: la cabecera ya leída y el cursor hacia atrás para la carga inicial.
+model tender_sync_state {
+  feed String @id
+  head_seen_at DateTime? @db.Timestamptz(6)
+  gap_url String?
+  gap_until DateTime? @db.Timestamptz(6)
+  backfill_url String?
+  backfill_done Boolean @default(false)
+  last_run_at DateTime? @db.Timestamptz(6)
+  last_result Json @default("{}")
+}

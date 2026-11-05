@@ -1,0 +1,199 @@
+// lib/tenders/sync.ts
+import "server-only";
+import { prisma } from "@/lib/prisma";
+import {
+  PLACSP_FEED_URL,
+  PLACSP_MINOR_FEED_URL,
+  isOpenOpportunity,
+  parseFeedPage,
+  type ParsedFeedPage,
+  type ParsedTender,
+} from "./placsp";
+import { walkFeed, type WalkState } from "./walker";
+
+const FEEDS = [
+  { key: "licitaciones", url: PLACSP_FEED_URL },
+  { key: "menores", url: PLACSP_MINOR_FEED_URL },
+] as const;
+/** La carga inicial baja hasta aquí: más atrás casi nada sigue en plazo. */
+const BACKFILL_DAYS = 60;
+const REQUEST_TIMEOUT_MS = 25_000;
+
+export type SyncSummary = {
+  feeds: { feed: string; pages: number; tenders: number; backfillDone: boolean; error?: string }[];
+  open: number;
+};
+
+async function fetchPage(url: string): Promise<ParsedFeedPage> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Crussader/1.0 (lector del feed abierto de licitaciones)" },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`PLACSP respondió ${res.status} en ${url}`);
+  return parseFeedPage(await res.text());
+}
+
+function row(t: ParsedTender) {
+  return {
+    folder_id: t.folderId,
+    title: t.title.slice(0, 2000),
+    url: t.url,
+    status: t.status,
+    kind: t.kind ?? "otro",
+    is_software: t.isSoftware,
+    contracting_body: t.contractingBody,
+    contract_type: t.contractType,
+    procedure_code: t.procedureCode,
+    estimated_amount: t.estimatedAmount,
+    budget_without_tax: t.budgetWithoutTax,
+    budget_with_tax: t.budgetWithTax,
+    cpv_codes: t.cpvCodes,
+    province: t.province,
+    city: t.city,
+    deadline: t.deadline,
+    source_updated_at: t.updatedAt,
+    summary: t.summary?.slice(0, 4000) ?? null,
+  };
+}
+
+/**
+ * Guarda una página: añade las oportunidades en plazo y actualiza el estado de las que ya
+ * teníamos (adjudicadas, anuladas, borradas). Nunca pisa datos con una versión más antigua,
+ * porque la carga inicial lee el feed hacia atrás.
+ */
+export async function applyPage(page: ParsedFeedPage, now = new Date()) {
+  const ids = [...new Set([...page.tenders.map((t) => t.externalId), ...page.deletedIds])];
+  if (!ids.length) return;
+  const known = new Map(
+    (
+      await prisma.public_tenders.findMany({
+        where: { external_id: { in: ids } },
+        select: { external_id: true, source_updated_at: true },
+      })
+    ).map((r) => [r.external_id, r.source_updated_at]),
+  );
+  const isNewer = (t: ParsedTender) => {
+    const current = known.get(t.externalId);
+    return !current || !t.updatedAt || t.updatedAt.getTime() >= current.getTime();
+  };
+  // Si una licitación aparece varias veces en la página, nos quedamos con su versión más reciente.
+  const latest = new Map<string, ParsedTender>();
+  for (const t of page.tenders) {
+    const prev = latest.get(t.externalId);
+    if (!prev || (t.updatedAt?.getTime() ?? 0) > (prev.updatedAt?.getTime() ?? 0))
+      latest.set(t.externalId, t);
+  }
+  const fresh = [...latest.values()].filter(isNewer);
+  const toCreate = fresh.filter((t) => !known.has(t.externalId) && isOpenOpportunity(t, now));
+  const toUpdate = fresh.filter((t) => known.has(t.externalId));
+  const deleted = page.deletedIds.filter((id) => known.has(id));
+
+  await prisma.$transaction([
+    ...(toCreate.length
+      ? [
+          prisma.public_tenders.createMany({
+            data: toCreate.map((t) => ({ external_id: t.externalId, ...row(t) })),
+            skipDuplicates: true,
+          }),
+        ]
+      : []),
+    ...toUpdate.map((t) =>
+      prisma.public_tenders.update({
+        where: { external_id: t.externalId },
+        data: { ...row(t), updated_at: now },
+      }),
+    ),
+    ...(deleted.length
+      ? [
+          prisma.public_tenders.updateMany({
+            where: { external_id: { in: deleted } },
+            data: { status: "BORRADA", updated_at: now },
+          }),
+        ]
+      : []),
+  ]);
+}
+
+function toWalkState(s: {
+  head_seen_at: Date | null;
+  gap_url: string | null;
+  gap_until: Date | null;
+  backfill_url: string | null;
+  backfill_done: boolean;
+} | null): WalkState {
+  return {
+    headSeenAt: s?.head_seen_at ?? null,
+    gapUrl: s?.gap_url ?? null,
+    gapUntil: s?.gap_until ?? null,
+    backfillUrl: s?.backfill_url ?? null,
+    backfillDone: s?.backfill_done ?? false,
+  };
+}
+
+/** Lee novedades de los feeds dentro de un tiempo máximo. Se puede llamar tantas veces como haga falta. */
+export async function syncTenders(budgetMs = 45_000): Promise<SyncSummary> {
+  const started = Date.now();
+  const deadline = started + budgetMs;
+  const backfillUntil = new Date(started - BACKFILL_DAYS * 86_400_000);
+  const summary: SyncSummary = { feeds: [], open: 0 };
+
+  for (const [index, feed] of FEEDS.entries()) {
+    // Reparte el tiempo que queda entre los feeds pendientes; el de licitaciones va primero.
+    const feedsLeft = FEEDS.length - index;
+    const feedDeadline = Date.now() + Math.max(0, deadline - Date.now()) / feedsLeft;
+    const stored = await prisma.tender_sync_state.findUnique({ where: { feed: feed.key } });
+    let result = { state: toWalkState(stored), pages: 0, tenders: 0 };
+    let error: string | undefined;
+    try {
+      result = await walkFeed(result.state, {
+        feedUrl: feed.url,
+        fetchPage,
+        applyPage: (page) => applyPage(page),
+        // Deja margen para una petición más (lectura + guardado) antes del límite.
+        hasTime: () => Date.now() < feedDeadline - 8_000,
+        backfillUntil,
+      });
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+    const s = result.state;
+    const data = {
+      head_seen_at: s.headSeenAt,
+      gap_url: s.gapUrl,
+      gap_until: s.gapUntil,
+      backfill_url: s.backfillUrl,
+      backfill_done: s.backfillDone,
+      last_run_at: new Date(),
+      last_result: { pages: result.pages, tenders: result.tenders, error: error ?? null },
+    };
+    await prisma.tender_sync_state.upsert({
+      where: { feed: feed.key },
+      create: { feed: feed.key, ...data },
+      update: data,
+    });
+    summary.feeds.push({
+      feed: feed.key,
+      pages: result.pages,
+      tenders: result.tenders,
+      backfillDone: s.backfillDone,
+      ...(error ? { error } : {}),
+    });
+  }
+
+  summary.open = await prisma.public_tenders.count({
+    where: { status: "PUB", OR: [{ deadline: null }, { deadline: { gt: new Date() } }] },
+  });
+  return summary;
+}
+
+export async function syncStatus() {
+  const states = await prisma.tender_sync_state.findMany({ orderBy: { feed: "asc" } });
+  return states.map((s) => ({
+    feed: s.feed,
+    lastRunAt: s.last_run_at,
+    backfillDone: s.backfill_done,
+    pending: !!s.gap_url || (!s.backfill_done && !!s.backfill_url),
+    lastResult: s.last_result,
+  }));
+}
