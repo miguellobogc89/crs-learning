@@ -63,10 +63,14 @@
       <cbc:ContractFolderID>583004/2026</cbc:ContractFolderID>
       <cbc-place-ext:ContractFolderStatusCode>PUB</cbc-place-ext:ContractFolderStatusCode>
       <cac-place-ext:LocatedContractingParty>
-        <cac:Party><cac:PartyName><cbc:Name>Ayuntamiento de Zaragoza</cbc:Name></cac:PartyName></cac:Party>
+        <cac:Party>
+          <cac:PartyName><cbc:Name>Ayuntamiento de Zaragoza</cbc:Name></cac:PartyName>
+          <cac:PostalAddress><cbc:CityName>Zaragoza</cbc:CityName><cbc:PostalZone>50001</cbc:PostalZone></cac:PostalAddress>
+        </cac:Party>
       </cac-place-ext:LocatedContractingParty>
       <cac:ProcurementProject>
-        <cbc:Name>Alquiler e instalación de carpa para fiestas</cbc:Name>
+        <cbc:Name>&amp;nbsp; &amp;nbsp;Alquiler e instalación&#xD;
+          de carpa para fiestas</cbc:Name>
         <cbc:TypeCode>2</cbc:TypeCode>
         <cac:BudgetAmount>
           <cbc:EstimatedOverallContractAmount currencyID="EUR">95000</cbc:EstimatedOverallContractAmount>

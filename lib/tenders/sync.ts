@@ -22,7 +22,10 @@ const FEEDS = [
  * así que lo publicado hace más de 45 días casi nunca sigue en plazo.
  */
 const BACKFILL_DAYS = 45;
-const REQUEST_TIMEOUT_MS = 25_000;
+/** Espera máxima por página: PLACSP a veces tarda bastante en servir sus ficheros de 500 entradas. */
+const REQUEST_TIMEOUT_MS = 40_000;
+/** Estimación inicial de lo que tarda una página (descarga + lectura + guardado) hasta medirlo. */
+const FIRST_PAGE_ESTIMATE_MS = 15_000;
 
 export type SyncSummary = {
   feeds: {
@@ -40,13 +43,20 @@ export type SyncSummary = {
   target: string;
 };
 
-async function fetchPage(url: string): Promise<ParsedFeedPage> {
-  const res = await fetch(url, {
-    headers: { "User-Agent": "Crussader/1.0 (lector del feed abierto de licitaciones)" },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`PLACSP respondió ${res.status} en ${url}`);
+async function fetchPage(url: string, timeoutMs: number): Promise<ParsedFeedPage> {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { "User-Agent": "Crussader/1.0 (lector del feed abierto de licitaciones)" },
+      signal: AbortSignal.timeout(timeoutMs),
+      cache: "no-store",
+    });
+  } catch (e) {
+    if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError"))
+      throw new Error(`la Plataforma tardó más de ${Math.round(timeoutMs / 1000)} s en responder`);
+    throw e;
+  }
+  if (!res.ok) throw new Error(`PLACSP respondió ${res.status}`);
   return parseFeedPage(await res.text());
 }
 
@@ -153,8 +163,18 @@ export async function syncTenders(budgetMs = 45_000): Promise<SyncSummary> {
   const deadline = started + budgetMs;
   const backfillUntil = new Date(started - BACKFILL_DAYS * 86_400_000);
   const summary: SyncSummary = { feeds: [], open: 0, target: backfillUntil.toISOString() };
-  // Deja margen para una petición más (descarga + guardado) antes del límite.
-  const hasTime = () => Date.now() < deadline - 8_000;
+  // Solo se pide otra página si, por lo que han tardado las anteriores, da tiempo a terminarla.
+  const pageTimes: number[] = [];
+  const expectedPageMs = () =>
+    pageTimes.length ? Math.max(...pageTimes.slice(-3)) : FIRST_PAGE_ESTIMATE_MS;
+  const hasTime = () => deadline - Date.now() > expectedPageMs() * 1.2 + 2_000;
+  const timedFetch = async (url: string) => {
+    const startedAt = Date.now();
+    const timeout = Math.min(REQUEST_TIMEOUT_MS, Math.max(5_000, deadline - Date.now() - 1_000));
+    const page = await fetchPage(url, timeout);
+    pageTimes.push(Date.now() - startedAt);
+    return page;
+  };
 
   // Van en orden y cada uno usa todo el tiempo que necesite: primero las licitaciones de la
   // Plataforma, luego las autonómicas agregadas y, con lo que sobre, los contratos menores
@@ -179,7 +199,7 @@ export async function syncTenders(budgetMs = 45_000): Promise<SyncSummary> {
       !!stored?.last_run_at && Date.now() - stored.last_run_at.getTime() < 20 * 60_000;
     const result = await walkFeed(state, {
       feedUrl: feed.url,
-      fetchPage,
+      fetchPage: timedFetch,
       applyPage: (page) => applyPage(page),
       hasTime,
       backfillUntil,

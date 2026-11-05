@@ -77,3 +77,13 @@ test("detecta software por palabras aunque el CPV no sea informático", () => {
   assert.equal(placsp.isSoftwareTender(["79342000"], "Creación de la página web municipal"), true);
   assert.equal(placsp.isSoftwareTender(["45000000"], "Obras de pavimentación"), false);
 });
+
+test("limpia restos de HTML y deduce la provincia del código postal del órgano", () => {
+  const [, tent] = placsp.parseFeedPage(xml).tenders;
+  assert.equal(tent.title, "Alquiler e instalación de carpa para fiestas");
+  assert.equal(tent.province, "Zaragoza");
+  assert.equal(tent.city, "Zaragoza");
+  assert.equal(placsp.cleanText("&nbsp; &nbsp;Firma&#xD; electrónica &amp; SaaS"), "Firma electrónica & SaaS");
+  assert.equal(placsp.provinceFromPostalCode("08001"), "Barcelona");
+  assert.equal(placsp.provinceFromPostalCode("99"), null);
+});

@@ -67,6 +67,8 @@ const FEED_LABELS: Record<string, string> = {
 };
 /** Tope de pasadas por pulsación (~45 s cada una). */
 const MAX_SYNC_ROUNDS = 80;
+/** Pasadas seguidas sin leer ninguna página antes de rendirse. */
+const MAX_FAILED_ROUNDS = 3;
 type Filters = {
   q: string;
   kind: string;
@@ -184,6 +186,7 @@ export function TendersWorkspace() {
     stopRef.current = false;
     setStopRequested(false);
     const dayFmt = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", timeZone: "Europe/Madrid" });
+    let failedRounds = 0;
     try {
       for (let round = 1; round <= MAX_SYNC_ROUNDS; round++) {
         const r = await api<SyncSummary>("sync", {});
@@ -193,9 +196,14 @@ export function TendersWorkspace() {
         const main = r.feeds.find((f) => !f.backfillDone && f.feed !== "menores");
         const pending = r.feeds.some((f) => !f.backfillDone);
         await load();
-        // Un fallo puntual de un feed no detiene la carga si los demás siguen avanzando.
-        if (errors.length && pages === 0) {
-          setSyncMessage(`Error al leer la Plataforma: ${errors.map((f) => `${FEED_LABELS[f.feed] ?? f.feed}: ${f.error}`).join(" · ")}`);
+        // Los fallos puntuales (la Plataforma a veces tarda) no detienen la carga:
+        // solo se para tras varias pasadas seguidas sin avanzar nada.
+        const feedErrors = errors.map((f) => `${FEED_LABELS[f.feed] ?? f.feed}: ${f.error}`).join(" · ");
+        failedRounds = pages === 0 ? failedRounds + 1 : 0;
+        if (failedRounds >= MAX_FAILED_ROUNDS) {
+          setSyncMessage(
+            `La Plataforma no responde (${feedErrors || "sin avances"}). Se ha guardado lo leído; vuelve a pulsar Actualizar más tarde.`,
+          );
           break;
         }
         const progress =
@@ -212,12 +220,8 @@ export function TendersWorkspace() {
           setSyncMessage(`Detenido.${progress} Pulsa Actualizar para continuar.`);
           break;
         }
-        if (pages === 0) {
-          setSyncMessage(`No se pudo avanzar en esta pasada.${progress} Vuelve a intentarlo en unos minutos.`);
-          break;
-        }
         setSyncMessage(
-          `Leyendo… pasada ${round}, ${pages} páginas en la última.${progress} ${r.open.toLocaleString("es-ES")} licitaciones en plazo hasta ahora.`,
+          `Leyendo… pasada ${round}, ${pages} páginas en la última.${progress} ${r.open.toLocaleString("es-ES")} licitaciones en plazo hasta ahora.${errors.length ? ` (Reintentando: ${feedErrors})` : ""}`,
         );
       }
     } catch (e) {
@@ -389,7 +393,9 @@ export function TendersWorkspace() {
                       <DeadlineCell deadline={t.deadline} />
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{t.title}</div>
+                      <div className="line-clamp-2 font-medium text-slate-900" title={t.title}>
+                        {t.title}
+                      </div>
                       <div className="mt-0.5 text-xs text-slate-500">
                         {[t.contractingBody, t.folderId && `Exp. ${t.folderId}`, t.contractType]
                           .filter(Boolean)
@@ -488,6 +494,8 @@ function TenderDetail({
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <dl className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2 text-sm">
+        <dt className="text-slate-500">Objeto</dt>
+        <dd className="text-slate-900">{tender.title}</dd>
         <dt className="text-slate-500">Procedimiento</dt>
         <dd className="text-slate-900">{tender.procedure ?? "—"}</dd>
         <dt className="text-slate-500">Importe sin IVA</dt>

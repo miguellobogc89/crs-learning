@@ -128,6 +128,47 @@ export function text(value: unknown): string | null {
   if (node && "#text" in node) return text(node["#text"]);
   return null;
 }
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+};
+/** Limpia restos de HTML que algunos órganos dejan en los textos (&nbsp;, &#xD;…) y espacios de más. */
+export function cleanText(value: string | null): string | null {
+  if (!value) return value;
+  const decoded = value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code: string) => {
+    if (code[0] === "#") {
+      const n = code[1].toLowerCase() === "x" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      return Number.isFinite(n) && n > 0 ? String.fromCodePoint(n) : match;
+    }
+    return NAMED_ENTITIES[code.toLowerCase()] ?? match;
+  });
+  return decoded.replace(/\s+/g, " ").trim() || null;
+}
+
+/** Provincia a partir de los dos primeros dígitos del código postal. */
+const POSTAL_PROVINCES: Record<string, string> = {
+  "01": "Araba/Álava", "02": "Albacete", "03": "Alicante/Alacant", "04": "Almería", "05": "Ávila",
+  "06": "Badajoz", "07": "Illes Balears", "08": "Barcelona", "09": "Burgos", "10": "Cáceres",
+  "11": "Cádiz", "12": "Castellón/Castelló", "13": "Ciudad Real", "14": "Córdoba", "15": "A Coruña",
+  "16": "Cuenca", "17": "Girona", "18": "Granada", "19": "Guadalajara", "20": "Gipuzkoa",
+  "21": "Huelva", "22": "Huesca", "23": "Jaén", "24": "León", "25": "Lleida", "26": "La Rioja",
+  "27": "Lugo", "28": "Madrid", "29": "Málaga", "30": "Murcia", "31": "Navarra", "32": "Ourense",
+  "33": "Asturias", "34": "Palencia", "35": "Las Palmas", "36": "Pontevedra", "37": "Salamanca",
+  "38": "Santa Cruz de Tenerife", "39": "Cantabria", "40": "Segovia", "41": "Sevilla", "42": "Soria",
+  "43": "Tarragona", "44": "Teruel", "45": "Toledo", "46": "Valencia/València", "47": "Valladolid",
+  "48": "Bizkaia", "49": "Zamora", "50": "Zaragoza", "51": "Ceuta", "52": "Melilla",
+};
+export function provinceFromPostalCode(code: string | null): string | null {
+  const digits = (code || "").replace(/\D/g, "");
+  return digits.length === 5 ? POSTAL_PROVINCES[digits.slice(0, 2)] ?? null : null;
+}
+/** Nombres de ámbito que no son una provincia (se usa el código postal en su lugar). */
+const NOT_A_PROVINCE = /^(españa|spain|comunidad de madrid|catalu(ñ|ny)a|andaluc[ií]a|pa[ií]s vasco|euskadi|galicia|castilla y le[oó]n|castilla-la mancha|comunitat valenciana|comunidad valenciana|arag[oó]n|extremadura|canarias|regi[oó]n de murcia|principado de asturias|comunidad foral de navarra|illes balears|varias provincias|nacional)$/i;
+
 function at(node: unknown, ...path: string[]): unknown {
   let current: unknown = node;
   for (const key of path) {
@@ -210,7 +251,14 @@ export function parseEntry(entry: Node): ParsedTender | null {
   const process = at(folder, "TenderingProcess");
   const budget = at(project, "BudgetAmount");
   const location = at(project, "RealizedLocation");
-  const title = text(at(project, "Name")) || text(entry.title) || "(Sin título)";
+  const title = cleanText(text(at(project, "Name")) || text(entry.title)) || "(Sin título)";
+  const party = at(folder, "LocatedContractingParty", "Party");
+  const realizedProvince = cleanText(text(at(location, "CountrySubentity")));
+  const province =
+    (realizedProvince && !NOT_A_PROVINCE.test(realizedProvince) ? realizedProvince : null) ??
+    provinceFromPostalCode(text(at(location, "Address", "PostalZone"))) ??
+    provinceFromPostalCode(text(at(party, "PostalAddress", "PostalZone"))) ??
+    realizedProvince;
   const cpvCodes = cpvList(project, at(folder, "ProcurementProjectLot"));
   const procedureCode = text(at(process, "ProcedureCode"));
   const estimatedAmount = amount(at(budget, "EstimatedOverallContractAmount"));
@@ -222,15 +270,17 @@ export function parseEntry(entry: Node): ParsedTender | null {
     title,
     url: linkHref(entry),
     status: text(at(folder, "ContractFolderStatusCode")),
-    contractingBody: text(at(folder, "LocatedContractingParty", "Party", "PartyName", "Name")),
+    contractingBody: cleanText(text(at(party, "PartyName", "Name"))),
     contractType: text(at(project, "TypeCode")),
     procedureCode,
     estimatedAmount,
     budgetWithoutTax,
     budgetWithTax: amount(at(budget, "TotalAmount")),
     cpvCodes,
-    province: text(at(location, "CountrySubentity")),
-    city: text(at(location, "Address", "CityName")),
+    province,
+    city:
+      cleanText(text(at(location, "Address", "CityName"))) ??
+      cleanText(text(at(party, "PostalAddress", "CityName"))),
     deadline: deadlineOf(
       text(at(process, "TenderSubmissionDeadlinePeriod", "EndDate")),
       text(at(process, "TenderSubmissionDeadlinePeriod", "EndTime")),
@@ -238,7 +288,7 @@ export function parseEntry(entry: Node): ParsedTender | null {
     updatedAt: date(text(entry.updated)),
     kind: classifyKind(procedureCode, reference),
     isSoftware: isSoftwareTender(cpvCodes, title),
-    summary: text(entry.summary),
+    summary: cleanText(text(entry.summary)),
   };
 }
 
