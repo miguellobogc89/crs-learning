@@ -13,6 +13,13 @@ function fail(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
+/** Prisma P2021: la tabla no existe (falta aplicar la migración). */
+function missingTables(e: unknown) {
+  return !!e && typeof e === "object" && (e as { code?: unknown }).code === "P2021";
+}
+const MIGRATION_HINT =
+  "Faltan las tablas de licitaciones en la base de datos: ejecuta la migración prisma/migrations/20261105100000_public_tenders/migration.sql";
+
 export async function GET(req: Request, route: RouteContext) {
   const ctx = await connectorContext();
   if (!ctx) return fail("No autenticado", 401);
@@ -29,7 +36,8 @@ export async function GET(req: Request, route: RouteContext) {
     return fail("No encontrado", 404);
   } catch (e) {
     console.error("[tenders] GET", action, e);
-    return fail("No se pudieron cargar las licitaciones", 500);
+    if (missingTables(e)) return fail(MIGRATION_HINT, 500);
+    return fail(`No se pudieron cargar las licitaciones: ${e instanceof Error ? e.message.slice(0, 300) : "error desconocido"}`, 500);
   }
 }
 
@@ -53,6 +61,7 @@ export async function POST(req: Request, route: RouteContext) {
     return fail("No encontrado", 404);
   } catch (e) {
     console.error("[tenders] POST", action, e);
+    if (missingTables(e)) return fail(MIGRATION_HINT, 500);
     return fail(e instanceof Error ? e.message : "No se pudo completar la operación", 500);
   }
 }
