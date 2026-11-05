@@ -172,7 +172,7 @@ export async function listTenders(workspaceId: string, f: TenderFilters, now = n
 export async function saveReview(
   workspaceId: string,
   userId: string,
-  input: { tenderId: unknown; status: unknown; notes: unknown },
+  input: Record<string, unknown>,
 ) {
   const tenderId = typeof input.tenderId === "string" ? input.tenderId : "";
   if (!/^[0-9a-f-]{36}$/i.test(tenderId)) throw new Error("Licitación no válida");
