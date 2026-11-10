@@ -22,7 +22,7 @@ import {
 } from "@/lib/trading/service";
 import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
 import { decideProposal, getCommittee, runCommittee } from "@/lib/trading/committee/service";
-import { getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, Trading212Error } from "@/lib/trading/trading212";
+import { findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, Trading212Error } from "@/lib/trading/trading212";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,7 +57,7 @@ export async function GET(req: Request, route: RouteContext) {
     if (action === "news") return NextResponse.json({ ...(await listNews(normalizeNewsFilters(url.searchParams))), canManage: ctx.canManage });
     if (action === "committee") return NextResponse.json({ ...(await getCommittee(ctx.workspaceId)), canManage: ctx.canManage });
     if (action === "library") return NextResponse.json(await getLibrary(url.searchParams.get("market") === "crypto" ? "crypto" : "bolsa"));
-    if (action === "trading212/account" || action === "trading212/positions" || action === "trading212/orders") {
+    if (action === "trading212/account" || action === "trading212/positions" || action === "trading212/orders" || action === "trading212/instruments") {
       // Clave personal de Demo: no debe exponerse en entornos desplegados ni a usuarios del workspace.
       if (process.env.NODE_ENV !== "development") return fail("Solo disponible en desarrollo local", 403);
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede consultar Trading 212", 403);
@@ -66,7 +66,9 @@ export async function GET(req: Request, route: RouteContext) {
           ? await getTrading212DemoSummary()
           : action === "trading212/positions"
             ? await getTrading212DemoPositions()
-            : await getTrading212DemoOrders();
+            : action === "trading212/orders"
+              ? await getTrading212DemoOrders()
+              : await findTrading212DemoInstruments(url.searchParams.get("symbol") || "");
         return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
       } catch (e) {
         if (e instanceof Trading212Error) return fail(e.message, e.status);
