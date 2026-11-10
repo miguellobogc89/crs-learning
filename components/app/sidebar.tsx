@@ -16,6 +16,7 @@ import {
   Home,
   Inbox,
   Landmark,
+  ChartCandlestick,
   Library,
   Settings,
   ShieldCheck,
@@ -54,6 +55,7 @@ const navItems = [
   },
   { href: "/whatsapp", icon: MessageCircle, label: "WhatsApp" },
   { href: "/tenders", icon: Landmark, label: "Licitaciones" },
+  { href: "/trading", icon: ChartCandlestick, label: "Trading" },
   {
     href: "/courses",
     icon: GraduationCap,

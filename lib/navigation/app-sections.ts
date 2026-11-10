@@ -8,6 +8,7 @@ import {
   Home,
   Inbox,
   Landmark,
+  ChartCandlestick,
   Library,
   Settings,
   UserRound,
@@ -18,6 +19,7 @@ import {
 export const APP_SECTIONS = {
   whatsapp: { label: "WhatsApp", href: "/whatsapp", icon: MessageCircle },
   tenders: { label: "Licitaciones", href: "/tenders", icon: Landmark },
+  trading: { label: "Trading", href: "/trading", icon: ChartCandlestick },
   dashboard: {
     label: "Inicio",
     href: "/dashboard",

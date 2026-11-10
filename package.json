@@ -26,7 +26,8 @@
     "test:knowledge:templates": "node --test tests/knowledge/templates.test.mjs",
     "test:assistant": "node --test tests/assistant/data-query.test.mjs tests/assistant/changes-plan.test.mjs tests/assistant/changes-apply.test.mjs",
     "test:whatsapp": "node --test tests/whatsapp/*.test.mjs",
-    "test:tenders": "node --test tests/tenders/*.test.mjs"
+    "test:tenders": "node --test tests/tenders/*.test.mjs",
+    "test:trading": "node --test tests/trading/*.test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

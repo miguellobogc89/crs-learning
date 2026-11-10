@@ -2179,3 +2179,127 @@ model tender_sync_state {
   last_run_at DateTime? @db.Timestamptz(6)
   last_result Json @default("{}")
 }
+/// Valor cotizado que sigue el módulo de trading (acciones e índices). Global, compartido por todos los espacios.
+model market_instruments {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  symbol String @unique
+  name String
+  sector String?
+  market String @default("IBEX35")
+  is_index Boolean @default(false)
+  active Boolean @default(true)
+  currency String?
+  last_candle_at DateTime? @db.Date
+  last_sync_at DateTime? @db.Timestamptz(6)
+  last_error String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  candles market_candles[]
+  positions trading_positions[]
+}
+/// Vela diaria de un valor.
+model market_candles {
+  instrument_id String @db.Uuid
+  day DateTime @db.Date
+  open Float
+  high Float
+  low Float
+  close Float
+  volume BigInt @default(0)
+  instrument market_instruments @relation(fields: [instrument_id], references: [id], onDelete: Cascade)
+  @@id([instrument_id, day])
+}
+/// Resultado del backtest de las figuras sobre todo el universo. Se guarda una fila por ejecución.
+model market_backtests {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  as_of DateTime @db.Date
+  instruments Int
+  trades Int
+  stats Json @default("{}")
+  params Json @default("{}")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  @@index([created_at])
+}
+/// Cartera virtual de un espacio de trabajo y sus reglas de riesgo.
+model trading_accounts {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @unique @db.Uuid
+  name String @default("Cartera virtual")
+  initial_capital Float @default(10000)
+  cash Float @default(10000)
+  risk_per_trade_pct Float @default(1)
+  max_position_pct Float @default(20)
+  max_open_positions Int @default(8)
+  commission_pct Float @default(0.1)
+  commission_min Float @default(3)
+  slippage_bps Float @default(5)
+  allow_short Boolean @default(false)
+  auto_trade Boolean @default(false)
+  min_score Int @default(65)
+  breakeven Boolean @default(true)
+  patterns String[] @default([])
+  last_processed_day DateTime? @db.Date
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  positions trading_positions[]
+  transactions trading_transactions[]
+  equity trading_equity[]
+}
+/// Posición de la cartera virtual: pendiente (se ejecuta en la próxima apertura), abierta, cerrada o cancelada.
+model trading_positions {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id String @db.Uuid
+  workspace_id String @db.Uuid
+  instrument_id String @db.Uuid
+  symbol String
+  direction String
+  status String @default("pendiente")
+  quantity Int
+  planned_entry Float
+  entry_price Float?
+  entry_day DateTime? @db.Date
+  stop Float
+  initial_stop Float
+  target Float
+  max_hold_until DateTime? @db.Date
+  exit_price Float?
+  exit_day DateTime? @db.Date
+  exit_reason String?
+  fees Float @default(0)
+  pnl Float?
+  r_multiple Float?
+  pattern String?
+  signal_key String?
+  score Int?
+  source String @default("manual")
+  notes String?
+  created_by String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  account trading_accounts @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  instrument market_instruments @relation(fields: [instrument_id], references: [id])
+  @@index([account_id, status])
+  @@index([workspace_id])
+}
+/// Movimientos de caja de la cartera virtual.
+model trading_transactions {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id String @db.Uuid
+  position_id String? @db.Uuid
+  kind String
+  amount Float
+  description String
+  day DateTime? @db.Date
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  account trading_accounts @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  @@index([account_id, created_at])
+}
+/// Patrimonio de la cartera virtual al cierre de cada sesión.
+model trading_equity {
+  account_id String @db.Uuid
+  day DateTime @db.Date
+  equity Float
+  cash Float
+  invested Float
+  account trading_accounts @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  @@id([account_id, day])
+}
