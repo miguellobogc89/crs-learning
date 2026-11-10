@@ -11,6 +11,15 @@ export type Trading212DemoSummary = {
   investedValue: number;
 };
 
+export type Trading212DemoPosition = {
+  ticker: string | null;
+  name: string | null;
+  quantity: number;
+  quantityAvailableForTrading: number | null;
+  averagePricePaid: number;
+  currentPrice: number;
+};
+
 export class Trading212Error extends Error {
   constructor(message: string, public readonly status = 502) {
     super(message);
@@ -18,8 +27,7 @@ export class Trading212Error extends Error {
   }
 }
 
-/** Consulta exclusivamente el saldo Demo, sin exponer credenciales ni el identificador de cuenta. */
-export async function getTrading212DemoSummary(): Promise<Trading212DemoSummary> {
+async function fetchDemo(path: "/equity/account/summary" | "/equity/positions"): Promise<unknown> {
   if (process.env.TRADING212_ENV !== "demo") {
     throw new Trading212Error("Trading 212 debe estar configurado en modo demo", 503);
   }
@@ -31,7 +39,7 @@ export async function getTrading212DemoSummary(): Promise<Trading212DemoSummary>
 
   let response: Response;
   try {
-    response = await fetch(`${DEMO_API}/equity/account/summary`, {
+    response = await fetch(`${DEMO_API}${path}`, {
       method: "GET",
       headers: {
         Authorization: `Basic ${Buffer.from(`${key}:${secret}`).toString("base64")}`,
@@ -54,19 +62,23 @@ export async function getTrading212DemoSummary(): Promise<Trading212DemoSummary>
     throw new Trading212Error(`Trading 212 devolvió un error HTTP ${response.status}`);
   }
 
-  let body: unknown;
   try {
-    body = await response.json();
+    return await response.json();
   } catch {
     throw new Trading212Error("Trading 212 devolvió una respuesta no válida");
   }
-  const data = body as {
+}
+
+const isAmount = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+/** Consulta exclusivamente el saldo Demo, sin exponer credenciales ni el identificador de cuenta. */
+export async function getTrading212DemoSummary(): Promise<Trading212DemoSummary> {
+  const data = (await fetchDemo("/equity/account/summary")) as {
     currency?: unknown;
     totalValue?: unknown;
     cash?: { availableToTrade?: unknown };
     investments?: { currentValue?: unknown };
   } | null;
-  const isAmount = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
   if (
     !data ||
@@ -85,4 +97,36 @@ export async function getTrading212DemoSummary(): Promise<Trading212DemoSummary>
     totalValue: data.totalValue,
     investedValue: data.investments.currentValue,
   };
+}
+
+/** Posiciones abiertas en Demo. No modifica órdenes ni la cartera virtual. */
+export async function getTrading212DemoPositions(): Promise<{
+  environment: "demo";
+  items: Trading212DemoPosition[];
+}> {
+  const data = await fetchDemo("/equity/positions");
+  if (!Array.isArray(data)) throw new Trading212Error("Trading 212 devolvió posiciones no válidas");
+
+  const items: Trading212DemoPosition[] = data.map((value: unknown) => {
+    const p = value as {
+      instrument?: { ticker?: unknown; name?: unknown };
+      quantity?: unknown;
+      quantityAvailableForTrading?: unknown;
+      averagePricePaid?: unknown;
+      currentPrice?: unknown;
+    } | null;
+    if (!p || !isAmount(p.quantity) || !isAmount(p.averagePricePaid) || !isAmount(p.currentPrice)) {
+      throw new Trading212Error("Trading 212 devolvió una posición incompleta");
+    }
+    return {
+      ticker: typeof p.instrument?.ticker === "string" ? p.instrument.ticker : null,
+      name: typeof p.instrument?.name === "string" ? p.instrument.name : null,
+      quantity: p.quantity,
+      quantityAvailableForTrading: isAmount(p.quantityAvailableForTrading) ? p.quantityAvailableForTrading : null,
+      averagePricePaid: p.averagePricePaid,
+      currentPrice: p.currentPrice,
+    };
+  });
+
+  return { environment: "demo", items };
 }
