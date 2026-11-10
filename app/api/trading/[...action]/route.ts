@@ -22,7 +22,7 @@ import {
 } from "@/lib/trading/service";
 import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
 import { decideProposal, getCommittee, runCommittee } from "@/lib/trading/committee/service";
-import { buyOneIberdrolaInTrading212Demo, findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, sellTrading212DemoPosition, Trading212Error } from "@/lib/trading/trading212";
+import { buyOneIberdrolaInTrading212Demo, cancelTrading212DemoOrder, findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, placeTrading212DemoConditionalOrder, sellTrading212DemoPosition, Trading212Error, type Trading212ConditionalKind } from "@/lib/trading/trading212";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,6 +109,39 @@ export async function POST(req: Request, route: RouteContext) {
     if (raw.length > 16_384) return fail("Petición demasiado grande", 413);
     const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>;
 
+    if (action === "trading212/conditional" || action === "trading212/cancel-order") {
+      if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
+        return fail("Solo disponible para Trading 212 Demo en localhost", 403);
+      }
+      if (!ctx.canManage) return fail("Solo el propietario o administrador puede operar en la Demo", 403);
+      if (body.confirmDemo !== true) return fail("Falta la confirmación explícita de operación Demo", 400);
+      try {
+        const result = action === "trading212/conditional"
+          ? await (async () => {
+              const kind = body.kind;
+              if (kind !== "sell_stop" && kind !== "sell_limit" &&
+                  kind !== "buy_limit" && kind !== "buy_stop") return fail("Tipo de orden no permitido", 400);
+              if (typeof body.ticker !== "string" || typeof body.quantity !== "number" ||
+                  typeof body.price !== "number" || !Number.isFinite(body.quantity) || !Number.isFinite(body.price)) {
+                return fail("Faltan instrumento, cantidad o precio válidos", 400);
+              }
+              return placeTrading212DemoConditionalOrder({
+                kind: kind as Trading212ConditionalKind,
+                ticker: body.ticker,
+                quantity: body.quantity,
+                price: body.price,
+              });
+            })()
+          : await (async () => {
+              if (typeof body.id !== "number" || !Number.isSafeInteger(body.id)) return fail("ID de orden inválido", 400);
+              return cancelTrading212DemoOrder(body.id);
+            })();
+        return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+      } catch (e) {
+        if (e instanceof Trading212Error) return fail(e.message, e.status);
+        throw e;
+      }
+    }
     if (action === "trading212/sell") {
       if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
         return fail("Solo se permiten ventas en Trading 212 Demo en localhost", 403);
