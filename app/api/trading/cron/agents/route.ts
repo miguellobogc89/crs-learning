@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`)
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {
-    return NextResponse.json(await runAgentsDaily(55_000));
+    return NextResponse.json(await runAgentsDaily());
   } catch (e) {
     console.error("[trading] cron agentes", e);
     return NextResponse.json({ error: "Falló la reunión de los agentes" }, { status: 500 });

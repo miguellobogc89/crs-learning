@@ -18,6 +18,7 @@ export type TradingStatus = {
   openPositions: number;
   pendingOrders: number;
   autoTrade: boolean;
+  opened: boolean;
   canManage: boolean;
 };
 
@@ -136,6 +137,12 @@ export function TradingNavigation() {
         <div className="mx-3 mb-3 space-y-3 border border-slate-200 bg-white p-3 text-sm">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Mi patrimonio virtual</div>
+            {status && !status.opened ? (
+              <Link href="/trading/inicio" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">
+                Abre tu cuenta →
+              </Link>
+            ) : (
+            <>
             <div className="mt-0.5 flex items-baseline gap-2">
               <span className="text-lg font-semibold tabular-nums text-slate-900">{status ? eur0(status.equity) : "—"}</span>
               {status && <span className={`text-xs ${tone(status.returnPct)}`}>{pct(status.returnPct)}</span>}
@@ -145,6 +152,8 @@ export function TradingNavigation() {
                 {eur0(status.cash)} en efectivo · {status.openPositions} abiertas
                 {status.pendingOrders ? ` · ${status.pendingOrders} pendientes` : ""}
               </div>
+            )}
+            </>
             )}
             {status?.autoTrade && (
               <div className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-blue-700">

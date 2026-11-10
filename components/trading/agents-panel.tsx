@@ -2,14 +2,16 @@
 // Agentes: tres gestores de IA con la misma información, distinto carácter y su propia cartera virtual.
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot, CheckCircle2, ChevronDown, Loader2, Play, RotateCcw, XCircle } from "lucide-react";
+import { Bot, CheckCircle2, ChevronDown, Copy, Loader2, Play, RotateCcw, XCircle } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
-import { api, dayFmt, errorText, eur, eur0, ghost, int, panel, pct, primary, th, tone } from "./format";
+import type { getPortfolio } from "@/lib/trading/agents/copy";
+import { api, dayFmt, errorText, eur, eur0, field, ghost, int, panel, pct, primary, th, tone } from "./format";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { EquityCurve } from "./portfolio-panel";
-import { Rich } from "./ui";
+import { Modal, Rich } from "./ui";
 
-type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean };
+type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean; canCopy: boolean };
+type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
 type Agent = Data["agents"][number];
 
 const PROFILE_TONE: Record<string, string> = {
@@ -99,9 +101,11 @@ export function AgentsPanel() {
               <b>su carácter</b>, con {eur0(data.agents[0]?.summary.initialCapital)} virtuales. Se reúnen solos cada día laborable a las 19:15.
             </span>
           </p>
-          <button type="button" className={primary} disabled={!data.canManage || running} onClick={() => void meet(data.agents.map((a) => a.key))}>
-            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Reunir a los agentes ahora
-          </button>
+          {data.canManage && (
+            <button type="button" className={ghost} disabled={running} onClick={() => void meet(data.agents.map((a) => a.key))}>
+              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Reunir a los agentes ahora
+            </button>
+          )}
         </div>
         {run && (
           <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-100 pt-3 text-sm">
@@ -164,7 +168,14 @@ export function AgentsPanel() {
                   </div>
                   <p className="mt-1 text-xs leading-snug text-slate-500">{a.tagline}</p>
                 </div>
-                <span className="text-xs font-semibold text-slate-400">#{k + 1}</span>
+                <span className="flex flex-col items-end gap-1">
+                  <span className="text-xs font-semibold text-slate-400">#{k + 1}</span>
+                  {a.copyWeightPct !== null && (
+                    <span className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700">
+                      <Copy className="h-3 w-3" /> copias {a.copyWeightPct} %
+                    </span>
+                  )}
+                </span>
               </div>
               <div className="mt-3 flex items-baseline gap-2 px-4">
                 <span className={`text-2xl font-semibold tabular-nums ${tone(a.summary.returnPct)}`}>{pct(a.summary.returnPct)}</span>
@@ -189,13 +200,36 @@ export function AgentsPanel() {
       </div>
 
       {/* Ficha del agente */}
-      <AgentDetail key={agent.key} agent={agent} canManage={data.canManage} busy={running} onMeet={() => void meet([agent.key])} onReset={() => void reset(agent)} />
+      <AgentDetail
+        key={agent.key}
+        agent={agent}
+        canManage={data.canManage}
+        canCopy={data.canCopy}
+        busy={running}
+        onMeet={() => void meet([agent.key])}
+        onReset={() => void reset(agent)}
+      />
     </div>
   );
 }
 
-function AgentDetail({ agent: a, canManage, busy, onMeet, onReset }: { agent: Agent; canManage: boolean; busy: boolean; onMeet: () => void; onReset: () => void }) {
+function AgentDetail({
+  agent: a,
+  canManage,
+  canCopy,
+  busy,
+  onMeet,
+  onReset,
+}: {
+  agent: Agent;
+  canManage: boolean;
+  canCopy: boolean;
+  busy: boolean;
+  onMeet: () => void;
+  onReset: () => void;
+}) {
   const [showAll, setShowAll] = useState(false);
+  const [copying, setCopying] = useState(false);
   const lastRunId = a.lastRun?.id;
   const latest = a.proposals.filter((p) => p.runId === lastRunId);
   const older = a.proposals.filter((p) => p.runId !== lastRunId && p.status !== "rechazada" && p.action !== "vigilar");
@@ -216,14 +250,22 @@ function AgentDetail({ agent: a, canManage, busy, onMeet, onReset }: { agent: Ag
             convicción mínima {a.rules.minConviction} de 5 · {a.rules.buyInBearMarket ? "puede comprar con el mercado bajista" : "no compra con el mercado bajista"}
           </p>
         </div>
-        <div className="flex gap-2">
-          <button type="button" className={ghost} disabled={!canManage || busy} onClick={onMeet}>
-            <Play className="h-4 w-4" /> Reunir solo a {a.name}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={primary} disabled={!canCopy} onClick={() => setCopying(true)}>
+            <Copy className="h-4 w-4" /> {a.copyWeightPct !== null ? `Lo copias con el ${a.copyWeightPct} % · cambiar` : `Copiar a ${a.name}`}
           </button>
-          <button type="button" className={ghost} disabled={!canManage || busy} onClick={onReset} title="Borrar sus operaciones y empezar de cero">
-            <RotateCcw className="h-4 w-4" />
-          </button>
+          {canManage && (
+            <>
+              <button type="button" className={ghost} disabled={busy} onClick={onMeet}>
+                <Play className="h-4 w-4" /> Reunir solo a {a.name}
+              </button>
+              <button type="button" className={ghost} disabled={busy} onClick={onReset} title="Borrar sus operaciones y empezar de cero">
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            </>
+          )}
         </div>
+        {copying && <CopyModal agent={a} onClose={() => setCopying(false)} />}
       </header>
 
       <dl className="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-100 sm:grid-cols-4">
@@ -364,5 +406,131 @@ function Decision({ p, pending }: { p: Agent["proposals"][number]; pending: bool
       </p>
       {p.rejection && <p className="mt-0.5 text-xs text-slate-500">{p.rejection}</p>}
     </li>
+  );
+}
+
+function CopyModal({ agent: a, onClose }: { agent: Agent; onClose: () => void }) {
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [weight, setWeight] = useState(String(a.copyWeightPct ?? 25));
+  const [mirror, setMirror] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  useEffect(() => {
+    api<Portfolio>("portfolio").then(setPortfolio, (e) => setError(errorText(e)));
+  }, []);
+  const active = a.copyWeightPct !== null;
+  const w = Number(weight.replace(",", "."));
+  const others = portfolio ? portfolio.copies.filter((c) => c.agent !== a.key).reduce((s, c) => s + c.weightPct, 0) : 0;
+  const amount = portfolio ? (portfolio.total.equity * (w || 0)) / 100 : 0;
+  const valid = w >= 1 && w <= 100 - others;
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await api<{ weight: number; mirrored: number }>("copy/set", { agent: a.key, weightPct: w, mirror });
+      setDone(
+        active
+          ? `Ahora copias a ${a.name} con el ${r.weight} % de tu patrimonio.`
+          : `Ya copias a ${a.name}.${r.mirrored ? ` Se han replicado ${r.mirrored} ${r.mirrored === 1 ? "posición" : "posiciones"} suyas.` : ""} A partir de ahora harás lo mismo que él, en proporción.`,
+      );
+      refreshTrading();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const stop = async () => {
+    if (!window.confirm(`¿Dejar de copiar a ${a.name}? Se venden sus posiciones en tu copia al último precio y el dinero vuelve a tu cartera.`)) return;
+    setSaving(true);
+    try {
+      await api("copy/stop", { agent: a.key });
+      setDone(`Has dejado de copiar a ${a.name}. El dinero ha vuelto a tu cartera.`);
+      refreshTrading();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={active ? `Copia de ${a.name}` : `Copiar a ${a.name}`}
+      subtitle={`Perfil ${a.profile}`}
+      footer={
+        done ? (
+          <button type="button" className={primary} onClick={onClose}>
+            Hecho
+          </button>
+        ) : (
+          <>
+            {active && (
+              <button type="button" className={`${ghost} mr-auto text-red-700`} disabled={saving} onClick={() => void stop()}>
+                Dejar de copiar
+              </button>
+            )}
+            <button type="button" className={ghost} onClick={onClose}>
+              Cancelar
+            </button>
+            <button type="button" className={primary} disabled={!valid || saving || !portfolio?.opened} onClick={() => void save()}>
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />} {active ? "Guardar" : "Empezar a copiar"}
+            </button>
+          </>
+        )
+      }
+    >
+      {done ? (
+        <p className="text-sm text-slate-700">{done}</p>
+      ) : !portfolio ? (
+        error ? <p className="text-sm text-red-700">{error}</p> : <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+      ) : !portfolio.opened ? (
+        <p className="text-sm text-slate-700">Primero abre tu cuenta en Inicio y elige con cuánto dinero empiezas.</p>
+      ) : (
+        <div className="space-y-4 text-sm text-slate-700">
+          <p>
+            Asignas una parte de tu patrimonio a {a.name}. Con ese dinero, la app hace <b>exactamente lo que haga él, en proporción</b>: si mete el 20 % de
+            su cartera en Repsol, tú metes el 20 % de tu parte. Si vende, vendes; si sube el stop, lo subes.
+          </p>
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600">¿Qué parte de tu patrimonio le das?</span>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="range"
+                min={1}
+                max={Math.max(1, 100 - others)}
+                value={Number.isFinite(w) ? w : 1}
+                onChange={(e) => setWeight(e.target.value)}
+                className="flex-1"
+                aria-label="Peso de la copia"
+              />
+              <input className={`${field} w-20 text-right tabular-nums`} value={weight} onChange={(e) => setWeight(e.target.value)} aria-label="Peso en %" />
+              <span>%</span>
+            </div>
+          </label>
+          <p className="border border-slate-200 bg-slate-50 px-3 py-2">
+            Son unos <b>{eur0(amount)}</b> de tus {eur0(portfolio.total.equity)}.{" "}
+            {others > 0 && `Ya tienes el ${others} % en otras copias; el máximo aquí es ${100 - others} %. `}
+            Solo se mueve dinero que tengas en efectivo: si está invertido, la copia empieza con lo que haya libre.
+          </p>
+          {!valid && <p className="text-xs text-amber-700">Elige entre 1 % y {100 - others} %.</p>}
+          {!active && (
+            <label className="flex items-start gap-2">
+              <input type="checkbox" className="mt-1" checked={mirror} onChange={(e) => setMirror(e.target.checked)} />
+              <span>
+                <b>Igualar su cartera ahora</b>: compra en proporción lo que {a.name} ya tiene ({a.positions.length}{" "}
+                {a.positions.length === 1 ? "posición" : "posiciones"}). Si no, solo copias lo que haga a partir de hoy.
+              </span>
+            </label>
+          )}
+          <p className="text-xs text-slate-500">Se usan fracciones de acción, como en Trading 212, para que la proporción sea exacta aunque la cantidad sea pequeña.</p>
+          {error && <p className="text-red-700">{error}</p>}
+        </div>
+      )}
+    </Modal>
   );
 }

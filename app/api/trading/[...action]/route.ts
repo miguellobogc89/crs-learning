@@ -3,9 +3,9 @@ import { connectorContext } from "@/lib/connectors/context";
 import {
   accountDetail,
   closePosition,
+  openAccount,
   parseOrder,
   placeOrder,
-  resetAccount,
   updateSettings,
   updateStops,
 } from "@/lib/trading/accounts";
@@ -22,7 +22,8 @@ import {
 } from "@/lib/trading/service";
 import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
 import { decideProposal, executeProposalOnBroker, getCommittee, runCommittee } from "@/lib/trading/committee/service";
-import { getAgents, resetAgent, runAgent } from "@/lib/trading/agents/service";
+import { canDirectAgents, getAgents, resetAgent, runAgent } from "@/lib/trading/agents/service";
+import { getPortfolio, setCopy, stopCopy } from "@/lib/trading/agents/copy";
 import { getOpportunities } from "@/lib/trading/agents/opportunities";
 import { brokerLinks, brokerStatus, linkInstruments, listBrackets, runBrokerGuardian, setBrokerAutonomy } from "@/lib/trading/broker/service";
 import { buyOneIberdrolaInTrading212Demo, cancelTrading212DemoOrder, findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, placeTrading212DemoConditionalOrder, sellTrading212DemoPosition, Trading212Error, type Trading212ConditionalKind } from "@/lib/trading/trading212";
@@ -89,7 +90,8 @@ export async function GET(req: Request, route: RouteContext) {
     }
     if (action === "account") return NextResponse.json(await accountDetail(ctx.workspaceId));
     if (action === "opportunities") return NextResponse.json(await getOpportunities(ctx.workspaceId));
-    if (action === "agents") return NextResponse.json({ ...(await getAgents(ctx.workspaceId)), canManage: ctx.canManage });
+    if (action === "agents") return NextResponse.json({ ...(await getAgents(ctx.workspaceId)), canManage: canDirectAgents(ctx.workspaceId), canCopy: ctx.canManage });
+    if (action === "portfolio") return NextResponse.json(await getPortfolio(ctx.workspaceId));
     if (action === "instruments") {
       const list = await listInstruments();
       return NextResponse.json({
@@ -198,10 +200,24 @@ export async function POST(req: Request, route: RouteContext) {
       return NextResponse.json(await syncNews(45_000));
     }
     if (action === "agents/run" || action === "agents/reset") {
-      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede dirigir a los agentes", 403);
+      if (!canDirectAgents(ctx.workspaceId)) return fail("Los agentes son de toda la plataforma: solo los dirige su administrador", 403);
       const agent = String(body.agent ?? "");
-      if (action === "agents/run") return NextResponse.json(await runAgent(ctx.workspaceId, agent, ctx.userId));
-      await resetAgent(ctx.workspaceId, agent);
+      if (action === "agents/run") return NextResponse.json(await runAgent(agent, ctx.userId));
+      await resetAgent(agent);
+      return NextResponse.json({ ok: true });
+    }
+    if (action === "account/open") {
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede abrir la cuenta del espacio", 403);
+      await openAccount(ctx.workspaceId, body.capital);
+      return NextResponse.json({ ok: true });
+    }
+    if (action === "copy/set") {
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede cambiar las copias", 403);
+      return NextResponse.json(await setCopy(ctx.workspaceId, body.agent, body.weightPct, body.mirror === true));
+    }
+    if (action === "copy/stop") {
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede cambiar las copias", 403);
+      await stopCopy(ctx.workspaceId, body.agent);
       return NextResponse.json({ ok: true });
     }
     if (action === "committee/run") {
@@ -245,7 +261,7 @@ export async function POST(req: Request, route: RouteContext) {
     }
     if (action === "reset") {
       if (body.confirm !== true) return fail("Falta la confirmación");
-      await resetAccount(ctx.workspaceId, body.capital);
+      await openAccount(ctx.workspaceId, body.capital);
       return NextResponse.json({ ok: true });
     }
     if (action === "instruments") {

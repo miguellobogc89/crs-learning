@@ -4,6 +4,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { accountState, costOf, ensureAccount, OPEN_STATUSES, placeOrder, processAccount } from "./accounts";
+import { getPortfolio } from "./agents/copy";
 import { analyze, backtestSeries } from "./backtest";
 import { DEFAULT_COSTS } from "./risk";
 import { newsForSymbol, syncNews, type NewsSyncSummary } from "./news/service";
@@ -370,8 +371,8 @@ export type { Candle, PatternKey };
 // ---------------------------------------------------------------------------
 export async function getStatus(workspaceId: string) {
   await ensureUniverse();
-  const [state, index, info, withData] = await Promise.all([
-    accountState(workspaceId),
+  const [portfolio, index, info, withData] = await Promise.all([
+    getPortfolio(workspaceId),
     prisma.market_instruments.findFirst({ where: { is_index: true, active: true } }),
     prisma.market_instruments.aggregate({ _max: { last_candle_at: true }, _count: { _all: true }, where: { active: true } }),
     prisma.market_instruments.count({ where: { active: true, last_candle_at: { not: null } } }),
@@ -387,19 +388,21 @@ export async function getStatus(workspaceId: string) {
     const c = await loadRecent(btc.id, 320);
     if (c.length) cryptoRegime = regimeFrom(c, indicatorBundle(c));
   }
-  const s = state.summary;
+  const s = portfolio.main.summary;
+  const all = [...portfolio.main.positions, ...portfolio.copies.flatMap((c) => c.positions)];
   return {
     regime,
     cryptoRegime,
     asOf: info._max.last_candle_at ? dayKey(info._max.last_candle_at) : null,
     instruments: info._count._all,
     instrumentsWithData: withData,
-    equity: s.equity,
-    cash: s.cash,
-    returnPct: s.returnPct,
-    openPositions: state.positions.filter((p) => p.status === "abierta").length,
-    pendingOrders: state.positions.filter((p) => p.status === "pendiente").length,
+    equity: portfolio.total.equity,
+    cash: portfolio.total.cash,
+    returnPct: portfolio.total.returnPct,
+    openPositions: all.filter((p) => p.status === "abierta").length,
+    pendingOrders: all.filter((p) => p.status === "pendiente").length,
     autoTrade: s.settings.autoTrade,
+    opened: s.opened,
   };
 }
 

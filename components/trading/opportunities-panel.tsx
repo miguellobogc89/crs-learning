@@ -8,6 +8,7 @@ import { api, errorText, eur, eur0, ghost, int, panel, pct, primary } from "./fo
 import { AGENT_DOT, ago } from "./home-panel";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { ConfirmOrderModal, EvidenceList, TradeInfoModal, type TradeIdea } from "./trade-modals";
+import { OpenAccount } from "./open-account";
 import { Rich } from "./ui";
 
 type Data = Awaited<ReturnType<typeof getOpportunities>>;
@@ -103,6 +104,7 @@ export function OpportunitiesPanel() {
         <b>tu cartera</b>: arriesgas como mucho el {pct(data.account.riskPct, 1, false)} de tu patrimonio en cada operación.
       </p>
       {error && <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {!data.account.opened && <OpenAccount compact />}
 
       {data.sells.length > 0 && (
         <section className="border border-amber-200 bg-amber-50/60">
@@ -145,7 +147,7 @@ export function OpportunitiesPanel() {
         ) : (
           <ul className="divide-y divide-slate-100">
             {active.map((b) => (
-              <BuyRow key={b.symbol} b={b} onInfo={() => setInfo(ideaOf(b))} onExecute={() => setConfirm(ideaOf(b))} />
+              <BuyRow key={b.symbol} b={b} onInfo={() => setInfo(ideaOf(b))} onExecute={data.account.opened ? () => setConfirm(ideaOf(b)) : undefined} />
             ))}
           </ul>
         )}

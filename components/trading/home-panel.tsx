@@ -3,15 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Bot, Flame, Loader2 } from "lucide-react";
-import type { accountDetail } from "@/lib/trading/accounts";
+import type { getPortfolio } from "@/lib/trading/agents/copy";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getOpportunities } from "@/lib/trading/agents/opportunities";
 import { api, eur0, errorText, ghost, panel, pct, primary, th, tone } from "./format";
 import { useTradingRefresh } from "./navigation";
 import { EquityCurve } from "./portfolio-panel";
+import { OpenAccount } from "./open-account";
 import { plainText, Rich } from "./ui";
 
-type Account = Awaited<ReturnType<typeof accountDetail>>;
+type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
 type Agents = Awaited<ReturnType<typeof getAgents>>;
 type Opps = Awaited<ReturnType<typeof getOpportunities>>;
 
@@ -39,14 +40,14 @@ const short = (s: string | null, n = 150) => {
 };
 
 export function HomePanel() {
-  const [account, setAccount] = useState<Account | null>(null);
+  const [account, setAccount] = useState<Portfolio | null>(null);
   const [agents, setAgents] = useState<Agents | null>(null);
   const [opps, setOpps] = useState<Opps | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [a, g, o] = await Promise.all([api<Account>("account"), api<Agents>("agents"), api<Opps>("opportunities")]);
+      const [a, g, o] = await Promise.all([api<Portfolio>("portfolio"), api<Agents>("agents"), api<Opps>("opportunities")]);
       setAccount(a);
       setAgents(g);
       setOpps(o);
@@ -68,26 +69,31 @@ export function HomePanel() {
       </div>
     );
 
-  const s = account.summary;
-  const open = account.positions.filter((p) => p.status === "abierta").length;
-  const pending = account.positions.filter((p) => p.status === "pendiente").length;
+  const s = account.total;
+  const allPositions = [...account.main.positions, ...account.copies.flatMap((c) => c.positions)];
+  const open = allPositions.filter((p) => p.status === "abierta").length;
+  const pending = allPositions.filter((p) => p.status === "pendiente").length;
   const newOpps = opps?.buys.filter((b) => b.status === "ok").length ?? 0;
   const bench = agents.agents[0]?.benchmark;
   const view = agents.agents.find((a) => a.key === "nova")?.lastRun?.marketView ?? agents.agents.find((a) => a.lastRun?.marketView)?.lastRun?.marketView;
 
   const rows = [
-    {
-      key: "tu",
-      name: "Tú",
-      profile: "tu cartera",
-      color: "slate",
-      equity: s.equity,
-      returnPct: s.returnPct,
-      investedPct: s.equity > 0 ? (s.invested / s.equity) * 100 : 0,
-      open,
-      pending,
-      closed: s.stats.closed,
-    },
+    ...(account.opened
+      ? [
+          {
+            key: "tu",
+            name: "Tú",
+            profile: "tu cartera",
+            color: "slate",
+            equity: s.equity,
+            returnPct: s.returnPct,
+            investedPct: s.equity > 0 ? (s.invested / s.equity) * 100 : 0,
+            open,
+            pending,
+            closed: s.closed,
+          },
+        ]
+      : []),
     ...agents.agents.map((a) => ({
       key: a.key,
       name: a.name,
@@ -106,6 +112,9 @@ export function HomePanel() {
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="min-w-0 space-y-6">
         {/* Tu cartera */}
+        {!account.opened ? (
+          <OpenAccount />
+        ) : (
         <section className={panel}>
           <div className="flex flex-wrap items-end justify-between gap-4 px-5 pt-5">
             <div>
@@ -115,6 +124,7 @@ export function HomePanel() {
                 <span className={`text-sm font-medium ${tone(s.returnPct)}`}>{pct(s.returnPct)}</span>
               </div>
               <div className="mt-1 text-sm text-slate-500">
+                {account.copies.length > 0 && `${account.copies.map((c) => `${c.weightPct} % ${c.name}`).join(" · ")} · `}
                 {eur0(s.cash)} en efectivo · {open === 1 ? "1 posición abierta" : `${open} posiciones abiertas`}
                 {pending > 0 && ` · ${pending === 1 ? "1 orden pendiente" : `${pending} órdenes pendientes`}`}
               </div>
@@ -137,6 +147,7 @@ export function HomePanel() {
             />
           </div>
         </section>
+        )}
 
         {/* Tú contra los agentes */}
         <section className={panel}>

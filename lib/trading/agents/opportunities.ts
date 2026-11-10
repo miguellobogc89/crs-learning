@@ -7,7 +7,7 @@ import { accountState, costOf, latestCloses, OPEN_STATUSES, type PositionView } 
 import type { Evidence } from "../committee/service";
 import { isCryptoMarket, lotStepOf } from "../market-data";
 import { positionSize } from "../risk";
-import { AGENTS, agentByKey } from "./roster";
+import { AGENTS, AGENTS_WORKSPACE, agentByKey } from "./roster";
 
 /** Solo cuentan las reuniones recientes. */
 const MAX_AGE_DAYS = 4;
@@ -56,7 +56,7 @@ export async function getOpportunities(workspaceId: string) {
   const runs = await Promise.all(
     AGENTS.map((a) =>
       prisma.trading_committee_runs.findFirst({
-        where: { workspace_id: workspaceId, agent: a.key, status: "ok", created_at: { gte: since } },
+        where: { workspace_id: AGENTS_WORKSPACE, agent: a.key, status: "ok", created_at: { gte: since } },
         orderBy: { created_at: "desc" },
         include: { proposals: true },
       }),
@@ -150,7 +150,7 @@ export async function getOpportunities(workspaceId: string) {
   return {
     buys,
     sells,
-    account: { equity: state.summary.equity, cash: a.cash, riskPct: a.risk_per_trade_pct },
+    account: { equity: state.summary.equity, cash: a.cash, riskPct: a.risk_per_trade_pct, opened: state.summary.opened },
     lastRuns: runs.map((r, k) => ({ agent: AGENTS[k].key, name: AGENTS[k].name, at: r?.created_at.toISOString() ?? null })),
   };
 }

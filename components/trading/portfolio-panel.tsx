@@ -8,6 +8,8 @@ import { PATTERN_LIBRARY } from "@/lib/trading/library";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { Modal } from "./ui";
 import { BrokerPanel } from "./broker-panel";
+import { CopiesPanel } from "./copies-panel";
+import { OpenAccount } from "./open-account";
 import { PATTERN_SHORT, api, dayFmt, errorText, eur, eur0, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
 
 type Detail = Awaited<ReturnType<typeof accountDetail>>;
@@ -636,12 +638,14 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
     );
 
   const s = data.summary;
+  if (!s.opened) return <OpenAccount />;
   const active = data.positions.filter((p) => p.status === "abierta" || p.status === "pendiente");
   const history = data.positions.filter((p) => p.status === "cerrada" || p.status === "cancelada");
 
   return (
     <div className="space-y-4">
       {error && <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <CopiesPanel />
 
       <div className="grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-3 lg:grid-cols-6">
         {[
@@ -1007,7 +1011,7 @@ function Settings({ summary, onSaved }: { summary: Detail["summary"]; onSaved: (
       </div>
       <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-4 py-3 text-sm">
         <RotateCcw className="h-4 w-4 text-slate-500" />
-        <span className="text-slate-700">Reiniciar la cartera con</span>
+        <span className="text-slate-700">Reiniciar la cartera (y las copias) con</span>
         <input className={`${field} w-32 tabular-nums`} value={capital} onChange={(e) => setCapital(e.target.value)} inputMode="numeric" />
         <span className="text-slate-700">€</span>
         {confirmReset ? (

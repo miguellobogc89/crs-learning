@@ -34,6 +34,11 @@ export type AgentDef = {
   color: string;
 };
 
+/** Los agentes son de la plataforma, no de un espacio: viven en este espacio ficticio. */
+export const AGENTS_WORKSPACE = "00000000-0000-4000-8000-000000000001";
+/** Clave de la subcartera con la que un usuario copia a un agente. */
+export const copyKey = (agent: string) => `copia:${agent}`;
+
 /** Sin comisiones, como Trading 212; el deslizamiento sí cuenta. */
 const COSTS = { commission_pct: 0, commission_min: 0, slippage_bps: 8 };
 

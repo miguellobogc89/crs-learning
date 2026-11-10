@@ -2227,7 +2227,7 @@ model market_backtests {
 model trading_accounts {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspace_id String @db.Uuid
-  /// '' = cartera del usuario; si no, clave del agente (argo, nova, vertigo).
+  /// '' = cartera del usuario; 'copia:<agente>' = subcartera que copia a un agente; si no, clave del agente.
   agent String @default("")
   name String @default("Cartera virtual")
   initial_capital Float @default(10000)
@@ -2245,6 +2245,10 @@ model trading_accounts {
   patterns String[] @default([])
   last_processed_day DateTime? @db.Date
   broker_autonomy String @default("aprobacion")
+  /// Cartera del usuario abierta (eligió su capital). Null = aún no ha abierto cuenta.
+  opened_at DateTime? @db.Timestamptz(6)
+  /// Subcartera de copia ('copia:<agente>'): % del patrimonio total asignado. Null = no se copia.
+  copy_weight_pct Float?
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @default(now()) @db.Timestamptz(6)
   positions trading_positions[]

@@ -5,7 +5,8 @@ import "server-only";
 import type { trading_proposals } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { aiJson, aiModelInfo } from "../ai";
-import { closePosition, costOf, ensureAccount, madridDay, OPEN_STATUSES, placeOrder } from "../accounts";
+import { accountState, closePosition, costOf, ensureAccount, madridDay, OPEN_STATUSES, placeOrder } from "../accounts";
+import { replicate } from "../agents/copy";
 import { agentByKey, agentInstructions } from "../agents/roster";
 import { atrAt, indicatorBundle } from "../indicators";
 import { PATTERN_NAMES } from "../library";
@@ -265,7 +266,7 @@ export async function runCommittee(workspaceId: string, userId: string | null, a
       },
     },
   });
-  if (agentDef) return { id: run.id, auto: await executeAgentRun(workspaceId, run.id) };
+  if (agentDef) return { id: run.id, auto: await executeAgentRun(workspaceId, run.id, agent) };
   // Autonomía «automático»: las compras de bolsa aprobadas por las reglas se ejecutan solas en Trading 212 Demo.
   const auto: { symbol: string; ok: boolean; detail: string }[] = [];
   const broker = await brokerStatus(workspaceId);
@@ -284,8 +285,10 @@ export async function runCommittee(workspaceId: string, userId: string | null, a
 }
 
 /** Un agente tiene autonomía total: ejecuta en su cartera todo lo que su reunión aprobó. */
-async function executeAgentRun(workspaceId: string, runId: string) {
+async function executeAgentRun(workspaceId: string, runId: string, agent: string) {
   const out: { symbol: string; ok: boolean; detail: string }[] = [];
+  // Patrimonio del agente antes de operar: las copias replican en la misma proporción.
+  const equity = (await accountState(workspaceId, agent)).summary.equity;
   const list = await prisma.trading_proposals.findMany({ where: { run_id: runId, status: "propuesta" }, orderBy: { conviction: "desc" } });
   // Primero ventas (liberan efectivo), luego protecciones y por último compras.
   const order = { vender: 0, mantener: 1, comprar: 2, vigilar: 3 } as Record<string, number>;
@@ -294,7 +297,8 @@ async function executeAgentRun(workspaceId: string, runId: string) {
     if (p.action === "vigilar" || (p.action === "mantener" && !p.stop)) continue;
     try {
       await decideProposal(workspaceId, null, p.id, "ejecutar");
-      out.push({ symbol: p.symbol, ok: true, detail: p.action });
+      const c = await replicate(agent, p, equity);
+      out.push({ symbol: p.symbol, ok: true, detail: c.copies ? `${p.action} (copiado en ${c.copies} ${c.copies === 1 ? "cartera" : "carteras"})` : p.action });
     } catch (e) {
       const why = e instanceof Error ? e.message.slice(0, 300) : "error";
       await prisma.trading_proposals.update({ where: { id: p.id }, data: { status: "descartada", rejection: `No se pudo ejecutar: ${why}`, decided_at: new Date() } });

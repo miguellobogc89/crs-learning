@@ -118,6 +118,8 @@ export type AccountSummary = {
     patterns: string[];
   };
   lastProcessedDay: string | null;
+  /** La cartera del usuario está abierta (eligió su capital). Las de agentes y copias, siempre. */
+  opened: boolean;
   stats: { closed: number; wins: number; winRate: number; avgR: number; profitFactor: number | null; bestTrade: number; worstTrade: number };
 };
 
@@ -193,7 +195,7 @@ export async function accountState(workspaceId: string, agent = "") {
     invested,
     realized: closed.reduce((s, p) => s + p.pnl!, 0),
     unrealized: open.reduce((s, p) => s + (p.unrealized ?? 0), 0),
-    returnPct: ((equity - account.initial_capital) / account.initial_capital) * 100,
+    returnPct: account.initial_capital > 0 ? ((equity - account.initial_capital) / account.initial_capital) * 100 : 0,
     settings: {
       riskPerTradePct: account.risk_per_trade_pct,
       maxPositionPct: account.max_position_pct,
@@ -208,6 +210,7 @@ export async function accountState(workspaceId: string, agent = "") {
       patterns: account.patterns,
     },
     lastProcessedDay: account.last_processed_day ? dayKey(account.last_processed_day) : null,
+    opened: account.agent !== "" || !!account.opened_at,
     stats: {
       closed: closed.length,
       wins: wins.length,
@@ -276,6 +279,20 @@ export async function updateSettings(workspaceId: string, input: Record<string, 
   });
 }
 
+/** Abre la cuenta del usuario con el capital que elige (o la reinicia). Sin comisiones, como un bróker sin comisiones. */
+export async function openAccount(workspaceId: string, capitalInput: unknown) {
+  const capital = Number(capitalInput);
+  if (!(capital >= 500 && capital <= 100_000)) throw new Error("Elige un capital entre 500 € y 100.000 €");
+  const a = await ensureAccount(workspaceId);
+  // Las copias de agentes se reparten del capital: al abrir o reiniciar, empiezan de cero.
+  await prisma.trading_accounts.deleteMany({ where: { workspace_id: workspaceId, agent: { startsWith: "copia:" } } });
+  await resetAccount(workspaceId, Math.round(capital));
+  await prisma.trading_accounts.update({
+    where: { id: a.id },
+    data: { opened_at: new Date(), commission_pct: 0, commission_min: 0, updated_at: new Date() },
+  });
+}
+
 /** Borra posiciones y movimientos y vuelve a empezar con el capital indicado. */
 export async function resetAccount(workspaceId: string, capitalInput: unknown, agent = "") {
   const a = await ensureAccount(workspaceId, agent);
@@ -304,6 +321,8 @@ export type OrderInput = {
   stop: number;
   target: number;
   execution: "next_open" | "now";
+  /** Fracciones de acción (copias de agentes). */
+  fractional?: boolean;
   pattern?: PatternKey | null;
   signalKey?: string | null;
   score?: number | null;
@@ -340,13 +359,21 @@ export function parseOrder(body: Record<string, unknown>): OrderInput {
 export async function placeOrder(workspaceId: string, userId: string | null, order: OrderInput, agent = "") {
   let o = order;
   const a = await ensureAccount(workspaceId, agent);
+  if (!agent && !a.opened_at) throw new Error("Primero abre tu cuenta y elige con cuánto dinero empiezas");
   const cost = costOf(a);
   if (o.direction === "short" && !a.allow_short)
     throw new Error("Las posiciones cortas están desactivadas en los ajustes de la cartera");
   const inst = await prisma.market_instruments.findUnique({ where: { symbol: o.symbol } });
   if (!inst) throw new Error(`No sigo el valor ${o.symbol}`);
   // Acciones enteras en bolsa; fracciones en crypto.
-  o = { ...o, quantity: roundQty(isCryptoMarket(inst.market) ? o.quantity : Math.floor(o.quantity), lotStepOf(inst.market)) };
+  o = {
+    ...o,
+    quantity: isCryptoMarket(inst.market)
+      ? roundQty(o.quantity, lotStepOf(inst.market))
+      : o.fractional
+        ? roundQty(Math.floor(o.quantity * 10_000) / 10_000, 0.0001)
+        : Math.floor(o.quantity),
+  };
   if (!(o.quantity > 0)) throw new Error("Cantidad no válida");
   const last = (await latestCloses([inst.id])).get(inst.id);
   if (!last) throw new Error("Todavía no hay cotizaciones de este valor");

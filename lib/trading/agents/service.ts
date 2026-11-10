@@ -6,10 +6,12 @@ import { accountState, ensureAccount, processAccount, resetAccount } from "../ac
 import { runCommittee, view as proposalView } from "../committee/service";
 import { CRYPTO_BENCHMARK, INDEX_SYMBOL } from "../market-data";
 import { dayKey, loadSeries } from "../sync";
-import { AGENTS, agentByKey, type AgentDef } from "./roster";
+import { AGENTS, AGENTS_WORKSPACE, agentByKey, copyKey, type AgentDef } from "./roster";
 
-async function ensureAgent(workspaceId: string, a: AgentDef) {
-  return ensureAccount(workspaceId, a.key, { name: a.name, capital: a.capital, settings: a.settings });
+const WS = AGENTS_WORKSPACE;
+
+async function ensureAgent(a: AgentDef) {
+  return ensureAccount(WS, a.key, { name: a.name, capital: a.capital, settings: a.settings });
 }
 
 /** Rentabilidad de un índice desde un día (para comparar). */
@@ -21,8 +23,12 @@ function changeSince(candles: { t: number; c: number }[], since: number) {
   return ((last.c - start.c) / start.c) * 100;
 }
 
-export async function getAgents(workspaceId: string) {
-  const accounts = await Promise.all(AGENTS.map((a) => ensureAgent(workspaceId, a)));
+/** Los agentes son iguales para todos; `workspaceId` solo sirve para saber a cuáles copias tú. */
+export async function getAgents(workspaceId?: string) {
+  const accounts = await Promise.all(AGENTS.map((a) => ensureAgent(a)));
+  const copies = workspaceId
+    ? await prisma.trading_accounts.findMany({ where: { workspace_id: workspaceId, agent: { in: AGENTS.map((a) => copyKey(a.key)) }, copy_weight_pct: { not: null } } })
+    : [];
   const started = Math.min(...accounts.map((a) => a.created_at.getTime()));
   const benchInst = await prisma.market_instruments.findMany({ where: { symbol: { in: [INDEX_SYMBOL, CRYPTO_BENCHMARK] } } });
   const benchSeries = await loadSeries(benchInst.map((i) => i.id), new Date(started - 5 * 86_400_000));
@@ -35,10 +41,10 @@ export async function getAgents(workspaceId: string) {
     AGENTS.map(async (def, k) => {
       const account = accounts[k];
       const [state, equity, runs, proposals] = await Promise.all([
-        accountState(workspaceId, def.key),
+        accountState(WS, def.key),
         prisma.trading_equity.findMany({ where: { account_id: account.id }, orderBy: { day: "asc" }, take: 1000 }),
-        prisma.trading_committee_runs.findMany({ where: { workspace_id: workspaceId, agent: def.key }, orderBy: { created_at: "desc" }, take: 1 }),
-        prisma.trading_proposals.findMany({ where: { workspace_id: workspaceId, agent: def.key }, orderBy: { created_at: "desc" }, take: 40 }),
+        prisma.trading_committee_runs.findMany({ where: { workspace_id: WS, agent: def.key }, orderBy: { created_at: "desc" }, take: 1 }),
+        prisma.trading_proposals.findMany({ where: { workspace_id: WS, agent: def.key }, orderBy: { created_at: "desc" }, take: 40 }),
       ]);
       const last = runs[0] ?? null;
       const since = account.created_at.getTime();
@@ -55,6 +61,7 @@ export async function getAgents(workspaceId: string) {
           maxOpenPositions: def.settings.max_open_positions,
         },
         startedAt: account.created_at.toISOString(),
+        copyWeightPct: copies.find((c) => c.agent === copyKey(def.key))?.copy_weight_pct ?? null,
         summary: state.summary,
         positions: state.positions.filter((p) => p.status === "abierta" || p.status === "pendiente"),
         closed: state.positions.filter((p) => p.status === "cerrada").slice(0, 20),
@@ -111,39 +118,38 @@ function movesOf(
 }
 
 /** Reunión de un agente: pone al día su cartera, decide y ejecuta. */
-export async function runAgent(workspaceId: string, key: string, userId: string | null) {
+export async function runAgent(key: string, userId: string | null) {
   const def = agentByKey(key);
   if (!def) throw new Error("Agente desconocido");
-  const account = await ensureAgent(workspaceId, def);
+  const account = await ensureAgent(def);
   await processAccount(account.id);
-  return runCommittee(workspaceId, userId, def.key);
+  return runCommittee(WS, userId, def.key);
+}
+
+/** Los agentes son de toda la plataforma: solo los dirige quien la administra (o cualquiera en local). */
+export function canDirectAgents(workspaceId: string) {
+  if (process.env.NODE_ENV === "development") return true;
+  const allowed = (process.env.TRADING_AGENTS_ADMIN_WORKSPACES ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  return allowed.includes(workspaceId);
 }
 
 /** Vuelve a empezar con el capital inicial y los ajustes de su perfil. */
-export async function resetAgent(workspaceId: string, key: string) {
+export async function resetAgent(key: string) {
   const def = agentByKey(key);
   if (!def) throw new Error("Agente desconocido");
-  const account = await ensureAgent(workspaceId, def);
-  await resetAccount(workspaceId, def.capital, def.key);
+  const account = await ensureAgent(def);
+  await resetAccount(WS, def.capital, def.key);
   await prisma.trading_accounts.update({ where: { id: account.id }, data: { ...def.settings, name: def.name, created_at: new Date(), updated_at: new Date() } });
 }
 
-/** Cron: reunión diaria de los agentes de cada espacio que los tenga, en paralelo. */
-export async function runAgentsDaily(budgetMs = 55_000) {
-  const started = Date.now();
-  const spaces = await prisma.trading_accounts.findMany({ where: { agent: { not: "" } }, select: { workspace_id: true }, distinct: ["workspace_id"] });
-  const results: { workspaceId: string; agent: string; ok: boolean; detail: string }[] = [];
-  for (const { workspace_id } of spaces) {
-    if (Date.now() - started > budgetMs / 3) break;
-    const runs = await Promise.allSettled(AGENTS.map((a) => runAgent(workspace_id, a.key, null)));
-    runs.forEach((r, k) =>
-      results.push({
-        workspaceId: workspace_id,
-        agent: AGENTS[k].key,
-        ok: r.status === "fulfilled",
-        detail: r.status === "fulfilled" ? `${r.value.auto.filter((x) => x.ok).length} órdenes` : r.reason instanceof Error ? r.reason.message : "error",
-      }),
-    );
-  }
-  return { results };
+/** Cron: reunión diaria de los tres agentes, en paralelo. */
+export async function runAgentsDaily() {
+  const runs = await Promise.allSettled(AGENTS.map((a) => runAgent(a.key, null)));
+  return {
+    results: runs.map((r, k) => ({
+      agent: AGENTS[k].key,
+      ok: r.status === "fulfilled",
+      detail: r.status === "fulfilled" ? `${r.value.auto.filter((x) => x.ok).length} órdenes` : r.reason instanceof Error ? r.reason.message : "error",
+    })),
+  };
 }

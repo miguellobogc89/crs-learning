@@ -118,3 +118,10 @@ Sección *Agentes* (`/trading/agentes`), que sustituye al simulador histórico e
 - **Mi cartera**: solo la cartera virtual. Trading 212 Demo queda oculto; se vuelve a mostrar con `NEXT_PUBLIC_TRADING212_UI=1` en local.
 - **Explorar**: Gráficos, Noticias, Aprende. **Ajustes**: Reglas y riesgo, Valores seguidos.
 - Se han quitado el comité suelto (Oportunidades e Historial del comité) y las señales técnicas sueltas. El código del comité sigue en el servidor porque lo usan los agentes.
+
+## Agentes globales, abrir cuenta y copias (migración 20261110220000_trading_open_copy)
+
+- **Agentes globales**: viven en el espacio ficticio `AGENTS_WORKSPACE` (`00000000-0000-4000-8000-000000000001`), iguales para todos. La migración mueve allí los del primer espacio que los creó. Solo los reúne/reinicia a mano quien está en `TRADING_AGENTS_ADMIN_WORKSPACES` (ids de espacio separados por comas) o cualquiera en local; el cron los reúne una vez al día para toda la plataforma.
+- **Abrir cuenta**: `trading_accounts.opened_at`. Sin abrir, Inicio, Oportunidades y Mi cartera muestran «Abre tu cuenta» (500 € - 100.000 €). `openAccount` reinicia la cartera sin comisiones y borra las copias. Las cuentas existentes quedan abiertas.
+- **Copias** (`lib/trading/agents/copy.ts`): subcartera `agent = 'copia:<agente>'` en el espacio del usuario con `copy_weight_pct` (% del patrimonio total). Al asignar o cambiar el peso se traspasa efectivo entre la cartera principal y la copia (ajustando el capital inicial de ambas). `replicate` se llama tras cada decisión ejecutada de un agente: compras en proporción (mismo % de su patrimonio, con fracciones), ventas y subidas de stop. «Igualar cartera» replica sus posiciones actuales al seguirle. Dejar de copiar vende al último precio y devuelve el dinero.
+- API: `GET portfolio`, `POST account/open { capital }`, `POST copy/set { agent, weightPct, mirror }`, `POST copy/stop { agent }`.
