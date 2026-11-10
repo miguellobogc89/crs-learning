@@ -105,7 +105,7 @@ export function RecommendationsPanel({ data, onOpenChart }: { data: Overview; on
   const [info, setInfo] = useState<Recommendation | null>(null);
 
   const recs = data.recommendations;
-  const top = recs.filter((r) => r.strong && (r.action === "comprar" || r.action === "vender_corto")).slice(0, 3);
+  const top = recs.filter((r) => r.strong && !r.held && (r.action === "comprar" || r.action === "vender_corto")).slice(0, 3);
   const watch = recs.filter((r) => r.action === "vigilar" && r.score >= data.account.settings.minScore - 10).slice(0, 6);
   const warnings = recs.filter((r) => r.action === "cerrar" || (r.action === "evitar" && r.strong)).slice(0, 6);
 

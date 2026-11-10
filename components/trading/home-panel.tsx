@@ -17,9 +17,9 @@ import { Rich, StopTargetBar } from "./ui";
 type News = Awaited<ReturnType<typeof listNews>>;
 
 const MOOD = {
-  alcista: { label: "sube", dot: "bg-emerald-500", text: "buen momento para comprar con cabeza" },
-  bajista: { label: "baja", dot: "bg-red-500", text: "mejor ir con mucho cuidado" },
-  lateral: { label: "va de lado", dot: "bg-slate-400", text: "sin una dirección clara" },
+  alcista: { one: "sube", many: "suben", dot: "bg-emerald-500", text: "buen momento para comprar con cabeza" },
+  bajista: { one: "baja", many: "bajan", dot: "bg-red-500", text: "mejor ir con mucho cuidado" },
+  lateral: { one: "va de lado", many: "van de lado", dot: "bg-slate-400", text: "sin una dirección clara" },
 } as const;
 
 function IdeaCard({ idea, onInfo, onExecute }: { idea: TradeIdea; onInfo: () => void; onExecute: () => void }) {
@@ -73,22 +73,25 @@ export function HomePanel({ data, onOpenChart }: { data: Overview; onOpenChart: 
 
   // Lo más interesante de hoy: primero el comité, luego las figuras fuertes.
   const ideas = useMemo(() => {
+    const heldSymbols = new Set(data.openPositions.map((p) => p.symbol));
     const out: TradeIdea[] = [];
     const fromCommittee = (committee?.latest?.proposals ?? []).filter(
       (p: Proposal) => p.status === "propuesta" && p.action === "comprar" && p.quantity,
     );
-    for (const p of fromCommittee) out.push(ideaFromProposal(p));
+    for (const p of fromCommittee) if (!heldSymbols.has(p.symbol)) out.push(ideaFromProposal(p));
     for (const r of data.recommendations) {
       if (out.length >= 3) break;
-      if (!r.strong || r.action !== "comprar" || !r.sizing?.quantity) continue;
+      if (!r.strong || r.action !== "comprar" || !r.sizing?.quantity || r.held) continue;
       if (out.some((o) => o.symbol === r.symbol)) continue;
       out.push(ideaFromRecommendation(r));
     }
     return out.slice(0, 3);
-  }, [committee, data.recommendations]);
+  }, [committee, data.recommendations, data.openPositions]);
 
   const a = data.account;
   const open = data.openPositions;
+  const openCount = open.filter((p) => p.status === "abierta").length;
+  const pendingCount = open.length - openCount;
   const bolsa = MOOD[data.regime];
   const crypto = data.cryptoRegime ? MOOD[data.cryptoRegime] : null;
 
@@ -105,7 +108,8 @@ export function HomePanel({ data, onOpenChart }: { data: Overview; onOpenChart: 
                 <span className={`text-sm font-medium ${tone(a.returnPct)}`}>{pct(a.returnPct)}</span>
               </div>
               <div className="mt-1 text-sm text-slate-500">
-                {eur0(a.cash)} en efectivo · {open.length === 1 ? "1 posición" : `${open.length} posiciones`}
+                {eur0(a.cash)} en efectivo · {openCount === 1 ? "1 posición abierta" : `${openCount} posiciones abiertas`}
+                {pendingCount > 0 && ` · ${pendingCount === 1 ? "1 orden pendiente" : `${pendingCount} órdenes pendientes`}`}
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -119,11 +123,17 @@ export function HomePanel({ data, onOpenChart }: { data: Overview; onOpenChart: 
           </div>
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 border-t border-slate-100 pt-3 text-sm text-slate-700">
             <span className="flex items-center gap-2">
-              <span className={`h-2 w-2 ${bolsa.dot}`} /> La <b className="font-semibold">bolsa española {bolsa.label}</b>: {bolsa.text}.
+              <span className={`h-2 w-2 shrink-0 ${bolsa.dot}`} />
+              <span>
+                La <b className="font-semibold">bolsa española {bolsa.one}</b>: {bolsa.text}.
+              </span>
             </span>
             {crypto && (
               <span className="flex items-center gap-2">
-                <span className={`h-2 w-2 ${crypto.dot}`} /> Las <b className="font-semibold">crypto {crypto.label}</b>: {crypto.text}.
+                <span className={`h-2 w-2 shrink-0 ${crypto.dot}`} />
+                <span>
+                  Las <b className="font-semibold">crypto {crypto.many}</b>: {crypto.text}.
+                </span>
               </span>
             )}
           </div>
@@ -180,7 +190,9 @@ export function HomePanel({ data, onOpenChart }: { data: Overview; onOpenChart: 
                       </span>
                     </span>
                     <span className="text-right">
-                      <span className={`block font-semibold tabular-nums ${tone(p.unrealized)}`}>{p.unrealized !== null ? `${p.unrealized >= 0 ? "+" : ""}${eur0(p.unrealized)}` : "—"}</span>
+                      <span className={`block font-semibold tabular-nums ${tone(p.unrealized)}`}>
+                        {p.status === "pendiente" ? <span className="text-xs font-medium text-amber-700">pendiente</span> : p.unrealized !== null ? `${p.unrealized >= 0 ? "+" : ""}${eur0(p.unrealized)}` : "—"}
+                      </span>
                       {p.entryPrice && p.lastPrice && (
                         <span className={`text-xs tabular-nums ${tone(p.unrealized)}`}>{pct(((p.lastPrice - p.entryPrice) / p.entryPrice) * 100 * (p.direction === "long" ? 1 : -1))}</span>
                       )}

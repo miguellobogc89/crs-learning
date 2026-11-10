@@ -54,6 +54,8 @@ export type Recommendation = {
   maxHoldDays: number;
   /** La figura tiene historial negativo con muestra suficiente: no se recomienda entrar. */
   vetoed: boolean;
+  /** Ya hay una posición abierta en la misma dirección. */
+  held: boolean;
   plan: string;
 };
 
@@ -202,7 +204,10 @@ export function recommendForInstrument(
           })
         : null;
 
-    const strong = score >= account.minScore && !provenLoser;
+    // Ya hay posición en la misma dirección: no se propone volver a entrar.
+    const alreadyIn = !!held && held === d.direction;
+    if (alreadyIn) cons.unshift("Ya tienes una posición abierta en este valor");
+    const strong = score >= account.minScore && !provenLoser && !alreadyIn;
     out.push({
       key: `${inst.symbol}:${d.pattern}:${d.startIndex}:${isoDay(c[d.startIndex].t)}`,
       symbol: inst.symbol,
@@ -228,10 +233,13 @@ export function recommendForInstrument(
       sizing,
       history: st ? { trades: st.trades, winRate: st.winRate, avgR: st.avgR } : null,
       maxHoldDays: maxHoldBars(d),
-      plan: provenLoser && action !== "cerrar" && action !== "evitar"
+      plan: alreadyIn
+        ? `Ya tienes ${inst.name} en tu cartera: esta señal confirma la posición, no hace falta comprar más.`
+        : provenLoser && action !== "cerrar" && action !== "evitar"
         ? `**No recomendada**: el ${PATTERN_NAMES[d.pattern].toLowerCase()} ha dado pérdidas en ${where} (${st!.trades} operaciones, ${(st!.winRate * 100).toFixed(0)} % de acierto, ${st!.avgR.toFixed(2)} R de media). Aunque la figura esté bien formada, la estadística no acompaña.`
         : planText(action, inst.name, d, entry, stop, target, rr, sizing, account, strong, inst.unit ?? "acciones"),
       vetoed: provenLoser,
+      held: alreadyIn,
     });
   }
   return out;

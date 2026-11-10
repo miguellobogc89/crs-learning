@@ -121,6 +121,7 @@ export const COMMITTEE_INSTRUCTIONS = [
   "- rationale: 2 a 4 frases en español claro, para alguien que nunca ha invertido. Di qué ha pasado y por qué tiene sentido. Nada de jerga sin explicar. Marca en **negrita** (con dobles asteriscos) entre 1 y 3 ideas clave.",
   "- evidence: identificadores exactos de las pruebas que usas (N:… noticias, S:… figuras, F:… fuerza relativa, T:… datos técnicos de un activo, P:… posición). Al menos uno.",
   "- risks: una frase con lo que podría salir mal.",
+  "- La fase de cada mercado (alcista, bajista o lateral) te la doy calculada: úsala tal cual al describirla. Si las noticias apuntan en otra dirección, dilo así («la tendencia es alcista, pero…»), sin cambiar la fase.",
   "- market_view: 2 o 3 frases con cómo ves hoy la bolsa española y el mercado crypto, para alguien que no sabe de bolsa. Marca en **negrita** lo más importante.",
   "- watchlist: hasta 5 activos a seguir de cerca con el motivo, en una frase.",
 ].join("\n");

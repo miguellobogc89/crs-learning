@@ -195,6 +195,8 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
                       <span className="inline-flex items-center gap-1">
                         <Bot className="h-3.5 w-3.5" /> automático
                       </span>
+                    ) : p.source === "comite" ? (
+                      "comité de inversión"
                     ) : (
                       "manual"
                     )}
