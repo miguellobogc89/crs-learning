@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { accountState, costOf, ensureAccount, OPEN_STATUSES, placeOrder, processAccount } from "./accounts";
 import { analyze, backtestSeries } from "./backtest";
 import { DEFAULT_COSTS } from "./risk";
+import { newsForSymbol, syncNews, type NewsSyncSummary } from "./news/service";
 import { simulatePortfolio, type SimSeries, type SimSettings } from "./simulate";
 import { indicatorBundle, trendAt } from "./indicators";
 import { PATTERN_LIBRARY } from "./library";
@@ -204,6 +205,7 @@ export async function getInstrument(workspaceId: string, symbol: string) {
     detections: chartDetections,
     stats: bt?.perSymbol?.[inst.symbol] ?? {},
     positions: state.positions.filter((p) => p.symbol === inst.symbol),
+    news: await newsForSymbol(inst.symbol).catch(() => []),
   };
 }
 
@@ -281,6 +283,7 @@ export type DailyRunSummary = {
   market: Awaited<ReturnType<typeof syncMarket>>;
   backtest: { asOf: string; trades: number } | null;
   accounts: { processed: number; filled: number; closed: number; cancelled: number; autoOpened: number };
+  news: NewsSyncSummary | null;
   pending: boolean;
 };
 
@@ -304,7 +307,11 @@ export async function runDaily(budgetMs = 45_000, workspaceId?: string): Promise
       accounts.autoOpened += (await autoTrade(a.workspace_id)).opened;
     }
   }
-  return { market, backtest, accounts, pending: market.pending > 0 };
+  // Con el tiempo que sobre, noticias (solo en el proceso diario completo).
+  let news: NewsSyncSummary | null = null;
+  const left = budgetMs - (Date.now() - started);
+  if (!workspaceId && left > 15_000) news = await syncNews(left - 3_000).catch(() => null);
+  return { market, backtest, accounts, news, pending: market.pending > 0 };
 }
 
 export type { Candle, PatternKey };

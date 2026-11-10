@@ -7,6 +7,7 @@ import { CandleChart, type ChartLevel } from "./candle-chart";
 import { PATTERN_SHORT, STATUS_LABEL, api, dayFmt, errorText, eur, field, num, panel, pct, primary, th, tone } from "./format";
 import { OrderDialog, type OrderDraft } from "./order-dialog";
 import { refreshTrading } from "./navigation";
+import { NewsItem } from "./news-panel";
 
 type Instrument = Awaited<ReturnType<typeof getInstrument>>;
 
@@ -82,6 +83,7 @@ export function MarketPanel({
     levels.push({ price: det.target, label: "Objetivo", kind: "target" });
   }
 
+  const names = useMemo(() => Object.fromEntries(data.market.map((m) => [m.symbol, m.name])), [data.market]);
   const rec = data.recommendations.find((r) => r.symbol === current && det && r.pattern === det.pattern);
 
   return (
@@ -157,6 +159,19 @@ export function MarketPanel({
             </div>
           )}
         </section>
+
+        {inst && inst.news.length > 0 && (
+          <section className={panel}>
+            <header className="border-b border-slate-200 px-4 py-3">
+              <h3 className="text-sm font-semibold text-slate-900">Noticias recientes de {inst.name}</h3>
+            </header>
+            <ul className="divide-y divide-slate-100">
+              {inst.news.map((n) => (
+                <NewsItem key={n.id} n={n} names={names} />
+              ))}
+            </ul>
+          </section>
+        )}
 
         {inst && (
           <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">

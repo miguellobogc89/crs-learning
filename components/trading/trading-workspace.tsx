@@ -10,6 +10,7 @@ import { MarketPanel } from "./market-panel";
 import { LibraryPanel } from "./library-panel";
 import { PortfolioPanel, RulesPanel, UniversePanel } from "./portfolio-panel";
 import { SimulatorPanel } from "./simulator-panel";
+import { NewsPanel } from "./news-panel";
 import type { TradingTab } from "./tabs";
 
 export type Overview = Awaited<ReturnType<typeof getOverview>> & { canManage: boolean };
@@ -67,7 +68,8 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
       );
     else if (data && tab === "hoy") body = <RecommendationsPanel data={data} onOpenChart={openChart} />;
     else if (data && tab === "mercado") body = <MarketPanel data={data} symbol={symbol} onSymbol={pickSymbol} />;
-  } else if (tab === "cartera") body = <PortfolioPanel onOpenChart={openChart} />;
+  } else if (tab === "noticias") body = <NewsPanel />;
+  else if (tab === "cartera") body = <PortfolioPanel onOpenChart={openChart} />;
   else if (tab === "simulador") body = <SimulatorPanel onOpenChart={openChart} />;
   else if (tab === "patrones") body = <LibraryPanel />;
   else if (tab === "reglas") body = <RulesPanel />;

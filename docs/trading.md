@@ -36,3 +36,16 @@ Datos de mercado globales (`market_*`); cartera por espacio (`trading_*`, una po
 - El simulador usa la composición actual del índice (sesgo de supervivencia leve, avisado en pantalla).
 - Tests: `npm run test:trading`.
 - Es una simulación con dinero ficticio; no es asesoramiento financiero.
+
+## Noticias (agentes de bolsa y crypto)
+
+- Migración: `prisma/migrations/20261110120000_trading_news/migration.sql`.
+- Fuentes: Google Noticias (una búsqueda por valor del IBEX 35 y una general) y los RSS de CoinDesk,
+  Cointelegraph, Decrypt, The Block y BeInCrypto (es). Lectura en `lib/trading/news/feed.ts`, sin dependencias.
+- Cada feed se lee como mucho cada 30 minutos; se guardan las noticias de los últimos 3 días y se borran a los 60.
+- La IA (`lib/trading/ai.ts`, modelo barato) clasifica en lotes de 20: activos afectados, tipo, tono (−2…2),
+  importancia (0…3) y una frase de resumen. Las no relevantes quedan como «descartada».
+- Se actualizan al entrar en la sección (si hace más de 30 min), con el botón «Actualizar» y con el tiempo que
+  sobre en el cron diario.
+- Variables opcionales: `TRADING_AI_PROVIDER` (openai), `TRADING_AI_FAST_MODEL`, `TRADING_AI_SMART_MODEL`,
+  `TRADING_AI_DAILY_CALLS` (tope diario, 300 por defecto).

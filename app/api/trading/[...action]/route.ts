@@ -20,6 +20,7 @@ import {
   setInstrumentActive,
   simulate,
 } from "@/lib/trading/service";
+import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ function missingTables(e: unknown) {
   return !!e && typeof e === "object" && (e as { code?: unknown }).code === "P2021";
 }
 const MIGRATION_HINT =
-  "Faltan las tablas de trading en la base de datos: ejecuta la migración prisma/migrations/20261110080000_trading/migration.sql";
+  "Faltan tablas de trading en la base de datos: ejecuta las migraciones prisma/migrations/20261110080000_trading y 20261110120000_trading_news";
 const message = (e: unknown) => (e instanceof Error ? e.message.slice(0, 400) : "No se pudo completar la operación");
 
 export async function GET(req: Request, route: RouteContext) {
@@ -51,6 +52,7 @@ export async function GET(req: Request, route: RouteContext) {
       return NextResponse.json(await getInstrument(ctx.workspaceId, symbol));
     }
     if (action === "status") return NextResponse.json({ ...(await getStatus(ctx.workspaceId)), canManage: ctx.canManage });
+    if (action === "news") return NextResponse.json({ ...(await listNews(normalizeNewsFilters(url.searchParams))), canManage: ctx.canManage });
     if (action === "library") return NextResponse.json(await getLibrary());
     if (action === "account") return NextResponse.json(await accountDetail(ctx.workspaceId));
     if (action === "instruments") {
@@ -89,6 +91,10 @@ export async function POST(req: Request, route: RouteContext) {
     if (action === "sync") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede actualizar las cotizaciones", 403);
       return NextResponse.json(await runDaily(45_000, ctx.workspaceId));
+    }
+    if (action === "news/sync") {
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede actualizar las noticias", 403);
+      return NextResponse.json(await syncNews(45_000));
     }
     if (action === "simulate") return NextResponse.json(await simulate(ctx.workspaceId, body));
     if (action === "order") return NextResponse.json(await placeOrder(ctx.workspaceId, ctx.userId, parseOrder(body)));

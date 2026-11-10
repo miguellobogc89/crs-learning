@@ -2303,3 +2303,48 @@ model trading_equity {
   account trading_accounts @relation(fields: [account_id], references: [id], onDelete: Cascade)
   @@id([account_id, day])
 }
+/// Noticia leída de un feed (bolsa o crypto) y su clasificación por IA. Global, compartida por todos los espacios.
+model news_items {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  url String @unique
+  title_key String
+  market String
+  feed String
+  publisher String?
+  title String
+  snippet String?
+  published_at DateTime @db.Timestamptz(6)
+  fetched_at DateTime @default(now()) @db.Timestamptz(6)
+  hints String[] @default([])
+  status String @default("pendiente")
+  relevant Boolean @default(false)
+  symbols String[] @default([])
+  category String?
+  sentiment Int?
+  impact Int?
+  summary String?
+  model String?
+  attempts Int @default(0)
+  classified_at DateTime? @db.Timestamptz(6)
+  @@unique([market, title_key])
+  @@index([status, published_at])
+  @@index([published_at])
+  @@index([symbols], type: Gin)
+}
+/// Última lectura de cada feed de noticias.
+model news_feed_state {
+  feed String @id
+  last_run_at DateTime? @db.Timestamptz(6)
+  last_ok_at DateTime? @db.Timestamptz(6)
+  last_error String?
+  last_count Int @default(0)
+}
+/// Llamadas a la IA del módulo de trading por día y uso (para el tope de gasto).
+model trading_ai_usage {
+  day DateTime @db.Date
+  purpose String
+  calls Int @default(0)
+  input_tokens Int @default(0)
+  output_tokens Int @default(0)
+  @@id([day, purpose])
+}
