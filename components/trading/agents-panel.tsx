@@ -16,10 +16,10 @@ type Agent = Data["agents"][number];
 
 const PROFILE_TONE: Record<string, string> = {
   emerald: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  blue: "border-blue-200 bg-blue-50 text-blue-700",
+  violet: "border-violet-200 bg-violet-50 text-violet-700",
   orange: "border-orange-200 bg-orange-50 text-orange-800",
 };
-const HEX: Record<string, string> = { emerald: "#10b981", blue: "#3b82f6", orange: "#f97316" };
+const HEX: Record<string, string> = { emerald: "#10b981", violet: "#8b5cf6", orange: "#f97316" };
 
 const ACTION: Record<string, string> = { comprar: "Compra", vender: "Venta", mantener: "Mantener", vigilar: "Vigilar" };
 const STATUS: Record<string, { label: string; tone: string }> = {

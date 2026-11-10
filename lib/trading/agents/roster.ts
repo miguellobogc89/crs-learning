@@ -74,7 +74,7 @@ export const AGENTS: AgentDef[] = [
     capital: AGENT_CAPITAL,
     settings: { ...COSTS, risk_per_trade_pct: 1, max_position_pct: 25, max_open_positions: 8, breakeven: true },
     rules: { maxBuys: 2, minConviction: 3, minRewardRisk: 1.5, buyInBearMarket: false },
-    color: "blue",
+    color: "violet",
   },
   {
     key: "vertigo",
