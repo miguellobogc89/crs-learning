@@ -13,7 +13,7 @@ import { Modal, Rich } from "./ui";
 
 export type TradeIdea = {
   key: string;
-  source: "comite" | "figura";
+  source: "comite" | "figura" | "agente";
   symbol: string;
   name: string;
   market: "bolsa" | "crypto";
@@ -314,6 +314,7 @@ export function ConfirmOrderModal({
           score: idea.score ?? null,
           maxHoldDays: idea.horizonDays ?? null,
           notes: idea.rationale.replace(/\*\*/g, ""),
+          source: idea.source === "agente" ? "agente" : undefined,
         });
         setDone(r.status === "pendiente" ? "Orden programada para la apertura de la próxima sesión." : "Posición abierta en tu cartera.");
       }

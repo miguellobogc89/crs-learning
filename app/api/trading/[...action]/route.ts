@@ -23,6 +23,7 @@ import {
 import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
 import { decideProposal, executeProposalOnBroker, getCommittee, runCommittee } from "@/lib/trading/committee/service";
 import { getAgents, resetAgent, runAgent } from "@/lib/trading/agents/service";
+import { getOpportunities } from "@/lib/trading/agents/opportunities";
 import { brokerLinks, brokerStatus, linkInstruments, listBrackets, runBrokerGuardian, setBrokerAutonomy } from "@/lib/trading/broker/service";
 import { buyOneIberdrolaInTrading212Demo, cancelTrading212DemoOrder, findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, placeTrading212DemoConditionalOrder, sellTrading212DemoPosition, Trading212Error, type Trading212ConditionalKind } from "@/lib/trading/trading212";
 
@@ -87,6 +88,7 @@ export async function GET(req: Request, route: RouteContext) {
       });
     }
     if (action === "account") return NextResponse.json(await accountDetail(ctx.workspaceId));
+    if (action === "opportunities") return NextResponse.json(await getOpportunities(ctx.workspaceId));
     if (action === "agents") return NextResponse.json({ ...(await getAgents(ctx.workspaceId)), canManage: ctx.canManage });
     if (action === "instruments") {
       const list = await listInstruments();

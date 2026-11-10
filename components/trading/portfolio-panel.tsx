@@ -23,15 +23,20 @@ const STATUS_TONE: Record<string, string> = {
   cancelada: "bg-slate-50 text-slate-400 border-slate-200",
 };
 
-function EquityCurve({ points, initial }: { points: { day: string; equity: number }[]; initial: number }) {
-  if (points.length < 2)
-    return (
-      <p className="px-4 py-6 text-sm text-slate-500">
-        La curva de patrimonio se dibuja con el cierre de cada sesión a partir de que la cartera tenga actividad.
-      </p>
-    );
+export function EquityCurve({
+  points,
+  initial,
+  height = 180,
+  empty = "La curva de patrimonio se dibuja con el cierre de cada sesión a partir de que la cartera tenga actividad.",
+}: {
+  points: { day: string; equity: number }[];
+  initial: number;
+  height?: number;
+  empty?: string;
+}) {
+  if (points.length < 2) return <p className="px-4 py-6 text-sm text-slate-500">{empty}</p>;
   const w = 800;
-  const h = 180;
+  const h = height;
   const vals = points.map((p) => p.equity).concat(initial);
   const lo = Math.min(...vals) * 0.995;
   const hi = Math.max(...vals) * 1.005;
@@ -41,7 +46,7 @@ function EquityCurve({ points, initial }: { points: { day: string; equity: numbe
   const last = points[points.length - 1].equity;
   const col = last >= initial ? "#059669" : "#dc2626";
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="block h-[180px] w-full" preserveAspectRatio="none">
+    <svg viewBox={`0 0 ${w} ${h}`} className="block w-full" style={{ height: h }} preserveAspectRatio="none" role="img" aria-label="Evolución del patrimonio">
       <line x1={40} x2={w - 10} y1={y(initial)} y2={y(initial)} stroke="#cbd5e1" strokeDasharray="4 4" />
       <text x={36} y={y(initial) + 3} fontSize="10" fill="#94a3b8" textAnchor="end">
         {int(Math.round(initial))}
@@ -64,7 +69,8 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
   const params = useSearchParams();
   const [source, setSource] = useState<PortfolioSource>(params.get("source") === "trading212" ? "trading212" : "crs");
   // Las credenciales pertenecen por ahora a una única cuenta personal de Demo en localhost.
-  const demoAvailable = process.env.NODE_ENV === "development";
+  // Oculto hasta que conectemos dinero real: NEXT_PUBLIC_TRADING212_UI=1 lo vuelve a mostrar.
+  const demoAvailable = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_TRADING212_UI === "1";
 
   if (!demoAvailable) return <CrsPortfolioPanel onOpenChart={onOpenChart} />;
 
@@ -730,6 +736,8 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
                       </span>
                     ) : p.source === "comite" ? (
                       "comité de inversión"
+                    ) : p.source === "agente" ? (
+                      "idea de los agentes"
                     ) : (
                       "manual"
                     )}

@@ -1,10 +1,12 @@
 "use client";
 // Agentes: tres gestores de IA con la misma información, distinto carácter y su propia cartera virtual.
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Bot, CheckCircle2, ChevronDown, Loader2, Play, RotateCcw, XCircle } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
 import { api, dayFmt, errorText, eur, eur0, ghost, int, panel, pct, primary, th, tone } from "./format";
 import { refreshTrading, useTradingRefresh } from "./navigation";
+import { EquityCurve } from "./portfolio-panel";
 import { Rich } from "./ui";
 
 type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean };
@@ -15,7 +17,7 @@ const PROFILE_TONE: Record<string, string> = {
   blue: "border-blue-200 bg-blue-50 text-blue-700",
   orange: "border-orange-200 bg-orange-50 text-orange-800",
 };
-const BAR: Record<string, string> = { emerald: "bg-emerald-500", blue: "bg-blue-500", orange: "bg-orange-500" };
+const HEX: Record<string, string> = { emerald: "#10b981", blue: "#3b82f6", orange: "#f97316" };
 
 const ACTION: Record<string, string> = { comprar: "Compra", vender: "Venta", mantener: "Mantener", vigilar: "Vigilar" };
 const STATUS: Record<string, { label: string; tone: string }> = {
@@ -35,7 +37,8 @@ type RunState = Record<string, { state: "esperando" | "reunido" | "ok" | "error"
 export function AgentsPanel() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string>("nova");
+  const params = useSearchParams();
+  const [selected, setSelected] = useState<string>(params.get("agent") ?? "nova");
   const [run, setRun] = useState<RunState | null>(null);
   const running = !!run && Object.values(run).some((r) => r.state === "esperando" || r.state === "reunido");
 
@@ -130,68 +133,60 @@ export function AgentsPanel() {
 
       {error && <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      {/* Clasificación */}
-      <section className={panel}>
-        <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">Clasificación</h2>
-          {bench && (
-            <span className="text-xs text-slate-500">
-              En el mismo periodo: IBEX 35 <b className={tone(bench.ibexPct)}>{pct(bench.ibexPct)}</b> · Bitcoin{" "}
-              <b className={tone(bench.btcPct)}>{pct(bench.btcPct)}</b>
-            </span>
-          )}
-        </header>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className={th}>#</th>
-                <th className={th}>Agente</th>
-                <th className={`${th} text-right`}>Patrimonio</th>
-                <th className={`${th} text-right`}>Rentabilidad</th>
-                <th className={`${th} text-right`}>Invertido</th>
-                <th className={`${th} text-right`}>Operaciones</th>
-                <th className={th}>Última reunión</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ranked.map((a, k) => {
-                const investedPct = a.summary.equity > 0 ? (a.summary.invested / a.summary.equity) * 100 : 0;
-                return (
-                  <tr
-                    key={a.key}
-                    onClick={() => setSelected(a.key)}
-                    className={`cursor-pointer border-t border-slate-100 ${a.key === agent.key ? "bg-blue-50/50" : "hover:bg-slate-50"}`}
-                  >
-                    <td className="px-3 py-3 font-semibold tabular-nums text-slate-500">{k + 1}</td>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-2.5 w-2.5 ${BAR[a.color]}`} />
-                        <span className="font-semibold text-slate-900">{a.name}</span>
-                        <span className={`border px-1.5 py-0.5 text-xs font-medium ${PROFILE_TONE[a.color]}`}>{a.profile}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-right font-medium tabular-nums">{eur0(a.summary.equity)}</td>
-                    <td className={`px-3 py-3 text-right font-semibold tabular-nums ${tone(a.summary.returnPct)}`}>{pct(a.summary.returnPct)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums text-slate-600">{pct(investedPct, 0, false)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums text-slate-600">
-                      {[
-                        `${a.positions.filter((p) => p.status === "abierta").length} abiertas`,
-                        ...(a.positions.some((p) => p.status === "pendiente") ? [`${a.positions.filter((p) => p.status === "pendiente").length} pendientes`] : []),
-                        `${a.summary.stats.closed} cerradas`,
-                      ].join(" · ")}
-                    </td>
-                    <td className="px-3 py-3 text-slate-600">
-                      {when(a.lastRun?.at)}
-                      {a.lastRun?.status === "error" && <span className="ml-1 text-xs text-red-700">(falló)</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      {/* Una tarjeta por agente */}
+      {bench && (
+        <p className="-mb-3 text-xs text-slate-500">
+          Desde que empezaron: IBEX 35 <b className={tone(bench.ibexPct)}>{pct(bench.ibexPct)}</b> · Bitcoin <b className={tone(bench.btcPct)}>{pct(bench.btcPct)}</b>
+        </p>
+      )}
+      <div className="grid gap-4 md:grid-cols-3">
+        {ranked.map((a, k) => {
+          const open = a.positions.filter((p) => p.status === "abierta").length;
+          const pending = a.positions.filter((p) => p.status === "pendiente").length;
+          const lastMove = a.proposals.find((p) => p.status === "ejecutada" && p.action !== "vigilar");
+          const sel = a.key === agent.key;
+          return (
+            <button
+              key={a.key}
+              type="button"
+              onClick={() => {
+                setSelected(a.key);
+                window.history.replaceState(null, "", `/trading/agentes?agent=${a.key}`);
+              }}
+              className={`${panel} flex flex-col border-t-4 text-left transition-shadow hover:shadow-sm ${sel ? "ring-2 ring-blue-500" : ""}`}
+              style={{ borderTopColor: HEX[a.color] }}
+            >
+              <div className="flex items-start justify-between gap-2 px-4 pt-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-semibold text-slate-900">{a.name}</span>
+                    <span className={`border px-1.5 py-0.5 text-[11px] font-medium ${PROFILE_TONE[a.color]}`}>{a.profile}</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-snug text-slate-500">{a.tagline}</p>
+                </div>
+                <span className="text-xs font-semibold text-slate-400">#{k + 1}</span>
+              </div>
+              <div className="mt-3 flex items-baseline gap-2 px-4">
+                <span className={`text-2xl font-semibold tabular-nums ${tone(a.summary.returnPct)}`}>{pct(a.summary.returnPct)}</span>
+                <span className="text-sm tabular-nums text-slate-500">{eur0(a.summary.equity)}</span>
+              </div>
+              <div className="px-1">
+                <EquityCurve points={a.equity} initial={a.summary.initialCapital} height={70} empty="La línea aparece tras su primera sesión." />
+              </div>
+              <div className="mt-auto border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600">
+                <div>
+                  {open} abiertas{pending ? ` · ${pending} pendientes` : ""} · {a.summary.stats.closed} cerradas
+                  {a.summary.stats.closed ? ` · acierto ${Math.round(a.summary.stats.winRate * 100)} %` : ""}
+                </div>
+                <div className="mt-0.5 truncate text-slate-500">
+                  {lastMove ? `Último: ${ACTION[lastMove.action] ?? lastMove.action} ${lastMove.name}` : a.lastRun ? "Aún no ha operado" : "Aún no se ha reunido"}
+                  {a.lastRun ? ` · reunión ${when(a.lastRun.at)}` : ""}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
 
       {/* Ficha del agente */}
       <AgentDetail key={agent.key} agent={agent} canManage={data.canManage} busy={running} onMeet={() => void meet([agent.key])} onReset={() => void reset(agent)} />
@@ -208,7 +203,7 @@ function AgentDetail({ agent: a, canManage, busy, onMeet, onReset }: { agent: Ag
   const pendingIds = new Set(a.positions.filter((p) => p.status === "pendiente").map((p) => p.id));
 
   return (
-    <section className={`${panel} border-t-4`} style={{ borderTopColor: a.color === "emerald" ? "#10b981" : a.color === "blue" ? "#3b82f6" : "#f97316" }}>
+    <section className={`${panel} border-t-4`} style={{ borderTopColor: HEX[a.color] }}>
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
         <div className="max-w-2xl">
           <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
@@ -245,6 +240,9 @@ function AgentDetail({ agent: a, canManage, busy, onMeet, onReset }: { agent: Ag
         ))}
       </dl>
 
+      <div className="border-b border-slate-100 px-2 py-2">
+        <EquityCurve points={a.equity} initial={s.initialCapital} height={160} empty="Su gráfico se dibuja con el cierre de cada sesión desde que empezó." />
+      </div>
       {a.lastRun?.marketView && (
         <div className="border-b border-slate-100 px-5 py-3 text-sm leading-relaxed text-slate-700">
           <div className="mb-1 text-xs font-medium text-slate-500">Cómo ve el mercado ({when(a.lastRun.at)})</div>

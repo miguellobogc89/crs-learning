@@ -333,6 +333,7 @@ export function parseOrder(body: Record<string, unknown>): OrderInput {
     score: Number.isFinite(Number(body.score)) ? Math.round(Number(body.score)) : null,
     maxHoldDays: Number.isFinite(Number(body.maxHoldDays)) ? Math.round(Number(body.maxHoldDays)) : null,
     notes: typeof body.notes === "string" ? body.notes.trim().slice(0, 2000) || null : null,
+    source: body.source === "agente" ? "agente" : "manual",
   };
 }
 

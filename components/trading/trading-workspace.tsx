@@ -1,24 +1,23 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, Loader2, ShieldAlert } from "lucide-react";
+import { Loader2, ShieldAlert } from "lucide-react";
 import type { getOverview } from "@/lib/trading/service";
 import { api, errorText } from "./format";
 import { useTradingRefresh } from "./navigation";
-import { RecommendationsPanel } from "./recommendations-panel";
 import { MarketPanel } from "./market-panel";
 import { LibraryPanel } from "./library-panel";
 import { PortfolioPanel, RulesPanel, UniversePanel } from "./portfolio-panel";
 import { AgentsPanel } from "./agents-panel";
 import { NewsPanel } from "./news-panel";
-import { CommitteeHistory, CommitteeToday } from "./committee-panel";
+import { OpportunitiesPanel } from "./opportunities-panel";
 import { HomePanel } from "./home-panel";
 import type { TradingTab } from "./tabs";
 
 export type Overview = Awaited<ReturnType<typeof getOverview>> & { canManage: boolean };
 
 /** Paneles que necesitan el análisis completo del mercado. */
-const NEEDS_OVERVIEW: TradingTab[] = ["inicio", "oportunidades", "mercado"];
+const NEEDS_OVERVIEW: TradingTab[] = ["mercado"];
 
 export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   const router = useRouter();
@@ -27,7 +26,6 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   const [loading, setLoading] = useState(NEEDS_OVERVIEW.includes(tab));
   const [error, setError] = useState<string | null>(null);
   const [symbol, setSymbol] = useState<string | null>(params.get("symbol"));
-  const [showTechnical, setShowTechnical] = useState(false);
 
   const load = useCallback(async () => {
     if (!NEEDS_OVERVIEW.includes(tab)) return;
@@ -69,33 +67,10 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
             : "Pide a un administrador del espacio que pulse «Actualizar cotizaciones» en el panel de la izquierda."}
         </div>
       );
-    else if (data && tab === "inicio") body = <HomePanel data={data} onOpenChart={openChart} />;
-    else if (data && tab === "oportunidades")
-      body = (
-        <div className="space-y-8">
-          <CommitteeToday />
-          <section className="border-t border-slate-200 pt-5">
-            <button type="button" onClick={() => setShowTechnical(!showTechnical)} className="flex w-full items-center justify-between gap-3 text-left">
-              <span>
-                <span className="block text-sm font-semibold text-slate-900">Detalle técnico (para curiosos)</span>
-                <span className="block text-xs text-slate-500">
-                  Lo que dicen solo los gráficos, sin noticias ni contexto. Puede no coincidir con el comité: la decisión buena es la del comité,
-                  que tiene en cuenta todo.
-                </span>
-              </span>
-              <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${showTechnical ? "rotate-180" : ""}`} />
-            </button>
-            {showTechnical && (
-              <div className="mt-4">
-                <RecommendationsPanel data={data} onOpenChart={openChart} />
-              </div>
-            )}
-          </section>
-        </div>
-      );
     else if (data && tab === "mercado") body = <MarketPanel data={data} symbol={symbol} onSymbol={pickSymbol} />;
-  } else if (tab === "noticias") body = <NewsPanel />;
-  else if (tab === "comite") body = <CommitteeHistory />;
+  } else if (tab === "inicio") body = <HomePanel />;
+  else if (tab === "oportunidades") body = <OpportunitiesPanel />;
+  else if (tab === "noticias") body = <NewsPanel />;
   else if (tab === "cartera") body = <PortfolioPanel onOpenChart={openChart} />;
   else if (tab === "agentes") body = <AgentsPanel />;
   else if (tab === "patrones") body = <LibraryPanel />;

@@ -109,3 +109,12 @@ Sección *Agentes* (`/trading/agentes`), que sustituye al simulador histórico e
 - Reunión diaria: cron `/api/trading/cron/agents` (lunes a viernes, 18:15 UTC, después del cron de datos), los tres en paralelo. También a mano con «Reunir a los agentes ahora» (una petición por agente).
 - API: `GET agents`, `POST agents/run { agent }`, `POST agents/reset { agent }`.
 - Migración: `prisma/migrations/20261110200000_trading_agents/migration.sql`.
+
+## Navegación (desde el 10/11/2026)
+
+- **Inicio** (`home-panel.tsx`): tu cartera virtual y su gráfico, tabla «Tú y los agentes» y últimos movimientos de los agentes (`getAgents().moves`).
+- **Oportunidades** (`opportunities-panel.tsx`, `GET opportunities` → `lib/trading/agents/opportunities.ts`): las compras de la última reunión de cada agente (últimos 4 días), agrupadas por valor, con el tamaño recalculado para tu cartera y el plan del agente más convencido. Avisa si un agente vende algo que tú tienes. Se ejecutan en tu cartera virtual (`source = "agente"`).
+- **Agentes**: una tarjeta por agente y su ficha.
+- **Mi cartera**: solo la cartera virtual. Trading 212 Demo queda oculto; se vuelve a mostrar con `NEXT_PUBLIC_TRADING212_UI=1` en local.
+- **Explorar**: Gráficos, Noticias, Aprende. **Ajustes**: Reglas y riesgo, Valores seguidos.
+- Se han quitado el comité suelto (Oportunidades e Historial del comité) y las señales técnicas sueltas. El código del comité sigue en el servidor porque lo usan los agentes.

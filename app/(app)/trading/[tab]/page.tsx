@@ -14,6 +14,7 @@ export default async function Page({ params }: { params: Promise<{ tab: string }
   const { tab } = await params;
   // Nombres antiguos de secciones.
   if (tab === "hoy") redirect("/trading/oportunidades");
+  if (tab === "simulador" || tab === "comite") redirect("/trading/agentes");
   if (!isTradingTab(tab)) notFound();
   const ctx = await connectorContext();
   if (!ctx) redirect("/");
