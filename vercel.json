@@ -1,6 +1,16 @@
 {
   "crons": [
-    { "path": "/api/tenders/cron", "schedule": "17 6 * * *" },
-    { "path": "/api/trading/cron", "schedule": "50 17 * * 1-5" }
+    {
+      "path": "/api/tenders/cron",
+      "schedule": "17 6 * * *"
+    },
+    {
+      "path": "/api/trading/cron",
+      "schedule": "50 17 * * 1-5"
+    },
+    {
+      "path": "/api/trading/cron/agents",
+      "schedule": "15 18 * * 1-5"
+    }
   ]
 }

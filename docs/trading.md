@@ -94,3 +94,18 @@ Solo funciona en local (`NODE_ENV=development`) con `TRADING212_ENV=demo`, `TRAD
 - **Autonomía del comité** (`trading_accounts.broker_autonomy`): `nada` (no toca el bróker), `aprobacion` (botón «Trading 212 Demo» al ejecutar una propuesta) o `automatico` (al reunirse, el comité envía solo sus compras de bolsa válidas).
 - API: `GET broker`, `POST broker/link`, `POST broker/guardian`, `POST broker/autonomy`, `POST committee/execute-broker` (`{ proposalId, confirmDemo: true }`).
 - Migración: `prisma/migrations/20261110180000_trading_broker/migration.sql`.
+
+## Agentes
+
+Sección *Agentes* (`/trading/agentes`), que sustituye al simulador histórico en el menú (el endpoint `simulate` sigue existiendo).
+
+- Tres agentes (`lib/trading/agents/roster.ts`), cada uno con **5.000 € virtuales** y su propia cartera (`trading_accounts.agent`; la del usuario es `agent = ''`):
+  - **ARGO-1**, precavido: 0,5 % de riesgo por operación, máx. 15 % por valor, 1 compra por reunión, convicción ≥ 4, beneficio/riesgo ≥ 2, no compra en mercado bajista.
+  - **NOVA-2**, equilibrado: 1 %, 25 %, 2 compras, convicción ≥ 3, beneficio/riesgo ≥ 1,5.
+  - **VÉRTIGO-3**, arriesgado: 2 %, 35 %, 3 compras, convicción ≥ 3, puede comprar en mercado bajista con convicción 5.
+  - Sin comisiones (como Trading 212), con 8 pb de deslizamiento.
+- Todos reciben **la misma información** que el comité (`buildContext`); cambian su carácter (se añade a las instrucciones), sus reglas duras (`ctx.rules` en `validateCommittee`) y su cartera.
+- **Autonomía total**: al acabar la reunión, `executeAgentRun` ejecuta en su cartera ventas, subidas de stop y compras (a la próxima apertura). Lo que no se puede ejecutar queda como «descartada» con el motivo.
+- Reunión diaria: cron `/api/trading/cron/agents` (lunes a viernes, 18:15 UTC, después del cron de datos), los tres en paralelo. También a mano con «Reunir a los agentes ahora» (una petición por agente).
+- API: `GET agents`, `POST agents/run { agent }`, `POST agents/reset { agent }`.
+- Migración: `prisma/migrations/20261110200000_trading_agents/migration.sql`.

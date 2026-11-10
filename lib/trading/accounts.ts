@@ -23,20 +23,34 @@ export function madridDay(d = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(d);
 }
 
-export async function ensureAccount(workspaceId: string) {
-  const found = await prisma.trading_accounts.findUnique({ where: { workspace_id: workspaceId } });
+/** Cartera de un espacio. `agent` vacío = la del usuario; si no, la del agente. */
+export async function ensureAccount(workspaceId: string, agent = "", defaults: AccountDefaults = {}) {
+  const key = { workspace_id_agent: { workspace_id: workspaceId, agent } };
+  const found = await prisma.trading_accounts.findUnique({ where: key });
   if (found) return found;
+  const capital = defaults.capital ?? 10_000;
   return prisma.trading_accounts.upsert({
-    where: { workspace_id: workspaceId },
+    where: key,
     create: {
       workspace_id: workspaceId,
+      agent,
+      ...(defaults.name ? { name: defaults.name } : {}),
+      initial_capital: capital,
+      cash: capital,
+      ...(defaults.settings ?? {}),
       transactions: {
-        create: { kind: "aportación", amount: 10_000, description: "Capital inicial", day: dayDate(madridDay()) },
+        create: { kind: "aportación", amount: capital, description: "Capital inicial", day: dayDate(madridDay()) },
       },
     },
     update: {},
   });
 }
+
+export type AccountDefaults = {
+  name?: string;
+  capital?: number;
+  settings?: Partial<Pick<trading_accounts, "risk_per_trade_pct" | "max_position_pct" | "max_open_positions" | "commission_pct" | "commission_min" | "slippage_bps" | "breakeven">>;
+};
 
 /** Último cierre de cada instrumento. */
 export async function latestCloses(instrumentIds: string[]) {
@@ -146,8 +160,8 @@ function viewPosition(p: trading_positions & { instrument: { name: string } }, l
   };
 }
 
-export async function accountState(workspaceId: string) {
-  const account = await ensureAccount(workspaceId);
+export async function accountState(workspaceId: string, agent = "") {
+  const account = await ensureAccount(workspaceId, agent);
   const positions = await prisma.trading_positions.findMany({
     where: { account_id: account.id },
     include: { instrument: { select: { name: true } } },
@@ -207,8 +221,8 @@ export async function accountState(workspaceId: string) {
   return { account, summary, positions: views };
 }
 
-export async function accountDetail(workspaceId: string) {
-  const state = await accountState(workspaceId);
+export async function accountDetail(workspaceId: string, agent = "") {
+  const state = await accountState(workspaceId, agent);
   const [equity, transactions] = await Promise.all([
     prisma.trading_equity.findMany({ where: { account_id: state.account.id }, orderBy: { day: "asc" }, take: 2000 }),
     prisma.trading_transactions.findMany({ where: { account_id: state.account.id }, orderBy: { created_at: "desc" }, take: 200 }),
@@ -263,8 +277,8 @@ export async function updateSettings(workspaceId: string, input: Record<string, 
 }
 
 /** Borra posiciones y movimientos y vuelve a empezar con el capital indicado. */
-export async function resetAccount(workspaceId: string, capitalInput: unknown) {
-  const a = await ensureAccount(workspaceId);
+export async function resetAccount(workspaceId: string, capitalInput: unknown, agent = "") {
+  const a = await ensureAccount(workspaceId, agent);
   const capital = Math.round(num(capitalInput, 500, 10_000_000, a.initial_capital));
   await prisma.$transaction([
     prisma.trading_positions.deleteMany({ where: { account_id: a.id } }),
@@ -295,7 +309,7 @@ export type OrderInput = {
   score?: number | null;
   maxHoldDays?: number | null;
   notes?: string | null;
-  source?: "manual" | "auto" | "comite";
+  source?: "manual" | "auto" | "comite" | "agente";
 };
 
 export function parseOrder(body: Record<string, unknown>): OrderInput {
@@ -322,9 +336,9 @@ export function parseOrder(body: Record<string, unknown>): OrderInput {
   };
 }
 
-export async function placeOrder(workspaceId: string, userId: string | null, order: OrderInput) {
+export async function placeOrder(workspaceId: string, userId: string | null, order: OrderInput, agent = "") {
   let o = order;
-  const a = await ensureAccount(workspaceId);
+  const a = await ensureAccount(workspaceId, agent);
   const cost = costOf(a);
   if (o.direction === "short" && !a.allow_short)
     throw new Error("Las posiciones cortas están desactivadas en los ajustes de la cartera");
@@ -447,27 +461,27 @@ async function closeWith(
   a.cash += delta;
 }
 
-export async function closePosition(workspaceId: string, positionId: string) {
+export async function closePosition(workspaceId: string, positionId: string, agent = "", reason = "manual") {
   if (!/^[0-9a-f-]{36}$/i.test(positionId)) throw new Error("Posición no válida");
-  const a = await ensureAccount(workspaceId);
+  const a = await ensureAccount(workspaceId, agent);
   const p = await prisma.trading_positions.findFirst({ where: { id: positionId, account_id: a.id } });
   if (!p) throw new Error("La posición no existe");
   if (p.status === "pendiente") {
     await prisma.trading_positions.update({
       where: { id: p.id },
-      data: { status: "cancelada", exit_reason: "cancelada por el usuario", updated_at: new Date() },
+      data: { status: "cancelada", exit_reason: reason === "manual" ? "cancelada por el usuario" : reason, updated_at: new Date() },
     });
     return { status: "cancelada" };
   }
   if (p.status !== "abierta") throw new Error("La posición ya está cerrada");
   const last = (await latestCloses([p.instrument_id])).get(p.instrument_id);
   if (!last) throw new Error("No hay precio para cerrar");
-  await closeWith(a, p, last.close, last.day, "manual");
+  await closeWith(a, p, last.close, last.day, reason);
   return { status: "cerrada" };
 }
 
-export async function updateStops(workspaceId: string, positionId: string, input: Record<string, unknown>) {
-  const a = await ensureAccount(workspaceId);
+export async function updateStops(workspaceId: string, positionId: string, input: Record<string, unknown>, agent = "") {
+  const a = await ensureAccount(workspaceId, agent);
   const p = await prisma.trading_positions.findFirst({ where: { id: positionId, account_id: a.id, status: { in: [...OPEN_STATUSES] } } });
   if (!p) throw new Error("La posición no existe o ya está cerrada");
   const stop = Number(input.stop);

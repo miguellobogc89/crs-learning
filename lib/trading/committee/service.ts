@@ -5,7 +5,8 @@ import "server-only";
 import type { trading_proposals } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { aiJson, aiModelInfo } from "../ai";
-import { closePosition, costOf, madridDay, OPEN_STATUSES, placeOrder } from "../accounts";
+import { closePosition, costOf, ensureAccount, madridDay, OPEN_STATUSES, placeOrder } from "../accounts";
+import { agentByKey, agentInstructions } from "../agents/roster";
 import { atrAt, indicatorBundle } from "../indicators";
 import { PATTERN_NAMES } from "../library";
 import { CRYPTO_BENCHMARK, INDEX_SYMBOL, isCryptoMarket, lotStepOf, newsSymbolOf } from "../market-data";
@@ -39,9 +40,9 @@ export type Evidence = {
 const when = (d: Date) =>
   new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(d);
 
-async function buildContext(workspaceId: string) {
+async function buildContext(workspaceId: string, agent = "") {
   const [{ ranked, market, regime, cryptoRegime, state, view, instruments, series }, trend] = await Promise.all([
-    computeRecommendations(workspaceId),
+    computeRecommendations(workspaceId, agent),
     getTrendPicks(),
   ]);
   const strengthOf = (symbol: string) => {
@@ -200,16 +201,22 @@ async function buildContext(workspaceId: string) {
   return { ctx, evidence };
 }
 
-export async function runCommittee(workspaceId: string, userId: string | null) {
-  const { ctx, evidence } = await buildContext(workspaceId);
+/** Reunión del comité. Con `agentKey`, es la reunión de ese agente: su carácter, sus límites y su cartera. */
+export async function runCommittee(workspaceId: string, userId: string | null, agentKey = "") {
+  const agentDef = agentKey ? agentByKey(agentKey) : null;
+  if (agentKey && !agentDef) throw new Error("Agente desconocido");
+  const agent = agentDef?.key ?? "";
+  if (agentDef) await ensureAccount(workspaceId, agent, { name: agentDef.name, capital: agentDef.capital, settings: agentDef.settings });
+  const { ctx, evidence } = await buildContext(workspaceId, agent);
+  if (agentDef) ctx.rules = agentDef.rules;
   const model = aiModelInfo().smart;
   if (!ctx.assets.length) throw new Error("No hay datos suficientes: actualiza primero cotizaciones y noticias");
   let raw: unknown;
   try {
     raw = await aiJson<unknown>({
       tier: "smart",
-      purpose: "comite",
-      instructions: COMMITTEE_INSTRUCTIONS,
+      purpose: agentDef ? `agente:${agent}` : "comite",
+      instructions: agentDef ? COMMITTEE_INSTRUCTIONS + "\n" + agentInstructions(agentDef) : COMMITTEE_INSTRUCTIONS,
       input: `Datos del día. Devuelve solo JSON según el contrato.\n${committeeInput(ctx)}`,
       schemaName: "investment_committee",
       schema: COMMITTEE_SCHEMA as unknown as Record<string, unknown>,
@@ -219,7 +226,7 @@ export async function runCommittee(workspaceId: string, userId: string | null) {
   } catch (e) {
     const error = e instanceof Error ? e.message.slice(0, 500) : "La IA no respondió";
     await prisma.trading_committee_runs.create({
-      data: { workspace_id: workspaceId, as_of: dayDate(ctx.date), status: "error", error, model, created_by: userId, context: JSON.parse(JSON.stringify(ctx)) },
+      data: { workspace_id: workspaceId, agent, as_of: dayDate(ctx.date), status: "error", error, model, created_by: userId, context: JSON.parse(JSON.stringify(ctx)) },
     });
     throw new Error(error);
   }
@@ -227,6 +234,7 @@ export async function runCommittee(workspaceId: string, userId: string | null) {
   const run = await prisma.trading_committee_runs.create({
     data: {
       workspace_id: workspaceId,
+      agent,
       as_of: dayDate(ctx.date),
       market_view: v.marketView || null,
       watchlist: JSON.parse(JSON.stringify(v.watchlist)),
@@ -237,6 +245,7 @@ export async function runCommittee(workspaceId: string, userId: string | null) {
       proposals: {
         create: v.proposals.map((p) => ({
           workspace_id: workspaceId,
+          agent,
           symbol: p.symbol,
           name: p.name,
           market: p.market,
@@ -256,6 +265,7 @@ export async function runCommittee(workspaceId: string, userId: string | null) {
       },
     },
   });
+  if (agentDef) return { id: run.id, auto: await executeAgentRun(workspaceId, run.id) };
   // Autonomía «automático»: las compras de bolsa aprobadas por las reglas se ejecutan solas en Trading 212 Demo.
   const auto: { symbol: string; ok: boolean; detail: string }[] = [];
   const broker = await brokerStatus(workspaceId);
@@ -273,10 +283,31 @@ export async function runCommittee(workspaceId: string, userId: string | null) {
   return { id: run.id, auto };
 }
 
+/** Un agente tiene autonomía total: ejecuta en su cartera todo lo que su reunión aprobó. */
+async function executeAgentRun(workspaceId: string, runId: string) {
+  const out: { symbol: string; ok: boolean; detail: string }[] = [];
+  const list = await prisma.trading_proposals.findMany({ where: { run_id: runId, status: "propuesta" }, orderBy: { conviction: "desc" } });
+  // Primero ventas (liberan efectivo), luego protecciones y por último compras.
+  const order = { vender: 0, mantener: 1, comprar: 2, vigilar: 3 } as Record<string, number>;
+  list.sort((a, b) => (order[a.action] ?? 9) - (order[b.action] ?? 9));
+  for (const p of list) {
+    if (p.action === "vigilar" || (p.action === "mantener" && !p.stop)) continue;
+    try {
+      await decideProposal(workspaceId, null, p.id, "ejecutar");
+      out.push({ symbol: p.symbol, ok: true, detail: p.action });
+    } catch (e) {
+      const why = e instanceof Error ? e.message.slice(0, 300) : "error";
+      await prisma.trading_proposals.update({ where: { id: p.id }, data: { status: "descartada", rejection: `No se pudo ejecutar: ${why}`, decided_at: new Date() } });
+      out.push({ symbol: p.symbol, ok: false, detail: why });
+    }
+  }
+  return out;
+}
+
 /** Ejecuta una propuesta de compra del comité en Trading 212 Demo, con stop y objetivo protegidos. */
 export async function executeProposalOnBroker(workspaceId: string, proposalId: string, source: "comite" | "auto" = "comite") {
   if (!/^[0-9a-f-]{36}$/i.test(proposalId)) throw new Error("Propuesta no válida");
-  const p = await prisma.trading_proposals.findFirst({ where: { id: proposalId, workspace_id: workspaceId } });
+  const p = await prisma.trading_proposals.findFirst({ where: { id: proposalId, workspace_id: workspaceId, agent: "" } });
   if (!p) throw new Error("La propuesta no existe");
   if (p.status !== "propuesta") throw new Error("Esta propuesta ya se decidió");
   if (p.action !== "comprar" || p.market !== "bolsa" || !p.stop || !p.target) throw new Error("Solo se pueden enviar al bróker compras de bolsa con stop y objetivo");
@@ -291,11 +322,11 @@ export async function executeProposalOnBroker(workspaceId: string, proposalId: s
 export async function getCommittee(workspaceId: string) {
   const [latest, proposals] = await Promise.all([
     prisma.trading_committee_runs.findFirst({
-      where: { workspace_id: workspaceId },
+      where: { workspace_id: workspaceId, agent: "" },
       orderBy: { created_at: "desc" },
       include: { proposals: { orderBy: [{ status: "asc" }, { conviction: "desc" }] } },
     }),
-    prisma.trading_proposals.findMany({ where: { workspace_id: workspaceId }, orderBy: { created_at: "desc" }, take: 200 }),
+    prisma.trading_proposals.findMany({ where: { workspace_id: workspaceId, agent: "" }, orderBy: { created_at: "desc" }, take: 200 }),
   ]);
   const symbols = [...new Set([...proposals.map((p) => p.symbol), INDEX_SYMBOL, CRYPTO_BENCHMARK])];
   const instruments = await prisma.market_instruments.findMany({ where: { symbol: { in: symbols } } });
@@ -345,7 +376,7 @@ export async function getCommittee(workspaceId: string) {
   };
 }
 
-function view(p: trading_proposals) {
+export function view(p: trading_proposals) {
   return {
     id: p.id,
     runId: p.run_id,
@@ -373,7 +404,7 @@ export type DecisionOverrides = { quantity?: number; stop?: number; target?: num
 
 export async function decideProposal(
   workspaceId: string,
-  userId: string,
+  userId: string | null,
   proposalId: string,
   decision: "ejecutar" | "descartar",
   overrides: DecisionOverrides = {},
@@ -382,6 +413,9 @@ export async function decideProposal(
   const p = await prisma.trading_proposals.findFirst({ where: { id: proposalId, workspace_id: workspaceId } });
   if (!p) throw new Error("La propuesta no existe");
   if (p.status !== "propuesta") throw new Error("Esta propuesta ya se decidió");
+  const agent = p.agent;
+  if (agent && userId !== null) throw new Error("Las propuestas de los agentes las ejecuta el propio agente");
+  const account = await ensureAccount(workspaceId, agent);
   if (decision === "descartar") {
     await prisma.trading_proposals.update({ where: { id: p.id }, data: { status: "descartada", decided_at: new Date() } });
     return { status: "descartada" };
@@ -401,20 +435,20 @@ export async function decideProposal(
       execution: overrides.execution === "now" ? "now" : "next_open",
       signalKey: `comite:${p.id}`,
       maxHoldDays: Math.round(p.horizon_days * 1.5),
-      notes: `Comité de inversión: ${p.rationale}`,
-      source: "comite",
-    });
+      notes: `${agent ? agentByKey(agent)?.name ?? agent : "Comité de inversión"}: ${p.rationale}`,
+      source: agent ? "agente" : "comite",
+    }, agent);
     positionId = r.id;
   } else if (p.action === "vender") {
     const pos = await prisma.trading_positions.findFirst({
-      where: { workspace_id: workspaceId, symbol: p.symbol, status: { in: [...OPEN_STATUSES] } },
+      where: { account_id: account.id, symbol: p.symbol, status: { in: [...OPEN_STATUSES] } },
       orderBy: { created_at: "desc" },
     });
     if (!pos) throw new Error("Ya no hay posición abierta en este valor");
-    await closePosition(workspaceId, pos.id);
+    await closePosition(workspaceId, pos.id, agent, agent ? "decisión del agente" : "manual");
     positionId = pos.id;
   } else if (p.action === "mantener" && p.stop) {
-    const pos = await prisma.trading_positions.findFirst({ where: { workspace_id: workspaceId, symbol: p.symbol, status: "abierta" } });
+    const pos = await prisma.trading_positions.findFirst({ where: { account_id: account.id, symbol: p.symbol, status: "abierta" } });
     if (pos && (pos.direction === "long" ? p.stop > pos.stop : p.stop < pos.stop))
       await prisma.trading_positions.update({ where: { id: pos.id }, data: { stop: p.stop, updated_at: new Date() } });
     positionId = pos?.id ?? null;

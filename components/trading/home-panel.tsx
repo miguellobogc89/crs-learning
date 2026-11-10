@@ -3,7 +3,7 @@
 // que merezca la pena, cómo van sus posiciones y las noticias que importan.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Flame, FlaskConical, Info, Newspaper, TrendingUp, Wallet } from "lucide-react";
+import { ArrowRight, Bot, Flame, Info, Newspaper, TrendingUp, Wallet } from "lucide-react";
 import type { listNews } from "@/lib/trading/news/service";
 import type { Overview } from "./trading-workspace";
 import type { Committee, Proposal } from "./committee-panel";
@@ -116,8 +116,8 @@ export function HomePanel({ data, onOpenChart }: { data: Overview; onOpenChart: 
               <Link href="/trading/oportunidades" className={primary}>
                 <Flame className="h-4 w-4" /> Ver oportunidades
               </Link>
-              <Link href="/trading/simulador" className={ghost}>
-                <FlaskConical className="h-4 w-4" /> ¿Cuánto habría ganado?
+              <Link href="/trading/agentes" className={ghost}>
+                <Bot className="h-4 w-4" /> Ver a los agentes
               </Link>
             </div>
           </div>
@@ -176,7 +176,7 @@ export function HomePanel({ data, onOpenChart }: { data: Overview; onOpenChart: 
           </header>
           {open.length === 0 ? (
             <p className="px-4 py-4 text-sm text-slate-600">
-              Todavía no tienes nada comprado. Empieza por una oportunidad o mira en el simulador cómo te habría ido.
+              Todavía no tienes nada comprado. Empieza por una oportunidad o mira cómo lo hacen los agentes.
             </p>
           ) : (
             <ul className="divide-y divide-slate-100">
@@ -216,7 +216,7 @@ export function HomePanel({ data, onOpenChart }: { data: Overview; onOpenChart: 
               <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <TrendingUp className="h-4 w-4 text-emerald-600" /> Los que más fuerza tienen
               </h2>
-              <p className="text-xs text-slate-500">Lo que más ha subido en los últimos meses. Es la base de la estrategia de tendencia del simulador.</p>
+              <p className="text-xs text-slate-500">Lo que más ha subido en los últimos meses. Es la base de la estrategia de tendencia.</p>
             </header>
             <div className="grid divide-y divide-slate-100 md:grid-cols-2 md:divide-x md:divide-y-0">
               {(["bolsa", "crypto"] as const).map((m) => {
@@ -255,13 +255,13 @@ export function HomePanel({ data, onOpenChart }: { data: Overview; onOpenChart: 
       <aside className="min-w-0 space-y-6">
         <section className="border border-blue-200 bg-blue-50/60 px-4 py-4">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <FlaskConical className="h-4 w-4 text-blue-600" /> ¿Te fías? Compruébalo
+            <Bot className="h-4 w-4 text-blue-600" /> Los agentes, en directo
           </h2>
           <p className="mt-1 text-sm text-slate-700">
-            Mira <b>cuánto habrías ganado</b> siguiendo la app el último año, con tu dinero y tu nivel de riesgo, y compáralo con el mercado.
+            Tres gestores de IA (<b>precavido, equilibrado y arriesgado</b>) operan solos con su propia cartera. Mira quién va ganando y por qué decide lo que decide.
           </p>
-          <Link href="/trading/simulador" className={`${primary} mt-3`}>
-            Abrir el simulador <ArrowRight className="h-4 w-4" />
+          <Link href="/trading/agentes" className={`${primary} mt-3`}>
+            Ver la clasificación <ArrowRight className="h-4 w-4" />
           </Link>
         </section>
 

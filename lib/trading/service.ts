@@ -66,8 +66,8 @@ function accountView(state: Awaited<ReturnType<typeof accountState>>): AccountVi
 }
 
 /** Analiza todo el universo y genera las recomendaciones para la cartera de un espacio. */
-export async function computeRecommendations(workspaceId: string) {
-  const [{ instruments, series }, backtest, state] = await Promise.all([universe(), latestBacktest(), accountState(workspaceId)]);
+export async function computeRecommendations(workspaceId: string, agent = "") {
+  const [{ instruments, series }, backtest, state] = await Promise.all([universe(), latestBacktest(), accountState(workspaceId, agent)]);
   const view = accountView(state);
   const index = instruments.find((i) => i.is_index);
   const idxCandles = index ? series.get(index.id) ?? [] : [];
@@ -344,7 +344,7 @@ export async function runDaily(budgetMs = 45_000, workspaceId?: string): Promise
   if (market.pending === 0) {
     const bt = await runBacktest();
     if (bt) backtest = { asOf: bt.asOf, trades: bt.trades };
-    const list = await prisma.trading_accounts.findMany({ where: workspaceId ? { workspace_id: workspaceId } : {}, select: { id: true, workspace_id: true } });
+    const list = await prisma.trading_accounts.findMany({ where: workspaceId ? { workspace_id: workspaceId } : {}, select: { id: true, workspace_id: true, agent: true } });
     for (const a of list) {
       if (Date.now() - started > budgetMs) break;
       const r = await processAccount(a.id);
@@ -352,7 +352,8 @@ export async function runDaily(budgetMs = 45_000, workspaceId?: string): Promise
       accounts.filled += r.filled;
       accounts.closed += r.closed;
       accounts.cancelled += r.cancelled;
-      accounts.autoOpened += (await autoTrade(a.workspace_id)).opened;
+      // El modo automático de señales es solo de la cartera del usuario; los agentes deciden en su reunión.
+      if (!a.agent) accounts.autoOpened += (await autoTrade(a.workspace_id)).opened;
     }
   }
   // Con el tiempo que sobre, noticias (solo en el proceso diario completo).

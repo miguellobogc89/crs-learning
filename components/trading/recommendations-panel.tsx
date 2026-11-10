@@ -214,8 +214,8 @@ export function RecommendationsPanel({ data, onOpenChart }: { data: Overview; on
           Aprende los patrones
         </Link>
         . ¿Te fías del sistema?{" "}
-        <Link href="/trading/simulador" className="font-medium text-blue-700 hover:underline">
-          Mira cómo te habría ido
+        <Link href="/trading/agentes" className="font-medium text-blue-700 hover:underline">
+          Mira cómo les va a los agentes
         </Link>
         .
       </p>

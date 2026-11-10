@@ -22,6 +22,7 @@ import {
 } from "@/lib/trading/service";
 import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
 import { decideProposal, executeProposalOnBroker, getCommittee, runCommittee } from "@/lib/trading/committee/service";
+import { getAgents, resetAgent, runAgent } from "@/lib/trading/agents/service";
 import { brokerLinks, brokerStatus, linkInstruments, listBrackets, runBrokerGuardian, setBrokerAutonomy } from "@/lib/trading/broker/service";
 import { buyOneIberdrolaInTrading212Demo, cancelTrading212DemoOrder, findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, placeTrading212DemoConditionalOrder, sellTrading212DemoPosition, Trading212Error, type Trading212ConditionalKind } from "@/lib/trading/trading212";
 
@@ -86,6 +87,7 @@ export async function GET(req: Request, route: RouteContext) {
       });
     }
     if (action === "account") return NextResponse.json(await accountDetail(ctx.workspaceId));
+    if (action === "agents") return NextResponse.json({ ...(await getAgents(ctx.workspaceId)), canManage: ctx.canManage });
     if (action === "instruments") {
       const list = await listInstruments();
       return NextResponse.json({
@@ -192,6 +194,13 @@ export async function POST(req: Request, route: RouteContext) {
     if (action === "news/sync") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede actualizar las noticias", 403);
       return NextResponse.json(await syncNews(45_000));
+    }
+    if (action === "agents/run" || action === "agents/reset") {
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede dirigir a los agentes", 403);
+      const agent = String(body.agent ?? "");
+      if (action === "agents/run") return NextResponse.json(await runAgent(ctx.workspaceId, agent, ctx.userId));
+      await resetAgent(ctx.workspaceId, agent);
+      return NextResponse.json({ ok: true });
     }
     if (action === "committee/run") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede convocar al comité", 403);

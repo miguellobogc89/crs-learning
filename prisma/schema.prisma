@@ -2226,7 +2226,9 @@ model market_backtests {
 /// Cartera virtual de un espacio de trabajo y sus reglas de riesgo.
 model trading_accounts {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspace_id String @unique @db.Uuid
+  workspace_id String @db.Uuid
+  /// '' = cartera del usuario; si no, clave del agente (argo, nova, vertigo).
+  agent String @default("")
   name String @default("Cartera virtual")
   initial_capital Float @default(10000)
   cash Float @default(10000)
@@ -2248,6 +2250,7 @@ model trading_accounts {
   positions trading_positions[]
   transactions trading_transactions[]
   equity trading_equity[]
+  @@unique([workspace_id, agent])
 }
 /// Posición de la cartera virtual: pendiente (se ejecuta en la próxima apertura), abierta, cerrada o cancelada.
 model trading_positions {
@@ -2357,6 +2360,7 @@ model trading_ai_usage {
 model trading_committee_runs {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspace_id String @db.Uuid
+  agent String @default("")
   as_of DateTime @db.Date
   status String @default("ok")
   market_view String?
@@ -2369,12 +2373,14 @@ model trading_committee_runs {
   created_at DateTime @default(now()) @db.Timestamptz(6)
   proposals trading_proposals[]
   @@index([workspace_id, created_at])
+  @@index([workspace_id, agent, created_at])
 }
 /// Propuesta del comité: comprar, vender, mantener o vigilar, con su porqué, sus pruebas y si pasó las reglas.
 model trading_proposals {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   run_id String @db.Uuid
   workspace_id String @db.Uuid
+  agent String @default("")
   symbol String
   name String
   market String
@@ -2395,6 +2401,7 @@ model trading_proposals {
   created_at DateTime @default(now()) @db.Timestamptz(6)
   run trading_committee_runs @relation(fields: [run_id], references: [id], onDelete: Cascade)
   @@index([workspace_id, created_at])
+  @@index([workspace_id, agent, created_at])
   @@index([run_id])
 }
 /// Operación en el bróker con stop y objetivo: el stop vive en el bróker y el objetivo lo vigila la app.

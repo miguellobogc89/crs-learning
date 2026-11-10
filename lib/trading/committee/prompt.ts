@@ -54,6 +54,8 @@ export type CommitteeContext = {
   };
   marketNews: CommitteeNews[];
   assets: CommitteeAsset[];
+  /** Límites de un agente (si la reunión es de un agente). */
+  rules?: { maxBuys: number; minConviction: number; minRewardRisk: number; buyInBearMarket: boolean } | null;
 };
 
 export const COMMITTEE_ACTIONS = ["comprar", "vender", "mantener", "vigilar"] as const;
@@ -215,6 +217,10 @@ export function validateCommittee(raw: unknown, ctx: CommitteeContext) {
   const out: ValidatedProposal[] = [];
   let openCount = ctx.account.openCount;
   let cash = ctx.account.cash;
+  let buys = 0;
+  const minConviction = ctx.rules?.minConviction ?? 3;
+  const minRR = ctx.rules?.minRewardRisk ?? 1.5;
+  const bear = (m: "bolsa" | "crypto") => (m === "crypto" ? ctx.regimes.crypto : ctx.regimes.bolsa) === "bajista";
   const seen = new Set<string>();
   const list = Array.isArray(data.proposals) ? (data.proposals as Record<string, unknown>[]) : [];
 
@@ -284,7 +290,7 @@ export function validateCommittee(raw: unknown, ctx: CommitteeContext) {
       reject(asset.position.pending ? "Ya hay una orden de compra pendiente para este activo" : "Ya hay una posición abierta en este activo");
       continue;
     }
-    if (conviction < 3) {
+    if (conviction < minConviction) {
       out.push({ ...base, action: "vigilar", stop: null, target: null, rejection: "Convicción baja: se deja en vigilancia" });
       continue;
     }
@@ -304,8 +310,16 @@ export function validateCommittee(raw: unknown, ctx: CommitteeContext) {
       continue;
     }
     const rr = (target - asset.price) / (asset.price - stop);
-    if (rr < 1.5) {
-      reject(`Beneficio/riesgo insuficiente (${rr.toFixed(2)} a 1; mínimo 1,5)`);
+    if (rr < minRR - 1e-9) {
+      reject(`Beneficio/riesgo insuficiente (${rr.toFixed(2)} a 1; mínimo ${minRR.toString().replace(".", ",")})`);
+      continue;
+    }
+    if (ctx.rules && bear(asset.market) && !(ctx.rules.buyInBearMarket && conviction >= 5)) {
+      reject("Su perfil no compra con el mercado en fase bajista");
+      continue;
+    }
+    if (ctx.rules && buys >= ctx.rules.maxBuys) {
+      reject(`Ya propuso ${buys} ${buys === 1 ? "compra" : "compras"}, el máximo de su perfil por reunión`);
       continue;
     }
     if (openCount >= ctx.account.maxOpen) {
@@ -327,6 +341,7 @@ export function validateCommittee(raw: unknown, ctx: CommitteeContext) {
       continue;
     }
     openCount++;
+    buys++;
     cash -= sizing.notional + sizing.commission;
     out.push({ ...base, sizing });
   }

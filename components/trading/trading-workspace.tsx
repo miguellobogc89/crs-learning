@@ -9,7 +9,7 @@ import { RecommendationsPanel } from "./recommendations-panel";
 import { MarketPanel } from "./market-panel";
 import { LibraryPanel } from "./library-panel";
 import { PortfolioPanel, RulesPanel, UniversePanel } from "./portfolio-panel";
-import { SimulatorPanel } from "./simulator-panel";
+import { AgentsPanel } from "./agents-panel";
 import { NewsPanel } from "./news-panel";
 import { CommitteeHistory, CommitteeToday } from "./committee-panel";
 import { HomePanel } from "./home-panel";
@@ -97,7 +97,7 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   } else if (tab === "noticias") body = <NewsPanel />;
   else if (tab === "comite") body = <CommitteeHistory />;
   else if (tab === "cartera") body = <PortfolioPanel onOpenChart={openChart} />;
-  else if (tab === "simulador") body = <SimulatorPanel onOpenChart={openChart} />;
+  else if (tab === "agentes") body = <AgentsPanel />;
   else if (tab === "patrones") body = <LibraryPanel />;
   else if (tab === "reglas") body = <RulesPanel />;
   else if (tab === "valores") body = <UniversePanel />;
