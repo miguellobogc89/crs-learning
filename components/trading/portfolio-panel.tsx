@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Bot, LineChart, Loader2, Pencil, RotateCcw, X } from "lucide-react";
 import type { accountDetail, PositionView } from "@/lib/trading/accounts";
 import type { Trading212DemoPosition, Trading212DemoSummary } from "@/lib/trading/trading212";
@@ -58,7 +59,8 @@ function EquityCurve({ points, initial }: { points: { day: string; equity: numbe
 type PortfolioSource = "crs" | "trading212";
 
 export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => void }) {
-  const [source, setSource] = useState<PortfolioSource>("crs");
+  const params = useSearchParams();
+  const [source, setSource] = useState<PortfolioSource>(params.get("source") === "trading212" ? "trading212" : "crs");
   // Las credenciales pertenecen por ahora a una única cuenta personal de Demo en localhost.
   const demoAvailable = process.env.NODE_ENV === "development";
 
