@@ -86,9 +86,11 @@ export function recommendForInstrument(
   stats: Partial<Record<PatternKey, PatternStats>>,
   regime: Regime,
   account: AccountView,
+  /** Vela que hace de "hoy" (para el simulador). Por defecto, la última. */
+  at?: number,
 ): Recommendation[] {
   const c = inst.candles;
-  const last = c.length - 1;
+  const last = at ?? c.length - 1;
   if (last < 30) return [];
   const close = c[last].c;
   const out: Recommendation[] = [];
@@ -98,8 +100,8 @@ export function recommendForInstrument(
   for (const d of inst.detections) {
     const long = d.direction === "long";
     let live = false;
-    if (d.status === "confirmed" && d.confirmIndex !== null && d.confirmIndex >= last - 3) live = true;
-    if (d.status === "forming" && d.formedAt >= last - 40) live = true;
+    if (d.status === "confirmed" && d.confirmIndex !== null && d.confirmIndex >= last - 3 && d.confirmIndex <= last) live = true;
+    if (d.status === "forming" && d.formedAt >= last - 40 && at === undefined) live = true;
     if (!live) continue;
 
     // Para las confirmadas, se recalcula desde el precio actual: la entrada sería ahora.

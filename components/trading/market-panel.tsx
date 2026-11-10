@@ -6,6 +6,7 @@ import type { Overview } from "./trading-workspace";
 import { CandleChart, type ChartLevel } from "./candle-chart";
 import { PATTERN_SHORT, STATUS_LABEL, api, dayFmt, errorText, eur, field, num, panel, pct, primary, th, tone } from "./format";
 import { OrderDialog, type OrderDraft } from "./order-dialog";
+import { refreshTrading } from "./navigation";
 
 type Instrument = Awaited<ReturnType<typeof getInstrument>>;
 
@@ -26,12 +27,10 @@ export function MarketPanel({
   data,
   symbol,
   onSymbol,
-  onChanged,
 }: {
   data: Overview;
   symbol: string | null;
   onSymbol: (s: string) => void;
-  onChanged: () => void;
 }) {
   const [q, setQ] = useState("");
   const [inst, setInst] = useState<Instrument | null>(null);
@@ -252,7 +251,7 @@ export function MarketPanel({
                         })
                       }
                     >
-                      Ejecutar en cartera
+                      Hacerlo en mi cartera
                     </button>
                   ) : null}
                 </div>
@@ -281,7 +280,7 @@ export function MarketPanel({
           onDone={() => {
             setDraft(null);
             setReload((n) => n + 1);
-            onChanged();
+            refreshTrading();
           }}
         />
       )}

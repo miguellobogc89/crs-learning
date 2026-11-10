@@ -1,6 +1,6 @@
 # Módulo de trading
 
-Sección **Trading** (`/trading`): figuras chartistas en el IBEX 35, recomendaciones con plan completo
+Sección **Trading** (`/trading/<sección>`, con panel lateral: Qué hacer hoy, Mi cartera, ¿Cómo me habría ido?, Gráficos, Patrones, Reglas y Valores): figuras chartistas en el IBEX 35, recomendaciones con plan completo
 (entrada, stop, objetivo, tamaño) y una cartera virtual por espacio de trabajo con modo automático.
 
 ## Puesta en marcha
@@ -22,6 +22,7 @@ Sección **Trading** (`/trading`): figuras chartistas en el IBEX 35, recomendaci
 | `lib/trading/library.ts` | Fichas de cada figura: cómo se reconoce, entrada, stop, objetivo, tamaño y errores típicos. |
 | `lib/trading/backtest.ts` | Backtest: señal al cierre de ruptura, entrada en la apertura siguiente, costes, una operación a la vez por valor. |
 | `lib/trading/recommend.ts` | Puntuación (calidad 40 %, historial 25 %, tendencia 15 %, mercado 10 %, B/R 10 %) y plan en texto. |
+| `lib/trading/simulate.ts` | Simulador histórico de la cartera con las reglas del usuario, sin mirar el futuro (el historial de cada figura solo cuenta operaciones ya cerradas en cada fecha). |
 | `lib/trading/risk.ts` / `paper.ts` | Tamaño por riesgo fijo, comisiones, deslizamiento y reglas de la cartera virtual. |
 | `lib/trading/market-data.ts` | Proveedor de velas (endpoint público de Yahoo Finance) y composición inicial del IBEX 35. |
 | `lib/trading/sync.ts` / `accounts.ts` / `service.ts` | Base de datos, proceso diario y lo que consume la API. |
@@ -32,5 +33,6 @@ Datos de mercado globales (`market_*`); cartera por espacio (`trading_*`, una po
 
 - Yahoo Finance no es una API oficial: si cambia o limita, solo hay que tocar `market-data.ts`.
 - Las velas de la sesión en curso no se guardan hasta las 18:00 (Madrid) para no dar por vista una vela incompleta.
+- El simulador usa la composición actual del índice (sesgo de supervivencia leve, avisado en pantalla).
 - Tests: `npm run test:trading`.
 - Es una simulación con dinero ficticio; no es asesoramiento financiero.

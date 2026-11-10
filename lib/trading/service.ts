@@ -4,7 +4,9 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { accountState, costOf, ensureAccount, OPEN_STATUSES, placeOrder, processAccount } from "./accounts";
-import { analyze } from "./backtest";
+import { analyze, backtestSeries } from "./backtest";
+import { DEFAULT_COSTS } from "./risk";
+import { simulatePortfolio, type SimSeries, type SimSettings } from "./simulate";
 import { indicatorBundle, trendAt } from "./indicators";
 import { PATTERN_LIBRARY } from "./library";
 import { fetchDailyCandles, INDEX_SYMBOL } from "./market-data";
@@ -306,3 +308,83 @@ export async function runDaily(budgetMs = 45_000, workspaceId?: string): Promise
 }
 
 export type { Candle, PatternKey };
+
+// ---------------------------------------------------------------------------
+// Estado ligero para el panel lateral y simulador histórico
+// ---------------------------------------------------------------------------
+export async function getStatus(workspaceId: string) {
+  await ensureUniverse();
+  const [state, index, info, withData] = await Promise.all([
+    accountState(workspaceId),
+    prisma.market_instruments.findFirst({ where: { is_index: true, active: true } }),
+    prisma.market_instruments.aggregate({ _max: { last_candle_at: true }, _count: { _all: true }, where: { active: true } }),
+    prisma.market_instruments.count({ where: { active: true, last_candle_at: { not: null } } }),
+  ]);
+  let regime: Regime = "lateral";
+  if (index) {
+    const c = await loadRecent(index.id, 320);
+    if (c.length) regime = regimeFrom(c, indicatorBundle(c));
+  }
+  const s = state.summary;
+  return {
+    regime,
+    asOf: info._max.last_candle_at ? dayKey(info._max.last_candle_at) : null,
+    instruments: info._count._all,
+    instrumentsWithData: withData,
+    equity: s.equity,
+    cash: s.cash,
+    returnPct: s.returnPct,
+    openPositions: state.positions.filter((p) => p.status === "abierta").length,
+    pendingOrders: state.positions.filter((p) => p.status === "pendiente").length,
+    autoTrade: s.settings.autoTrade,
+  };
+}
+
+export const SIM_MONTHS = [1, 3, 6, 12, 24, 36] as const;
+
+export async function simulate(workspaceId: string, body: Record<string, unknown>) {
+  const account = await ensureAccount(workspaceId);
+  const n = (v: unknown, lo: number, hi: number, d: number) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d;
+  };
+  const months = Math.round(n(body.months, 1, 60, 12));
+  const settings: SimSettings = {
+    capital: Math.round(n(body.capital, 500, 10_000_000, 10_000)),
+    riskPct: n(body.riskPct, 0.1, 5, account.risk_per_trade_pct),
+    maxPositionPct: n(body.maxPositionPct, 1, 100, account.max_position_pct),
+    maxOpen: Math.round(n(body.maxOpen, 1, 40, account.max_open_positions)),
+    minScore: Math.round(n(body.minScore, 0, 100, account.min_score)),
+    allowShort: typeof body.allowShort === "boolean" ? body.allowShort : account.allow_short,
+    breakeven: typeof body.breakeven === "boolean" ? body.breakeven : account.breakeven,
+    patterns: Array.isArray(body.patterns)
+      ? (body.patterns.filter((p) => typeof p === "string" && PATTERN_LIBRARY.some((x) => x.key === p)) as PatternKey[])
+      : (account.patterns as PatternKey[]),
+    cost: costOf(account),
+  };
+
+  const instruments = await prisma.market_instruments.findMany({ where: { active: true } });
+  const all = await loadSeries(instruments.map((i) => i.id));
+  const index = instruments.find((i) => i.is_index);
+  const lastT = Math.max(0, ...[...all.values()].map((c) => (c.length ? c[c.length - 1].t : 0)));
+  if (!lastT) throw new Error("Todavía no hay cotizaciones: actualiza primero");
+  const start = new Date(lastT);
+  start.setUTCMonth(start.getUTCMonth() - months);
+
+  const series: SimSeries[] = [];
+  for (const inst of instruments) {
+    if (inst.is_index) continue;
+    const c = all.get(inst.id);
+    if (!c || c.length < 250) continue;
+    const analysis = analyze(c);
+    series.push({ symbol: inst.symbol, name: inst.name, candles: c, analysis, trades: backtestSeries(c, DEFAULT_COSTS, analysis) });
+  }
+  const idx = index ? all.get(index.id) ?? [] : [];
+  const result = simulatePortfolio({
+    series,
+    index: idx.length ? { candles: idx, ind: indicatorBundle(idx) } : null,
+    startT: start.getTime(),
+    settings,
+  });
+  return { months, settings: { ...settings, cost: undefined }, result };
+}

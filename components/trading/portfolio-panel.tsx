@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Bot, LineChart, Loader2, Pencil, RotateCcw, X } from "lucide-react";
 import type { accountDetail, PositionView } from "@/lib/trading/accounts";
 import { PATTERN_LIBRARY } from "@/lib/trading/library";
+import { refreshTrading, useTradingRefresh } from "./navigation";
 import { PATTERN_SHORT, api, dayFmt, errorText, eur, eur0, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
 
 type Detail = Awaited<ReturnType<typeof accountDetail>>;
@@ -53,15 +54,8 @@ function EquityCurve({ points, initial }: { points: { day: string; equity: numbe
   );
 }
 
-export function PortfolioPanel({
-  canManage,
-  onChanged,
-  onOpenChart,
-}: {
-  canManage: boolean;
-  onChanged: () => void;
-  onOpenChart: (symbol: string) => void;
-}) {
+export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => void }) {
+  const onChanged = refreshTrading;
   const [data, setData] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -78,13 +72,13 @@ export function PortfolioPanel({
   useEffect(() => {
     void load();
   }, [load]);
+  useTradingRefresh(load);
 
   const act = async (id: string, path: string, body: unknown) => {
     setBusy(id);
     setError(null);
     try {
       await api(path, body);
-      await load();
       onChanged();
     } catch (e) {
       setError(errorText(e));
@@ -162,7 +156,7 @@ export function PortfolioPanel({
             {active.length === 0 ? (
               <tr>
                 <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
-                  Sin posiciones. Abre una desde «Qué hacer hoy» o activa el modo automático.
+                  Sin posiciones. Abre una desde «Qué hacer hoy» o activa el modo automático en «Reglas y riesgo».
                 </td>
               </tr>
             ) : (
@@ -232,8 +226,6 @@ export function PortfolioPanel({
         </table>
       </section>
 
-      <Settings summary={s} onSaved={async () => { await load(); onChanged(); }} />
-
       <section className={`${panel} overflow-x-auto`}>
         <header className="border-b border-slate-200 px-4 py-3">
           <h2 className="text-sm font-semibold text-slate-900">Historial de operaciones</h2>
@@ -298,15 +290,12 @@ export function PortfolioPanel({
         </ul>
       </section>
 
-      <Universe canManage={canManage} onChanged={onChanged} />
-
       {editing && (
         <EditStops
           position={editing}
           onClose={() => setEditing(null)}
-          onSaved={async () => {
+          onSaved={() => {
             setEditing(null);
-            await load();
             onChanged();
           }}
         />
@@ -498,7 +487,8 @@ function Settings({ summary, onSaved }: { summary: Detail["summary"]; onSaved: (
   );
 }
 
-function Universe({ canManage, onChanged }: { canManage: boolean; onChanged: () => void }) {
+export function UniversePanel() {
+  const onChanged = refreshTrading;
   const [data, setData] = useState<Instruments | null>(null);
   const [symbol, setSymbol] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
@@ -522,6 +512,7 @@ function Universe({ canManage, onChanged }: { canManage: boolean; onChanged: () 
     }
   };
   if (!data) return null;
+  const canManage = data.canManage;
   return (
     <section className={panel}>
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
@@ -565,4 +556,29 @@ function Universe({ canManage, onChanged }: { canManage: boolean; onChanged: () 
       </div>
     </section>
   );
+}
+
+/** Página de reglas: ajustes de la cartera y reinicio. */
+export function RulesPanel() {
+  const [data, setData] = useState<Detail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    try {
+      setData(await api<Detail>("account"));
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  useTradingRefresh(load);
+  if (error) return <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>;
+  if (!data)
+    return (
+      <div className="flex h-40 items-center justify-center border border-slate-200 bg-white">
+        <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+      </div>
+    );
+  return <Settings summary={data.summary} onSaved={async () => refreshTrading()} />;
 }

@@ -14,9 +14,11 @@ import {
   getInstrument,
   getLibrary,
   getOverview,
+  getStatus,
   listInstruments,
   runDaily,
   setInstrumentActive,
+  simulate,
 } from "@/lib/trading/service";
 
 export const runtime = "nodejs";
@@ -48,6 +50,7 @@ export async function GET(req: Request, route: RouteContext) {
       if (!symbol) return fail("Falta el valor");
       return NextResponse.json(await getInstrument(ctx.workspaceId, symbol));
     }
+    if (action === "status") return NextResponse.json({ ...(await getStatus(ctx.workspaceId)), canManage: ctx.canManage });
     if (action === "library") return NextResponse.json(await getLibrary());
     if (action === "account") return NextResponse.json(await accountDetail(ctx.workspaceId));
     if (action === "instruments") {
@@ -87,6 +90,7 @@ export async function POST(req: Request, route: RouteContext) {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede actualizar las cotizaciones", 403);
       return NextResponse.json(await runDaily(45_000, ctx.workspaceId));
     }
+    if (action === "simulate") return NextResponse.json(await simulate(ctx.workspaceId, body));
     if (action === "order") return NextResponse.json(await placeOrder(ctx.workspaceId, ctx.userId, parseOrder(body)));
     if (action === "close") return NextResponse.json(await closePosition(ctx.workspaceId, String(body.positionId ?? "")));
     if (action === "stops") return NextResponse.json(await updateStops(ctx.workspaceId, String(body.positionId ?? ""), body));
