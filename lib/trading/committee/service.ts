@@ -143,7 +143,8 @@ async function buildContext(workspaceId: string) {
         kind: "figura",
         label: `Fuerza: puesto ${strength.rank} de ${strength.of} (${strength.momPct >= 0 ? "+" : ""}${strength.momPct.toFixed(0)} % en ${strength.lookback} sesiones)${strength.inTop ? ", entre los que compraría la estrategia de tendencia" : ""}`,
       });
-    const pos = state.positions.find((p) => p.symbol === symbol && p.status === "abierta");
+    // Las órdenes pendientes cuentan como posición: no se vuelve a proponer comprarlas.
+    const pos = state.positions.find((p) => p.symbol === symbol && (p.status === "abierta" || p.status === "pendiente"));
     if (pos)
       evidence.set(`P:${symbol}`, {
         id: `P:${symbol}`,
@@ -173,6 +174,7 @@ async function buildContext(workspaceId: string) {
             stop: pos.stop,
             target: pos.target,
             unrealizedPct: pos.entryPrice && pos.lastPrice ? ((pos.lastPrice - pos.entryPrice) / pos.entryPrice) * 100 * (pos.direction === "long" ? 1 : -1) : 0,
+            pending: pos.status === "pendiente",
           }
         : null,
     });

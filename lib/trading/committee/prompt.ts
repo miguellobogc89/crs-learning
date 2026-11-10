@@ -36,7 +36,7 @@ export type CommitteeAsset = {
   /** Fuerza relativa (estrategia de tendencia): puesto en el ranking de su mercado. */
   strength: { id: string; rank: number; of: number; momPct: number; lookback: number; inTop: boolean; aboveSma200: boolean } | null;
   news: CommitteeNews[];
-  position: { direction: Direction; quantity: number; entry: number; stop: number; target: number; unrealizedPct: number } | null;
+  position: { direction: Direction; quantity: number; entry: number; stop: number; target: number; unrealizedPct: number; pending?: boolean } | null;
 };
 
 export type CommitteeContext = {
@@ -111,6 +111,8 @@ export const COMMITTEE_INSTRUCTIONS = [
   "",
   "Acciones:",
   "- comprar: abrir una posición nueva. Obligatorio dar stop y target en euros: el stop por debajo del precio actual (a una distancia razonable según su volatilidad, atrPct) y el target por encima, con al menos 1,5 veces lo que se arriesga. Si hay una figura activa, puedes usar su stop y su objetivo.",
+  "- Una posición con pending=true es una orden de compra que se ejecutará en la próxima apertura: ya está decidida, no la vuelvas a proponer.",
+  "- Sé coherente: no cambies de opinión sobre una posición recién abierta salvo que haya un hecho nuevo e importante (noticia de impacto 3, ruptura del stop técnico).",
   "- vender: cerrar una posición que la cartera ya tiene (por noticias en contra, ruptura del stop técnico, objetivo cumplido…). stop y target a null.",
   "- mantener: solo para posiciones abiertas, cuando conviene explicar que siguen bien. Puedes proponer un stop más alto (protección) en stop; target puede ser null.",
   "- vigilar: activo interesante sin entrada clara todavía. Explica qué tendría que pasar.",
@@ -274,7 +276,7 @@ export function validateCommittee(raw: unknown, ctx: CommitteeContext) {
     }
     // comprar
     if (asset.position) {
-      reject("Ya hay una posición abierta en este activo");
+      reject(asset.position.pending ? "Ya hay una orden de compra pendiente para este activo" : "Ya hay una posición abierta en este activo");
       continue;
     }
     if (conviction < 3) {
