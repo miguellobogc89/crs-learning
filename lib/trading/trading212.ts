@@ -463,3 +463,123 @@ export async function sellTrading212DemoPosition(ticker: string, quantity: numbe
     demoSellInFlight.delete(ticker);
   }
 }
+
+
+export type Trading212ConditionalKind = "sell_stop" | "sell_limit" | "buy_limit" | "buy_stop";
+const conditionalInFlight = new Set<string>();
+const conditionalAttemptAt = new Map<string, number>();
+
+/**
+ * STOP de venta (pérdida), LIMIT de venta (objetivo) o compras a precio condicionado.
+ * La API no proporciona una vinculación OCO: nunca abre dos ventas por el mismo valor.
+ * Una orden condicional se queda en el bróker aunque se cierre localhost.
+ */
+export async function placeTrading212DemoConditionalOrder(input: {
+  kind: Trading212ConditionalKind;
+  ticker: string;
+  quantity: number;
+  price: number;
+}): Promise<{
+  environment: "demo";
+  orderId: number;
+  status: string;
+  kind: Trading212ConditionalKind;
+  ticker: string;
+}> {
+  if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
+    throw new Trading212Error("Solo se permiten órdenes condicionadas de la cuenta Demo local", 403);
+  }
+  const { kind, ticker, quantity, price } = input;
+  if (!["sell_stop", "sell_limit", "buy_limit", "buy_stop"].includes(kind) ||
+      typeof ticker !== "string" || ticker.length > 80 || !/^[A-Za-z0-9_.-]+$/.test(ticker) ||
+      !isAmount(quantity) || quantity <= 0 || quantity > 1_000 ||
+      !isAmount(price) || price <= 0 || price > 1_000_000) {
+    throw new Trading212Error("Orden condicional no válida", 400);
+  }
+  const lockKey = ticker;
+  if (conditionalInFlight.has(lockKey)) throw new Trading212Error("Ya se está procesando una orden de este valor", 409);
+  if (Date.now() - (conditionalAttemptAt.get(lockKey) ?? 0) < 60_000) {
+    throw new Trading212Error("Se intentó enviar una orden de este valor recientemente; revisa las pendientes", 429);
+  }
+  conditionalInFlight.add(lockKey);
+  try {
+    // Comprueba también órdenes creadas directamente en Trading 212.
+    demoReadCache.delete("/equity/orders");
+    const existing = (await getTrading212DemoOrders()).items.filter(o => o.ticker === ticker);
+    if (existing.some(o => o.side === (kind.startsWith("sell") ? "SELL" : "BUY"))) {
+      throw new Trading212Error("Ya hay una orden pendiente del mismo sentido para este instrumento. Cancélala antes.", 409);
+    }
+
+    if (kind.startsWith("sell")) {
+      const positions = await getTrading212DemoPositions(true);
+      const p = positions.items.find(p => p.ticker === ticker);
+      if (!p || p.quantityAvailableForTrading === null || quantity > p.quantityAvailableForTrading + 1e-8) {
+        throw new Trading212Error("No hay suficientes acciones libres para crear la venta condicionada", 409);
+      }
+      if (kind === "sell_stop" && price >= p.currentPrice) {
+        throw new Trading212Error("El stop de venta debe estar por debajo del precio actual", 400);
+      }
+      if (kind === "sell_limit" && price <= p.currentPrice) {
+        throw new Trading212Error("El objetivo de venta debe estar por encima del precio actual", 400);
+      }
+    } else {
+      // Primera fase: solo instrumento ya contrastado por ticker e ISIN en Demo.
+      if (ticker !== "IBEe_EQ") {
+        throw new Trading212Error("Por seguridad, la compra programada Demo solo admite Iberdrola por ahora", 400);
+      }
+      const mapped = await findTrading212DemoInstruments("IBE.MC");
+      if (!mapped.matches.some(m => m.ticker === ticker && m.isin === "ES0144580Y14")) {
+        throw new Trading212Error("No se pudo validar Iberdrola mediante el ISIN", 409);
+      }
+      const account = await getTrading212DemoSummary();
+      // Tope conservador: 20% del patrimonio total y como máximo el efectivo disponible.
+      if (account.currency !== "EUR" || quantity * price > Math.min(account.availableToTrade, account.totalValue * 0.2) + 1e-8) {
+        throw new Trading212Error("La compra supera el efectivo o el límite del 20 % del patrimonio Demo", 400);
+      }
+      const positions = await getTrading212DemoPositions(true);
+      if (positions.items.some(p => p.ticker === ticker && p.quantity > 0)) {
+        throw new Trading212Error("Ya hay posición en este valor; no se crea otra compra programada automáticamente", 409);
+      }
+    }
+
+    // Nunca reintentar POST: la API de Trading 212 no garantiza idempotencia.
+    conditionalAttemptAt.set(lockKey, Date.now());
+    const isStop = kind.endsWith("stop");
+    const path = isStop ? "/equity/orders/stop" : "/equity/orders/limit";
+    const signedQuantity = kind.startsWith("sell") ? -quantity : quantity;
+    const body = isStop
+      ? { ticker, quantity: signedQuantity, stopPrice: price, timeValidity: "GOOD_TILL_CANCEL" as const }
+      : { ticker, quantity: signedQuantity, limitPrice: price, timeValidity: "GOOD_TILL_CANCEL" as const };
+    const result = (await fetchDemo(path, { method: "POST", body })) as { id?: unknown; status?: unknown } | null;
+    if (!result || !isAmount(result.id) || typeof result.status !== "string") {
+      throw new Trading212Error("Resultado de orden desconocido: revisa las pendientes antes de repetir");
+    }
+    return { environment: "demo", orderId: result.id, status: result.status, kind, ticker };
+  } finally {
+    demoReadCache.clear();
+    conditionalInFlight.delete(lockKey);
+  }
+}
+
+export async function cancelTrading212DemoOrder(id: number): Promise<{ environment: "demo"; id: number; requested: true }> {
+  if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
+    throw new Trading212Error("Solo se permiten cancelaciones en Trading 212 Demo local", 403);
+  }
+  if (!Number.isSafeInteger(id) || id < 1) throw new Trading212Error("ID de orden no válido", 400);
+  const key = `cancel:${id}`;
+  if (conditionalInFlight.has(key)) throw new Trading212Error("Cancelación ya iniciada", 409);
+  conditionalInFlight.add(key);
+  try {
+    demoReadCache.delete("/equity/orders");
+    const pending = (await getTrading212DemoOrders()).items.find(o => o.id === id);
+    if (!pending) throw new Trading212Error("La orden ya no figura entre las pendientes", 409);
+    if (pending.initiatedFrom !== "API") {
+      throw new Trading212Error("Solo se pueden cancelar desde CRS las órdenes creadas mediante API", 403);
+    }
+    await fetchDemo(`/equity/orders/${id}`, { method: "DELETE" });
+    return { environment: "demo", id, requested: true };
+  } finally {
+    demoReadCache.clear();
+    conditionalInFlight.delete(key);
+  }
+}
