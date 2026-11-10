@@ -116,3 +116,12 @@ test("resultado de una propuesta: entra a la apertura siguiente y sale en el obj
   assert.ok(stopHit.r < 0);
   assert.equal(evaluateProposal(p, [c[0]], bench).state, "pendiente");
 });
+
+test("comité: mantener con el mismo stop no deja nada que ejecutar", () => {
+  const pos = { position: { direction: "long", quantity: 5, entry: 9, stop: 9.2, target: 12, unrealizedPct: 11 } };
+  const c = ctx([asset("A", pos), asset("B", pos)]);
+  const keep = (symbol, stop) => ({ symbol, action: "mantener", conviction: 3, horizon_days: 10, stop, target: null, rationale: "r", evidence: [`P:${symbol}`], risks: "" });
+  const v = validateCommittee({ market_view: "", proposals: [keep("A", 9.2), keep("B", 9.6)], watchlist: [] }, c);
+  assert.equal(v.proposals.find((p) => p.symbol === "A").stop, null);
+  assert.equal(v.proposals.find((p) => p.symbol === "B").stop, 9.6);
+});

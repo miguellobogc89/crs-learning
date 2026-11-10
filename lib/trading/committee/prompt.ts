@@ -266,8 +266,13 @@ export function validateCommittee(raw: unknown, ctx: CommitteeContext) {
           reject("El nuevo stop propuesto ya está superado por el precio actual");
           continue;
         }
+        // Si no mejora el stop que ya tiene, no hay nada que ejecutar: solo «mantener».
+        if (long ? stop <= asset.position.stop + 1e-9 : stop >= asset.position.stop - 1e-9) {
+          out.push({ ...base, stop: null, target: null });
+          continue;
+        }
       }
-      out.push(base);
+      out.push(action === "mantener" ? { ...base, target: null } : base);
       continue;
     }
     if (action === "vigilar") {
