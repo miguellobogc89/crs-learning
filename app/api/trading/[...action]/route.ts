@@ -116,27 +116,26 @@ export async function POST(req: Request, route: RouteContext) {
       if (!ctx.canManage) return fail("Solo el propietario o administrador puede operar en la Demo", 403);
       if (body.confirmDemo !== true) return fail("Falta la confirmación explícita de operación Demo", 400);
       try {
-        const result = action === "trading212/conditional"
-          ? await (async () => {
-              const kind = body.kind;
-              if (kind !== "sell_stop" && kind !== "sell_limit" &&
-                  kind !== "buy_limit" && kind !== "buy_stop") return fail("Tipo de orden no permitido", 400);
-              if (typeof body.ticker !== "string" || typeof body.quantity !== "number" ||
-                  typeof body.price !== "number" || !Number.isFinite(body.quantity) || !Number.isFinite(body.price)) {
-                return fail("Faltan instrumento, cantidad o precio válidos", 400);
-              }
-              return placeTrading212DemoConditionalOrder({
-                kind: kind as Trading212ConditionalKind,
-                ticker: body.ticker,
-                quantity: body.quantity,
-                price: body.price,
-              });
-            })()
-          : await (async () => {
-              if (typeof body.id !== "number" || !Number.isSafeInteger(body.id)) return fail("ID de orden inválido", 400);
-              return cancelTrading212DemoOrder(body.id);
-            })();
-        return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+        if (action === "trading212/conditional") {
+          const kind = body.kind;
+          if (kind !== "sell_stop" && kind !== "sell_limit" &&
+              kind !== "buy_limit" && kind !== "buy_stop") return fail("Tipo de orden no permitido", 400);
+          if (typeof body.ticker !== "string" || typeof body.quantity !== "number" ||
+              typeof body.price !== "number" || !Number.isFinite(body.quantity) || !Number.isFinite(body.price)) {
+            return fail("Faltan instrumento, cantidad o precio válidos", 400);
+          }
+          return NextResponse.json(
+            await placeTrading212DemoConditionalOrder({
+              kind: kind as Trading212ConditionalKind,
+              ticker: body.ticker,
+              quantity: body.quantity,
+              price: body.price,
+            }),
+            { headers: { "Cache-Control": "no-store" } },
+          );
+        }
+        if (typeof body.id !== "number" || !Number.isSafeInteger(body.id)) return fail("ID de orden inválido", 400);
+        return NextResponse.json(await cancelTrading212DemoOrder(body.id), { headers: { "Cache-Control": "no-store" } });
       } catch (e) {
         if (e instanceof Trading212Error) return fail(e.message, e.status);
         throw e;
