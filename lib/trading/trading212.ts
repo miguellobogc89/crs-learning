@@ -217,29 +217,52 @@ export async function findTrading212DemoInstruments(symbol: string): Promise<{
   environment: "demo";
   symbol: string;
   matches: Trading212InstrumentMatch[];
+  catalogCount: number;
+  spanishStockCount: number;
 }> {
   const clean = symbol.trim().toUpperCase();
   const match = /^([A-Z0-9]{1,12})[.]MC$/.exec(clean);
   if (!match) throw new Trading212Error("Solo se admiten símbolos de bolsa española como IBE.MC", 400);
   const base = match[1];
+
+  // El ticker de Trading 212 no tiene por qué coincidir con el de Yahoo Finance.
+  // Para Iberdrola priorizamos su ISIN oficial, no un patrón supuesto de ticker.
+  const isin = clean === "IBE.MC" ? "ES0144580Y14" : null;
+  const companyName = clean === "IBE.MC" ? "IBERDROLA" : null;
   const items = await demoInstruments();
-  const matches = items
-    .filter((item) => {
-      if (item.type !== "STOCK" || item.currencyCode !== "EUR") return false;
-      const ticker = typeof item.ticker === "string" ? item.ticker.toUpperCase() : "";
-      const shortName = typeof item.shortName === "string" ? item.shortName.toUpperCase() : "";
-      return ticker.startsWith(`${base}_ES_`) || (shortName === base && ticker.includes("_ES_"));
-    })
-    .filter((item): item is Trading212RawInstrument & { ticker: string; name: string; isin: string } =>
-      typeof item.ticker === "string" && typeof item.name === "string" && typeof item.isin === "string",
-    )
-    .slice(0, 10)
+
+  const stocks = items.filter((item) => item.type === "STOCK");
+  const candidates = stocks.filter((item) => {
+    const ticker = typeof item.ticker === "string" ? item.ticker.toUpperCase() : "";
+    const shortName = typeof item.shortName === "string" ? item.shortName.toUpperCase() : "";
+    const name = typeof item.name === "string" ? item.name.toUpperCase() : "";
+    const code = typeof item.isin === "string" ? item.isin.toUpperCase() : "";
+    if (isin && code === isin) return true;
+    if (companyName && name.includes(companyName)) return true;
+    // Coincidencia de ticker más flexible. No equivale a una validación para enviar órdenes.
+    return shortName === base ||
+      ticker === base || ticker.startsWith(`${base}_`) || ticker.startsWith(`${base}.`);
+  });
+
+  const matches = candidates
+    .filter((item): item is Trading212RawInstrument & {
+      ticker: string; name: string; isin: string; currencyCode: string;
+    } => typeof item.ticker === "string" && typeof item.name === "string" &&
+      typeof item.isin === "string" && typeof item.currencyCode === "string")
+    .slice(0, 20)
     .map((item) => ({
       ticker: item.ticker,
       name: item.name,
       isin: item.isin,
-      currency: "EUR",
+      currency: item.currencyCode,
       type: "STOCK" as const,
     }));
-  return { environment: "demo", symbol: clean, matches };
+
+  return {
+    environment: "demo",
+    symbol: clean,
+    matches,
+    catalogCount: items.length,
+    spanishStockCount: stocks.filter((item) => typeof item.isin === "string" && item.isin.startsWith("ES")).length,
+  };
 }
