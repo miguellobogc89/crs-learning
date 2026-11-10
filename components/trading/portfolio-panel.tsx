@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bot, LineChart, Loader2, Pencil, RotateCcw, X } from "lucide-react";
 import type { accountDetail, PositionView } from "@/lib/trading/accounts";
+import type { Trading212DemoPosition, Trading212DemoSummary } from "@/lib/trading/trading212";
 import { PATTERN_LIBRARY } from "@/lib/trading/library";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { PATTERN_SHORT, api, dayFmt, errorText, eur, eur0, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
@@ -54,7 +55,151 @@ function EquityCurve({ points, initial }: { points: { day: string; equity: numbe
   );
 }
 
+type PortfolioSource = "crs" | "trading212";
+
 export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => void }) {
+  const [source, setSource] = useState<PortfolioSource>("crs");
+  // Las credenciales pertenecen por ahora a una única cuenta personal de Demo en localhost.
+  const demoAvailable = process.env.NODE_ENV === "development";
+
+  if (!demoAvailable) return <CrsPortfolioPanel onOpenChart={onOpenChart} />;
+
+  return (
+    <div className="space-y-4">
+      <div role="tablist" aria-label="Seleccionar cartera" className="flex gap-1 border-b border-slate-200">
+        {([
+          ["crs", "Simulador CRS"],
+          ["trading212", "Trading 212 Demo"],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            id={`portfolio-tab-${key}`}
+            aria-controls={`portfolio-panel-${key}`}
+            aria-selected={source === key}
+            onClick={() => setSource(key)}
+            className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              source === key
+                ? "border-blue-600 text-blue-700"
+                : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" id={`portfolio-panel-${source}`} aria-labelledby={`portfolio-tab-${source}`}>
+        {source === "crs" ? <CrsPortfolioPanel onOpenChart={onOpenChart} /> : <Trading212DemoPortfolio />}
+      </div>
+    </div>
+  );
+}
+
+function Trading212DemoPortfolio() {
+  const [summary, setSummary] = useState<Trading212DemoSummary | null>(null);
+  const [positions, setPositions] = useState<Trading212DemoPosition[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [account, portfolio] = await Promise.all([
+        api<Trading212DemoSummary>("trading212/account"),
+        api<{ environment: "demo"; items: Trading212DemoPosition[] }>("trading212/positions"),
+      ]);
+      setSummary(account);
+      setPositions(portfolio.items);
+      setError(null);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+  useTradingRefresh(load);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-600">
+          Cuenta de práctica de Trading 212. Saldo y posiciones independientes del simulador CRS.
+        </p>
+        <button type="button" className={ghost} onClick={() => void load()} disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          Actualizar
+        </button>
+      </div>
+      {error && <p role="alert" className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {!summary && loading ? (
+        <div className="flex h-40 items-center justify-center border border-slate-200 bg-white">
+          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+        </div>
+      ) : summary ? (
+        <>
+          <div className="grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-3">
+            {([
+              ["Patrimonio total", summary.totalValue],
+              ["Disponible para operar", summary.availableToTrade],
+              ["Invertido", summary.investedValue],
+            ] as const).map(([label, value]) => (
+              <div key={label} className="bg-white px-4 py-4">
+                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
+                <div className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+                  {summary.currency === "EUR" ? eur(value, 2) : `${num(value, 2)} ${summary.currency}`}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <section className={`${panel} overflow-x-auto`}>
+            <header className="border-b border-slate-200 px-4 py-3">
+              <h2 className="text-sm font-semibold text-slate-900">Posiciones en Trading 212 Demo</h2>
+              <p className="text-xs text-slate-500">
+                Datos obtenidos del bróker. Los precios se muestran en la divisa de cada instrumento; no se convierten a euros.
+              </p>
+            </header>
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className={th}>Valor</th>
+                  <th className={`${th} text-right`}>Cantidad</th>
+                  <th className={`${th} text-right`}>Disponible</th>
+                  <th className={`${th} text-right`}>Precio medio</th>
+                  <th className={`${th} text-right`}>Precio actual</th>
+                </tr>
+              </thead>
+              <tbody>
+                {positions?.length ? positions.map((p, i) => (
+                  <tr key={`${p.ticker ?? "position"}-${i}`} className="border-t border-slate-100">
+                    <td className="px-3 py-3">
+                      <div className="font-medium text-slate-900">{p.name ?? p.ticker ?? "Instrumento"}</div>
+                      {p.ticker && <div className="text-xs text-slate-500">{p.ticker}</div>}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums">{int(p.quantity)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">
+                      {p.quantityAvailableForTrading === null ? "—" : int(p.quantityAvailableForTrading)}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums">{num(p.averagePricePaid, 2)}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{num(p.currentPrice, 2)}</td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Todavía no hay posiciones abiertas en Trading 212 Demo.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </section>
+          <p className="text-xs text-slate-500">Esta pestaña es de solo lectura: todavía no envía órdenes ni cambia stops en Trading 212.</p>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => void }) {
   const onChanged = refreshTrading;
   const [data, setData] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
