@@ -362,6 +362,9 @@ export async function buyOneIberdrolaInTrading212Demo(): Promise<{
   if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
     throw new Trading212Error("Las compras están limitadas a Trading 212 Demo en localhost", 403);
   }
+  if (conditionalInFlight.has("IBEe_EQ") || demoSellInFlight.has("IBEe_EQ")) {
+    throw new Trading212Error("Ya hay otra operación en curso para Iberdrola", 409);
+  }
   const mapping = await findTrading212DemoInstruments("IBE.MC");
   const verified = mapping.matches.filter(m =>
     m.ticker === "IBEe_EQ" && m.isin === "ES0144580Y14" && m.currency === "EUR",
@@ -422,7 +425,7 @@ export async function sellTrading212DemoPosition(ticker: string, quantity: numbe
   }
 
   // Bloquea solicitudes simultáneas al mismo valor, incluso durante la validación.
-  if (demoSellInFlight.has(ticker)) {
+  if (demoSellInFlight.has(ticker) || conditionalInFlight.has(ticker)) {
     throw new Trading212Error("Ya se está procesando una venta de este valor; comprueba su estado", 409);
   }
   if (Date.now() - (lastDemoSellAttempt.get(ticker) ?? 0) < 60_000) {
@@ -497,7 +500,9 @@ export async function placeTrading212DemoConditionalOrder(input: {
     throw new Trading212Error("Orden condicional no válida", 400);
   }
   const lockKey = ticker;
-  if (conditionalInFlight.has(lockKey)) throw new Trading212Error("Ya se está procesando una orden de este valor", 409);
+  if (conditionalInFlight.has(lockKey) || demoSellInFlight.has(ticker)) {
+    throw new Trading212Error("Ya se está procesando otra operación de este valor", 409);
+  }
   if (Date.now() - (conditionalAttemptAt.get(lockKey) ?? 0) < 60_000) {
     throw new Trading212Error("Se intentó enviar una orden de este valor recientemente; revisa las pendientes", 429);
   }
