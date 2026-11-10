@@ -27,7 +27,7 @@ export class Trading212Error extends Error {
   }
 }
 
-async function fetchDemo(path: "/equity/account/summary" | "/equity/positions" | "/equity/orders"): Promise<unknown> {
+async function fetchDemo(path: "/equity/account/summary" | "/equity/positions" | "/equity/orders" | "/equity/metadata/instruments"): Promise<unknown> {
   if (process.env.TRADING212_ENV !== "demo") {
     throw new Trading212Error("Trading 212 debe estar configurado en modo demo", 503);
   }
@@ -174,4 +174,72 @@ export async function getTrading212DemoOrders(): Promise<{
     };
   });
   return { environment: "demo", items };
+}
+
+
+export type Trading212InstrumentMatch = {
+  ticker: string;
+  name: string;
+  isin: string;
+  currency: string;
+  type: "STOCK";
+};
+
+type Trading212RawInstrument = {
+  ticker?: unknown;
+  name?: unknown;
+  shortName?: unknown;
+  isin?: unknown;
+  currencyCode?: unknown;
+  type?: unknown;
+};
+
+let instrumentsCache: { expiresAt: number; items: Trading212RawInstrument[] } | null = null;
+let instrumentsPending: Promise<Trading212RawInstrument[]> | null = null;
+
+async function demoInstruments(): Promise<Trading212RawInstrument[]> {
+  if (instrumentsCache && Date.now() < instrumentsCache.expiresAt) return instrumentsCache.items;
+  if (!instrumentsPending) {
+    instrumentsPending = (async () => {
+      const result = await fetchDemo("/equity/metadata/instruments");
+      if (!Array.isArray(result)) throw new Trading212Error("Trading 212 devolvió instrumentos no válidos");
+      const items = result as Trading212RawInstrument[];
+      // Trading 212 limita la consulta a una cada 50 segundos.
+      instrumentsCache = { items, expiresAt: Date.now() + 10 * 60_000 };
+      return items;
+    })().finally(() => { instrumentsPending = null; });
+  }
+  return instrumentsPending;
+}
+
+/** Correspondencia tentativa; devolver candidatos no autoriza automáticamente una orden. */
+export async function findTrading212DemoInstruments(symbol: string): Promise<{
+  environment: "demo";
+  symbol: string;
+  matches: Trading212InstrumentMatch[];
+}> {
+  const clean = symbol.trim().toUpperCase();
+  const match = /^([A-Z0-9]{1,12})[.]MC$/.exec(clean);
+  if (!match) throw new Trading212Error("Solo se admiten símbolos de bolsa española como IBE.MC", 400);
+  const base = match[1];
+  const items = await demoInstruments();
+  const matches = items
+    .filter((item) => {
+      if (item.type !== "STOCK" || item.currencyCode !== "EUR") return false;
+      const ticker = typeof item.ticker === "string" ? item.ticker.toUpperCase() : "";
+      const shortName = typeof item.shortName === "string" ? item.shortName.toUpperCase() : "";
+      return ticker.startsWith(`${base}_ES_`) || (shortName === base && ticker.includes("_ES_"));
+    })
+    .filter((item): item is Trading212RawInstrument & { ticker: string; name: string; isin: string } =>
+      typeof item.ticker === "string" && typeof item.name === "string" && typeof item.isin === "string",
+    )
+    .slice(0, 10)
+    .map((item) => ({
+      ticker: item.ticker,
+      name: item.name,
+      isin: item.isin,
+      currency: "EUR",
+      type: "STOCK" as const,
+    }));
+  return { environment: "demo", symbol: clean, matches };
 }
