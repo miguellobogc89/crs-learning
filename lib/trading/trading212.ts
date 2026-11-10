@@ -27,7 +27,7 @@ export class Trading212Error extends Error {
   }
 }
 
-async function fetchDemo(path: "/equity/account/summary" | "/equity/positions"): Promise<unknown> {
+async function fetchDemo(path: "/equity/account/summary" | "/equity/positions" | "/equity/orders"): Promise<unknown> {
   if (process.env.TRADING212_ENV !== "demo") {
     throw new Trading212Error("Trading 212 debe estar configurado en modo demo", 503);
   }
@@ -128,5 +128,50 @@ export async function getTrading212DemoPositions(): Promise<{
     };
   });
 
+  return { environment: "demo", items };
+}
+
+
+export type Trading212DemoOrder = {
+  id: number;
+  ticker: string;
+  side: "BUY" | "SELL";
+  type: string;
+  status: string;
+  quantity: number;
+};
+
+/** Órdenes pendientes en Demo. Verifica además el permiso de lectura de órdenes. */
+export async function getTrading212DemoOrders(): Promise<{
+  environment: "demo";
+  items: Trading212DemoOrder[];
+}> {
+  const data = await fetchDemo("/equity/orders");
+  if (!Array.isArray(data)) throw new Trading212Error("Trading 212 devolvió órdenes no válidas");
+
+  const items: Trading212DemoOrder[] = data.map((value: unknown) => {
+    const order = value as {
+      id?: unknown;
+      ticker?: unknown;
+      side?: unknown;
+      type?: unknown;
+      status?: unknown;
+      quantity?: unknown;
+    } | null;
+    if (!order || !isAmount(order.id) || typeof order.ticker !== "string" ||
+      (order.side !== "BUY" && order.side !== "SELL") ||
+      typeof order.type !== "string" || typeof order.status !== "string" ||
+      !isAmount(order.quantity)) {
+      throw new Trading212Error("Trading 212 devolvió una orden incompleta");
+    }
+    return {
+      id: order.id,
+      ticker: order.ticker,
+      side: order.side,
+      type: order.type,
+      status: order.status,
+      quantity: order.quantity,
+    };
+  });
   return { environment: "demo", items };
 }
