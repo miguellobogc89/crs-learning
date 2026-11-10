@@ -22,7 +22,7 @@ import {
 } from "@/lib/trading/service";
 import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
 import { decideProposal, getCommittee, runCommittee } from "@/lib/trading/committee/service";
-import { buyOneIberdrolaInTrading212Demo, findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, Trading212Error } from "@/lib/trading/trading212";
+import { buyOneIberdrolaInTrading212Demo, findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, sellTrading212DemoPosition, Trading212Error } from "@/lib/trading/trading212";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,6 +109,25 @@ export async function POST(req: Request, route: RouteContext) {
     if (raw.length > 16_384) return fail("Petición demasiado grande", 413);
     const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>;
 
+    if (action === "trading212/sell") {
+      if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
+        return fail("Solo se permiten ventas en Trading 212 Demo en localhost", 403);
+      }
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede operar en la Demo", 403);
+      if (body.confirmDemo !== true || typeof body.ticker !== "string" ||
+          typeof body.quantity !== "number" || !Number.isFinite(body.quantity)) {
+        return fail("Confirma la venta e indica un instrumento y cantidad válidos", 400);
+      }
+      try {
+        return NextResponse.json(
+          await sellTrading212DemoPosition(body.ticker, body.quantity),
+          { headers: { "Cache-Control": "no-store" } },
+        );
+      } catch (e) {
+        if (e instanceof Trading212Error) return fail(e.message, e.status);
+        throw e;
+      }
+    }
     if (action === "trading212/buy-test") {
       if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
         return fail("Solo se permiten órdenes de Trading 212 Demo en localhost", 403);
