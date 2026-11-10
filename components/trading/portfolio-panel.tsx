@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Bot, LineChart, Loader2, Pencil, RotateCcw, X } from "lucide-react";
 import type { accountDetail, PositionView } from "@/lib/trading/accounts";
-import type { Trading212DemoPosition, Trading212DemoSummary } from "@/lib/trading/trading212";
+import type { Trading212ConditionalKind, Trading212DemoOrder, Trading212DemoPosition, Trading212DemoSummary } from "@/lib/trading/trading212";
 import { PATTERN_LIBRARY } from "@/lib/trading/library";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { Modal } from "./ui";
@@ -102,6 +102,15 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
 function Trading212DemoPortfolio() {
   const [summary, setSummary] = useState<Trading212DemoSummary | null>(null);
   const [positions, setPositions] = useState<Trading212DemoPosition[] | null>(null);
+  const [orders, setOrders] = useState<Trading212DemoOrder[]>([]);
+  const [conditional, setConditional] = useState<{ kind: Trading212ConditionalKind; ticker: string; name: string; quantity: number; lastPrice: number | null } | null>(null);
+  const [conditionalPrice, setConditionalPrice] = useState("");
+  const [conditionalQuantity, setConditionalQuantity] = useState("1");
+  const [conditionalAccepted, setConditionalAccepted] = useState(false);
+  const [conditionalBusy, setConditionalBusy] = useState(false);
+  const [cancelOrder, setCancelOrder] = useState<Trading212DemoOrder | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [orderResult, setOrderResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [confirmBuy, setConfirmBuy] = useState(false);
@@ -116,12 +125,14 @@ function Trading212DemoPortfolio() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [account, portfolio] = await Promise.all([
+      const [account, portfolio, pending] = await Promise.all([
         api<Trading212DemoSummary>("trading212/account"),
         api<{ environment: "demo"; items: Trading212DemoPosition[] }>("trading212/positions"),
+        api<{ environment: "demo"; items: Trading212DemoOrder[] }>("trading212/orders"),
       ]);
       setSummary(account);
       setPositions(portfolio.items);
+      setOrders(pending.items);
       setError(null);
     } catch (e) {
       setError(errorText(e));
@@ -181,6 +192,61 @@ function Trading212DemoPortfolio() {
     }
   };
 
+  const openConditional = (kind: Trading212ConditionalKind, position?: Trading212DemoPosition) => {
+    const isBuy = kind.startsWith("buy");
+    setConditional({
+      kind,
+      ticker: isBuy ? "IBEe_EQ" : (position?.ticker ?? ""),
+      name: isBuy ? "Iberdrola" : (position?.name ?? position?.ticker ?? ""),
+      quantity: isBuy ? 1 : (position?.quantityAvailableForTrading ?? 0),
+      lastPrice: position?.currentPrice ?? null,
+    });
+    setConditionalPrice("");
+    setConditionalQuantity(isBuy ? "1" : String(position?.quantityAvailableForTrading ?? 0));
+    setConditionalAccepted(false);
+    setError(null);
+  };
+
+  const submitConditional = async () => {
+    if (!conditional || !conditionalAccepted || conditionalBusy) return;
+    const price = Number(conditionalPrice.replace(",", "."));
+    const quantity = Number(conditionalQuantity.replace(",", "."));
+    if (!(price > 0) || !(quantity > 0)) {
+      setError("Introduce precio y cantidad válidos");
+      return;
+    }
+    setConditionalBusy(true);
+    setError(null);
+    try {
+      const result = await api<{ orderId: number; status: string }>("trading212/conditional", {
+        kind: conditional.kind, ticker: conditional.ticker, quantity, price, confirmDemo: true,
+      });
+      setOrderResult(`Orden condicionada Demo registrada (ID ${result.orderId}; estado: ${result.status}). Puedes consultarla y cancelarla en «Órdenes pendientes».`);
+      setConditional(null);
+      await load();
+    } catch (e) {
+      setError(`${errorText(e)}. Antes de reintentar, comprueba las órdenes pendientes de Trading 212.`);
+    } finally {
+      setConditionalBusy(false);
+    }
+  };
+
+  const cancelPending = async () => {
+    if (!cancelOrder || cancelBusy) return;
+    setCancelBusy(true);
+    setError(null);
+    try {
+      await api("trading212/cancel-order", { id: cancelOrder.id, confirmDemo: true });
+      setOrderResult(`Cancelación solicitada para la orden ${cancelOrder.id}. Comprueba el estado actualizado.`);
+      setCancelOrder(null);
+      await load();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setCancelBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -188,8 +254,11 @@ function Trading212DemoPortfolio() {
           Cuenta de práctica de Trading 212. Saldo y posiciones independientes del simulador CRS.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={ghost} onClick={() => { setAcknowledged(false); setConfirmBuy(true); }} disabled={buying || selling || loading || !summary || !!error}>
+          <button type="button" className={ghost} onClick={() => { setAcknowledged(false); setConfirmBuy(true); }} disabled={buying || selling || loading || conditionalBusy || !summary || !!error}>
             Compra de prueba: 1 Iberdrola
+          </button>
+          <button type="button" className={ghost} onClick={() => openConditional("buy_limit")} disabled={loading || conditionalBusy || selling || buying || !summary || !!error}>
+            Compra programada
           </button>
           <button type="button" className={ghost} onClick={() => void load()} disabled={loading || buying || selling}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
@@ -199,6 +268,7 @@ function Trading212DemoPortfolio() {
       </div>
       {buyResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{buyResult}</p>}
       {sellResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{sellResult}</p>}
+      {orderResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{orderResult}</p>}
       {error && <p role="alert" className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {!summary && loading ? (
         <div className="flex h-40 items-center justify-center border border-slate-200 bg-white">
@@ -264,6 +334,26 @@ function Trading212DemoPortfolio() {
                       >
                         Vender
                       </button>
+                      <button
+                        type="button"
+                        className={`${ghost} ml-1`}
+                        disabled={loading || buying || selling || conditionalBusy || !p.ticker ||
+                          !(p.quantityAvailableForTrading !== null && p.quantityAvailableForTrading > 0) ||
+                          orders.some(o => o.ticker === p.ticker && o.side === "SELL")}
+                        onClick={() => openConditional("sell_stop", p)}
+                      >
+                        Stop
+                      </button>
+                      <button
+                        type="button"
+                        className={`${ghost} ml-1`}
+                        disabled={loading || buying || selling || conditionalBusy || !p.ticker ||
+                          !(p.quantityAvailableForTrading !== null && p.quantityAvailableForTrading > 0) ||
+                          orders.some(o => o.ticker === p.ticker && o.side === "SELL")}
+                        onClick={() => openConditional("sell_limit", p)}
+                      >
+                        Objetivo
+                      </button>
                     </td>
                   </tr>
                 )) : (
@@ -272,11 +362,145 @@ function Trading212DemoPortfolio() {
               </tbody>
             </table>
           </section>
+          <section className={`${panel} overflow-x-auto`}>
+            <header className="border-b border-slate-200 px-4 py-3">
+              <h2 className="text-sm font-semibold text-slate-900">Órdenes pendientes en Trading 212 Demo</h2>
+              <p className="text-xs text-slate-500">
+                Stop y objetivo son órdenes alternativas: Trading 212 no ofrece aquí una vinculación OCO.
+                Cancela una antes de crear la otra sobre las mismas acciones.
+              </p>
+            </header>
+            <table className="w-full min-w-[750px] text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className={th}>Instrumento</th>
+                  <th className={th}>Tipo</th>
+                  <th className={`${th} text-right`}>Cantidad</th>
+                  <th className={`${th} text-right`}>Precio de activación</th>
+                  <th className={th}>Estado</th>
+                  <th className={`${th} text-right`}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.length ? orders.map(o => (
+                  <tr key={o.id} className="border-t border-slate-100">
+                    <td className="px-3 py-3 font-medium text-slate-900">{o.ticker}</td>
+                    <td className="px-3 py-3">{o.side === "BUY" ? "Compra" : "Venta"} · {o.type}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{int(Math.abs(o.quantity))}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">
+                      {o.type === "STOP" ? num(o.stopPrice, 3) : o.type === "LIMIT" ? num(o.limitPrice, 3) : "—"}
+                    </td>
+                    <td className="px-3 py-3 text-xs text-slate-600">{o.status}</td>
+                    <td className="px-3 py-3 text-right">
+                      <button type="button" className={ghost}
+                        disabled={cancelBusy || conditionalBusy || o.initiatedFrom !== "API"}
+                        onClick={() => setCancelOrder(o)}>
+                        Cancelar
+                      </button>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-500">No hay órdenes pendientes.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </section>
           <p className="text-xs text-slate-500">
-            Las compras y ventas son órdenes manuales en Demo. Los stops y objetivos automáticos aún no están integrados.
+            Las compras, stops y objetivos condicionados se ejecutan en Trading 212 Demo al alcanzar el precio indicado,
+            incluso con CRS cerrado. El stop no garantiza un precio mínimo de venta.
           </p>
         </>
       ) : null}
+      {conditional && (
+        <Modal
+          open
+          onClose={() => { if (!conditionalBusy) setConditional(null); }}
+          title={conditional.kind.startsWith("buy") ? "Programar compra · Trading 212 Demo" :
+            conditional.kind === "sell_stop" ? "Stop de protección · Trading 212 Demo" : "Objetivo de beneficio · Trading 212 Demo"}
+          subtitle="Orden condicionada en el bróker · sin dinero real"
+          footer={
+            <>
+              <button type="button" className={ghost} disabled={conditionalBusy} onClick={() => setConditional(null)}>
+                Cancelar
+              </button>
+              <button type="button" className={primary} disabled={conditionalBusy || !conditionalAccepted}
+                onClick={() => void submitConditional()}>
+                {conditionalBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                Registrar orden Demo
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-4 text-sm text-slate-700">
+            <p><b>{conditional.name}</b> · {conditional.ticker}</p>
+            {conditional.kind.startsWith("buy") && (
+              <fieldset className="space-y-2 border border-slate-200 px-3 py-2">
+                <legend className="text-xs font-medium">Tipo de compra automática al precio</legend>
+                <label className="flex items-center gap-2">
+                  <input type="radio" checked={conditional.kind === "buy_limit"} onChange={() => setConditional({ ...conditional, kind: "buy_limit" })} />
+                  Límite: comprar a este precio o más barato
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="radio" checked={conditional.kind === "buy_stop"} onChange={() => setConditional({ ...conditional, kind: "buy_stop" })} />
+                  Stop de compra: activar compra al alcanzar el precio por arriba
+                </label>
+              </fieldset>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs">
+                <span className="mb-1 block font-medium text-slate-700">Cantidad de acciones</span>
+                <input type="number" min="0.000001" step="any" className={`${field} w-full`}
+                  value={conditionalQuantity} disabled={!conditional.kind.startsWith("buy") || conditionalBusy}
+                  onChange={(e) => setConditionalQuantity(e.target.value)} />
+              </label>
+              <label className="text-xs">
+                <span className="mb-1 block font-medium text-slate-700">
+                  {conditional.kind.endsWith("stop") ? "Precio de activación (€)" : "Precio límite (€)"}
+                </span>
+                <input type="number" min="0.0001" step="any" className={`${field} w-full`}
+                  value={conditionalPrice} disabled={conditionalBusy}
+                  onChange={(e) => setConditionalPrice(e.target.value)} />
+              </label>
+            </div>
+            {conditional.lastPrice !== null && (
+              <p className="text-xs text-slate-500">Último precio comunicado por Trading 212: {num(conditional.lastPrice, 3)} €.</p>
+            )}
+            <p className="border border-amber-200 bg-amber-50 p-3 text-amber-900">
+              Las órdenes se almacenan y ejecutan en el bróker, aunque cierres CRS.
+              No se vincula automáticamente un stop con un objetivo: solo puede reservarse esta cantidad para una de las dos órdenes.
+              No se garantizan precios de ejecución para los stops.
+            </p>
+            {error && <p role="alert" className="text-red-700">{error}</p>}
+            <label className="flex items-start gap-2">
+              <input type="checkbox" className="mt-1" checked={conditionalAccepted} disabled={conditionalBusy}
+                onChange={(e) => setConditionalAccepted(e.target.checked)} />
+              <span>Confirmo esta orden automática con dinero ficticio en Trading 212 Demo.</span>
+            </label>
+          </div>
+        </Modal>
+      )}
+      {cancelOrder && (
+        <Modal
+          open
+          onClose={() => { if (!cancelBusy) setCancelOrder(null); }}
+          title="Cancelar orden · Trading 212 Demo"
+          subtitle="Una orden puede haberse ejecutado antes de recibir la cancelación."
+          footer={
+            <>
+              <button type="button" className={ghost} disabled={cancelBusy} onClick={() => setCancelOrder(null)}>Volver</button>
+              <button type="button" className={primary} disabled={cancelBusy} onClick={() => void cancelPending()}>
+                {cancelBusy && <Loader2 className="h-4 w-4 animate-spin" />}
+                Solicitar cancelación
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-slate-700">
+            Vas a solicitar la cancelación de la orden <strong>#{cancelOrder.id}</strong> ({cancelOrder.side} · {cancelOrder.type}) de
+            {" "}<strong>{cancelOrder.ticker}</strong> en Demo.
+          </p>
+        </Modal>
+      )}
       {sellPosition && (
         <Modal
           open
