@@ -21,6 +21,7 @@ import {
   type CommitteeNews,
 } from "./prompt";
 import { evaluateProposal } from "./outcome";
+import { brokerStatus, executeProtectedBuy } from "../broker/service";
 
 /** Activos como máximo en el contexto (para que la llamada quepa y no sea cara). */
 const MAX_ASSETS = 24;
@@ -255,7 +256,33 @@ export async function runCommittee(workspaceId: string, userId: string | null) {
       },
     },
   });
-  return { id: run.id };
+  // Autonomía «automático»: las compras de bolsa aprobadas por las reglas se ejecutan solas en Trading 212 Demo.
+  const auto: { symbol: string; ok: boolean; detail: string }[] = [];
+  const broker = await brokerStatus(workspaceId);
+  if (broker.available && broker.autonomy === "automatico") {
+    const created = await prisma.trading_proposals.findMany({ where: { run_id: run.id, status: "propuesta", action: "comprar", market: "bolsa" } });
+    for (const p of created) {
+      try {
+        const r = await executeProposalOnBroker(workspaceId, p.id, "auto");
+        auto.push({ symbol: p.symbol, ok: true, detail: `${r.quantity} acciones (orden ${r.orderId})` });
+      } catch (e) {
+        auto.push({ symbol: p.symbol, ok: false, detail: e instanceof Error ? e.message : "error" });
+      }
+    }
+  }
+  return { id: run.id, auto };
+}
+
+/** Ejecuta una propuesta de compra del comité en Trading 212 Demo, con stop y objetivo protegidos. */
+export async function executeProposalOnBroker(workspaceId: string, proposalId: string, source: "comite" | "auto" = "comite") {
+  if (!/^[0-9a-f-]{36}$/i.test(proposalId)) throw new Error("Propuesta no válida");
+  const p = await prisma.trading_proposals.findFirst({ where: { id: proposalId, workspace_id: workspaceId } });
+  if (!p) throw new Error("La propuesta no existe");
+  if (p.status !== "propuesta") throw new Error("Esta propuesta ya se decidió");
+  if (p.action !== "comprar" || p.market !== "bolsa" || !p.stop || !p.target) throw new Error("Solo se pueden enviar al bróker compras de bolsa con stop y objetivo");
+  const r = await executeProtectedBuy(workspaceId, { symbol: p.symbol, stop: p.stop, target: p.target, source, proposalId: p.id });
+  await prisma.trading_proposals.update({ where: { id: p.id }, data: { status: "ejecutada", decided_at: new Date() } });
+  return r;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +339,7 @@ export async function getCommittee(workspaceId: string) {
         }
       : null,
     stale: !latest || madridDay(latest.created_at) !== today,
+    broker: await brokerStatus(workspaceId),
     history,
     scoreboard,
   };

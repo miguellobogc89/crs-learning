@@ -552,10 +552,10 @@ export async function placeTrading212DemoConditionalOrder(input: {
     const isStop = kind.endsWith("stop");
     const path = isStop ? "/equity/orders/stop" : "/equity/orders/limit";
     const signedQuantity = kind.startsWith("sell") ? -quantity : quantity;
-    const body = isStop
-      ? { ticker, quantity: signedQuantity, stopPrice: price, timeValidity: "GOOD_TILL_CANCEL" as const }
-      : { ticker, quantity: signedQuantity, limitPrice: price, timeValidity: "GOOD_TILL_CANCEL" as const };
-    const result = (await fetchDemo(path, { method: "POST", body })) as { id?: unknown; status?: unknown } | null;
+    const request: DemoOrderRequest = isStop
+      ? { method: "POST", body: { ticker, quantity: signedQuantity, stopPrice: price, timeValidity: "GOOD_TILL_CANCEL" } }
+      : { method: "POST", body: { ticker, quantity: signedQuantity, limitPrice: price, timeValidity: "GOOD_TILL_CANCEL" } };
+    const result = (await fetchDemo(path, request)) as { id?: unknown; status?: unknown } | null;
     if (!result || !isAmount(result.id) || typeof result.status !== "string") {
       throw new Trading212Error("Resultado de orden desconocido: revisa las pendientes antes de repetir");
     }
@@ -587,4 +587,92 @@ export async function cancelTrading212DemoOrder(id: number): Promise<{ environme
     demoReadCache.clear();
     conditionalInFlight.delete(key);
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// Primitivas para operaciones protegidas y para el comité (solo Demo en localhost).
+// No reintentan nunca un POST: la API no garantiza idempotencia.
+// ---------------------------------------------------------------------------
+function assertDemoLocal() {
+  if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
+    throw new Trading212Error("Solo disponible para Trading 212 Demo en localhost", 403);
+  }
+}
+
+/** ¿Está configurada la Demo para operar desde este servidor? */
+export function trading212DemoAvailable() {
+  return (
+    process.env.NODE_ENV === "development" &&
+    process.env.TRADING212_ENV === "demo" &&
+    !!process.env.TRADING212_API_KEY &&
+    !!process.env.TRADING212_API_SECRET
+  );
+}
+
+/** Catálogo normalizado (con caché de 10 minutos; el bróker limita esta consulta). */
+export async function trading212Catalog() {
+  assertDemoLocal();
+  const items = await demoInstruments();
+  return items
+    .filter((i) => typeof i.ticker === "string" && typeof i.name === "string")
+    .map((i) => ({
+      ticker: i.ticker as string,
+      name: i.name as string,
+      shortName: typeof i.shortName === "string" ? i.shortName : null,
+      isin: typeof i.isin === "string" ? i.isin : null,
+      currency: typeof i.currencyCode === "string" ? i.currencyCode : null,
+      type: typeof i.type === "string" ? i.type : null,
+    }));
+}
+
+/** Foto fresca de posiciones y órdenes pendientes (dos lecturas). */
+export async function trading212Snapshot() {
+  assertDemoLocal();
+  const positions = await getTrading212DemoPositions(true);
+  demoReadCache.delete("/equity/orders");
+  const orders = await getTrading212DemoOrders();
+  return { positions: positions.items, orders: orders.items };
+}
+
+const brokerOpInFlight = new Set<string>();
+
+async function placeOrder(path: "/equity/orders/market" | "/equity/orders/stop", ticker: string, body: Record<string, unknown>) {
+  assertDemoLocal();
+  if (!/^[A-Za-z0-9_.-]{1,80}$/.test(ticker)) throw new Trading212Error("Ticker no válido", 400);
+  if (brokerOpInFlight.has(ticker) || demoSellInFlight.has(ticker) || conditionalInFlight.has(ticker)) {
+    throw new Trading212Error("Ya hay otra operación en curso para este valor", 409);
+  }
+  brokerOpInFlight.add(ticker);
+  try {
+    const result = (await fetchDemo(path, { method: "POST", body } as DemoOrderRequest)) as { id?: unknown; status?: unknown } | null;
+    if (!result || !isAmount(result.id) || typeof result.status !== "string") {
+      throw new Trading212Error("Resultado de orden desconocido: revisa la cartera y las órdenes antes de repetir");
+    }
+    return { orderId: String(result.id), status: result.status };
+  } finally {
+    demoReadCache.clear();
+    brokerOpInFlight.delete(ticker);
+  }
+}
+
+/** Compra (cantidad positiva) o venta (negativa) a mercado. */
+export async function trading212MarketOrder(ticker: string, signedQuantity: number) {
+  if (!isAmount(signedQuantity) || signedQuantity === 0 || Math.abs(signedQuantity) > 100_000) throw new Trading212Error("Cantidad no válida", 400);
+  return placeOrder("/equity/orders/market", ticker, { ticker, quantity: signedQuantity, extendedHours: false });
+}
+
+/** Stop de venta en el bróker: protege la posición aunque la app esté apagada. */
+export async function trading212StopSell(ticker: string, quantity: number, stopPrice: number) {
+  if (!isAmount(quantity) || quantity <= 0 || !isAmount(stopPrice) || stopPrice <= 0) throw new Trading212Error("Stop no válido", 400);
+  return placeOrder("/equity/orders/stop", ticker, { ticker, quantity: -quantity, stopPrice, timeValidity: "GOOD_TILL_CANCEL" });
+}
+
+/** Cancela una orden creada por API (por ejemplo, el stop antes de vender en el objetivo). */
+export async function trading212CancelApiOrder(id: string) {
+  assertDemoLocal();
+  if (!/^\d{1,20}$/.test(id)) throw new Trading212Error("ID de orden no válido", 400);
+  await fetchDemo(`/equity/orders/${id}`, { method: "DELETE" });
+  demoReadCache.clear();
+  return { id, requested: true as const };
 }

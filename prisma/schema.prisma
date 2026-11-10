@@ -2192,6 +2192,10 @@ model market_instruments {
   last_candle_at DateTime? @db.Date
   last_sync_at DateTime? @db.Timestamptz(6)
   last_error String?
+  isin String?
+  broker_ticker String?
+  broker_checked_at DateTime? @db.Timestamptz(6)
+  broker_note String?
   created_at DateTime @default(now()) @db.Timestamptz(6)
   candles market_candles[]
   positions trading_positions[]
@@ -2238,6 +2242,7 @@ model trading_accounts {
   breakeven Boolean @default(true)
   patterns String[] @default([])
   last_processed_day DateTime? @db.Date
+  broker_autonomy String @default("aprobacion")
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @default(now()) @db.Timestamptz(6)
   positions trading_positions[]
@@ -2391,4 +2396,31 @@ model trading_proposals {
   run trading_committee_runs @relation(fields: [run_id], references: [id], onDelete: Cascade)
   @@index([workspace_id, created_at])
   @@index([run_id])
+}
+/// Operación en el bróker con stop y objetivo: el stop vive en el bróker y el objetivo lo vigila la app.
+model trading_broker_brackets {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @db.Uuid
+  broker String @default("trading212_demo")
+  symbol String
+  ticker String
+  name String
+  quantity Float
+  stop Float
+  target Float
+  planned_price Float
+  status String @default("esperando_entrada")
+  entry_order_id String?
+  stop_order_id String?
+  exit_order_id String?
+  entry_price Float?
+  exit_price Float?
+  exit_reason String?
+  note String?
+  source String @default("manual")
+  proposal_id String? @db.Uuid
+  last_checked_at DateTime? @db.Timestamptz(6)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  @@index([workspace_id, status])
 }

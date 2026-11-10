@@ -21,7 +21,8 @@ import {
   simulate,
 } from "@/lib/trading/service";
 import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
-import { decideProposal, getCommittee, runCommittee } from "@/lib/trading/committee/service";
+import { decideProposal, executeProposalOnBroker, getCommittee, runCommittee } from "@/lib/trading/committee/service";
+import { brokerLinks, brokerStatus, linkInstruments, listBrackets, runBrokerGuardian, setBrokerAutonomy } from "@/lib/trading/broker/service";
 import { buyOneIberdrolaInTrading212Demo, cancelTrading212DemoOrder, findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, placeTrading212DemoConditionalOrder, sellTrading212DemoPosition, Trading212Error, type Trading212ConditionalKind } from "@/lib/trading/trading212";
 
 export const runtime = "nodejs";
@@ -74,6 +75,15 @@ export async function GET(req: Request, route: RouteContext) {
         if (e instanceof Trading212Error) return fail(e.message, e.status);
         throw e;
       }
+    }
+    if (action === "broker") {
+      const status = await brokerStatus(ctx.workspaceId);
+      return NextResponse.json({
+        ...status,
+        brackets: status.available ? await listBrackets(ctx.workspaceId) : [],
+        links: status.available ? await brokerLinks() : [],
+        canManage: ctx.canManage,
+      });
     }
     if (action === "account") return NextResponse.json(await accountDetail(ctx.workspaceId));
     if (action === "instruments") {
@@ -198,6 +208,21 @@ export async function POST(req: Request, route: RouteContext) {
           execution: body.execution === "now" ? "now" : "next_open",
         }),
       );
+    }
+    if (action === "committee/execute-broker" || action === "broker/link" || action === "broker/guardian" || action === "broker/autonomy") {
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede operar con el bróker", 403);
+      try {
+        if (action === "committee/execute-broker") {
+          if (body.confirmDemo !== true) return fail("Falta la confirmación explícita de operación Demo");
+          return NextResponse.json(await executeProposalOnBroker(ctx.workspaceId, String(body.proposalId ?? "")));
+        }
+        if (action === "broker/link") return NextResponse.json(await linkInstruments(body.force === true));
+        if (action === "broker/guardian") return NextResponse.json(await runBrokerGuardian(ctx.workspaceId));
+        return NextResponse.json(await setBrokerAutonomy(ctx.workspaceId, body.autonomy));
+      } catch (e) {
+        if (e instanceof Trading212Error) return fail(e.message, e.status);
+        throw e;
+      }
     }
     if (action === "simulate") return NextResponse.json(await simulate(ctx.workspaceId, body));
     if (action === "order") return NextResponse.json(await placeOrder(ctx.workspaceId, ctx.userId, parseOrder(body)));

@@ -272,7 +272,7 @@ export function CommitteeToday() {
               }
             />
           )}
-          {confirm && <ConfirmOrderModal idea={ideaFromProposal(confirm)} onClose={() => setConfirm(null)} />}
+          {confirm && <ConfirmOrderModal idea={ideaFromProposal(confirm)} broker={data.broker} onClose={() => setConfirm(null)} />}
           {latest.status === "error" ? (
             <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">La última reunión falló: {latest.error}</p>
           ) : (

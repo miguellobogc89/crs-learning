@@ -82,3 +82,15 @@ Datos de mercado globales (`market_*`); cartera por espacio (`trading_*`, una po
 
 Inicio · Oportunidades · Mi cartera · Noticias · Simulador · Gráficos · Aprende; en «Más»: Historial del comité,
 Reglas y riesgo, Valores seguidos. `/trading/hoy` redirige a Oportunidades.
+
+## Trading 212 Demo (bróker)
+
+Solo funciona en local (`NODE_ENV=development`) con `TRADING212_ENV=demo`, `TRADING212_API_KEY` y `TRADING212_API_SECRET`.
+
+- **Vinculación** (`lib/trading/broker/logic.ts` → `matchInstrument`): cada valor de bolsa se busca en el catálogo de Trading 212 por ISIN, luego por ticker `XXXe_EQ` y luego por nombre corto. Solo acciones en EUR. El resultado se guarda en `market_instruments.broker_ticker / isin / broker_note`. Las crypto no se vinculan.
+- **Compra protegida** (`executeProtectedBuy`): compra a mercado y crea una fila en `trading_broker_brackets`. Tamaño = mínimo entre riesgo por operación de la cuenta, 20 % del patrimonio Demo y 98 % del efectivo. Rechaza si ya hay posición, órdenes pendientes u operación activa en ese valor. Nunca reintenta un POST.
+- **Vigilancia** (`runBrokerGuardian`, `decideBracket`): Trading 212 no tiene OCO y solo admite una orden de venta por valor, así que el **stop** se deja puesto en el bróker y el **objetivo** lo vigila la app. Al tocarlo: cancela el stop y vende a mercado. Si el stop desaparece, lo vuelve a poner. Si el precio abre por debajo del stop, vende. Estados: `esperando_entrada → protegida → vendiendo → cerrada` (o `error`).
+- La pantalla *Mi cartera → Trading 212 Demo* ejecuta la vigilancia cada minuto mientras está abierta (`POST broker/guardian`). Con la app cerrada, solo protege el stop.
+- **Autonomía del comité** (`trading_accounts.broker_autonomy`): `nada` (no toca el bróker), `aprobacion` (botón «Trading 212 Demo» al ejecutar una propuesta) o `automatico` (al reunirse, el comité envía solo sus compras de bolsa válidas).
+- API: `GET broker`, `POST broker/link`, `POST broker/guardian`, `POST broker/autonomy`, `POST committee/execute-broker` (`{ proposalId, confirmDemo: true }`).
+- Migración: `prisma/migrations/20261110180000_trading_broker/migration.sql`.

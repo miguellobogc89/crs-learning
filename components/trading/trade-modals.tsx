@@ -248,8 +248,21 @@ export function TradeInfoModal({ idea, onClose, onExecute }: { idea: TradeIdea; 
 }
 
 /** «Ejecutar orden»: confirmación clara, con la opción de ajustar antes de confirmar. */
-export function ConfirmOrderModal({ idea, cash, onClose }: { idea: TradeIdea; cash?: number; onClose: () => void }) {
+export function ConfirmOrderModal({
+  idea,
+  cash,
+  onClose,
+  broker,
+}: {
+  idea: TradeIdea;
+  cash?: number;
+  onClose: () => void;
+  /** Trading 212 Demo disponible para enviar propuestas del comité. */
+  broker?: { available: boolean; autonomy: string } | null;
+}) {
   const crypto = idea.market === "crypto";
+  const canBroker = !!broker?.available && broker.autonomy !== "nada" && !!idea.proposalId && idea.market === "bolsa" && idea.action === "comprar";
+  const [dest, setDest] = useState<"crs" | "t212">("crs");
   const sell = idea.action === "vender" || idea.action === "cerrar";
   const [adjust, setAdjust] = useState(false);
   const [quantity, setQuantity] = useState(String(idea.quantity ?? ""));
@@ -273,7 +286,12 @@ export function ConfirmOrderModal({ idea, cash, onClose }: { idea: TradeIdea; ca
     setSaving(true);
     setError(null);
     try {
-      if (idea.proposalId) {
+      if (dest === "t212" && idea.proposalId) {
+        const r = await api<{ quantity: number; orderId: string; status: string }>("committee/execute-broker", { proposalId: idea.proposalId, confirmDemo: true });
+        setDone(
+          `Compra de ${int(r.quantity)} acciones enviada a Trading 212 Demo (orden ${r.orderId}, ${r.status}). En cuanto el bróker la registre, la app pondrá el stop y vigilará el objetivo.`,
+        );
+      } else if (idea.proposalId) {
         const r = await api<{ status: string; order: string | null }>("committee/decide", {
           proposalId: idea.proposalId,
           decision: "ejecutar",
@@ -318,8 +336,8 @@ export function ConfirmOrderModal({ idea, cash, onClose }: { idea: TradeIdea; ca
             <button type="button" className={ghost} onClick={onClose}>
               Seguir mirando
             </button>
-            <Link href="/trading/cartera" className={primary} onClick={onClose}>
-              Ver mi cartera
+            <Link href={dest === "t212" ? "/trading/cartera?source=trading212" : "/trading/cartera"} className={primary} onClick={onClose}>
+              {dest === "t212" ? "Ver Trading 212 Demo" : "Ver mi cartera"}
             </Link>
           </>
         }
@@ -358,7 +376,45 @@ export function ConfirmOrderModal({ idea, cash, onClose }: { idea: TradeIdea; ca
       }
     >
       <div className="space-y-4 text-sm text-slate-700">
-        {sell ? (
+        {canBroker && (
+          <fieldset className="grid grid-cols-2 gap-2">
+            <legend className="mb-1.5 text-xs font-medium text-slate-600">¿Dónde la ejecutas?</legend>
+            {(
+              [
+                ["crs", "Simulador CRS", "Tu cartera virtual de la app."],
+                ["t212", "Trading 212 Demo", "Cuenta de práctica del bróker, con stop y objetivo protegidos."],
+              ] as const
+            ).map(([key, label, text]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setDest(key)}
+                className={`border px-3 py-2 text-left ${dest === key ? "border-blue-500 bg-blue-50/60 ring-1 ring-blue-500" : "border-slate-200 hover:bg-slate-50"}`}
+              >
+                <span className="block text-sm font-semibold text-slate-900">{label}</span>
+                <span className="mt-0.5 block text-xs text-slate-500">{text}</span>
+              </button>
+            ))}
+          </fieldset>
+        )}
+        {dest === "t212" ? (
+          <div className="space-y-2">
+            <p className="text-[15px] leading-relaxed">
+              <Rich text={`Vas a **comprar ${idea.name} en Trading 212 Demo** a mercado (si la bolsa está cerrada, se ejecuta en la apertura).`} />
+            </p>
+            <ul className="list-disc space-y-1 pl-5 text-xs text-slate-600">
+              <li>
+                La <b>cantidad</b> la calcula la app con el saldo de tu cuenta Demo y tu riesgo por operación (máximo el 20 % del patrimonio).
+              </li>
+              <li>
+                El <b>stop a {idea.stop !== null ? eur(idea.stop) : "—"}</b> queda puesto en el bróker en cuanto se registre la compra.
+              </li>
+              <li>
+                El <b>objetivo a {idea.target !== null ? eur(idea.target) : "—"}</b> lo vigila la app mientras la tengas abierta: al tocarlo, cancela el stop y vende.
+              </li>
+            </ul>
+          </div>
+        ) : sell ? (
           <p className="text-[15px]">
             <Rich text={`Vas a **cerrar tu posición en ${idea.name}** al último precio disponible (**${eur(idea.price)}**).`} />
           </p>

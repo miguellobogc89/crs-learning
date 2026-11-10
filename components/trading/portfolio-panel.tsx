@@ -7,6 +7,7 @@ import type { Trading212ConditionalKind, Trading212DemoOrder, Trading212DemoPosi
 import { PATTERN_LIBRARY } from "@/lib/trading/library";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { Modal } from "./ui";
+import { BrokerPanel } from "./broker-panel";
 import { PATTERN_SHORT, api, dayFmt, errorText, eur, eur0, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
 
 type Detail = Awaited<ReturnType<typeof accountDetail>>;
@@ -266,6 +267,7 @@ function Trading212DemoPortfolio() {
           </button>
         </div>
       </div>
+      <BrokerPanel />
       {buyResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{buyResult}</p>}
       {sellResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{sellResult}</p>}
       {orderResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{orderResult}</p>}
