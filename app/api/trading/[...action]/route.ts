@@ -22,6 +22,7 @@ import {
 } from "@/lib/trading/service";
 import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
 import { decideProposal, getCommittee, runCommittee } from "@/lib/trading/committee/service";
+import { getTrading212DemoSummary, Trading212Error } from "@/lib/trading/trading212";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +57,17 @@ export async function GET(req: Request, route: RouteContext) {
     if (action === "news") return NextResponse.json({ ...(await listNews(normalizeNewsFilters(url.searchParams))), canManage: ctx.canManage });
     if (action === "committee") return NextResponse.json({ ...(await getCommittee(ctx.workspaceId)), canManage: ctx.canManage });
     if (action === "library") return NextResponse.json(await getLibrary(url.searchParams.get("market") === "crypto" ? "crypto" : "bolsa"));
+    if (action === "trading212/account") {
+      // Clave personal de Demo: no debe exponerse en entornos desplegados ni a usuarios del workspace.
+      if (process.env.NODE_ENV !== "development") return fail("Solo disponible en desarrollo local", 403);
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede consultar Trading 212", 403);
+      try {
+        return NextResponse.json(await getTrading212DemoSummary(), { headers: { "Cache-Control": "no-store" } });
+      } catch (e) {
+        if (e instanceof Trading212Error) return fail(e.message, e.status);
+        throw e;
+      }
+    }
     if (action === "account") return NextResponse.json(await accountDetail(ctx.workspaceId));
     if (action === "instruments") {
       const list = await listInstruments();
