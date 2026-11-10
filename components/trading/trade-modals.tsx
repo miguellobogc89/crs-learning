@@ -256,11 +256,6 @@ export function ConfirmOrderModal({ idea, cash, onClose }: { idea: TradeIdea; ca
   const [stop, setStop] = useState(idea.stop !== null ? String(Number(idea.stop.toFixed(4))) : "");
   const [target, setTarget] = useState(idea.target !== null ? String(Number(idea.target.toFixed(4))) : "");
   const [execution, setExecution] = useState<"next_open" | "now">("next_open");
-  const [demoMode, setDemoMode] = useState(false);
-  const [demoConfirmed, setDemoConfirmed] = useState(false);
-  const demoEligible = process.env.NODE_ENV === "development"
-    && idea.symbol === "IBE.MC" && idea.market === "bolsa"
-    && idea.action === "comprar" && idea.direction === "long";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -278,14 +273,7 @@ export function ConfirmOrderModal({ idea, cash, onClose }: { idea: TradeIdea; ca
     setSaving(true);
     setError(null);
     try {
-      if (demoMode) {
-        const r = await api<{ status: string; orderId: number }>("trading212/buy-test", {
-          symbol: idea.symbol,
-          quantity: 1,
-          confirmDemo: demoConfirmed,
-        });
-        setDone(`Orden de compra enviada a Trading 212 Demo (ID ${r.orderId}, estado ${r.status}). Comprueba si está ejecutada o pendiente en el bróker.`);
-      } else if (idea.proposalId) {
+      if (idea.proposalId) {
         const r = await api<{ status: string; order: string | null }>("committee/decide", {
           proposalId: idea.proposalId,
           decision: "ejecutar",
@@ -330,7 +318,7 @@ export function ConfirmOrderModal({ idea, cash, onClose }: { idea: TradeIdea; ca
             <button type="button" className={ghost} onClick={onClose}>
               Seguir mirando
             </button>
-            <Link href={demoMode ? "/trading/cartera?source=trading212" : "/trading/cartera"} className={primary} onClick={onClose}>
+            <Link href="/trading/cartera" className={primary} onClick={onClose}>
               Ver mi cartera
             </Link>
           </>
@@ -340,14 +328,11 @@ export function ConfirmOrderModal({ idea, cash, onClose }: { idea: TradeIdea; ca
           <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-600" />
           <div className="space-y-1 text-sm text-slate-700">
             <p className="font-medium text-slate-900">{done}</p>
-            {!sell && !demoMode && (
+            {!sell && (
               <p>
                 A partir de ahora la app vigila la posición cada día: si toca el stop o el objetivo, la cierra sola. Lo verás en
                 «Mi cartera».
               </p>
-            )}
-            {demoMode && (
-              <p>Esta prueba no coloca stop ni objetivo. La orden puede quedar pendiente hasta la apertura del mercado.</p>
             )}
           </div>
         </div>
@@ -359,51 +344,21 @@ export function ConfirmOrderModal({ idea, cash, onClose }: { idea: TradeIdea; ca
       open
       onClose={onClose}
       title={sell ? `Vender ${idea.name}` : `Ejecutar orden · ${idea.name}`}
-      subtitle={demoMode ? "Trading 212 Demo · dinero ficticio, no operas en la cuenta real" : "Cartera virtual: no se mueve dinero real"}
+      subtitle="Cartera virtual: no se mueve dinero real"
       footer={
         <>
           <button type="button" className={ghost} onClick={onClose}>
             Cancelar
           </button>
-          <button type="button" className={primary} onClick={confirm} disabled={saving || (demoMode ? !demoConfirmed || values.q !== 1 : !sell && !(values.q > 0))}>
+          <button type="button" className={primary} onClick={confirm} disabled={saving || (!sell && !(values.q > 0))}>
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            {demoMode ? "Confirmar compra en Demo" : sell ? "Confirmar venta" : "Confirmar orden"}
+            {sell ? "Confirmar venta" : "Confirmar orden"}
           </button>
         </>
       }
     >
       <div className="space-y-4 text-sm text-slate-700">
-        {demoEligible && (
-          <fieldset className="space-y-2 border border-slate-200 p-3">
-            <legend className="px-1 text-xs font-semibold text-slate-700">Destino de la operación</legend>
-            <label className="flex items-center gap-2">
-              <input type="radio" name="orderDestination" checked={!demoMode} onChange={() => {
-                setDemoMode(false); setDemoConfirmed(false); setQuantity(String(idea.quantity ?? ""));
-              }} />
-              Simulador CRS
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="radio" name="orderDestination" checked={demoMode} onChange={() => {
-                setDemoMode(true); setDemoConfirmed(false); setQuantity("1");
-              }} />
-              Trading 212 Demo (prueba con 1 acción)
-            </label>
-          </fieldset>
-        )}
-        {demoMode ? (
-          <div className="space-y-3">
-            <p>Enviarás una <strong>orden de mercado de compra de 1 acción de Iberdrola</strong> a Trading 212 Demo. No se usará dinero real ni se modificará la cartera CRS.</p>
-            <p className="border border-amber-200 bg-amber-50 p-3 text-amber-900">
-              <strong>Importante:</strong> es una compra de prueba sin stop ni objetivo automáticos.
-              El precio final puede diferir del último cierre y la orden puede quedar pendiente si el mercado está cerrado.
-              No vuelvas a enviarla si no conoces su estado.
-            </p>
-            <label className="flex items-start gap-2">
-              <input type="checkbox" className="mt-1" checked={demoConfirmed} onChange={(e) => setDemoConfirmed(e.target.checked)} />
-              <span>Confirmo la compra de una acción ficticia en Trading 212 Demo, sin protección automática todavía.</span>
-            </label>
-          </div>
-        ) : sell ? (
+        {sell ? (
           <p className="text-[15px]">
             <Rich text={`Vas a **cerrar tu posición en ${idea.name}** al último precio disponible (**${eur(idea.price)}**).`} />
           </p>
