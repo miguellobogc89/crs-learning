@@ -467,6 +467,8 @@ function Trading212DemoPortfolio() {
             )}
             <p className="border border-amber-200 bg-amber-50 p-3 text-amber-900">
               Las órdenes se almacenan y ejecutan en el bróker, aunque cierres CRS.
+              Un límite de compra por encima del precio de mercado puede ejecutarse inmediatamente.
+              Las compras programadas no colocan stops después de ejecutarse.
               No se vincula automáticamente un stop con un objetivo: solo puede reservarse esta cantidad para una de las dos órdenes.
               No se garantizan precios de ejecución para los stops.
             </p>
