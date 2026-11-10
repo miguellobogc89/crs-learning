@@ -144,7 +144,20 @@ export async function getTrading212DemoPositions(fresh = false): Promise<{
   environment: "demo";
   items: Trading212DemoPosition[];
 }> {
-  const data = fresh ? await fetchDemo("/equity/positions") : await readDemo("/equity/positions", 2_000);
+  let data: unknown;
+  if (fresh) {
+    try {
+      data = await fetchDemo("/equity/positions");
+    } catch (e) {
+      // La lectura de posiciones tiene límite de 1 consulta/segundo.
+      // Reintenta solo la consulta GET de validación, nunca la orden de venta.
+      if (!(e instanceof Trading212Error) || e.status !== 429) throw e;
+      await new Promise<void>((resolve) => setTimeout(resolve, 1_300));
+      data = await fetchDemo("/equity/positions");
+    }
+  } else {
+    data = await readDemo("/equity/positions", 2_000);
+  }
   if (!Array.isArray(data)) throw new Trading212Error("Trading 212 devolvió posiciones no válidas");
 
   const items: Trading212DemoPosition[] = data.map((value: unknown) => {
