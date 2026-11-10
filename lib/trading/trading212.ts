@@ -37,7 +37,11 @@ async function fetchDemo(
   path: string,
   options?: DemoOrderRequest,
 ): Promise<unknown> {
-  if (!/^\\/equity\\/(?:account\\/summary|positions|orders(?:\\/(?:market|stop|limit|[0-9]+))?|metadata\\/instruments)$/.test(path)) {
+  const fixedPaths = ["/equity/account/summary", "/equity/positions", "/equity/orders",
+    "/equity/metadata/instruments", "/equity/orders/market", "/equity/orders/stop", "/equity/orders/limit"];
+  const orderId = path.startsWith("/equity/orders/") ? path.slice("/equity/orders/".length) : "";
+  const isOrderId = orderId.length > 0 && [...orderId].every(ch => ch >= "0" && ch <= "9");
+  if (!fixedPaths.includes(path) && !isOrderId) {
     throw new Trading212Error("Endpoint de Trading 212 no permitido", 400);
   }
   if (process.env.TRADING212_ENV !== "demo") {
