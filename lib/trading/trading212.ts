@@ -74,11 +74,46 @@ async function fetchDemo(
   }
 }
 
+type DemoReadPath = "/equity/account/summary" | "/equity/positions" | "/equity/orders";
+
+/** Cache corta + deduplicación: evita llamadas simultáneas repetidas en React y respeta los límites del bróker. */
+const demoReadCache = new Map<DemoReadPath, {
+  value?: unknown;
+  expiresAt: number;
+  pending?: Promise<unknown>;
+}>();
+
+async function readDemo(path: DemoReadPath, ttlMs: number): Promise<unknown> {
+  const cached = demoReadCache.get(path);
+  if (cached?.pending) return cached.pending;
+  if (cached?.value !== undefined && cached.expiresAt > Date.now()) return cached.value;
+
+  const pending = (async () => {
+    try {
+      return await fetchDemo(path);
+    } catch (e) {
+      // Las lecturas sí pueden reintentarse; nunca hacemos esto con las órdenes POST.
+      if (!(e instanceof Trading212Error) || e.status !== 429) throw e;
+      await new Promise<void>((resolve) => setTimeout(resolve, 5_300));
+      return fetchDemo(path);
+    }
+  })();
+  demoReadCache.set(path, { ...cached, pending, expiresAt: 0 });
+  try {
+    const value = await pending;
+    demoReadCache.set(path, { value, expiresAt: Date.now() + ttlMs });
+    return value;
+  } catch (e) {
+    demoReadCache.delete(path);
+    throw e;
+  }
+}
+
 const isAmount = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 /** Consulta exclusivamente el saldo Demo, sin exponer credenciales ni el identificador de cuenta. */
 export async function getTrading212DemoSummary(): Promise<Trading212DemoSummary> {
-  const data = (await fetchDemo("/equity/account/summary")) as {
+  const data = (await readDemo("/equity/account/summary", 6_000)) as {
     currency?: unknown;
     totalValue?: unknown;
     cash?: { availableToTrade?: unknown };
@@ -109,7 +144,7 @@ export async function getTrading212DemoPositions(): Promise<{
   environment: "demo";
   items: Trading212DemoPosition[];
 }> {
-  const data = await fetchDemo("/equity/positions");
+  const data = await readDemo("/equity/positions", 2_000);
   if (!Array.isArray(data)) throw new Trading212Error("Trading 212 devolvió posiciones no válidas");
 
   const items: Trading212DemoPosition[] = data.map((value: unknown) => {
@@ -151,7 +186,7 @@ export async function getTrading212DemoOrders(): Promise<{
   environment: "demo";
   items: Trading212DemoOrder[];
 }> {
-  const data = await fetchDemo("/equity/orders");
+  const data = await readDemo("/equity/orders", 6_000);
   if (!Array.isArray(data)) throw new Trading212Error("Trading 212 devolvió órdenes no válidas");
 
   const items: Trading212DemoOrder[] = data.map((value: unknown) => {
@@ -311,6 +346,8 @@ export async function buyOneIberdrolaInTrading212Demo(): Promise<{
   if (!result || !isAmount(result.id) || typeof result.status !== "string") {
     throw new Trading212Error("Resultado de orden desconocido: consulta la cartera y las órdenes antes de repetir");
   }
+  // Una compra puede cambiar saldo, posiciones y órdenes pendientes.
+  demoReadCache.clear();
   return {
     environment: "demo",
     symbol: "IBE.MC",
