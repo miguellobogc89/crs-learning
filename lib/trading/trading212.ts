@@ -27,7 +27,10 @@ export class Trading212Error extends Error {
   }
 }
 
-async function fetchDemo(path: "/equity/account/summary" | "/equity/positions" | "/equity/orders" | "/equity/metadata/instruments"): Promise<unknown> {
+async function fetchDemo(
+  path: "/equity/account/summary" | "/equity/positions" | "/equity/orders" | "/equity/metadata/instruments" | "/equity/orders/market",
+  options?: { method: "POST"; body: { ticker: string; quantity: number; extendedHours: false } },
+): Promise<unknown> {
   if (process.env.TRADING212_ENV !== "demo") {
     throw new Trading212Error("Trading 212 debe estar configurado en modo demo", 503);
   }
@@ -40,11 +43,13 @@ async function fetchDemo(path: "/equity/account/summary" | "/equity/positions" |
   let response: Response;
   try {
     response = await fetch(`${DEMO_API}${path}`, {
-      method: "GET",
+      method: options?.method ?? "GET",
       headers: {
         Authorization: `Basic ${Buffer.from(`${key}:${secret}`).toString("base64")}`,
         Accept: "application/json",
+        ...(options ? { "Content-Type": "application/json" } : {}),
       },
+      ...(options ? { body: JSON.stringify(options.body) } : {}),
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
@@ -264,5 +269,54 @@ export async function findTrading212DemoInstruments(symbol: string): Promise<{
     matches,
     catalogCount: items.length,
     spanishStockCount: stocks.filter((item) => typeof item.isin === "string" && item.isin.startsWith("ES")).length,
+  };
+}
+
+
+// Primer ensayo controlado: exclusivamente una acción ficticia de Iberdrola.
+let lastDemoBuyAttemptAt = 0;
+
+export async function buyOneIberdrolaInTrading212Demo(): Promise<{
+  environment: "demo";
+  symbol: "IBE.MC";
+  ticker: "IBEe_EQ";
+  orderId: number;
+  status: string;
+  quantity: 1;
+}> {
+  // No se habilitan operaciones con dinero real ni en servidores desplegados.
+  if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
+    throw new Trading212Error("Las compras están limitadas a Trading 212 Demo en localhost", 403);
+  }
+  const mapping = await findTrading212DemoInstruments("IBE.MC");
+  const verified = mapping.matches.filter(m =>
+    m.ticker === "IBEe_EQ" && m.isin === "ES0144580Y14" && m.currency === "EUR",
+  );
+  if (verified.length !== 1) {
+    throw new Trading212Error("No se pudo verificar de forma inequívoca Iberdrola en Trading 212", 409);
+  }
+
+  // La API de órdenes no es idempotente. No se reintentan peticiones fallidas.
+  // Bloqueo preventivo ante doble clic/reenvío durante un minuto.
+  if (Date.now() - lastDemoBuyAttemptAt < 60_000) {
+    throw new Trading212Error("Ya se intentó enviar una compra hace menos de un minuto: comprueba antes la cartera", 429);
+  }
+  lastDemoBuyAttemptAt = Date.now();
+
+  const result = (await fetchDemo("/equity/orders/market", {
+    method: "POST",
+    body: { ticker: "IBEe_EQ", quantity: 1, extendedHours: false },
+  })) as { id?: unknown; status?: unknown } | null;
+
+  if (!result || !isAmount(result.id) || typeof result.status !== "string") {
+    throw new Trading212Error("Resultado de orden desconocido: consulta la cartera y las órdenes antes de repetir");
+  }
+  return {
+    environment: "demo",
+    symbol: "IBE.MC",
+    ticker: "IBEe_EQ",
+    orderId: result.id,
+    status: result.status,
+    quantity: 1,
   };
 }
