@@ -22,7 +22,7 @@ import {
 } from "@/lib/trading/service";
 import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
 import { decideProposal, getCommittee, runCommittee } from "@/lib/trading/committee/service";
-import { findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, Trading212Error } from "@/lib/trading/trading212";
+import { buyOneIberdrolaInTrading212Demo, findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, Trading212Error } from "@/lib/trading/trading212";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,6 +109,21 @@ export async function POST(req: Request, route: RouteContext) {
     if (raw.length > 16_384) return fail("Petición demasiado grande", 413);
     const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>;
 
+    if (action === "trading212/buy-test") {
+      if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
+        return fail("Solo se permiten órdenes de Trading 212 Demo en localhost", 403);
+      }
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede operar en la Demo", 403);
+      if (body.symbol !== "IBE.MC" || body.quantity !== 1 || body.confirmDemo !== true) {
+        return fail("Esta prueba solo permite comprar una acción de Iberdrola en Demo, con confirmación explícita");
+      }
+      try {
+        return NextResponse.json(await buyOneIberdrolaInTrading212Demo(), { headers: { "Cache-Control": "no-store" } });
+      } catch (e) {
+        if (e instanceof Trading212Error) return fail(e.message, e.status);
+        throw e;
+      }
+    }
     if (action === "sync") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede actualizar las cotizaciones", 403);
       return NextResponse.json(await runDaily(45_000, ctx.workspaceId));
