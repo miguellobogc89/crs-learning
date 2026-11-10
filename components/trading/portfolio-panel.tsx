@@ -6,6 +6,7 @@ import type { accountDetail, PositionView } from "@/lib/trading/accounts";
 import type { Trading212DemoPosition, Trading212DemoSummary } from "@/lib/trading/trading212";
 import { PATTERN_LIBRARY } from "@/lib/trading/library";
 import { refreshTrading, useTradingRefresh } from "./navigation";
+import { Modal } from "./ui";
 import { PATTERN_SHORT, api, dayFmt, errorText, eur, eur0, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
 
 type Detail = Awaited<ReturnType<typeof accountDetail>>;
@@ -103,6 +104,10 @@ function Trading212DemoPortfolio() {
   const [positions, setPositions] = useState<Trading212DemoPosition[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [confirmBuy, setConfirmBuy] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [buying, setBuying] = useState(false);
+  const [buyResult, setBuyResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -124,17 +129,46 @@ function Trading212DemoPortfolio() {
   useEffect(() => { void load(); }, [load]);
   useTradingRefresh(load);
 
+  const buyTest = async () => {
+    if (!acknowledged || buying) return;
+    setBuying(true);
+    setError(null);
+    try {
+      const result = await api<{ orderId: number; status: string }>("trading212/buy-test", {
+        symbol: "IBE.MC",
+        quantity: 1,
+        confirmDemo: true,
+      });
+      setConfirmBuy(false);
+      setAcknowledged(false);
+      setBuyResult(`Orden Demo enviada (ID ${result.orderId}; estado: ${result.status}). Puede estar pendiente hasta la apertura de mercado. No se han configurado stops.`);
+      await load();
+    } catch (e) {
+      setError(`${errorText(e)}. Si llegaste a confirmar, comprueba las órdenes en Trading 212 antes de volver a intentarlo.`);
+      setConfirmBuy(false);
+      setAcknowledged(false);
+    } finally {
+      setBuying(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-600">
           Cuenta de práctica de Trading 212. Saldo y posiciones independientes del simulador CRS.
         </p>
-        <button type="button" className={ghost} onClick={() => void load()} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          Actualizar
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={ghost} onClick={() => { setAcknowledged(false); setConfirmBuy(true); }} disabled={buying}>
+            Compra de prueba: 1 Iberdrola
+          </button>
+          <button type="button" className={ghost} onClick={() => void load()} disabled={loading || buying}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+            Actualizar
+          </button>
+        </div>
       </div>
+      {buyResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{buyResult}</p>}
       {error && <p role="alert" className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {!summary && loading ? (
         <div className="flex h-40 items-center justify-center border border-slate-200 bg-white">
@@ -194,9 +228,46 @@ function Trading212DemoPortfolio() {
               </tbody>
             </table>
           </section>
-          <p className="text-xs text-slate-500">Esta pestaña es de solo lectura: todavía no envía órdenes ni cambia stops en Trading 212.</p>
+          <p className="text-xs text-slate-500">
+            Los datos de cartera son de lectura. Solo se permite la compra ficticia de prueba, sin gestión de stops u objetivos.
+          </p>
         </>
       ) : null}
+      {confirmBuy && (
+        <Modal
+          open
+          onClose={() => { if (!buying) setConfirmBuy(false); }}
+          title="Compra de prueba · Trading 212 Demo"
+          subtitle="Una acción ficticia de Iberdrola. Sin dinero real."
+          footer={
+            <>
+              <button type="button" className={ghost} onClick={() => setConfirmBuy(false)} disabled={buying}>
+                Cancelar
+              </button>
+              <button type="button" className={primary} disabled={!acknowledged || buying} onClick={() => void buyTest()}>
+                {buying && <Loader2 className="h-4 w-4 animate-spin" />}
+                Confirmar compra Demo
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-4 text-sm text-slate-700">
+            <p>
+              Se enviará una orden de <strong>mercado</strong> para comprar <strong>1 acción de Iberdrola</strong>
+              {" "}(ticker Trading 212: <code>IBEe_EQ</code>) en tu cuenta <strong>Demo</strong>.
+              No se modificará el simulador CRS.
+            </p>
+            <p className="border border-amber-200 bg-amber-50 p-3 text-amber-900">
+              No incluye stop ni objetivo automáticos. El precio final puede variar y, si el mercado está cerrado,
+              la orden puede quedar pendiente. No vuelvas a enviarla sin comprobar antes su estado.
+            </p>
+            <label className="flex items-start gap-2">
+              <input type="checkbox" className="mt-1" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} />
+              <span>Entiendo que es una compra ficticia sin protección automática y quiero enviarla a Trading 212 Demo.</span>
+            </label>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
