@@ -89,16 +89,13 @@ export function AgentsPanel() {
     <div className="space-y-6">
       <section className={`${panel} px-5 py-4`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-2xl">
-            <h1 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-              <Bot className="h-5 w-5 text-blue-600" /> Agentes
-            </h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Tres gestores de IA con <b>la misma información</b> (cotizaciones, figuras, fuerza relativa y noticias) y{" "}
-              <b>distinto carácter</b>. Cada uno tiene {eur0(data.agents[0]?.summary.initialCapital)} virtuales y decide y opera solo, sin
-              aprobación. Se reúnen cada día laborable después del cierre.
-            </p>
-          </div>
+          <p className="flex max-w-2xl items-start gap-2 text-sm text-slate-600">
+            <Bot className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+            <span>
+              Todos ven <b>la misma información</b> (cotizaciones, figuras, fuerza relativa y noticias) y cada uno decide con{" "}
+              <b>su carácter</b>, con {eur0(data.agents[0]?.summary.initialCapital)} virtuales. Se reúnen solos cada día laborable a las 19:15.
+            </span>
+          </p>
           <button type="button" className={primary} disabled={!data.canManage || running} onClick={() => void meet(data.agents.map((a) => a.key))}>
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Reunir a los agentes ahora
           </button>
@@ -178,7 +175,11 @@ export function AgentsPanel() {
                     <td className={`px-3 py-3 text-right font-semibold tabular-nums ${tone(a.summary.returnPct)}`}>{pct(a.summary.returnPct)}</td>
                     <td className="px-3 py-3 text-right tabular-nums text-slate-600">{pct(investedPct, 0, false)}</td>
                     <td className="px-3 py-3 text-right tabular-nums text-slate-600">
-                      {a.positions.length} abiertas · {a.summary.stats.closed} cerradas
+                      {[
+                        `${a.positions.filter((p) => p.status === "abierta").length} abiertas`,
+                        ...(a.positions.some((p) => p.status === "pendiente") ? [`${a.positions.filter((p) => p.status === "pendiente").length} pendientes`] : []),
+                        `${a.summary.stats.closed} cerradas`,
+                      ].join(" · ")}
                     </td>
                     <td className="px-3 py-3 text-slate-600">
                       {when(a.lastRun?.at)}
@@ -204,6 +205,7 @@ function AgentDetail({ agent: a, canManage, busy, onMeet, onReset }: { agent: Ag
   const latest = a.proposals.filter((p) => p.runId === lastRunId);
   const older = a.proposals.filter((p) => p.runId !== lastRunId && p.status !== "rechazada" && p.action !== "vigilar");
   const s = a.summary;
+  const pendingIds = new Set(a.positions.filter((p) => p.status === "pendiente").map((p) => p.id));
 
   return (
     <section className={`${panel} border-t-4`} style={{ borderTopColor: a.color === "emerald" ? "#10b981" : a.color === "blue" ? "#3b82f6" : "#f97316" }}>
@@ -299,7 +301,7 @@ function AgentDetail({ agent: a, canManage, busy, onMeet, onReset }: { agent: Ag
         ) : (
           <ul className="mt-2 divide-y divide-slate-100">
             {latest.map((p) => (
-              <Decision key={p.id} p={p} />
+              <Decision key={p.id} p={p} pending={!!p.positionId && pendingIds.has(p.positionId)} />
             ))}
           </ul>
         )}
@@ -311,7 +313,7 @@ function AgentDetail({ agent: a, canManage, busy, onMeet, onReset }: { agent: Ag
             {showAll && (
               <ul className="mt-2 divide-y divide-slate-100">
                 {older.map((p) => (
-                  <Decision key={p.id} p={p} />
+                  <Decision key={p.id} p={p} pending={!!p.positionId && pendingIds.has(p.positionId)} />
                 ))}
               </ul>
             )}
@@ -339,8 +341,8 @@ function AgentDetail({ agent: a, canManage, busy, onMeet, onReset }: { agent: Ag
   );
 }
 
-function Decision({ p }: { p: Agent["proposals"][number] }) {
-  const st = STATUS[p.status] ?? STATUS.propuesta;
+function Decision({ p, pending }: { p: Agent["proposals"][number]; pending: boolean }) {
+  const st = pending ? { label: "Orden puesta", tone: "text-amber-700" } : STATUS[p.status] ?? STATUS.propuesta;
   return (
     <li className="py-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
