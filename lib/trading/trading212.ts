@@ -1,4 +1,4 @@
-// Conector Trading 212: primera fase, solo lectura de la cuenta Demo.
+// Conector Trading 212: cuenta Demo, lecturas y órdenes confirmadas (solo localhost).
 import "server-only";
 
 const DEMO_API = "https://demo.trading212.com/api/v0";
@@ -27,10 +27,19 @@ export class Trading212Error extends Error {
   }
 }
 
+type DemoOrderRequest =
+  | { method: "POST"; body: { ticker: string; quantity: number; extendedHours: false } }
+  | { method: "POST"; body: { ticker: string; quantity: number; stopPrice: number; timeValidity: "GOOD_TILL_CANCEL" } }
+  | { method: "POST"; body: { ticker: string; quantity: number; limitPrice: number; timeValidity: "GOOD_TILL_CANCEL" } }
+  | { method: "DELETE" };
+
 async function fetchDemo(
-  path: "/equity/account/summary" | "/equity/positions" | "/equity/orders" | "/equity/metadata/instruments" | "/equity/orders/market",
-  options?: { method: "POST"; body: { ticker: string; quantity: number; extendedHours: false } },
+  path: string,
+  options?: DemoOrderRequest,
 ): Promise<unknown> {
+  if (!/^\\/equity\\/(?:account\\/summary|positions|orders(?:\\/(?:market|stop|limit|[0-9]+))?|metadata\\/instruments)$/.test(path)) {
+    throw new Trading212Error("Endpoint de Trading 212 no permitido", 400);
+  }
   if (process.env.TRADING212_ENV !== "demo") {
     throw new Trading212Error("Trading 212 debe estar configurado en modo demo", 503);
   }
@@ -49,7 +58,7 @@ async function fetchDemo(
         Accept: "application/json",
         ...(options ? { "Content-Type": "application/json" } : {}),
       },
-      ...(options ? { body: JSON.stringify(options.body) } : {}),
+      ...(options?.method === "POST" ? { body: JSON.stringify(options.body) } : {}),
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
@@ -67,6 +76,10 @@ async function fetchDemo(
     throw new Trading212Error(`Trading 212 devolvió un error HTTP ${response.status}`);
   }
 
+  if (options?.method === "DELETE") {
+    // DELETE puede devolver un cuerpo vacío. Un 2xx confirma recepción, no ejecución.
+    return { ok: true };
+  }
   try {
     return await response.json();
   } catch {
@@ -192,6 +205,9 @@ export type Trading212DemoOrder = {
   type: string;
   status: string;
   quantity: number;
+  stopPrice: number | null;
+  limitPrice: number | null;
+  initiatedFrom: string | null;
 };
 
 /** Órdenes pendientes en Demo. Verifica además el permiso de lectura de órdenes. */
@@ -210,6 +226,9 @@ export async function getTrading212DemoOrders(): Promise<{
       type?: unknown;
       status?: unknown;
       quantity?: unknown;
+      stopPrice?: unknown;
+      limitPrice?: unknown;
+      initiatedFrom?: unknown;
     } | null;
     if (!order || !isAmount(order.id) || typeof order.ticker !== "string" ||
       (order.side !== "BUY" && order.side !== "SELL") ||
@@ -224,6 +243,9 @@ export async function getTrading212DemoOrders(): Promise<{
       type: order.type,
       status: order.status,
       quantity: order.quantity,
+      stopPrice: isAmount(order.stopPrice) ? order.stopPrice : null,
+      limitPrice: isAmount(order.limitPrice) ? order.limitPrice : null,
+      initiatedFrom: typeof order.initiatedFrom === "string" ? order.initiatedFrom : null,
     };
   });
   return { environment: "demo", items };
