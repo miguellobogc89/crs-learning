@@ -52,10 +52,14 @@ export type Recommendation = {
   history: { trades: number; winRate: number; avgR: number } | null;
   /** Sesiones máximas en posición antes de salir por tiempo. */
   maxHoldDays: number;
+  /** La figura tiene historial negativo con muestra suficiente: no se recomienda entrar. */
+  vetoed: boolean;
   plan: string;
 };
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
+/** Operaciones mínimas del historial para vetar una figura con resultado negativo. */
+export const MIN_TRADES_FOR_VETO = 30;
 const REVERSALS: PatternKey[] = ["hch", "hch_inv", "double_top", "double_bottom"];
 
 const eur = (v: number) =>
@@ -120,7 +124,7 @@ export function recommendForInstrument(
     const edge = st ? st.adjustedExpectancy : 0;
     let edgeScore = 50;
     if (st && st.trades >= 5) {
-      edgeScore = clamp(50 + edge * 100);
+      edgeScore = clamp(50 + edge * 150);
       const line = `Historial en el IBEX: ${st.trades} operaciones, ${(st.winRate * 100).toFixed(0)} % de acierto, ${st.avgR >= 0 ? "+" : ""}${st.avgR.toFixed(2)} R de media`;
       (edge > 0.05 ? pros : cons).push(line);
     } else cons.push("Pocas operaciones en el historial para medir esta figura");
@@ -148,7 +152,14 @@ export function recommendForInstrument(
     if (d.volumeConfirmed) pros.push("Ruptura con volumen por encima de la media");
     else if (d.status === "confirmed") cons.push("Ruptura sin volumen destacado");
 
-    let score = 0.4 * d.quality + 0.25 * edgeScore + 0.15 * trendScore + 0.1 * regimeScore + 0.1 * rrScore;
+    // El historial pesa más que la geometría: una figura bonita que pierde dinero no vale.
+    let score = 0.3 * d.quality + 0.35 * edgeScore + 0.15 * trendScore + 0.1 * regimeScore + 0.1 * rrScore;
+    // Con una muestra amplia y resultado medio negativo, la figura queda vetada para entrar.
+    const provenLoser = !!st && st.trades >= MIN_TRADES_FOR_VETO && st.avgR < 0;
+    if (provenLoser) {
+      score = Math.min(score, 45);
+      cons.unshift(`Esta figura ha perdido dinero en el IBEX (${st!.trades} operaciones, ${st!.avgR.toFixed(2)} R de media): no se recomienda entrar`);
+    }
     if (r !== null && (long ? r > 75 : r < 25)) {
       score -= 8;
       cons.push(long ? `RSI en sobrecompra (${r.toFixed(0)})` : `RSI en sobreventa (${r.toFixed(0)})`);
@@ -180,7 +191,7 @@ export function recommendForInstrument(
           })
         : null;
 
-    const strong = score >= account.minScore;
+    const strong = score >= account.minScore && !provenLoser;
     out.push({
       key: `${inst.symbol}:${d.pattern}:${d.startIndex}:${isoDay(c[d.startIndex].t)}`,
       symbol: inst.symbol,
@@ -206,7 +217,10 @@ export function recommendForInstrument(
       sizing,
       history: st ? { trades: st.trades, winRate: st.winRate, avgR: st.avgR } : null,
       maxHoldDays: maxHoldBars(d),
-      plan: planText(action, inst.name, d, entry, stop, target, rr, sizing, account, strong),
+      plan: provenLoser && action !== "cerrar" && action !== "evitar"
+        ? `No recomendada: el ${PATTERN_NAMES[d.pattern].toLowerCase()} ha dado pérdidas en el IBEX (${st!.trades} operaciones, ${(st!.winRate * 100).toFixed(0)} % de acierto, ${st!.avgR.toFixed(2)} R de media). Aunque la figura esté bien formada, la estadística no acompaña.`
+        : planText(action, inst.name, d, entry, stop, target, rr, sizing, account, strong),
+      vetoed: provenLoser,
     });
   }
   return out;

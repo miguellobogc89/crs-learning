@@ -290,7 +290,13 @@ export function RecommendationsPanel({ data, onOpenChart }: { data: Overview; on
                             </button>
                           </td>
                           <td className="px-3 py-2.5">
-                            <span className={`inline-block border px-1.5 py-0.5 text-xs font-medium ${ACTION_TONE[r.action]}`}>{ACTION_LABEL[r.action]}</span>
+                            {r.vetoed && (r.action === "comprar" || r.action === "vender_corto") ? (
+                              <span className="inline-block border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-medium text-slate-500" title="Esta figura ha perdido dinero en el IBEX">
+                                No recomendada
+                              </span>
+                            ) : (
+                              <span className={`inline-block border px-1.5 py-0.5 text-xs font-medium ${ACTION_TONE[r.action]}`}>{ACTION_LABEL[r.action]}</span>
+                            )}
                           </td>
                           <td className="px-3 py-2.5">
                             <div className="text-slate-800">{PATTERN_SHORT[r.pattern]}</div>

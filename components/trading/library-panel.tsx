@@ -62,7 +62,14 @@ export function LibraryPanel() {
               <tbody>
                 {ranked.map((p) => (
                   <tr key={p.key} className="border-t border-slate-100">
-                    <td className="px-3 py-2 font-medium text-slate-900">{p.name}</td>
+                    <td className="px-3 py-2 font-medium text-slate-900">
+                      {p.name}
+                      {p.stats!.trades >= 30 && p.stats!.avgR < 0 && (
+                        <span className="ml-2 border border-red-200 bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-700" title="Con este historial la app no recomienda entrar con esta figura">
+                          Vetada
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums">{p.stats!.trades}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{num(p.stats!.winRate * 100, 0)} %</td>
                     <td className={`px-3 py-2 text-right font-semibold tabular-nums ${tone(p.stats!.avgR)}`}>
@@ -80,7 +87,7 @@ export function LibraryPanel() {
             <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
               R = resultado en múltiplos del riesgo inicial (1 R es lo que pierdes si salta el stop). Una figura con R medio positivo
               ha ganado dinero en el pasado aunque acierte menos de la mitad de las veces. Las recomendaciones dan más peso a las
-              figuras con mejor historial.
+              figuras con mejor historial, y las que tienen R medio negativo con 30 operaciones o más quedan vetadas.
             </p>
           </div>
         )}

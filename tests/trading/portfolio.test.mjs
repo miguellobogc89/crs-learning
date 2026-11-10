@@ -113,3 +113,20 @@ test("recomendaciones: plan con tamaño y orden por puntuación", () => {
   const ranked = rankRecommendations([{ ...r, score: 10, strong: false }, r]);
   assert.equal(ranked[0].score, r.score);
 });
+
+test("recomendaciones: una figura con historial negativo amplio queda vetada", () => {
+  const c = series([[0, 140], [30, 100], [50, 120], [70, 100.5], [86, 121.5], [88, 122.5]]);
+  const { ind, detections } = analyze(c);
+  const account = { equity: 10_000, cash: 10_000, riskPct: 1, maxPositionPct: 25, allowShort: false, minScore: 0, cost, holdings: {} };
+  const bad = { double_bottom: { pattern: "double_bottom", trades: 108, wins: 43, winRate: 0.4, avgR: -0.12, adjustedExpectancy: -0.105, profitFactor: 0.85, avgBars: 20, avgPct: -0.3, maxDrawdownR: 14, bestR: 3, worstR: -1.3 } };
+  const r = recommendForInstrument({ symbol: "TST.MC", name: "Test", candles: c, ind, detections }, bad, "alcista", account).find((x) => x.pattern === "double_bottom");
+  assert.ok(r);
+  assert.equal(r.vetoed, true);
+  assert.equal(r.strong, false, "aunque la nota mínima sea 0");
+  assert.ok(r.score <= 45);
+  assert.match(r.plan, /No recomendada/);
+  // Con pocas operaciones no se veta (se penaliza en la nota, sin más).
+  const few = { double_bottom: { ...bad.double_bottom, trades: 12 } };
+  const r2 = recommendForInstrument({ symbol: "TST.MC", name: "Test", candles: c, ind, detections }, few, "alcista", account).find((x) => x.pattern === "double_bottom");
+  assert.equal(r2.vetoed, false);
+});
