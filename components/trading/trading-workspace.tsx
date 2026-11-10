@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { ChevronDown, Loader2, ShieldAlert } from "lucide-react";
 import type { getOverview } from "@/lib/trading/service";
 import { api, errorText } from "./format";
 import { useTradingRefresh } from "./navigation";
@@ -27,6 +27,7 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   const [loading, setLoading] = useState(NEEDS_OVERVIEW.includes(tab));
   const [error, setError] = useState<string | null>(null);
   const [symbol, setSymbol] = useState<string | null>(params.get("symbol"));
+  const [showTechnical, setShowTechnical] = useState(false);
 
   const load = useCallback(async () => {
     if (!NEEDS_OVERVIEW.includes(tab)) return;
@@ -73,12 +74,22 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
       body = (
         <div className="space-y-8">
           <CommitteeToday />
-          <section className="space-y-3 border-t border-slate-200 pt-6">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Señales técnicas de las figuras</h2>
-              <p className="text-xs text-slate-500">Lo que dicen solo los gráficos, sin noticias. El comité ya las tiene en cuenta; aquí las ves al detalle.</p>
-            </div>
-            <RecommendationsPanel data={data} onOpenChart={openChart} />
+          <section className="border-t border-slate-200 pt-5">
+            <button type="button" onClick={() => setShowTechnical(!showTechnical)} className="flex w-full items-center justify-between gap-3 text-left">
+              <span>
+                <span className="block text-sm font-semibold text-slate-900">Detalle técnico (para curiosos)</span>
+                <span className="block text-xs text-slate-500">
+                  Lo que dicen solo los gráficos, sin noticias ni contexto. Puede no coincidir con el comité: la decisión buena es la del comité,
+                  que tiene en cuenta todo.
+                </span>
+              </span>
+              <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${showTechnical ? "rotate-180" : ""}`} />
+            </button>
+            {showTechnical && (
+              <div className="mt-4">
+                <RecommendationsPanel data={data} onOpenChart={openChart} />
+              </div>
+            )}
           </section>
         </div>
       );
