@@ -12,12 +12,13 @@ import { PortfolioPanel, RulesPanel, UniversePanel } from "./portfolio-panel";
 import { SimulatorPanel } from "./simulator-panel";
 import { NewsPanel } from "./news-panel";
 import { CommitteeHistory, CommitteeToday } from "./committee-panel";
+import { HomePanel } from "./home-panel";
 import type { TradingTab } from "./tabs";
 
 export type Overview = Awaited<ReturnType<typeof getOverview>> & { canManage: boolean };
 
 /** Paneles que necesitan el análisis completo del mercado. */
-const NEEDS_OVERVIEW: TradingTab[] = ["hoy", "mercado"];
+const NEEDS_OVERVIEW: TradingTab[] = ["inicio", "oportunidades", "mercado"];
 
 export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   const router = useRouter();
@@ -67,7 +68,8 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
             : "Pide a un administrador del espacio que pulse «Actualizar cotizaciones» en el panel de la izquierda."}
         </div>
       );
-    else if (data && tab === "hoy")
+    else if (data && tab === "inicio") body = <HomePanel data={data} onOpenChart={openChart} />;
+    else if (data && tab === "oportunidades")
       body = (
         <div className="space-y-8">
           <CommitteeToday />

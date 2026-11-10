@@ -68,3 +68,17 @@ Datos de mercado globales (`market_*`); cartera por espacio (`trading_*`, una po
   tamaño por riesgo fijo. Lo que no pasa se guarda como «rechazada» con el motivo.
 - Se reúne solo al entrar en «Qué hacer hoy» si aún no lo ha hecho ese día (o con «Volver a convocar»).
 - `committee/outcome.ts` mide cada propuesta como si se hubiera seguido; «Historial del comité» lo compara con el mercado.
+
+## Estrategia de tendencia y perfiles de riesgo
+
+- `lib/trading/strategy.ts`: rotación por fuerza relativa (subida en N sesiones, por encima de la media de 200),
+  `topN` activos, revisión periódica, stop de protección por ATR y salida total si el IBEX / Bitcoin pierde su media de 200.
+- Los parámetros se eligen con `chooseTrendParams` usando solo los 3 años anteriores al inicio de la simulación
+  (mejor rentabilidad / caída máxima); el periodo simulado no se usa para elegir.
+- Perfiles: Prudente (50 % invertido; 0,5 % de riesgo en figuras), Equilibrado (80 %; 1 %), Agresivo (100 %; 2 %).
+- La fuerza relativa entra también en el comité (pruebas `F:`) y en «Los que más fuerza tienen» del Inicio.
+
+## Navegación
+
+Inicio · Oportunidades · Mi cartera · Noticias · Simulador · Gráficos · Aprende; en «Más»: Historial del comité,
+Reglas y riesgo, Valores seguidos. `/trading/hoy` redirige a Oportunidades.

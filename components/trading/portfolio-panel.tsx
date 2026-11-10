@@ -156,7 +156,7 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
             {active.length === 0 ? (
               <tr>
                 <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
-                  Sin posiciones. Abre una desde «Qué hacer hoy» o activa el modo automático en «Reglas y riesgo».
+                  Sin posiciones. Abre una desde «Oportunidades» o activa el modo automático en «Reglas y riesgo».
                 </td>
               </tr>
             ) : (

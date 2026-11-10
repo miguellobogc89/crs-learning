@@ -1,4 +1,4 @@
 import { redirect } from "next/navigation";
 export default function Page() {
-  redirect("/trading/hoy");
+  redirect("/trading/inicio");
 }

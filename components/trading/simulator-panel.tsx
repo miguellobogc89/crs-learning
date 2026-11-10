@@ -4,11 +4,23 @@ import { ChevronDown, FlaskConical, Loader2, Save } from "lucide-react";
 import type { accountDetail } from "@/lib/trading/accounts";
 import { PATTERN_LIBRARY } from "@/lib/trading/library";
 import type { SimResult, SimTrade } from "@/lib/trading/simulate";
-import { PATTERN_SHORT, api, dayFmt, errorText, eur, eur0, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
+import { signalLabel, api, dayFmt, errorText, eur, eur0, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
 import { refreshTrading } from "./navigation";
 
 type Detail = Awaited<ReturnType<typeof accountDetail>>;
-type Response = { months: number; market: "bolsa" | "crypto"; result: SimResult };
+type Method = { params: { lookback: number; topN: number; rebalance: number; exposure: number; stopAtr: number }; trained: boolean; trainFrom: string | null; trainTo: string } | null;
+type Response = { months: number; market: "bolsa" | "crypto"; strategy: "tendencia" | "figuras"; profile: Profile; method: Method; result: SimResult };
+type Profile = "prudente" | "equilibrado" | "agresivo";
+
+const STRATEGIES = [
+  { key: "tendencia", label: "Tendencia", tag: "Recomendada", text: "Compra lo que más fuerza tiene y sale si el mercado se gira." },
+  { key: "figuras", label: "Figuras", tag: null, text: "Opera las figuras chartistas según su historial." },
+] as const;
+const PROFILE_OPTIONS: { key: Profile; label: string; text: string }[] = [
+  { key: "prudente", label: "Prudente", text: "Como mucho la mitad invertida. Menos ganancia, caídas suaves." },
+  { key: "equilibrado", label: "Equilibrado", text: "Hasta el 80 % invertido. El punto medio." },
+  { key: "agresivo", label: "Agresivo", text: "Todo invertido. Más ganancia posible y caídas más fuertes." },
+];
 
 const PERIODS = [
   { months: 1, label: "1 mes" },
@@ -29,6 +41,8 @@ const REASON: Record<string, string> = {
 };
 
 type Form = {
+  strategy: "tendencia" | "figuras";
+  profile: Profile;
   market: "bolsa" | "crypto";
   months: number;
   capital: number;
@@ -126,18 +140,28 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
   const [saved, setSaved] = useState<string | null>(null);
   const [showTrades, setShowTrades] = useState(false);
 
-  const run = useCallback(async (f: Form) => {
+  const run = useCallback(async (f: Form, manual = false) => {
     setRunning(true);
     setError(null);
     setSaved(null);
     try {
-      setRes(await api<Response>("simulate", f));
+      // Sin «Más opciones» manda el perfil; con ellas, los ajustes a mano.
+      const payload = manual
+        ? f
+        : { strategy: f.strategy, profile: f.profile, market: f.market, months: f.months, capital: f.capital, minScore: f.minScore, breakeven: f.breakeven, patterns: f.patterns };
+      setRes(await api<Response>("simulate", payload));
     } catch (e) {
       setError(errorText(e));
     } finally {
       setRunning(false);
     }
   }, []);
+  const rerun = (patch: Partial<Form>) => {
+    if (!form) return;
+    const f = { ...form, ...patch };
+    setForm(f);
+    void run(f, advanced);
+  };
 
   // Arranca con las reglas actuales de la cartera y un año hacia atrás.
   useEffect(() => {
@@ -145,6 +169,8 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
       .then((d) => {
         const s = d.summary.settings;
         const f: Form = {
+          strategy: "tendencia",
+          profile: "equilibrado",
           market: "bolsa",
           months: 12,
           capital: Math.round(d.summary.initialCapital),
@@ -206,6 +232,43 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
   return (
     <div className="space-y-4">
       <section className={panel}>
+        <div className="grid gap-4 border-b border-slate-100 px-4 py-4 lg:grid-cols-2">
+          <div>
+            <div className="mb-1.5 text-xs font-medium text-slate-600">Estrategia</div>
+            <div className="grid grid-cols-2 gap-2">
+              {STRATEGIES.map((st) => (
+                <button
+                  key={st.key}
+                  type="button"
+                  onClick={() => rerun({ strategy: st.key })}
+                  className={`border px-3 py-2 text-left ${form.strategy === st.key ? "border-blue-500 bg-blue-50/60 ring-1 ring-blue-500" : "border-slate-200 hover:bg-slate-50"}`}
+                >
+                  <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    {st.label}
+                    {st.tag && <span className="bg-blue-600 px-1.5 py-px text-[10px] font-semibold uppercase text-white">{st.tag}</span>}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-slate-500">{st.text}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="mb-1.5 text-xs font-medium text-slate-600">Tu perfil de riesgo</div>
+            <div className="grid grid-cols-3 gap-2">
+              {PROFILE_OPTIONS.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => rerun({ profile: p.key })}
+                  className={`border px-3 py-2 text-left ${form.profile === p.key ? "border-blue-500 bg-blue-50/60 ring-1 ring-blue-500" : "border-slate-200 hover:bg-slate-50"}`}
+                >
+                  <span className="block text-sm font-semibold text-slate-900">{p.label}</span>
+                  <span className="mt-0.5 block text-xs leading-snug text-slate-500">{p.text}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
         <div className="flex flex-wrap items-end gap-4 px-4 py-4">
           <div>
             <div className="mb-1 text-xs font-medium text-slate-600">Mercado</div>
@@ -214,11 +277,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
                 <button
                   key={m}
                   type="button"
-                  onClick={() => {
-                    const f = { ...form, market: m };
-                    setForm(f);
-                    void run(f);
-                  }}
+                  onClick={() => rerun({ market: m })}
                   className={`px-3 py-2 text-sm ${form.market === m ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
                   {m === "bolsa" ? "Bolsa" : "Crypto"}
@@ -233,11 +292,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
                 <button
                   key={p.months}
                   type="button"
-                  onClick={() => {
-                    const f = { ...form, months: p.months };
-                    setForm(f);
-                    void run(f);
-                  }}
+                  onClick={() => rerun({ months: p.months })}
                   className={`px-3 py-2 text-sm ${form.months === p.months ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
                   {p.label}
@@ -249,25 +304,27 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
             <span className="mb-1 block text-xs font-medium text-slate-600">Con un capital de (€)</span>
             <input type="number" className={`${field} w-32 tabular-nums`} value={form.capital} onChange={(e) => set("capital", Number(e.target.value))} />
           </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-600">Arriesgando por operación (%)</span>
-            <input type="number" step="0.1" className={`${field} w-28 tabular-nums`} value={form.riskPct} onChange={(e) => set("riskPct", Number(e.target.value))} />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-600">Nota mínima de la señal</span>
-            <input type="number" className={`${field} w-28 tabular-nums`} value={form.minScore} onChange={(e) => set("minScore", Number(e.target.value))} />
-          </label>
-          <button type="button" className={primary} onClick={() => run(form)} disabled={running}>
+          <button type="button" className={primary} onClick={() => run(form, advanced)} disabled={running}>
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
             {running ? "Simulando…" : "Simular"}
           </button>
-          <button type="button" className="ml-auto text-xs font-medium text-blue-700 hover:underline" onClick={() => setAdvanced(!advanced)}>
-            {advanced ? "Menos opciones" : "Más opciones"}
-          </button>
+          {form.strategy === "figuras" && (
+            <button type="button" className="ml-auto text-xs font-medium text-blue-700 hover:underline" onClick={() => setAdvanced(!advanced)}>
+              {advanced ? "Menos opciones" : "Ajustar a mano"}
+            </button>
+          )}
         </div>
-        {advanced && (
+        {advanced && form.strategy === "figuras" && (
           <div className="space-y-3 border-t border-slate-100 px-4 py-4">
             <div className="flex flex-wrap gap-4">
+              <label className="text-sm">
+                <span className="mb-1 block text-xs font-medium text-slate-600">Riesgo por operación (%)</span>
+                <input type="number" step="0.1" className={`${field} w-24`} value={form.riskPct} onChange={(e) => set("riskPct", Number(e.target.value))} />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block text-xs font-medium text-slate-600">Nota mínima</span>
+                <input type="number" className={`${field} w-24`} value={form.minScore} onChange={(e) => set("minScore", Number(e.target.value))} />
+              </label>
               <label className="text-sm">
                 <span className="mb-1 block text-xs font-medium text-slate-600">Posiciones a la vez</span>
                 <input type="number" className={`${field} w-24`} value={form.maxOpen} onChange={(e) => set("maxOpen", Number(e.target.value))} />
@@ -311,7 +368,8 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
         <div className={`space-y-4 ${running ? "opacity-60" : ""}`}>
           <section className={`${panel} border-l-4 ${verdict.gained >= 0 ? "border-l-emerald-500" : "border-l-red-500"} px-5 py-4`}>
             <p className="text-[15px] leading-relaxed text-slate-800">
-              Si el <b>{dayFmt(r.start)}</b> hubieras empezado con <b>{eur0(r.capital)}</b> siguiendo la app con estas reglas, hoy tendrías{" "}
+              Si el <b>{dayFmt(r.start)}</b> hubieras empezado con <b>{eur0(r.capital)}</b> siguiendo la estrategia de{" "}
+              {res?.strategy === "figuras" ? "figuras" : "tendencia"} con un perfil {res?.profile ?? form.profile}, hoy tendrías{" "}
               <b className={tone(verdict.gained)}>{eur0(r.finalEquity)}</b>{" "}
               <span className={tone(verdict.gained)}>
                 ({verdict.gained >= 0 ? "+" : ""}
@@ -332,10 +390,22 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
                 </>
               )}
             </p>
-            <p className="mt-1 text-sm text-slate-600">
-              {r.trades + r.openTrades === 0
-                ? "En ese periodo ninguna señal habría pasado tus filtros."
-                : `${r.trades} operaciones cerradas (${num(r.winRate * 100, 0)} % ganadoras)${r.openTrades ? ` y ${r.openTrades} todavía abiertas` : ""}. En el peor momento la cartera llegó a caer un ${num(r.maxDrawdownPct, 1)} % desde su máximo. De media tuviste invertido el ${num(r.exposurePct, 0)} % del dinero.`}
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              {r.trades + r.openTrades === 0 ? (
+                "En ese periodo ninguna señal habría pasado los filtros."
+              ) : (
+                <>
+                  {r.trades} operaciones terminadas (<b className="text-slate-800">{num(r.winRate * 100, 0)} % ganadoras</b>)
+                  {r.openTrades ? ` y ${r.openTrades} todavía abiertas` : ""}. En el peor momento tu cartera llegó a caer un{" "}
+                  <b className="text-slate-800">{num(r.maxDrawdownPct, 1)} %</b>
+                  {r.benchmarkMaxDrawdownPct !== null && (
+                    <>
+                      ; {bench} llegó a caer un <b className="text-slate-800">{num(r.benchmarkMaxDrawdownPct, 1)} %</b>
+                    </>
+                  )}
+                  . De media tuviste invertido el {num(r.exposurePct, 0)} % del dinero.
+                </>
+              )}
             </p>
           </section>
 
@@ -397,7 +467,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
                   <tbody>
                     {r.byPattern.map((p) => (
                       <tr key={p.pattern} className="border-t border-slate-100">
-                        <td className="px-3 py-2">{PATTERN_SHORT[p.pattern]}</td>
+                        <td className="px-3 py-2">{signalLabel(p.pattern)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{p.trades}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{num((p.wins / p.trades) * 100, 0)} %</td>
                         <td className={`px-3 py-2 text-right font-medium tabular-nums ${tone(p.pnl)}`}>{eur0(p.pnl)}</td>
@@ -445,7 +515,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
                           </button>
                           <div className="text-xs text-slate-500">nota {t.score}</div>
                         </td>
-                        <td className="px-3 py-2">{PATTERN_SHORT[t.pattern]}</td>
+                        <td className="px-3 py-2">{signalLabel(t.pattern)}</td>
                         <td className="px-3 py-2 tabular-nums">
                           {eur(t.entryPrice)} <span className="text-xs text-slate-500">{dayFmt(t.entryDay)}</span>
                         </td>
@@ -464,6 +534,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
             )}
           </section>
 
+          {res?.strategy === "figuras" && (
           <section className={`${panel} flex flex-wrap items-center gap-3 px-4 py-3`}>
             <p className="flex-1 text-sm text-slate-600">¿Te convencen estas reglas? Guárdalas para tu cartera virtual y para las recomendaciones de cada día.</p>
             {saved && <span className="text-sm text-slate-600">{saved}</span>}
@@ -471,14 +542,37 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
               <Save className="h-4 w-4" /> Usar estas reglas
             </button>
           </section>
+          )}
 
-          <p className="text-xs leading-relaxed text-slate-500">
-            Cómo se calcula: la app recorre el pasado sesión a sesión. Cada tarde mira solo los datos disponibles hasta ese día,
-            elige las señales igual que hoy y compra a la apertura del día siguiente, con comisiones y deslizamiento. El
-            historial de cada figura solo cuenta operaciones ya terminadas en ese momento. Limitación: se usan las empresas que
-            están hoy en el índice o en la lista de criptomonedas, y eso tiende a favorecer un poco el resultado (las que
-            cayeron mucho y salieron no aparecen).
-          </p>
+          <section className="space-y-2 border border-slate-200 bg-slate-50/60 px-4 py-3 text-xs leading-relaxed text-slate-600">
+            <h3 className="text-sm font-semibold text-slate-900">Cómo se ha calculado (y por qué te lo puedes creer)</h3>
+            {res?.strategy === "tendencia" && res.method ? (
+              <p>
+                {res.method.trained ? (
+                  <>
+                    Las reglas se eligieron <b className="text-slate-800">solo con datos anteriores</b> al inicio (del {dayFmt(res.method.trainFrom)} al{" "}
+                    {dayFmt(res.method.trainTo)}): se probaron varias combinaciones y se quedó la que mejor equilibraba ganancia y caídas. Después se
+                    aplicaron a un periodo que el sistema <b className="text-slate-800">no había visto</b>.
+                  </>
+                ) : (
+                  <>No había historia suficiente antes del inicio para elegir las reglas, así que se usaron unas reglas estándar.</>
+                )}{" "}
+                Reglas usadas: fuerza medida en <b className="text-slate-800">{res.method.params.lookback} sesiones</b>,{" "}
+                <b className="text-slate-800">{res.method.params.topN} activos</b> a la vez, revisión cada {res.method.params.rebalance} sesiones,{" "}
+                {num(res.method.params.exposure * 100, 0)} % del dinero invertido como máximo y salida de todo cuando {bench} pierde su media de 200
+                sesiones.
+              </p>
+            ) : (
+              <p>
+                La app recorre el pasado sesión a sesión. Cada tarde mira solo los datos disponibles hasta ese día, elige las señales igual que hoy y
+                compra a la apertura del día siguiente. El historial de cada figura solo cuenta operaciones ya terminadas en ese momento.
+              </p>
+            )}
+            <p>
+              Incluye comisiones y deslizamiento. Limitación: se usan las empresas y criptomonedas que la app sigue hoy, y eso tiende a favorecer un
+              poco el resultado (las que se hundieron y desaparecieron no están). Lo que pasó no garantiza lo que pasará.
+            </p>
+          </section>
         </div>
       )}
     </div>
@@ -496,7 +590,7 @@ function TradeHighlight({ title, t, onOpenChart }: { title: string; t: SimTrade;
         <span className={`text-lg font-semibold tabular-nums ${tone(t.pnl)}`}>{eur0(t.pnl)}</span>
       </div>
       <p className="text-sm text-slate-600">
-        {PATTERN_SHORT[t.pattern]} · {int(t.quantity)} {/-EUR$/.test(t.symbol) ? t.symbol.replace(/-EUR$/, "") : "acciones"} de {eur(t.entryPrice)} a {eur(t.exitPrice)} ({dayFmt(t.entryDay)} → {t.exitDay ? dayFmt(t.exitDay) : "hoy"}) ·{" "}
+        {signalLabel(t.pattern)} · {int(t.quantity)} {/-EUR$/.test(t.symbol) ? t.symbol.replace(/-EUR$/, "") : "acciones"} de {eur(t.entryPrice)} a {eur(t.exitPrice)} ({dayFmt(t.entryDay)} → {t.exitDay ? dayFmt(t.exitDay) : "hoy"}) ·{" "}
         {REASON[t.reason] ?? t.reason}
       </p>
     </section>

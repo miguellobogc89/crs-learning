@@ -8,6 +8,7 @@ import { analyze, backtestSeries } from "./backtest";
 import { DEFAULT_COSTS } from "./risk";
 import { newsForSymbol, syncNews, type NewsSyncSummary } from "./news/service";
 import { simulatePortfolio, type SimSeries, type SimSettings } from "./simulate";
+import { chooseTrendParams, prepareTrend, PROFILES, simulateTrend, trendGrid, trendPicks, type RiskProfile } from "./strategy";
 import { indicatorBundle, trendAt } from "./indicators";
 import { PATTERN_LIBRARY } from "./library";
 import { CRYPTO_BENCHMARK, fetchDailyCandles, INDEX_SYMBOL, isCryptoMarket, lotStepOf, newsSymbolOf } from "./market-data";
@@ -135,7 +136,10 @@ export async function computeRecommendations(workspaceId: string) {
 }
 
 export async function getOverview(workspaceId: string) {
-  const { ranked, market, regime, cryptoRegime, backtest, state } = await computeRecommendations(workspaceId);
+  const [{ ranked, market, regime, cryptoRegime, backtest, state }, trend] = await Promise.all([
+    computeRecommendations(workspaceId),
+    getTrendPicks().catch(() => null),
+  ]);
   const syncInfo = await prisma.market_instruments.aggregate({
     _max: { last_candle_at: true, last_sync_at: true },
     _count: { _all: true },
@@ -145,6 +149,12 @@ export async function getOverview(workspaceId: string) {
   return {
     regime,
     cryptoRegime,
+    trend: trend
+      ? {
+          bolsa: { marketOk: trend.bolsa.marketOk, lookback: trend.bolsa.lookback, top: trend.bolsa.ranked.slice(0, 6), picks: trend.bolsa.picks.map((p) => p.symbol) },
+          crypto: { marketOk: trend.crypto.marketOk, lookback: trend.crypto.lookback, top: trend.crypto.ranked.slice(0, 6), picks: trend.crypto.picks.map((p) => p.symbol) },
+        }
+      : null,
     asOf: syncInfo._max.last_candle_at ? dayKey(syncInfo._max.last_candle_at) : null,
     lastSyncAt: syncInfo._max.last_sync_at?.toISOString() ?? null,
     instruments: syncInfo._count._all,
@@ -402,18 +412,24 @@ export async function simulate(workspaceId: string, body: Record<string, unknown
   };
   const months = Math.round(n(body.months, 1, 60, 12));
   const market: "bolsa" | "crypto" = body.market === "crypto" ? "crypto" : "bolsa";
+  const strategy: "tendencia" | "figuras" = body.strategy === "figuras" ? "figuras" : "tendencia";
+  const profile: RiskProfile = body.profile === "prudente" || body.profile === "agresivo" ? body.profile : "equilibrado";
+  const prof = PROFILES[profile];
+  const capital = Math.round(n(body.capital, 500, 10_000_000, 10_000));
+  const cost = costOf(account);
+  // El perfil marca el riesgo; en «Más opciones» se puede afinar a mano.
   const settings: SimSettings = {
-    capital: Math.round(n(body.capital, 500, 10_000_000, 10_000)),
-    riskPct: n(body.riskPct, 0.1, 5, account.risk_per_trade_pct),
-    maxPositionPct: n(body.maxPositionPct, 1, 100, account.max_position_pct),
-    maxOpen: Math.round(n(body.maxOpen, 1, 40, account.max_open_positions)),
+    capital,
+    riskPct: n(body.riskPct, 0.1, 5, prof.patternRiskPct),
+    maxPositionPct: n(body.maxPositionPct, 1, 100, prof.patternMaxPositionPct),
+    maxOpen: Math.round(n(body.maxOpen, 1, 40, prof.patternMaxOpen)),
     minScore: Math.round(n(body.minScore, 0, 100, account.min_score)),
     allowShort: typeof body.allowShort === "boolean" ? body.allowShort : account.allow_short,
     breakeven: typeof body.breakeven === "boolean" ? body.breakeven : account.breakeven,
     patterns: Array.isArray(body.patterns)
       ? (body.patterns.filter((p) => typeof p === "string" && PATTERN_LIBRARY.some((x) => x.key === p)) as PatternKey[])
       : (account.patterns as PatternKey[]),
-    cost: costOf(account),
+    cost,
   };
 
   const instruments = (await prisma.market_instruments.findMany({ where: { active: true } })).filter((i) =>
@@ -426,12 +442,30 @@ export async function simulate(workspaceId: string, body: Record<string, unknown
   if (!lastT) throw new Error("Todavía no hay cotizaciones: actualiza primero");
   const start = new Date(lastT);
   start.setUTCMonth(start.getUTCMonth() - months);
+  const idx = index ? all.get(index.id) ?? [] : [];
+  const tradable = instruments.filter((i) => !i.is_index && (all.get(i.id)?.length ?? 0) >= 250);
+
+  if (strategy === "tendencia") {
+    const prepared = prepareTrend(
+      tradable.map((inst) => ({ symbol: inst.symbol, name: inst.name, candles: all.get(inst.id)!, lotStep: lotStepOf(inst.market) })),
+    );
+    const bench = idx.length ? { candles: idx } : null;
+    const chosen = chooseTrendParams({ series: prepared, bench, market, exposure: prof.exposure, startT: start.getTime(), cost });
+    const result = simulateTrend({ series: prepared, bench, startT: start.getTime(), capital, params: chosen.params, cost });
+    return {
+      months,
+      market,
+      strategy,
+      profile,
+      method: { params: chosen.params, trained: chosen.trained, trainFrom: chosen.trainFrom, trainTo: dayKey(start) },
+      settings: { ...settings, cost: undefined },
+      result,
+    };
+  }
 
   const series: SimSeries[] = [];
-  for (const inst of instruments) {
-    if (inst.is_index) continue;
-    const c = all.get(inst.id);
-    if (!c || c.length < 250) continue;
+  for (const inst of tradable) {
+    const c = all.get(inst.id)!;
     const analysis = analyze(c);
     series.push({
       symbol: inst.symbol,
@@ -443,12 +477,30 @@ export async function simulate(workspaceId: string, body: Record<string, unknown
       unit: market === "crypto" ? newsSymbolOf(inst.symbol, inst.market) : "acciones",
     });
   }
-  const idx = index ? all.get(index.id) ?? [] : [];
   const result = simulatePortfolio({
     series,
     index: idx.length ? { candles: idx, ind: indicatorBundle(idx) } : null,
     startT: start.getTime(),
     settings,
   });
-  return { months, market, settings: { ...settings, cost: undefined }, result };
+  return { months, market, strategy, profile, method: null, settings: { ...settings, cost: undefined }, result };
+}
+
+/** Lo que la estrategia de tendencia tendría hoy en cartera, en bolsa y en crypto. */
+export async function getTrendPicks() {
+  const instruments = await prisma.market_instruments.findMany({ where: { active: true } });
+  const since = new Date(Date.now() - 520 * 86_400_000);
+  const all = await loadSeries(instruments.map((i) => i.id), since);
+  const pick = (market: "bolsa" | "crypto") => {
+    const list = instruments.filter((i) => !i.is_index && (market === "crypto" ? isCryptoMarket(i.market) : !isCryptoMarket(i.market)));
+    const prepared = prepareTrend(
+      list.filter((i) => (all.get(i.id)?.length ?? 0) > 0).map((i) => ({ symbol: i.symbol, name: i.name, candles: all.get(i.id)!, lotStep: lotStepOf(i.market) })),
+    );
+    const benchInst = market === "crypto" ? instruments.find((i) => i.symbol === CRYPTO_BENCHMARK) : instruments.find((i) => i.is_index);
+    const bench = benchInst ? { candles: all.get(benchInst.id) ?? [] } : null;
+    const grid = trendGrid(market, 1);
+    const p = grid[Math.floor(grid.length / 2)];
+    return { ...trendPicks(prepared, bench, p), lookback: p.lookback, topN: p.topN };
+  };
+  return { bolsa: pick("bolsa"), crypto: pick("crypto") };
 }

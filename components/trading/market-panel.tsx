@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Search, TrendingDown, TrendingUp, Minus } from "lucide-react";
+import { Info, Loader2, Search, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import type { ChartDetection, getInstrument } from "@/lib/trading/service";
 import type { Overview } from "./trading-workspace";
 import { CandleChart, type ChartLevel } from "./candle-chart";
-import { PATTERN_SHORT, STATUS_LABEL, api, dayFmt, errorText, eur, field, num, panel, pct, primary, th, tone } from "./format";
-import { OrderDialog, type OrderDraft } from "./order-dialog";
-import { refreshTrading } from "./navigation";
+import { PATTERN_SHORT, STATUS_LABEL, api, dayFmt, errorText, eur, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
+import { ConfirmOrderModal, TradeInfoModal, ideaFromRecommendation } from "./trade-modals";
+import { Rich } from "./ui";
+import { useTradingRefresh } from "./navigation";
 import { NewsItem } from "./news-panel";
 
 type Instrument = Awaited<ReturnType<typeof getInstrument>>;
@@ -38,8 +39,10 @@ export function MarketPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<number>(0);
-  const [draft, setDraft] = useState<OrderDraft | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const [info, setInfo] = useState(false);
   const [reload, setReload] = useState(0);
+  useTradingRefresh(() => setReload((n) => n + 1));
   const current = symbol ?? data.market.find((m) => !m.isIndex)?.symbol ?? data.market[0]?.symbol ?? null;
 
   useEffect(() => {
@@ -260,31 +263,23 @@ export function MarketPanel({
                       {num(inst.stats[det.pattern]!.winRate * 100, 0)} % de acierto, {num(inst.stats[det.pattern]!.avgR, 2)} R de media.
                     </p>
                   )}
-                  {rec && <p className="border-l-2 border-blue-500 bg-blue-50/50 px-3 py-2 text-slate-800">{rec.plan}</p>}
-                  {rec && (rec.action === "comprar" || rec.action === "vender_corto" || rec.action === "vigilar") && rec.sizing?.quantity ? (
-                    <button
-                      type="button"
-                      className={primary}
-                      onClick={() =>
-                        setDraft({
-                          symbol: rec.symbol,
-                          name: rec.name,
-                          direction: rec.direction,
-                          reference: rec.lastClose,
-                          quantity: rec.sizing!.quantity,
-                          stop: rec.stop,
-                          target: rec.target,
-                          pattern: rec.pattern,
-                          signalKey: rec.key,
-                          score: rec.score,
-                          maxHoldDays: rec.maxHoldDays,
-                          notes: rec.plan,
-                        })
-                      }
-                    >
-                      Hacerlo en mi cartera
-                    </button>
-                  ) : null}
+                  {rec && (
+                    <p className="border-l-2 border-blue-500 bg-blue-50/50 px-3 py-2 text-slate-700">
+                      <Rich text={rec.plan} />
+                    </p>
+                  )}
+                  {rec && (
+                    <div className="flex gap-2">
+                      <button type="button" className={ghost} onClick={() => setInfo(true)}>
+                        <Info className="h-4 w-4" /> Más info
+                      </button>
+                      {(rec.action === "comprar" || rec.action === "vender_corto" || rec.action === "vigilar") && rec.sizing?.quantity ? (
+                        <button type="button" className={primary} onClick={() => setConfirm(true)}>
+                          Ejecutar orden
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="px-4 py-5 text-sm text-slate-500">Elige una figura.</p>
@@ -292,7 +287,7 @@ export function MarketPanel({
               {openPos.length > 0 && (
                 <div className="border-t border-slate-200 px-4 py-3 text-sm text-slate-700">
                   Tienes {openPos.length === 1 ? "una posición" : `${openPos.length} posiciones`} en este valor (
-                  {openPos.map((p) => `${p.quantity} acc. ${p.status}`).join(", ")}).
+                  {openPos.map((p) => `${int(p.quantity)} ${p.status}`).join(", ")}).
                 </div>
               )}
             </section>
@@ -300,19 +295,25 @@ export function MarketPanel({
         )}
       </div>
 
-      {draft && (
-        <OrderDialog
-          draft={draft}
+      {info && rec && (
+        <TradeInfoModal
+          idea={ideaFromRecommendation(rec)}
+          onClose={() => setInfo(false)}
+          onExecute={
+            rec.sizing?.quantity && (rec.action === "comprar" || rec.action === "vender_corto" || rec.action === "vigilar")
+              ? () => {
+                  setInfo(false);
+                  setConfirm(true);
+                }
+              : undefined
+          }
+        />
+      )}
+      {confirm && rec && (
+        <ConfirmOrderModal
+          idea={{ ...ideaFromRecommendation(rec), action: rec.action === "vigilar" ? "comprar" : rec.action }}
           cash={data.account.cash}
-          equity={data.account.equity}
-          commissionPct={data.account.settings.commissionPct}
-          commissionMin={data.account.settings.commissionMin}
-          onClose={() => setDraft(null)}
-          onDone={() => {
-            setDraft(null);
-            setReload((n) => n + 1);
-            refreshTrading();
-          }}
+          onClose={() => setConfirm(false)}
         />
       )}
     </div>

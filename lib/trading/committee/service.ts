@@ -9,7 +9,7 @@ import { closePosition, costOf, madridDay, OPEN_STATUSES, placeOrder } from "../
 import { atrAt, indicatorBundle } from "../indicators";
 import { PATTERN_NAMES } from "../library";
 import { CRYPTO_BENCHMARK, INDEX_SYMBOL, isCryptoMarket, lotStepOf, newsSymbolOf } from "../market-data";
-import { computeRecommendations } from "../service";
+import { computeRecommendations, getTrendPicks } from "../service";
 import { dayDate, dayKey, loadSeries } from "../sync";
 import {
   COMMITTEE_INSTRUCTIONS,
@@ -39,7 +39,20 @@ const when = (d: Date) =>
   new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(d);
 
 async function buildContext(workspaceId: string) {
-  const { ranked, market, regime, cryptoRegime, state, view, instruments, series } = await computeRecommendations(workspaceId);
+  const [{ ranked, market, regime, cryptoRegime, state, view, instruments, series }, trend] = await Promise.all([
+    computeRecommendations(workspaceId),
+    getTrendPicks(),
+  ]);
+  const strengthOf = (symbol: string) => {
+    for (const m of [trend.bolsa, trend.crypto]) {
+      const k = m.ranked.findIndex((r) => r.symbol === symbol);
+      if (k >= 0) {
+        const r = m.ranked[k];
+        return { id: `F:${symbol}`, rank: k + 1, of: m.ranked.length, momPct: r.momPct, lookback: m.lookback, inTop: m.marketOk && m.picks.some((p) => p.symbol === symbol), aboveSma200: r.aboveSma200 };
+      }
+    }
+    return null;
+  };
   const since = new Date(Date.now() - NEWS_HOURS * 3_600_000);
   const news = await prisma.news_items.findMany({
     where: { status: "clasificada", relevant: true, published_at: { gte: since }, impact: { gte: 1 } },
@@ -79,6 +92,8 @@ async function buildContext(workspaceId: string) {
   for (const r of ranked) if (r.action !== "vigilar" || r.score >= 50) bump(r.symbol, r.score + (r.strong ? 50 : 0));
   for (const [s, list] of newsFor) bump(s, list.reduce((acc, n) => acc + n.impact * 25, 0));
   for (const s of [CRYPTO_BENCHMARK, "ETH-EUR"]) bump(s, 30);
+  // Los que la estrategia de tendencia tendría hoy en cartera.
+  for (const m of [trend.bolsa, trend.crypto]) if (m.marketOk) m.picks.forEach((p, k) => bump(p.symbol, 120 - k * 10));
   const candidates = [...score.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([s]) => s)
@@ -121,6 +136,13 @@ async function buildContext(workspaceId: string) {
           history: r.history ? `${r.history.trades} op., ${(r.history.winRate * 100).toFixed(0)} % acierto, ${r.history.avgR.toFixed(2)} R medio` : null,
         };
       });
+    const strength = strengthOf(symbol);
+    if (strength)
+      evidence.set(strength.id, {
+        id: strength.id,
+        kind: "figura",
+        label: `Fuerza: puesto ${strength.rank} de ${strength.of} (${strength.momPct >= 0 ? "+" : ""}${strength.momPct.toFixed(0)} % en ${strength.lookback} sesiones)${strength.inTop ? ", entre los que compraría la estrategia de tendencia" : ""}`,
+      });
     const pos = state.positions.find((p) => p.symbol === symbol && p.status === "abierta");
     if (pos)
       evidence.set(`P:${symbol}`, {
@@ -141,6 +163,7 @@ async function buildContext(workspaceId: string) {
       atrPct: (atr / row.close) * 100,
       lotStep: lotStepOf(inst.market),
       signals,
+      strength,
       news: newsFor.get(symbol) ?? [],
       position: pos
         ? {
@@ -316,7 +339,15 @@ function view(p: trading_proposals) {
   };
 }
 
-export async function decideProposal(workspaceId: string, userId: string, proposalId: string, decision: "ejecutar" | "descartar") {
+export type DecisionOverrides = { quantity?: number; stop?: number; target?: number; execution?: "next_open" | "now" };
+
+export async function decideProposal(
+  workspaceId: string,
+  userId: string,
+  proposalId: string,
+  decision: "ejecutar" | "descartar",
+  overrides: DecisionOverrides = {},
+) {
   if (!/^[0-9a-f-]{36}$/i.test(proposalId)) throw new Error("Propuesta no válida");
   const p = await prisma.trading_proposals.findFirst({ where: { id: proposalId, workspace_id: workspaceId } });
   if (!p) throw new Error("La propuesta no existe");
@@ -327,14 +358,17 @@ export async function decideProposal(workspaceId: string, userId: string, propos
   }
   let positionId: string | null = null;
   if (p.action === "comprar") {
-    if (!p.stop || !p.target || !p.quantity) throw new Error("A la propuesta le faltan stop, objetivo o tamaño");
+    const quantity = overrides.quantity && overrides.quantity > 0 ? overrides.quantity : p.quantity;
+    const stop = overrides.stop && overrides.stop > 0 ? overrides.stop : p.stop;
+    const target = overrides.target && overrides.target > 0 ? overrides.target : p.target;
+    if (!stop || !target || !quantity) throw new Error("A la propuesta le faltan stop, objetivo o tamaño");
     const r = await placeOrder(workspaceId, userId, {
       symbol: p.symbol,
       direction: "long",
-      quantity: p.quantity,
-      stop: p.stop,
-      target: p.target,
-      execution: "next_open",
+      quantity,
+      stop,
+      target,
+      execution: overrides.execution === "now" ? "now" : "next_open",
       signalKey: `comite:${p.id}`,
       maxHoldDays: Math.round(p.horizon_days * 1.5),
       notes: `Comité de inversión: ${p.rationale}`,
@@ -356,5 +390,5 @@ export async function decideProposal(workspaceId: string, userId: string, propos
     positionId = pos?.id ?? null;
   } else throw new Error("Esta propuesta no tiene nada que ejecutar");
   await prisma.trading_proposals.update({ where: { id: p.id }, data: { status: "ejecutada", decided_at: new Date(), position_id: positionId } });
-  return { status: "ejecutada" };
+  return { status: "ejecutada", order: p.action === "comprar" ? (overrides.execution === "now" ? "abierta" : "pendiente") : null };
 }

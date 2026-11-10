@@ -1,12 +1,12 @@
 "use client";
 import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, ChevronDown, Eye, LineChart, ThumbsDown, ThumbsUp } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ChevronDown, Eye, Info, LineChart, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { Recommendation } from "@/lib/trading/recommend";
 import type { Overview } from "./trading-workspace";
 import { ACTION_LABEL, ACTION_TONE, PATTERN_SHORT, STATUS_LABEL, dayFmt, eur, eur0, ghost, int, num, panel, pct, primary, th } from "./format";
-import { OrderDialog, type OrderDraft } from "./order-dialog";
-import { refreshTrading } from "./navigation";
+import { ConfirmOrderModal, TradeInfoModal, ideaFromRecommendation } from "./trade-modals";
+import { Rich } from "./ui";
 
 const FILTERS = [
   { key: "accion", label: "Para actuar" },
@@ -28,25 +28,8 @@ function ScoreBar({ score, strong }: { score: number; strong: boolean }) {
   );
 }
 
-function draftOf(r: Recommendation): OrderDraft {
-  return {
-    symbol: r.symbol,
-    name: r.name,
-    direction: r.direction,
-    reference: r.lastClose,
-    quantity: r.sizing?.quantity ?? 0,
-    stop: r.stop,
-    target: r.target,
-    pattern: r.pattern,
-    signalKey: r.key,
-    score: r.score,
-    maxHoldDays: r.maxHoldDays,
-    notes: r.plan,
-  };
-}
-
 /** Tarjeta de una operación propuesta, pensada para leerse en 10 segundos. */
-function TradeCard({ r, onOrder, onChart }: { r: Recommendation; onOrder: () => void; onChart: () => void }) {
+function TradeCard({ r, onOrder, onInfo, onChart }: { r: Recommendation; onOrder: () => void; onInfo: () => void; onChart: () => void }) {
   const long = r.direction === "long";
   const q = r.sizing?.quantity ?? 0;
   const loss = r.sizing?.riskAmount ?? 0;
@@ -102,8 +85,11 @@ function TradeCard({ r, onOrder, onChart }: { r: Recommendation; onOrder: () => 
           <button type="button" className={ghost} onClick={onChart} aria-label="Ver gráfico">
             <LineChart className="h-4 w-4" />
           </button>
+          <button type="button" className={ghost} onClick={onInfo}>
+            <Info className="h-4 w-4" /> Más info
+          </button>
           <button type="button" className={primary} onClick={onOrder} disabled={!q}>
-            Hacerlo en mi cartera
+            Ejecutar orden
           </button>
         </div>
       </footer>
@@ -115,8 +101,8 @@ export function RecommendationsPanel({ data, onOpenChart }: { data: Overview; on
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("accion");
   const [showAll, setShowAll] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const [draft, setDraft] = useState<OrderDraft | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<Recommendation | null>(null);
+  const [info, setInfo] = useState<Recommendation | null>(null);
 
   const recs = data.recommendations;
   const top = recs.filter((r) => r.strong && (r.action === "comprar" || r.action === "vender_corto")).slice(0, 3);
@@ -131,7 +117,6 @@ export function RecommendationsPanel({ data, onOpenChart }: { data: Overview; on
 
   return (
     <div className="space-y-5">
-      {notice && <p className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{notice}</p>}
 
       <section>
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
@@ -151,7 +136,7 @@ export function RecommendationsPanel({ data, onOpenChart }: { data: Overview; on
         ) : (
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {top.map((r) => (
-              <TradeCard key={r.key} r={r} onOrder={() => setDraft(draftOf(r))} onChart={() => onOpenChart(r.symbol)} />
+              <TradeCard key={r.key} r={r} onOrder={() => setConfirm(r)} onInfo={() => setInfo(r)} onChart={() => onOpenChart(r.symbol)} />
             ))}
           </div>
         )}
@@ -339,10 +324,12 @@ export function RecommendationsPanel({ data, onOpenChart }: { data: Overview; on
                             <td colSpan={10} className="px-4 py-4">
                               <div className="grid gap-6 md:grid-cols-[1.4fr_1fr_1fr]">
                                 <div>
-                                  <p className="text-sm leading-relaxed text-slate-800">{r.plan}</p>
+                                  <p className="text-sm leading-relaxed text-slate-700">
+                                    <Rich text={r.plan} />
+                                  </p>
                                   {(r.action === "comprar" || r.action === "vender_corto" || r.action === "vigilar") && (
-                                    <button type="button" className={`${primary} mt-3`} onClick={() => setDraft(draftOf(r))} disabled={!r.sizing?.quantity}>
-                                      {r.action === "vigilar" ? "Entrar ya (anticipado)" : "Hacerlo en mi cartera"}
+                                    <button type="button" className={`${primary} mt-3`} onClick={() => setConfirm(r)} disabled={!r.sizing?.quantity}>
+                                      {r.action === "vigilar" ? "Entrar ya (anticipado)" : "Ejecutar orden"}
                                     </button>
                                   )}
                                 </div>
@@ -374,25 +361,21 @@ export function RecommendationsPanel({ data, onOpenChart }: { data: Overview; on
         )}
       </section>
 
-      {draft && (
-        <OrderDialog
-          draft={draft}
-          cash={data.account.cash}
-          equity={data.account.equity}
-          commissionPct={data.account.settings.commissionPct}
-          commissionMin={data.account.settings.commissionMin}
-          onClose={() => setDraft(null)}
-          onDone={(status) => {
-            setNotice(
-              status === "pendiente"
-                ? `Orden de ${draft.name} programada: se ejecutará a la apertura de la próxima sesión. La tienes en «Mi cartera».`
-                : `Posición en ${draft.name} abierta. La tienes en «Mi cartera».`,
-            );
-            setDraft(null);
-            refreshTrading();
-          }}
+      {info && (
+        <TradeInfoModal
+          idea={ideaFromRecommendation(info)}
+          onClose={() => setInfo(null)}
+          onExecute={
+            info.sizing?.quantity && (info.action === "comprar" || info.action === "vender_corto")
+              ? () => {
+                  setConfirm(info);
+                  setInfo(null);
+                }
+              : undefined
+          }
         />
       )}
+      {confirm && <ConfirmOrderModal idea={{ ...ideaFromRecommendation(confirm), action: confirm.action === "vigilar" ? "comprar" : confirm.action }} cash={data.account.cash} onClose={() => setConfirm(null)} />}
     </div>
   );
 }

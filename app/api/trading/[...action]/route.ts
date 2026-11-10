@@ -104,7 +104,15 @@ export async function POST(req: Request, route: RouteContext) {
     }
     if (action === "committee/decide") {
       const decision = body.decision === "descartar" ? "descartar" : "ejecutar";
-      return NextResponse.json(await decideProposal(ctx.workspaceId, ctx.userId, String(body.proposalId ?? ""), decision));
+      const num = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : undefined);
+      return NextResponse.json(
+        await decideProposal(ctx.workspaceId, ctx.userId, String(body.proposalId ?? ""), decision, {
+          quantity: num(body.quantity),
+          stop: num(body.stop),
+          target: num(body.target),
+          execution: body.execution === "now" ? "now" : "next_open",
+        }),
+      );
     }
     if (action === "simulate") return NextResponse.json(await simulate(ctx.workspaceId, body));
     if (action === "order") return NextResponse.json(await placeOrder(ctx.workspaceId, ctx.userId, parseOrder(body)));

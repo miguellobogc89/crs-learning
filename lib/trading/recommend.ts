@@ -229,7 +229,7 @@ export function recommendForInstrument(
       history: st ? { trades: st.trades, winRate: st.winRate, avgR: st.avgR } : null,
       maxHoldDays: maxHoldBars(d),
       plan: provenLoser && action !== "cerrar" && action !== "evitar"
-        ? `No recomendada: el ${PATTERN_NAMES[d.pattern].toLowerCase()} ha dado pérdidas en ${where} (${st!.trades} operaciones, ${(st!.winRate * 100).toFixed(0)} % de acierto, ${st!.avgR.toFixed(2)} R de media). Aunque la figura esté bien formada, la estadística no acompaña.`
+        ? `**No recomendada**: el ${PATTERN_NAMES[d.pattern].toLowerCase()} ha dado pérdidas en ${where} (${st!.trades} operaciones, ${(st!.winRate * 100).toFixed(0)} % de acierto, ${st!.avgR.toFixed(2)} R de media). Aunque la figura esté bien formada, la estadística no acompaña.`
         : planText(action, inst.name, d, entry, stop, target, rr, sizing, account, strong, inst.unit ?? "acciones"),
       vetoed: provenLoser,
     });
@@ -264,11 +264,11 @@ function planText(
   const gain = s.quantity * Math.abs(target - entry);
   const head =
     action === "vigilar"
-      ? `Si ${name} cierra ${long ? "por encima" : "por debajo"} de ${eur(entry)}: ${verb.toLowerCase()} ${qty(s.quantity)} ${unit} (≈ ${eur0(s.notional)}).`
-      : `${verb} ${qty(s.quantity)} ${unit === "acciones" ? `acciones de ${name}` : unit} (≈ ${eur0(s.notional)}) a la apertura de la próxima sesión.`;
+      ? `Si ${name} cierra ${long ? "por encima" : "por debajo"} de **${eur(entry)}**: ${verb.toLowerCase()} **${qty(s.quantity)} ${unit}** (≈ ${eur0(s.notional)}).`
+      : `**${verb} ${qty(s.quantity)} ${unit === "acciones" ? `acciones de ${name}` : unit}** (≈ ${eur0(s.notional)}) a la apertura de la próxima sesión.`;
   return (
-    `${head} Stop en ${eur(stop)}: si salta pierdes ≈ ${eur0(risk)} (${((risk / account.equity) * 100).toFixed(1)} % de la cartera). ` +
-    `Objetivo en ${eur(target)}: ≈ +${eur0(gain)} (${rr.toFixed(1)} a 1).` +
+    `${head} Stop en ${eur(stop)}: si salta **pierdes ≈ ${eur0(risk)}** (${((risk / account.equity) * 100).toFixed(1)} % de la cartera). ` +
+    `Objetivo en ${eur(target)}: **≈ +${eur0(gain)}** (${rr.toFixed(1)} a 1).` +
     (s.limitedBy && s.limitedBy !== "riesgo" ? ` Tamaño limitado por ${s.limitedBy}.` : "") +
     weak
   );

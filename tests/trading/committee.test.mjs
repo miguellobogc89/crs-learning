@@ -19,6 +19,7 @@ const asset = (symbol, extra = {}) => ({
   distSma200: 5,
   atrPct: 2,
   lotStep: 1,
+  strength: null,
   signals: [{ id: `S:${symbol}:double_bottom`, pattern: "Doble suelo", status: "confirmada", direction: "long", entry: 10, stop: 9.4, target: 11.5, score: 70, vetoed: false, history: null }],
   news: [{ id: "N:abcd1234", when: "hoy", summary: "Resultados mejores de lo esperado", sentiment: 2, impact: 3, category: "resultados" }],
   position: null,

@@ -33,6 +33,8 @@ export type CommitteeAsset = {
   atrPct: number | null;
   lotStep: number;
   signals: CommitteeSignal[];
+  /** Fuerza relativa (estrategia de tendencia): puesto en el ranking de su mercado. */
+  strength: { id: string; rank: number; of: number; momPct: number; lookback: number; inTop: boolean; aboveSma200: boolean } | null;
   news: CommitteeNews[];
   position: { direction: Direction; quantity: number; entry: number; stop: number; target: number; unrealizedPct: number } | null;
 };
@@ -103,6 +105,8 @@ export const COMMITTEE_INSTRUCTIONS = [
   "- Una figura marcada como vetada (vetoed) ha perdido dinero históricamente: no la uses como argumento a favor.",
   "- Las noticias muy importantes (impact 3) pesan más que las figuras. Una noticia negativa importante descarta compras en ese activo.",
   "- Ve a favor de la tendencia de fondo salvo que haya una razón fuerte y documentada.",
+  "- La fuerza relativa (F:…) es la señal más fiable que tienes: la estrategia de tendencia (comprar los activos que más han subido en los últimos meses y están por encima de su media de 200 sesiones, y salir si el mercado se gira) está validada con años de datos. Prioriza activos en el top de fuerza (inTop) y con buenas noticias; desconfía de comprar lo que está abajo del ranking.",
+  "- Si el mercado de un activo está en fase bajista, no propongas compras en ese mercado salvo convicción 5 con pruebas muy claras.",
   "- Usa solo los datos que te doy. No inventes cifras, noticias ni hechos.",
   "",
   "Acciones:",
@@ -114,10 +118,10 @@ export const COMMITTEE_INSTRUCTIONS = [
   "Campos:",
   "- conviction: 1 (muy baja) a 5 (muy alta). Con menos de 3 no propongas comprar: usa vigilar.",
   "- horizon_days: sesiones orientativas que debería durar la operación.",
-  "- rationale: 2 a 4 frases en español claro, para alguien que no sabe de bolsa. Di qué ha pasado y por qué tiene sentido. Nada de jerga sin explicar.",
-  "- evidence: identificadores exactos de las pruebas que usas (N:… noticias, S:… figuras, T:… datos técnicos de un activo, P:… posición). Al menos uno.",
+  "- rationale: 2 a 4 frases en español claro, para alguien que nunca ha invertido. Di qué ha pasado y por qué tiene sentido. Nada de jerga sin explicar. Marca en **negrita** (con dobles asteriscos) entre 1 y 3 ideas clave.",
+  "- evidence: identificadores exactos de las pruebas que usas (N:… noticias, S:… figuras, F:… fuerza relativa, T:… datos técnicos de un activo, P:… posición). Al menos uno.",
   "- risks: una frase con lo que podría salir mal.",
-  "- market_view: 2 o 3 frases con cómo ves hoy la bolsa española y el mercado crypto.",
+  "- market_view: 2 o 3 frases con cómo ves hoy la bolsa española y el mercado crypto, para alguien que no sabe de bolsa. Marca en **negrita** lo más importante.",
   "- watchlist: hasta 5 activos a seguir de cerca con el motivo, en una frase.",
 ].join("\n");
 
@@ -150,6 +154,9 @@ export function committeeInput(ctx: CommitteeContext) {
       dist_media200_pct: r2(a.distSma200, 1),
       atr_pct: r2(a.atrPct),
       posicion: a.position ? { id: `P:${a.symbol}`, ...a.position, unrealizedPct: r2(a.position.unrealizedPct) } : null,
+      fuerza: a.strength
+        ? { id: a.strength.id, puesto: a.strength.rank, de: a.strength.of, subida_pct: r2(a.strength.momPct, 1), sesiones: a.strength.lookback, en_top: a.strength.inTop, sobre_media200: a.strength.aboveSma200 }
+        : null,
       figuras: a.signals.map((s) => ({
         id: s.id,
         figura: s.pattern,
@@ -194,7 +201,13 @@ export function validateCommittee(raw: unknown, ctx: CommitteeContext) {
   const bySymbol = new Map(ctx.assets.map((a) => [a.symbol, a]));
   const evidenceIds = new Set<string>([
     ...ctx.marketNews.map((n) => n.id),
-    ...ctx.assets.flatMap((a) => [`T:${a.symbol}`, ...(a.position ? [`P:${a.symbol}`] : []), ...a.signals.map((s) => s.id), ...a.news.map((n) => n.id)]),
+    ...ctx.assets.flatMap((a) => [
+      `T:${a.symbol}`,
+      ...(a.position ? [`P:${a.symbol}`] : []),
+      ...(a.strength ? [a.strength.id] : []),
+      ...a.signals.map((s) => s.id),
+      ...a.news.map((n) => n.id),
+    ]),
   ]);
   const out: ValidatedProposal[] = [];
   let openCount = ctx.account.openCount;

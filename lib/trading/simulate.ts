@@ -34,10 +34,13 @@ export type SimSettings = {
   cost: CostModel;
 };
 
+/** Por qué entró una operación simulada: una figura o la estrategia de tendencia. */
+export type SimSignal = PatternKey | "tendencia";
+
 export type SimTrade = {
   symbol: string;
   name: string;
-  pattern: PatternKey;
+  pattern: SimSignal;
   direction: Direction;
   score: number;
   quantity: number;
@@ -45,7 +48,7 @@ export type SimTrade = {
   entryPrice: number;
   exitDay: string | null;
   exitPrice: number | null;
-  reason: ExitReason | "abierta";
+  reason: ExitReason | "abierta" | "rotación" | "mercado bajista";
   stop: number;
   target: number;
   pnl: number;
@@ -66,6 +69,8 @@ export type SimResult = {
   benchmarkPct: number | null;
   maxDrawdownPct: number;
   maxDrawdownDay: string | null;
+  /** Peor caída de la referencia (IBEX o Bitcoin) en el mismo periodo. */
+  benchmarkMaxDrawdownPct: number | null;
   exposurePct: number;
   trades: number;
   openTrades: number;
@@ -79,7 +84,7 @@ export type SimResult = {
   fees: number;
   curve: SimPoint[];
   list: SimTrade[];
-  byPattern: { pattern: PatternKey; trades: number; wins: number; pnl: number; avgR: number }[];
+  byPattern: { pattern: SimSignal; trades: number; wins: number; pnl: number; avgR: number }[];
   monthly: { month: string; returnPct: number; benchmarkPct: number | null }[];
 };
 
@@ -418,8 +423,15 @@ export function summarizeSim(capital: number, curve: SimPoint[], list: SimTrade[
     }
   }
   const lastBench = curve.length ? curve[curve.length - 1].benchmark : null;
+  let bPeak = 0;
+  let bDd: number | null = null;
+  for (const p of curve) {
+    if (p.benchmark === null) continue;
+    bPeak = Math.max(bPeak, p.benchmark);
+    bDd = Math.max(bDd ?? 0, (bPeak - p.benchmark) / bPeak);
+  }
 
-  const byPatternMap = new Map<PatternKey, { pattern: PatternKey; trades: number; wins: number; pnl: number; sumR: number }>();
+  const byPatternMap = new Map<SimSignal, { pattern: SimSignal; trades: number; wins: number; pnl: number; sumR: number }>();
   for (const t of closed) {
     const a = byPatternMap.get(t.pattern) ?? { pattern: t.pattern, trades: 0, wins: 0, pnl: 0, sumR: 0 };
     a.trades++;
@@ -460,6 +472,7 @@ export function summarizeSim(capital: number, curve: SimPoint[], list: SimTrade[
     benchmarkPct: lastBench !== null ? ((lastBench - capital) / capital) * 100 : null,
     maxDrawdownPct: dd * 100,
     maxDrawdownDay: ddDay,
+    benchmarkMaxDrawdownPct: bDd === null ? null : bDd * 100,
     exposurePct: curve.length ? (curve.reduce((s, p) => s + (p.equity > 0 ? p.invested / p.equity : 0), 0) / curve.length) * 100 : 0,
     trades: closed.length,
     openTrades: list.length - closed.length,

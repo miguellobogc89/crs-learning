@@ -1,13 +1,14 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BarChart3, ChevronDown, ExternalLink, FileText, LineChart, Loader2, RefreshCw, ShieldAlert, Sparkles, Wallet } from "lucide-react";
-import type { Evidence, getCommittee } from "@/lib/trading/committee/service";
+import { ChevronDown, Info, Loader2, RefreshCw, ShieldAlert, Sparkles } from "lucide-react";
+import type { getCommittee } from "@/lib/trading/committee/service";
 import { api, dayFmt, errorText, eur, eur0, ghost, num, panel, pct, primary, th, tone } from "./format";
 import { refreshTrading, useTradingRefresh } from "./navigation";
-import { Tone } from "./news-panel";
+import { ConfirmOrderModal, TradeInfoModal, type TradeIdea } from "./trade-modals";
+import { Rich } from "./ui";
 
-type Committee = Awaited<ReturnType<typeof getCommittee>> & { canManage: boolean };
-type Proposal = NonNullable<Committee["latest"]>["proposals"][number];
+export type Committee = Awaited<ReturnType<typeof getCommittee>> & { canManage: boolean };
+export type Proposal = NonNullable<Committee["latest"]>["proposals"][number];
 
 const ACTION = {
   comprar: { label: "Comprar", tone: "bg-emerald-50 text-emerald-800 border-emerald-200" },
@@ -37,51 +38,56 @@ function Conviction({ value }: { value: number }) {
   );
 }
 
-const EVIDENCE_ICON = {
-  noticia: FileText,
-  figura: LineChart,
-  tecnico: BarChart3,
-  posicion: Wallet,
-} as const;
-
-function EvidenceList({ items }: { items: Evidence[] }) {
-  if (!items.length) return null;
-  return (
-    <ul className="space-y-1.5">
-      {items.map((e) => {
-        const Icon = EVIDENCE_ICON[e.kind] ?? FileText;
-        return (
-          <li key={e.id} className="flex gap-2 text-xs leading-snug text-slate-600">
-            {e.kind === "noticia" && e.sentiment !== undefined ? (
-              <Tone sentiment={e.sentiment} className="mt-px h-3.5 w-3.5 shrink-0" />
-            ) : (
-              <Icon className="mt-px h-3.5 w-3.5 shrink-0 text-slate-400" />
-            )}
-            {e.url ? (
-              <a href={e.url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-700">
-                {e.label} <ExternalLink className="inline h-3 w-3 text-slate-300" />
-              </a>
-            ) : (
-              <span>{e.label}</span>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
+export function ideaFromProposal(p: Proposal): TradeIdea {
+  return {
+    key: p.id,
+    source: "comite",
+    symbol: p.symbol,
+    name: p.name,
+    market: p.market,
+    action: p.action,
+    direction: "long",
+    price: p.price,
+    stop: p.stop,
+    target: p.target,
+    quantity: p.quantity,
+    rationale: p.rationale,
+    pros: [],
+    cons: p.risks ? [p.risks] : [],
+    evidence: p.evidence,
+    origin: "Comité de inversión",
+    conviction: p.conviction,
+    horizonDays: p.horizonDays,
+    proposalId: p.id,
+  };
 }
 
-function ProposalCard({ p, onDecide, busy }: { p: Proposal; onDecide: (d: "ejecutar" | "descartar") => void; busy: boolean }) {
+export function ProposalCard({
+  p,
+  onInfo,
+  onExecute,
+  onDismiss,
+  busy,
+  compact = false,
+}: {
+  p: Proposal;
+  onInfo: () => void;
+  onExecute: () => void;
+  onDismiss?: () => void;
+  busy?: boolean;
+  compact?: boolean;
+}) {
   const buy = p.action === "comprar";
   const loss = buy && p.quantity && p.stop ? p.quantity * (p.price - p.stop) : null;
   const gain = buy && p.quantity && p.target ? p.quantity * (p.target - p.price) : null;
+  const canExecute = p.status === "propuesta" && (buy || p.action === "vender" || (p.action === "mantener" && p.stop !== null));
   return (
     <article className={`${panel} flex flex-col`}>
       <header className="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <div className="min-w-0">
           <div className="truncate font-semibold text-slate-900">{p.name}</div>
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            {p.symbol} · {p.market === "crypto" ? "Crypto" : "Bolsa"} · <Conviction value={p.conviction} />
+            {p.market === "crypto" ? "Crypto" : "Bolsa"} · <Conviction value={p.conviction} />
           </div>
         </div>
         <span className={`shrink-0 border px-2 py-0.5 text-xs font-semibold ${ACTION[p.action].tone}`}>{ACTION[p.action].label}</span>
@@ -89,77 +95,71 @@ function ProposalCard({ p, onDecide, busy }: { p: Proposal; onDecide: (d: "ejecu
 
       {buy && p.quantity !== null && (
         <>
-          <div className="px-4 pt-3">
-            <p className="text-[15px] font-medium text-slate-900">
-              Compra {qtyFmt(p.quantity)} {unitOf(p)} <span className="font-normal text-slate-500">(≈ {eur0(p.quantity * p.price)})</span>
-            </p>
-            <p className="text-xs text-slate-500">a la apertura de la próxima sesión · horizonte ~{p.horizonDays} sesiones</p>
-          </div>
+          <p className="px-4 pt-3 text-[15px] text-slate-900">
+            <Rich text={`**Compra ${qtyFmt(p.quantity)} ${unitOf(p)}**`} />{" "}
+            <span className="text-slate-500">por unos {eur0(p.quantity * p.price)}</span>
+          </p>
           <dl className="mx-4 mt-3 grid grid-cols-3 gap-px border border-slate-200 bg-slate-200 text-center">
             <div className="bg-white px-2 py-2">
-              <dt className="text-[11px] text-slate-500">Precio ahora</dt>
+              <dt className="text-[11px] text-slate-500">Precio</dt>
               <dd className="font-semibold tabular-nums text-slate-900">{eur(p.price)}</dd>
             </div>
             <div className="bg-white px-2 py-2">
-              <dt className="text-[11px] text-red-700">Si sale mal, vende a</dt>
-              <dd className="font-semibold tabular-nums text-red-700">{eur(p.stop)}</dd>
-              {loss !== null && <dd className="text-[11px] tabular-nums text-red-700">−{eur0(loss)}</dd>}
+              <dt className="text-[11px] text-red-700">Si sale mal</dt>
+              <dd className="font-semibold tabular-nums text-red-700">{loss !== null ? `−${eur0(loss)}` : "—"}</dd>
             </div>
             <div className="bg-white px-2 py-2">
-              <dt className="text-[11px] text-emerald-700">Si sale bien, vende a</dt>
-              <dd className="font-semibold tabular-nums text-emerald-700">{eur(p.target)}</dd>
-              {gain !== null && <dd className="text-[11px] tabular-nums text-emerald-700">+{eur0(gain)}</dd>}
+              <dt className="text-[11px] text-emerald-700">Si sale bien</dt>
+              <dd className="font-semibold tabular-nums text-emerald-700">{gain !== null ? `+${eur0(gain)}` : "—"}</dd>
             </div>
           </dl>
         </>
       )}
-      {p.action === "mantener" && p.stop !== null && (
-        <p className="px-4 pt-3 text-sm text-slate-700">
-          Propone subir el stop a <b className="tabular-nums">{eur(p.stop)}</b> para proteger lo ganado.
-        </p>
-      )}
 
-      <div className="flex-1 space-y-3 px-4 py-3">
-        <p className="text-sm leading-relaxed text-slate-800">{p.rationale}</p>
-        <div>
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">En qué se basa</div>
-          <EvidenceList items={p.evidence} />
-        </div>
-        {p.risks && (
-          <p className="flex gap-1.5 text-xs text-amber-800">
-            <ShieldAlert className="mt-px h-3.5 w-3.5 shrink-0" /> {p.risks}
+      <div className="flex-1 px-4 py-3">
+        <p className={`text-sm leading-relaxed text-slate-700 ${compact ? "line-clamp-3" : "line-clamp-4"}`}>
+          <Rich text={p.rationale} />
+        </p>
+        {!compact && p.risks && (
+          <p className="mt-2 flex gap-1.5 text-xs text-amber-800">
+            <ShieldAlert className="mt-px h-3.5 w-3.5 shrink-0" /> <span className="line-clamp-2">{p.risks}</span>
           </p>
         )}
       </div>
 
-      <footer className="flex items-center justify-end gap-2 border-t border-slate-100 px-4 py-3">
-        {p.status === "propuesta" ? (
-          <>
-            <button type="button" className={ghost} onClick={() => onDecide("descartar")} disabled={busy}>
-              Descartar
-            </button>
-            {(p.action === "comprar" || p.action === "vender" || (p.action === "mantener" && p.stop !== null)) && (
-              <button type="button" className={primary} onClick={() => onDecide("ejecutar")} disabled={busy}>
-                {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-                {p.action === "comprar" ? "Hacerlo en mi cartera" : p.action === "vender" ? "Cerrar la posición" : "Subir el stop"}
-              </button>
-            )}
-          </>
+      <footer className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-3">
+        {p.status === "propuesta" && onDismiss ? (
+          <button type="button" className="text-xs text-slate-500 hover:text-slate-800" onClick={onDismiss} disabled={busy}>
+            Descartar
+          </button>
         ) : (
-          <span className="text-xs font-medium text-slate-500">{p.status === "ejecutada" ? "Hecho en tu cartera" : "Descartada"}</span>
+          <span className="text-xs font-medium text-slate-500">{p.status === "ejecutada" ? "Hecho en tu cartera" : p.status === "descartada" ? "Descartada" : ""}</span>
         )}
+        <div className="flex gap-2">
+          <button type="button" className={ghost} onClick={onInfo}>
+            <Info className="h-4 w-4" /> Más info
+          </button>
+          {canExecute && (
+            <button type="button" className={primary} onClick={onExecute} disabled={busy}>
+              {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+              {p.action === "mantener" ? "Subir stop" : p.action === "vender" ? "Vender" : "Ejecutar orden"}
+            </button>
+          )}
+        </div>
       </footer>
     </article>
   );
 }
 
-/** Bloque principal de «Qué hacer hoy»: la reunión del comité. */
+/** Bloque principal de «Oportunidades»: la reunión del comité. */
 export function CommitteeToday() {
   const [data, setData] = useState<Committee | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [showRejected, setShowRejected] = useState(false);
+  const [info, setInfo] = useState<Proposal | null>(null);
+  const [confirm, setConfirm] = useState<Proposal | null>(null);
   const auto = useRef(false);
 
   const load = useCallback(async () => {
@@ -196,11 +196,11 @@ export function CommitteeToday() {
     }
   }, [data, run]);
 
-  const decide = async (p: Proposal, decision: "ejecutar" | "descartar") => {
+  const dismiss = async (p: Proposal) => {
     setBusy(p.id);
     setError(null);
     try {
-      await api("committee/decide", { proposalId: p.id, decision });
+      await api("committee/decide", { proposalId: p.id, decision: "descartar" });
       await load();
       refreshTrading();
     } catch (e) {
@@ -258,11 +258,28 @@ export function CommitteeToday() {
         )
       ) : (
         <>
+          {info && (
+            <TradeInfoModal
+              idea={ideaFromProposal(info)}
+              onClose={() => setInfo(null)}
+              onExecute={
+                info.status === "propuesta"
+                  ? () => {
+                      setConfirm(info);
+                      setInfo(null);
+                    }
+                  : undefined
+              }
+            />
+          )}
+          {confirm && <ConfirmOrderModal idea={ideaFromProposal(confirm)} onClose={() => setConfirm(null)} />}
           {latest.status === "error" ? (
             <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">La última reunión falló: {latest.error}</p>
           ) : (
             latest.marketView && (
-              <div className={`${panel} border-l-4 border-l-blue-500 px-4 py-3 text-sm leading-relaxed text-slate-800`}>{latest.marketView}</div>
+              <div className={`${panel} border-l-4 border-l-blue-500 px-4 py-3 text-sm leading-relaxed text-slate-700`}>
+                <Rich text={latest.marketView} />
+              </div>
             )
           )}
 
@@ -274,7 +291,14 @@ export function CommitteeToday() {
             ) : (
               <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                 {active.map((p) => (
-                  <ProposalCard key={p.id} p={p} busy={busy === p.id} onDecide={(d) => decide(p, d)} />
+                  <ProposalCard
+                    key={p.id}
+                    p={p}
+                    busy={busy === p.id}
+                    onInfo={() => setInfo(p)}
+                    onExecute={() => setConfirm(p)}
+                    onDismiss={() => dismiss(p)}
+                  />
                 ))}
               </div>
             ))}
@@ -285,7 +309,7 @@ export function CommitteeToday() {
               <ul className="divide-y divide-slate-100 text-sm">
                 {watching.map((p) => (
                   <li key={p.id} className="px-4 py-2.5">
-                    <b className="font-semibold text-slate-900">{p.name}</b> <span className="text-slate-600">— {p.rationale}</span>
+                    <b className="font-semibold text-slate-900">{p.name}</b> <span className="text-slate-600">— <Rich text={p.rationale} /></span>
                   </li>
                 ))}
                 {latest.watchlist
@@ -381,7 +405,7 @@ export function CommitteeHistory() {
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                  Todavía no hay propuestas. El comité se reúne al entrar en «Qué hacer hoy».
+                  Todavía no hay propuestas. El comité se reúne al entrar en «Oportunidades».
                 </td>
               </tr>
             ) : (
@@ -395,7 +419,7 @@ export function CommitteeHistory() {
                   <td className="px-3 py-2">
                     <span className={`border px-1.5 py-0.5 text-xs font-medium ${ACTION[h.action].tone}`}>{ACTION[h.action].label}</span>
                     <div className="mt-1 line-clamp-2 max-w-md text-xs text-slate-500" title={h.rationale}>
-                      {h.rationale}
+                      {h.rationale.replace(/\*\*/g, "")}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-600">{h.outcome ? OUTCOME[h.outcome.state] : "—"}</td>

@@ -92,3 +92,6 @@ export const STATUS_LABEL: Record<string, string> = {
   invalidated: "Anulada",
   expired: "Caducada",
 };
+
+/** Etiqueta de lo que hizo entrar una operación simulada: una figura o la estrategia de tendencia. */
+export const signalLabel = (p: string) => (p === "tendencia" ? "Tendencia" : PATTERN_SHORT[p as PatternKey] ?? p);
