@@ -1,9 +1,9 @@
 // components/trading/tabs.ts
 // Secciones del módulo de trading (panel lateral y rutas /trading/<clave>).
 import type { ComponentType } from "react";
-import { BookOpen, Newspaper, CalendarCheck, FlaskConical, LineChart, ListChecks, SlidersHorizontal, Wallet } from "lucide-react";
+import { BookOpen, History, Newspaper, CalendarCheck, FlaskConical, LineChart, ListChecks, SlidersHorizontal, Wallet } from "lucide-react";
 
-export const TRADING_TAB_KEYS = ["hoy", "noticias", "cartera", "simulador", "mercado", "patrones", "reglas", "valores"] as const;
+export const TRADING_TAB_KEYS = ["hoy", "noticias", "cartera", "simulador", "comite", "mercado", "patrones", "reglas", "valores"] as const;
 export type TradingTab = (typeof TRADING_TAB_KEYS)[number];
 type TabDef = { key: TradingTab; label: string; icon: ComponentType<{ className?: string }>; description: string };
 
@@ -11,12 +11,13 @@ export const TRADING_SECTIONS: { title: string | null; items: TabDef[] }[] = [
   {
     title: null,
     items: [
-      { key: "hoy", label: "Qué hacer hoy", icon: CalendarCheck, description: "Las operaciones que propone la app para la próxima sesión, con cuánto entrar y dónde salir." },
+      { key: "hoy", label: "Qué hacer hoy", icon: CalendarCheck, description: "Lo que propone el comité de inversión para la próxima sesión, con su porqué, y las señales técnicas de las figuras." },
       { key: "noticias", label: "Noticias", icon: Newspaper, description: "Lo que se publica sobre tus valores y las criptomonedas, resumido y clasificado por la IA." },
       { key: "cartera", label: "Mi cartera", icon: Wallet, description: "Tu dinero virtual: posiciones abiertas, órdenes pendientes, resultados y evolución." },
       { key: "simulador", label: "¿Cómo me habría ido?", icon: FlaskConical, description: "Simula qué habría pasado si hubieras seguido la app desde hace unos meses, con tus mismas reglas." },
-      { key: "mercado", label: "Gráficos", icon: LineChart, description: "Cada valor del IBEX 35 con sus figuras dibujadas sobre el gráfico." },
-      { key: "patrones", label: "Aprende los patrones", icon: BookOpen, description: "Qué es cada figura, cómo se opera y qué tal ha funcionado en la bolsa española." },
+      { key: "comite", label: "Historial del comité", icon: History, description: "Todo lo que ha propuesto el comité y qué tal habría salido, comparado con el mercado." },
+      { key: "mercado", label: "Gráficos", icon: LineChart, description: "Cada valor del IBEX 35 y cada criptomoneda con sus figuras dibujadas sobre el gráfico." },
+      { key: "patrones", label: "Aprende los patrones", icon: BookOpen, description: "Qué es cada figura, cómo se opera y qué tal ha funcionado en la bolsa española y en crypto." },
     ],
   },
   {

@@ -64,7 +64,7 @@ function TradeCard({ r, onOrder, onChart }: { r: Recommendation; onOrder: () => 
       </header>
       <div className="px-4 pt-3">
         <p className="text-[15px] font-medium text-slate-900">
-          {long ? "Compra" : "Vende en corto"} {int(q)} acciones <span className="font-normal text-slate-500">(≈ {eur0(r.sizing?.notional)})</span>
+          {long ? "Compra" : "Vende en corto"} {int(q)} {/-EUR$/.test(r.symbol) ? r.symbol.replace(/-EUR$/, "") : "acciones"} <span className="font-normal text-slate-500">(≈ {eur0(r.sizing?.notional)})</span>
         </p>
         <p className="text-xs text-slate-500">a la apertura de la próxima sesión</p>
       </div>
@@ -136,7 +136,7 @@ export function RecommendationsPanel({ data, onOpenChart }: { data: Overview; on
       <section>
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-sm font-semibold text-slate-900">
-            {top.length ? `${top.length === 1 ? "1 operación" : `${top.length} operaciones`} para la próxima sesión` : "Hoy no hay operaciones claras"}
+            {top.length ? `${top.length === 1 ? "1 figura" : `${top.length} figuras`} con entrada para la próxima sesión` : "Ninguna figura con entrada clara hoy"}
           </h2>
           <span className="text-xs text-slate-500">
             Con tu regla de arriesgar el {num(data.account.settings.riskPerTradePct, 1)} % ({eur0((data.account.equity * data.account.settings.riskPerTradePct) / 100)}) por operación ·

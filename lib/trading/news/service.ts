@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { AiBudgetError, aiJson, aiModelInfo, usageToday } from "../ai";
 import { CLASSIFY_SCHEMA, classifyInput, classifyInstructions, normalizeClassification, type AssetRef, type NewsToClassify } from "./classify";
 import { parseFeed, titleKey } from "./feed";
+import { isCryptoMarket } from "../market-data";
 import { CRYPTO_ASSETS, MARKET_TAGS, buildSources, type FeedSource, type NewsMarket } from "./sources";
 
 /** Cada feed se vuelve a leer como mucho cada media hora. */
@@ -20,7 +21,10 @@ const PARALLEL_AI = 3;
 const MAX_ATTEMPTS = 3;
 
 async function universe() {
-  const instruments = await prisma.market_instruments.findMany({ where: { active: true }, orderBy: { name: "asc" } });
+  // Solo bolsa: las criptomonedas tienen su propia lista (CRYPTO_ASSETS) con símbolos cortos (BTC, ETH…).
+  const instruments = (await prisma.market_instruments.findMany({ where: { active: true }, orderBy: { name: "asc" } })).filter(
+    (i) => !isCryptoMarket(i.market),
+  );
   const assets: AssetRef[] = [
     ...instruments.filter((i) => !i.is_index).map((i) => ({ symbol: i.symbol, name: i.name })),
     ...CRYPTO_ASSETS,

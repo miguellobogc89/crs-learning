@@ -11,6 +11,7 @@ import { LibraryPanel } from "./library-panel";
 import { PortfolioPanel, RulesPanel, UniversePanel } from "./portfolio-panel";
 import { SimulatorPanel } from "./simulator-panel";
 import { NewsPanel } from "./news-panel";
+import { CommitteeHistory, CommitteeToday } from "./committee-panel";
 import type { TradingTab } from "./tabs";
 
 export type Overview = Awaited<ReturnType<typeof getOverview>> & { canManage: boolean };
@@ -66,9 +67,22 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
             : "Pide a un administrador del espacio que pulse «Actualizar cotizaciones» en el panel de la izquierda."}
         </div>
       );
-    else if (data && tab === "hoy") body = <RecommendationsPanel data={data} onOpenChart={openChart} />;
+    else if (data && tab === "hoy")
+      body = (
+        <div className="space-y-8">
+          <CommitteeToday />
+          <section className="space-y-3 border-t border-slate-200 pt-6">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Señales técnicas de las figuras</h2>
+              <p className="text-xs text-slate-500">Lo que dicen solo los gráficos, sin noticias. El comité ya las tiene en cuenta; aquí las ves al detalle.</p>
+            </div>
+            <RecommendationsPanel data={data} onOpenChart={openChart} />
+          </section>
+        </div>
+      );
     else if (data && tab === "mercado") body = <MarketPanel data={data} symbol={symbol} onSymbol={pickSymbol} />;
   } else if (tab === "noticias") body = <NewsPanel />;
+  else if (tab === "comite") body = <CommitteeHistory />;
   else if (tab === "cartera") body = <PortfolioPanel onOpenChart={openChart} />;
   else if (tab === "simulador") body = <SimulatorPanel onOpenChart={openChart} />;
   else if (tab === "patrones") body = <LibraryPanel />;

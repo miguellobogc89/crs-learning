@@ -2253,7 +2253,7 @@ model trading_positions {
   symbol String
   direction String
   status String @default("pendiente")
-  quantity Int
+  quantity Float
   planned_entry Float
   entry_price Float?
   entry_day DateTime? @db.Date
@@ -2347,4 +2347,48 @@ model trading_ai_usage {
   input_tokens Int @default(0)
   output_tokens Int @default(0)
   @@id([day, purpose])
+}
+/// Reunión del comité de inversión (coordinador con IA) de un espacio: visión de mercado, contexto usado y respuesta.
+model trading_committee_runs {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String @db.Uuid
+  as_of DateTime @db.Date
+  status String @default("ok")
+  market_view String?
+  watchlist Json @default("[]")
+  context Json @default("{}")
+  raw Json?
+  error String?
+  model String?
+  created_by String?
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  proposals trading_proposals[]
+  @@index([workspace_id, created_at])
+}
+/// Propuesta del comité: comprar, vender, mantener o vigilar, con su porqué, sus pruebas y si pasó las reglas.
+model trading_proposals {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  run_id String @db.Uuid
+  workspace_id String @db.Uuid
+  symbol String
+  name String
+  market String
+  action String
+  conviction Int
+  horizon_days Int
+  price Float
+  stop Float?
+  target Float?
+  quantity Float?
+  rationale String
+  evidence Json @default("[]")
+  risks String?
+  status String @default("propuesta")
+  rejection String?
+  position_id String? @db.Uuid
+  decided_at DateTime? @db.Timestamptz(6)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  run trading_committee_runs @relation(fields: [run_id], references: [id], onDelete: Cascade)
+  @@index([workspace_id, created_at])
+  @@index([run_id])
 }

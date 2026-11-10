@@ -21,6 +21,7 @@ import {
   simulate,
 } from "@/lib/trading/service";
 import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
+import { decideProposal, getCommittee, runCommittee } from "@/lib/trading/committee/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ function missingTables(e: unknown) {
   return !!e && typeof e === "object" && (e as { code?: unknown }).code === "P2021";
 }
 const MIGRATION_HINT =
-  "Faltan tablas de trading en la base de datos: ejecuta las migraciones prisma/migrations/20261110080000_trading y 20261110120000_trading_news";
+  "Faltan tablas de trading en la base de datos: ejecuta las migraciones de prisma/migrations que empiezan por 20261110 (trading, trading_news y trading_committee)";
 const message = (e: unknown) => (e instanceof Error ? e.message.slice(0, 400) : "No se pudo completar la operación");
 
 export async function GET(req: Request, route: RouteContext) {
@@ -53,7 +54,8 @@ export async function GET(req: Request, route: RouteContext) {
     }
     if (action === "status") return NextResponse.json({ ...(await getStatus(ctx.workspaceId)), canManage: ctx.canManage });
     if (action === "news") return NextResponse.json({ ...(await listNews(normalizeNewsFilters(url.searchParams))), canManage: ctx.canManage });
-    if (action === "library") return NextResponse.json(await getLibrary());
+    if (action === "committee") return NextResponse.json({ ...(await getCommittee(ctx.workspaceId)), canManage: ctx.canManage });
+    if (action === "library") return NextResponse.json(await getLibrary(url.searchParams.get("market") === "crypto" ? "crypto" : "bolsa"));
     if (action === "account") return NextResponse.json(await accountDetail(ctx.workspaceId));
     if (action === "instruments") {
       const list = await listInstruments();
@@ -95,6 +97,14 @@ export async function POST(req: Request, route: RouteContext) {
     if (action === "news/sync") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede actualizar las noticias", 403);
       return NextResponse.json(await syncNews(45_000));
+    }
+    if (action === "committee/run") {
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede convocar al comité", 403);
+      return NextResponse.json(await runCommittee(ctx.workspaceId, ctx.userId));
+    }
+    if (action === "committee/decide") {
+      const decision = body.decision === "descartar" ? "descartar" : "ejecutar";
+      return NextResponse.json(await decideProposal(ctx.workspaceId, ctx.userId, String(body.proposalId ?? ""), decision));
     }
     if (action === "simulate") return NextResponse.json(await simulate(ctx.workspaceId, body));
     if (action === "order") return NextResponse.json(await placeOrder(ctx.workspaceId, ctx.userId, parseOrder(body)));

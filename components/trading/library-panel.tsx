@@ -17,10 +17,12 @@ export function LibraryPanel() {
   const [data, setData] = useState<Library | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [market, setMarket] = useState<"bolsa" | "crypto">("bolsa");
 
   useEffect(() => {
-    api<Library>("library").then(setData).catch((e) => setError(errorText(e)));
-  }, []);
+    api<Library>(`library?market=${market}`).then(setData).catch((e) => setError(errorText(e)));
+  }, [market]);
+  const where = market === "crypto" ? "en crypto" : "en el IBEX";
 
   if (error) return <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>;
   if (!data)
@@ -37,10 +39,24 @@ export function LibraryPanel() {
     <div className="space-y-4">
       <section className={panel}>
         <header className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">Qué ha funcionado en el IBEX 35</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-slate-900">Qué ha funcionado {market === "crypto" ? "en las criptomonedas" : "en el IBEX 35"}</h2>
+            <div className="flex border border-slate-200">
+              {(["bolsa", "crypto"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMarket(m)}
+                  className={`px-3 py-1 text-xs ${market === m ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+                >
+                  {m === "bolsa" ? "Bolsa" : "Crypto"}
+                </button>
+              ))}
+            </div>
+          </div>
           <p className="text-xs text-slate-500">
             {bt
-              ? `Backtest de ${int(bt.trades)} operaciones en ${bt.instruments} valores hasta el ${dayFmt(bt.asOf)}. Entrada en la apertura siguiente a la ruptura, stop y objetivo de cada figura, comisión del 0,1 % por lado y deslizamiento. Una operación a la vez por valor.`
+              ? `Backtest de ${int(bt.trades)} operaciones en ${bt.instruments} ${market === "crypto" ? "criptomonedas" : "valores"} hasta el ${dayFmt(bt.asOf)}. Entrada en la apertura siguiente a la ruptura, stop y objetivo de cada figura, comisión del 0,1 % por lado y deslizamiento. Una operación a la vez por valor.`
               : "Todavía no hay backtest: se calcula al terminar la primera descarga de cotizaciones."}
           </p>
         </header>
@@ -111,7 +127,7 @@ export function LibraryPanel() {
                 <p className="mt-1 text-sm leading-relaxed text-slate-700">{p.summary}</p>
                 {p.stats && p.stats.trades > 0 && (
                   <p className="mt-1 text-xs text-slate-500">
-                    {PATTERN_SHORT[p.key]} en el IBEX: {p.stats.trades} operaciones · {num(p.stats.winRate * 100, 0)} % de acierto ·{" "}
+                    {PATTERN_SHORT[p.key]} {where}: {p.stats.trades} operaciones · {num(p.stats.winRate * 100, 0)} % de acierto ·{" "}
                     <span className={tone(p.stats.avgR)}>{num(p.stats.avgR, 2)} R</span> de media
                   </p>
                 )}

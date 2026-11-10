@@ -3,7 +3,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { analyze, backtestSeries, statsByPattern, summarize } from "./backtest";
-import { fetchDailyCandles, IBEX35, INDEX_SYMBOL } from "./market-data";
+import { CRYPTO, CRYPTO_MARKET, fetchDailyCandles, IBEX35, INDEX_SYMBOL, isCryptoMarket } from "./market-data";
 import { DEFAULT_COSTS } from "./risk";
 import type { Candle, PatternKey, PatternStats, TradeOutcome } from "./types";
 
@@ -32,17 +32,28 @@ export function sessionInProgress(t: number, now = new Date()) {
   return new Date(t).toISOString().slice(0, 10) >= today && minutes < 18 * 60;
 }
 
-/** Siembra el IBEX 35 y su índice la primera vez. */
+/** La vela del día en curso de una crypto (mercado 24/7, la sesión cierra a las 00:00 UTC). */
+export function cryptoDayInProgress(t: number, now = new Date()) {
+  return new Date(t).toISOString().slice(0, 10) >= now.toISOString().slice(0, 10);
+}
+
+/** Siembra el IBEX 35 y su índice la primera vez, y las criptomonedas la primera vez que no hay ninguna. */
 export async function ensureUniverse() {
   const count = await prisma.market_instruments.count();
-  if (count > 0) return;
-  await prisma.market_instruments.createMany({
-    data: [
-      { symbol: INDEX_SYMBOL, name: "IBEX 35", sector: "Índice", market: "IBEX35", is_index: true },
-      ...IBEX35.map((x) => ({ symbol: x.symbol, name: x.name, sector: x.sector, market: "IBEX35" })),
-    ],
-    skipDuplicates: true,
-  });
+  if (count === 0)
+    await prisma.market_instruments.createMany({
+      data: [
+        { symbol: INDEX_SYMBOL, name: "IBEX 35", sector: "Índice", market: "IBEX35", is_index: true },
+        ...IBEX35.map((x) => ({ symbol: x.symbol, name: x.name, sector: x.sector, market: "IBEX35" })),
+      ],
+      skipDuplicates: true,
+    });
+  const crypto = await prisma.market_instruments.count({ where: { market: CRYPTO_MARKET } });
+  if (crypto === 0)
+    await prisma.market_instruments.createMany({
+      data: CRYPTO.map((x) => ({ symbol: x.symbol, name: x.name, sector: x.sector, market: CRYPTO_MARKET, currency: "EUR" })),
+      skipDuplicates: true,
+    });
 }
 
 async function saveCandles(instrumentId: string, candles: Candle[]) {
@@ -94,7 +105,8 @@ export async function syncMarket(budgetMs = 35_000, now = new Date()): Promise<M
             : undefined;
           const r = await fetchDailyCandles(inst.symbol, { since, years: HISTORY_YEARS });
           // La sesión en curso no se guarda: su vela aún no es definitiva y la cartera la daría por vista.
-          r.candles = r.candles.filter((c) => !sessionInProgress(c.t, now));
+          const crypto = isCryptoMarket(inst.market);
+          r.candles = r.candles.filter((c) => !(crypto ? cryptoDayInProgress(c.t, now) : sessionInProgress(c.t, now)));
           if (r.candles.length) await saveCandles(inst.id, r.candles);
           const last = r.candles[r.candles.length - 1];
           await prisma.market_instruments.update({
@@ -152,14 +164,23 @@ export async function loadRecent(instrumentId: string, limit: number) {
   return rows.reverse().map(toCandle);
 }
 
+export type MarketStats = {
+  instruments: number;
+  trades: number;
+  byPattern: Partial<Record<PatternKey, PatternStats>>;
+  overall: PatternStats | null;
+};
+
 export type BacktestSnapshot = {
   asOf: string;
+  /** Estadísticas de las criptomonedas (las de nivel superior son las de la bolsa). */
+  crypto?: MarketStats;
   instruments: number;
   trades: number;
   byPattern: Partial<Record<PatternKey, PatternStats>>;
   overall: PatternStats | null;
   perSymbol: Record<string, Partial<Record<PatternKey, { trades: number; winRate: number; avgR: number }>>>;
-  recent: (TradeOutcome & { symbol: string; entryDay: string; exitDay: string })[];
+  recent: (TradeOutcome & { symbol: string; market: string; entryDay: string; exitDay: string })[];
   createdAt: string;
 };
 
@@ -178,31 +199,45 @@ export async function runBacktest(force = false): Promise<BacktestSnapshot | nul
   }
   const series = await loadSeries(instruments.map((i) => i.id));
   const all: TradeOutcome[] = [];
+  const allCrypto: TradeOutcome[] = [];
+  let nStocks = 0;
+  let nCrypto = 0;
   const perSymbol: BacktestSnapshot["perSymbol"] = {};
   const recent: BacktestSnapshot["recent"] = [];
   for (const inst of instruments) {
     const c = series.get(inst.id);
+    const crypto = isCryptoMarket(inst.market);
     if (!c || c.length < 250) continue;
     const trades = backtestSeries(c, DEFAULT_COSTS, analyze(c));
-    all.push(...trades);
+    if (crypto) {
+      allCrypto.push(...trades);
+      nCrypto++;
+    } else {
+      all.push(...trades);
+      nStocks++;
+    }
     const s = statsByPattern(trades);
     perSymbol[inst.symbol] = Object.fromEntries(
       Object.entries(s).map(([k, v]) => [k, { trades: v!.trades, winRate: v!.winRate, avgR: v!.avgR }]),
     );
     for (const t of trades.slice(-6))
-      recent.push({ ...t, symbol: inst.symbol, entryDay: dayKey(new Date(c[t.entryIndex].t)), exitDay: dayKey(new Date(c[t.exitIndex].t)) });
+      recent.push({ ...t, symbol: inst.symbol, market: inst.market, entryDay: dayKey(new Date(c[t.entryIndex].t)), exitDay: dayKey(new Date(c[t.exitIndex].t)) });
   }
   recent.sort((a, b) => b.exitDay.localeCompare(a.exitDay));
-  const byPattern = statsByPattern(all);
-  const overallRaw = summarize(all, "hch");
   const snapshot = {
     asOf: dayKey(lastDay),
-    instruments: Object.keys(perSymbol).length,
+    instruments: nStocks,
     trades: all.filter((t) => t.reason !== "open").length,
-    byPattern,
-    overall: all.length ? overallRaw : null,
+    byPattern: statsByPattern(all),
+    overall: all.length ? summarize(all, "hch") : null,
+    crypto: {
+      instruments: nCrypto,
+      trades: allCrypto.filter((t) => t.reason !== "open").length,
+      byPattern: statsByPattern(allCrypto),
+      overall: allCrypto.length ? summarize(allCrypto, "hch") : null,
+    },
     perSymbol,
-    recent: recent.slice(0, 60),
+    recent: recent.slice(0, 80),
   };
   const row = await prisma.market_backtests.create({
     data: {

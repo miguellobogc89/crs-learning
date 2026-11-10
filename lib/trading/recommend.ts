@@ -79,6 +79,14 @@ export type InstrumentInput = {
   candles: Candle[];
   ind: IndicatorBundle;
   detections: Detection[];
+  /** Paso mínimo de cantidad (1 en acciones, fracciones en crypto). */
+  lotStep?: number;
+  /** Cómo se llama la unidad: «acciones» o el símbolo de la crypto. */
+  unit?: string;
+  /** Dónde se midió el historial («el IBEX», «las crypto»). */
+  where?: string;
+  /** Nombre de la referencia del mercado («IBEX 35», «Bitcoin»). */
+  benchmark?: string;
 };
 
 /**
@@ -95,6 +103,8 @@ export function recommendForInstrument(
 ): Recommendation[] {
   const c = inst.candles;
   const last = at ?? c.length - 1;
+  const where = inst.where ?? "el IBEX";
+  const bench = inst.benchmark ?? "IBEX 35";
   if (last < 30) return [];
   const close = c[last].c;
   const out: Recommendation[] = [];
@@ -125,7 +135,7 @@ export function recommendForInstrument(
     let edgeScore = 50;
     if (st && st.trades >= 5) {
       edgeScore = clamp(50 + edge * 150);
-      const line = `Historial en el IBEX: ${st.trades} operaciones, ${(st.winRate * 100).toFixed(0)} % de acierto, ${st.avgR >= 0 ? "+" : ""}${st.avgR.toFixed(2)} R de media`;
+      const line = `Historial en ${where}: ${st.trades} operaciones, ${(st.winRate * 100).toFixed(0)} % de acierto, ${st.avgR >= 0 ? "+" : ""}${st.avgR.toFixed(2)} R de media`;
       (edge > 0.05 ? pros : cons).push(line);
     } else cons.push("Pocas operaciones en el historial para medir esta figura");
 
@@ -141,10 +151,10 @@ export function recommendForInstrument(
     let regimeScore = 60;
     if (regime === (long ? "alcista" : "bajista")) {
       regimeScore = 100;
-      pros.push(`Mercado (IBEX 35) en fase ${regime}`);
+      pros.push(`Mercado (${bench}) en fase ${regime}`);
     } else if (regime === (long ? "bajista" : "alcista")) {
       regimeScore = 20;
-      cons.push(`Mercado (IBEX 35) en fase ${regime}: va en contra`);
+      cons.push(`Mercado (${bench}) en fase ${regime}: va en contra`);
     }
     const rrScore = clamp(((rr - 1) / 2) * 100);
     if (rr >= 2) pros.push(`Beneficio/riesgo de ${rr.toFixed(1)} a 1`);
@@ -158,7 +168,7 @@ export function recommendForInstrument(
     const provenLoser = !!st && st.trades >= MIN_TRADES_FOR_VETO && st.avgR < 0;
     if (provenLoser) {
       score = Math.min(score, 45);
-      cons.unshift(`Esta figura ha perdido dinero en el IBEX (${st!.trades} operaciones, ${st!.avgR.toFixed(2)} R de media): no se recomienda entrar`);
+      cons.unshift(`Esta figura ha perdido dinero en ${where} (${st!.trades} operaciones, ${st!.avgR.toFixed(2)} R de media): no se recomienda entrar`);
     }
     if (r !== null && (long ? r > 75 : r < 25)) {
       score -= 8;
@@ -188,6 +198,7 @@ export function recommendForInstrument(
             entry,
             stop,
             cost: account.cost,
+            step: inst.lotStep,
           })
         : null;
 
@@ -218,8 +229,8 @@ export function recommendForInstrument(
       history: st ? { trades: st.trades, winRate: st.winRate, avgR: st.avgR } : null,
       maxHoldDays: maxHoldBars(d),
       plan: provenLoser && action !== "cerrar" && action !== "evitar"
-        ? `No recomendada: el ${PATTERN_NAMES[d.pattern].toLowerCase()} ha dado pérdidas en el IBEX (${st!.trades} operaciones, ${(st!.winRate * 100).toFixed(0)} % de acierto, ${st!.avgR.toFixed(2)} R de media). Aunque la figura esté bien formada, la estadística no acompaña.`
-        : planText(action, inst.name, d, entry, stop, target, rr, sizing, account, strong),
+        ? `No recomendada: el ${PATTERN_NAMES[d.pattern].toLowerCase()} ha dado pérdidas en ${where} (${st!.trades} operaciones, ${(st!.winRate * 100).toFixed(0)} % de acierto, ${st!.avgR.toFixed(2)} R de media). Aunque la figura esté bien formada, la estadística no acompaña.`
+        : planText(action, inst.name, d, entry, stop, target, rr, sizing, account, strong, inst.unit ?? "acciones"),
       vetoed: provenLoser,
     });
   }
@@ -237,13 +248,15 @@ function planText(
   s: Sizing | null,
   account: AccountView,
   strong: boolean,
+  unit: string,
 ) {
   const long = d.direction === "long";
+  const qty = (q: number) => new Intl.NumberFormat("es-ES", { maximumFractionDigits: q < 1 ? 6 : q < 100 ? 4 : 0 }).format(q);
   const weak = strong ? "" : " Señal por debajo de tu umbral de puntuación: mejor solo observarla.";
   if (action === "cerrar")
     return `Tienes posición en ${name} y acaba de aparecer un ${PATTERN_NAMES[d.pattern].toLowerCase()} en contra. Plantéate cerrarla o subir el stop a ${eur(stop)}.`;
   if (action === "evitar")
-    return `Señal bajista confirmada en ${name} (${PATTERN_NAMES[d.pattern].toLowerCase()}). No abras compras; si ya tienes acciones, valora venderlas. Objetivo de la caída: ${eur(target)}. Si cierra por encima de ${eur(stop)}, la señal se anula.${weak}`;
+    return `Señal bajista confirmada en ${name} (${PATTERN_NAMES[d.pattern].toLowerCase()}). No abras compras; si ya tienes, valora vender. Objetivo de la caída: ${eur(target)}. Si cierra por encima de ${eur(stop)}, la señal se anula.${weak}`;
   if (!s || s.quantity === 0)
     return `Señal en ${name}, pero con tu efectivo y tus límites de riesgo no sale un tamaño mínimo de posición.`;
   const verb = long ? "Compra" : "Vende en corto";
@@ -251,8 +264,8 @@ function planText(
   const gain = s.quantity * Math.abs(target - entry);
   const head =
     action === "vigilar"
-      ? `Si ${name} cierra ${long ? "por encima" : "por debajo"} de ${eur(entry)}: ${verb.toLowerCase()} ${s.quantity} acciones (≈ ${eur0(s.notional)}).`
-      : `${verb} ${s.quantity} acciones de ${name} (≈ ${eur0(s.notional)}) a la apertura de la próxima sesión.`;
+      ? `Si ${name} cierra ${long ? "por encima" : "por debajo"} de ${eur(entry)}: ${verb.toLowerCase()} ${qty(s.quantity)} ${unit} (≈ ${eur0(s.notional)}).`
+      : `${verb} ${qty(s.quantity)} ${unit === "acciones" ? `acciones de ${name}` : unit} (≈ ${eur0(s.notional)}) a la apertura de la próxima sesión.`;
   return (
     `${head} Stop en ${eur(stop)}: si salta pierdes ≈ ${eur0(risk)} (${((risk / account.equity) * 100).toFixed(1)} % de la cartera). ` +
     `Objetivo en ${eur(target)}: ≈ +${eur0(gain)} (${rr.toFixed(1)} a 1).` +

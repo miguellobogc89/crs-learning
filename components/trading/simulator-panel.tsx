@@ -8,7 +8,7 @@ import { PATTERN_SHORT, api, dayFmt, errorText, eur, eur0, field, ghost, int, nu
 import { refreshTrading } from "./navigation";
 
 type Detail = Awaited<ReturnType<typeof accountDetail>>;
-type Response = { months: number; result: SimResult };
+type Response = { months: number; market: "bolsa" | "crypto"; result: SimResult };
 
 const PERIODS = [
   { months: 1, label: "1 mes" },
@@ -29,6 +29,7 @@ const REASON: Record<string, string> = {
 };
 
 type Form = {
+  market: "bolsa" | "crypto";
   months: number;
   capital: number;
   riskPct: number;
@@ -40,7 +41,7 @@ type Form = {
   patterns: string[];
 };
 
-function CompareChart({ curve, capital }: { curve: SimResult["curve"]; capital: number }) {
+function CompareChart({ curve, capital, bench }: { curve: SimResult["curve"]; capital: number; bench: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const w = 900;
   const h = 260;
@@ -72,7 +73,7 @@ function CompareChart({ curve, capital }: { curve: SimResult["curve"]; capital: 
         </span>
         {hp.benchmark !== null && (
           <span className="flex items-center gap-1.5">
-            <i className="inline-block h-0.5 w-4 bg-slate-400" /> Comprar el IBEX y olvidarse <b className="tabular-nums text-slate-900">{eur0(hp.benchmark)}</b>
+            <i className="inline-block h-0.5 w-4 bg-slate-400" /> Comprar {bench} y olvidarse <b className="tabular-nums text-slate-900">{eur0(hp.benchmark)}</b>
           </span>
         )}
         <span>Invertido {eur0(hp.invested)}</span>
@@ -144,6 +145,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
       .then((d) => {
         const s = d.summary.settings;
         const f: Form = {
+          market: "bolsa",
           months: 12,
           capital: Math.round(d.summary.initialCapital),
           riskPct: s.riskPerTradePct,
@@ -182,6 +184,9 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
   };
 
   const r = res?.result;
+  const simMarket = res?.market ?? form?.market ?? "bolsa";
+  const bench = simMarket === "crypto" ? "Bitcoin" : "el IBEX 35";
+  const benchShort = simMarket === "crypto" ? "Bitcoin" : "IBEX 35";
   const verdict = useMemo(() => {
     if (!r) return null;
     const gained = r.finalEquity - r.capital;
@@ -202,6 +207,25 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
     <div className="space-y-4">
       <section className={panel}>
         <div className="flex flex-wrap items-end gap-4 px-4 py-4">
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-600">Mercado</div>
+            <div className="flex border border-slate-200">
+              {(["bolsa", "crypto"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => {
+                    const f = { ...form, market: m };
+                    setForm(f);
+                    void run(f);
+                  }}
+                  className={`px-3 py-2 text-sm ${form.market === m ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+                >
+                  {m === "bolsa" ? "Bolsa" : "Crypto"}
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <div className="mb-1 text-xs font-medium text-slate-600">Empezando hace</div>
             <div className="flex border border-slate-200">
@@ -297,7 +321,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
               {r.benchmarkPct !== null && (
                 <>
                   {" "}
-                  Comprando el IBEX 35 ese día y sin tocarlo habrías hecho <b className={tone(r.benchmarkPct)}>{pct(r.benchmarkPct)}</b>
+                  Comprando {bench} ese día y sin tocarlo habrías hecho <b className={tone(r.benchmarkPct)}>{pct(r.benchmarkPct)}</b>
                   {verdict.vs !== null && (
                     <>
                       : la app {verdict.vs >= 0 ? "lo habría batido" : "habría quedado por debajo"} por{" "}
@@ -318,7 +342,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
           <div className="grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-3 lg:grid-cols-6">
             {[
               ["Resultado", pct(r.returnPct), eur0(r.finalEquity - r.capital), tone(r.returnPct)],
-              ["IBEX 35", pct(r.benchmarkPct), "comprar y mantener", tone(r.benchmarkPct)],
+              [benchShort, pct(r.benchmarkPct), "comprar y mantener", tone(r.benchmarkPct)],
               ["Operaciones", int(r.trades), `${r.openTrades} abiertas`, "text-slate-500"],
               ["Acierto", r.trades ? `${num(r.winRate * 100, 0)} %` : "—", `R medio ${num(r.avgR, 2)}`, tone(r.avgR)],
               ["Peor caída", `−${num(r.maxDrawdownPct, 1)} %`, r.maxDrawdownDay ? `el ${dayFmt(r.maxDrawdownDay)}` : "", "text-red-700"],
@@ -326,7 +350,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
             ].map(([label, value, sub, cls]) => (
               <div key={label} className="bg-white px-4 py-3">
                 <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-                <div className={`mt-1 text-lg font-semibold tabular-nums ${label === "Resultado" || label === "IBEX 35" ? cls : "text-slate-900"}`}>{value}</div>
+                <div className={`mt-1 text-lg font-semibold tabular-nums ${label === "Resultado" || label === benchShort ? cls : "text-slate-900"}`}>{value}</div>
                 <div className={`text-xs ${cls}`}>{sub}</div>
               </div>
             ))}
@@ -336,7 +360,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
             <header className="border-b border-slate-200 px-4 py-3">
               <h3 className="text-sm font-semibold text-slate-900">Tu dinero día a día</h3>
             </header>
-            <CompareChart curve={r.curve} capital={r.capital} />
+            <CompareChart curve={r.curve} capital={r.capital} bench={bench} />
           </section>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -349,7 +373,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
                   <div key={m.month} className="bg-white px-3 py-2">
                     <div className="text-xs capitalize text-slate-500">{monthLabel(m.month)}</div>
                     <div className={`font-semibold tabular-nums ${tone(m.returnPct)}`}>{pct(m.returnPct)}</div>
-                    {m.benchmarkPct !== null && <div className="text-[11px] tabular-nums text-slate-400">IBEX {pct(m.benchmarkPct)}</div>}
+                    {m.benchmarkPct !== null && <div className="text-[11px] tabular-nums text-slate-400">{benchShort} {pct(m.benchmarkPct)}</div>}
                   </div>
                 ))}
               </div>
@@ -407,7 +431,7 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
                       <th className={th}>Entrada</th>
                       <th className={th}>Salida</th>
                       <th className={th}>Motivo</th>
-                      <th className={`${th} text-right`}>Acciones</th>
+                      <th className={`${th} text-right`}>Cantidad</th>
                       <th className={`${th} text-right`}>Resultado</th>
                       <th className={`${th} text-right`}>R</th>
                     </tr>
@@ -452,8 +476,8 @@ export function SimulatorPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
             Cómo se calcula: la app recorre el pasado sesión a sesión. Cada tarde mira solo los datos disponibles hasta ese día,
             elige las señales igual que hoy y compra a la apertura del día siguiente, con comisiones y deslizamiento. El
             historial de cada figura solo cuenta operaciones ya terminadas en ese momento. Limitación: se usan las empresas que
-            están hoy en el índice, y eso tiende a favorecer un poco el resultado (las que cayeron mucho y salieron del IBEX no
-            aparecen).
+            están hoy en el índice o en la lista de criptomonedas, y eso tiende a favorecer un poco el resultado (las que
+            cayeron mucho y salieron no aparecen).
           </p>
         </div>
       )}
@@ -472,7 +496,7 @@ function TradeHighlight({ title, t, onOpenChart }: { title: string; t: SimTrade;
         <span className={`text-lg font-semibold tabular-nums ${tone(t.pnl)}`}>{eur0(t.pnl)}</span>
       </div>
       <p className="text-sm text-slate-600">
-        {PATTERN_SHORT[t.pattern]} · {int(t.quantity)} acciones de {eur(t.entryPrice)} a {eur(t.exitPrice)} ({dayFmt(t.entryDay)} → {t.exitDay ? dayFmt(t.exitDay) : "hoy"}) ·{" "}
+        {PATTERN_SHORT[t.pattern]} · {int(t.quantity)} {/-EUR$/.test(t.symbol) ? t.symbol.replace(/-EUR$/, "") : "acciones"} de {eur(t.entryPrice)} a {eur(t.exitPrice)} ({dayFmt(t.entryDay)} → {t.exitDay ? dayFmt(t.exitDay) : "hoy"}) ·{" "}
         {REASON[t.reason] ?? t.reason}
       </p>
     </section>

@@ -45,6 +45,34 @@ export const IBEX35: { symbol: string; name: string; sector: string }[] = [
   { symbol: "UNI.MC", name: "Unicaja", sector: "Banca" },
 ];
 
+/** Mercado de las criptomonedas en la tabla de instrumentos. */
+export const CRYPTO_MARKET = "CRYPTO";
+/** Referencia del mercado crypto para la tendencia general (como el IBEX para la bolsa). */
+export const CRYPTO_BENCHMARK = "BTC-EUR";
+
+/** Criptomonedas con cotización en euros (tickers de Yahoo). Las stablecoins no se siguen. */
+export const CRYPTO: { symbol: string; name: string; sector: string }[] = [
+  { symbol: "BTC-EUR", name: "Bitcoin", sector: "Crypto" },
+  { symbol: "ETH-EUR", name: "Ethereum", sector: "Crypto" },
+  { symbol: "SOL-EUR", name: "Solana", sector: "Crypto" },
+  { symbol: "XRP-EUR", name: "XRP", sector: "Crypto" },
+  { symbol: "BNB-EUR", name: "BNB", sector: "Crypto" },
+  { symbol: "ADA-EUR", name: "Cardano", sector: "Crypto" },
+  { symbol: "DOGE-EUR", name: "Dogecoin", sector: "Crypto" },
+  { symbol: "AVAX-EUR", name: "Avalanche", sector: "Crypto" },
+  { symbol: "DOT-EUR", name: "Polkadot", sector: "Crypto" },
+  { symbol: "LINK-EUR", name: "Chainlink", sector: "Crypto" },
+  { symbol: "LTC-EUR", name: "Litecoin", sector: "Crypto" },
+  { symbol: "TRX-EUR", name: "Tron", sector: "Crypto" },
+];
+
+export const isCryptoMarket = (market: string | null | undefined) => market === CRYPTO_MARKET;
+/** Símbolo con el que las noticias etiquetan un instrumento (BTC-EUR → BTC). */
+export const newsSymbolOf = (symbol: string, market?: string | null) =>
+  isCryptoMarket(market) || /-EUR$/.test(symbol) ? symbol.replace(/-EUR$/, "") : symbol;
+/** Paso mínimo de cantidad: acciones enteras; crypto en fracciones. */
+export const lotStepOf = (market: string | null | undefined) => (isCryptoMarket(market) ? 0.000001 : 1);
+
 export type ChartResponse = {
   symbol: string;
   name: string | null;

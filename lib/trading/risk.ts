@@ -37,6 +37,8 @@ export type SizingInput = {
   entry: number;
   stop: number;
   cost: CostModel;
+  /** Paso mínimo de cantidad (1 = acciones enteras; 0,000001 en crypto). */
+  step?: number;
 };
 
 export type Sizing = {
@@ -53,16 +55,18 @@ export function positionSize(s: SizingInput): Sizing {
   const riskPerShare = Math.abs(s.entry - s.stop);
   const empty: Sizing = { quantity: 0, notional: 0, riskAmount: 0, riskPerShare, commission: 0, limitedBy: null };
   if (!(riskPerShare > 0) || !(s.entry > 0) || s.equity <= 0) return empty;
+  const step = s.step && s.step > 0 ? s.step : 1;
+  const floorStep = (x: number) => roundQty(Math.floor(x / step + 1e-9) * step, step);
   const budgetRisk = (s.equity * s.riskPct) / 100;
-  let qty = Math.floor(budgetRisk / riskPerShare);
+  let qty = floorStep(budgetRisk / riskPerShare);
   let limitedBy: Sizing["limitedBy"] = "riesgo";
-  const maxByPosition = Math.floor((s.equity * s.maxPositionPct) / 100 / s.entry);
+  const maxByPosition = floorStep((s.equity * s.maxPositionPct) / 100 / s.entry);
   if (maxByPosition < qty) {
     qty = maxByPosition;
     limitedBy = "tamaño máximo";
   }
   // Deja margen para la comisión.
-  const maxByCash = Math.floor(Math.max(0, s.cash - commission(s.cash, s.cost)) / s.entry);
+  const maxByCash = floorStep(Math.max(0, s.cash - commission(s.cash, s.cost)) / s.entry);
   if (maxByCash < qty) {
     qty = maxByCash;
     limitedBy = "efectivo";
@@ -77,4 +81,11 @@ export function positionSize(s: SizingInput): Sizing {
     commission: commission(notional, s.cost),
     limitedBy,
   };
+}
+
+/** Redondea una cantidad a su paso, sin restos de coma flotante. */
+export function roundQty(q: number, step = 1) {
+  if (step >= 1) return Math.round(q);
+  const decimals = Math.min(10, Math.max(0, Math.round(-Math.log10(step))));
+  return Number(q.toFixed(decimals));
 }

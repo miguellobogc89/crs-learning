@@ -62,10 +62,14 @@ export function MarketPanel({
     };
   }, [current, reload]);
 
+  const currentMarket = data.market.find((m) => m.symbol === current)?.market ?? "bolsa";
+  const [listMarket, setListMarket] = useState<"bolsa" | "crypto">(currentMarket);
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return data.market.filter((m) => !s || m.name.toLowerCase().includes(s) || m.symbol.toLowerCase().includes(s));
-  }, [data.market, q]);
+    return data.market.filter(
+      (m) => (s ? true : m.market === listMarket) && (!s || m.name.toLowerCase().includes(s) || m.symbol.toLowerCase().includes(s)),
+    );
+  }, [data.market, q, listMarket]);
 
   const det: ChartDetection | null = inst?.detections[selected] ?? null;
   const lastClose = inst?.candles[inst.candles.length - 1]?.c ?? null;
@@ -89,10 +93,22 @@ export function MarketPanel({
   return (
     <div className="grid gap-4 xl:grid-cols-[340px_1fr]">
       <aside className={`${panel} flex max-h-[860px] flex-col`}>
-        <div className="border-b border-slate-200 p-2">
+        <div className="space-y-2 border-b border-slate-200 p-2">
+          <div className="grid grid-cols-2 border border-slate-200">
+            {(["bolsa", "crypto"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setListMarket(m)}
+                className={`py-1.5 text-sm ${listMarket === m ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+              >
+                {m === "bolsa" ? "Bolsa" : "Crypto"}
+              </button>
+            ))}
+          </div>
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <input className={`${field} w-full pl-8`} placeholder="Buscar valor" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input className={`${field} w-full pl-8`} placeholder="Buscar" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">

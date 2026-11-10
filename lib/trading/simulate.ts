@@ -18,6 +18,8 @@ export type SimSeries = {
   analysis: Analysis;
   /** Operaciones del backtest de este valor (para el historial de cada figura). */
   trades: TradeOutcome[];
+  lotStep?: number;
+  unit?: string;
 };
 
 export type SimSettings = {
@@ -323,7 +325,13 @@ export function simulatePortfolio(input: {
       const dets = byConfirm[k].get(i);
       if (!dets) continue;
       const s = series[k];
-      for (const r of recommendForInstrument({ symbol: s.symbol, name: s.name, candles: s.candles, ind: s.analysis.ind, detections: dets }, snap, regime, view, i))
+      for (const r of recommendForInstrument(
+        { symbol: s.symbol, name: s.name, candles: s.candles, ind: s.analysis.ind, detections: dets, lotStep: s.lotStep, unit: s.unit },
+        snap,
+        regime,
+        view,
+        i,
+      ))
         recs.push({ r, k });
     }
     const order = rankRecommendations(recs.map((x) => x.r));

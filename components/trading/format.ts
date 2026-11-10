@@ -21,7 +21,9 @@ export const num = (v: number | null | undefined, digits = 2) =>
 export const pct = (v: number | null | undefined, digits = 1, sign = true) =>
   v === null || v === undefined || !Number.isFinite(v) ? "—" : `${sign && v > 0 ? "+" : ""}${num(v, digits)} %`;
 
-export const int = (v: number) => new Intl.NumberFormat("es-ES").format(v);
+/** Enteros y cantidades (las de crypto llevan decimales). */
+export const int = (v: number) =>
+  new Intl.NumberFormat("es-ES", { maximumFractionDigits: Number.isInteger(v) ? 0 : Math.abs(v) < 1 ? 6 : Math.abs(v) < 100 ? 4 : 2 }).format(v);
 
 export const dayFmt = (d: string | null | undefined) =>
   d ? new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", year: "2-digit", timeZone: "UTC" }).format(new Date(d)) : "—";

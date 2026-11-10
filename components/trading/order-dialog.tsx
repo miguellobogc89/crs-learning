@@ -36,6 +36,7 @@ export function OrderDialog({
   onClose: () => void;
   onDone: (status: string) => void;
 }) {
+  const crypto = /-EUR$/.test(draft.symbol);
   const [quantity, setQuantity] = useState(String(draft.quantity || ""));
   const [stop, setStop] = useState(String(draft.stop.toFixed(3)));
   const [target, setTarget] = useState(String(draft.target.toFixed(3)));
@@ -44,7 +45,8 @@ export function OrderDialog({
   const [error, setError] = useState<string | null>(null);
 
   const calc = useMemo(() => {
-    const q = Math.floor(Number(quantity.replace(",", ".")));
+    const raw = Number(quantity.replace(",", "."));
+    const q = crypto ? Math.floor(raw * 1e6) / 1e6 : Math.floor(raw);
     const s = Number(stop.replace(",", "."));
     const t = Number(target.replace(",", "."));
     const p = draft.reference;
@@ -53,7 +55,7 @@ export function OrderDialog({
     const risk = q > 0 && s > 0 ? q * Math.abs(p - s) + 2 * fee : 0;
     const reward = q > 0 && t > 0 ? q * Math.abs(t - p) - 2 * fee : 0;
     return { q, s, t, notional, fee, risk, reward, rr: risk > 0 ? reward / risk : 0 };
-  }, [quantity, stop, target, draft.reference, commissionMin, commissionPct]);
+  }, [quantity, stop, target, draft.reference, commissionMin, commissionPct, crypto]);
 
   const submit = async () => {
     setSaving(true);
@@ -99,8 +101,8 @@ export function OrderDialog({
         </div>
         <div className="grid grid-cols-3 gap-3 px-5 py-4">
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-600">Acciones</span>
-            <input className={`${field} w-full tabular-nums`} value={quantity} onChange={(e) => setQuantity(e.target.value)} inputMode="numeric" />
+            <span className="mb-1 block text-xs font-medium text-slate-600">{crypto ? "Cantidad" : "Acciones"}</span>
+            <input className={`${field} w-full tabular-nums`} value={quantity} onChange={(e) => setQuantity(e.target.value)} inputMode="decimal" />
           </label>
           <label className="text-sm">
             <span className="mb-1 block text-xs font-medium text-red-700">Stop</span>

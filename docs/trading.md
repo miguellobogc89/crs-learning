@@ -49,3 +49,22 @@ Datos de mercado globales (`market_*`); cartera por espacio (`trading_*`, una po
   sobre en el cron diario.
 - Variables opcionales: `TRADING_AI_PROVIDER` (openai), `TRADING_AI_FAST_MODEL`, `TRADING_AI_SMART_MODEL`,
   `TRADING_AI_DAILY_CALLS` (tope diario, 300 por defecto).
+
+## Crypto
+
+- 12 criptomonedas en euros (`CRYPTO` en `market-data.ts`), mercado `CRYPTO` en `market_instruments`; se siembran solas.
+- Velas diarias 24/7 (la del día en curso no se guarda hasta las 00:00 UTC), cantidades fraccionarias,
+  backtest y estadísticas propios (`crypto` en `market_backtests.stats`), Bitcoin como referencia del mercado.
+- Gráficos, biblioteca y simulador tienen selector Bolsa / Crypto.
+
+## Comité de inversión (coordinador)
+
+- Migración: `prisma/migrations/20261110150000_trading_committee/migration.sql` (también pasa `trading_positions.quantity` a decimal).
+- `lib/trading/committee/service.ts` reúne para cada activo candidato (posiciones, señales, noticias importantes,
+  BTC y ETH; máx. 24) técnico, figuras con su historial, noticias de 72 h y la cartera, y consulta al modelo bueno
+  (`TRADING_AI_SMART_MODEL`, esfuerzo `TRADING_AI_SMART_EFFORT`, «low» por defecto para no pasar del minuto).
+- `committee/prompt.ts` aplica reglas duras a la respuesta: pruebas citadas que existan, stop y objetivo coherentes,
+  distancia del stop (0,5 ATR – 15 % en bolsa, 25 % en crypto), beneficio/riesgo ≥ 1,5, máximo de posiciones,
+  tamaño por riesgo fijo. Lo que no pasa se guarda como «rechazada» con el motivo.
+- Se reúne solo al entrar en «Qué hacer hoy» si aún no lo ha hecho ese día (o con «Volver a convocar»).
+- `committee/outcome.ts` mide cada propuesta como si se hubiera seguido; «Historial del comité» lo compara con el mercado.

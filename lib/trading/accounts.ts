@@ -5,7 +5,8 @@ import type { trading_accounts, trading_positions } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PATTERN_LIBRARY } from "./library";
 import { cashDelta, fillAtOpen, marketValue, realizedPnl, stepPosition } from "./paper";
-import { closeSide, commission, openSide, slipped, type CostModel } from "./risk";
+import { isCryptoMarket, lotStepOf } from "./market-data";
+import { closeSide, commission, openSide, roundQty, slipped, type CostModel } from "./risk";
 import { dayDate, dayKey, loadSeries } from "./sync";
 import type { Direction, PatternKey } from "./types";
 
@@ -294,14 +295,14 @@ export type OrderInput = {
   score?: number | null;
   maxHoldDays?: number | null;
   notes?: string | null;
-  source?: "manual" | "auto";
+  source?: "manual" | "auto" | "comite";
 };
 
 export function parseOrder(body: Record<string, unknown>): OrderInput {
   const symbol = typeof body.symbol === "string" ? body.symbol.trim().toUpperCase().slice(0, 20) : "";
   if (!symbol) throw new Error("Falta el valor");
   const direction = body.direction === "short" ? "short" : "long";
-  const quantity = Math.floor(Number(body.quantity));
+  const quantity = Number(body.quantity);
   const stop = Number(body.stop);
   const target = Number(body.target);
   if (!(quantity > 0 && quantity < 10_000_000)) throw new Error("Cantidad no válida");
@@ -321,13 +322,17 @@ export function parseOrder(body: Record<string, unknown>): OrderInput {
   };
 }
 
-export async function placeOrder(workspaceId: string, userId: string | null, o: OrderInput) {
+export async function placeOrder(workspaceId: string, userId: string | null, order: OrderInput) {
+  let o = order;
   const a = await ensureAccount(workspaceId);
   const cost = costOf(a);
   if (o.direction === "short" && !a.allow_short)
     throw new Error("Las posiciones cortas están desactivadas en los ajustes de la cartera");
   const inst = await prisma.market_instruments.findUnique({ where: { symbol: o.symbol } });
   if (!inst) throw new Error(`No sigo el valor ${o.symbol}`);
+  // Acciones enteras en bolsa; fracciones en crypto.
+  o = { ...o, quantity: roundQty(isCryptoMarket(inst.market) ? o.quantity : Math.floor(o.quantity), lotStepOf(inst.market)) };
+  if (!(o.quantity > 0)) throw new Error("Cantidad no válida");
   const last = (await latestCloses([inst.id])).get(inst.id);
   if (!last) throw new Error("Todavía no hay cotizaciones de este valor");
   const long = o.direction === "long";

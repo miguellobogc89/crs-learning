@@ -8,6 +8,7 @@ import { api, dayFmt, errorText, eur0, pct, tone } from "./format";
 
 export type TradingStatus = {
   regime: "alcista" | "bajista" | "lateral";
+  cryptoRegime: "alcista" | "bajista" | "lateral" | null;
   asOf: string | null;
   instruments: number;
   instrumentsWithData: number;
@@ -100,7 +101,6 @@ export function TradingNavigation() {
     }
   }, [status, sync]);
 
-  const regime = status ? REGIME[status.regime] : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -153,14 +153,21 @@ export function TradingNavigation() {
             )}
           </div>
           <div className="border-t border-slate-100 pt-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Mercado (IBEX 35)</div>
-            {regime ? (
-              <>
-                <div className="mt-0.5 flex items-center gap-2 font-medium text-slate-900">
-                  <span className={`h-2 w-2 ${regime.dot}`} /> {regime.label}
-                </div>
-                <div className="text-xs text-slate-500">{regime.text}</div>
-              </>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cómo está el mercado</div>
+            {status ? (
+              <div className="mt-1 space-y-1.5">
+                {[
+                  { label: "Bolsa (IBEX 35)", r: REGIME[status.regime] },
+                  ...(status.cryptoRegime ? [{ label: "Crypto (Bitcoin)", r: REGIME[status.cryptoRegime] }] : []),
+                ].map(({ label, r }) => (
+                  <div key={label} className="flex items-center justify-between gap-2" title={r.text}>
+                    <span className="text-xs text-slate-600">{label}</span>
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-slate-900">
+                      <span className={`h-2 w-2 ${r.dot}`} /> {r.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
             ) : (
               <div className="text-slate-400">—</div>
             )}

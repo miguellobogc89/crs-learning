@@ -142,7 +142,7 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
             <tr>
               <th className={th}>Valor</th>
               <th className={th}>Estado</th>
-              <th className={`${th} text-right`}>Acciones</th>
+              <th className={`${th} text-right`}>Cantidad</th>
               <th className={`${th} text-right`}>Entrada</th>
               <th className={`${th} text-right`}>Actual</th>
               <th className={`${th} text-right`}>Stop</th>
@@ -238,7 +238,7 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
               <th className={th}>Entrada</th>
               <th className={th}>Salida</th>
               <th className={th}>Motivo</th>
-              <th className={`${th} text-right`}>Acciones</th>
+              <th className={`${th} text-right`}>Cantidad</th>
               <th className={`${th} text-right`}>Resultado</th>
               <th className={`${th} text-right`}>R</th>
             </tr>

@@ -30,6 +30,12 @@ function modelFor(tier: AiTier) {
   return m;
 }
 
+/** Esfuerzo de razonamiento del modelo bueno (TRADING_AI_SMART_EFFORT: low | medium | high). Bajo por defecto para no pasar del minuto. */
+function smartEffort(): "low" | "medium" | "high" {
+  const e = process.env.TRADING_AI_SMART_EFFORT?.trim();
+  return e === "medium" || e === "high" ? e : "low";
+}
+
 export function dailyCallLimit() {
   const n = Number(process.env.TRADING_AI_DAILY_CALLS);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 300;
@@ -78,7 +84,7 @@ export async function aiJson<T>(opts: {
     {
       model,
       instructions: opts.instructions,
-      ...(reasoning ? { reasoning: { effort: opts.tier === "fast" ? ("low" as const) : ("medium" as const) } } : {}),
+      ...(reasoning ? { reasoning: { effort: opts.tier === "fast" ? ("low" as const) : smartEffort() } } : {}),
       input: [{ role: "user", content: [{ type: "input_text", text: opts.input }] }],
       text: { format: { type: "json_schema", name: opts.schemaName, strict: true, schema: opts.schema } },
       max_output_tokens: opts.maxOutputTokens ?? 6000,
@@ -92,8 +98,8 @@ export async function aiJson<T>(opts: {
 
 export function aiModelInfo() {
   try {
-    return { provider: (process.env.TRADING_AI_PROVIDER || "openai").trim(), fast: modelFor("fast") };
+    return { provider: (process.env.TRADING_AI_PROVIDER || "openai").trim(), fast: modelFor("fast"), smart: modelFor("smart") };
   } catch {
-    return { provider: (process.env.TRADING_AI_PROVIDER || "openai").trim(), fast: null };
+    return { provider: (process.env.TRADING_AI_PROVIDER || "openai").trim(), fast: null, smart: null };
   }
 }
