@@ -140,11 +140,11 @@ export async function getTrading212DemoSummary(): Promise<Trading212DemoSummary>
 }
 
 /** Posiciones abiertas en Demo. No modifica órdenes ni la cartera virtual. */
-export async function getTrading212DemoPositions(): Promise<{
+export async function getTrading212DemoPositions(fresh = false): Promise<{
   environment: "demo";
   items: Trading212DemoPosition[];
 }> {
-  const data = await readDemo("/equity/positions", 2_000);
+  const data = fresh ? await fetchDemo("/equity/positions") : await readDemo("/equity/positions", 2_000);
   if (!Array.isArray(data)) throw new Trading212Error("Trading 212 devolvió posiciones no válidas");
 
   const items: Trading212DemoPosition[] = data.map((value: unknown) => {
@@ -356,4 +356,71 @@ export async function buyOneIberdrolaInTrading212Demo(): Promise<{
     status: result.status,
     quantity: 1,
   };
+}
+
+
+/**
+ * Vende una cantidad de una posición existente, exclusivamente en Demo.
+ * La operación se verifica contra las posiciones actuales del bróker, no contra
+ * los datos del navegador. Un fallo de red no debe provocar un reintento del POST.
+ */
+const demoSellInFlight = new Set<string>();
+const lastDemoSellAttempt = new Map<string, number>();
+
+export async function sellTrading212DemoPosition(ticker: string, quantity: number): Promise<{
+  environment: "demo";
+  ticker: string;
+  quantity: number;
+  orderId: number;
+  status: string;
+}> {
+  if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
+    throw new Trading212Error("Las ventas están limitadas a Trading 212 Demo en localhost", 403);
+  }
+  if (typeof ticker !== "string" || ticker.length > 80 || !/^[A-Za-z0-9_.-]+$/.test(ticker) ||
+      !isAmount(quantity) || quantity <= 0) {
+    throw new Trading212Error("Ticker o cantidad de venta no válidos", 400);
+  }
+
+  // Bloquea solicitudes simultáneas al mismo valor, incluso durante la validación.
+  if (demoSellInFlight.has(ticker)) {
+    throw new Trading212Error("Ya se está procesando una venta de este valor; comprueba su estado", 409);
+  }
+  if (Date.now() - (lastDemoSellAttempt.get(ticker) ?? 0) < 60_000) {
+    throw new Trading212Error("Ya se intentó vender este valor hace menos de un minuto; consulta las órdenes antes de repetir", 429);
+  }
+  demoSellInFlight.add(ticker);
+  try {
+    // Consulta sin cache para evitar vender acciones ya reservadas por otra orden.
+    const freshPositions = await getTrading212DemoPositions(true);
+    const position = freshPositions.items.find(p => p.ticker === ticker);
+    const available = position?.quantityAvailableForTrading;
+    if (!position || available === null || available === undefined || available <= 0) {
+      throw new Trading212Error("La posición ya no existe o no tiene acciones disponibles para vender", 409);
+    }
+    if (quantity > available + 1e-8 || quantity > position.quantity + 1e-8) {
+      throw new Trading212Error("La cantidad solicitada supera la disponible; actualiza la cartera", 409);
+    }
+
+    // La API exige una cantidad NEGATIVA para las órdenes de venta.
+    lastDemoSellAttempt.set(ticker, Date.now());
+    const result = (await fetchDemo("/equity/orders/market", {
+      method: "POST",
+      body: { ticker, quantity: -quantity, extendedHours: false },
+    })) as { id?: unknown; status?: unknown } | null;
+
+    if (!result || !isAmount(result.id) || typeof result.status !== "string") {
+      throw new Trading212Error("Resultado de venta desconocido: consulta la cartera y las órdenes antes de repetir");
+    }
+    return {
+      environment: "demo",
+      ticker,
+      quantity,
+      orderId: result.id,
+      status: result.status,
+    };
+  } finally {
+    demoReadCache.clear();
+    demoSellInFlight.delete(ticker);
+  }
 }
