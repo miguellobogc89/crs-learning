@@ -159,7 +159,7 @@ function Trading212DemoPortfolio() {
           Cuenta de práctica de Trading 212. Saldo y posiciones independientes del simulador CRS.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={ghost} onClick={() => { setAcknowledged(false); setConfirmBuy(true); }} disabled={buying}>
+          <button type="button" className={ghost} onClick={() => { setAcknowledged(false); setConfirmBuy(true); }} disabled={buying || loading || !summary || !!error}>
             Compra de prueba: 1 Iberdrola
           </button>
           <button type="button" className={ghost} onClick={() => void load()} disabled={loading || buying}>
