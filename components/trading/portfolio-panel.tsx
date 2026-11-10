@@ -108,6 +108,10 @@ function Trading212DemoPortfolio() {
   const [acknowledged, setAcknowledged] = useState(false);
   const [buying, setBuying] = useState(false);
   const [buyResult, setBuyResult] = useState<string | null>(null);
+  const [sellPosition, setSellPosition] = useState<Trading212DemoPosition | null>(null);
+  const [sellAcknowledged, setSellAcknowledged] = useState(false);
+  const [selling, setSelling] = useState(false);
+  const [sellResult, setSellResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -152,6 +156,31 @@ function Trading212DemoPortfolio() {
     }
   };
 
+  const sellPositionNow = async () => {
+    const p = sellPosition;
+    const available = p?.quantityAvailableForTrading;
+    if (!sellAcknowledged || selling || !p?.ticker || available === null || available === undefined || available <= 0) return;
+    setSelling(true);
+    setError(null);
+    try {
+      const result = await api<{ orderId: number; status: string; quantity: number }>("trading212/sell", {
+        ticker: p.ticker,
+        quantity: available,
+        confirmDemo: true,
+      });
+      setSellPosition(null);
+      setSellAcknowledged(false);
+      setSellResult(`Venta de ${int(result.quantity)} acciones enviada a Trading 212 Demo (orden ${result.orderId}; estado: ${result.status}). Puede quedar pendiente hasta que abra el mercado.`);
+      void load();
+    } catch (e) {
+      setError(`${errorText(e)}. Si confirmaste la venta, comprueba su estado en Trading 212 antes de volver a enviarla.`);
+      setSellPosition(null);
+      setSellAcknowledged(false);
+    } finally {
+      setSelling(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -159,16 +188,17 @@ function Trading212DemoPortfolio() {
           Cuenta de práctica de Trading 212. Saldo y posiciones independientes del simulador CRS.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={ghost} onClick={() => { setAcknowledged(false); setConfirmBuy(true); }} disabled={buying || loading || !summary || !!error}>
+          <button type="button" className={ghost} onClick={() => { setAcknowledged(false); setConfirmBuy(true); }} disabled={buying || selling || loading || !summary || !!error}>
             Compra de prueba: 1 Iberdrola
           </button>
-          <button type="button" className={ghost} onClick={() => void load()} disabled={loading || buying}>
+          <button type="button" className={ghost} onClick={() => void load()} disabled={loading || buying || selling}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
             Actualizar
           </button>
         </div>
       </div>
       {buyResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{buyResult}</p>}
+      {sellResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{sellResult}</p>}
       {error && <p role="alert" className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {!summary && loading ? (
         <div className="flex h-40 items-center justify-center border border-slate-200 bg-white">
@@ -198,7 +228,7 @@ function Trading212DemoPortfolio() {
                 Datos obtenidos del bróker. Los precios se muestran en la divisa de cada instrumento; no se convierten a euros.
               </p>
             </header>
-            <table className="w-full min-w-[640px] text-sm">
+            <table className="w-full min-w-[750px] text-sm">
               <thead className="bg-slate-50">
                 <tr>
                   <th className={th}>Valor</th>
@@ -206,6 +236,7 @@ function Trading212DemoPortfolio() {
                   <th className={`${th} text-right`}>Disponible</th>
                   <th className={`${th} text-right`}>Precio medio</th>
                   <th className={`${th} text-right`}>Precio actual</th>
+                  <th className={`${th} text-right`}>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -221,18 +252,74 @@ function Trading212DemoPortfolio() {
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums">{num(p.averagePricePaid, 2)}</td>
                     <td className="px-3 py-3 text-right tabular-nums">{num(p.currentPrice, 2)}</td>
+                    <td className="px-3 py-3 text-right">
+                      <button
+                        type="button"
+                        className={ghost}
+                        disabled={loading || buying || selling || !p.ticker || !(p.quantityAvailableForTrading !== null && p.quantityAvailableForTrading > 0)}
+                        onClick={() => { setSellAcknowledged(false); setSellPosition(p); }}
+                        title={p.quantityAvailableForTrading === null || p.quantityAvailableForTrading <= 0
+                          ? "No hay acciones disponibles para vender"
+                          : "Vender las acciones disponibles"}
+                      >
+                        Vender
+                      </button>
+                    </td>
                   </tr>
                 )) : (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Todavía no hay posiciones abiertas en Trading 212 Demo.</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Todavía no hay posiciones abiertas en Trading 212 Demo.</td></tr>
                 )}
               </tbody>
             </table>
           </section>
           <p className="text-xs text-slate-500">
-            Los datos de cartera son de lectura. Solo se permite la compra ficticia de prueba, sin gestión de stops u objetivos.
+            Las compras y ventas son órdenes manuales en Demo. Los stops y objetivos automáticos aún no están integrados.
           </p>
         </>
       ) : null}
+      {sellPosition && (
+        <Modal
+          open
+          onClose={() => { if (!selling) setSellPosition(null); }}
+          title={`Vender · ${sellPosition.name ?? sellPosition.ticker ?? "Posición"}`}
+          subtitle="Trading 212 Demo · Sin dinero real"
+          footer={
+            <>
+              <button type="button" className={ghost} disabled={selling} onClick={() => setSellPosition(null)}>
+                Cancelar
+              </button>
+              <button type="button" className={primary} disabled={selling || !sellAcknowledged} onClick={() => void sellPositionNow()}>
+                {selling && <Loader2 className="h-4 w-4 animate-spin" />}
+                Confirmar venta Demo
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-4 text-sm text-slate-700">
+            <p>
+              Se enviará a Trading 212 Demo una <strong>orden de mercado de venta</strong> por
+              {" "}<strong>{int(sellPosition.quantityAvailableForTrading ?? 0)} acciones disponibles</strong> de
+              {" "}<strong>{sellPosition.name ?? sellPosition.ticker}</strong>.
+              El resto de tus inversiones en CRS no se modificará.
+            </p>
+            {sellPosition.quantityAvailableForTrading !== null && sellPosition.quantityAvailableForTrading < sellPosition.quantity && (
+              <p className="text-amber-800">
+                Parte de la posición no está disponible para operar. Se venderá solo la cantidad disponible.
+              </p>
+            )}
+            <p className="border border-amber-200 bg-amber-50 p-3 text-amber-900">
+              El precio final puede diferir del mostrado y la orden puede quedar pendiente si el mercado está cerrado.
+              Si falla la solicitud, comprueba primero las órdenes en el bróker; no repitas la venta sin verificarla.
+            </p>
+            <label className="flex items-start gap-2">
+              <input type="checkbox" className="mt-1" checked={sellAcknowledged}
+                disabled={selling}
+                onChange={(e) => setSellAcknowledged(e.target.checked)} />
+              <span>Confirmo que quiero vender esta cantidad ficticia desde mi cuenta Trading 212 Demo.</span>
+            </label>
+          </div>
+        </Modal>
+      )}
       {confirmBuy && (
         <Modal
           open
