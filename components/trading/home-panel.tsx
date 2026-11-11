@@ -97,7 +97,7 @@ export function HomePanel() {
   const leader = [...agents.agents].sort((x, y) => y.summary.returnPct - x.summary.returnPct)[0];
   const bench = agents.agents[0]?.benchmark;
   const kpis = (
-    <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2">
+    <div className="grid w-full grid-cols-2 gap-x-4 gap-y-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end sm:gap-x-6">
       {account.opened && (
         <Kpi label="Tu patrimonio">
           <Money v={s.equity} digits={2} className="font-semibold text-slate-900" />

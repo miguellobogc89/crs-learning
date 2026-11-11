@@ -179,6 +179,19 @@ const readWidths = (id: string): Record<string, number> => {
   }
 };
 
+/** true en pantallas estrechas (móvil): las tablas pasan a tarjetas. */
+export function useIsMobile(query = "(max-width: 767px)") {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const update = () => setMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, [query]);
+  return mobile;
+}
+
 export function DataTable<T>({
   id,
   columns,
@@ -211,6 +224,7 @@ export function DataTable<T>({
   const [open, setOpen] = useState<string | null>(null);
   const [widths, setWidths] = useState<Record<string, number>>({});
   const tableRef = useRef<HTMLTableElement>(null);
+  const mobile = useIsMobile();
   useEffect(() => setWidths(readWidths(id)), [id]);
 
   const sorted = useMemo(() => {
@@ -264,17 +278,89 @@ export function DataTable<T>({
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
   };
+  // En móvil: la primera columna alineada a la izquierda es el título de cada tarjeta; las columnas sin
+  // título (botones, flecha) van arriba a la derecha; el resto, como etiqueta y valor.
+  const titleCol = columns.find((c) => c.align === "left") ?? columns[0];
+  const fields = columns.filter((c) => c !== titleCol && c.label);
+  const actions = columns.filter((c) => c !== titleCol && !c.label);
+  const sortable = columns.filter((c) => c.sort && c.label);
+  const sortChips =
+    mobile && sortable.length > 1 ? (
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 [scrollbar-width:none]" role="group" aria-label="Ordenar">
+        {sortable.map((c) => {
+          const active = sort?.key === c.key;
+          return (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => pick(c)}
+              aria-pressed={active}
+              className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600"}`}
+            >
+              {c.label}
+              {active && <span className="ml-1 text-[10px]">{sort!.dir === 1 ? "▲" : "▼"}</span>}
+            </button>
+          );
+        })}
+      </div>
+    ) : null;
+  const panelHeader =
+    header || sortChips ? (
+      <div className="space-y-3">
+        {header}
+        {sortChips}
+      </div>
+    ) : undefined;
+
   const fixed = columns.every((c) => widths[c.key]);
   const total = fixed ? columns.reduce((s, c) => s + widths[c.key], 0) : null;
 
   return (
     <TablePanel
       height={height}
-      header={header}
+      header={panelHeader}
       footer={paginate ? <Pager total={rows.length} page={page} perPage={perPage} onPage={setPage} onPerPage={setPerPage} label={label} /> : undefined}
     >
       {rows.length === 0 ? (
         <div className="px-6 py-8 text-center text-sm text-slate-500">{empty ?? "Sin registros."}</div>
+      ) : mobile ? (
+        <ul className="divide-y divide-slate-100">
+          {visible.map((r) => {
+            const k = rowKey(r);
+            const extra = expand && open === k ? expand(r) : null;
+            const clickable = !!expand || !!onRowClick;
+            return (
+              <li key={k}>
+                <div
+                  className={`px-4 py-3 ${clickable ? "cursor-pointer active:bg-slate-50" : ""}`}
+                  onClick={clickable ? () => (expand ? setOpen(open === k ? null : k) : onRowClick?.(r)) : undefined}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 text-sm">{titleCol.cell(r)}</div>
+                    {actions.length > 0 && (
+                      <div className="flex shrink-0 items-center gap-1">
+                        {actions.map((c) => (
+                          <span key={c.key}>{c.cell(r)}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {fields.length > 0 && (
+                    <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
+                      {fields.map((c) => (
+                        <div key={c.key} className="min-w-0">
+                          <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{c.label}</dt>
+                          <dd className="mt-0.5 min-w-0 text-sm text-slate-800 [&>*]:!justify-start [&>*]:!text-left">{c.cell(r)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                </div>
+                {extra && <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3">{extra}</div>}
+              </li>
+            );
+          })}
+        </ul>
       ) : (
         <table ref={tableRef} className="w-full table-fixed text-sm" style={total ? { width: total, minWidth: "100%" } : undefined}>
           <colgroup>

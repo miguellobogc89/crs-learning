@@ -116,17 +116,17 @@ export function AgentsPanel() {
 
       {/* Barra del catálogo: buscar, filtrar, ordenar y cambiar de vista */}
       <div className="flex shrink-0 flex-wrap items-center gap-3">
-        <div className="relative min-w-[220px] flex-1 sm:max-w-xs">
+        <div className="relative w-full min-w-0 sm:w-auto sm:min-w-[220px] sm:max-w-xs sm:flex-1">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <input className={`${field} w-full pl-9`} placeholder="Buscar agente, perfil o creador" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Buscar agentes" />
         </div>
-        <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
+        <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 [scrollbar-width:none]">
           {PROFILES.map((p) => (
             <button
               key={p}
               type="button"
               onClick={() => setProfile(p)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${profile === p ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium ${profile === p ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
             >
               {p === "todos" ? "Todos" : cap(p)}
             </button>

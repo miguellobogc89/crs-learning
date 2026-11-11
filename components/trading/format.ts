@@ -103,4 +103,5 @@ export const STATUS_LABEL: Record<string, string> = {
 export const signalLabel = (p: string) => (p === "tendencia" ? "Tendencia" : PATTERN_SHORT[p as PatternKey] ?? p);
 
 /** Alto de una página del módulo sin scroll: la tabla ocupa el resto y desplaza por dentro. */
-export const FULL_H = "h-[calc(100dvh-10rem)]";
+/** Alto de las tablas a pantalla completa (en móvil, menos: arriba están las pestañas de secciones). */
+export const FULL_H = "h-[calc(100dvh-13rem)] lg:h-[calc(100dvh-10rem)]";
