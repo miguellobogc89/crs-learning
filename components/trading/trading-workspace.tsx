@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
 import type { getOverview } from "@/lib/trading/service";
 import { api, errorText } from "./format";
 import { useTradingRefresh } from "./navigation";
@@ -13,6 +13,7 @@ import { NewsPanel } from "./news-panel";
 import { OpportunitiesPanel } from "./opportunities-panel";
 import { HomePanel } from "./home-panel";
 import type { TradingTab } from "./tabs";
+import { LoadingCard } from "./ui";
 
 export type Overview = Awaited<ReturnType<typeof getOverview>> & { canManage: boolean };
 
@@ -54,13 +55,11 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   if (NEEDS_OVERVIEW.includes(tab)) {
     if (loading && !data)
       body = (
-        <div className="flex h-48 items-center justify-center border border-slate-200 bg-white">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-        </div>
+        <LoadingCard />
       );
     else if (data && data.instrumentsWithData === 0)
       body = (
-        <div className="border border-slate-200 bg-white p-6 text-sm text-slate-600">
+        <div className="rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.04)] p-6 text-sm text-slate-600">
           Aún no hay cotizaciones guardadas.{" "}
           {data.canManage
             ? "La primera descarga (6 años del IBEX 35) arranca sola desde el panel de la izquierda y tarda uno o dos minutos."
@@ -80,7 +79,7 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   return (
     <div className="space-y-4">
       {error && (
-        <p role="alert" className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </p>
       )}

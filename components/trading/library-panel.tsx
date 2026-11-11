@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { History } from "lucide-react";
 import type { getLibrary } from "@/lib/trading/service";
 import { PatternSketch } from "./candle-chart";
 import { PATTERN_SHORT, api, dayFmt, errorText, int, num, panel, th, tone } from "./format";
+import { ErrorNote, LoadingCard } from "./ui";
 
 type Library = Awaited<ReturnType<typeof getLibrary>>;
 
@@ -24,30 +25,28 @@ export function LibraryPanel() {
   }, [market]);
   const where = market === "crypto" ? "en crypto" : "en el IBEX";
 
-  if (error) return <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>;
+  if (error) return <ErrorNote>{error}</ErrorNote>;
   if (!data)
     return (
-      <div className="flex h-40 items-center justify-center border border-slate-200 bg-white">
-        <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-      </div>
+      <LoadingCard height="h-40" />
     );
 
   const bt = data.backtest;
   const ranked = [...data.patterns].filter((p) => p.stats && p.stats.trades > 0).sort((a, b) => (b.stats!.adjustedExpectancy ?? 0) - (a.stats!.adjustedExpectancy ?? 0));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <section className={panel}>
-        <header className="border-b border-slate-200 px-4 py-3">
+        <header className="border-b border-slate-100 px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900">Qué ha funcionado {market === "crypto" ? "en las criptomonedas" : "en el IBEX 35"}</h2>
-            <div className="flex border border-slate-200">
+            <h2 className="text-base font-semibold text-slate-900">Qué ha funcionado {market === "crypto" ? "en las criptomonedas" : "en el IBEX 35"}</h2>
+            <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
               {(["bolsa", "crypto"] as const).map((m) => (
                 <button
                   key={m}
                   type="button"
                   onClick={() => setMarket(m)}
-                  className={`px-3 py-1 text-xs ${market === m ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium ${market === m ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
                 >
                   {m === "bolsa" ? "Bolsa" : "Crypto"}
                 </button>
@@ -63,7 +62,7 @@ export function LibraryPanel() {
         {ranked.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
-              <thead className="bg-slate-50">
+              <thead>
                 <tr>
                   <th className={th}>Figura</th>
                   <th className={`${th} text-right`}>Operaciones</th>
@@ -81,7 +80,7 @@ export function LibraryPanel() {
                     <td className="px-3 py-2 font-medium text-slate-900">
                       {p.name}
                       {p.stats!.trades >= 30 && p.stats!.avgR < 0 && (
-                        <span className="ml-2 border border-red-200 bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-700" title="Con este historial la app no recomienda entrar con esta figura">
+                        <span className="ml-2 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700" title="Con este historial la app no recomienda entrar con esta figura">
                           Vetada
                         </span>
                       )}
@@ -113,12 +112,12 @@ export function LibraryPanel() {
         {data.patterns.map((p) => (
           <article key={p.key} className={panel}>
             <div className="flex gap-4 border-b border-slate-100 p-4">
-              <div className="shrink-0 border border-slate-100 bg-slate-50">
+              <div className="shrink-0 rounded-xl border border-slate-100 bg-slate-50">
                 <PatternSketch points={p.sketch} trigger={p.sketchTrigger} direction={p.direction} />
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-semibold text-slate-900">{p.name}</h3>
+                  <h3 className="text-[15px] font-semibold text-slate-900">{p.name}</h3>
                   <span className={`border px-1.5 py-0.5 text-xs ${FAMILY_TONE[p.family]}`}>{p.family}</span>
                   <span className={`text-xs font-medium ${p.direction === "long" ? "text-emerald-700" : "text-red-700"}`}>
                     {p.key === "triangle_sym" ? "Según tendencia" : p.direction === "long" ? "Alcista" : "Bajista"}
@@ -178,11 +177,13 @@ export function LibraryPanel() {
 
       {bt && bt.recent.length > 0 && (
         <section className={`${panel} overflow-x-auto`}>
-          <header className="border-b border-slate-200 px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-900">Últimas operaciones del backtest</h2>
+          <header className="border-b border-slate-100 px-5 py-4">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                <History className="h-5 w-5 text-blue-600" /> Últimas operaciones del backtest
+              </h2>
           </header>
           <table className="w-full min-w-[720px] text-sm">
-            <thead className="bg-slate-50">
+            <thead>
               <tr>
                 <th className={th}>Valor</th>
                 <th className={th}>Figura</th>

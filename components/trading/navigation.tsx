@@ -4,7 +4,8 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bot, Loader2, RefreshCw } from "lucide-react";
 import { TRADING_SECTIONS } from "./tabs";
-import { api, dayFmt, errorText, eur0, pct, tone } from "./format";
+import { api, dayFmt, errorText, eur0 } from "./format";
+import { ReturnPill } from "./ui";
 
 export type TradingStatus = {
   regime: "alcista" | "bajista" | "lateral";
@@ -118,12 +119,12 @@ export function TradingNavigation() {
                     key={t.key}
                     href={`/trading/${t.key}`}
                     aria-current={active ? "page" : undefined}
-                    className={`flex items-center gap-2 px-3 py-2 text-sm ${active ? "bg-blue-50 font-semibold text-blue-600" : "text-slate-600 hover:bg-slate-50"}`}
+                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${active ? "bg-blue-50 font-semibold text-blue-600" : "text-slate-600 hover:bg-slate-50"}`}
                   >
                     <t.icon className="h-4 w-4 shrink-0" />
                     <span className="truncate">{t.label}</span>
                     {t.key === "cartera" && status && status.openPositions + status.pendingOrders > 0 && (
-                      <span className="ml-auto bg-slate-100 px-1.5 text-[11px] font-semibold text-slate-600">
+                      <span className="ml-auto rounded-full bg-slate-100 px-2 text-[11px] font-semibold text-slate-600">
                         {status.openPositions + status.pendingOrders}
                       </span>
                     )}
@@ -134,7 +135,7 @@ export function TradingNavigation() {
           ))}
         </nav>
 
-        <div className="mx-3 mb-3 space-y-3 border border-slate-200 bg-white p-3 text-sm">
+        <div className="mx-3 mb-3 space-y-3 rounded-2xl border border-slate-100 bg-white p-4 text-sm shadow-sm">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Mi patrimonio virtual</div>
             {status && !status.opened ? (
@@ -143,9 +144,9 @@ export function TradingNavigation() {
               </Link>
             ) : (
             <>
-            <div className="mt-0.5 flex items-baseline gap-2">
-              <span className="text-lg font-semibold tabular-nums text-slate-900">{status ? eur0(status.equity) : "—"}</span>
-              {status && <span className={`text-xs ${tone(status.returnPct)}`}>{pct(status.returnPct)}</span>}
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-xl font-bold tracking-tight tabular-nums text-slate-900">{status ? eur0(status.equity) : "—"}</span>
+              {status && <ReturnPill value={status.returnPct} />}
             </div>
             {status && (
               <div className="text-xs text-slate-500">
@@ -172,7 +173,7 @@ export function TradingNavigation() {
                   <div key={label} className="flex items-center justify-between gap-2" title={r.text}>
                     <span className="text-xs text-slate-600">{label}</span>
                     <span className="flex items-center gap-1.5 text-xs font-medium text-slate-900">
-                      <span className={`h-2 w-2 ${r.dot}`} /> {r.label}
+                      <span className={`h-2 w-2 rounded-full ${r.dot}`} /> {r.label}
                     </span>
                   </div>
                 ))}
@@ -192,7 +193,7 @@ export function TradingNavigation() {
                 type="button"
                 onClick={sync}
                 disabled={syncing}
-                className="mt-2 inline-flex w-full items-center justify-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
                 {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 {syncing ? "Actualizando…" : "Actualizar cotizaciones"}

@@ -46,14 +46,18 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 
+// Estilo común del módulo (el de Inicio): tarjetas redondeadas con sombra suave, botones y campos redondeados.
 export const field =
-  "border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
+  "rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
 export const ghost =
-  "inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50";
+  "inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50";
 export const primary =
-  "inline-flex items-center gap-1.5 bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50";
-export const panel = "border border-slate-200 bg-white";
-export const th = "px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500";
+  "inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-600/30 hover:bg-blue-700 disabled:opacity-50 disabled:shadow-none";
+/** Tarjeta de Inicio. */
+export const card = "rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.04)]";
+/** Tarjeta con contenido a sangre (tablas, listas con separadores). */
+export const panel = `${card} overflow-hidden`;
+export const th = "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500";
 
 export const DIRECTION_LABEL = { long: "Alcista", short: "Bajista" } as const;
 

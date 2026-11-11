@@ -6,7 +6,7 @@ import type { Overview } from "./trading-workspace";
 import { CandleChart, type ChartLevel } from "./candle-chart";
 import { PATTERN_SHORT, STATUS_LABEL, api, dayFmt, errorText, eur, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
 import { ConfirmOrderModal, TradeInfoModal, ideaFromRecommendation } from "./trade-modals";
-import { Rich } from "./ui";
+import { ErrorNote, Rich } from "./ui";
 import { useTradingRefresh } from "./navigation";
 import { NewsItem } from "./news-panel";
 
@@ -94,16 +94,16 @@ export function MarketPanel({
   const rec = data.recommendations.find((r) => r.symbol === current && det && r.pattern === det.pattern);
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[340px_1fr]">
+    <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
       <aside className={`${panel} flex max-h-[860px] flex-col`}>
-        <div className="space-y-2 border-b border-slate-200 p-2">
-          <div className="grid grid-cols-2 border border-slate-200">
+        <div className="space-y-2 border-b border-slate-100 p-3">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
             {(["bolsa", "crypto"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
                 onClick={() => setListMarket(m)}
-                className={`py-1.5 text-sm ${listMarket === m ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+                className={`rounded-lg py-1.5 text-sm font-medium ${listMarket === m ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
               >
                 {m === "bolsa" ? "Bolsa" : "Crypto"}
               </button>
@@ -116,7 +116,7 @@ export function MarketPanel({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-slate-50">
+            <thead className="sticky top-0 bg-white">
               <tr>
                 <th className={th}>Valor</th>
                 <th className={`${th} text-right`}>Cierre</th>
@@ -135,7 +135,7 @@ export function MarketPanel({
                     <div className={`font-medium ${m.isIndex ? "text-slate-900" : "text-slate-800"}`}>{m.name}</div>
                     <div className="text-xs text-slate-500">
                       {m.symbol}
-                      {m.signals > 0 && <span className="ml-1.5 bg-blue-600 px-1 text-[10px] font-semibold text-white">{m.signals}</span>}
+                      {m.signals > 0 && <span className="ml-1.5 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">{m.signals}</span>}
                       {m.lastError && <span className="ml-1.5 text-red-600" title={m.lastError}>sin datos</span>}
                     </div>
                   </td>
@@ -149,12 +149,12 @@ export function MarketPanel({
         </div>
       </aside>
 
-      <div className="min-w-0 space-y-4">
-        {error && <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="min-w-0 space-y-6">
+        {error && <ErrorNote>{error}</ErrorNote>}
         <section className={panel}>
-          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">
+              <h2 className="text-lg font-semibold text-slate-900">
                 {inst?.name ?? current} <span className="text-sm font-normal text-slate-500">{inst?.symbol}</span>
               </h2>
               <p className="text-xs text-slate-500">
@@ -181,8 +181,8 @@ export function MarketPanel({
 
         {inst && inst.news.length > 0 && (
           <section className={panel}>
-            <header className="border-b border-slate-200 px-4 py-3">
-              <h3 className="text-sm font-semibold text-slate-900">Noticias recientes de {inst.name}</h3>
+            <header className="border-b border-slate-100 px-5 py-4">
+              <h3 className="text-[15px] font-semibold text-slate-900">Noticias recientes de {inst.name}</h3>
             </header>
             <ul className="divide-y divide-slate-100">
               {inst.news.map((n) => (
@@ -195,8 +195,8 @@ export function MarketPanel({
         {inst && (
           <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
             <section className={panel}>
-              <header className="border-b border-slate-200 px-4 py-3">
-                <h3 className="text-sm font-semibold text-slate-900">Figuras detectadas</h3>
+              <header className="border-b border-slate-100 px-5 py-4">
+                <h3 className="text-[15px] font-semibold text-slate-900">Figuras detectadas</h3>
                 <p className="text-xs text-slate-500">Pulsa una para dibujarla en el gráfico.</p>
               </header>
               {inst.detections.length === 0 ? (
@@ -229,13 +229,13 @@ export function MarketPanel({
             </section>
 
             <section className={panel}>
-              <header className="border-b border-slate-200 px-4 py-3">
-                <h3 className="text-sm font-semibold text-slate-900">{det ? PATTERN_SHORT[det.pattern] : "Detalle"}</h3>
+              <header className="border-b border-slate-100 px-5 py-4">
+                <h3 className="text-[15px] font-semibold text-slate-900">{det ? PATTERN_SHORT[det.pattern] : "Detalle"}</h3>
                 {det && <p className="text-xs text-slate-500">{STATUS_LABEL[det.status]}</p>}
               </header>
               {det ? (
                 <div className="space-y-3 px-4 py-4 text-sm">
-                  <dl className="grid grid-cols-3 gap-px border border-slate-200 bg-slate-200 text-center">
+                  <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-slate-100 bg-slate-100 text-center">
                     <div className="bg-white px-2 py-2">
                       <dt className="text-xs text-slate-500">{det.status === "forming" ? "Entrada si rompe" : "Entrada"}</dt>
                       <dd className="font-semibold tabular-nums text-slate-900">{eur(det.entry)}</dd>
@@ -285,7 +285,7 @@ export function MarketPanel({
                 <p className="px-4 py-5 text-sm text-slate-500">Elige una figura.</p>
               )}
               {openPos.length > 0 && (
-                <div className="border-t border-slate-200 px-4 py-3 text-sm text-slate-700">
+                <div className="border-t border-slate-100 px-4 py-3 text-sm text-slate-700">
                   Tienes {openPos.length === 1 ? "una posición" : `${openPos.length} posiciones`} en este valor (
                   {openPos.map((p) => `${int(p.quantity)} ${p.status}`).join(", ")}).
                 </div>

@@ -101,7 +101,7 @@ function Numbers({ idea, quantity }: { idea: TradeIdea; quantity: number | null 
   const loss = idea.stop !== null && q ? Math.abs(idea.price - idea.stop) * q : null;
   const gain = idea.target !== null && q ? Math.abs(idea.target - idea.price) * q : null;
   return (
-    <dl className="grid grid-cols-3 gap-px border border-slate-200 bg-slate-200 text-center">
+    <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-slate-100 bg-slate-100 text-center">
       <div className="bg-white px-2 py-3">
         <dt className="text-[11px] text-slate-500">Precio ahora</dt>
         <dd className="text-base font-semibold tabular-nums text-slate-900">{eur(idea.price)}</dd>
@@ -214,7 +214,7 @@ export function TradeInfoModal({ idea, onClose, onExecute }: { idea: TradeIdea; 
           </section>
         )}
 
-        <section className="border border-slate-200 bg-slate-50/60">
+        <section className="rounded-xl border border-slate-100 bg-slate-50/60">
           <button type="button" onClick={() => setGlossary(!glossary)} className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-slate-700">
             <span className="inline-flex items-center gap-1.5">
               <Info className="h-3.5 w-3.5" /> ¿Nuevo en esto? Las palabras clave
@@ -222,7 +222,7 @@ export function TradeInfoModal({ idea, onClose, onExecute }: { idea: TradeIdea; 
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${glossary ? "rotate-180" : ""}`} />
           </button>
           {glossary && (
-            <dl className="space-y-2 border-t border-slate-200 px-3 py-3 text-xs text-slate-600">
+            <dl className="space-y-2 border-t border-slate-100 px-3 py-3 text-xs text-slate-600">
               <div>
                 <dt className="font-semibold text-slate-800">Stop</dt>
                 <dd>El precio al que la app vende si las cosas van mal. Es tu límite de pérdida: lo decides antes de entrar.</dd>
@@ -440,7 +440,7 @@ export function ConfirmOrderModal({
               {adjust ? "Ocultar ajustes" : "Ajustar cantidad, stop u objetivo"}
             </button>
             {adjust && (
-              <div className="space-y-3 border border-slate-200 bg-slate-50/60 p-3">
+              <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3">
                 <div className="grid grid-cols-3 gap-3">
                   <label className="text-xs">
                     <span className="mb-1 block font-medium text-slate-600">{crypto ? "Cantidad" : "Acciones"}</span>
@@ -478,7 +478,7 @@ export function ConfirmOrderModal({
             )}
           </>
         )}
-        {error && <p className="border border-red-200 bg-red-50 px-3 py-2 text-red-700">{error}</p>}
+        {error && <p className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-red-700">{error}</p>}
       </div>
     </Modal>
   );

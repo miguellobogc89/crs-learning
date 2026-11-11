@@ -1,10 +1,11 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, ExternalLink, Loader2, Minus, RefreshCw, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ExternalLink, Loader2, Minus, Newspaper, RefreshCw, X } from "lucide-react";
 import type { listNews, NewsRow } from "@/lib/trading/news/service";
 import { CATEGORY_LABEL, type NewsCategory } from "@/lib/trading/news/sources";
 import { api, errorText, ghost, int, panel } from "./format";
 import { useTradingRefresh } from "./navigation";
+import { ErrorNote, LoadingCard } from "./ui";
 
 type News = Awaited<ReturnType<typeof listNews>> & { canManage: boolean };
 type SyncResult = {
@@ -53,7 +54,7 @@ export function Impact({ impact }: { impact: number }) {
   return (
     <span className="inline-flex gap-0.5" title={["Ruido", "Menor", "Relevante", "Muy importante"][impact] ?? ""} aria-label={`Importancia ${impact} de 3`}>
       {[1, 2, 3].map((k) => (
-        <i key={k} className={`inline-block h-1.5 w-1.5 ${k <= impact ? (impact >= 3 ? "bg-red-500" : impact >= 2 ? "bg-amber-500" : "bg-slate-400") : "bg-slate-200"}`} />
+        <i key={k} className={`inline-block h-1.5 w-1.5 rounded-full ${k <= impact ? (impact >= 3 ? "bg-red-500" : impact >= 2 ? "bg-amber-500" : "bg-slate-400") : "bg-slate-200"}`} />
       ))}
     </span>
   );
@@ -83,11 +84,11 @@ export function NewsItem({
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
           {n.symbols.map((s) =>
             onSymbol ? (
-              <button key={s} type="button" onClick={() => onSymbol(s)} className="border border-slate-200 bg-slate-50 px-1.5 py-px font-medium text-slate-700 hover:border-blue-300 hover:text-blue-700">
+              <button key={s} type="button" onClick={() => onSymbol(s)} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-px font-medium text-slate-700 hover:border-blue-300 hover:text-blue-700">
                 {names[s] ?? s}
               </button>
             ) : (
-              <span key={s} className="border border-slate-200 bg-slate-50 px-1.5 py-px font-medium text-slate-700">
+              <span key={s} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-px font-medium text-slate-700">
                 {names[s] ?? s}
               </span>
             ),
@@ -176,15 +177,15 @@ export function NewsPanel() {
   }, [data]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex border border-slate-200 bg-white">
+        <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
           {MARKETS.map((m) => (
             <button
               key={m.key}
               type="button"
               onClick={() => setMarket(m.key)}
-              className={`px-3 py-1.5 text-sm ${market === m.key ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50"}`}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${market === m.key ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
             >
               {m.label}
             </button>
@@ -195,7 +196,7 @@ export function NewsPanel() {
           Solo las importantes
         </label>
         {symbol && (
-          <button type="button" onClick={() => setSymbol(null)} className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800">
+          <button type="button" onClick={() => setSymbol(null)} className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800">
             {data?.names[symbol] ?? symbol} <X className="h-3 w-3" />
           </button>
         )}
@@ -210,13 +211,15 @@ export function NewsPanel() {
         </div>
       </div>
 
-      {syncMsg && <p className="border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{syncMsg}</p>}
-      {error && <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {syncMsg && <p className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">{syncMsg}</p>}
+      {error && <ErrorNote>{error}</ErrorNote>}
 
       {data && data.trending.length > 0 && !symbol && (
         <section className={`${panel} px-4 py-3`}>
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900">Últimas 24 horas</h2>
+            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                <Newspaper className="h-5 w-5 text-blue-600" /> Últimas 24 horas
+              </h2>
             <span className="text-xs text-slate-500">
               {int(data.today.total)} noticias relevantes · {int(data.today.important)} importantes ·{" "}
               <span className="text-emerald-700">{int(data.today.positive)} positivas</span> ·{" "}
@@ -229,7 +232,7 @@ export function NewsPanel() {
                 key={t.symbol}
                 type="button"
                 onClick={() => setSymbol(t.symbol)}
-                className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-2.5 py-1 text-sm hover:border-blue-300"
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-sm hover:border-blue-300"
                 title={`${t.count} noticias, ${t.important} importantes`}
               >
                 <Tone sentiment={t.tone > 0.25 ? 1 : t.tone < -0.25 ? -1 : 0} className="h-3.5 w-3.5" />
@@ -242,9 +245,7 @@ export function NewsPanel() {
       )}
 
       {loading && !data ? (
-        <div className="flex h-40 items-center justify-center border border-slate-200 bg-white">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-        </div>
+        <LoadingCard height="h-40" />
       ) : data && data.items.length === 0 ? (
         <div className={`${panel} px-4 py-8 text-center text-sm text-slate-500`}>
           {data.pending > 0

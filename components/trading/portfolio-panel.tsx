@@ -1,12 +1,12 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot, LineChart, Loader2, Pencil, RotateCcw, X } from "lucide-react";
+import { Bot, Briefcase, Clock, History, TrendingUp, ListChecks, Loader2, Pencil, RotateCcw, ShieldCheck, Wallet, X } from "lucide-react";
 import type { accountDetail, PositionView } from "@/lib/trading/accounts";
 import type { Trading212ConditionalKind, Trading212DemoOrder, Trading212DemoPosition, Trading212DemoSummary } from "@/lib/trading/trading212";
 import { PATTERN_LIBRARY } from "@/lib/trading/library";
 import { refreshTrading, useTradingRefresh } from "./navigation";
-import { Modal } from "./ui";
+import { card, ErrorNote, LoadingCard, Modal, ReturnPill } from "./ui";
 import { BrokerPanel } from "./broker-panel";
 import { CopiesPanel } from "./copies-panel";
 import { OpenAccount } from "./open-account";
@@ -77,8 +77,8 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
   if (!demoAvailable) return <CrsPortfolioPanel onOpenChart={onOpenChart} />;
 
   return (
-    <div className="space-y-4">
-      <div role="tablist" aria-label="Seleccionar cartera" className="flex gap-1 border-b border-slate-200">
+    <div className="space-y-6">
+      <div role="tablist" aria-label="Seleccionar cartera" className="flex gap-1 border-b border-slate-100">
         {([
           ["crs", "Simulador CRS"],
           ["trading212", "Trading 212 Demo"],
@@ -91,7 +91,7 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
             aria-controls={`portfolio-panel-${key}`}
             aria-selected={source === key}
             onClick={() => setSource(key)}
-            className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            className={`border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
               source === key
                 ? "border-blue-600 text-blue-700"
                 : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"
@@ -257,7 +257,7 @@ function Trading212DemoPortfolio() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-600">
           Cuenta de práctica de Trading 212. Saldo y posiciones independientes del simulador CRS.
@@ -276,25 +276,23 @@ function Trading212DemoPortfolio() {
         </div>
       </div>
       <BrokerPanel />
-      {buyResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{buyResult}</p>}
-      {sellResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{sellResult}</p>}
-      {orderResult && <p role="status" className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{orderResult}</p>}
-      {error && <p role="alert" className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {buyResult && <p role="status" className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{buyResult}</p>}
+      {sellResult && <p role="status" className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{sellResult}</p>}
+      {orderResult && <p role="status" className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{orderResult}</p>}
+      {error && <ErrorNote>{error}</ErrorNote>}
       {!summary && loading ? (
-        <div className="flex h-40 items-center justify-center border border-slate-200 bg-white">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-        </div>
+        <LoadingCard height="h-40" />
       ) : summary ? (
         <>
-          <div className="grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-3">
             {([
               ["Patrimonio total", summary.totalValue],
               ["Disponible para operar", summary.availableToTrade],
               ["Invertido", summary.investedValue],
             ] as const).map(([label, value]) => (
-              <div key={label} className="bg-white px-4 py-4">
-                <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-                <div className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+              <div key={label} className={`${card} px-5 py-4`}>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+                <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-slate-900">
                   {summary.currency === "EUR" ? eur(value, 2) : `${num(value, 2)} ${summary.currency}`}
                 </div>
               </div>
@@ -302,14 +300,16 @@ function Trading212DemoPortfolio() {
           </div>
 
           <section className={`${panel} overflow-x-auto`}>
-            <header className="border-b border-slate-200 px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-900">Posiciones en Trading 212 Demo</h2>
+            <header className="border-b border-slate-100 px-5 py-4">
+              <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                <Briefcase className="h-5 w-5 text-blue-600" /> Posiciones en Trading 212 Demo
+              </h2>
               <p className="text-xs text-slate-500">
                 Datos obtenidos del bróker. Los precios se muestran en la divisa de cada instrumento; no se convierten a euros.
               </p>
             </header>
             <table className="w-full min-w-[750px] text-sm">
-              <thead className="bg-slate-50">
+              <thead>
                 <tr>
                   <th className={th}>Valor</th>
                   <th className={`${th} text-right`}>Cantidad</th>
@@ -373,15 +373,17 @@ function Trading212DemoPortfolio() {
             </table>
           </section>
           <section className={`${panel} overflow-x-auto`}>
-            <header className="border-b border-slate-200 px-4 py-3">
-              <h2 className="text-sm font-semibold text-slate-900">Órdenes pendientes en Trading 212 Demo</h2>
+            <header className="border-b border-slate-100 px-5 py-4">
+              <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                <Clock className="h-5 w-5 text-blue-600" /> Órdenes pendientes en Trading 212 Demo
+              </h2>
               <p className="text-xs text-slate-500">
                 Stop y objetivo son órdenes alternativas: Trading 212 no ofrece aquí una vinculación OCO.
                 Cancela una antes de crear la otra sobre las mismas acciones.
               </p>
             </header>
             <table className="w-full min-w-[750px] text-sm">
-              <thead className="bg-slate-50">
+              <thead>
                 <tr>
                   <th className={th}>Instrumento</th>
                   <th className={th}>Tipo</th>
@@ -444,7 +446,7 @@ function Trading212DemoPortfolio() {
           <div className="space-y-4 text-sm text-slate-700">
             <p><b>{conditional.name}</b> · {conditional.ticker}</p>
             {conditional.kind.startsWith("buy") && (
-              <fieldset className="space-y-2 border border-slate-200 px-3 py-2">
+              <fieldset className="space-y-2 rounded-xl border border-slate-200 px-3 py-2">
                 <legend className="text-xs font-medium">Tipo de compra automática al precio</legend>
                 <label className="flex items-center gap-2">
                   <input type="radio" checked={conditional.kind === "buy_limit"} onChange={() => setConditional({ ...conditional, kind: "buy_limit" })} />
@@ -475,7 +477,7 @@ function Trading212DemoPortfolio() {
             {conditional.lastPrice !== null && (
               <p className="text-xs text-slate-500">Último precio comunicado por Trading 212: {num(conditional.lastPrice, 3)} €.</p>
             )}
-            <p className="border border-amber-200 bg-amber-50 p-3 text-amber-900">
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
               Las órdenes se almacenan y ejecutan en el bróker, aunque cierres CRS.
               Un límite de compra por encima del precio de mercado puede ejecutarse inmediatamente.
               Las compras programadas no colocan stops después de ejecutarse.
@@ -543,7 +545,7 @@ function Trading212DemoPortfolio() {
                 Parte de la posición no está disponible para operar. Se venderá solo la cantidad disponible.
               </p>
             )}
-            <p className="border border-amber-200 bg-amber-50 p-3 text-amber-900">
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
               El precio final puede diferir del mostrado y la orden puede quedar pendiente si el mercado está cerrado.
               Si falla la solicitud, comprueba primero las órdenes en el bróker; no repitas la venta sin verificarla.
             </p>
@@ -580,7 +582,7 @@ function Trading212DemoPortfolio() {
               {" "}(ticker Trading 212: <code>IBEe_EQ</code>) en tu cuenta <strong>Demo</strong>.
               No se modificará el simulador CRS.
             </p>
-            <p className="border border-amber-200 bg-amber-50 p-3 text-amber-900">
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
               No incluye stop ni objetivo automáticos. El precio final puede variar y, si el mercado está cerrado,
               la orden puede quedar pendiente. No vuelvas a enviarla sin comprobar antes su estado.
             </p>
@@ -630,11 +632,9 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
 
   if (!data)
     return error ? (
-      <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      <ErrorNote>{error}</ErrorNote>
     ) : (
-      <div className="flex h-40 items-center justify-center border border-slate-200 bg-white">
-        <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-      </div>
+      <LoadingCard height="h-40" />
     );
 
   const s = data.summary;
@@ -643,11 +643,11 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
   const history = data.positions.filter((p) => p.status === "cerrada" || p.status === "cancelada");
 
   return (
-    <div className="space-y-4">
-      {error && <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+    <div className="space-y-6">
+      {error && <ErrorNote>{error}</ErrorNote>}
       <CopiesPanel />
 
-      <div className="grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {[
           ["Patrimonio", eur0(s.equity), pct(s.returnPct), tone(s.returnPct)],
           ["Invertido", eur0(s.invested), `${num(s.equity ? (s.invested / s.equity) * 100 : 0, 0)} % de la cartera`, "text-slate-500"],
@@ -656,32 +656,42 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
           ["Acierto", s.stats.closed ? `${num(s.stats.winRate * 100, 0)} %` : "—", `R medio ${num(s.stats.avgR, 2)}`, tone(s.stats.avgR)],
           ["Factor de beneficio", s.stats.profitFactor ? num(s.stats.profitFactor, 2) : "—", `mejor ${eur0(s.stats.bestTrade)} · peor ${eur0(s.stats.worstTrade)}`, "text-slate-500"],
         ].map(([label, value, sub, cls]) => (
-          <div key={label} className="bg-white px-4 py-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
-            <div className="mt-1 text-lg font-semibold tabular-nums text-slate-900">{value}</div>
-            <div className={`text-xs ${cls}`}>{sub}</div>
+          <div key={label} className={`${card} px-5 py-4`}>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+            <div className="mt-1 text-xl font-bold tracking-tight tabular-nums text-slate-900">{value}</div>
+            {label === "Patrimonio" ? (
+              <div className="mt-1">
+                <ReturnPill value={s.returnPct} />
+              </div>
+            ) : (
+              <div className={`mt-0.5 text-xs ${cls}`}>{sub}</div>
+            )}
           </div>
         ))}
       </div>
 
       <section className={panel}>
-        <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">Evolución del patrimonio</h2>
+        <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                <TrendingUp className="h-5 w-5 text-blue-600" /> Evolución del patrimonio
+              </h2>
           <span className="text-xs text-slate-500">Capital inicial {eur0(s.initialCapital)}</span>
         </header>
         <EquityCurve points={data.equity} initial={s.initialCapital} />
       </section>
 
       <section className={`${panel} overflow-x-auto`}>
-        <header className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">Posiciones abiertas y órdenes pendientes</h2>
+        <header className="border-b border-slate-100 px-5 py-4">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                <Briefcase className="h-5 w-5 text-blue-600" /> Posiciones abiertas y órdenes pendientes
+              </h2>
           <p className="text-xs text-slate-500">
             Se revisan cada día al cierre: si el precio toca el stop o el objetivo, la posición se cierra sola
             {s.settings.breakeven ? "; al ganar 1 R el stop sube a precio de entrada" : ""}.
           </p>
         </header>
         <table className="w-full min-w-[980px] text-sm">
-          <thead className="bg-slate-50">
+          <thead>
             <tr>
               <th className={th}>Valor</th>
               <th className={th}>Estado</th>
@@ -750,7 +760,7 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
                   <td className="px-3 py-2.5">
                     <div className="flex justify-end gap-1">
                       <button type="button" title="Ver gráfico" className="p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => onOpenChart(p.symbol)}>
-                        <LineChart className="h-4 w-4" />
+                        <TrendingUp className="h-4 w-4" />
                       </button>
                       <button type="button" title="Cambiar stop y objetivo" className="p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => setEditing(p)}>
                         <Pencil className="h-4 w-4" />
@@ -774,11 +784,13 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
       </section>
 
       <section className={`${panel} overflow-x-auto`}>
-        <header className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">Historial de operaciones</h2>
+        <header className="border-b border-slate-100 px-5 py-4">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                <History className="h-5 w-5 text-blue-600" /> Historial de operaciones
+              </h2>
         </header>
         <table className="w-full min-w-[880px] text-sm">
-          <thead className="bg-slate-50">
+          <thead>
             <tr>
               <th className={th}>Valor</th>
               <th className={th}>Figura</th>
@@ -821,8 +833,10 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
       </section>
 
       <section className={panel}>
-        <header className="border-b border-slate-200 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">Movimientos de caja</h2>
+        <header className="border-b border-slate-100 px-5 py-4">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                <Wallet className="h-5 w-5 text-blue-600" /> Movimientos de caja
+              </h2>
         </header>
         <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto text-sm">
           {data.transactions.map((t) => (
@@ -869,8 +883,8 @@ function EditStops({ position, onClose, onSaved }: { position: PositionView; onC
   };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-sm border border-slate-200 bg-white shadow-xl">
-        <div className="border-b border-slate-200 px-5 py-3 text-sm font-semibold text-slate-900">
+      <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl">
+        <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-900">
           Stop y objetivo · {position.name}
         </div>
         <div className="grid grid-cols-2 gap-3 px-5 py-4">
@@ -883,8 +897,8 @@ function EditStops({ position, onClose, onSaved }: { position: PositionView; onC
             <input className={`${field} w-full`} value={target} onChange={(e) => setTarget(e.target.value)} />
           </label>
         </div>
-        {error && <p className="mx-5 mb-3 border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+        {error && <p className="mx-5 mb-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
           <button type="button" className={ghost} onClick={onClose}>
             Cancelar
           </button>
@@ -942,8 +956,10 @@ function Settings({ summary, onSaved }: { summary: Detail["summary"]; onSaved: (
 
   return (
     <section className={panel}>
-      <header className="border-b border-slate-200 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-900">Reglas de la cartera</h2>
+      <header className="border-b border-slate-100 px-5 py-4">
+        <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                <ShieldCheck className="h-5 w-5 text-blue-600" /> Reglas de la cartera
+              </h2>
         <p className="text-xs text-slate-500">Deciden el tamaño de cada operación, qué señales cuentan y si el sistema opera solo.</p>
       </header>
       <div className="grid gap-4 px-4 py-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1009,7 +1025,7 @@ function Settings({ summary, onSaved }: { summary: Detail["summary"]; onSaved: (
           </button>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3 border-t border-slate-200 px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 px-4 py-3 text-sm">
         <RotateCcw className="h-4 w-4 text-slate-500" />
         <span className="text-slate-700">Reiniciar la cartera (y las copias) con</span>
         <input className={`${field} w-32 tabular-nums`} value={capital} onChange={(e) => setCapital(e.target.value)} inputMode="numeric" />
@@ -1062,9 +1078,11 @@ export function UniversePanel() {
   const canManage = data.canManage;
   return (
     <section className={panel}>
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div>
-          <h2 className="text-sm font-semibold text-slate-900">Valores que se siguen</h2>
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                <ListChecks className="h-5 w-5 text-blue-600" /> Valores que se siguen
+              </h2>
           <p className="text-xs text-slate-500">
             {data.items.filter((i) => i.active).length} activos. Símbolos de Yahoo Finance: «.MC» para la Bolsa de Madrid (p. ej. CIE.MC).
           </p>
@@ -1120,12 +1138,10 @@ export function RulesPanel() {
     void load();
   }, [load]);
   useTradingRefresh(load);
-  if (error) return <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>;
+  if (error) return <ErrorNote>{error}</ErrorNote>;
   if (!data)
     return (
-      <div className="flex h-40 items-center justify-center border border-slate-200 bg-white">
-        <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-      </div>
+      <LoadingCard height="h-40" />
     );
   return <Settings summary={data.summary} onSaved={async () => refreshTrading()} />;
 }

@@ -2,43 +2,20 @@
 // Inicio: tu cartera y su evolución, tú contra los agentes y lo último que han hecho.
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowDownRight, ArrowRight, ArrowUpRight, BarChart3, Bot, Briefcase, Flame, Info, Loader2, User, Users, Wallet } from "lucide-react";
+import { ArrowRight, BarChart3, Bot, Briefcase, Flame, Info, User, Users, Wallet } from "lucide-react";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getOpportunities } from "@/lib/trading/agents/opportunities";
 import { api, eur0, errorText, pct, tone } from "./format";
 import { useTradingRefresh } from "./navigation";
 import { OpenAccount } from "./open-account";
-import { plainText, Rich } from "./ui";
+import { AVATAR, cap, card, ErrorNote, LoadingCard, PILL, plainText, ReturnPill, Rich } from "./ui";
 
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
 type Agents = Awaited<ReturnType<typeof getAgents>>;
 type Opps = Awaited<ReturnType<typeof getOpportunities>>;
 
-export const AGENT_DOT: Record<string, string> = { emerald: "bg-emerald-500", violet: "bg-violet-500", blue: "bg-blue-500", orange: "bg-orange-500", slate: "bg-slate-800" };
-/** Avatar y etiqueta de perfil de cada agente (estilo de Inicio). */
-const AVATAR: Record<string, string> = { emerald: "bg-emerald-500", violet: "bg-violet-500", orange: "bg-orange-500", slate: "bg-slate-300" };
-const PILL: Record<string, string> = {
-  emerald: "bg-emerald-50 text-emerald-700",
-  violet: "bg-violet-50 text-violet-700",
-  orange: "bg-orange-50 text-orange-700",
-  slate: "bg-slate-100 text-slate-600",
-};
-const card = "rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.04)]";
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-function ReturnPill({ value, big = false }: { value: number; big?: boolean }) {
-  const up = value > 0.05;
-  const down = value < -0.05;
-  const cls = up ? "bg-emerald-50 text-emerald-700" : down ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600";
-  const Icon = up ? ArrowUpRight : down ? ArrowDownRight : null;
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full font-semibold tabular-nums ${cls} ${big ? "px-3 py-1 text-sm" : "px-2.5 py-0.5 text-xs"}`}>
-      {Icon && <Icon className={big ? "h-4 w-4" : "h-3.5 w-3.5"} />}
-      {pct(value)}
-    </span>
-  );
-}
+export { AGENT_DOT } from "./ui";
 
 /** Línea de patrimonio pequeña, con degradado. */
 function Sparkline({ points }: { points: { day: string; equity: number }[] }) {
@@ -113,11 +90,9 @@ export function HomePanel() {
 
   if (!account || !agents)
     return error ? (
-      <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      <ErrorNote>{error}</ErrorNote>
     ) : (
-      <div className="flex h-48 items-center justify-center border border-slate-200 bg-white">
-        <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-      </div>
+      <LoadingCard />
     );
 
   const s = account.total;

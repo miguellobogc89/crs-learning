@@ -8,18 +8,11 @@ import type { getPortfolio } from "@/lib/trading/agents/copy";
 import { api, dayFmt, errorText, eur, eur0, field, ghost, int, panel, pct, primary, th, tone } from "./format";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { EquityCurve } from "./portfolio-panel";
-import { Modal, Rich } from "./ui";
+import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill, Rich } from "./ui";
 
 type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean; canCopy: boolean };
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
 type Agent = Data["agents"][number];
-
-const PROFILE_TONE: Record<string, string> = {
-  emerald: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  violet: "border-violet-200 bg-violet-50 text-violet-700",
-  orange: "border-orange-200 bg-orange-50 text-orange-800",
-};
-const HEX: Record<string, string> = { emerald: "#10b981", violet: "#8b5cf6", orange: "#f97316" };
 
 const ACTION: Record<string, string> = { comprar: "Compra", vender: "Venta", mantener: "Mantener", vigilar: "Vigilar" };
 const STATUS: Record<string, { label: string; tone: string }> = {
@@ -84,7 +77,7 @@ export function AgentsPanel() {
     }
   };
 
-  if (!data) return error ? <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : <Loader2 className="h-5 w-5 animate-spin text-slate-400" />;
+  if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard />;
 
   const ranked = [...data.agents].sort((a, b) => b.summary.returnPct - a.summary.returnPct);
   const agent = data.agents.find((a) => a.key === selected) ?? data.agents[0];
@@ -92,7 +85,7 @@ export function AgentsPanel() {
 
   return (
     <div className="space-y-6">
-      <section className={`${panel} px-5 py-4`}>
+      <section className={`${card} px-6 py-5`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <p className="flex max-w-2xl items-start gap-2 text-sm text-slate-600">
             <Bot className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
@@ -122,7 +115,7 @@ export function AgentsPanel() {
                     ) : r.state === "reunido" ? (
                       <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
                     ) : (
-                      <span className="h-4 w-4 border border-slate-300" />
+                      <span className="h-4 w-4 rounded border border-slate-300" />
                     )}
                     <b className="font-semibold text-slate-900">{a.name}</b>
                     <span className={r.state === "error" ? "text-red-700" : "text-slate-500"}>
@@ -135,7 +128,7 @@ export function AgentsPanel() {
         )}
       </section>
 
-      {error && <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <ErrorNote>{error}</ErrorNote>}
 
       {/* Una tarjeta por agente */}
       {bench && (
@@ -157,34 +150,36 @@ export function AgentsPanel() {
                 setSelected(a.key);
                 window.history.replaceState(null, "", `/trading/agentes?agent=${a.key}`);
               }}
-              className={`${panel} flex flex-col border-t-4 text-left transition-shadow hover:shadow-sm ${sel ? "ring-2 ring-blue-500" : ""}`}
-              style={{ borderTopColor: HEX[a.color] }}
+              className={`${panel} flex flex-col text-left transition-shadow hover:shadow-md ${sel ? "ring-2 ring-blue-500" : ""}`}
             >
-              <div className="flex items-start justify-between gap-2 px-4 pt-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-semibold text-slate-900">{a.name}</span>
-                    <span className={`border px-1.5 py-0.5 text-[11px] font-medium ${PROFILE_TONE[a.color]}`}>{a.profile}</span>
+              <div className="flex items-start justify-between gap-2 px-5 pt-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  <AgentAvatar color={a.color} size="lg" />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[15px] font-semibold text-slate-900">{a.name}</span>
+                      <Pill color={a.color}>{cap(a.profile)}</Pill>
+                    </div>
+                    <p className="mt-1 text-xs leading-snug text-slate-500">{a.tagline}</p>
                   </div>
-                  <p className="mt-1 text-xs leading-snug text-slate-500">{a.tagline}</p>
                 </div>
                 <span className="flex flex-col items-end gap-1">
-                  <span className="text-xs font-semibold text-slate-400">#{k + 1}</span>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-xs font-semibold text-slate-600">{k + 1}</span>
                   {a.copyWeightPct !== null && (
-                    <span className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
                       <Copy className="h-3 w-3" /> copias {a.copyWeightPct} %
                     </span>
                   )}
                 </span>
               </div>
-              <div className="mt-3 flex items-baseline gap-2 px-4">
-                <span className={`text-2xl font-semibold tabular-nums ${tone(a.summary.returnPct)}`}>{pct(a.summary.returnPct)}</span>
-                <span className="text-sm tabular-nums text-slate-500">{eur0(a.summary.equity)}</span>
+              <div className="mt-3 flex items-center gap-3 px-5">
+                <span className="text-2xl font-bold tracking-tight tabular-nums text-slate-900">{eur0(a.summary.equity)}</span>
+                <ReturnPill value={a.summary.returnPct} />
               </div>
               <div className="px-1">
                 <EquityCurve points={a.equity} initial={a.summary.initialCapital} height={70} empty="La línea aparece tras su primera sesión." />
               </div>
-              <div className="mt-auto border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600">
+              <div className="mt-auto border-t border-slate-100 px-5 py-3 text-xs text-slate-600">
                 <div>
                   {open} abiertas{pending ? ` · ${pending} pendientes` : ""} · {a.summary.stats.closed} cerradas
                   {a.summary.stats.closed ? ` · acierto ${Math.round(a.summary.stats.winRate * 100)} %` : ""}
@@ -237,11 +232,13 @@ function AgentDetail({
   const pendingIds = new Set(a.positions.filter((p) => p.status === "pendiente").map((p) => p.id));
 
   return (
-    <section className={`${panel} border-t-4`} style={{ borderTopColor: HEX[a.color] }}>
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-        <div className="max-w-2xl">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-            {a.name} <span className={`border px-1.5 py-0.5 text-xs font-medium ${PROFILE_TONE[a.color]}`}>{a.profile}</span>
+    <section className={panel}>
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-6 py-5">
+        <div className="flex max-w-2xl items-start gap-3">
+          <AgentAvatar color={a.color} size="lg" />
+          <div className="min-w-0">
+          <h2 className="flex flex-wrap items-center gap-2 text-lg font-semibold text-slate-900">
+            {a.name} <Pill color={a.color}>{cap(a.profile)}</Pill> <ReturnPill value={s.returnPct} />
           </h2>
           <p className="mt-1 text-sm text-slate-600">{a.tagline}</p>
           <p className="mt-2 text-xs text-slate-500">
@@ -249,6 +246,7 @@ function AgentDetail({
             valor · hasta {a.settings.maxOpenPositions} posiciones · {a.rules.maxBuys} {a.rules.maxBuys === 1 ? "compra" : "compras"} por reunión ·
             convicción mínima {a.rules.minConviction} de 5 · {a.rules.buyInBearMarket ? "puede comprar con el mercado bajista" : "no compra con el mercado bajista"}
           </p>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" className={primary} disabled={!canCopy} onClick={() => setCopying(true)}>
@@ -268,7 +266,7 @@ function AgentDetail({
         {copying && <CopyModal agent={a} onClose={() => setCopying(false)} />}
       </header>
 
-      <dl className="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-100 sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-px border-b border-slate-100 bg-slate-100 sm:grid-cols-4">
         {[
           ["Patrimonio", eur0(s.equity), ""],
           ["Rentabilidad", pct(s.returnPct), tone(s.returnPct)],
@@ -295,7 +293,7 @@ function AgentDetail({
 
       {/* Cartera */}
       <div className="border-b border-slate-100">
-        <h3 className="px-5 pt-4 text-sm font-semibold text-slate-900">Su cartera</h3>
+        <h3 className="px-5 pt-4 text-[15px] font-semibold text-slate-900">Su cartera</h3>
         {a.positions.length === 0 ? (
           <p className="px-5 pb-4 pt-1 text-sm text-slate-500">Todo en efectivo.</p>
         ) : (
@@ -335,7 +333,7 @@ function AgentDetail({
 
       {/* Decisiones */}
       <div className="border-b border-slate-100 px-5 py-4">
-        <h3 className="text-sm font-semibold text-slate-900">Qué decidió en su última reunión</h3>
+        <h3 className="text-[15px] font-semibold text-slate-900">Qué decidió en su última reunión</h3>
         {latest.length === 0 ? (
           <p className="mt-1 text-sm text-slate-500">{a.lastRun ? "No propuso nada: prefirió esperar." : "Todavía no se ha reunido. Pulsa «Reunir» para su primera reunión."}</p>
         ) : (
@@ -364,7 +362,7 @@ function AgentDetail({
       {/* Cerradas */}
       {a.closed.length > 0 && (
         <div className="px-5 py-4">
-          <h3 className="text-sm font-semibold text-slate-900">Operaciones cerradas</h3>
+          <h3 className="text-[15px] font-semibold text-slate-900">Operaciones cerradas</h3>
           <ul className="mt-2 divide-y divide-slate-100 text-sm">
             {a.closed.map((p) => (
               <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-2 py-1.5">
@@ -512,7 +510,7 @@ function CopyModal({ agent: a, onClose }: { agent: Agent; onClose: () => void })
               <span>%</span>
             </div>
           </label>
-          <p className="border border-slate-200 bg-slate-50 px-3 py-2">
+          <p className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
             Son unos <b>{eur0(amount)}</b> de tus {eur0(portfolio.total.equity)}.{" "}
             {others > 0 && `Ya tienes el ${others} % en otras copias; el máximo aquí es ${100 - others} %. `}
             Solo se mueve dinero que tengas en efectivo: si está invertido, la copia empieza con lo que haya libre.

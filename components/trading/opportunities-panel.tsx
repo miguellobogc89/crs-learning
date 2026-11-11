@@ -2,14 +2,14 @@
 // Oportunidades: lo que han comprado (o vendido) los agentes, agrupado por valor y con el tamaño
 // calculado para tu cartera. Tú decides qué ejecutar.
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, ChevronDown, Info, Loader2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, Flame, Info, Loader2, ShoppingCart } from "lucide-react";
 import type { getOpportunities } from "@/lib/trading/agents/opportunities";
 import { api, errorText, eur, eur0, ghost, int, panel, pct, primary } from "./format";
-import { AGENT_DOT, ago } from "./home-panel";
+import { ago } from "./home-panel";
+import { AGENT_DOT, AgentAvatar, ErrorNote, LoadingCard, Pill, Rich } from "./ui";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { ConfirmOrderModal, EvidenceList, TradeInfoModal, type TradeIdea } from "./trade-modals";
 import { OpenAccount } from "./open-account";
-import { Rich } from "./ui";
 
 type Data = Awaited<ReturnType<typeof getOpportunities>>;
 type Buy = Data["buys"][number];
@@ -85,11 +85,9 @@ export function OpportunitiesPanel() {
 
   if (!data)
     return error ? (
-      <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      <ErrorNote>{error}</ErrorNote>
     ) : (
-      <div className="flex h-48 items-center justify-center border border-slate-200 bg-white">
-        <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-      </div>
+      <LoadingCard />
     );
 
   const active = data.buys.filter((b) => b.status === "ok");
@@ -103,17 +101,20 @@ export function OpportunitiesPanel() {
         {met.length ? ` (${met.map((r) => `${r.name} ${ago(r.at!)}`).join(" · ")})` : ""}. La cantidad está calculada para{" "}
         <b>tu cartera</b>: arriesgas como mucho el {pct(data.account.riskPct, 1, false)} de tu patrimonio en cada operación.
       </p>
-      {error && <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <ErrorNote>{error}</ErrorNote>}
       {!data.account.opened && <OpenAccount compact />}
 
       {data.sells.length > 0 && (
-        <section className="border border-amber-200 bg-amber-50/60">
-          <h2 className="flex items-center gap-2 border-b border-amber-200 px-4 py-3 text-sm font-semibold text-amber-900">
-            <AlertTriangle className="h-4 w-4" /> Los agentes venden algo que tú tienes
+        <section className="rounded-2xl border border-amber-100 bg-amber-50/60 overflow-hidden">
+          <h2 className="flex items-center gap-3 border-b border-amber-100 px-5 py-4 text-base font-semibold text-amber-900">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+              <AlertTriangle className="h-4 w-4" />
+            </span>
+            Los agentes venden algo que tú tienes
           </h2>
           <ul className="divide-y divide-amber-100">
             {data.sells.map((s) => (
-              <li key={s.symbol} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+              <li key={s.symbol} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
                 <div className="min-w-0 max-w-3xl text-sm">
                   <b className="font-semibold text-slate-900">{s.name}</b>
                   <span className="text-slate-600"> · lo vende {names(s.agents.map((a) => a.name))}</span>
@@ -137,11 +138,12 @@ export function OpportunitiesPanel() {
       )}
 
       <section className={panel}>
-        <h2 className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">
+        <h2 className="flex items-center gap-2 border-b border-slate-100 px-5 py-4 text-base font-semibold text-slate-900">
+          <Flame className="h-5 w-5 text-blue-600" />
           {active.length ? `${active.length} ${active.length === 1 ? "oportunidad" : "oportunidades"} para ti` : "Oportunidades"}
         </h2>
         {active.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-slate-500">
+          <p className="px-5 py-6 text-sm text-slate-500">
             Ahora mismo no hay compras nuevas de los agentes que puedas hacer. Se reúnen cada día laborable a las 19:15.
           </p>
         ) : (
@@ -155,7 +157,9 @@ export function OpportunitiesPanel() {
 
       {rest.length > 0 && (
         <section className={panel}>
-          <h2 className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">Otras compras de los agentes</h2>
+          <h2 className="flex items-center gap-2 border-b border-slate-100 px-5 py-4 text-base font-semibold text-slate-900">
+            <ShoppingCart className="h-5 w-5 text-blue-600" /> Otras compras de los agentes
+          </h2>
           <ul className="divide-y divide-slate-100">
             {rest.map((b) => (
               <BuyRow key={b.symbol} b={b} onInfo={() => setInfo(ideaOf(b))} />
@@ -191,16 +195,16 @@ function BuyRow({ b, onInfo, onExecute }: { b: Buy; onInfo: () => void; onExecut
   const lead = b.agents.find((a) => a.agent === b.lead) ?? b.agents[0];
   const moved = lead.price ? ((b.price - lead.price) / lead.price) * 100 : 0;
   return (
-    <li className="px-4 py-4">
+    <li className="px-5 py-4 hover:bg-slate-50/60">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <b className="text-base font-semibold text-slate-900">{b.name}</b>
-            <span className="text-xs text-slate-500">{b.market === "crypto" ? "Crypto" : "Bolsa"}</span>
+            <Pill color={b.market === "crypto" ? "orange" : "blue"}>{b.market === "crypto" ? "Crypto" : "Bolsa"}</Pill>
             <span className="flex items-center gap-1.5 text-xs text-slate-600">
               {b.agents.map((a) => (
-                <span key={a.agent} className="inline-flex items-center gap-1">
-                  <span className={`h-2 w-2 ${AGENT_DOT[a.color]}`} />
+                <span key={a.agent} className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+                  <AgentAvatar color={a.color} size="sm" />
                   {a.name}
                 </span>
               ))}
@@ -240,7 +244,7 @@ function BuyRow({ b, onInfo, onExecute }: { b: Buy; onInfo: () => void; onExecut
               {b.agents.map((a) => (
                 <div key={a.agent} className="text-sm">
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                    <span className={`h-2 w-2 ${AGENT_DOT[a.color]}`} /> {a.name} · convicción {a.conviction}/5 · stop {eur(a.stop)} · objetivo {eur(a.target)}
+                    <span className={`h-2 w-2 rounded-full ${AGENT_DOT[a.color]}`} /> {a.name} · convicción {a.conviction}/5 · stop {eur(a.stop)} · objetivo {eur(a.target)}
                   </div>
                   {b.agents.length > 1 && (
                     <p className="mt-1 text-slate-600">
