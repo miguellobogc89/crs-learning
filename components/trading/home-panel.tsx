@@ -2,14 +2,14 @@
 // Inicio: tu cartera y su evolución, tú contra los agentes y lo último que han hecho.
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Bot, Info, User, Users } from "lucide-react";
+import { ArrowRight, Bot, ChevronDown, Info, User, Users } from "lucide-react";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import type { TradingStatus } from "./navigation";
 import type { getAgents } from "@/lib/trading/agents/service";
 import { api, eur, eur0, errorText, pct, tone, MEETINGS_TEXT } from "./format";
 import { useTradingRefresh } from "./navigation";
 import { OpenAccount } from "./open-account";
-import { AVATAR, cap, card, ErrorNote, LoadingCard, PILL, plainText, ReturnPill } from "./ui";
+import { AVATAR, cap, card, ErrorNote, LoadingCard, PILL, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
@@ -37,14 +37,24 @@ export function HomeBalance() {
   );
 }
 
-const MOVE: Record<string, (asset: string) => string> = {
-  compra: (a) => `compra ${a}`,
-  venta: (a) => `vende ${a}`,
-  protege: (a) => `sube el stop de ${a}`,
-  stop: (a) => `sale de ${a} por el stop`,
-  objetivo: (a) => `cobra el objetivo en ${a}`,
-  tiempo: (a) => `cierra ${a} por tiempo`,
-};
+type Move = Agents["moves"][number];
+
+/** Resumen compacto: la acción y el activo destacan, sin repetir la explicación larga. */
+function MoveSummary({ move }: { move: Move }) {
+  const asset = (
+    <>
+      <strong className="font-semibold text-slate-900">{move.asset}</strong>{" "}
+      <AssetIcon symbol={move.symbol} name={move.asset} size="xs" className="inline-block align-[-4px]" />
+    </>
+  );
+  if (move.kind === "compra") return <>Compra {asset}</>;
+  if (move.kind === "venta") return <>Venta de {asset}</>;
+  if (move.kind === "protege")
+    return <>Subida de <strong className="font-semibold text-slate-900">stop</strong>{move.stop !== null ? <> a {eur(move.stop, move.stop < 1 ? 6 : 2)}</> : null} en {asset}</>;
+  if (move.kind === "stop") return <>Salida por <strong className="font-semibold text-slate-900">stop</strong> en {asset}</>;
+  if (move.kind === "objetivo") return <>Objetivo alcanzado en {asset}</>;
+  return <>Cierre por tiempo en {asset}</>;
+}
 
 export const ago = (iso: string) => {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
@@ -53,15 +63,11 @@ export const ago = (iso: string) => {
   return new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", timeZone: "Europe/Madrid" }).format(new Date(iso));
 };
 
-const short = (s: string | null, n = 150) => {
-  const t = plainText(s);
-  return t.length > n ? `${t.slice(0, n).replace(/\s+\S*$/, "")}…` : t;
-};
-
 export function HomePanel() {
   const [account, setAccount] = useState<Portfolio | null>(null);
   const [agents, setAgents] = useState<Agents | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expandedMove, setExpandedMove] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -232,29 +238,51 @@ export function HomePanel() {
             <p className="px-5 pb-5 pt-2 text-sm text-slate-500">Los agentes aún no han operado. {MEETINGS_TEXT}</p>
           ) : (
             <ul className="px-2 pb-3">
-              {agents.moves.map((m) => (
-                <li key={`${m.kind}-${m.id}`} className="flex gap-3 rounded-xl px-3 py-3 hover:bg-slate-50">
-                  <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR[m.color] ?? AVATAR.slate} text-white`}>
-                    <Bot className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-2 text-sm">
-                      <span className="min-w-0">
-                        <b className="font-semibold text-slate-900">{m.name}</b> <span className="text-slate-700">{MOVE[m.kind](m.asset)}</span>{" "}
-                        <AssetIcon symbol={m.symbol} name={m.asset} size="xs" className="ml-0.5 align-[-5px]" />
-                      </span>
-                      <span className="shrink-0 text-xs text-slate-400">{ago(m.at)}</span>
+              {agents.moves.map((m) => {
+                const key = `${m.kind}-${m.id}`;
+                const isExpanded = expandedMove === key;
+                return (
+                  <li key={key} className="flex gap-3 border-b border-slate-100 px-3 py-3 last:border-b-0">
+                    <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR[m.color] ?? AVATAR.slate} text-white`}>
+                      <Bot className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <b className="min-w-0 text-sm font-semibold text-slate-900">{m.name}</b>
+                        <span className="shrink-0 whitespace-nowrap text-xs text-slate-400">{ago(m.at)}</span>
+                      </div>
+                      <div className="mt-1 flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs leading-relaxed text-slate-600"><MoveSummary move={m} /></p>
+                          {m.pnl !== null && (
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                              <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${m.pnl >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+                                {m.pnl > 0 ? "+" : ""}{eur(m.pnl, 2)}
+                              </span>
+                              <span className="text-[11px] text-slate-400">{m.pnlType === "latente" ? "P/L latente actual" : "P/L realizado"}</span>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={isExpanded ? `Ocultar detalle de ${m.name}` : `Ver detalle de ${m.name}`}
+                          aria-expanded={isExpanded}
+                          aria-controls={`trading-move-${m.id}`}
+                          onClick={() => setExpandedMove(isExpanded ? null : key)}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-blue-700"
+                        >
+                          <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                        </button>
+                      </div>
+                      {isExpanded && (
+                        <div id={`trading-move-${m.id}`} className="mt-2 rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-600">
+                          {m.text ? <Rich text={m.text} /> : m.pnl !== null ? "Resultado de la posición cerrada." : "Movimiento registrado en la cartera del agente."}
+                        </div>
+                      )}
                     </div>
-                    {m.pnl !== null && (
-                      <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${m.pnl >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
-                        {m.pnl >= 0 ? "+" : ""}
-                        {eur0(m.pnl)}
-                      </span>
-                    )}
-                    {m.text && <p className="mt-1 text-xs leading-relaxed text-slate-500">{short(m.text)}</p>}
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
