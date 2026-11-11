@@ -9,6 +9,7 @@ import type { getOpportunities } from "@/lib/trading/agents/opportunities";
 import { api, eur0, errorText, pct, tone } from "./format";
 import { useTradingRefresh } from "./navigation";
 import { OpenAccount } from "./open-account";
+import { withLivePoint } from "./equity-chart";
 import { AVATAR, cap, card, ErrorNote, LoadingCard, PILL, plainText, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 
@@ -161,7 +162,7 @@ export function HomePanel() {
                   {pending > 0 && ` · ${pending === 1 ? "1 orden pendiente" : `${pending} órdenes pendientes`}`}
                 </div>
               </div>
-              <div className="flex min-w-[160px] flex-1 justify-center">{account.equity.length >= 2 && <Sparkline points={account.equity} />}</div>
+              <div className="flex min-w-[160px] flex-1 justify-center">{withLivePoint(account.equity, s.equity).length >= 2 && <Sparkline points={withLivePoint(account.equity, s.equity)} />}</div>
               <div className="flex w-full flex-col gap-2 sm:w-auto">
                 <Link
                   href="/trading/oportunidades"
@@ -177,7 +178,7 @@ export function HomePanel() {
                 </Link>
               </div>
             </div>
-            {account.equity.length < 2 && (
+            {withLivePoint(account.equity, s.equity).length < 2 && (
               <p className="mt-4 flex items-center gap-2 text-sm text-slate-500">
                 <BarChart3 className="h-4 w-4 text-slate-400" /> Tu gráfico se dibuja con el cierre de cada sesión. Ejecuta tu primera oportunidad y mañana
                 verás la línea.

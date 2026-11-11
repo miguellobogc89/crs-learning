@@ -8,7 +8,7 @@ import type { getAgents } from "@/lib/trading/agents/service";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import { api, dayFmt, errorText, eur, eur0, field, ghost, int, panel, pct, primary, th, tone } from "./format";
 import { refreshTrading, useTradingRefresh } from "./navigation";
-import { EquityCurve } from "./equity-chart";
+import { EquityCurve, withLivePoint } from "./equity-chart";
 import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 
@@ -391,7 +391,7 @@ function AgentCard({ a, rank, onDetail }: { a: Agent; rank: number; onDetail: ()
         <ReturnPill value={a.summary.returnPct} />
       </div>
       <div className="mt-2 px-3">
-        <EquityCurve points={a.equity} initial={a.summary.initialCapital} height={64} empty="La línea aparece tras su primera sesión." />
+        <EquityCurve points={withLivePoint(a.equity, a.summary.equity)} initial={a.summary.initialCapital} height={64} empty="La línea aparece tras su primera sesión." />
       </div>
       <ul className="mt-3 flex flex-wrap gap-1.5 px-5">
         {traits.map((t) => (
@@ -490,7 +490,7 @@ function AgentDetail({
       </dl>
 
       <div className="border-b border-slate-100 px-2 py-2">
-        <EquityCurve points={a.equity} initial={s.initialCapital} height={160} empty="Su gráfico se dibuja con el cierre de cada sesión desde que empezó." />
+        <EquityCurve points={withLivePoint(a.equity, s.equity)} initial={s.initialCapital} height={160} empty="Su gráfico se dibuja con el cierre de cada sesión desde que empezó." />
       </div>
       {a.lastRun?.marketView && (
         <div className="border-b border-slate-100 px-5 py-3 text-sm leading-relaxed text-slate-700">

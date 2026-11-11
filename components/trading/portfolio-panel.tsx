@@ -7,7 +7,7 @@ import { PATTERN_LIBRARY } from "@/lib/trading/library";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { card, ErrorNote, LoadingCard, ReturnPill } from "./ui";
 import { CopiesPanel } from "./copies-panel";
-import { EquityChart } from "./equity-chart";
+import { EquityChart, withLivePoint } from "./equity-chart";
 import { AssetIcon } from "./asset-icon";
 import { OpenAccount } from "./open-account";
 import { PATTERN_SHORT, api, dayFmt, errorText, eur, eur0, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
@@ -145,7 +145,7 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
               </h2>
           <span className="text-xs text-slate-500">Capital inicial {eur0(s.initialCapital)}</span>
         </header>
-        <EquityChart points={data.equity} initial={s.initialCapital} />
+        <EquityChart points={withLivePoint(data.equity, s.equity)} initial={s.initialCapital} />
       </section>
       <CopiesPanel />
       </>

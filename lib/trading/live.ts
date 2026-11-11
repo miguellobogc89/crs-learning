@@ -63,7 +63,9 @@ async function run(budgetMs: number): Promise<LiveSummary> {
           where: { id: inst.id },
           data: bar
             ? { live_day: new Date(bar.t), live_open: bar.o, live_high: bar.h, live_low: bar.l, live_price: bar.c, live_at: new Date() }
-            : { live_at: new Date() },
+            : // Sin vela de hoy (noche, fin de semana o el proveedor aún no la tiene: la bolsa española
+              // llega con ~15 min de retraso): se vuelve a mirar en un par de minutos, no en diez.
+              { live_at: new Date(Date.now() - STALE_MS + 2 * 60_000) },
         });
         if (bar) out.updated++;
       } catch {

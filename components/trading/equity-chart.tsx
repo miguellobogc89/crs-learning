@@ -6,6 +6,21 @@ import { eur0, pct } from "./format";
 
 type Point = { day: string; equity: number };
 
+/** Día de hoy en Madrid (AAAA-MM-DD). */
+const todayMadrid = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date());
+
+/**
+ * Las curvas guardadas son de cierre (un punto por sesión). Se añade el patrimonio de ahora como
+ * punto de hoy para que la línea se mueva durante el día; al cierre lo sustituye el definitivo.
+ */
+export function withLivePoint(points: Point[], equityNow: number | null | undefined): Point[] {
+  if (equityNow === null || equityNow === undefined || !Number.isFinite(equityNow) || !points.length) return points;
+  const today = todayMadrid();
+  const last = points[points.length - 1];
+  if (last.day.slice(0, 10) >= today) return [...points.slice(0, -1), { day: last.day, equity: equityNow }];
+  return [...points, { day: today, equity: equityNow }];
+}
+
 const RANGES = [
   { key: "1m", label: "1M", days: 31 },
   { key: "3m", label: "3M", days: 92 },
