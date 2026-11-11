@@ -2,9 +2,10 @@
 // Oportunidades: una sola tabla con las ideas cripto del analista común (vivas primero), qué habría
 // pasado siguiéndolas al pie de la letra y quién entró en cada una. Paginada.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Play } from "lucide-react";
+import { ChevronDown, Play } from "lucide-react";
 import type { faroView } from "@/lib/trading/faro/engine";
-import { api, errorText, eur, ghost, panel, pct, th } from "./format";
+import { api, errorText, eur, pct } from "./format";
+import { Money, Pager, TablePanel, TD, TH } from "./table";
 import { OpenAccount } from "./open-account";
 import { ago } from "./home-panel";
 import { AgentAvatar, ErrorNote, LoadingCard, Pill, Rich } from "./ui";
@@ -32,10 +33,6 @@ const left = (iso: string) => {
   const h = (new Date(iso).getTime() - Date.now()) / 3_600_000;
   return h <= 0 ? "caducada" : h < 1 ? `${Math.max(1, Math.round(h * 60))} min` : `${Math.round(h)} h`;
 };
-const signed = (v: number | null) => (v === null ? "—" : `${v > 0 ? "+" : ""}${eur(v, 2)}`);
-const SIZES = [10, 15, 25, 50];
-const TH = `${th} whitespace-normal px-2 leading-tight`;
-const TD = "px-2 py-3";
 
 export function FaroPanel() {
   const [data, setData] = useState<Data | null>(null);
@@ -96,11 +93,11 @@ export function FaroPanel() {
     <div className="space-y-4">
       {error && <ErrorNote>{error}</ErrorNote>}
       {!data.account.opened && <OpenAccount compact />}
-    <section className={`${panel} flex min-h-[calc(100dvh-15rem)] flex-col`}>
+    <TablePanel footer={<Pager total={all.length} page={current} perPage={PAGE} onPage={setPage} onPerPage={setPerPage} label="ideas" />}>
       {rows.length === 0 ? (
         <p className="flex-1 px-6 py-8 text-center text-sm text-slate-500">Todavía no hay ideas. La primera tanda llega en el próximo análisis (cada {data.everyMinutes} min).</p>
       ) : (
-        <div className="flex-1">
+        <div>
           <table className="w-full table-fixed text-sm">
             <colgroup>
               {[12, 8, 7, 9, 9, 9, 9, 9, 11, 7, 10].map((w, n) => (
@@ -144,11 +141,11 @@ export function FaroPanel() {
                         <Pill color={k.color}>{k.label}</Pill>
                       </td>
                       <td className={`${TD} text-center tabular-nums text-slate-700`}>{i.conviction}/5</td>
-                      <td className={`${TD} truncate text-right tabular-nums text-slate-700`}>{eur(i.price)}</td>
-                      <td className={`${TD} truncate text-right tabular-nums text-rose-600`}>{eur(i.invalidation)}</td>
-                      <td className={`${TD} truncate text-right tabular-nums text-emerald-600`}>{eur(i.target)}</td>
-                      <td className={`${TD} truncate text-right tabular-nums text-slate-700`}>{eur(i.lastPrice)}</td>
-                      <td className={`${TD} truncate text-right font-semibold tabular-nums ${tone(i.resultPct)}`}>{signed(i.resultPct)}</td>
+                      <td className={`${TD} truncate text-right text-slate-700`}><Money v={i.price} /></td>
+                      <td className={`${TD} truncate text-right text-rose-600`}><Money v={i.invalidation} /></td>
+                      <td className={`${TD} truncate text-right text-emerald-600`}><Money v={i.target} /></td>
+                      <td className={`${TD} truncate text-right text-slate-700`}><Money v={i.lastPrice} /></td>
+                      <td className={`${TD} truncate text-right font-semibold ${tone(i.resultPct)}`}><Money v={i.resultPct} digits={2} sign /></td>
                       <td className={TD}>
                         <span className="flex flex-wrap items-center gap-1.5">
                           <Pill color={st.color}>{st.label}</Pill>
@@ -210,7 +207,7 @@ export function FaroPanel() {
                                         </span>
                                       </span>
                                       <span className={`font-semibold tabular-nums ${tone(p.result)}`}>
-                                        {signed(p.result)}
+                                        <Money v={p.result} digits={2} sign />
                                         {p.resultPct !== null && <span className="ml-1 text-xs font-normal">({pct(p.resultPct, 1)})</span>}
                                       </span>
                                     </li>
@@ -229,41 +226,7 @@ export function FaroPanel() {
           </table>
         </div>
       )}
-      <footer className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-500">
-        <span className="tabular-nums">{all.length ? `${current * PAGE + 1}–${Math.min(all.length, (current + 1) * PAGE)} de ${all.length}` : "0 ideas"}</span>
-        <span className="flex items-center gap-4">
-          <label className="flex items-center gap-2">
-            Ver
-            <select
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-800"
-              value={perPage}
-              onChange={(e) => {
-                setPerPage(Number(e.target.value));
-                setPage(0);
-              }}
-            >
-              {SIZES.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            por página
-          </label>
-          <span className="flex items-center gap-1">
-            <button type="button" className={`${ghost} !px-2 !py-1.5`} disabled={current === 0} onClick={() => setPage(current - 1)} aria-label="Página anterior">
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="px-2 tabular-nums">
-              {current + 1} / {pages}
-            </span>
-            <button type="button" className={`${ghost} !px-2 !py-1.5`} disabled={current >= pages - 1} onClick={() => setPage(current + 1)} aria-label="Página siguiente">
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </span>
-        </span>
-      </footer>
-    </section>
+    </TablePanel>
       {confirm && <ConfirmOrderModal idea={confirm} cash={data.account.cash} onClose={() => setConfirm(null)} />}
     </div>
   );

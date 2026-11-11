@@ -1,29 +1,28 @@
 // components/trading/format.ts
 import type { PatternKey } from "@/lib/trading/types";
 
-export const eur = (v: number | null | undefined, digits?: number) =>
-  v === null || v === undefined || !Number.isFinite(v)
-    ? "—"
-    : new Intl.NumberFormat("es-ES", {
-        style: "currency",
-        currency: "EUR",
-        minimumFractionDigits: digits ?? (Math.abs(v) < 20 ? 3 : 2),
-        maximumFractionDigits: digits ?? (Math.abs(v) < 20 ? 3 : 2),
-      }).format(v);
+// Formato de cifras: punto de miles y coma decimal siempre (de-DE agrupa también los miles de 4
+// cifras, que es-ES deja sin punto). Importes con dos decimales; precios por debajo de 1 € con cuatro
+// para que no se pierda la diferencia entre stop y objetivo en monedas baratas.
+const nf = (digits: number) => new Intl.NumberFormat("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-export const eur0 = (v: number | null | undefined) => eur(v, 0);
+export const eurDigits = (v: number) => (v !== 0 && Math.abs(v) < 1 ? 4 : 2);
+
+export const eur = (v: number | null | undefined, digits?: number) =>
+  v === null || v === undefined || !Number.isFinite(v) ? "—" : `${nf(digits ?? eurDigits(v)).format(v)} €`;
+
+/** Importes (saldos, resultados): siempre dos decimales. */
+export const eur0 = (v: number | null | undefined) => eur(v, 2);
 
 export const num = (v: number | null | undefined, digits = 2) =>
-  v === null || v === undefined || !Number.isFinite(v)
-    ? "—"
-    : new Intl.NumberFormat("es-ES", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(v);
+  v === null || v === undefined || !Number.isFinite(v) ? "—" : nf(digits).format(v);
 
 export const pct = (v: number | null | undefined, digits = 1, sign = true) =>
   v === null || v === undefined || !Number.isFinite(v) ? "—" : `${sign && v > 0 ? "+" : ""}${num(v, digits)} %`;
 
 /** Enteros y cantidades (las de crypto llevan decimales). */
 export const int = (v: number) =>
-  new Intl.NumberFormat("es-ES", { maximumFractionDigits: Number.isInteger(v) ? 0 : Math.abs(v) < 1 ? 6 : Math.abs(v) < 100 ? 4 : 2 }).format(v);
+  new Intl.NumberFormat("de-DE", { maximumFractionDigits: Number.isInteger(v) ? 0 : Math.abs(v) < 1 ? 6 : Math.abs(v) < 100 ? 4 : 2 }).format(v);
 
 export const dayFmt = (d: string | null | undefined) =>
   d ? new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", year: "2-digit", timeZone: "UTC" }).format(new Date(d)) : "—";
@@ -102,3 +101,6 @@ export const STATUS_LABEL: Record<string, string> = {
 
 /** Etiqueta de lo que hizo entrar una operación simulada: una figura o la estrategia de tendencia. */
 export const signalLabel = (p: string) => (p === "tendencia" ? "Tendencia" : PATTERN_SHORT[p as PatternKey] ?? p);
+
+/** Alto de una página del módulo sin scroll: la tabla ocupa el resto y desplaza por dentro. */
+export const FULL_H = "h-[calc(100dvh-13rem)]";

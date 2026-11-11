@@ -1,7 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ShieldAlert } from "lucide-react";
 import type { getOverview } from "@/lib/trading/service";
 import { api, errorText } from "./format";
 import { useTradingRefresh } from "./navigation";
@@ -11,6 +10,7 @@ import { PortfolioPanel, RulesPanel, UniversePanel } from "./portfolio-panel";
 import { AgentsPanel } from "./agents-panel";
 import { NewsPanel } from "./news-panel";
 import { FaroPanel } from "./faro-panel";
+import { ActivityPanel } from "./activity-panel";
 import { HomePanel } from "./home-panel";
 import { IntegrationsPanel } from "./integrations-panel";
 import type { TradingTab } from "./tabs";
@@ -69,6 +69,7 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
       );
     else if (data && tab === "mercado") body = <MarketPanel data={data} symbol={symbol} onSymbol={pickSymbol} />;
   } else if (tab === "inicio") body = <HomePanel />;
+  else if (tab === "actividad") body = <ActivityPanel />;
   else if (tab === "oportunidades") body = <FaroPanel />;
   else if (tab === "noticias") body = <NewsPanel />;
   else if (tab === "cartera") body = <PortfolioPanel onOpenChart={openChart} />;
@@ -86,11 +87,6 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
         </p>
       )}
       {body}
-      <p className="flex items-start gap-2 text-xs leading-relaxed text-slate-500">
-        <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        Simulación con dinero ficticio. Las figuras chartistas no garantizan resultados y lo que pasó antes no asegura lo que
-        pasará. Cotizaciones de cierre de un proveedor público, sin garantía de exactitud. No es asesoramiento financiero.
-      </p>
     </div>
   );
 }

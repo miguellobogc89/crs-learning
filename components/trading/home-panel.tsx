@@ -1,16 +1,17 @@
 "use client";
-// Inicio: tu cartera y su evolución, tú contra los agentes y lo último que han hecho.
+// Inicio: tú contra los agentes, en una tabla con el estilo de Oportunidades. La actividad de los
+// agentes vive en su propia sección («Actividad»).
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Bot, ChevronDown, User } from "lucide-react";
+import { Bot, User } from "lucide-react";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import type { TradingStatus } from "./navigation";
 import type { getAgents } from "@/lib/trading/agents/service";
-import { api, eur, eur0, errorText, pct, MEETINGS_TEXT } from "./format";
+import { api, eur, errorText, pct } from "./format";
 import { useTradingRefresh } from "./navigation";
 import { OpenAccount } from "./open-account";
-import { AVATAR, cap, ErrorNote, LoadingCard, PILL, ReturnPill, Rich } from "./ui";
-import { AssetIcon } from "./asset-icon";
+import { AVATAR, cap, ErrorNote, LoadingCard, PILL, ReturnPill } from "./ui";
+import { Money, TablePanel, TD, TH } from "./table";
 
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
 type Agents = Awaited<ReturnType<typeof getAgents>>;
@@ -37,25 +38,6 @@ export function HomeBalance() {
   );
 }
 
-type Move = Agents["moves"][number];
-
-/** Resumen compacto: la acción y el activo destacan, sin repetir la explicación larga. */
-function MoveSummary({ move }: { move: Move }) {
-  const asset = (
-    <>
-      <strong className="font-semibold text-slate-900">{move.asset}</strong>{" "}
-      <AssetIcon symbol={move.symbol} name={move.asset} size="xs" className="inline-block align-[-4px]" />
-    </>
-  );
-  if (move.kind === "compra") return <>Compra {asset}</>;
-  if (move.kind === "venta") return <>Venta de {asset}</>;
-  if (move.kind === "protege")
-    return <>Subida de <strong className="font-semibold text-slate-900">stop</strong>{move.stop !== null ? <> a {eur(move.stop, move.stop < 1 ? 6 : 2)}</> : null} en {asset}</>;
-  if (move.kind === "stop") return <>Salida por <strong className="font-semibold text-slate-900">stop</strong> en {asset}</>;
-  if (move.kind === "objetivo") return <>Objetivo alcanzado en {asset}</>;
-  return <>Cierre por tiempo en {asset}</>;
-}
-
 export const ago = (iso: string) => {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
   if (mins < 60) return `hace ${Math.max(1, mins)} min`;
@@ -67,7 +49,6 @@ export function HomePanel() {
   const [account, setAccount] = useState<Portfolio | null>(null);
   const [agents, setAgents] = useState<Agents | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expandedMove, setExpandedMove] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -127,151 +108,78 @@ export function HomePanel() {
   ].sort((x, y) => y.returnPct - x.returnPct);
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="min-w-0 space-y-6">
-        {!account.opened && <OpenAccount />}
-
-        {/* Tabla de operadores: sin tarjeta ni cabecera redundante */}
-        <section className="min-w-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] table-fixed text-sm">
-              <colgroup>
-                <col className="w-[6%]" />
-                <col className="w-[23%]" />
-                <col className="w-[19%]" />
-                <col className="w-[17%]" />
-                <col className="w-[22%]" />
-                <col className="w-[13%]" />
-              </colgroup>
-              <thead>
-                <tr className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="py-2 text-center">#</th>
-                  <th className="px-2 py-2 text-left">Operador</th>
-                  <th className="px-2 py-2 text-right">Patrimonio</th>
-                  <th className="px-2 py-2 text-center">Rentabilidad</th>
-                  <th className="px-2 py-2 text-center">Invertido</th>
-                  <th className="py-2 text-center">Posiciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, k) => (
-                  <tr key={r.key} className="hover:bg-slate-50/50">
-                    <td className="py-3 text-center">
-                      <span className="mx-auto flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-xs font-semibold text-slate-600">{k + 1}</span>
-                    </td>
-                    <td className="px-2 py-3">
-                      {r.key === "tu" ? (
-                        <span className="flex items-center gap-2 whitespace-nowrap">
-                          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR.slate} text-white`}>
-                            <User className="h-4 w-4" />
-                          </span>
-                          <b className="text-[15px] font-semibold text-slate-900">Tú</b>
-                        </span>
-                      ) : (
-                        <Link href={`/trading/agentes?agent=${r.key}`} className="group flex min-w-0 items-center gap-2 whitespace-nowrap">
-                          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR[r.color] ?? AVATAR.slate} text-white`}>
-                            <Bot className="h-4 w-4" />
-                          </span>
-                          <b className="truncate text-[15px] font-semibold text-slate-900 group-hover:underline">{r.name}</b>
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${PILL[r.color] ?? PILL.slate}`}>{cap(r.profile)}</span>
-                        </Link>
-                      )}
-                    </td>
-                    <td className="px-2 py-3 text-right text-[15px] font-semibold tabular-nums text-slate-900">{eur(r.equity, 2)}</td>
-                    <td className="px-2 py-3 text-center">
-                      <ReturnPill value={r.returnPct} />
-                    </td>
-                    <td className="px-2 py-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="shrink-0 whitespace-nowrap tabular-nums text-slate-700">{pct(r.investedPct, 0, false)}</span>
-                        <span className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-slate-100 lg:w-20">
-                          <span className="block h-full rounded-full bg-blue-600" style={{ width: `${Math.min(100, Math.max(0, r.investedPct))}%` }} />
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 text-center">
-                      {r.pending > 0 ? (
-                        <span className="rounded-lg bg-orange-50 px-2.5 py-1 text-xs font-semibold tabular-nums text-orange-700">
-                          {r.open} + {r.pending} pend.
-                        </span>
-                      ) : (
-                        <span className="tabular-nums text-slate-700">{r.open}</span>
-                      )}
-                      {r.closed > 0 && <div className="mt-0.5 text-[11px] text-slate-400">{r.closed} cerradas</div>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-        </section>
-      </div>
-
-      {/* Últimos movimientos */}
-      <aside className="min-w-0 xl:sticky xl:top-0 xl:self-start">
-        <section className="flex max-h-[calc(100dvh-12rem)] min-h-0 flex-col overflow-hidden">
-          <header className="flex shrink-0 items-center justify-between px-3 pb-3 pt-1">
-            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-              <Bot className="h-5 w-5 text-blue-600" /> Últimos movimientos
-            </h2>
-            <Link href="/trading/agentes" className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline">
-              Agentes <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </header>
-          {agents.moves.length === 0 ? (
-            <p className="px-5 pb-5 pt-2 text-sm text-slate-500">Los agentes aún no han operado. {MEETINGS_TEXT}</p>
-          ) : (
-            <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
-              {agents.moves.map((m) => {
-                const key = `${m.kind}-${m.id}`;
-                const isExpanded = expandedMove === key;
-                return (
-                  <li key={key} className="flex gap-3 rounded-lg px-3 py-3 hover:bg-slate-50/70">
-                    <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR[m.color] ?? AVATAR.slate} text-white`}>
-                      <Bot className="h-4 w-4" />
+    <div className="space-y-4">
+      {!account.opened && <OpenAccount />}
+      <TablePanel>
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            {[6, 30, 18, 16, 18, 12].map((w, n) => (
+              <col key={n} style={{ width: `${w}%` }} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr>
+              <th className={`${TH} text-center`}>#</th>
+              <th className={TH}>Operador</th>
+              <th className={`${TH} text-right`}>Patrimonio</th>
+              <th className={`${TH} text-center`}>Rentabilidad</th>
+              <th className={`${TH} text-center`}>Invertido</th>
+              <th className={`${TH} text-center`}>Posiciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, k) => (
+              <tr key={r.key} className="border-b border-slate-100 hover:bg-slate-50/60">
+                <td className={`${TD} text-center`}>
+                  <span className="mx-auto flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-xs font-semibold text-slate-600">{k + 1}</span>
+                </td>
+                <td className={TD}>
+                  {r.key === "tu" ? (
+                    <span className="flex items-center gap-2">
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR.slate} text-white`}>
+                        <User className="h-4 w-4" />
+                      </span>
+                      <b className="font-semibold text-slate-900">Tú</b>
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <b className="min-w-0 text-sm font-semibold text-slate-900">{m.name}</b>
-                        <span className="shrink-0 whitespace-nowrap text-xs text-slate-400">{ago(m.at)}</span>
-                      </div>
-                      <div className="mt-1 flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs leading-relaxed text-slate-600"><MoveSummary move={m} /></p>
-                          {m.pnl !== null && (
-                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                              <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${m.pnl >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
-                                {m.pnl > 0 ? "+" : ""}{eur(m.pnl, 2)}
-                              </span>
-                              <span className="text-[11px] text-slate-400">{m.pnlType === "latente" ? "P/L latente actual" : "P/L realizado"}</span>
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          aria-label={isExpanded ? `Ocultar detalle de ${m.name}` : `Ver detalle de ${m.name}`}
-                          aria-expanded={isExpanded}
-                          aria-controls={`trading-move-${m.id}`}
-                          onClick={() => setExpandedMove(isExpanded ? null : key)}
-                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-blue-700"
-                        >
-                          <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                        </button>
-                      </div>
-                      {isExpanded && (
-                        <div id={`trading-move-${m.id}`} className="mt-2 rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-600">
-                          {m.text ? <Rich text={m.text} /> : m.pnl !== null ? "Resultado de la posición cerrada." : "Movimiento registrado en la cartera del agente."}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      </aside>
+                  ) : (
+                    <Link href={`/trading/agentes?agent=${r.key}`} className="group flex min-w-0 items-center gap-2">
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR[r.color] ?? AVATAR.slate} text-white`}>
+                        <Bot className="h-4 w-4" />
+                      </span>
+                      <b className="truncate font-semibold text-slate-900 group-hover:underline">{r.name}</b>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${PILL[r.color] ?? PILL.slate}`}>{cap(r.profile)}</span>
+                    </Link>
+                  )}
+                </td>
+                <td className={`${TD} text-right font-semibold text-slate-900`}>
+                  <Money v={r.equity} digits={2} />
+                </td>
+                <td className={`${TD} text-center`}>
+                  <ReturnPill value={r.returnPct} />
+                </td>
+                <td className={TD}>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="shrink-0 tabular-nums text-slate-700">{pct(r.investedPct, 0, false)}</span>
+                    <span className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-slate-100">
+                      <span className="block h-full rounded-full bg-blue-600" style={{ width: `${Math.min(100, Math.max(0, r.investedPct))}%` }} />
+                    </span>
+                  </div>
+                </td>
+                <td className={`${TD} text-center`}>
+                  {r.pending > 0 ? (
+                    <span className="rounded-lg bg-orange-50 px-2.5 py-1 text-xs font-semibold tabular-nums text-orange-700">
+                      {r.open} + {r.pending} pend.
+                    </span>
+                  ) : (
+                    <span className="tabular-nums text-slate-700">{r.open}</span>
+                  )}
+                  {r.closed > 0 && <div className="mt-0.5 text-[11px] text-slate-400">{r.closed} cerradas</div>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TablePanel>
     </div>
   );
 }
