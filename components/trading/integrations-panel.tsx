@@ -3,12 +3,13 @@
 // central (/api/brokers): proveedores, capacidades, entornos, permisos y estado. Aquí no hay lógica
 // de ningún bróker concreto. Las credenciales se envían una vez y no vuelven nunca al navegador.
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, ClipboardList, KeyRound, Loader2, Plug, PlugZap, RefreshCw, ShieldAlert, Unplug } from "lucide-react";
+import { CheckCircle2, ClipboardList, Eye, KeyRound, Loader2, Plug, PlugZap, RefreshCw, ShieldAlert, Unplug } from "lucide-react";
 import type { ConnectionView, ProviderView } from "@/lib/brokers/gateway";
 import type { BrokerEnvironment, BrokerPermission, OrderStatus } from "@/lib/brokers/types";
 import { errorText, field, ghost, panel, primary, th } from "./format";
 import { refreshTrading } from "./navigation";
 import { BrokerPanel } from "./broker-panel";
+import { AccountModal } from "./integrations-account";
 import { card, ErrorNote, LoadingCard, Modal, Pill } from "./ui";
 
 type Data = { providers: ProviderView[]; connections: ConnectionView[]; realEnabled: boolean; canManage: boolean };
@@ -93,6 +94,7 @@ export function IntegrationsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState<ProviderView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<{ c: ConnectionView; p: ProviderView } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -211,6 +213,7 @@ export function IntegrationsPanel() {
                     }
                     onPermissions={(perms) => act(`perm:${c.id}`, "permissions", { connectionId: c.id, permissions: perms })}
                     onUseForTrading={(use) => act(`use:${c.id}`, "use-for-trading", { connectionId: use ? c.id : null })}
+                    onView={() => setViewing({ c, p })}
                   />
                 ))}
                 {!conns.length && <p className="text-sm text-slate-500">No tienes ninguna cuenta conectada.</p>}
@@ -303,6 +306,16 @@ export function IntegrationsPanel() {
                     {o.orderId ? `orden ${o.orderId}` : ""}
                     {o.error && <div className="text-red-700">{o.error}</div>}
                     {o.reference && <div>{o.reference}</div>}
+                    {(o.status === "unknown" || o.status === "open" || o.status === "partially_filled" || o.status === "pending_submit") && (
+                      <button
+                        type="button"
+                        className="mt-1 font-semibold text-blue-700 hover:underline disabled:opacity-50"
+                        disabled={!!busy}
+                        onClick={() => act(`refresh:${o.id}`, "refresh-order", { requestId: o.id })}
+                      >
+                        {busy === `refresh:${o.id}` ? "Consultando…" : "Consultar estado en el bróker"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -311,6 +324,17 @@ export function IntegrationsPanel() {
         )}
       </section>
 
+      {viewing && (
+        <AccountModal
+          c={viewing.c}
+          provider={viewing.p}
+          onClose={() => setViewing(null)}
+          onChanged={() => {
+            void load();
+            refreshTrading();
+          }}
+        />
+      )}
       {connecting && (
         <ConnectModal
           provider={connecting}
@@ -336,6 +360,7 @@ function ConnectionRow({
   onDisconnect,
   onPermissions,
   onUseForTrading,
+  onView,
 }: {
   c: ConnectionView;
   canManage: boolean;
@@ -344,6 +369,7 @@ function ConnectionRow({
   onDisconnect: () => void;
   onPermissions: (p: BrokerPermission[]) => void;
   onUseForTrading: (use: boolean) => void;
+  onView: () => void;
 }) {
   const st = STATUS_PILL[c.status];
   const toggle = (k: BrokerPermission) => {
@@ -369,6 +395,11 @@ function ConnectionRow({
           )}
         </div>
         <div className="flex gap-1.5">
+          {c.status === "active" && (
+            <button type="button" className={ghost} onClick={onView}>
+              <Eye className="h-4 w-4" /> Ver cuenta
+            </button>
+          )}
           <button type="button" className={ghost} title="Comprobar la conexión" disabled={!!busy} onClick={onVerify}>
             {busy === `verify:${c.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </button>
