@@ -90,8 +90,10 @@ export function ActivityPanel({ header }: { header?: ReactNode } = {}) {
   ];
 
   return (
+    <div className="flex h-full min-h-0 flex-col">
     <DataTable
       id="actividad"
+      height="min-h-0 flex-1"
       header={header}
       columns={columns}
       rows={moves}
@@ -105,5 +107,6 @@ export function ActivityPanel({ header }: { header?: ReactNode } = {}) {
         </div>
       )}
     />
+    </div>
   );
 }
