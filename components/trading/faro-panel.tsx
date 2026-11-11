@@ -33,12 +33,15 @@ const left = (iso: string) => {
   return h <= 0 ? "caducada" : h < 1 ? `${Math.max(1, Math.round(h * 60))} min` : `${Math.round(h)} h`;
 };
 const signed = (v: number | null) => (v === null ? "—" : `${v > 0 ? "+" : ""}${eur(v, 2)}`);
-const PAGE = 15;
+const SIZES = [10, 15, 25, 50];
+const TH = `${th} whitespace-normal px-2 leading-tight`;
+const TD = "px-2 py-3";
 
 export function FaroPanel() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [perPage, setPerPage] = useState(15);
   const [open, setOpen] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<TradeIdea | null>(null);
 
@@ -57,6 +60,7 @@ export function FaroPanel() {
 
   const all = useMemo(() => (data ? [...data.live, ...data.past] : []), [data]);
   if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard />;
+  const PAGE = perPage;
   const pages = Math.max(1, Math.ceil(all.length / PAGE));
   const current = Math.min(page, pages - 1);
   const rows = all.slice(current * PAGE, current * PAGE + PAGE);
@@ -92,30 +96,30 @@ export function FaroPanel() {
     <div className="space-y-4">
       {error && <ErrorNote>{error}</ErrorNote>}
       {!data.account.opened && <OpenAccount compact />}
-    <section className={panel}>
+    <section className={`${panel} flex min-h-[calc(100dvh-15rem)] flex-col`}>
       {rows.length === 0 ? (
-        <p className="px-6 py-8 text-center text-sm text-slate-500">Todavía no hay ideas. La primera tanda llega en el próximo análisis (cada {data.everyMinutes} min).</p>
+        <p className="flex-1 px-6 py-8 text-center text-sm text-slate-500">Todavía no hay ideas. La primera tanda llega en el próximo análisis (cada {data.everyMinutes} min).</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] table-fixed text-sm">
+        <div className="flex-1">
+          <table className="w-full table-fixed text-sm">
             <colgroup>
-              {[13, 8, 7, 9, 9, 9, 10, 9, 10, 7, 9].map((w, n) => (
+              {[12, 8, 7, 9, 9, 9, 9, 9, 11, 7, 10].map((w, n) => (
                 <col key={n} style={{ width: `${w}%` }} />
               ))}
             </colgroup>
             <thead>
               <tr className="border-b border-slate-100">
-                <th className={th}>Activo</th>
-                <th className={th}>Tipo</th>
-                <th className={`${th} text-center`}>Convicción</th>
-                <th className={`${th} text-right`}>Detectada a</th>
-                <th className={`${th} text-right`}>Invalidación</th>
-                <th className={`${th} text-right`}>Objetivo</th>
-                <th className={`${th} text-right`}>Precio ahora / salida</th>
-                <th className={`${th} text-right`}>Resultado por 100 €</th>
-                <th className={th}>Estado</th>
-                <th className={`${th} text-center`}>Participantes</th>
-                <th className={th} />
+                <th className={TH}>Activo</th>
+                <th className={TH}>Tipo</th>
+                <th className={`${TH} text-center`}>Convicción</th>
+                <th className={`${TH} text-right`}>Detectada a</th>
+                <th className={`${TH} text-right`}>Invalidación</th>
+                <th className={`${TH} text-right`}>Objetivo</th>
+                <th className={`${TH} text-right`}>Precio ahora / salida</th>
+                <th className={`${TH} text-right`}>Resultado por 100 €</th>
+                <th className={TH}>Estado</th>
+                <th className={`${TH} text-center`}>Participantes</th>
+                <th className={TH} />
               </tr>
             </thead>
             <tbody>
@@ -127,7 +131,7 @@ export function FaroPanel() {
                 return (
                   <Fragment key={i.id}>
                     <tr className="cursor-pointer border-b border-slate-100 hover:bg-slate-50/60" onClick={() => setOpen(expanded ? null : i.id)}>
-                      <td className="px-3 py-3">
+                      <td className={TD}>
                         <span className="flex items-center gap-2">
                           <AssetIcon symbol={i.symbol} name={i.symbol} size="sm" />
                           <span className="min-w-0">
@@ -136,32 +140,32 @@ export function FaroPanel() {
                           </span>
                         </span>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className={TD}>
                         <Pill color={k.color}>{k.label}</Pill>
                       </td>
-                      <td className="px-3 py-3 text-center tabular-nums text-slate-700">{i.conviction}/5</td>
-                      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{eur(i.price)}</td>
-                      <td className="px-3 py-3 text-right tabular-nums text-rose-600">{eur(i.invalidation)}</td>
-                      <td className="px-3 py-3 text-right tabular-nums text-emerald-600">{eur(i.target)}</td>
-                      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{eur(i.lastPrice)}</td>
-                      <td className={`px-3 py-3 text-right font-semibold tabular-nums ${tone(i.resultPct)}`}>{signed(i.resultPct)}</td>
-                      <td className="px-3 py-3">
-                        <span className="flex items-center gap-1.5 whitespace-nowrap">
+                      <td className={`${TD} text-center tabular-nums text-slate-700`}>{i.conviction}/5</td>
+                      <td className={`${TD} truncate text-right tabular-nums text-slate-700`}>{eur(i.price)}</td>
+                      <td className={`${TD} truncate text-right tabular-nums text-rose-600`}>{eur(i.invalidation)}</td>
+                      <td className={`${TD} truncate text-right tabular-nums text-emerald-600`}>{eur(i.target)}</td>
+                      <td className={`${TD} truncate text-right tabular-nums text-slate-700`}>{eur(i.lastPrice)}</td>
+                      <td className={`${TD} truncate text-right font-semibold tabular-nums ${tone(i.resultPct)}`}>{signed(i.resultPct)}</td>
+                      <td className={TD}>
+                        <span className="flex flex-wrap items-center gap-1.5">
                           <Pill color={st.color}>{st.label}</Pill>
                           {i.status === "viva" && <span className="text-xs text-slate-400">{left(i.validUntil)}</span>}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-center">
+                      <td className={`${TD} text-center`}>
                         <span className={`inline-flex min-w-7 justify-center rounded-lg px-2 py-0.5 text-xs font-semibold tabular-nums ${i.participants.length ? "bg-blue-50 text-blue-700" : "bg-slate-50 text-slate-400"}`}>
                           {i.participants.length}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-right">
+                      <td className={`${TD} text-right`}>
                         <span className="inline-flex items-center gap-2">
                           {i.status === "viva" && (
                             <button
                               type="button"
-                              className={ghost}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
                               disabled={!data.account.opened || mineIn}
                               title={!data.account.opened ? "Abre tu cuenta primero" : mineIn ? "Ya has entrado en esta idea" : "Ver la operación y ejecutarla"}
                               onClick={(e) => {
@@ -169,7 +173,7 @@ export function FaroPanel() {
                                 execute(i);
                               }}
                             >
-                              <Play className="h-3.5 w-3.5" /> Ejecutar
+                              <Play className="h-3.5 w-3.5" /> <span className="hidden xl:inline">Ejecutar</span>
                             </button>
                           )}
                           <ChevronDown className={`h-4 w-4 text-slate-400 transition ${expanded ? "rotate-180" : ""}`} />
@@ -225,24 +229,40 @@ export function FaroPanel() {
           </table>
         </div>
       )}
-      {all.length > PAGE && (
-        <footer className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-500">
-          <span className="tabular-nums">
-            {current * PAGE + 1}–{Math.min(all.length, (current + 1) * PAGE)} de {all.length}
-          </span>
+      <footer className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-500">
+        <span className="tabular-nums">{all.length ? `${current * PAGE + 1}–${Math.min(all.length, (current + 1) * PAGE)} de ${all.length}` : "0 ideas"}</span>
+        <span className="flex items-center gap-4">
+          <label className="flex items-center gap-2">
+            Ver
+            <select
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-800"
+              value={perPage}
+              onChange={(e) => {
+                setPerPage(Number(e.target.value));
+                setPage(0);
+              }}
+            >
+              {SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            por página
+          </label>
           <span className="flex items-center gap-1">
-            <button type="button" className={ghost} disabled={current === 0} onClick={() => setPage(current - 1)} aria-label="Página anterior">
+            <button type="button" className={`${ghost} !px-2 !py-1.5`} disabled={current === 0} onClick={() => setPage(current - 1)} aria-label="Página anterior">
               <ChevronLeft className="h-4 w-4" />
             </button>
             <span className="px-2 tabular-nums">
               {current + 1} / {pages}
             </span>
-            <button type="button" className={ghost} disabled={current >= pages - 1} onClick={() => setPage(current + 1)} aria-label="Página siguiente">
+            <button type="button" className={`${ghost} !px-2 !py-1.5`} disabled={current >= pages - 1} onClick={() => setPage(current + 1)} aria-label="Página siguiente">
               <ChevronRight className="h-4 w-4" />
             </button>
           </span>
-        </footer>
-      )}
+        </span>
+      </footer>
     </section>
       {confirm && <ConfirmOrderModal idea={confirm} cash={data.account.cash} onClose={() => setConfirm(null)} />}
     </div>
