@@ -7,7 +7,7 @@ import type { AgentRules } from "../agents/roster";
 export type KamikazeStyle = "impulso" | "rupturas" | "rebotes";
 
 export type KamikazeDef = {
-  key: "cohete" | "mecha" | "fenix";
+  key: string;
   name: string;
   profile: "kamikaze";
   style: KamikazeStyle;
@@ -32,6 +32,17 @@ export type KamikazeDef = {
     breakeven: boolean;
   };
   rules: AgentRules;
+  /** Variantes: clave del kamikaze original y qué cambia (una sola cosa, para comparar limpio). */
+  base?: string;
+  variant?: string;
+  /** % del capital de la ronda por operación (100 = todo; 50 = dos «balas»). */
+  sizePct?: number;
+  /** Cuánto puede haber subido el precio desde la idea para que aún entre. */
+  maxChasePct?: number;
+  /** «clamp»: stop en la invalidación, pero entre un 5 % y un 40 % por debajo; «idea»: justo en la invalidación. */
+  stopMode?: "clamp" | "idea";
+  /** «target»: vende en el objetivo; «trail»: deja correr con un stop que sube con el precio. */
+  exitMode?: "target" | "trail";
 };
 
 /** Costes de un exchange de crypto al contado: ~0,1 % por operación y algo de deslizamiento. */
@@ -94,6 +105,24 @@ export const KAMIKAZES: KamikazeDef[] = [
     rules: RULES,
   },
 ];
+
+/** Variantes: copian a su original y cambian un solo parámetro. */
+const variant = (base: string, o: Pick<KamikazeDef, "key" | "name" | "variant" | "tagline"> & Partial<KamikazeDef>): KamikazeDef => {
+  const b = ORIGINALS.find((k) => k.key === base)!;
+  return { ...b, base, ...o };
+};
+const ORIGINALS = KAMIKAZES.slice();
+KAMIKAZES.splice(
+  0,
+  KAMIKAZES.length,
+  ORIGINALS[0],
+  variant("cohete", { key: "cohete-persigue", name: "COHETE PERSIGUE", variant: "Persigue", maxChasePct: 8, tagline: "Como COHETE, pero entra aunque el precio ya haya subido hasta un 8 % desde la idea (COHETE: 3 %)." }),
+  ORIGINALS[1],
+  variant("mecha", { key: "mecha-balas", name: "MECHA 2 BALAS", variant: "2 balas", sizePct: 50, tagline: "Como MECHA, pero cada operación usa la mitad del capital de la ronda: si falla una, le queda otra." }),
+  variant("mecha", { key: "mecha-corre", name: "MECHA CORRE", variant: "Corre", exitMode: "trail", tagline: "Como MECHA, pero no vende en el objetivo: deja correr con un stop que sube con el precio." }),
+  ORIGINALS[2],
+  variant("fenix", { key: "fenix-ajustado", name: "FÉNIX AJUSTADO", variant: "Ajustado", stopMode: "idea", tagline: "Como FÉNIX, pero con el stop justo en la invalidación de la idea, sin el mínimo del 5 %." }),
+);
 
 export type KamikazeKey = KamikazeDef["key"];
 export const kamikazeByKey = (key: string) => KAMIKAZES.find((k) => k.key === key) ?? null;

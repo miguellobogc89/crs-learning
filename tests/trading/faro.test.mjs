@@ -59,3 +59,15 @@ test("faro: cada kamikaze toma su tipo, sin perseguir el precio y con sus límit
   assert.equal(F.pickIdea("impulso", board, px, now, new Set(["a"])), null, "una idea ya tomada no se repite");
   assert.equal(F.pickIdea("impulso", board, px, 6 * H), null, "caducada");
 });
+
+test("faro: motivo cuando no entra, variantes de entrada y stop que sube", () => {
+  const now = H;
+  const board = [{ id: "a", pair: "SOLEUR", kind: "impulso", conviction: 3, price: 100, invalidation: 97, target: 104, validUntil: 5 * H, createdAt: 0 }];
+  assert.match(F.chooseIdea("rebotes", board, () => 100, now).reason, /No hay ideas de rebote/);
+  assert.match(F.chooseIdea("impulso", board, () => 100, now, new Set(["a"])).reason, /Ya entró/);
+  assert.match(F.chooseIdea("impulso", board, () => 106, now).reason, /ya escapada \(\+6,0 %\)/);
+  assert.equal(F.chooseIdea("impulso", board, () => 106, now, new Set(), { maxChasePct: 8 }).pick.idea.id, "a", "la variante que persigue sí entra");
+  assert.equal(F.chooseIdea("impulso", board, () => 100, now, new Set(), { stopMode: "idea" }).pick.stop, 97, "stop justo en la invalidación");
+  assert.equal(F.trailingStop({ entry: 100, initialStop: 90, stop: 90 }, 130), 117, "misma distancia (10 %) que el riesgo inicial");
+  assert.equal(F.trailingStop({ entry: 100, initialStop: 90, stop: 117 }, 120), 117, "nunca baja");
+});

@@ -177,24 +177,57 @@ export type BoardIdea = { id: string; pair: string; kind: string; conviction: nu
 /** Margen máximo que puede haber subido el precio desde la idea para que aún valga entrar. */
 export const MAX_CHASE_PCT = 3;
 
+export type PickOptions = { maxChasePct?: number; stopMode?: "clamp" | "idea" };
+const TYPE_TEXT: Record<KamikazeStyle, string> = { impulso: "impulso", rupturas: "ruptura o noticia", rebotes: "rebote" };
+const pct1 = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
+
 /**
  * La mejor idea viva de su estilo que aún se puede tomar: no caducada, precio por encima de la
- * invalidación y sin haberse escapado. El kamikaze usa la invalidación como stop (entre un 5 % y
- * un 40 % por debajo) y apunta al menos a +10 %: si la idea pide menos, deja correr la ganancia.
+ * invalidación y sin haberse escapado. Stop en la invalidación («clamp»: entre un 5 % y un 40 % por
+ * debajo; «idea»: tal cual) y objetivo de al menos +10 %. Si no hay ninguna, dice por qué.
  */
-export function pickIdea<T extends BoardIdea>(style: KamikazeStyle, ideas: T[], price: (pair: string) => number | null, now: number, taken: Set<string> = new Set()) {
+export function chooseIdea<T extends BoardIdea>(
+  style: KamikazeStyle,
+  ideas: T[],
+  price: (pair: string) => number | null,
+  now: number,
+  taken: Set<string> = new Set(),
+  opts: PickOptions = {},
+): { pick: { idea: T; price: number; stop: number; target: number } } | { reason: string } {
+  const chase = opts.maxChasePct ?? MAX_CHASE_PCT;
   const kinds = STYLE_KINDS[style] as string[];
-  const options = ideas
-    .filter((i) => kinds.includes(i.kind) && i.validUntil > now && !taken.has(i.id))
-    .map((i) => ({ i, p: price(i.pair) }))
-    .filter((x): x is { i: T; p: number } => x.p !== null && x.p > x.i.invalidation && x.p <= x.i.price * (1 + MAX_CHASE_PCT / 100))
+  const mine = ideas.filter((i) => kinds.includes(i.kind) && i.validUntil > now);
+  if (!mine.length) return { reason: `No hay ideas de ${TYPE_TEXT[style]} en el tablón` };
+  const free = mine.filter((i) => !taken.has(i.id));
+  if (!free.length) return { reason: `Ya entró en las ideas de ${TYPE_TEXT[style]} que hay` };
+  const priced = free.map((i) => ({ i, p: price(i.pair) }));
+  const options = priced
+    .filter((x): x is { i: T; p: number } => x.p !== null && x.p > x.i.invalidation && x.p <= x.i.price * (1 + chase / 100))
     .sort((a, b) => b.i.conviction - a.i.conviction || b.i.createdAt - a.i.createdAt);
   const best = options[0];
-  if (!best) return null;
+  if (!best) {
+    const why = priced.map(({ i, p }) =>
+      p === null ? `${i.pair}: sin precio` : p <= i.invalidation ? `${i.pair}: por debajo de la invalidación` : `${i.pair}: ya escapada (${pct1(((p - i.price) / i.price) * 100)})`,
+    );
+    return { reason: `${free.length === 1 ? "1 idea" : `${free.length} ideas`} de ${TYPE_TEXT[style]}, ninguna a tiro: ${why.join(" · ")}` };
+  }
   const { i, p } = best;
-  const stop = Math.min(p * 0.95, Math.max(p * 0.6, i.invalidation));
+  const stop = opts.stopMode === "idea" ? i.invalidation : Math.min(p * 0.95, Math.max(p * 0.6, i.invalidation));
   const target = Math.max(i.target, p * 1.1);
-  return { idea: i, price: p, stop, target };
+  return { pick: { idea: i, price: p, stop, target } };
+}
+
+/** Igual que chooseIdea, sin el motivo: la idea elegida o null. */
+export function pickIdea<T extends BoardIdea>(style: KamikazeStyle, ideas: T[], price: (pair: string) => number | null, now: number, taken: Set<string> = new Set(), opts: PickOptions = {}) {
+  const r = chooseIdea(style, ideas, price, now, taken, opts);
+  return "pick" in r ? r.pick : null;
+}
+
+/** Stop que sube con el precio: misma distancia que el riesgo inicial, y nunca baja. */
+export function trailingStop(p: { entry: number; initialStop: number; stop: number }, price: number) {
+  const dist = p.entry > p.initialStop ? (p.entry - p.initialStop) / p.entry : 0.1;
+  const next = price * (1 - dist);
+  return next > p.stop ? next : p.stop;
 }
 
 export const hoursLeft = (validUntil: number, now: number) => Math.max(0, (validUntil - now) / HOUR);

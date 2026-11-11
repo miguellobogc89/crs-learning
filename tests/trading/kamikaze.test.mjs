@@ -8,11 +8,20 @@ const { KAMIKAZES } = load("lib/trading/kamikaze/roster.ts");
 const DAY = 86_400_000;
 
 test("kamikazes: tres estilos con metas distintas y 20 € por ronda", () => {
-  assert.deepEqual(KAMIKAZES.map((k) => [k.key, k.style, k.multiple, k.days]), [
+  const originals = KAMIKAZES.filter((k) => !k.base);
+  assert.deepEqual(originals.map((k) => [k.key, k.style, k.multiple, k.days]), [
     ["cohete", "impulso", 10, 7],
     ["mecha", "rupturas", 10, 5],
     ["fenix", "rebotes", 8, 10],
   ]);
+  // Cada variante copia a su original y cambia un solo parámetro.
+  const params = ["sizePct", "maxChasePct", "stopMode", "exitMode"];
+  for (const v of KAMIKAZES.filter((k) => k.base)) {
+    const b = originals.find((o) => o.key === v.base);
+    assert.equal(v.style, b.style);
+    assert.equal(params.filter((p) => v[p] !== b[p]).length, 1, `${v.key} cambia una sola cosa`);
+  }
+  assert.equal(new Set(KAMIKAZES.map((k) => k.key)).size, KAMIKAZES.length);
   assert.ok(KAMIKAZES.every((k) => k.capital === 20 && k.settings.max_open_positions === 1));
 });
 

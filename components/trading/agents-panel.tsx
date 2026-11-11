@@ -776,6 +776,11 @@ function RoundProgress({ k, equity }: { k: Kamikaze; equity: number }) {
         <span>{equity >= r.goal ? "¡Meta alcanzada!" : "Objetivo sin fecha límite"}</span>
         <span>{k.stats.rounds} rondas · {k.stats.goals} metas</span>
       </div>
+      {r.note && (
+        <p className="mt-1.5 border-t border-slate-200/70 pt-1.5 text-slate-500" title={r.noteAt ? `Revisado ${new Date(r.noteAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}` : undefined}>
+          {r.note}
+        </p>
+      )}
     </div>
   );
 }

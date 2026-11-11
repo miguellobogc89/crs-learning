@@ -2532,6 +2532,9 @@ model trading_kamikaze_rounds {
   last_decision_at    DateTime? @db.Timestamptz(6)
   last_decision_price Float?
   cooldown_until      DateTime? @db.Timestamptz(6)
+  /// Qué pasó en la última revisión: por qué no entró o en qué entró.
+  last_note           String?
+  last_note_at        DateTime? @db.Timestamptz(6)
 
   @@unique([agent, number], map: "trading_kamikaze_rounds_agent_number")
   @@index([agent, status], map: "trading_kamikaze_rounds_agent_status")

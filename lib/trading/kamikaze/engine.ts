@@ -13,7 +13,7 @@ import { accountState, closePosition, costOf, ensureAccount, madridDay, placeOrd
 import { AGENTS_WORKSPACE } from "../agents/roster";
 import { dayDate } from "../sync";
 import { boardIdeas, faroTick, lastMarketView, setLive } from "../faro/engine";
-import { pickIdea, type BoardIdea } from "../faro/logic";
+import { chooseIdea, trailingStop, type BoardIdea } from "../faro/logic";
 import { allInQuantity, exitNow, protectedStop, roundOutcome, type Ticker } from "./logic";
 import { eurPairs, priceEur, tickers } from "./market";
 import { KAMIKAZES, kamikazeByKey, type KamikazeDef } from "./roster";
@@ -146,10 +146,12 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
             });
             actions.push(`${pos.symbol}: ${hit}`);
           } else {
-            const stop = protectedStop({ entry: pos.entryPrice ?? price, stop: pos.stop }, price);
-            if (stop !== pos.stop) {
+            const entry = pos.entryPrice ?? price;
+            let stop = protectedStop({ entry, stop: pos.stop }, price);
+            if (def.exitMode === "trail") stop = Math.max(stop, trailingStop({ entry, initialStop: pos.initialStop, stop: pos.stop }, price));
+            if (stop > pos.stop) {
               await prisma.trading_positions.update({ where: { id: pos.id }, data: { stop, updated_at: new Date() } });
-              actions.push(`${pos.symbol}: stop a la entrada`);
+              actions.push(`${pos.symbol}: stop sube a ${stop.toFixed(4)}`);
             }
           }
         }
@@ -171,15 +173,28 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
         return;
       }
 
-      // 3) Sin posición: la mejor idea viva de su estilo en el tablón de FARO.
-      if (pos) return;
-      if (force !== def.key && round.cooldown_until && round.cooldown_until.getTime() > Date.now()) return;
+      // 3) Sin posición: la mejor idea viva de su estilo en el tablón de FARO. Si no entra, deja dicho por qué.
+      const note = (text: string | null) => prisma.trading_kamikaze_rounds.update({ where: { id: round.id }, data: { last_note: text, last_note_at: new Date() } });
+      if (pos) {
+        if (round.last_note) await note(null);
+        return;
+      }
+      if (force !== def.key && round.cooldown_until && round.cooldown_until.getTime() > Date.now()) {
+        const until = new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(round.cooldown_until);
+        await note(`En pausa tras una pérdida hasta las ${until}`);
+        return;
+      }
       // Una idea solo se toma una vez por ronda.
       const mine = await prisma.trading_positions.findMany({ where: { account_id: account.id, signal_key: { startsWith: "faro:", endsWith: `:${round.id}` } }, select: { signal_key: true } });
       const taken = new Set<string>(mine.map((p) => p.signal_key?.split(":")[1] ?? ""));
-      const pick = pickIdea(def.style, board, priceOf, Date.now(), taken);
-      if (!pick) return;
-      actions.push(await takeIdea(def, round, pick));
+      const choice = chooseIdea(def.style, board, priceOf, Date.now(), taken, { maxChasePct: def.maxChasePct, stopMode: def.stopMode });
+      if ("reason" in choice) {
+        await note(choice.reason);
+        return;
+      }
+      const done = await takeIdea(def, round, choice.pick);
+      await note(done);
+      actions.push(done);
     } catch (e) {
       actions.push(`error: ${e instanceof Error ? e.message.slice(0, 160) : "desconocido"}`);
       console.error("[kamikaze]", def.key, e);
@@ -200,7 +215,11 @@ async function takeIdea(def: KamikazeDef, round: trading_kamikaze_rounds, pick: 
   const px = (await priceEur(idea.pair)) ?? pick.price;
   const inst = await prisma.market_instruments.findUnique({ where: { symbol: idea.symbol }, select: { id: true } });
   if (inst) await setLive(inst.id, px);
-  const quantity = allInQuantity(state.summary.available, px, costOf(state.account));
+  // Por operación: todo el efectivo o, con «balas», un % del capital de la ronda (sin pasar del efectivo).
+  const budget = Math.min(state.summary.available, (round.start_capital * (def.sizePct ?? 100)) / 100);
+  const quantity = allInQuantity(budget, px, costOf(state.account));
+  // «Corre»: sin objetivo de venta (el de la ronda) y con stop que sube con el precio.
+  const target = def.exitMode === "trail" ? Math.max(pick.target, px * def.multiple) : pick.target;
   const view = await lastMarketView();
   const run = await prisma.trading_committee_runs.create({
     data: { workspace_id: WS, agent: def.key, as_of: dayDate(madridDay()), status: "ok", market_view: view?.marketView ?? null, context: { faro: idea.id } as Prisma.InputJsonValue },
@@ -217,7 +236,7 @@ async function takeIdea(def: KamikazeDef, round: trading_kamikaze_rounds, pick: 
         direction: "long",
         quantity,
         stop: pick.stop,
-        target: pick.target,
+        target,
         execution: "now",
         maxHoldDays: null,
         notes: `${def.name} toma una idea de ${idea.kind}: ${idea.rationale}`,
@@ -245,7 +264,7 @@ async function takeIdea(def: KamikazeDef, round: trading_kamikaze_rounds, pick: 
       horizon_days: 1,
       price: px,
       stop: pick.stop,
-      target: pick.target,
+      target,
       quantity,
       rationale: idea.rationale,
       risks: null,
@@ -255,7 +274,7 @@ async function takeIdea(def: KamikazeDef, round: trading_kamikaze_rounds, pick: 
       decided_at: new Date(),
     },
   });
-  return `compra ${idea.symbol} (idea de ${idea.kind})${rejection ? ` (${rejection})` : ""}`;
+  return rejection ? `No pudo entrar en ${idea.symbol}: ${rejection}` : `Entró en ${idea.symbol.replace(/-EUR$/, "")} (idea de ${idea.kind})`;
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +299,8 @@ export async function kamikazeView(key: string) {
     trades: r.trades,
     lastDecisionAt: r.last_decision_at?.toISOString() ?? null,
     cooldownUntil: r.cooldown_until?.toISOString() ?? null,
+    note: r.last_note,
+    noteAt: r.last_note_at?.toISOString() ?? null,
   });
   const invested = done.reduce((s, r) => s + r.start_capital, 0);
   const returned = done.reduce((s, r) => s + (r.end_equity ?? 0), 0);
@@ -288,6 +309,8 @@ export async function kamikazeView(key: string) {
     days: def.days,
     style: def.style,
     capital: def.capital,
+    base: def.base ?? null,
+    variant: def.variant ?? null,
     current: current ? view(current) : null,
     history: done.map(view),
     stats: { rounds: done.length, goals: done.filter((r) => r.status === "meta").length, busted: done.filter((r) => r.status === "arruinado").length, net: returned - invested },
