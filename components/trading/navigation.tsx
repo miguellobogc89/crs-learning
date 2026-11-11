@@ -21,6 +21,8 @@ export type TradingStatus = {
   autoTrade: boolean;
   opened: boolean;
   canManage: boolean;
+  /** Revisión del precio en directo hecha en esta consulta (null si no tocaba o falló). */
+  live?: { updated: number; filled: number; cancelled: number; skipped?: string } | null;
 };
 
 type SyncResult = {
@@ -62,10 +64,21 @@ export function TradingNavigation() {
   const auto = useRef(false);
 
   const load = useCallback(() => {
-    api<TradingStatus>("status").then(setStatus).catch(() => undefined);
+    api<TradingStatus>("status")
+      .then((st) => {
+        setStatus(st);
+        // Si han entrado precios nuevos u órdenes ejecutadas en la apertura, se refresca todo el módulo.
+        if (st.live && (st.live.updated || st.live.filled || st.live.cancelled)) refreshTrading();
+      })
+      .catch(() => undefined);
   }, []);
   useEffect(() => load(), [load]);
   useTradingRefresh(load);
+  // Mientras la pantalla esté abierta, se pide el precio en directo cada 5 minutos.
+  useEffect(() => {
+    const id = window.setInterval(load, 5 * 60_000);
+    return () => window.clearInterval(id);
+  }, [load]);
 
   const sync = useCallback(async () => {
     setSyncing(true);

@@ -8,7 +8,8 @@ import { cashDelta, fillAtOpen, marketValue, realizedPnl, stepPosition } from ".
 import { isCryptoMarket, lotStepOf } from "./market-data";
 import { closeSide, commission, openSide, roundQty, slipped, type CostModel } from "./risk";
 import { dayDate, dayKey, loadSeries } from "./sync";
-import type { Direction, PatternKey } from "./types";
+import { canFillLive, preferLive } from "./live-logic";
+import type { Candle, Direction, PatternKey } from "./types";
 
 const PATTERN_KEYS = new Set<string>(PATTERN_LIBRARY.map((p) => p.key));
 
@@ -52,15 +53,28 @@ export type AccountDefaults = {
   settings?: Partial<Pick<trading_accounts, "risk_per_trade_pct" | "max_position_pct" | "max_open_positions" | "commission_pct" | "commission_min" | "slippage_bps" | "breakeven">>;
 };
 
-/** Último cierre de cada instrumento. */
-export async function latestCloses(instrumentIds: string[]) {
-  if (!instrumentIds.length) return new Map<string, { close: number; day: Date }>();
+/**
+ * Último precio de cada instrumento: el cierre guardado o, durante la sesión, el precio en directo
+ * si es de un día posterior. `live: false` para lo que tiene que ser de cierre (patrimonio diario).
+ */
+export async function latestCloses(instrumentIds: string[], opts: { live?: boolean } = {}) {
+  if (!instrumentIds.length) return new Map<string, { close: number; day: Date; live?: boolean }>();
   const rows = await prisma.$queryRaw<{ instrument_id: string; close: number; day: Date }[]>`
     SELECT DISTINCT ON (instrument_id) instrument_id, close, day
     FROM market_candles
     WHERE instrument_id = ANY(${instrumentIds}::uuid[])
     ORDER BY instrument_id, day DESC`;
-  return new Map<string, { close: number; day: Date }>(rows.map((r) => [r.instrument_id, { close: r.close, day: r.day }]));
+  const out = new Map<string, { close: number; day: Date; live?: boolean }>(rows.map((r) => [r.instrument_id, { close: r.close, day: r.day }]));
+  if (opts.live === false) return out;
+  const live = await prisma.market_instruments.findMany({
+    where: { id: { in: instrumentIds }, live_day: { not: null }, live_price: { not: null } },
+    select: { id: true, live_day: true, live_price: true },
+  });
+  for (const l of live) {
+    const stored = out.get(l.id);
+    if (preferLive(stored ? stored.day.getTime() : null, l.live_day!.getTime())) out.set(l.id, { close: l.live_price!, day: l.live_day!, live: true });
+  }
+  return out;
 }
 
 export type PositionView = {
@@ -420,7 +434,7 @@ export async function placeOrder(workspaceId: string, userId: string | null, ord
     const p = await prisma.trading_positions.create({ data: { ...base, status: "pendiente" } });
     return { id: p.id, status: "pendiente" as const };
   }
-  // Ejecución inmediata al último cierre disponible.
+  // Ejecución inmediata al último precio (el de la sesión en curso si la bolsa está abierta).
   const price = slipped(ref, openSide(o.direction), cost);
   const fee = commission(price * o.quantity, cost);
   const delta = cashDelta(o.direction, "open", o.quantity, price, fee);
@@ -530,6 +544,94 @@ export async function updateStops(workspaceId: string, positionId: string, input
 // ---------------------------------------------------------------------------
 export type ProcessSummary = { filled: number; cancelled: number; closed: number; processedUntil: string | null };
 
+/**
+ * Ejecuta (o anula) una orden pendiente en la apertura de `bar`. `intraday`: con la vela en directo,
+ * antes de tener la de cierre. La actualización es condicional (status = pendiente): si otro proceso
+ * ya la ejecutó, no se hace nada (sin doble cargo en caja). Actualiza `a.cash` en memoria.
+ */
+async function executePending(
+  a: trading_accounts,
+  pos: trading_positions,
+  bar: Candle,
+  intraday: boolean,
+): Promise<{ kind: "filled"; position: trading_positions } | { kind: "cancelled" } | { kind: "skip" }> {
+  const cost = costOf(a);
+  const fill = fillAtOpen({ direction: pos.direction as Direction, quantity: pos.quantity, stop: pos.stop, target: pos.target }, bar, cost);
+  const day = new Date(bar.t);
+  const cancel = async (reason: string) => {
+    const r = await prisma.trading_positions.updateMany({
+      where: { id: pos.id, status: "pendiente" },
+      data: { status: "cancelada", exit_reason: reason, exit_day: day, updated_at: new Date() },
+    });
+    return r.count ? ({ kind: "cancelled" } as const) : ({ kind: "skip" } as const);
+  };
+  if (fill.kind === "cancelled") return cancel(fill.reason);
+  if (fill.price * pos.quantity + fill.commission > a.cash + 1e-6) return cancel("Sin efectivo suficiente al ejecutar");
+  const delta = cashDelta(pos.direction as Direction, "open", pos.quantity, fill.price, fill.commission);
+  // El stop y el objetivo se mantienen en precio; la salida por tiempo cuenta desde la ejecución.
+  const holdMs = pos.max_hold_until ? pos.max_hold_until.getTime() - pos.created_at.getTime() : null;
+  const done = await prisma.$transaction(async (tx) => {
+    const r = await tx.trading_positions.updateMany({
+      where: { id: pos.id, status: "pendiente" },
+      data: {
+        status: "abierta",
+        entry_price: fill.price,
+        entry_day: day,
+        fees: fill.commission,
+        filled_intraday: intraday,
+        ...(holdMs ? { max_hold_until: new Date(bar.t + holdMs) } : {}),
+        updated_at: new Date(),
+      },
+    });
+    if (!r.count) return null;
+    await tx.trading_accounts.update({ where: { id: a.id }, data: { cash: { increment: delta } } });
+    await tx.trading_transactions.create({
+      data: {
+        account_id: a.id,
+        position_id: pos.id,
+        kind: pos.direction === "long" ? "compra" : "venta corto",
+        amount: delta,
+        description: `${pos.direction === "long" ? "Compra" : "Venta en corto"} de ${pos.quantity} ${pos.symbol} a ${fill.price.toFixed(3)} € en la apertura (comisión ${fill.commission.toFixed(2)} €)`,
+        day,
+      },
+    });
+    return tx.trading_positions.findUniqueOrThrow({ where: { id: pos.id } });
+  });
+  if (!done) return { kind: "skip" };
+  a.cash += delta;
+  return { kind: "filled", position: done };
+}
+
+/**
+ * Durante la sesión: ejecuta las órdenes pendientes de una cartera con la apertura de hoy (precio en
+ * directo). Los stops y objetivos del día los revisa el proceso de cierre con la vela definitiva.
+ */
+export async function fillPendingLive(accountId: string) {
+  const out = { filled: 0, cancelled: 0 };
+  const a = await prisma.trading_accounts.findUnique({ where: { id: accountId } });
+  if (!a) return out;
+  const pending = await prisma.trading_positions.findMany({
+    where: { account_id: a.id, status: "pendiente" },
+    include: { instrument: { select: { live_day: true, live_open: true, live_high: true, live_low: true, live_price: true } } },
+    orderBy: { created_at: "asc" },
+  });
+  for (const { instrument: i, ...pos } of pending) {
+    if (!i.live_day || i.live_open === null || i.live_price === null) continue;
+    const created = dayDate(madridDay(pos.created_at)).getTime();
+    const stored = await prisma.market_candles.findFirst({
+      where: { instrument_id: pos.instrument_id, day: { gt: new Date(created) } },
+      select: { day: true },
+      orderBy: { day: "asc" },
+    });
+    if (!canFillLive(created, i.live_day.getTime(), stored ? stored.day.getTime() : null)) continue;
+    const bar: Candle = { t: i.live_day.getTime(), o: i.live_open, h: i.live_high ?? i.live_price, l: i.live_low ?? i.live_price, c: i.live_price, v: 0 };
+    const r = await executePending(a, pos, bar, true);
+    if (r.kind === "filled") out.filled++;
+    if (r.kind === "cancelled") out.cancelled++;
+  }
+  return out;
+}
+
 export async function processAccount(accountId: string): Promise<ProcessSummary> {
   const a = await prisma.trading_accounts.findUnique({ where: { id: accountId } });
   const out: ProcessSummary = { filled: 0, cancelled: 0, closed: 0, processedUntil: null };
@@ -557,62 +659,20 @@ export async function processAccount(accountId: string): Promise<ProcessSummary>
       k = candles.findIndex((c) => c.t > created);
       if (k < 0) continue;
       const bar = candles[k];
-      const fill = fillAtOpen(
-        { direction: pos.direction as Direction, quantity: pos.quantity, stop: pos.stop, target: pos.target },
-        bar,
-        cost,
-      );
-      const day = new Date(bar.t);
-      if (fill.kind === "cancelled") {
-        await prisma.trading_positions.update({
-          where: { id: pos.id },
-          data: { status: "cancelada", exit_reason: fill.reason, exit_day: day, updated_at: new Date() },
-        });
+      const r = await executePending(a, pos, bar, false);
+      if (r.kind === "skip") continue;
+      if (r.kind === "cancelled") {
         out.cancelled++;
         continue;
       }
-      const notional = fill.price * pos.quantity;
-      if (notional + fill.commission > a.cash + 1e-6) {
-        await prisma.trading_positions.update({
-          where: { id: pos.id },
-          data: { status: "cancelada", exit_reason: "Sin efectivo suficiente al ejecutar", exit_day: day, updated_at: new Date() },
-        });
-        out.cancelled++;
-        continue;
-      }
-      const delta = cashDelta(pos.direction as Direction, "open", pos.quantity, fill.price, fill.commission);
-      // El stop y el objetivo se mantienen en precio; la salida por tiempo cuenta desde la ejecución.
-      const holdMs = pos.max_hold_until ? pos.max_hold_until.getTime() - pos.created_at.getTime() : null;
-      const [updated] = await prisma.$transaction([
-        prisma.trading_positions.update({
-          where: { id: pos.id },
-          data: {
-            status: "abierta",
-            entry_price: fill.price,
-            entry_day: day,
-            fees: fill.commission,
-            ...(holdMs ? { max_hold_until: new Date(bar.t + holdMs) } : {}),
-            updated_at: new Date(),
-          },
-        }),
-        prisma.trading_accounts.update({ where: { id: a.id }, data: { cash: { increment: delta } } }),
-        prisma.trading_transactions.create({
-          data: {
-            account_id: a.id,
-            position_id: pos.id,
-            kind: pos.direction === "long" ? "compra" : "venta corto",
-            amount: delta,
-            description: `${pos.direction === "long" ? "Compra" : "Venta en corto"} de ${pos.quantity} ${pos.symbol} a ${fill.price.toFixed(3)} € en la apertura (comisión ${fill.commission.toFixed(2)} €)`,
-            day,
-          },
-        }),
-      ]);
-      a.cash += delta;
+      const updated = r.position;
       out.filled++;
       pos = updated;
       startAfter = bar.t - 1; // La vela de la ejecución también se vigila.
     } else {
-      startAfter = Math.max(watermark, pos.entry_day!.getTime());
+      // Si se ejecutó en la apertura con el precio en directo, su vela de ese día aún hay que vigilarla.
+      const entry = pos.entry_day!.getTime();
+      startAfter = pos.filled_intraday ? Math.max(watermark, entry - 1) : Math.max(watermark, entry);
     }
 
     let stop = pos.stop;
@@ -650,7 +710,8 @@ export async function processAccount(accountId: string): Promise<ProcessSummary>
   const refDay = lastMarket._max.last_candle_at ?? (Number.isFinite(maxDay) ? new Date(maxDay) : null);
   if (refDay) {
     const open = await prisma.trading_positions.findMany({ where: { account_id: a.id, status: "abierta" } });
-    const closes = await latestCloses([...new Set(open.map((p) => p.instrument_id))]);
+    // El patrimonio diario es de cierre: sin precios en directo.
+    const closes = await latestCloses([...new Set(open.map((p) => p.instrument_id))], { live: false });
     let mv = 0;
     let invested = 0;
     for (const p of open) {

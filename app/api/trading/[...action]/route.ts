@@ -27,6 +27,7 @@ import { getPortfolio, setCopy, stopCopy } from "@/lib/trading/agents/copy";
 import { getOpportunities } from "@/lib/trading/agents/opportunities";
 import { brokerLinks, brokerStatus, linkInstruments, listBrackets, runBrokerGuardian, setBrokerAutonomy } from "@/lib/trading/broker/service";
 import { isBrokerError, type BrokerActor } from "@/lib/brokers/types";
+import { refreshLive } from "@/lib/trading/live";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,7 +58,14 @@ export async function GET(req: Request, route: RouteContext) {
       if (!symbol) return fail("Falta el valor");
       return NextResponse.json(await getInstrument(ctx.workspaceId, symbol));
     }
-    if (action === "status") return NextResponse.json({ ...(await getStatus(ctx.workspaceId)), canManage: ctx.canManage });
+    if (action === "status") {
+      // Con la bolsa abierta: precio en directo y órdenes pendientes ejecutadas en la apertura (si toca).
+      const live = await refreshLive(6_000).catch((e) => {
+        console.error("[trading] live", e);
+        return null;
+      });
+      return NextResponse.json({ ...(await getStatus(ctx.workspaceId)), canManage: ctx.canManage, live });
+    }
     if (action === "news") return NextResponse.json({ ...(await listNews(normalizeNewsFilters(url.searchParams))), canManage: ctx.canManage });
     if (action === "committee") return NextResponse.json({ ...(await getCommittee(ctx.workspaceId)), canManage: ctx.canManage });
     if (action === "library") return NextResponse.json(await getLibrary(url.searchParams.get("market") === "crypto" ? "crypto" : "bolsa"));

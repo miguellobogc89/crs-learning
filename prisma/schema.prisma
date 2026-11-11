@@ -2196,6 +2196,13 @@ model market_instruments {
   broker_ticker String?
   broker_checked_at DateTime? @db.Timestamptz(6)
   broker_note String?
+  /// Vela provisional de la sesión en curso (no es de cierre: no se guarda en market_candles).
+  live_day DateTime? @db.Date
+  live_open Float?
+  live_high Float?
+  live_low Float?
+  live_price Float?
+  live_at DateTime? @db.Timestamptz(6)
   created_at DateTime @default(now()) @db.Timestamptz(6)
   candles market_candles[]
   positions trading_positions[]
@@ -2287,6 +2294,8 @@ model trading_positions {
   source String @default("manual")
   notes String?
   created_by String?
+  /// Ejecutada en la apertura con el precio en directo (antes de tener la vela de cierre de ese día).
+  filled_intraday Boolean @default(false)
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @default(now()) @db.Timestamptz(6)
   account trading_accounts @relation(fields: [account_id], references: [id], onDelete: Cascade)
