@@ -2,28 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load } from "./helpers.mjs";
 
-const { matchInstrument, decideBracket, brokerQuantity } = load("lib/trading/broker/logic.ts");
-
-const item = (ticker, extra = {}) => ({ ticker, name: ticker, shortName: null, isin: null, currency: "EUR", type: "STOCK", ...extra });
-
-test("vinculación: ticker de Madrid, ISIN y casos dudosos", () => {
-  const catalog = [
-    item("IBEe_EQ", { name: "Iberdrola", isin: "ES0144580Y14" }),
-    item("SANe_EQ", { name: "Banco Santander", isin: "ES0113900J37" }),
-    item("SAN_US_EQ", { currency: "USD", shortName: "SAN" }),
-    item("REPe_EQ", { isin: "ES0173516115" }),
-    item("REP_X", { shortName: "REP", isin: "XX" }),
-  ];
-  const ibe = matchInstrument("IBE.MC", catalog);
-  assert.equal(ibe.status, "ok");
-  assert.equal(ibe.item.ticker, "IBEe_EQ");
-  assert.equal(matchInstrument("SAN.MC", catalog).item.ticker, "SANe_EQ", "ignora el de dólares");
-  assert.equal(matchInstrument("REP.MC", catalog, "ES0173516115").how, "ISIN");
-  assert.equal(matchInstrument("XYZ.MC", catalog).status, "no_encontrado");
-  assert.equal(matchInstrument("BTC-EUR", catalog).status, "no_encontrado");
-  const amb = matchInstrument("ACS.MC", [item("ACS1", { shortName: "ACS" }), item("ACS2", { shortName: "ACS" })]);
-  assert.equal(amb.status, "ambiguo");
-});
+// La vinculación de símbolos de Trading 212 se prueba en tests/brokers/trading212.test.mjs.
+const { decideBracket, brokerQuantity } = load("lib/trading/broker/logic.ts");
 
 const base = { status: "esperando_entrada", quantity: 10, stop: 9, target: 12, stopOrderId: null, exitReason: null, createdAt: 0 };
 

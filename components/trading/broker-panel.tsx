@@ -1,5 +1,5 @@
 "use client";
-// Control del bróker (Trading 212 Demo): autonomía del comité, operaciones protegidas,
+// Control del bróker conectado a la cartera: autonomía del comité, operaciones protegidas,
 // vigilancia del objetivo y vinculación de valores.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Link2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
@@ -26,6 +26,8 @@ type Bracket = {
 };
 type BrokerInfo = {
   available: boolean;
+  provider: string | null;
+  environment: "demo" | "real" | null;
   autonomy: "nada" | "aprobacion" | "automatico";
   brackets: Bracket[];
   links: { symbol: string; name: string; ticker: string | null; note: string | null; checked: boolean }[];
@@ -41,9 +43,9 @@ const STATUS: Record<Bracket["status"], { label: string; tone: string }> = {
 };
 
 const AUTONOMY = [
-  { key: "nada", label: "Nada", text: "El comité solo propone; Trading 212 no se toca." },
-  { key: "aprobacion", label: "Con mi aprobación", text: "Puedes enviar cada propuesta a Trading 212 con un botón." },
-  { key: "automatico", label: "Automático", text: "Las compras que pasan las reglas se envían solas al reunirse el comité." },
+  { key: "nada", label: "Nada", text: "El comité solo propone; el bróker no se toca." },
+  { key: "aprobacion", label: "Con mi aprobación", text: "Puedes enviar cada propuesta al bróker con un botón." },
+  { key: "automatico", label: "Automático", text: "Las compras que pasan las reglas se envían solas al reunirse el comité (necesita el permiso «automático» de la conexión)." },
 ] as const;
 
 const time = (iso: string | null) =>
@@ -132,7 +134,7 @@ export function BrokerPanel() {
             <ShieldCheck className="h-4 w-4 text-emerald-600" /> Comité y operaciones protegidas
           </h2>
           <p className="text-xs text-slate-500">
-            El <b>stop</b> queda puesto en Trading 212 y protege aunque la app esté cerrada. El <b>objetivo</b> lo vigila la app cada minuto
+            El <b>stop</b> queda puesto en {info.provider ?? "el bróker"} y protege aunque la app esté cerrada. El <b>objetivo</b> lo vigila la app cada minuto
             mientras esta pantalla está abierta: al tocarlo, cancela el stop y vende.
           </p>
         </div>
@@ -150,7 +152,7 @@ export function BrokerPanel() {
       )}
 
       <div className="border-b border-slate-100 px-4 py-3">
-        <div className="mb-1.5 text-xs font-medium text-slate-600">¿Qué puede hacer el comité en Trading 212 Demo?</div>
+        <div className="mb-1.5 text-xs font-medium text-slate-600">¿Qué puede hacer el comité en {info.provider ?? "el bróker"}{info.environment === "demo" ? " Demo" : ""}?</div>
         <div className="grid gap-2 sm:grid-cols-3">
           {AUTONOMY.map((a) => (
             <button
@@ -184,7 +186,7 @@ export function BrokerPanel() {
             {info.brackets.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
-                  Aún no hay operaciones protegidas. Envía una propuesta del comité a Trading 212 desde «Oportunidades».
+                  Aún no hay operaciones protegidas. Envía una propuesta del comité al bróker desde «Oportunidades».
                 </td>
               </tr>
             ) : (
@@ -216,7 +218,7 @@ export function BrokerPanel() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <button type="button" onClick={() => setShowLinks(!showLinks)} className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900">
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showLinks ? "rotate-180" : ""}`} />
-            {linked} de {info.links.length} valores de bolsa vinculados con Trading 212
+            {linked} de {info.links.length} valores de bolsa vinculados con {info.provider ?? "el bróker"}
           </button>
           <div className="flex items-center gap-2">
             {linkMsg && <span className="text-xs text-slate-600">{linkMsg}</span>}

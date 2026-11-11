@@ -12,6 +12,7 @@ import { AgentsPanel } from "./agents-panel";
 import { NewsPanel } from "./news-panel";
 import { OpportunitiesPanel } from "./opportunities-panel";
 import { HomePanel } from "./home-panel";
+import { IntegrationsPanel } from "./integrations-panel";
 import type { TradingTab } from "./tabs";
 import { LoadingCard } from "./ui";
 
@@ -75,6 +76,7 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   else if (tab === "patrones") body = <LibraryPanel />;
   else if (tab === "reglas") body = <RulesPanel />;
   else if (tab === "valores") body = <UniversePanel />;
+  else if (tab === "integraciones") body = <IntegrationsPanel />;
 
   return (
     <div className="space-y-4">

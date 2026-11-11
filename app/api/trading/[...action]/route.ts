@@ -26,7 +26,7 @@ import { canDirectAgents, getAgents, resetAgent, runAgent } from "@/lib/trading/
 import { getPortfolio, setCopy, stopCopy } from "@/lib/trading/agents/copy";
 import { getOpportunities } from "@/lib/trading/agents/opportunities";
 import { brokerLinks, brokerStatus, linkInstruments, listBrackets, runBrokerGuardian, setBrokerAutonomy } from "@/lib/trading/broker/service";
-import { buyOneIberdrolaInTrading212Demo, cancelTrading212DemoOrder, findTrading212DemoInstruments, getTrading212DemoOrders, getTrading212DemoPositions, getTrading212DemoSummary, placeTrading212DemoConditionalOrder, sellTrading212DemoPosition, Trading212Error, type Trading212ConditionalKind } from "@/lib/trading/trading212";
+import { isBrokerError, type BrokerActor } from "@/lib/brokers/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ function missingTables(e: unknown) {
   return !!e && typeof e === "object" && (e as { code?: unknown }).code === "P2021";
 }
 const MIGRATION_HINT =
-  "Faltan tablas de trading en la base de datos: ejecuta las migraciones de prisma/migrations que empiezan por 20261110 (trading, trading_news y trading_committee)";
+  "Faltan tablas de trading en la base de datos: ejecuta las migraciones de prisma/migrations que empiezan por 20261110 y 20261111 (trading, noticias, comité e integraciones de brókeres)";
 const message = (e: unknown) => (e instanceof Error ? e.message.slice(0, 400) : "No se pudo completar la operación");
 
 export async function GET(req: Request, route: RouteContext) {
@@ -61,24 +61,6 @@ export async function GET(req: Request, route: RouteContext) {
     if (action === "news") return NextResponse.json({ ...(await listNews(normalizeNewsFilters(url.searchParams))), canManage: ctx.canManage });
     if (action === "committee") return NextResponse.json({ ...(await getCommittee(ctx.workspaceId)), canManage: ctx.canManage });
     if (action === "library") return NextResponse.json(await getLibrary(url.searchParams.get("market") === "crypto" ? "crypto" : "bolsa"));
-    if (action === "trading212/account" || action === "trading212/positions" || action === "trading212/orders" || action === "trading212/instruments") {
-      // Clave personal de Demo: no debe exponerse en entornos desplegados ni a usuarios del workspace.
-      if (process.env.NODE_ENV !== "development") return fail("Solo disponible en desarrollo local", 403);
-      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede consultar Trading 212", 403);
-      try {
-        const data = action === "trading212/account"
-          ? await getTrading212DemoSummary()
-          : action === "trading212/positions"
-            ? await getTrading212DemoPositions()
-            : action === "trading212/orders"
-              ? await getTrading212DemoOrders()
-              : await findTrading212DemoInstruments(url.searchParams.get("symbol") || "");
-        return NextResponse.json(data, { headers: { "Cache-Control": "no-store" } });
-      } catch (e) {
-        if (e instanceof Trading212Error) return fail(e.message, e.status);
-        throw e;
-      }
-    }
     if (action === "broker") {
       const status = await brokerStatus(ctx.workspaceId);
       return NextResponse.json({
@@ -109,6 +91,7 @@ export async function GET(req: Request, route: RouteContext) {
     }
     return fail("No encontrado", 404);
   } catch (e) {
+    if (isBrokerError(e)) return NextResponse.json(e.toJSON(), { status: e.httpStatus });
     console.error("[trading] GET", action, e);
     if (missingTables(e)) return fail(MIGRATION_HINT, 500);
     return fail(message(e), 500);
@@ -125,72 +108,6 @@ export async function POST(req: Request, route: RouteContext) {
     if (raw.length > 16_384) return fail("Petición demasiado grande", 413);
     const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>;
 
-    if (action === "trading212/conditional" || action === "trading212/cancel-order") {
-      if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
-        return fail("Solo disponible para Trading 212 Demo en localhost", 403);
-      }
-      if (!ctx.canManage) return fail("Solo el propietario o administrador puede operar en la Demo", 403);
-      if (body.confirmDemo !== true) return fail("Falta la confirmación explícita de operación Demo", 400);
-      try {
-        if (action === "trading212/conditional") {
-          const kind = body.kind;
-          if (kind !== "sell_stop" && kind !== "sell_limit" &&
-              kind !== "buy_limit" && kind !== "buy_stop") return fail("Tipo de orden no permitido", 400);
-          if (typeof body.ticker !== "string" || typeof body.quantity !== "number" ||
-              typeof body.price !== "number" || !Number.isFinite(body.quantity) || !Number.isFinite(body.price)) {
-            return fail("Faltan instrumento, cantidad o precio válidos", 400);
-          }
-          return NextResponse.json(
-            await placeTrading212DemoConditionalOrder({
-              kind: kind as Trading212ConditionalKind,
-              ticker: body.ticker,
-              quantity: body.quantity,
-              price: body.price,
-            }),
-            { headers: { "Cache-Control": "no-store" } },
-          );
-        }
-        if (typeof body.id !== "number" || !Number.isSafeInteger(body.id)) return fail("ID de orden inválido", 400);
-        return NextResponse.json(await cancelTrading212DemoOrder(body.id), { headers: { "Cache-Control": "no-store" } });
-      } catch (e) {
-        if (e instanceof Trading212Error) return fail(e.message, e.status);
-        throw e;
-      }
-    }
-    if (action === "trading212/sell") {
-      if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
-        return fail("Solo se permiten ventas en Trading 212 Demo en localhost", 403);
-      }
-      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede operar en la Demo", 403);
-      if (body.confirmDemo !== true || typeof body.ticker !== "string" ||
-          typeof body.quantity !== "number" || !Number.isFinite(body.quantity)) {
-        return fail("Confirma la venta e indica un instrumento y cantidad válidos", 400);
-      }
-      try {
-        return NextResponse.json(
-          await sellTrading212DemoPosition(body.ticker, body.quantity),
-          { headers: { "Cache-Control": "no-store" } },
-        );
-      } catch (e) {
-        if (e instanceof Trading212Error) return fail(e.message, e.status);
-        throw e;
-      }
-    }
-    if (action === "trading212/buy-test") {
-      if (process.env.NODE_ENV !== "development" || process.env.TRADING212_ENV !== "demo") {
-        return fail("Solo se permiten órdenes de Trading 212 Demo en localhost", 403);
-      }
-      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede operar en la Demo", 403);
-      if (body.symbol !== "IBE.MC" || body.quantity !== 1 || body.confirmDemo !== true) {
-        return fail("Esta prueba solo permite comprar una acción de Iberdrola en Demo, con confirmación explícita");
-      }
-      try {
-        return NextResponse.json(await buyOneIberdrolaInTrading212Demo(), { headers: { "Cache-Control": "no-store" } });
-      } catch (e) {
-        if (e instanceof Trading212Error) return fail(e.message, e.status);
-        throw e;
-      }
-    }
     if (action === "sync") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede actualizar las cotizaciones", 403);
       return NextResponse.json(await runDaily(45_000, ctx.workspaceId));
@@ -238,18 +155,15 @@ export async function POST(req: Request, route: RouteContext) {
     }
     if (action === "committee/execute-broker" || action === "broker/link" || action === "broker/guardian" || action === "broker/autonomy") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede operar con el bróker", 403);
-      try {
-        if (action === "committee/execute-broker") {
-          if (body.confirmDemo !== true) return fail("Falta la confirmación explícita de operación Demo");
-          return NextResponse.json(await executeProposalOnBroker(ctx.workspaceId, String(body.proposalId ?? "")));
-        }
-        if (action === "broker/link") return NextResponse.json(await linkInstruments(body.force === true));
-        if (action === "broker/guardian") return NextResponse.json(await runBrokerGuardian(ctx.workspaceId));
-        return NextResponse.json(await setBrokerAutonomy(ctx.workspaceId, body.autonomy));
-      } catch (e) {
-        if (e instanceof Trading212Error) return fail(e.message, e.status);
-        throw e;
+      // Quien lo pide tiene que ser el dueño de la conexión del bróker (lo comprueba el gateway).
+      const requester: BrokerActor = { kind: "user", userId: ctx.userId, workspaceId: ctx.workspaceId, canManage: ctx.canManage };
+      if (action === "committee/execute-broker") {
+        if (body.confirmDemo !== true) return fail("Falta la confirmación explícita de la operación");
+        return NextResponse.json(await executeProposalOnBroker(ctx.workspaceId, String(body.proposalId ?? ""), "comite", requester));
       }
+      if (action === "broker/link") return NextResponse.json(await linkInstruments(ctx.workspaceId, requester));
+      if (action === "broker/guardian") return NextResponse.json(await runBrokerGuardian(ctx.workspaceId));
+      return NextResponse.json(await setBrokerAutonomy(ctx.workspaceId, body.autonomy));
     }
     if (action === "simulate") return NextResponse.json(await simulate(ctx.workspaceId, body));
     if (action === "order") return NextResponse.json(await placeOrder(ctx.workspaceId, ctx.userId, parseOrder(body)));
@@ -275,6 +189,7 @@ export async function POST(req: Request, route: RouteContext) {
     }
     return fail("No encontrado", 404);
   } catch (e) {
+    if (isBrokerError(e)) return NextResponse.json(e.toJSON(), { status: e.httpStatus });
     console.error("[trading] POST", action, e);
     if (missingTables(e)) return fail(MIGRATION_HINT, 500);
     if (e instanceof SyntaxError) return fail("JSON no válido");

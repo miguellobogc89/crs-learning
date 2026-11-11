@@ -19,6 +19,7 @@ export function load(path) {
     if (spec.startsWith(".")) {
       const target = resolve(dirname(full), spec);
       if (existsSync(`${target}.ts`)) return load(`${target}.ts`);
+      if (existsSync(`${target}/index.ts`)) return load(`${target}/index.ts`);
     }
     return nodeRequire(spec);
   };

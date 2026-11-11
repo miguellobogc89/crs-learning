@@ -2245,6 +2245,8 @@ model trading_accounts {
   patterns String[] @default([])
   last_processed_day DateTime? @db.Date
   broker_autonomy String @default("aprobacion")
+  /// Conexión de bróker (broker_connections) que usa esta cartera. Null = ninguna.
+  broker_connection_id String? @db.Uuid
   /// Cartera del usuario abierta (eligió su capital). Null = aún no ha abierto cuenta.
   opened_at DateTime? @db.Timestamptz(6)
   /// Subcartera de copia ('copia:<agente>'): % del patrimonio total asignado. Null = no se copia.
@@ -2413,6 +2415,8 @@ model trading_broker_brackets {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   workspace_id String @db.Uuid
   broker String @default("trading212_demo")
+  /// Conexión (broker_connections) con la que se abrió.
+  connection_id String? @db.Uuid
   symbol String
   ticker String
   name String
@@ -2434,4 +2438,68 @@ model trading_broker_brackets {
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @default(now()) @db.Timestamptz(6)
   @@index([workspace_id, status])
+}
+
+/// Conexión de un usuario con un bróker. El entorno (demo/real) se fija al crearla y nunca cambia.
+/// Las credenciales van cifradas (lib/connectors/crypto) y jamás salen hacia el navegador.
+model broker_connections {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id            String          @db.Uuid
+  workspace_id       String          @db.Uuid
+  provider           String
+  environment        String
+  /// active | error | disconnected
+  status             String          @default("active")
+  account_id         String?
+  account_label      String?
+  currency           String?
+  /// read | trade | auto
+  permissions        String[]        @default(["read"])
+  credentials_enc    String?
+  /// stored = cifradas en la base de datos; server = del .env del servidor (solo desarrollo y demo)
+  credentials_source String          @default("stored")
+  last_error         String?
+  last_checked_at    DateTime?       @db.Timestamptz(6)
+  created_at         DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime        @default(now()) @db.Timestamptz(6)
+  orders             broker_orders[]
+
+  @@unique([user_id, workspace_id, provider, environment], map: "broker_connections_owner_unique")
+  @@index([workspace_id], map: "broker_connections_workspace_idx")
+}
+
+/// Registro auditable de cada orden pedida a un bróker y su resultado. La clave de idempotencia
+/// impide enviar dos veces la misma intención por la misma conexión.
+model broker_orders {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connection_id     String             @db.Uuid
+  user_id           String             @db.Uuid
+  workspace_id      String             @db.Uuid
+  provider          String
+  environment       String
+  /// usuario | nombre del automatismo
+  actor             String
+  idempotency_key   String
+  reference         String?
+  symbol            String
+  market            String
+  provider_symbol   String?
+  side              String
+  type              String
+  quantity          Float
+  limit_price       Float?
+  stop_price        Float?
+  time_in_force     String?
+  status            String             @default("pending_submit")
+  provider_order_id String?
+  provider_status   String?
+  error_code        String?
+  error_message     String?
+  response_json     Json?
+  created_at        DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime           @default(now()) @db.Timestamptz(6)
+  connection        broker_connections @relation(fields: [connection_id], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "broker_orders_connection_fkey")
+
+  @@unique([connection_id, idempotency_key], map: "broker_orders_idempotency_unique")
+  @@index([user_id, created_at], map: "broker_orders_user_idx")
 }

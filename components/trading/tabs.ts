@@ -1,9 +1,9 @@
 // components/trading/tabs.ts
 // Secciones del módulo de trading (panel lateral y rutas /trading/<clave>).
 import type { ComponentType } from "react";
-import { BookOpen, Bot, Flame, Home, LineChart, ListChecks, Newspaper, SlidersHorizontal, Wallet } from "lucide-react";
+import { BookOpen, Bot, Flame, Home, LineChart, ListChecks, Newspaper, Plug, SlidersHorizontal, Wallet } from "lucide-react";
 
-export const TRADING_TAB_KEYS = ["inicio", "oportunidades", "agentes", "cartera", "mercado", "noticias", "patrones", "reglas", "valores"] as const;
+export const TRADING_TAB_KEYS = ["inicio", "oportunidades", "agentes", "cartera", "mercado", "noticias", "patrones", "reglas", "valores", "integraciones"] as const;
 export type TradingTab = (typeof TRADING_TAB_KEYS)[number];
 type TabDef = { key: TradingTab; label: string; icon: ComponentType<{ className?: string }>; description: string };
 
@@ -30,6 +30,7 @@ export const TRADING_SECTIONS: { title: string | null; items: TabDef[] }[] = [
     items: [
       { key: "reglas", label: "Reglas y riesgo", icon: SlidersHorizontal, description: "Cuánto arriesgar en tu cartera y el modo automático." },
       { key: "valores", label: "Valores seguidos", icon: ListChecks, description: "Qué empresas y criptomonedas analiza la app." },
+      { key: "integraciones", label: "Integraciones", icon: Plug, description: "Tus brókeres conectados: cuentas, entorno demo o real, permisos y registro de órdenes." },
     ],
   },
 ];

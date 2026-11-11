@@ -24,6 +24,7 @@ import {
 } from "./prompt";
 import { evaluateProposal } from "./outcome";
 import { brokerStatus, executeProtectedBuy } from "../broker/service";
+import type { BrokerActor } from "@/lib/brokers/types";
 
 /** Activos como máximo en el contexto (para que la llamada quepa y no sea cara). */
 const MAX_ASSETS = 24;
@@ -267,7 +268,8 @@ export async function runCommittee(workspaceId: string, userId: string | null, a
     },
   });
   if (agentDef) return { id: run.id, auto: await executeAgentRun(workspaceId, run.id, agent) };
-  // Autonomía «automático»: las compras de bolsa aprobadas por las reglas se ejecutan solas en Trading 212 Demo.
+  // Autonomía «automático»: las compras de bolsa aprobadas por las reglas se ejecutan solas en el bróker conectado
+  // (si su dueño concedió el permiso «automático» a la conexión; si no, el gateway lo impide).
   const auto: { symbol: string; ok: boolean; detail: string }[] = [];
   const broker = await brokerStatus(workspaceId);
   if (broker.available && broker.autonomy === "automatico") {
@@ -308,14 +310,15 @@ async function executeAgentRun(workspaceId: string, runId: string, agent: string
   return out;
 }
 
-/** Ejecuta una propuesta de compra del comité en Trading 212 Demo, con stop y objetivo protegidos. */
-export async function executeProposalOnBroker(workspaceId: string, proposalId: string, source: "comite" | "auto" = "comite") {
+/** Ejecuta una propuesta de compra del comité en el bróker conectado, con stop y objetivo protegidos. */
+/** `requester`: el usuario que lo pide (tiene que ser el dueño de la conexión). Sin él, actúa el automatismo. */
+export async function executeProposalOnBroker(workspaceId: string, proposalId: string, source: "comite" | "auto" = "comite", requester?: BrokerActor) {
   if (!/^[0-9a-f-]{36}$/i.test(proposalId)) throw new Error("Propuesta no válida");
   const p = await prisma.trading_proposals.findFirst({ where: { id: proposalId, workspace_id: workspaceId, agent: "" } });
   if (!p) throw new Error("La propuesta no existe");
   if (p.status !== "propuesta") throw new Error("Esta propuesta ya se decidió");
   if (p.action !== "comprar" || p.market !== "bolsa" || !p.stop || !p.target) throw new Error("Solo se pueden enviar al bróker compras de bolsa con stop y objetivo");
-  const r = await executeProtectedBuy(workspaceId, { symbol: p.symbol, stop: p.stop, target: p.target, source, proposalId: p.id });
+  const r = await executeProtectedBuy(workspaceId, { symbol: p.symbol, stop: p.stop, target: p.target, source, proposalId: p.id }, requester);
   await prisma.trading_proposals.update({ where: { id: p.id }, data: { status: "ejecutada", decided_at: new Date() } });
   return r;
 }

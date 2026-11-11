@@ -261,12 +261,13 @@ export function ConfirmOrderModal({
   idea: TradeIdea;
   cash?: number;
   onClose: () => void;
-  /** Trading 212 Demo disponible para enviar propuestas del comité. */
-  broker?: { available: boolean; autonomy: string } | null;
+  /** Bróker conectado a la cartera (desde Integraciones) para enviar propuestas del comité. */
+  broker?: { available: boolean; autonomy: string; provider?: string | null; environment?: string | null } | null;
 }) {
   const crypto = idea.market === "crypto";
   const canBroker = !!broker?.available && broker.autonomy !== "nada" && !!idea.proposalId && idea.market === "bolsa" && idea.action === "comprar";
-  const [dest, setDest] = useState<"crs" | "t212">("crs");
+  const [dest, setDest] = useState<"crs" | "broker">("crs");
+  const brokerName = `${broker?.provider ?? "Bróker"}${broker?.environment === "demo" ? " Demo" : broker?.environment === "real" ? " (dinero real)" : ""}`;
   const sell = idea.action === "vender" || idea.action === "cerrar";
   const [adjust, setAdjust] = useState(false);
   const [quantity, setQuantity] = useState(String(idea.quantity ?? ""));
@@ -290,10 +291,10 @@ export function ConfirmOrderModal({
     setSaving(true);
     setError(null);
     try {
-      if (dest === "t212" && idea.proposalId) {
+      if (dest === "broker" && idea.proposalId) {
         const r = await api<{ quantity: number; orderId: string; status: string }>("committee/execute-broker", { proposalId: idea.proposalId, confirmDemo: true });
         setDone(
-          `Compra de ${int(r.quantity)} acciones enviada a Trading 212 Demo (orden ${r.orderId}, ${r.status}). En cuanto el bróker la registre, la app pondrá el stop y vigilará el objetivo.`,
+          `Compra de ${int(r.quantity)} acciones enviada a ${brokerName} (orden ${r.orderId}, ${r.status}). En cuanto el bróker la registre, la app pondrá el stop y vigilará el objetivo.`,
         );
       } else if (idea.proposalId) {
         const r = await api<{ status: string; order: string | null }>("committee/decide", {
@@ -341,8 +342,8 @@ export function ConfirmOrderModal({
             <button type="button" className={ghost} onClick={onClose}>
               Seguir mirando
             </button>
-            <Link href={dest === "t212" ? "/trading/cartera?source=trading212" : "/trading/cartera"} className={primary} onClick={onClose}>
-              {dest === "t212" ? "Ver Trading 212 Demo" : "Ver mi cartera"}
+            <Link href={dest === "broker" ? "/trading/integraciones" : "/trading/cartera"} className={primary} onClick={onClose}>
+              {dest === "broker" ? "Ver integraciones" : "Ver mi cartera"}
             </Link>
           </>
         }
@@ -387,14 +388,14 @@ export function ConfirmOrderModal({
             {(
               [
                 ["crs", "Simulador CRS", "Tu cartera virtual de la app."],
-                ["t212", "Trading 212 Demo", "Cuenta de práctica del bróker, con stop y objetivo protegidos."],
+                ["broker", brokerName, "Tu cuenta del bróker, con stop y objetivo protegidos."],
               ] as const
             ).map(([key, label, text]) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => setDest(key)}
-                className={`border px-3 py-2 text-left ${dest === key ? "border-blue-500 bg-blue-50/60 ring-1 ring-blue-500" : "border-slate-200 hover:bg-slate-50"}`}
+                className={`rounded-xl border px-3 py-2 text-left ${dest === key ? "border-blue-500 bg-blue-50/60 ring-1 ring-blue-500" : "border-slate-200 hover:bg-slate-50"}`}
               >
                 <span className="block text-sm font-semibold text-slate-900">{label}</span>
                 <span className="mt-0.5 block text-xs text-slate-500">{text}</span>
@@ -402,14 +403,14 @@ export function ConfirmOrderModal({
             ))}
           </fieldset>
         )}
-        {dest === "t212" ? (
+        {dest === "broker" ? (
           <div className="space-y-2">
             <p className="text-[15px] leading-relaxed">
-              <Rich text={`Vas a **comprar ${idea.name} en Trading 212 Demo** a mercado (si la bolsa está cerrada, se ejecuta en la apertura).`} />
+              <Rich text={`Vas a **comprar ${idea.name} en ${brokerName}** a mercado (si la bolsa está cerrada, se ejecuta en la apertura).`} />
             </p>
             <ul className="list-disc space-y-1 pl-5 text-xs text-slate-600">
               <li>
-                La <b>cantidad</b> la calcula la app con el saldo de tu cuenta Demo y tu riesgo por operación (máximo el 20 % del patrimonio).
+                La <b>cantidad</b> la calcula la app con el saldo de tu cuenta del bróker y tu riesgo por operación (máximo el 20 % del patrimonio).
               </li>
               <li>
                 El <b>stop a {idea.stop !== null ? eur(idea.stop) : "—"}</b> queda puesto en el bróker en cuanto se registre la compra.
