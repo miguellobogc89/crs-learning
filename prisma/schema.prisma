@@ -2579,3 +2579,47 @@ model trading_faro_ideas {
   @@index([status], map: "trading_faro_ideas_status")
   @@index([created_at], map: "trading_faro_ideas_created_at")
 }
+
+/// Copia de un agente en tu bróker: presupuesto en euros y modo (ensayo | real).
+model trading_mirrors {
+  id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id String                @db.Uuid
+  agent        String
+  budget       Float
+  mode         String                @default("ensayo")
+  active       Boolean               @default(true)
+  started_at   DateTime              @default(now()) @db.Timestamptz(6)
+  created_at   DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime              @default(now()) @db.Timestamptz(6)
+  legs         trading_mirror_legs[]
+
+  @@unique([workspace_id, agent], map: "trading_mirrors_workspace_agent")
+}
+
+/// Cada posición del agente copiada: abriendo | abierta | vendiendo | cerrada | omitida | error.
+model trading_mirror_legs {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  mirror_id          String          @db.Uuid
+  source_position_id String          @db.Uuid
+  mode               String
+  symbol             String
+  pair               String?
+  status             String          @default("abriendo")
+  amount             Float?
+  quantity           Float?
+  entry_price        Float?
+  exit_price         Float?
+  result             Float?
+  buy_order_id       String?
+  sell_order_id      String?
+  sell_attempts      Int             @default(0)
+  note               String?
+  opened_at          DateTime?       @db.Timestamptz(6)
+  closed_at          DateTime?       @db.Timestamptz(6)
+  created_at         DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime        @default(now()) @db.Timestamptz(6)
+  mirror             trading_mirrors @relation(fields: [mirror_id], references: [id], onDelete: Cascade, map: "trading_mirror_legs_mirror_fkey")
+
+  @@unique([mirror_id, source_position_id], map: "trading_mirror_legs_source")
+  @@index([mirror_id, status], map: "trading_mirror_legs_status")
+}

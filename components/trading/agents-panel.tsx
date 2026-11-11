@@ -12,6 +12,7 @@ import { EquityCurve, withLivePoint } from "./equity-chart";
 import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { DataTable, Money } from "./table";
+import { MirrorModal } from "./mirror-modal";
 
 type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean; canCopy: boolean };
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
@@ -374,6 +375,7 @@ function AgentDetail({
 }) {
   const [showAll, setShowAll] = useState(false);
   const [copying, setCopying] = useState(false);
+  const [mirroring, setMirroring] = useState(false);
   const lastRunId = a.lastRun?.id;
   const latest = a.proposals.filter((p) => p.runId === lastRunId);
   const older = a.proposals.filter((p) => p.runId !== lastRunId && p.status !== "rechazada" && p.action !== "vigilar");
@@ -402,6 +404,11 @@ function AgentDetail({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canCopy && (
+            <button type="button" className={a.kamikaze ? primary : ghost} onClick={() => setMirroring(true)}>
+              <Copy className="h-4 w-4" /> Copiar en mi Binance
+            </button>
+          )}
           {!a.kamikaze && (
             <button type="button" className={primary} disabled={!canCopy} onClick={() => setCopying(true)}>
               <Copy className="h-4 w-4" /> {a.copyWeightPct !== null ? `Lo copias con el ${a.copyWeightPct} % · cambiar` : `Copiar a ${a.name}`}
@@ -419,6 +426,7 @@ function AgentDetail({
           )}
         </div>
         {copying && <CopyModal agent={a} onClose={() => setCopying(false)} />}
+        {mirroring && <MirrorModal agent={a.key} name={a.name} onClose={() => setMirroring(false)} />}
       </header>
 
       <dl className="grid grid-cols-2 gap-px border-b border-slate-100 bg-slate-100 sm:grid-cols-4">

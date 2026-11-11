@@ -30,6 +30,7 @@ import { isBrokerError, type BrokerActor } from "@/lib/brokers/types";
 import { refreshLive } from "@/lib/trading/live";
 import { kamikazeTick } from "@/lib/trading/kamikaze/engine";
 import { faroView } from "@/lib/trading/faro/engine";
+import { mirrorView, setMirror, stopMirror } from "@/lib/trading/mirror/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,6 +88,7 @@ export async function GET(req: Request, route: RouteContext) {
     if (action === "account") return NextResponse.json(await accountDetail(ctx.workspaceId));
     if (action === "opportunities") return NextResponse.json(await getOpportunities(ctx.workspaceId));
     if (action === "faro") return NextResponse.json(await faroView(ctx.workspaceId));
+    if (action === "mirror") return NextResponse.json({ ...(await mirrorView(ctx.workspaceId)), canManage: ctx.canManage });
     if (action === "agents") return NextResponse.json({ ...(await getAgents(ctx.workspaceId)), canManage: canDirectAgents(ctx.workspaceId), canCopy: ctx.canManage });
     if (action === "portfolio") return NextResponse.json(await getPortfolio(ctx.workspaceId));
     if (action === "instruments") {
@@ -151,6 +153,11 @@ export async function POST(req: Request, route: RouteContext) {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede cambiar las copias", 403);
       await stopCopy(ctx.workspaceId, body.agent);
       return NextResponse.json({ ok: true });
+    }
+    if (action === "mirror/set" || action === "mirror/stop") {
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede copiar agentes en el bróker", 403);
+      if (action === "mirror/set") return NextResponse.json(await setMirror(ctx.workspaceId, body));
+      return NextResponse.json(await stopMirror(ctx.workspaceId, body.agent));
     }
     if (action === "committee/run") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede convocar al comité", 403);
