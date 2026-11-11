@@ -26,7 +26,7 @@ export const BINANCE_INFO: ProviderInfo = {
   id: PROVIDER_ID,
   name: "Binance",
   logo: "https://www.google.com/s2/favicons?domain=binance.com&sz=64",
-  description: "Criptomonedas al contado contra euros. Conexión por clave de API (HMAC).",
+  description: "Criptomonedas al contado contra euros. Conexión por clave de API (generada por Binance o autogenerada Ed25519).",
   availability: "available",
   environments: [...ENABLED_ENVIRONMENTS],
   markets: ["crypto"],
@@ -34,7 +34,7 @@ export const BINANCE_INFO: ProviderInfo = {
   orderTypes: ["market", "limit", "stop_limit"],
   credentialFields: [
     { key: "apiKey", label: "API Key", secret: true, help: "Binance → Perfil → Gestión de API. Solo lectura para empezar; NUNCA con retiros." },
-    { key: "apiSecret", label: "Secret Key", secret: true },
+    { key: "apiSecret", label: "Secret Key o clave privada", secret: true, help: "Clave generada por Binance: su Secret Key. Clave autogenerada (Ed25519): pega tu clave privada .pem completa." },
   ],
   notes: [
     "CRS rechaza las claves que tengan los retiros habilitados.",

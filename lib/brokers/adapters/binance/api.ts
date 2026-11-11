@@ -2,7 +2,7 @@
 // Comunicación con la API de Binance (spot): peticiones firmadas (HMAC-SHA256), lista cerrada de
 // endpoints, desfase de reloj, límites de peticiones y traducción de sus errores al formato común.
 // Un POST/DELETE nunca se reintenta: si no hay respuesta clara, el resultado es «unknown_outcome».
-import { createHmac } from "node:crypto";
+import { signPayload } from "./signing";
 import { BrokerError, type BrokerErrorCode } from "../../types";
 import type { BrokerSession } from "../../adapter";
 
@@ -77,7 +77,13 @@ export function createApi(deps: ApiDeps) {
       if (!apiKey || !apiSecret) throw err("misconfigured", "Faltan la clave o el secreto de la API de Binance");
       query.set("recvWindow", "5000");
       query.set("timestamp", String(deps.now() + (await offset(session.environment))));
-      query.set("signature", createHmac("sha256", apiSecret).update(query.toString()).digest("hex"));
+      let signature: string;
+      try {
+        signature = signPayload(apiSecret, query.toString());
+      } catch (e) {
+        throw err("misconfigured", e instanceof Error ? e.message : "Clave de Binance no válida");
+      }
+      query.set("signature", signature);
       headers["X-MBX-APIKEY"] = apiKey;
     }
     let res: Response;

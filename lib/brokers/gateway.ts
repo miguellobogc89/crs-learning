@@ -127,7 +127,7 @@ function readCredentials(provider: ProviderInfo, raw: unknown): Record<string, s
   for (const f of provider.credentialFields) {
     const v = input[f.key];
     if (typeof v !== "string" || !v.trim()) throw new BrokerError("invalid_request", `Falta ${f.label.toLowerCase()}`, { provider: provider.id });
-    if (v.length > 1_000) throw new BrokerError("invalid_request", `${f.label} demasiado largo`, { provider: provider.id });
+    if (v.length > 4_000) throw new BrokerError("invalid_request", `${f.label} demasiado largo`, { provider: provider.id });
     out[f.key] = v.trim();
   }
   return out;
