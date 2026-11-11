@@ -200,9 +200,9 @@ export function HomePanel() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {!account.opened && <OpenAccount />}
-      <DataTable id="inicio-operadores" header={tabs} columns={columns} rows={rows} rowKey={(r) => r.key} />
+      <DataTable id="inicio-operadores" height="min-h-0 flex-1" header={tabs} columns={columns} rows={rows} rowKey={(r) => r.key} paginate label="operadores" />
     </div>
   );
 }
