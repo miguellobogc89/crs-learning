@@ -93,9 +93,10 @@ export function createBinanceAdapter(deps: ApiDeps = defaultDeps()): BrokerAdapt
     async connect(s) {
       if (s.environment === "real") {
         // Seguridad: una clave capaz de retirar fondos no se acepta nunca. Si no se puede comprobar, tampoco.
-        let restrictions: { enableWithdrawals?: unknown; enableInternalTransfer?: unknown } | null = null;
+        type Restrictions = { enableWithdrawals?: unknown; enableInternalTransfer?: unknown };
+        let restrictions: Restrictions | null = null;
         try {
-          restrictions = (await api.call(s, "GET", "/sapi/v1/account/apiRestrictions")) as typeof restrictions;
+          restrictions = (await api.call(s, "GET", "/sapi/v1/account/apiRestrictions")) as Restrictions;
         } catch (e) {
           if (e instanceof BrokerError && e.code === "auth_failed") throw e;
           throw new BrokerError("forbidden", "No se pudieron comprobar los permisos de la clave en Binance; por seguridad no se conecta", { provider: PROVIDER_ID });
