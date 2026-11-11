@@ -84,6 +84,26 @@ export function FaroPanel() {
 
   const columns: Col<Idea>[] = [
     {
+      key: "who",
+      label: "Agente",
+      width: 14,
+      align: "left",
+      sort: (i) => i.participants.find((p) => p.who !== "tu")?.name ?? "FARO",
+      cell: (i) => {
+        const operators = i.participants.filter((p) => p.who !== "tu");
+        const lead = operators[0];
+        return (
+          <span className="flex min-w-0 items-center gap-2">
+            <AgentAvatar color={lead?.color ?? "blue"} size="sm" />
+            <span className="min-w-0">
+              <b className="block truncate font-semibold text-slate-900">{lead?.name ?? "FARO"}</b>
+              {operators.length > 1 && <span className="block text-[11px] text-slate-500">+{operators.length - 1} agentes</span>}
+            </span>
+          </span>
+        );
+      },
+    },
+    {
       key: "asset",
       label: "Activo",
       width: 12,
@@ -99,33 +119,22 @@ export function FaroPanel() {
         </span>
       ),
     },
-    { key: "kind", label: "Tipo", width: 8, sort: (i) => KIND[i.kind]?.label ?? i.kind, cell: (i) => <Pill color={(KIND[i.kind] ?? { color: "slate" }).color}>{KIND[i.kind]?.label ?? i.kind}</Pill> },
-    { key: "conv", label: "Convicción", width: 7, sort: (i) => i.conviction, cell: (i) => <span className="tabular-nums text-slate-700">{i.conviction}/5</span> },
-    { key: "price", label: "Detectada a", width: 9, sort: (i) => i.price, cell: (i) => <Money v={i.price} className="text-slate-700" /> },
-    { key: "inv", label: "Invalidación", width: 9, sort: (i) => i.invalidation, cell: (i) => <Money v={i.invalidation} className="text-rose-600" /> },
-    { key: "target", label: "Objetivo", width: 9, sort: (i) => i.target, cell: (i) => <Money v={i.target} className="text-emerald-600" /> },
-    { key: "now", label: "Precio ahora / salida", width: 9, sort: (i) => i.lastPrice, cell: (i) => <Money v={i.lastPrice} className="text-slate-700" /> },
+    { key: "kind", label: "Tipo", width: 7, sort: (i) => KIND[i.kind]?.label ?? i.kind, cell: (i) => <Pill color={(KIND[i.kind] ?? { color: "slate" }).color}>{KIND[i.kind]?.label ?? i.kind}</Pill> },
+    { key: "conv", label: "Convicción", width: 6, sort: (i) => i.conviction, cell: (i) => <span className="tabular-nums text-slate-700">{i.conviction}/5</span> },
+    { key: "price", label: "Detectada a", width: 8, sort: (i) => i.price, cell: (i) => <Money v={i.price} className="text-slate-700" /> },
+    { key: "inv", label: "Invalidación", width: 8, sort: (i) => i.invalidation, cell: (i) => <Money v={i.invalidation} className="text-rose-600" /> },
+    { key: "target", label: "Objetivo", width: 8, sort: (i) => i.target, cell: (i) => <Money v={i.target} className="text-emerald-600" /> },
+    { key: "now", label: "Precio ahora / salida", width: 8, sort: (i) => i.lastPrice, cell: (i) => <Money v={i.lastPrice} className="text-slate-700" /> },
     { key: "res", label: "Resultado por 100 €", width: 9, sort: (i) => i.resultPct, cell: (i) => <Money v={i.resultPct} digits={2} sign className={`font-semibold ${tone(i.resultPct)}`} /> },
     {
       key: "status",
       label: "Estado",
-      width: 11,
+      width: 10,
       sort: (i) => (i.status === "viva" ? 0 : 1),
       cell: (i) => (
         <span className="flex flex-wrap items-center justify-center gap-1.5">
           <Pill color={STATUS[i.status].color}>{STATUS[i.status].label}</Pill>
           {i.status === "viva" && <span className="text-xs text-slate-400">{left(i.validUntil)}</span>}
-        </span>
-      ),
-    },
-    {
-      key: "who",
-      label: "Participantes",
-      width: 7,
-      sort: (i) => i.participants.length,
-      cell: (i) => (
-        <span className={`inline-flex min-w-7 justify-center rounded-lg px-2 py-0.5 text-xs font-semibold tabular-nums ${i.participants.length ? "bg-blue-50 text-blue-700" : "bg-slate-50 text-slate-400"}`}>
-          {i.participants.length}
         </span>
       ),
     },
@@ -198,11 +207,12 @@ export function FaroPanel() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {error && <ErrorNote>{error}</ErrorNote>}
       {!data.account.opened && <OpenAccount compact />}
       <DataTable
         id="oportunidades"
+        height="min-h-0 flex-1"
         columns={columns}
         rows={all}
         rowKey={(i) => i.id}
