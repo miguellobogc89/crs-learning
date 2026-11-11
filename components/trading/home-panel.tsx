@@ -10,6 +10,7 @@ import { api, eur0, errorText, pct, tone } from "./format";
 import { useTradingRefresh } from "./navigation";
 import { OpenAccount } from "./open-account";
 import { AVATAR, cap, card, ErrorNote, LoadingCard, PILL, plainText, ReturnPill, Rich } from "./ui";
+import { AssetIcon } from "./asset-icon";
 
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
 type Agents = Awaited<ReturnType<typeof getAgents>>;
@@ -296,7 +297,8 @@ export function HomePanel() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2 text-sm">
                       <span className="min-w-0">
-                        <b className="font-semibold text-slate-900">{m.name}</b> <span className="text-slate-700">{MOVE[m.kind](m.asset)}</span>
+                        <b className="font-semibold text-slate-900">{m.name}</b> <span className="text-slate-700">{MOVE[m.kind](m.asset)}</span>{" "}
+                        <AssetIcon symbol={m.symbol} name={m.asset} size="xs" className="ml-0.5 align-[-5px]" />
                       </span>
                       <span className="shrink-0 text-xs text-slate-400">{ago(m.at)}</span>
                     </div>

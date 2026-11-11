@@ -6,6 +6,7 @@ import { CATEGORY_LABEL, type NewsCategory } from "@/lib/trading/news/sources";
 import { api, errorText, ghost, int, panel } from "./format";
 import { useTradingRefresh } from "./navigation";
 import { ErrorNote, LoadingCard } from "./ui";
+import { AssetIcon } from "./asset-icon";
 
 type News = Awaited<ReturnType<typeof listNews>> & { canManage: boolean };
 type SyncResult = {
@@ -84,11 +85,13 @@ export function NewsItem({
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
           {n.symbols.map((s) =>
             onSymbol ? (
-              <button key={s} type="button" onClick={() => onSymbol(s)} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-px font-medium text-slate-700 hover:border-blue-300 hover:text-blue-700">
+              <button key={s} type="button" onClick={() => onSymbol(s)} className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-px pl-0.5 pr-2 font-medium text-slate-700 hover:border-blue-300 hover:text-blue-700">
+                <AssetIcon symbol={s} name={names[s]} size="xs" className="h-4 w-4" />
                 {names[s] ?? s}
               </button>
             ) : (
-              <span key={s} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-px font-medium text-slate-700">
+              <span key={s} className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 py-px pl-0.5 pr-2 font-medium text-slate-700">
+                <AssetIcon symbol={s} name={names[s]} size="xs" className="h-4 w-4" />
                 {names[s] ?? s}
               </span>
             ),
@@ -235,8 +238,9 @@ export function NewsPanel() {
                 className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-sm hover:border-blue-300"
                 title={`${t.count} noticias, ${t.important} importantes`}
               >
-                <Tone sentiment={t.tone > 0.25 ? 1 : t.tone < -0.25 ? -1 : 0} className="h-3.5 w-3.5" />
+                <AssetIcon symbol={t.symbol} name={t.name} size="xs" />
                 <span className="font-medium text-slate-800">{t.name}</span>
+                <Tone sentiment={t.tone > 0.25 ? 1 : t.tone < -0.25 ? -1 : 0} className="h-3.5 w-3.5" />
                 <span className="text-xs text-slate-400">{t.count}</span>
               </button>
             ))}

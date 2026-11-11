@@ -10,6 +10,7 @@ import { AGENT_DOT, AgentAvatar, ErrorNote, LoadingCard, Pill, Rich } from "./ui
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { ConfirmOrderModal, EvidenceList, TradeInfoModal, type TradeIdea } from "./trade-modals";
 import { OpenAccount } from "./open-account";
+import { AssetIcon } from "./asset-icon";
 
 type Data = Awaited<ReturnType<typeof getOpportunities>>;
 type Buy = Data["buys"][number];
@@ -116,6 +117,7 @@ export function OpportunitiesPanel() {
             {data.sells.map((s) => (
               <li key={s.symbol} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
                 <div className="min-w-0 max-w-3xl text-sm">
+                  <AssetIcon symbol={s.symbol} name={s.name} size="sm" className="mr-2 align-middle" />
                   <b className="font-semibold text-slate-900">{s.name}</b>
                   <span className="text-slate-600"> · lo vende {names(s.agents.map((a) => a.name))}</span>
                   <p className="mt-1 text-slate-600">
@@ -199,6 +201,7 @@ function BuyRow({ b, onInfo, onExecute }: { b: Buy; onInfo: () => void; onExecut
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <AssetIcon symbol={b.symbol} name={b.name} size="md" />
             <b className="text-base font-semibold text-slate-900">{b.name}</b>
             <Pill color={b.market === "crypto" ? "orange" : "blue"}>{b.market === "crypto" ? "Crypto" : "Bolsa"}</Pill>
             <span className="flex items-center gap-1.5 text-xs text-slate-600">

@@ -1,14 +1,16 @@
 "use client";
-// Agentes: tres gestores de IA con la misma información, distinto carácter y su propia cartera virtual.
+// Agentes: catálogo de gestores de IA (en tarjetas o en lista) con la misma información, distinto carácter
+// y su propia cartera virtual. «Detalles» abre su ficha completa en un modal.
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot, CheckCircle2, ChevronDown, Copy, Loader2, Play, RotateCcw, XCircle } from "lucide-react";
+import { Bot, CheckCircle2, ChevronDown, Copy, Info, LayoutGrid, List, Loader2, Play, RotateCcw, Search, XCircle } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import { api, dayFmt, errorText, eur, eur0, field, ghost, int, panel, pct, primary, th, tone } from "./format";
 import { refreshTrading, useTradingRefresh } from "./navigation";
-import { EquityCurve } from "./portfolio-panel";
+import { EquityCurve } from "./equity-chart";
 import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill, Rich } from "./ui";
+import { AssetIcon } from "./asset-icon";
 
 type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean; canCopy: boolean };
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
@@ -27,13 +29,26 @@ const when = (iso: string | null | undefined) =>
     ? new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(iso))
     : "Nunca";
 
+const PROFILES = ["todos", "precavido", "equilibrado", "arriesgado"] as const;
+type SortKey = "rentabilidad" | "patrimonio" | "antiguedad" | "nombre";
+const SORTS: Record<SortKey, { label: string; fn: (a: Agent, b: Agent) => number }> = {
+  rentabilidad: { label: "Rentabilidad", fn: (a, b) => b.summary.returnPct - a.summary.returnPct },
+  patrimonio: { label: "Patrimonio", fn: (a, b) => b.summary.equity - a.summary.equity },
+  antiguedad: { label: "Más veteranos", fn: (a, b) => a.startedAt.localeCompare(b.startedAt) },
+  nombre: { label: "Nombre", fn: (a, b) => a.name.localeCompare(b.name, "es") },
+};
+
 type RunState = Record<string, { state: "esperando" | "reunido" | "ok" | "error"; detail?: string }>;
 
 export function AgentsPanel() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const params = useSearchParams();
-  const [selected, setSelected] = useState<string>(params.get("agent") ?? "nova");
+  const [selected, setSelected] = useState<string | null>(params.get("agent"));
+  const [query, setQuery] = useState("");
+  const [profile, setProfile] = useState<(typeof PROFILES)[number]>("todos");
+  const [sort, setSort] = useState<SortKey>("rentabilidad");
+  const [layout, setLayout] = useState<"cards" | "list">("cards");
   const [run, setRun] = useState<RunState | null>(null);
   const running = !!run && Object.values(run).some((r) => r.state === "esperando" || r.state === "reunido");
 
@@ -79,21 +94,35 @@ export function AgentsPanel() {
 
   if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard />;
 
-  const ranked = [...data.agents].sort((a, b) => b.summary.returnPct - a.summary.returnPct);
-  const agent = data.agents.find((a) => a.key === selected) ?? data.agents[0];
+  const q = query.trim().toLowerCase();
+  const list = data.agents
+    .filter((a) => profile === "todos" || a.profile === profile)
+    .filter((a) => !q || [a.name, a.profile, a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
+    .sort(SORTS[sort].fn);
+  const rank = new Map([...data.agents].sort((x, y) => y.summary.returnPct - x.summary.returnPct).map((a, k) => [a.key, k + 1]));
+  const detail = data.agents.find((a) => a.key === selected) ?? null;
   const bench = data.agents[0]?.benchmark;
+  const openDetail = (key: string | null) => {
+    setSelected(key);
+    window.history.replaceState(null, "", key ? `/trading/agentes?agent=${key}` : "/trading/agentes");
+  };
 
   return (
     <div className="space-y-6">
       <section className={`${card} px-6 py-5`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <p className="flex max-w-2xl items-start gap-2 text-sm text-slate-600">
-            <Bot className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-            <span>
-              Todos ven <b>la misma información</b> (cotizaciones, figuras, fuerza relativa y noticias) y cada uno decide con{" "}
-              <b>su carácter</b>, con {eur0(data.agents[0]?.summary.initialCapital)} virtuales. Se reúnen solos cada día laborable a las 19:15.
-            </span>
-          </p>
+          <div className="max-w-2xl">
+            <h2 className="flex items-center gap-3 text-lg font-semibold text-slate-900">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                <Bot className="h-5 w-5" />
+              </span>
+              Catálogo de agentes
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Todos ven <b>la misma información</b> (cotizaciones, figuras, fuerza relativa y noticias) y cada uno decide con <b>su carácter</b>, con{" "}
+              {eur0(data.agents[0]?.summary.initialCapital)} virtuales. Se reúnen solos cada día laborable a las 19:15.
+            </p>
+          </div>
           {data.canManage && (
             <button type="button" className={ghost} disabled={running} onClick={() => void meet(data.agents.map((a) => a.key))}>
               {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Reunir a los agentes ahora
@@ -130,81 +159,265 @@ export function AgentsPanel() {
 
       {error && <ErrorNote>{error}</ErrorNote>}
 
-      {/* Una tarjeta por agente */}
-      {bench && (
-        <p className="-mb-3 text-xs text-slate-500">
-          Desde que empezaron: IBEX 35 <b className={tone(bench.ibexPct)}>{pct(bench.ibexPct)}</b> · Bitcoin <b className={tone(bench.btcPct)}>{pct(bench.btcPct)}</b>
-        </p>
-      )}
-      <div className="grid gap-4 md:grid-cols-3">
-        {ranked.map((a, k) => {
-          const open = a.positions.filter((p) => p.status === "abierta").length;
-          const pending = a.positions.filter((p) => p.status === "pendiente").length;
-          const lastMove = a.proposals.find((p) => p.status === "ejecutada" && p.action !== "vigilar");
-          const sel = a.key === agent.key;
-          return (
+      {/* Barra del catálogo: buscar, filtrar, ordenar y cambiar de vista */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[220px] flex-1 sm:max-w-xs">
+          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <input className={`${field} w-full pl-9`} placeholder="Buscar agente, perfil o creador" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Buscar agentes" />
+        </div>
+        <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
+          {PROFILES.map((p) => (
             <button
-              key={a.key}
+              key={p}
               type="button"
-              onClick={() => {
-                setSelected(a.key);
-                window.history.replaceState(null, "", `/trading/agentes?agent=${a.key}`);
-              }}
-              className={`${panel} flex flex-col text-left transition-shadow hover:shadow-md ${sel ? "ring-2 ring-blue-500" : ""}`}
+              onClick={() => setProfile(p)}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${profile === p ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
             >
-              <div className="flex items-start justify-between gap-2 px-5 pt-4">
-                <div className="flex min-w-0 items-start gap-3">
-                  <AgentAvatar color={a.color} size="lg" />
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[15px] font-semibold text-slate-900">{a.name}</span>
-                      <Pill color={a.color}>{cap(a.profile)}</Pill>
-                    </div>
-                    <p className="mt-1 text-xs leading-snug text-slate-500">{a.tagline}</p>
-                  </div>
-                </div>
-                <span className="flex flex-col items-end gap-1">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-xs font-semibold text-slate-600">{k + 1}</span>
-                  {a.copyWeightPct !== null && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                      <Copy className="h-3 w-3" /> copias {a.copyWeightPct} %
-                    </span>
-                  )}
-                </span>
-              </div>
-              <div className="mt-3 flex items-center gap-3 px-5">
-                <span className="text-2xl font-bold tracking-tight tabular-nums text-slate-900">{eur0(a.summary.equity)}</span>
-                <ReturnPill value={a.summary.returnPct} />
-              </div>
-              <div className="px-1">
-                <EquityCurve points={a.equity} initial={a.summary.initialCapital} height={70} empty="La línea aparece tras su primera sesión." />
-              </div>
-              <div className="mt-auto border-t border-slate-100 px-5 py-3 text-xs text-slate-600">
-                <div>
-                  {open} abiertas{pending ? ` · ${pending} pendientes` : ""} · {a.summary.stats.closed} cerradas
-                  {a.summary.stats.closed ? ` · acierto ${Math.round(a.summary.stats.winRate * 100)} %` : ""}
-                </div>
-                <div className="mt-0.5 truncate text-slate-500">
-                  {lastMove ? `Último: ${ACTION[lastMove.action] ?? lastMove.action} ${lastMove.name}` : a.lastRun ? "Aún no ha operado" : "Aún no se ha reunido"}
-                  {a.lastRun ? ` · reunión ${when(a.lastRun.at)}` : ""}
-                </div>
-              </div>
+              {p === "todos" ? "Todos" : cap(p)}
             </button>
-          );
-        })}
+          ))}
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-500">
+          Ordenar por
+          <select className={`${field} py-1.5`} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+            {(Object.keys(SORTS) as SortKey[]).map((k) => (
+              <option key={k} value={k}>
+                {SORTS[k].label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="ml-auto flex items-center gap-3">
+          {bench && (
+            <span className="hidden items-center gap-1 text-xs text-slate-500 lg:flex" title="Lo que ha hecho el mercado desde que empezaron los agentes, para comparar.">
+              Mercado desde que empezaron: IBEX 35 <b className={tone(bench.ibexPct)}>{pct(bench.ibexPct)}</b> · Bitcoin <b className={tone(bench.btcPct)}>{pct(bench.btcPct)}</b>
+            </span>
+          )}
+          <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label="Vista">
+            {(
+              [
+                ["cards", LayoutGrid, "Tarjetas"],
+                ["list", List, "Lista"],
+              ] as const
+            ).map(([k, Icon, label]) => (
+              <button
+                key={k}
+                type="button"
+                title={label}
+                aria-pressed={layout === k}
+                onClick={() => setLayout(k)}
+                className={`rounded-lg p-1.5 ${layout === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Ficha del agente */}
-      <AgentDetail
-        key={agent.key}
-        agent={agent}
-        canManage={data.canManage}
-        canCopy={data.canCopy}
-        busy={running}
-        onMeet={() => void meet([agent.key])}
-        onReset={() => void reset(agent)}
-      />
+      <p className="-mt-3 text-xs text-slate-500">
+        {list.length === data.agents.length ? `${list.length} agentes` : `${list.length} de ${data.agents.length} agentes`}
+      </p>
+
+      {list.length === 0 ? (
+        <div className={`${card} px-6 py-10 text-center text-sm text-slate-500`}>Ningún agente coincide con la búsqueda.</div>
+      ) : layout === "cards" ? (
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {list.map((a) => (
+            <AgentCard key={a.key} a={a} rank={rank.get(a.key) ?? 0} onDetail={() => openDetail(a.key)} />
+          ))}
+        </div>
+      ) : (
+        <section className={`${panel} overflow-x-auto`}>
+          <table className="w-full min-w-[920px] text-sm">
+            <thead>
+              <tr>
+                <th className={`${th} pl-5`}>Agente</th>
+                <th className={th}>Creador</th>
+                <th className={th}>Lleva</th>
+                <th className={`${th} text-right`}>Patrimonio</th>
+                <th className={`${th} text-center`}>Rentabilidad</th>
+                <th className={`${th} text-right`}>Acierto</th>
+                <th className={`${th} text-right`}>Posiciones</th>
+                <th className={th}>Riesgo</th>
+                <th className={th} />
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((a) => {
+                const open = a.positions.filter((p) => p.status === "abierta").length;
+                return (
+                  <tr key={a.key} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50/60" onClick={() => openDetail(a.key)}>
+                    <td className="py-3 pl-5 pr-3">
+                      <span className="flex items-center gap-3">
+                        <AgentAvatar color={a.color} />
+                        <span>
+                          <span className="flex items-center gap-2">
+                            <b className="text-[15px] font-semibold text-slate-900">{a.name}</b>
+                            <Pill color={a.color}>{cap(a.profile)}</Pill>
+                          </span>
+                          <span className="block max-w-xs truncate text-xs text-slate-500">{a.tagline}</span>
+                        </span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <Creator />
+                    </td>
+                    <td className="px-3 py-3 text-slate-600">{runningFor(a.startedAt)}</td>
+                    <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900">{eur0(a.summary.equity)}</td>
+                    <td className="px-3 py-3 text-center">
+                      <ReturnPill value={a.summary.returnPct} />
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">
+                      {a.summary.stats.closed ? `${Math.round(a.summary.stats.winRate * 100)} %` : "—"}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">{open}</td>
+                    <td className="px-3 py-3 text-slate-600">{pct(a.settings.riskPerTradePct, 1, false)} por operación</td>
+                    <td className="px-3 py-3 pr-5 text-right">
+                      <button
+                        type="button"
+                        className={ghost}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDetail(a.key);
+                        }}
+                      >
+                        Detalles
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {detail && (
+        <Modal
+          open
+          onClose={() => openDetail(null)}
+          width="max-w-5xl"
+          title={
+            <span className="flex flex-wrap items-center gap-2">
+              <AgentAvatar color={detail.color} size="sm" /> {detail.name} <Pill color={detail.color}>{cap(detail.profile)}</Pill>{" "}
+              <ReturnPill value={detail.summary.returnPct} />
+            </span>
+          }
+          subtitle={
+            <span className="flex flex-wrap items-center gap-2">
+              <Creator /> · {runningFor(detail.startedAt)} · puesto {rank.get(detail.key)} de {data.agents.length}
+            </span>
+          }
+        >
+          <div className="-mx-6 -my-5">
+            <AgentDetail
+              key={detail.key}
+              agent={detail}
+              canManage={data.canManage}
+              canCopy={data.canCopy}
+              busy={running}
+              onMeet={() => void meet([detail.key])}
+              onReset={() => void reset(detail)}
+            />
+          </div>
+        </Modal>
+      )}
     </div>
+  );
+}
+
+/** Los agentes de ahora son de la casa; cuando haya agentes de usuarios, aquí irá su autor. */
+const CREATOR = { name: "Crussader", logo: "/email/logo-mark.png" };
+
+function Creator() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+      {/* eslint-disable-next-line @next/next/no-img-element -- logo propio, pequeño */}
+      <img src={CREATOR.logo} alt="" width={18} height={18} className="h-[18px] w-[18px] rounded-md" />
+      {CREATOR.name}
+    </span>
+  );
+}
+
+/** «lleva 12 días», «lleva 3 meses»… */
+function runningFor(iso: string) {
+  const days = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+  if (days < 1) return "empezó hoy";
+  if (days < 45) return `lleva ${days} ${days === 1 ? "día" : "días"}`;
+  const months = Math.round(days / 30.4);
+  if (months < 12) return `lleva ${months} meses`;
+  const years = Math.floor(months / 12);
+  return `lleva ${years} ${years === 1 ? "año" : "años"}`;
+}
+
+function AgentCard({ a, rank, onDetail }: { a: Agent; rank: number; onDetail: () => void }) {
+  const open = a.positions.filter((p) => p.status === "abierta").length;
+  const pending = a.positions.filter((p) => p.status === "pendiente").length;
+  const lastMove = a.proposals.find((p) => p.status === "ejecutada" && p.action !== "vigilar");
+  const traits = [
+    `${pct(a.settings.riskPerTradePct, 1, false)} de riesgo por operación`,
+    `hasta ${a.settings.maxOpenPositions} posiciones`,
+    `máx. ${pct(a.settings.maxPositionPct, 0, false)} en un valor`,
+    `convicción ≥ ${a.rules.minConviction}/5`,
+    a.rules.buyInBearMarket ? "compra en mercado bajista" : "no compra en mercado bajista",
+  ];
+  return (
+    <article className={`${card} flex flex-col overflow-hidden transition-shadow hover:shadow-md`}>
+      <div className="flex items-start justify-between gap-2 px-5 pt-5">
+        <div className="flex min-w-0 items-start gap-3">
+          <AgentAvatar color={a.color} size="lg" />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[15px] font-semibold text-slate-900">{a.name}</span>
+              <Pill color={a.color}>{cap(a.profile)}</Pill>
+            </div>
+            <p className="mt-1 text-xs leading-snug text-slate-500">{a.tagline}</p>
+          </div>
+        </div>
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-xs font-semibold text-slate-600" title="Puesto por rentabilidad">
+            {rank}
+          </span>
+          {a.copyWeightPct !== null && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+              <Copy className="h-3 w-3" /> lo copias {a.copyWeightPct} %
+            </span>
+          )}
+        </span>
+      </div>
+      <div className="mt-4 flex items-center gap-3 px-5">
+        <span className="text-2xl font-bold tracking-tight tabular-nums text-slate-900">{eur0(a.summary.equity)}</span>
+        <ReturnPill value={a.summary.returnPct} />
+      </div>
+      <div className="mt-2 px-3">
+        <EquityCurve points={a.equity} initial={a.summary.initialCapital} height={64} empty="La línea aparece tras su primera sesión." />
+      </div>
+      <ul className="mt-3 flex flex-wrap gap-1.5 px-5">
+        {traits.map((t) => (
+          <li key={t} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
+            {t}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 px-5 text-xs text-slate-500">
+        {open} abiertas{pending ? ` · ${pending} pendientes` : ""} · {a.summary.stats.closed} cerradas
+        {a.summary.stats.closed ? ` · acierto ${Math.round(a.summary.stats.winRate * 100)} %` : ""}
+        <div className="mt-0.5 truncate">
+          {lastMove ? `Último: ${ACTION[lastMove.action] ?? lastMove.action} ${lastMove.name}` : a.lastRun ? "Aún no ha operado" : "Aún no se ha reunido"}
+          {a.lastRun ? ` · reunión ${when(a.lastRun.at)}` : ""}
+        </div>
+      </div>
+      <footer className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 pt-3">
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <Creator />
+          <span className="text-[11px] text-slate-400">{runningFor(a.startedAt)}</span>
+        </span>
+        <button type="button" className={ghost} onClick={onDetail}>
+          <Info className="h-4 w-4" /> Detalles
+        </button>
+      </footer>
+    </article>
   );
 }
 
@@ -232,15 +445,11 @@ function AgentDetail({
   const pendingIds = new Set(a.positions.filter((p) => p.status === "pendiente").map((p) => p.id));
 
   return (
-    <section className={panel}>
+    <section>
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-6 py-5">
         <div className="flex max-w-2xl items-start gap-3">
-          <AgentAvatar color={a.color} size="lg" />
           <div className="min-w-0">
-          <h2 className="flex flex-wrap items-center gap-2 text-lg font-semibold text-slate-900">
-            {a.name} <Pill color={a.color}>{cap(a.profile)}</Pill> <ReturnPill value={s.returnPct} />
-          </h2>
-          <p className="mt-1 text-sm text-slate-600">{a.tagline}</p>
+          <p className="text-sm text-slate-700">{a.tagline}</p>
           <p className="mt-2 text-xs text-slate-500">
             Arriesga {pct(a.settings.riskPerTradePct, 1, false)} del patrimonio por operación · como mucho {pct(a.settings.maxPositionPct, 0, false)} en un
             valor · hasta {a.settings.maxOpenPositions} posiciones · {a.rules.maxBuys} {a.rules.maxBuys === 1 ? "compra" : "compras"} por reunión ·
@@ -314,8 +523,13 @@ function AgentDetail({
                 {a.positions.map((p) => (
                   <tr key={p.id} className="border-t border-slate-100">
                     <td className="px-3 py-2">
-                      <div className="font-medium text-slate-900">{p.name}</div>
-                      {p.status === "pendiente" && <div className="text-xs text-amber-700">Se compra en la próxima apertura</div>}
+                      <span className="flex items-center gap-2.5">
+                        <AssetIcon symbol={p.symbol} name={p.name} size="sm" />
+                        <span>
+                          <span className="block font-medium text-slate-900">{p.name}</span>
+                          {p.status === "pendiente" && <span className="block text-xs text-amber-700">Se compra en la próxima apertura</span>}
+                        </span>
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">{int(p.quantity)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{eur(p.entryPrice ?? p.plannedEntry)}</td>
@@ -366,7 +580,8 @@ function AgentDetail({
           <ul className="mt-2 divide-y divide-slate-100 text-sm">
             {a.closed.map((p) => (
               <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-2 py-1.5">
-                <span className="text-slate-700">
+                <span className="flex items-center gap-2 text-slate-700">
+                  <AssetIcon symbol={p.symbol} name={p.name} size="xs" />
                   {p.name} <span className="text-xs text-slate-500">· {dayFmt(p.exitDay)} · {p.exitReason}</span>
                 </span>
                 <span className={`font-medium tabular-nums ${tone(p.pnl)}`}>{eur0(p.pnl)}</span>
@@ -385,6 +600,7 @@ function Decision({ p, pending }: { p: Agent["proposals"][number]; pending: bool
     <li className="py-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-sm">
+          <AssetIcon symbol={p.symbol} name={p.name} size="sm" className="mr-2 align-middle" />
           <b className="font-semibold text-slate-900">
             {ACTION[p.action] ?? p.action} {p.name}
           </b>

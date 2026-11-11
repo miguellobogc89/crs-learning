@@ -10,6 +10,7 @@ import { api, errorText, eur, eur0, field, ghost, int, num, primary } from "./fo
 import { refreshTrading } from "./navigation";
 import { Tone } from "./news-panel";
 import { Modal, Rich } from "./ui";
+import { AssetIcon } from "./asset-icon";
 
 export type TradeIdea = {
   key: string;
@@ -141,8 +142,11 @@ export function TradeInfoModal({ idea, onClose, onExecute }: { idea: TradeIdea; 
       onClose={onClose}
       width="max-w-2xl"
       title={
-        <span>
-          {idea.name} <span className="text-sm font-normal text-slate-500">{idea.symbol}</span>
+        <span className="flex items-center gap-2.5">
+          <AssetIcon symbol={idea.symbol} name={idea.name} size="md" />
+          <span>
+            {idea.name} <span className="text-sm font-normal text-slate-500">{idea.symbol}</span>
+          </span>
         </span>
       }
       subtitle={`${idea.origin}${idea.market === "crypto" ? " · Crypto" : " · Bolsa"}${idea.conviction ? ` · convicción ${idea.conviction}/5` : ""}${idea.score !== undefined ? ` · nota ${idea.score}/100` : ""}`}

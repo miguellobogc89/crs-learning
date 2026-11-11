@@ -9,6 +9,7 @@ import { ConfirmOrderModal, TradeInfoModal, ideaFromRecommendation } from "./tra
 import { ErrorNote, Rich } from "./ui";
 import { useTradingRefresh } from "./navigation";
 import { NewsItem } from "./news-panel";
+import { AssetIcon } from "./asset-icon";
 
 type Instrument = Awaited<ReturnType<typeof getInstrument>>;
 
@@ -132,12 +133,17 @@ export function MarketPanel({
                   className={`cursor-pointer border-t border-slate-100 ${m.symbol === current ? "bg-blue-50/70" : "hover:bg-slate-50"}`}
                 >
                   <td className="px-3 py-2">
+                    <span className="flex items-center gap-2.5">
+                    <AssetIcon symbol={m.symbol} name={m.name} size="sm" />
+                    <span className="min-w-0">
                     <div className={`font-medium ${m.isIndex ? "text-slate-900" : "text-slate-800"}`}>{m.name}</div>
                     <div className="text-xs text-slate-500">
                       {m.symbol}
                       {m.signals > 0 && <span className="ml-1.5 rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white">{m.signals}</span>}
                       {m.lastError && <span className="ml-1.5 text-red-600" title={m.lastError}>sin datos</span>}
                     </div>
+                    </span>
+                    </span>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{m.close !== null ? num(m.close, m.close < 20 ? 3 : 2) : "—"}</td>
                   <td className={`px-3 py-2 text-right tabular-nums ${tone(m.change1d)}`}>{pct(m.change1d, 2)}</td>
@@ -154,7 +160,8 @@ export function MarketPanel({
         <section className={panel}>
           <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">
+              <h2 className="flex items-center gap-3 text-lg font-semibold text-slate-900">
+                <AssetIcon symbol={inst?.symbol ?? current} name={inst?.name} size="lg" />
                 {inst?.name ?? current} <span className="text-sm font-normal text-slate-500">{inst?.symbol}</span>
               </h2>
               <p className="text-xs text-slate-500">

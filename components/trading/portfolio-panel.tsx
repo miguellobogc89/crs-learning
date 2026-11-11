@@ -1,14 +1,14 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot, Briefcase, Clock, History, TrendingUp, ListChecks, Loader2, Pencil, RotateCcw, ShieldCheck, Wallet, X } from "lucide-react";
+import { Bot, Briefcase, History, TrendingUp, ListChecks, Loader2, Pencil, RotateCcw, ShieldCheck, Wallet, X } from "lucide-react";
 import type { accountDetail, PositionView } from "@/lib/trading/accounts";
-import type { Trading212ConditionalKind, Trading212DemoOrder, Trading212DemoPosition, Trading212DemoSummary } from "@/lib/trading/trading212";
 import { PATTERN_LIBRARY } from "@/lib/trading/library";
 import { refreshTrading, useTradingRefresh } from "./navigation";
-import { card, ErrorNote, LoadingCard, Modal, ReturnPill } from "./ui";
-import { BrokerPanel } from "./broker-panel";
+import { card, ErrorNote, LoadingCard, ReturnPill } from "./ui";
 import { CopiesPanel } from "./copies-panel";
+import { EquityChart } from "./equity-chart";
+import { AssetIcon } from "./asset-icon";
 import { OpenAccount } from "./open-account";
 import { PATTERN_SHORT, api, dayFmt, errorText, eur, eur0, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
 
@@ -25,580 +25,27 @@ const STATUS_TONE: Record<string, string> = {
   cancelada: "bg-slate-50 text-slate-400 border-slate-200",
 };
 
-export function EquityCurve({
-  points,
-  initial,
-  height = 180,
-  empty = "La curva de patrimonio se dibuja con el cierre de cada sesión a partir de que la cartera tenga actividad.",
-}: {
-  points: { day: string; equity: number }[];
-  initial: number;
-  height?: number;
-  empty?: string;
-}) {
-  if (points.length < 2) return <p className="px-4 py-6 text-sm text-slate-500">{empty}</p>;
-  const w = 800;
-  const h = height;
-  const vals = points.map((p) => p.equity).concat(initial);
-  const lo = Math.min(...vals) * 0.995;
-  const hi = Math.max(...vals) * 1.005;
-  const x = (i: number) => 40 + (i / (points.length - 1)) * (w - 50);
-  const y = (v: number) => 10 + ((hi - v) / (hi - lo)) * (h - 30);
-  const d = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.equity).toFixed(1)}`).join("");
-  const last = points[points.length - 1].equity;
-  const col = last >= initial ? "#059669" : "#dc2626";
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="block w-full" style={{ height: h }} preserveAspectRatio="none" role="img" aria-label="Evolución del patrimonio">
-      <line x1={40} x2={w - 10} y1={y(initial)} y2={y(initial)} stroke="#cbd5e1" strokeDasharray="4 4" />
-      <text x={36} y={y(initial) + 3} fontSize="10" fill="#94a3b8" textAnchor="end">
-        {int(Math.round(initial))}
-      </text>
-      <path d={`${d}L${x(points.length - 1)},${h - 20}L${x(0)},${h - 20}Z`} fill={col} fillOpacity={0.06} />
-      <path d={d} fill="none" stroke={col} strokeWidth={1.8} vectorEffect="non-scaling-stroke" />
-      <text x={40} y={h - 4} fontSize="10" fill="#94a3b8">
-        {dayFmt(points[0].day)}
-      </text>
-      <text x={w - 10} y={h - 4} fontSize="10" fill="#94a3b8" textAnchor="end">
-        {dayFmt(points[points.length - 1].day)}
-      </text>
-    </svg>
-  );
-}
+export { EquityCurve } from "./equity-chart";
 
-type PortfolioSource = "crs" | "trading212";
+type PortfolioView = "global" | "abiertas" | "historial" | "caja";
+const VIEWS: { key: PortfolioView; label: string }[] = [
+  { key: "global", label: "Posición global" },
+  { key: "abiertas", label: "Posiciones abiertas" },
+  { key: "historial", label: "Historial" },
+  { key: "caja", label: "Movimientos de caja" },
+];
 
 export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => void }) {
-  const params = useSearchParams();
-  const [source, setSource] = useState<PortfolioSource>(params.get("source") === "trading212" ? "trading212" : "crs");
-  // Las credenciales pertenecen por ahora a una única cuenta personal de Demo en localhost.
-  // Oculto hasta que conectemos dinero real: NEXT_PUBLIC_TRADING212_UI=1 lo vuelve a mostrar.
-  const demoAvailable = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_TRADING212_UI === "1";
-
-  if (!demoAvailable) return <CrsPortfolioPanel onOpenChart={onOpenChart} />;
-
-  return (
-    <div className="space-y-6">
-      <div role="tablist" aria-label="Seleccionar cartera" className="flex gap-1 border-b border-slate-100">
-        {([
-          ["crs", "Simulador CRS"],
-          ["trading212", "Trading 212 Demo"],
-        ] as const).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            id={`portfolio-tab-${key}`}
-            aria-controls={`portfolio-panel-${key}`}
-            aria-selected={source === key}
-            onClick={() => setSource(key)}
-            className={`border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
-              source === key
-                ? "border-blue-600 text-blue-700"
-                : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel" id={`portfolio-panel-${source}`} aria-labelledby={`portfolio-tab-${source}`}>
-        {source === "crs" ? <CrsPortfolioPanel onOpenChart={onOpenChart} /> : <Trading212DemoPortfolio />}
-      </div>
-    </div>
-  );
-}
-
-function Trading212DemoPortfolio() {
-  const [summary, setSummary] = useState<Trading212DemoSummary | null>(null);
-  const [positions, setPositions] = useState<Trading212DemoPosition[] | null>(null);
-  const [orders, setOrders] = useState<Trading212DemoOrder[]>([]);
-  const [conditional, setConditional] = useState<{ kind: Trading212ConditionalKind; ticker: string; name: string; quantity: number; lastPrice: number | null } | null>(null);
-  const [conditionalPrice, setConditionalPrice] = useState("");
-  const [conditionalQuantity, setConditionalQuantity] = useState("1");
-  const [conditionalAccepted, setConditionalAccepted] = useState(false);
-  const [conditionalBusy, setConditionalBusy] = useState(false);
-  const [cancelOrder, setCancelOrder] = useState<Trading212DemoOrder | null>(null);
-  const [cancelBusy, setCancelBusy] = useState(false);
-  const [orderResult, setOrderResult] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [confirmBuy, setConfirmBuy] = useState(false);
-  const [acknowledged, setAcknowledged] = useState(false);
-  const [buying, setBuying] = useState(false);
-  const [buyResult, setBuyResult] = useState<string | null>(null);
-  const [sellPosition, setSellPosition] = useState<Trading212DemoPosition | null>(null);
-  const [sellAcknowledged, setSellAcknowledged] = useState(false);
-  const [selling, setSelling] = useState(false);
-  const [sellResult, setSellResult] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [account, portfolio, pending] = await Promise.all([
-        api<Trading212DemoSummary>("trading212/account"),
-        api<{ environment: "demo"; items: Trading212DemoPosition[] }>("trading212/positions"),
-        api<{ environment: "demo"; items: Trading212DemoOrder[] }>("trading212/orders"),
-      ]);
-      setSummary(account);
-      setPositions(portfolio.items);
-      setOrders(pending.items);
-      setError(null);
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
-  useTradingRefresh(load);
-
-  const buyTest = async () => {
-    if (!acknowledged || buying) return;
-    setBuying(true);
-    setError(null);
-    try {
-      const result = await api<{ orderId: number; status: string }>("trading212/buy-test", {
-        symbol: "IBE.MC",
-        quantity: 1,
-        confirmDemo: true,
-      });
-      setConfirmBuy(false);
-      setAcknowledged(false);
-      setBuyResult(`Orden Demo enviada (ID ${result.orderId}; estado: ${result.status}). Puede estar pendiente hasta la apertura de mercado. No se han configurado stops.`);
-      await load();
-    } catch (e) {
-      setError(`${errorText(e)}. Si llegaste a confirmar, comprueba las órdenes en Trading 212 antes de volver a intentarlo.`);
-      setConfirmBuy(false);
-      setAcknowledged(false);
-    } finally {
-      setBuying(false);
-    }
-  };
-
-  const sellPositionNow = async () => {
-    const p = sellPosition;
-    const available = p?.quantityAvailableForTrading;
-    if (!sellAcknowledged || selling || !p?.ticker || available === null || available === undefined || available <= 0) return;
-    setSelling(true);
-    setError(null);
-    try {
-      const result = await api<{ orderId: number; status: string; quantity: number }>("trading212/sell", {
-        ticker: p.ticker,
-        quantity: available,
-        confirmDemo: true,
-      });
-      setSellPosition(null);
-      setSellAcknowledged(false);
-      setSellResult(`Venta de ${int(result.quantity)} acciones enviada a Trading 212 Demo (orden ${result.orderId}; estado: ${result.status}). Puede quedar pendiente hasta que abra el mercado.`);
-      void load();
-    } catch (e) {
-      setError(`${errorText(e)}. Si confirmaste la venta, comprueba su estado en Trading 212 antes de volver a enviarla.`);
-      setSellPosition(null);
-      setSellAcknowledged(false);
-    } finally {
-      setSelling(false);
-    }
-  };
-
-  const openConditional = (kind: Trading212ConditionalKind, position?: Trading212DemoPosition) => {
-    const isBuy = kind.startsWith("buy");
-    setConditional({
-      kind,
-      ticker: isBuy ? "IBEe_EQ" : (position?.ticker ?? ""),
-      name: isBuy ? "Iberdrola" : (position?.name ?? position?.ticker ?? ""),
-      quantity: isBuy ? 1 : (position?.quantityAvailableForTrading ?? 0),
-      lastPrice: position?.currentPrice ?? null,
-    });
-    setConditionalPrice("");
-    setConditionalQuantity(isBuy ? "1" : String(position?.quantityAvailableForTrading ?? 0));
-    setConditionalAccepted(false);
-    setError(null);
-  };
-
-  const submitConditional = async () => {
-    if (!conditional || !conditionalAccepted || conditionalBusy) return;
-    const price = Number(conditionalPrice.replace(",", "."));
-    const quantity = Number(conditionalQuantity.replace(",", "."));
-    if (!(price > 0) || !(quantity > 0)) {
-      setError("Introduce precio y cantidad válidos");
-      return;
-    }
-    setConditionalBusy(true);
-    setError(null);
-    try {
-      const result = await api<{ orderId: number; status: string }>("trading212/conditional", {
-        kind: conditional.kind, ticker: conditional.ticker, quantity, price, confirmDemo: true,
-      });
-      setOrderResult(`Orden condicionada Demo registrada (ID ${result.orderId}; estado: ${result.status}). Puedes consultarla y cancelarla en «Órdenes pendientes».`);
-      setConditional(null);
-      await load();
-    } catch (e) {
-      setError(`${errorText(e)}. Antes de reintentar, comprueba las órdenes pendientes de Trading 212.`);
-    } finally {
-      setConditionalBusy(false);
-    }
-  };
-
-  const cancelPending = async () => {
-    if (!cancelOrder || cancelBusy) return;
-    setCancelBusy(true);
-    setError(null);
-    try {
-      await api("trading212/cancel-order", { id: cancelOrder.id, confirmDemo: true });
-      setOrderResult(`Cancelación solicitada para la orden ${cancelOrder.id}. Comprueba el estado actualizado.`);
-      setCancelOrder(null);
-      await load();
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setCancelBusy(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-slate-600">
-          Cuenta de práctica de Trading 212. Saldo y posiciones independientes del simulador CRS.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={ghost} onClick={() => { setAcknowledged(false); setConfirmBuy(true); }} disabled={buying || selling || loading || conditionalBusy || !summary || !!error}>
-            Compra de prueba: 1 Iberdrola
-          </button>
-          <button type="button" className={ghost} onClick={() => openConditional("buy_limit")} disabled={loading || conditionalBusy || selling || buying || !summary || !!error}>
-            Compra programada
-          </button>
-          <button type="button" className={ghost} onClick={() => void load()} disabled={loading || buying || selling}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-            Actualizar
-          </button>
-        </div>
-      </div>
-      <BrokerPanel />
-      {buyResult && <p role="status" className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{buyResult}</p>}
-      {sellResult && <p role="status" className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{sellResult}</p>}
-      {orderResult && <p role="status" className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{orderResult}</p>}
-      {error && <ErrorNote>{error}</ErrorNote>}
-      {!summary && loading ? (
-        <LoadingCard height="h-40" />
-      ) : summary ? (
-        <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {([
-              ["Patrimonio total", summary.totalValue],
-              ["Disponible para operar", summary.availableToTrade],
-              ["Invertido", summary.investedValue],
-            ] as const).map(([label, value]) => (
-              <div key={label} className={`${card} px-5 py-4`}>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-                <div className="mt-1 text-2xl font-bold tracking-tight tabular-nums text-slate-900">
-                  {summary.currency === "EUR" ? eur(value, 2) : `${num(value, 2)} ${summary.currency}`}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <section className={`${panel} overflow-x-auto`}>
-            <header className="border-b border-slate-100 px-5 py-4">
-              <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                <Briefcase className="h-5 w-5 text-blue-600" /> Posiciones en Trading 212 Demo
-              </h2>
-              <p className="text-xs text-slate-500">
-                Datos obtenidos del bróker. Los precios se muestran en la divisa de cada instrumento; no se convierten a euros.
-              </p>
-            </header>
-            <table className="w-full min-w-[750px] text-sm">
-              <thead>
-                <tr>
-                  <th className={th}>Valor</th>
-                  <th className={`${th} text-right`}>Cantidad</th>
-                  <th className={`${th} text-right`}>Disponible</th>
-                  <th className={`${th} text-right`}>Precio medio</th>
-                  <th className={`${th} text-right`}>Precio actual</th>
-                  <th className={`${th} text-right`}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {positions?.length ? positions.map((p, i) => (
-                  <tr key={`${p.ticker ?? "position"}-${i}`} className="border-t border-slate-100">
-                    <td className="px-3 py-3">
-                      <div className="font-medium text-slate-900">{p.name ?? p.ticker ?? "Instrumento"}</div>
-                      {p.ticker && <div className="text-xs text-slate-500">{p.ticker}</div>}
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums">{int(p.quantity)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">
-                      {p.quantityAvailableForTrading === null ? "—" : int(p.quantityAvailableForTrading)}
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums">{num(p.averagePricePaid, 2)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{num(p.currentPrice, 2)}</td>
-                    <td className="px-3 py-3 text-right">
-                      <button
-                        type="button"
-                        className={ghost}
-                        disabled={loading || buying || selling || !p.ticker || !(p.quantityAvailableForTrading !== null && p.quantityAvailableForTrading > 0)}
-                        onClick={() => { setSellAcknowledged(false); setSellPosition(p); }}
-                        title={p.quantityAvailableForTrading === null || p.quantityAvailableForTrading <= 0
-                          ? "No hay acciones disponibles para vender"
-                          : "Vender las acciones disponibles"}
-                      >
-                        Vender
-                      </button>
-                      <button
-                        type="button"
-                        className={`${ghost} ml-1`}
-                        disabled={loading || buying || selling || conditionalBusy || !p.ticker ||
-                          !(p.quantityAvailableForTrading !== null && p.quantityAvailableForTrading > 0) ||
-                          orders.some(o => o.ticker === p.ticker && o.side === "SELL")}
-                        onClick={() => openConditional("sell_stop", p)}
-                      >
-                        Stop
-                      </button>
-                      <button
-                        type="button"
-                        className={`${ghost} ml-1`}
-                        disabled={loading || buying || selling || conditionalBusy || !p.ticker ||
-                          !(p.quantityAvailableForTrading !== null && p.quantityAvailableForTrading > 0) ||
-                          orders.some(o => o.ticker === p.ticker && o.side === "SELL")}
-                        onClick={() => openConditional("sell_limit", p)}
-                      >
-                        Objetivo
-                      </button>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Todavía no hay posiciones abiertas en Trading 212 Demo.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </section>
-          <section className={`${panel} overflow-x-auto`}>
-            <header className="border-b border-slate-100 px-5 py-4">
-              <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                <Clock className="h-5 w-5 text-blue-600" /> Órdenes pendientes en Trading 212 Demo
-              </h2>
-              <p className="text-xs text-slate-500">
-                Stop y objetivo son órdenes alternativas: Trading 212 no ofrece aquí una vinculación OCO.
-                Cancela una antes de crear la otra sobre las mismas acciones.
-              </p>
-            </header>
-            <table className="w-full min-w-[750px] text-sm">
-              <thead>
-                <tr>
-                  <th className={th}>Instrumento</th>
-                  <th className={th}>Tipo</th>
-                  <th className={`${th} text-right`}>Cantidad</th>
-                  <th className={`${th} text-right`}>Precio de activación</th>
-                  <th className={th}>Estado</th>
-                  <th className={`${th} text-right`}>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.length ? orders.map(o => (
-                  <tr key={o.id} className="border-t border-slate-100">
-                    <td className="px-3 py-3 font-medium text-slate-900">{o.ticker}</td>
-                    <td className="px-3 py-3">{o.side === "BUY" ? "Compra" : "Venta"} · {o.type}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{int(Math.abs(o.quantity))}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">
-                      {o.type === "STOP" ? num(o.stopPrice, 3) : o.type === "LIMIT" ? num(o.limitPrice, 3) : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-xs text-slate-600">{o.status}</td>
-                    <td className="px-3 py-3 text-right">
-                      <button type="button" className={ghost}
-                        disabled={cancelBusy || conditionalBusy || o.initiatedFrom !== "API"}
-                        onClick={() => setCancelOrder(o)}>
-                        Cancelar
-                      </button>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr><td colSpan={6} className="px-4 py-6 text-center text-slate-500">No hay órdenes pendientes.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </section>
-          <p className="text-xs text-slate-500">
-            Las compras, stops y objetivos condicionados se ejecutan en Trading 212 Demo al alcanzar el precio indicado,
-            incluso con CRS cerrado. El stop no garantiza un precio mínimo de venta.
-          </p>
-        </>
-      ) : null}
-      {conditional && (
-        <Modal
-          open
-          onClose={() => { if (!conditionalBusy) setConditional(null); }}
-          title={conditional.kind.startsWith("buy") ? "Programar compra · Trading 212 Demo" :
-            conditional.kind === "sell_stop" ? "Stop de protección · Trading 212 Demo" : "Objetivo de beneficio · Trading 212 Demo"}
-          subtitle="Orden condicionada en el bróker · sin dinero real"
-          footer={
-            <>
-              <button type="button" className={ghost} disabled={conditionalBusy} onClick={() => setConditional(null)}>
-                Cancelar
-              </button>
-              <button type="button" className={primary} disabled={conditionalBusy || !conditionalAccepted}
-                onClick={() => void submitConditional()}>
-                {conditionalBusy && <Loader2 className="h-4 w-4 animate-spin" />}
-                Registrar orden Demo
-              </button>
-            </>
-          }
-        >
-          <div className="space-y-4 text-sm text-slate-700">
-            <p><b>{conditional.name}</b> · {conditional.ticker}</p>
-            {conditional.kind.startsWith("buy") && (
-              <fieldset className="space-y-2 rounded-xl border border-slate-200 px-3 py-2">
-                <legend className="text-xs font-medium">Tipo de compra automática al precio</legend>
-                <label className="flex items-center gap-2">
-                  <input type="radio" checked={conditional.kind === "buy_limit"} onChange={() => setConditional({ ...conditional, kind: "buy_limit" })} />
-                  Límite: comprar a este precio o más barato
-                </label>
-                <label className="flex items-center gap-2">
-                  <input type="radio" checked={conditional.kind === "buy_stop"} onChange={() => setConditional({ ...conditional, kind: "buy_stop" })} />
-                  Stop de compra: activar compra al alcanzar el precio por arriba
-                </label>
-              </fieldset>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-xs">
-                <span className="mb-1 block font-medium text-slate-700">Cantidad de acciones</span>
-                <input type="number" min="0.000001" step="any" className={`${field} w-full`}
-                  value={conditionalQuantity} disabled={!conditional.kind.startsWith("buy") || conditionalBusy}
-                  onChange={(e) => setConditionalQuantity(e.target.value)} />
-              </label>
-              <label className="text-xs">
-                <span className="mb-1 block font-medium text-slate-700">
-                  {conditional.kind.endsWith("stop") ? "Precio de activación (€)" : "Precio límite (€)"}
-                </span>
-                <input type="number" min="0.0001" step="any" className={`${field} w-full`}
-                  value={conditionalPrice} disabled={conditionalBusy}
-                  onChange={(e) => setConditionalPrice(e.target.value)} />
-              </label>
-            </div>
-            {conditional.lastPrice !== null && (
-              <p className="text-xs text-slate-500">Último precio comunicado por Trading 212: {num(conditional.lastPrice, 3)} €.</p>
-            )}
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
-              Las órdenes se almacenan y ejecutan en el bróker, aunque cierres CRS.
-              Un límite de compra por encima del precio de mercado puede ejecutarse inmediatamente.
-              Las compras programadas no colocan stops después de ejecutarse.
-              No se vincula automáticamente un stop con un objetivo: solo puede reservarse esta cantidad para una de las dos órdenes.
-              No se garantizan precios de ejecución para los stops.
-            </p>
-            {error && <p role="alert" className="text-red-700">{error}</p>}
-            <label className="flex items-start gap-2">
-              <input type="checkbox" className="mt-1" checked={conditionalAccepted} disabled={conditionalBusy}
-                onChange={(e) => setConditionalAccepted(e.target.checked)} />
-              <span>Confirmo esta orden automática con dinero ficticio en Trading 212 Demo.</span>
-            </label>
-          </div>
-        </Modal>
-      )}
-      {cancelOrder && (
-        <Modal
-          open
-          onClose={() => { if (!cancelBusy) setCancelOrder(null); }}
-          title="Cancelar orden · Trading 212 Demo"
-          subtitle="Una orden puede haberse ejecutado antes de recibir la cancelación."
-          footer={
-            <>
-              <button type="button" className={ghost} disabled={cancelBusy} onClick={() => setCancelOrder(null)}>Volver</button>
-              <button type="button" className={primary} disabled={cancelBusy} onClick={() => void cancelPending()}>
-                {cancelBusy && <Loader2 className="h-4 w-4 animate-spin" />}
-                Solicitar cancelación
-              </button>
-            </>
-          }
-        >
-          <p className="text-sm text-slate-700">
-            Vas a solicitar la cancelación de la orden <strong>#{cancelOrder.id}</strong> ({cancelOrder.side} · {cancelOrder.type}) de
-            {" "}<strong>{cancelOrder.ticker}</strong> en Demo.
-          </p>
-        </Modal>
-      )}
-      {sellPosition && (
-        <Modal
-          open
-          onClose={() => { if (!selling) setSellPosition(null); }}
-          title={`Vender · ${sellPosition.name ?? sellPosition.ticker ?? "Posición"}`}
-          subtitle="Trading 212 Demo · Sin dinero real"
-          footer={
-            <>
-              <button type="button" className={ghost} disabled={selling} onClick={() => setSellPosition(null)}>
-                Cancelar
-              </button>
-              <button type="button" className={primary} disabled={selling || !sellAcknowledged} onClick={() => void sellPositionNow()}>
-                {selling && <Loader2 className="h-4 w-4 animate-spin" />}
-                Confirmar venta Demo
-              </button>
-            </>
-          }
-        >
-          <div className="space-y-4 text-sm text-slate-700">
-            <p>
-              Se enviará a Trading 212 Demo una <strong>orden de mercado de venta</strong> por
-              {" "}<strong>{int(sellPosition.quantityAvailableForTrading ?? 0)} acciones disponibles</strong> de
-              {" "}<strong>{sellPosition.name ?? sellPosition.ticker}</strong>.
-              El resto de tus inversiones en CRS no se modificará.
-            </p>
-            {sellPosition.quantityAvailableForTrading !== null && sellPosition.quantityAvailableForTrading < sellPosition.quantity && (
-              <p className="text-amber-800">
-                Parte de la posición no está disponible para operar. Se venderá solo la cantidad disponible.
-              </p>
-            )}
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
-              El precio final puede diferir del mostrado y la orden puede quedar pendiente si el mercado está cerrado.
-              Si falla la solicitud, comprueba primero las órdenes en el bróker; no repitas la venta sin verificarla.
-            </p>
-            <label className="flex items-start gap-2">
-              <input type="checkbox" className="mt-1" checked={sellAcknowledged}
-                disabled={selling}
-                onChange={(e) => setSellAcknowledged(e.target.checked)} />
-              <span>Confirmo que quiero vender esta cantidad ficticia desde mi cuenta Trading 212 Demo.</span>
-            </label>
-          </div>
-        </Modal>
-      )}
-      {confirmBuy && (
-        <Modal
-          open
-          onClose={() => { if (!buying) setConfirmBuy(false); }}
-          title="Compra de prueba · Trading 212 Demo"
-          subtitle="Una acción ficticia de Iberdrola. Sin dinero real."
-          footer={
-            <>
-              <button type="button" className={ghost} onClick={() => setConfirmBuy(false)} disabled={buying}>
-                Cancelar
-              </button>
-              <button type="button" className={primary} disabled={!acknowledged || buying} onClick={() => void buyTest()}>
-                {buying && <Loader2 className="h-4 w-4 animate-spin" />}
-                Confirmar compra Demo
-              </button>
-            </>
-          }
-        >
-          <div className="space-y-4 text-sm text-slate-700">
-            <p>
-              Se enviará una orden de <strong>mercado</strong> para comprar <strong>1 acción de Iberdrola</strong>
-              {" "}(ticker Trading 212: <code>IBEe_EQ</code>) en tu cuenta <strong>Demo</strong>.
-              No se modificará el simulador CRS.
-            </p>
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
-              No incluye stop ni objetivo automáticos. El precio final puede variar y, si el mercado está cerrado,
-              la orden puede quedar pendiente. No vuelvas a enviarla sin comprobar antes su estado.
-            </p>
-            <label className="flex items-start gap-2">
-              <input type="checkbox" className="mt-1" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} />
-              <span>Entiendo que es una compra ficticia sin protección automática y quiero enviarla a Trading 212 Demo.</span>
-            </label>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => void }) {
   const onChanged = refreshTrading;
+  const params = useSearchParams();
+  const [view, setView] = useState<PortfolioView>(() => {
+    const v = params.get("vista");
+    return VIEWS.some((x) => x.key === v) ? (v as PortfolioView) : "global";
+  });
+  const pickView = (v: PortfolioView) => {
+    setView(v);
+    window.history.replaceState(null, "", v === "global" ? "/trading/cartera" : `/trading/cartera?vista=${v}`);
+  };
   const [data, setData] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -645,7 +92,28 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
   return (
     <div className="space-y-6">
       {error && <ErrorNote>{error}</ErrorNote>}
-      <CopiesPanel />
+
+      <div role="tablist" aria-label="Partes de tu cartera" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+        {VIEWS.map((v) => {
+          const count = v.key === "abiertas" ? active.length : v.key === "historial" ? history.length : null;
+          return (
+            <button
+              key={v.key}
+              type="button"
+              role="tab"
+              aria-selected={view === v.key}
+              onClick={() => pickView(v.key)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium ${view === v.key ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+            >
+              {v.label}
+              {count ? <span className="rounded-full bg-slate-200/70 px-1.5 text-[11px] font-semibold tabular-nums text-slate-600">{count}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {view === "global" && (
+      <>
 
       <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {[
@@ -677,8 +145,13 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
               </h2>
           <span className="text-xs text-slate-500">Capital inicial {eur0(s.initialCapital)}</span>
         </header>
-        <EquityCurve points={data.equity} initial={s.initialCapital} />
+        <EquityChart points={data.equity} initial={s.initialCapital} />
       </section>
+      <CopiesPanel />
+      </>
+      )}
+
+      {view === "abiertas" && (
 
       <section className={`${panel} overflow-x-auto`}>
         <header className="border-b border-slate-100 px-5 py-4">
@@ -716,16 +189,19 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
               active.map((p) => (
                 <tr key={p.id} className="border-t border-slate-100">
                   <td className="px-3 py-2.5">
-                    <button type="button" className="text-left" onClick={() => onOpenChart(p.symbol)}>
-                      <div className="font-medium text-slate-900 hover:text-blue-700">{p.name}</div>
-                      <div className="text-xs text-slate-500">
-                        {p.symbol} · {p.direction === "long" ? "largo" : "corto"}
-                        {p.pattern ? ` · ${PATTERN_SHORT[p.pattern]}` : ""}
-                      </div>
+                    <button type="button" className="flex items-center gap-2.5 text-left" onClick={() => onOpenChart(p.symbol)}>
+                      <AssetIcon symbol={p.symbol} name={p.name} />
+                      <span>
+                        <span className="block font-medium text-slate-900 hover:text-blue-700">{p.name}</span>
+                        <span className="block text-xs text-slate-500">
+                          {p.symbol} · {p.direction === "long" ? "largo" : "corto"}
+                          {p.pattern ? ` · ${PATTERN_SHORT[p.pattern]}` : ""}
+                        </span>
+                      </span>
                     </button>
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className={`border px-1.5 py-0.5 text-xs ${STATUS_TONE[p.status]}`}>{p.status}</span>
+                    <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_TONE[p.status]}`}>{p.status}</span>
                     {p.status === "pendiente" && <div className="mt-0.5 text-xs text-slate-500">próxima apertura</div>}
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums">{int(p.quantity)}</td>
@@ -759,10 +235,10 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex justify-end gap-1">
-                      <button type="button" title="Ver gráfico" className="p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => onOpenChart(p.symbol)}>
+                      <button type="button" title="Ver gráfico" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => onOpenChart(p.symbol)}>
                         <TrendingUp className="h-4 w-4" />
                       </button>
-                      <button type="button" title="Cambiar stop y objetivo" className="p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => setEditing(p)}>
+                      <button type="button" title="Cambiar stop y objetivo" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => setEditing(p)}>
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
@@ -782,7 +258,9 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
           </tbody>
         </table>
       </section>
+      )}
 
+      {view === "historial" && (
       <section className={`${panel} overflow-x-auto`}>
         <header className="border-b border-slate-100 px-5 py-4">
           <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
@@ -813,8 +291,13 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
               history.map((p) => (
                 <tr key={p.id} className={`border-t border-slate-100 ${p.status === "cancelada" ? "text-slate-400" : ""}`}>
                   <td className="px-3 py-2">
-                    <div className="font-medium">{p.name}</div>
-                    <div className="text-xs text-slate-500">{p.direction === "long" ? "largo" : "corto"}</div>
+                    <span className="flex items-center gap-2.5">
+                      <AssetIcon symbol={p.symbol} name={p.name} size="sm" />
+                      <span>
+                        <span className="block font-medium">{p.name}</span>
+                        <span className="block text-xs text-slate-500">{p.direction === "long" ? "largo" : "corto"}</span>
+                      </span>
+                    </span>
                   </td>
                   <td className="px-3 py-2">{p.pattern ? PATTERN_SHORT[p.pattern] : "manual"}</td>
                   <td className="px-3 py-2 tabular-nums">
@@ -831,16 +314,18 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
           </tbody>
         </table>
       </section>
+      )}
 
+      {view === "caja" && (
       <section className={panel}>
         <header className="border-b border-slate-100 px-5 py-4">
           <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
                 <Wallet className="h-5 w-5 text-blue-600" /> Movimientos de caja
               </h2>
         </header>
-        <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto text-sm">
+        <ul className="divide-y divide-slate-100 overflow-y-auto text-sm">
           {data.transactions.map((t) => (
-            <li key={t.id} className="flex items-center justify-between gap-4 px-4 py-2">
+            <li key={t.id} className="flex items-center justify-between gap-4 px-5 py-3">
               <span className="text-slate-700">
                 <span className="mr-2 text-xs text-slate-500">{dayFmt(t.day)}</span>
                 {t.description}
@@ -850,6 +335,7 @@ function CrsPortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => v
           ))}
         </ul>
       </section>
+      )}
 
       {editing && (
         <EditStops
@@ -1100,11 +586,14 @@ export function UniversePanel() {
       <div className="grid gap-px bg-slate-100 sm:grid-cols-2 lg:grid-cols-4">
         {data.items.map((i) => (
           <div key={i.symbol} className={`flex items-center justify-between gap-2 bg-white px-3 py-2 text-sm ${i.active ? "" : "opacity-50"}`}>
-            <span className="min-w-0">
+            <span className="flex min-w-0 items-center gap-2.5">
+              <AssetIcon symbol={i.symbol} name={i.name} size="sm" />
+              <span className="min-w-0">
               <span className="block truncate font-medium text-slate-800">{i.name}</span>
               <span className="text-xs text-slate-500">
                 {i.symbol} · {i.lastError ? <span className="text-red-600">error</span> : i.lastCandle ? dayFmt(i.lastCandle) : "sin datos"}
               </span>
+            </span>
             </span>
             {canManage && !i.isIndex && (
               <button

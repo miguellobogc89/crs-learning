@@ -5,6 +5,7 @@ import type { getLibrary } from "@/lib/trading/service";
 import { PatternSketch } from "./candle-chart";
 import { PATTERN_SHORT, api, dayFmt, errorText, int, num, panel, th, tone } from "./format";
 import { ErrorNote, LoadingCard } from "./ui";
+import { AssetIcon } from "./asset-icon";
 
 type Library = Awaited<ReturnType<typeof getLibrary>>;
 
@@ -197,7 +198,12 @@ export function LibraryPanel() {
             <tbody>
               {bt.recent.map((t, k) => (
                 <tr key={k} className="border-t border-slate-100">
-                  <td className="px-3 py-2 font-medium text-slate-900">{t.symbol}</td>
+                  <td className="px-3 py-2 font-medium text-slate-900">
+                    <span className="flex items-center gap-2">
+                      <AssetIcon symbol={t.symbol} size="xs" />
+                      {t.symbol}
+                    </span>
+                  </td>
                   <td className="px-3 py-2">{PATTERN_SHORT[t.pattern]}</td>
                   <td className="px-3 py-2 tabular-nums">{dayFmt(t.entryDay)}</td>
                   <td className="px-3 py-2 tabular-nums">{t.reason === "open" ? "abierta" : dayFmt(t.exitDay)}</td>

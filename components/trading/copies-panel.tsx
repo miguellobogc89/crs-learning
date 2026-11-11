@@ -7,6 +7,7 @@ import type { getPortfolio } from "@/lib/trading/agents/copy";
 import { api, eur, eur0, int, panel, pct, th, tone } from "./format";
 import { AgentAvatar, AVATAR, ReturnPill } from "./ui";
 import { useTradingRefresh } from "./navigation";
+import { AssetIcon } from "./asset-icon";
 
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
 
@@ -87,7 +88,8 @@ export function CopiesPanel() {
                     {c.positions.length === 0
                       ? "En efectivo"
                       : c.positions.map((p) => (
-                          <div key={p.id}>
+                          <div key={p.id} className="flex items-center gap-1.5 py-0.5">
+                            <AssetIcon symbol={p.symbol} name={p.name} size="xs" />
                             {p.name}: {int(p.quantity)} a {eur(p.entryPrice ?? p.plannedEntry)}
                             {p.status === "pendiente" ? <span className="text-amber-700"> (próxima apertura)</span> : p.unrealized !== null ? <span className={tone(p.unrealized)}> ({eur0(p.unrealized)})</span> : null}
                           </div>

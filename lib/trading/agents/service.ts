@@ -85,6 +85,8 @@ export type AgentMove = {
   at: string;
   kind: "compra" | "venta" | "protege" | "stop" | "objetivo" | "tiempo";
   asset: string;
+  /** Símbolo del valor (para su icono). */
+  symbol: string;
   text: string | null;
   pnl: number | null;
 };
@@ -96,7 +98,7 @@ function movesOf(
     name: string;
     color: string;
     proposals: ReturnType<typeof proposalView>[];
-    closed: { id: string; name: string; exitDay: string | null; exitReason: string | null; pnl: number | null }[];
+    closed: { id: string; name: string; symbol: string; exitDay: string | null; exitReason: string | null; pnl: number | null }[];
   }[],
 ): AgentMove[] {
   const out: AgentMove[] = [];
@@ -105,13 +107,13 @@ function movesOf(
       if (p.status !== "ejecutada") continue;
       const kind = p.action === "comprar" ? "compra" : p.action === "vender" ? "venta" : p.action === "mantener" ? "protege" : null;
       if (!kind) continue;
-      out.push({ id: p.id, agent: a.key, name: a.name, color: a.color, at: p.createdAt, kind, asset: p.name, text: p.rationale, pnl: null });
+      out.push({ id: p.id, agent: a.key, name: a.name, color: a.color, at: p.createdAt, kind, asset: p.name, symbol: p.symbol, text: p.rationale, pnl: null });
     }
     for (const c of a.closed) {
       const r = (c.exitReason ?? "").toLowerCase();
       const kind = r.includes("stop") || r.includes("break") ? "stop" : r.includes("objetivo") ? "objetivo" : r.includes("tiempo") ? "tiempo" : null;
       if (!kind || !c.exitDay) continue;
-      out.push({ id: c.id, agent: a.key, name: a.name, color: a.color, at: `${c.exitDay}T17:30:00.000Z`, kind, asset: c.name, text: null, pnl: c.pnl });
+      out.push({ id: c.id, agent: a.key, name: a.name, color: a.color, at: `${c.exitDay}T17:30:00.000Z`, kind, asset: c.name, symbol: c.symbol, text: null, pnl: c.pnl });
     }
   }
   return out.sort((x, y) => y.at.localeCompare(x.at)).slice(0, 20);
