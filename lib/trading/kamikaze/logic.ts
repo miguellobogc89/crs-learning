@@ -17,12 +17,11 @@ export function requiredDailyPct(equity: number, goal: number, msLeft: number) {
   return (Math.pow(goal / equity, 1 / days) - 1) * 100;
 }
 
-export type RoundEnd = "meta" | "plazo" | "arruinado";
+export type RoundEnd = "meta" | "arruinado";
 
-/** ¿Termina la ronda? Meta alcanzada, plazo cumplido o sin dinero suficiente para una orden. */
-export function roundOutcome(r: { equity: number; goal: number; deadline: number; now: number; holding: boolean; cash: number; minOrder: number }): RoundEnd | null {
+/** ¿Termina la ronda? Solo al alcanzar la meta o quedarse sin dinero para operar. */
+export function roundOutcome(r: { equity: number; goal: number; holding: boolean; cash: number; minOrder: number }): RoundEnd | null {
   if (r.equity >= r.goal) return "meta";
-  if (r.now >= r.deadline) return "plazo";
   if (!r.holding && r.cash < r.minOrder) return "arruinado";
   return null;
 }
