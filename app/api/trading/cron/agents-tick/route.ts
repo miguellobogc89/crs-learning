@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { maybeRunAgents } from "@/lib/trading/agents/service";
 import { refreshLive } from "@/lib/trading/live";
+import { kamikazeTick } from "@/lib/trading/kamikaze/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,8 +17,9 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {
     const live = await refreshLive(10_000, true);
+    const kamikazes = await kamikazeTick();
     const agents = await maybeRunAgents();
-    return NextResponse.json({ live, agents });
+    return NextResponse.json({ live, kamikazes, agents });
   } catch (e) {
     console.error("[trading] cron agents-tick", e);
     return NextResponse.json({ error: "Falló la revisión" }, { status: 500 });

@@ -28,6 +28,7 @@ import { getOpportunities } from "@/lib/trading/agents/opportunities";
 import { brokerLinks, brokerStatus, linkInstruments, listBrackets, runBrokerGuardian, setBrokerAutonomy } from "@/lib/trading/broker/service";
 import { isBrokerError, type BrokerActor } from "@/lib/brokers/types";
 import { refreshLive } from "@/lib/trading/live";
+import { kamikazeTick } from "@/lib/trading/kamikaze/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,6 +67,8 @@ export async function GET(req: Request, route: RouteContext) {
       });
       // Y, sin hacer esperar a la pantalla, la reunión del agente al que le toque (si le toca).
       after(() => maybeRunAgents().catch((e) => console.error("[trading] reunión de agentes", e)));
+      // Los kamikazes: vigilancia cada pocos minutos y su decisión con IA cuando les toca.
+      after(() => kamikazeTick().catch((e) => console.error("[trading] kamikazes", e)));
       return NextResponse.json({ ...(await getStatus(ctx.workspaceId)), canManage: ctx.canManage, live });
     }
     if (action === "news") return NextResponse.json({ ...(await listNews(normalizeNewsFilters(url.searchParams))), canManage: ctx.canManage });

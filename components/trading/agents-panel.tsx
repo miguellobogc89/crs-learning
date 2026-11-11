@@ -29,7 +29,7 @@ const when = (iso: string | null | undefined) =>
     ? new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(iso))
     : "Nunca";
 
-const PROFILES = ["todos", "precavido", "equilibrado", "arriesgado"] as const;
+const PROFILES = ["todos", "precavido", "equilibrado", "arriesgado", "kamikaze"] as const;
 type SortKey = "rentabilidad" | "patrimonio" | "antiguedad" | "nombre";
 const SORTS: Record<SortKey, { label: string; fn: (a: Agent, b: Agent) => number }> = {
   rentabilidad: { label: "Rentabilidad", fn: (a, b) => b.summary.returnPct - a.summary.returnPct },
@@ -355,13 +355,16 @@ function AgentCard({ a, rank, onDetail }: { a: Agent; rank: number; onDetail: ()
   const open = a.positions.filter((p) => p.status === "abierta").length;
   const pending = a.positions.filter((p) => p.status === "pendiente").length;
   const lastMove = a.proposals.find((p) => p.status === "ejecutada" && p.action !== "vigilar");
-  const traits = [
-    `${pct(a.settings.riskPerTradePct, 1, false)} de riesgo por operación`,
-    `hasta ${a.settings.maxOpenPositions} posiciones`,
-    `máx. ${pct(a.settings.maxPositionPct, 0, false)} en un valor`,
-    `convicción ≥ ${a.rules.minConviction}/5`,
-    a.rules.buyInBearMarket ? "compra en mercado bajista" : "no compra en mercado bajista",
-  ];
+  const k = a.kamikaze;
+  const traits = k
+    ? [`meta ×${k.multiple} en ${k.days} días`, `caza ${k.style}`, "solo crypto", "una posición, todo dentro", "vigila cada pocos minutos"]
+    : [
+        `${pct(a.settings.riskPerTradePct, 1, false)} de riesgo por operación`,
+        `hasta ${a.settings.maxOpenPositions} posiciones`,
+        `máx. ${pct(a.settings.maxPositionPct, 0, false)} en un valor`,
+        `convicción ≥ ${a.rules.minConviction}/5`,
+        a.rules.buyInBearMarket ? "compra en mercado bajista" : "no compra en mercado bajista",
+      ];
   return (
     <article className={`${card} flex flex-col overflow-hidden transition-shadow hover:shadow-md`}>
       <div className="flex items-start justify-between gap-2 px-5 pt-5">
@@ -400,6 +403,11 @@ function AgentCard({ a, rank, onDetail }: { a: Agent; rank: number; onDetail: ()
           </li>
         ))}
       </ul>
+      {k && (
+        <div className="mx-5 mt-3">
+          <RoundProgress k={k} equity={a.summary.equity} />
+        </div>
+      )}
       <div className="mt-3 px-5 text-xs text-slate-500">
         {open} abiertas{pending ? ` · ${pending} pendientes` : ""} · {a.summary.stats.closed} cerradas
         {a.summary.stats.closed ? ` · acierto ${Math.round(a.summary.stats.winRate * 100)} %` : ""}
@@ -450,17 +458,27 @@ function AgentDetail({
         <div className="flex max-w-2xl items-start gap-3">
           <div className="min-w-0">
           <p className="text-sm text-slate-700">{a.tagline}</p>
-          <p className="mt-2 text-xs text-slate-500">
-            Arriesga {pct(a.settings.riskPerTradePct, 1, false)} del patrimonio por operación · como mucho {pct(a.settings.maxPositionPct, 0, false)} en un
-            valor · hasta {a.settings.maxOpenPositions} posiciones · {a.rules.maxBuys} {a.rules.maxBuys === 1 ? "compra" : "compras"} por reunión ·
-            convicción mínima {a.rules.minConviction} de 5 · {a.rules.buyInBearMarket ? "puede comprar con el mercado bajista" : "no compra con el mercado bajista"}
-          </p>
+          {a.kamikaze ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Rondas de {eur0(a.kamikaze.capital)} con meta ×{a.kamikaze.multiple} en {a.kamikaze.days} días · solo crypto en euros (datos de Binance) · una posición y
+              todo dentro · stop entre un 5 % y un 40 % · vigilancia cada pocos minutos y decisión con IA cada 30 min (60 con posición) · pausa de 30 min tras una pérdida.
+              Es una lotería con método: lo más probable en cada ronda es perder buena parte del capital.
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-slate-500">
+              Arriesga {pct(a.settings.riskPerTradePct, 1, false)} del patrimonio por operación · como mucho {pct(a.settings.maxPositionPct, 0, false)} en un
+              valor · hasta {a.settings.maxOpenPositions} posiciones · {a.rules.maxBuys} {a.rules.maxBuys === 1 ? "compra" : "compras"} por reunión ·
+              convicción mínima {a.rules.minConviction} de 5 · {a.rules.buyInBearMarket ? "puede comprar con el mercado bajista" : "no compra con el mercado bajista"}
+            </p>
+          )}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={primary} disabled={!canCopy} onClick={() => setCopying(true)}>
-            <Copy className="h-4 w-4" /> {a.copyWeightPct !== null ? `Lo copias con el ${a.copyWeightPct} % · cambiar` : `Copiar a ${a.name}`}
-          </button>
+          {!a.kamikaze && (
+            <button type="button" className={primary} disabled={!canCopy} onClick={() => setCopying(true)}>
+              <Copy className="h-4 w-4" /> {a.copyWeightPct !== null ? `Lo copias con el ${a.copyWeightPct} % · cambiar` : `Copiar a ${a.name}`}
+            </button>
+          )}
           {canManage && (
             <>
               <button type="button" className={ghost} disabled={busy} onClick={onMeet}>
@@ -499,6 +517,8 @@ function AgentDetail({
         </div>
       )}
       {a.lastRun?.status === "error" && <p className="border-b border-red-100 bg-red-50 px-5 py-2 text-sm text-red-700">La última reunión falló: {a.lastRun.error}</p>}
+
+      {a.kamikaze && <Rounds k={a.kamikaze} equity={s.equity} />}
 
       {/* Cartera */}
       <div className="border-b border-slate-100">
@@ -746,5 +766,111 @@ function CopyModal({ agent: a, onClose }: { agent: Agent; onClose: () => void })
         </div>
       )}
     </Modal>
+  );
+}
+
+type Kamikaze = NonNullable<Agent["kamikaze"]>;
+const ROUND_END: Record<string, { label: string; color: string }> = {
+  en_curso: { label: "En curso", color: "blue" },
+  meta: { label: "Meta", color: "emerald" },
+  plazo: { label: "Fin de plazo", color: "slate" },
+  arruinado: { label: "Sin capital", color: "rose" },
+};
+
+/** Ritmo diario necesario para llegar a la meta en el tiempo que queda. */
+function neededPace(equity: number, goal: number, deadline: string) {
+  const days = Math.max((new Date(deadline).getTime() - Date.now()) / 86_400_000, 1 / 24);
+  if (equity <= 0) return null;
+  if (equity >= goal) return 0;
+  return (Math.pow(goal / equity, 1 / days) - 1) * 100;
+}
+
+/** Barra de la ronda en curso: dónde está frente a la meta y cuánto tiempo le queda. */
+function RoundProgress({ k, equity }: { k: Kamikaze; equity: number }) {
+  const r = k.current;
+  if (!r) return <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">La primera ronda empieza en la próxima revisión.</p>;
+  const total = new Date(r.deadline).getTime() - new Date(r.startedAt).getTime();
+  const elapsed = Math.min(1, Math.max(0, (Date.now() - new Date(r.startedAt).getTime()) / total));
+  // Progreso en escala logarítmica: de ×1 a ×N (duplicar cuenta lo mismo al principio que al final).
+  const progress = equity > 0 ? Math.max(0, Math.min(1, Math.log(equity / r.startCapital) / Math.log(r.goal / r.startCapital))) : 0;
+  const pace = neededPace(equity, r.goal, r.deadline);
+  const daysLeft = Math.max(0, (new Date(r.deadline).getTime() - Date.now()) / 86_400_000);
+  return (
+    <div className="rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+      <div className="flex items-baseline justify-between gap-2">
+        <span>
+          <b className="font-semibold text-slate-900">Ronda {r.number}</b> · {eur0(equity)} de {eur0(r.goal)}
+        </span>
+        <span className="tabular-nums">{daysLeft >= 1 ? `${Math.floor(daysLeft)} d ${Math.round((daysLeft % 1) * 24)} h` : `${Math.round(daysLeft * 24)} h`}</span>
+      </div>
+      <div className="relative mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200" title="Camino a la meta (escala de multiplicador)">
+        <span className="absolute inset-y-0 left-0 rounded-full bg-rose-500" style={{ width: `${progress * 100}%` }} />
+        <span className="absolute inset-y-[-2px] w-px bg-slate-500" style={{ left: `${elapsed * 100}%` }} title="Tiempo transcurrido" />
+      </div>
+      <div className="mt-1.5 flex justify-between gap-2">
+        <span>{pace === null ? "Sin capital" : pace === 0 ? "¡Meta alcanzada!" : `Necesita +${pace >= 1000 ? "999+" : pace.toFixed(0)} % al día`}</span>
+        <span>
+          {k.stats.rounds} rondas · {k.stats.goals} metas
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Ficha de un kamikaze: la ronda en curso y el historial de rondas. */
+function Rounds({ k, equity }: { k: Kamikaze; equity: number }) {
+  return (
+    <div className="border-b border-slate-100 px-5 py-4">
+      <h3 className="text-[15px] font-semibold text-slate-900">Rondas</h3>
+      <div className="mt-2 max-w-md">
+        <RoundProgress k={k} equity={equity} />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+        <span>
+          <b className="font-semibold text-slate-900">{k.stats.rounds}</b> <span className="text-slate-500">terminadas</span>
+        </span>
+        <span>
+          <b className="font-semibold text-emerald-700">{k.stats.goals}</b> <span className="text-slate-500">metas</span>
+        </span>
+        <span>
+          <b className="font-semibold text-rose-700">{k.stats.busted}</b> <span className="text-slate-500">sin capital</span>
+        </span>
+        <span>
+          <b className={`font-semibold ${tone(k.stats.net)}`}>{eur0(k.stats.net)}</b> <span className="text-slate-500">neto acumulado</span>
+        </span>
+      </div>
+      {k.history.length > 0 && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead>
+              <tr>
+                <th className={th}>Ronda</th>
+                <th className={th}>Resultado</th>
+                <th className={`${th} text-right`}>Empezó con</th>
+                <th className={`${th} text-right`}>Acabó con</th>
+                <th className={`${th} text-right`}>Máximo</th>
+                <th className={`${th} text-right`}>Operaciones</th>
+                <th className={th}>Fin</th>
+              </tr>
+            </thead>
+            <tbody>
+              {k.history.map((r) => (
+                <tr key={r.number} className="border-t border-slate-100">
+                  <td className="px-3 py-2 font-medium text-slate-900">{r.number}</td>
+                  <td className="px-3 py-2">
+                    <Pill color={ROUND_END[r.status]?.color}>{ROUND_END[r.status]?.label ?? r.status}</Pill>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{eur0(r.startCapital)}</td>
+                  <td className={`px-3 py-2 text-right font-medium tabular-nums ${tone((r.endEquity ?? 0) - r.startCapital)}`}>{eur(r.endEquity, 2)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">{eur(r.bestEquity, 2)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.trades}</td>
+                  <td className="px-3 py-2 text-slate-600">{r.endedAt ? dayFmt(r.endedAt) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

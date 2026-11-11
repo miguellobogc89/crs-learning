@@ -2514,3 +2514,25 @@ model broker_orders {
   @@unique([connection_id, idempotency_key], map: "broker_orders_idempotency_unique")
   @@index([user_id, created_at], map: "broker_orders_user_idx")
 }
+
+/// Ronda de un agente kamikaze: capital de partida, meta (capital × N) y plazo. en_curso | meta | plazo | arruinado.
+model trading_kamikaze_rounds {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agent               String
+  number              Int
+  status              String    @default("en_curso")
+  start_capital       Float
+  goal                Float
+  started_at          DateTime  @default(now()) @db.Timestamptz(6)
+  deadline            DateTime  @db.Timestamptz(6)
+  ended_at            DateTime? @db.Timestamptz(6)
+  end_equity          Float?
+  best_equity         Float?
+  trades              Int       @default(0)
+  last_decision_at    DateTime? @db.Timestamptz(6)
+  last_decision_price Float?
+  cooldown_until      DateTime? @db.Timestamptz(6)
+
+  @@unique([agent, number], map: "trading_kamikaze_rounds_agent_number")
+  @@index([agent, status], map: "trading_kamikaze_rounds_agent_status")
+}

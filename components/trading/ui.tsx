@@ -8,14 +8,35 @@ import { card, pct } from "./format";
 export { card };
 
 /** Punto de color de cada agente. */
-export const AGENT_DOT: Record<string, string> = { emerald: "bg-emerald-500", violet: "bg-violet-500", blue: "bg-blue-500", orange: "bg-orange-500", slate: "bg-slate-800" };
+export const AGENT_DOT: Record<string, string> = {
+  emerald: "bg-emerald-500",
+  violet: "bg-violet-500",
+  blue: "bg-blue-500",
+  orange: "bg-orange-500",
+  rose: "bg-rose-500",
+  amber: "bg-amber-500",
+  fuchsia: "bg-fuchsia-500",
+  slate: "bg-slate-800",
+};
 /** Avatar y etiqueta de perfil de cada agente. */
-export const AVATAR: Record<string, string> = { emerald: "bg-emerald-500", violet: "bg-violet-500", blue: "bg-blue-500", orange: "bg-orange-500", slate: "bg-slate-300" };
+export const AVATAR: Record<string, string> = {
+  emerald: "bg-emerald-500",
+  violet: "bg-violet-500",
+  blue: "bg-blue-500",
+  orange: "bg-orange-500",
+  rose: "bg-rose-500",
+  amber: "bg-amber-500",
+  fuchsia: "bg-fuchsia-500",
+  slate: "bg-slate-300",
+};
 export const PILL: Record<string, string> = {
   emerald: "bg-emerald-50 text-emerald-700",
   violet: "bg-violet-50 text-violet-700",
   blue: "bg-blue-50 text-blue-700",
   orange: "bg-orange-50 text-orange-700",
+  rose: "bg-rose-50 text-rose-700",
+  amber: "bg-amber-50 text-amber-800",
+  fuchsia: "bg-fuchsia-50 text-fuchsia-700",
   slate: "bg-slate-100 text-slate-600",
 };
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

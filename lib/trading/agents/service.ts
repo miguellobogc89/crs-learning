@@ -9,10 +9,15 @@ import { CRYPTO_BENCHMARK, INDEX_SYMBOL } from "../market-data";
 import { dayKey, loadSeries } from "../sync";
 import { meetingDue, meetingIntervalMinutes } from "../live-logic";
 import { AGENTS, AGENTS_WORKSPACE, agentByKey, copyKey, type AgentDef } from "./roster";
+import { isKamikaze, KAMIKAZES, type KamikazeDef } from "../kamikaze/roster";
+import { kamikazeView, resetKamikaze, runKamikazeNow } from "../kamikaze/engine";
 
 const WS = AGENTS_WORKSPACE;
 
-async function ensureAgent(a: AgentDef) {
+/** Todos los agentes del catálogo: los clásicos y los kamikazes. */
+const CATALOG: (AgentDef | KamikazeDef)[] = [...AGENTS, ...KAMIKAZES];
+
+async function ensureAgent(a: AgentDef | KamikazeDef) {
   return ensureAccount(WS, a.key, { name: a.name, capital: a.capital, settings: a.settings });
 }
 
@@ -27,7 +32,7 @@ function changeSince(candles: { t: number; c: number }[], since: number) {
 
 /** Los agentes son iguales para todos; `workspaceId` solo sirve para saber a cuáles copias tú. */
 export async function getAgents(workspaceId?: string) {
-  const accounts = await Promise.all(AGENTS.map((a) => ensureAgent(a)));
+  const accounts = await Promise.all(CATALOG.map((a) => ensureAgent(a)));
   const copies = workspaceId
     ? await prisma.trading_accounts.findMany({ where: { workspace_id: workspaceId, agent: { in: AGENTS.map((a) => copyKey(a.key)) }, copy_weight_pct: { not: null } } })
     : [];
@@ -40,8 +45,9 @@ export async function getAgents(workspaceId?: string) {
   };
 
   const agents = await Promise.all(
-    AGENTS.map(async (def, k) => {
+    CATALOG.map(async (def, k) => {
       const account = accounts[k];
+      const kamikaze = isKamikaze(def.key) ? await kamikazeView(def.key) : null;
       const [state, equity, runs, proposals] = await Promise.all([
         accountState(WS, def.key),
         prisma.trading_equity.findMany({ where: { account_id: account.id }, orderBy: { day: "asc" }, take: 1000 }),
@@ -50,10 +56,14 @@ export async function getAgents(workspaceId?: string) {
       ]);
       const last = runs[0] ?? null;
       const since = account.created_at.getTime();
+      // Kamikazes: la curva y la rentabilidad son las de la ronda en curso.
+      const roundStart = kamikaze?.current ? new Date(kamikaze.current.startedAt.slice(0, 10)).getTime() : null;
       return {
+        kind: (kamikaze ? "kamikaze" : "agente") as "kamikaze" | "agente",
+        kamikaze,
         key: def.key,
         name: def.name,
-        profile: def.profile,
+        profile: def.profile as AgentDef["profile"] | KamikazeDef["profile"],
         tagline: def.tagline,
         color: def.color,
         rules: def.rules,
@@ -67,7 +77,7 @@ export async function getAgents(workspaceId?: string) {
         summary: state.summary,
         positions: state.positions.filter((p) => p.status === "abierta" || p.status === "pendiente"),
         closed: state.positions.filter((p) => p.status === "cerrada").slice(0, 20),
-        equity: equity.map((e) => ({ day: dayKey(e.day), equity: e.equity })),
+        equity: equity.filter((e) => roundStart === null || e.day.getTime() >= roundStart).map((e) => ({ day: dayKey(e.day), equity: e.equity })),
         lastRun: last
           ? { id: last.id, at: last.created_at.toISOString(), status: last.status, error: last.error, marketView: last.market_view }
           : null,
@@ -123,6 +133,7 @@ function movesOf(
 
 /** Reunión de un agente: pone al día su cartera, decide y ejecuta. */
 export async function runAgent(key: string, userId: string | null) {
+  if (isKamikaze(key)) return runKamikazeNow(key);
   const def = agentByKey(key);
   if (!def) throw new Error("Agente desconocido");
   const account = await ensureAgent(def);
@@ -139,6 +150,7 @@ export function canDirectAgents(workspaceId: string) {
 
 /** Vuelve a empezar con el capital inicial y los ajustes de su perfil. */
 export async function resetAgent(key: string) {
+  if (isKamikaze(key)) return resetKamikaze(key);
   const def = agentByKey(key);
   if (!def) throw new Error("Agente desconocido");
   const account = await ensureAgent(def);
