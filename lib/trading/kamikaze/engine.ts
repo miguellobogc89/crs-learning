@@ -176,7 +176,7 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       if (force !== def.key && round.cooldown_until && round.cooldown_until.getTime() > Date.now()) return;
       // Una idea solo se toma una vez por ronda.
       const mine = await prisma.trading_positions.findMany({ where: { account_id: account.id, signal_key: { startsWith: "faro:", endsWith: `:${round.id}` } }, select: { signal_key: true } });
-      const taken = new Set(mine.map((p) => p.signal_key?.split(":")[1] ?? ""));
+      const taken = new Set<string>(mine.map((p) => p.signal_key?.split(":")[1] ?? ""));
       const pick = pickIdea(def.style, board, priceOf, Date.now(), taken);
       if (!pick) return;
       actions.push(await takeIdea(def, round, pick));

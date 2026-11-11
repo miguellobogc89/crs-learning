@@ -182,12 +182,12 @@ export const MAX_CHASE_PCT = 3;
  * invalidación y sin haberse escapado. El kamikaze usa la invalidación como stop (entre un 5 % y
  * un 40 % por debajo) y apunta al menos a +10 %: si la idea pide menos, deja correr la ganancia.
  */
-export function pickIdea(style: KamikazeStyle, ideas: BoardIdea[], price: (pair: string) => number | null, now: number, taken: Set<string> = new Set()) {
+export function pickIdea<T extends BoardIdea>(style: KamikazeStyle, ideas: T[], price: (pair: string) => number | null, now: number, taken: Set<string> = new Set()) {
   const kinds = STYLE_KINDS[style] as string[];
   const options = ideas
     .filter((i) => kinds.includes(i.kind) && i.validUntil > now && !taken.has(i.id))
     .map((i) => ({ i, p: price(i.pair) }))
-    .filter((x): x is { i: BoardIdea; p: number } => x.p !== null && x.p > x.i.invalidation && x.p <= x.i.price * (1 + MAX_CHASE_PCT / 100))
+    .filter((x): x is { i: T; p: number } => x.p !== null && x.p > x.i.invalidation && x.p <= x.i.price * (1 + MAX_CHASE_PCT / 100))
     .sort((a, b) => b.i.conviction - a.i.conviction || b.i.createdAt - a.i.createdAt);
   const best = options[0];
   if (!best) return null;
