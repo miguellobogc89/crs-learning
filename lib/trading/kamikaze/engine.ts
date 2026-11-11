@@ -14,7 +14,7 @@ import { AGENTS_WORKSPACE } from "../agents/roster";
 import { CRYPTO, CRYPTO_MARKET } from "../market-data";
 import { dayDate } from "../sync";
 import { allInQuantity, checkDecision, decisionDue, exitNow, metricsOf, prefilter, protectedStop, rank, requiredDailyPct, roundOutcome, type AiDecision, type Metrics, type Ticker } from "./logic";
-import { eurPairs, hourly, prices, symbolOf, tickers } from "./market";
+import { eurPairs, hourly, priceEur, symbolOf, tickers } from "./market";
 import { KAMIKAZES, kamikazeByKey, type KamikazeDef } from "./roster";
 
 const WS = AGENTS_WORKSPACE;
@@ -31,7 +31,11 @@ const COOLDOWN_MIN = 30;
 const TICK_GAP_MS = 2 * 60_000;
 
 const ensureKamikaze = (def: KamikazeDef) => ensureAccount(WS, def.key, { name: def.name, capital: def.capital, settings: def.settings });
-const pairOf = (symbol: string) => symbol.replace(/-EUR$/, "") + "EUR";
+/** Par de Binance de un valor de CRS: el de euros si existe; si no, el de USDC. */
+const pairFor = (symbol: string, rules: Map<string, unknown>) => {
+  const base = symbol.replace(/-EUR$/, "");
+  return rules.has(`${base}EUR`) ? `${base}EUR` : `${base}USDC`;
+};
 
 // ---------------------------------------------------------------------------
 // Rondas
@@ -144,8 +148,7 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       let pos = state.positions.find((p) => p.status === "abierta") ?? null;
       let price: number | null = null;
       if (pos) {
-        const pair = pairOf(pos.symbol);
-        price = (await prices([pair])).get(pair) ?? null;
+        price = await priceEur(pairFor(pos.symbol, rules));
         if (price) {
           const inst = await prisma.market_instruments.findUnique({ where: { symbol: pos.symbol }, select: { id: true } });
           if (inst) await setLive(inst.id, price);
@@ -246,7 +249,7 @@ async function decide(def: KamikazeDef, round: trading_kamikaze_rounds, market: 
   const state = await accountState(WS, def.key);
   const s = state.summary;
   const pos = state.positions.find((p) => p.status === "abierta") ?? null;
-  const holdingPair = pos ? pairOf(pos.symbol) : null;
+  const holdingPair = pos ? (market.find((t) => t.base === pos.symbol.replace(/-EUR$/, ""))?.pair ?? pairFor(pos.symbol, rules)) : null;
 
   // Candidatos de su estilo: criba con el resumen de 24 h y detalle con velas horarias.
   const pre = prefilter(def.style, market, 15);
@@ -308,7 +311,7 @@ async function decide(def: KamikazeDef, round: trading_kamikaze_rounds, market: 
     STYLE_TEXT[def.style],
     "Reglas: una sola posición a la vez y con todo el efectivo. Para comprar, elige SOLO un par de la lista de candidatos, con stop entre un 5 % y un 40 % por debajo del precio y objetivo al menos un 10 % por encima (apunta alto: necesitas el ritmo diario indicado).",
     "Si tienes posición: «mantener» (puedes subir el stop o mover el objetivo), «vender» si el movimiento se ha agotado o hay algo mejor, o déjala correr. Sin posición: «comprar» o «esperar» si de verdad no hay nada; recuerda que esperar también tiene coste con tu plazo.",
-    "Volumen en euros de 24 h, cambios en %, fromHigh3d = distancia al máximo de 3 días, volSurge = volumen de las últimas 4 h frente a la media (1 = normal).",
+    "Todos los precios y volúmenes están en euros (los pares en USDC ya vienen convertidos). Cambios en %, fromHigh3d = distancia al máximo de 3 días, volSurge = volumen de las últimas 4 h frente a la media (1 = normal).",
     "Responde en español, claro y breve.",
   ].join("\n");
 
@@ -344,7 +347,7 @@ async function decide(def: KamikazeDef, round: trading_kamikaze_rounds, market: 
     } else if (checked.action === "comprar") {
       symbol = symbolOf(checked.pair, rules) ?? `${checked.pair.replace(/EUR$/, "")}-EUR`;
       const inst = await ensureInstrument(symbol, rules.get(checked.pair)?.base ?? symbol.replace(/-EUR$/, ""));
-      px = (await prices([checked.pair])).get(checked.pair) ?? livePrice(checked.pair);
+      px = (await priceEur(checked.pair)) ?? livePrice(checked.pair);
       if (!px) throw new Error("Sin precio al momento");
       await setLive(inst.id, px);
       quantity = allInQuantity(s.available, px, costOf(state.account));
