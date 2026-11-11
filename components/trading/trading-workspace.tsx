@@ -77,14 +77,15 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   else if (tab === "valores") body = <UniversePanel />;
   else if (tab === "integraciones") body = <IntegrationsPanel />;
 
+  const fittedTable = tab === "inicio" || tab === "oportunidades" || tab === "agentes";
   return (
-    <div className="space-y-4">
+    <div className={fittedTable ? "flex h-full min-h-0 flex-col gap-4" : "space-y-4"}>
       {error && (
         <p role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </p>
       )}
-      {body}
+      {fittedTable ? <div className="min-h-0 flex-1">{body}</div> : body}
     </div>
   );
 }
