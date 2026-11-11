@@ -1,7 +1,7 @@
 // lib/trading/kamikaze/engine.ts
 // Motor de los kamikazes. Cada pocos minutos (cuando alguien usa el módulo o lo pide el cron):
 //   1) vigilancia sin IA: precio al momento de Binance, stop y objetivo, protección del stop;
-//   2) rondas: termina la ronda al llegar a la meta, al plazo o sin dinero, y empieza otra;
+//   2) rondas: termina la ronda al llegar a la meta o quedarse sin dinero, y empieza otra;
 //   3) decisión con IA cuando toca (cada 30 min sin posición, cada 60 con ella o si el precio se
 //      mueve mucho), con los candidatos de su estilo y datos de mercado de la última hora.
 // Opera en su cartera virtual de siempre (accounts.ts): mismas órdenes, mismos costes.
@@ -13,7 +13,7 @@ import { accountState, closePosition, costOf, ensureAccount, madridDay, placeOrd
 import { AGENTS_WORKSPACE } from "../agents/roster";
 import { CRYPTO, CRYPTO_MARKET } from "../market-data";
 import { dayDate } from "../sync";
-import { allInQuantity, checkDecision, decisionDue, exitNow, metricsOf, prefilter, protectedStop, rank, requiredDailyPct, roundOutcome, type AiDecision, type Metrics, type Ticker } from "./logic";
+import { allInQuantity, checkDecision, decisionDue, exitNow, metricsOf, prefilter, protectedStop, rank, roundOutcome, type AiDecision, type Metrics, type Ticker } from "./logic";
 import { eurPairs, hourly, priceEur, symbolOf, tickers } from "./market";
 import { KAMIKAZES, kamikazeByKey, type KamikazeDef } from "./roster";
 
@@ -177,9 +177,9 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       if (s.equity > (round.best_equity ?? 0)) round = await prisma.trading_kamikaze_rounds.update({ where: { id: round.id }, data: { best_equity: s.equity } });
 
       // 2) ¿Termina la ronda?
-      const end = roundOutcome({ equity: s.equity, goal: round.goal, deadline: round.deadline.getTime(), now: Date.now(), holding: !!pos, cash: s.available, minOrder: MIN_ORDER });
+      const end = roundOutcome({ equity: s.equity, goal: round.goal, holding: !!pos, cash: s.available, minOrder: MIN_ORDER });
       if (end) {
-        if (pos) await closePosition(WS, pos.id, def.key, end === "meta" ? "meta de la ronda" : end === "plazo" ? "fin del plazo" : "sin capital");
+        if (pos) await closePosition(WS, pos.id, def.key, end === "meta" ? "meta de la ronda" : "sin capital");
         const after = (await accountState(WS, def.key)).summary.equity;
         await prisma.trading_kamikaze_rounds.update({ where: { id: round.id }, data: { status: end, end_equity: after, ended_at: new Date() } });
         actions.push(`ronda ${round.number}: ${end} con ${after.toFixed(2)} €`);
@@ -277,7 +277,6 @@ async function decide(def: KamikazeDef, round: trading_kamikaze_rounds, market: 
     select: { title: true, summary: true, symbols: true, sentiment: true, impact: true, published_at: true },
   });
 
-  const msLeft = round.deadline.getTime() - Date.now();
   const r2 = (x: number) => Math.round(x * 100) / 100;
   const input = {
     ahora: new Date().toISOString(),
@@ -287,8 +286,6 @@ async function decide(def: KamikazeDef, round: trading_kamikaze_rounds, market: 
       patrimonio: r2(s.equity),
       efectivo: r2(s.available),
       meta: round.goal,
-      dias_restantes: r2(msLeft / DAY),
-      ritmo_diario_necesario_pct: r2(requiredDailyPct(s.equity, round.goal, msLeft)),
       operaciones: round.trades,
     },
     posicion: pos
@@ -309,8 +306,8 @@ async function decide(def: KamikazeDef, round: trading_kamikaze_rounds, market: 
   const instructions = [
     def.persona,
     STYLE_TEXT[def.style],
-    "Reglas: una sola posición a la vez y con todo el efectivo. Para comprar, elige SOLO un par de la lista de candidatos, con stop entre un 5 % y un 40 % por debajo del precio y objetivo al menos un 10 % por encima (apunta alto: necesitas el ritmo diario indicado).",
-    "Si tienes posición: «mantener» (puedes subir el stop o mover el objetivo), «vender» si el movimiento se ha agotado o hay algo mejor, o déjala correr. Sin posición: «comprar» o «esperar» si de verdad no hay nada; recuerda que esperar también tiene coste con tu plazo.",
+    "Reglas: una sola posición a la vez y con todo el efectivo. Para comprar, elige SOLO un par de la lista de candidatos, con stop entre un 5 % y un 40 % por debajo del precio y objetivo al menos un 10 % por encima (sin un plazo obligatorio para alcanzar la meta).",
+    "Si tienes posición: «mantener» (puedes subir el stop o mover el objetivo), «vender» si el movimiento se ha agotado o hay algo mejor, o déjala correr. Sin posición: «comprar» o «esperar» si de verdad no hay nada; espera si no hay una oportunidad válida.",
     "Todos los precios y volúmenes están en euros (los pares en USDC ya vienen convertidos). Cambios en %, fromHigh3d = distancia al máximo de 3 días, volSurge = volumen de las últimas 4 h frente a la media (1 = normal).",
     "Responde en español, claro y breve.",
   ].join("\n");
@@ -361,7 +358,7 @@ async function decide(def: KamikazeDef, round: trading_kamikaze_rounds, market: 
           stop: checked.stop,
           target: checked.target,
           execution: "now",
-          maxHoldDays: Math.max(1, Math.ceil(msLeft / DAY)),
+          maxHoldDays: null,
           notes: `${def.name}: ${d.rationale}`,
           source: "agente",
           signalKey: `kamikaze:${round.id}:${Date.now()}`,
@@ -398,7 +395,7 @@ async function decide(def: KamikazeDef, round: trading_kamikaze_rounds, market: 
         market: "crypto",
         action: d.action,
         conviction: Math.max(1, Math.min(5, Math.round(d.conviction))),
-        horizon_days: Math.max(1, Math.ceil(msLeft / DAY)),
+        horizon_days: 0,
         price: px ?? 0,
         stop: d.stop || null,
         target: d.target || null,
