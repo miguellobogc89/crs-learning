@@ -6,7 +6,7 @@ import { ArrowRight, BarChart3, Bot, Briefcase, Flame, Info, User, Users, Wallet
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getOpportunities } from "@/lib/trading/agents/opportunities";
-import { api, eur0, errorText, pct, tone } from "./format";
+import { api, eur0, errorText, pct, tone, MEETINGS_TEXT } from "./format";
 import { useTradingRefresh } from "./navigation";
 import { OpenAccount } from "./open-account";
 import { withLivePoint } from "./equity-chart";
@@ -287,7 +287,7 @@ export function HomePanel() {
             </Link>
           </header>
           {agents.moves.length === 0 ? (
-            <p className="px-5 pb-5 pt-2 text-sm text-slate-500">Los agentes aún no han operado. Se reúnen cada día laborable a las 19:15.</p>
+            <p className="px-5 pb-5 pt-2 text-sm text-slate-500">Los agentes aún no han operado. {MEETINGS_TEXT}</p>
           ) : (
             <ul className="px-2 pb-3">
               {agents.moves.map((m) => (

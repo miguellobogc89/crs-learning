@@ -4,7 +4,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, Loader2, Play } from "lucide-react";
 import type { getOpportunities } from "@/lib/trading/agents/opportunities";
-import { api, errorText, eur, eur0, ghost, int, pct, primary } from "./format";
+import { api, errorText, eur, eur0, ghost, int, pct, primary, MEETINGS_TEXT } from "./format";
 import { ago } from "./home-panel";
 import { AgentAvatar, ErrorNote, LoadingCard, Pill, Rich } from "./ui";
 import { refreshTrading, useTradingRefresh } from "./navigation";
@@ -180,7 +180,7 @@ export function OpportunitiesPanel() {
       )}
 
       {rows.length === 0 ? (
-        <p className="py-10 text-center text-sm text-slate-500">Ahora mismo no hay compras de los agentes. Se reúnen cada día laborable a las 19:15.</p>
+        <p className="py-10 text-center text-sm text-slate-500">Ahora mismo no hay compras de los agentes. {MEETINGS_TEXT}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px] text-sm">

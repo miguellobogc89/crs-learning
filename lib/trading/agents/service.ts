@@ -1,11 +1,13 @@
 // lib/trading/agents/service.ts
 // Los agentes en marcha: cada uno con su cartera virtual, sus reuniones y su marcador.
 import "server-only";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { accountState, ensureAccount, processAccount, resetAccount } from "../accounts";
 import { runCommittee, view as proposalView } from "../committee/service";
 import { CRYPTO_BENCHMARK, INDEX_SYMBOL } from "../market-data";
 import { dayKey, loadSeries } from "../sync";
+import { meetingDue, meetingIntervalMinutes } from "../live-logic";
 import { AGENTS, AGENTS_WORKSPACE, agentByKey, copyKey, type AgentDef } from "./roster";
 
 const WS = AGENTS_WORKSPACE;
@@ -154,4 +156,47 @@ export async function runAgentsDaily() {
       detail: r.status === "fulfilled" ? `${r.value.auto.filter((x) => x.ok).length} órdenes` : r.reason instanceof Error ? r.reason.message : "error",
     })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Reuniones durante el día
+// ---------------------------------------------------------------------------
+let ticking = false;
+
+/**
+ * Si a algún agente le toca reunirse (cada hora con la bolsa abierta, cada 4 h fuera; configurable),
+ * reúne al que lleve más tiempo sin hacerlo. Uno por llamada: cada reunión tarda hasta un minuto.
+ * Un «turno» en la base de datos impide que dos servidores reúnan al mismo agente a la vez.
+ */
+export async function maybeRunAgents(userId: string | null = null) {
+  if (ticking) return { ran: null as string | null, skipped: "en curso" };
+  const interval = meetingIntervalMinutes();
+  if (interval <= 0) return { ran: null, skipped: "reuniones durante el día desactivadas" };
+  ticking = true;
+  try {
+    const last = await Promise.all(
+      AGENTS.map(async (a) => {
+        const run = await prisma.trading_committee_runs.findFirst({ where: { workspace_id: WS, agent: a.key }, orderBy: { created_at: "desc" }, select: { created_at: true } });
+        return { key: a.key, at: run?.created_at.getTime() ?? null };
+      }),
+    );
+    const due = last.filter((l) => meetingDue(l.at, interval)).sort((x, y) => (x.at ?? 0) - (y.at ?? 0));
+    for (const d of due) {
+      const def = agentByKey(d.key)!;
+      const account = await ensureAgent(def);
+      // Turno de 5 minutos: solo un servidor lo consigue.
+      const got = await prisma.$executeRaw(Prisma.sql`UPDATE public.trading_accounts SET meeting_lease_until = now() + interval '5 minutes'
+        WHERE id = ${account.id}::uuid AND (meeting_lease_until IS NULL OR meeting_lease_until < now())`);
+      if (got !== 1) continue;
+      try {
+        await runAgent(def.key, userId);
+      } finally {
+        await prisma.trading_accounts.update({ where: { id: account.id }, data: { meeting_lease_until: null } }).catch(() => undefined);
+      }
+      return { ran: def.key, skipped: null };
+    }
+    return { ran: null, skipped: "a ningún agente le toca" };
+  } finally {
+    ticking = false;
+  }
 }

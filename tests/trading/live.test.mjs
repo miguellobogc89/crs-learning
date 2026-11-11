@@ -39,3 +39,27 @@ test("directo: una pendiente de ayer se ejecuta con la apertura de hoy; una de h
   assert.equal(canFillLive(D("2026-11-10"), D("2026-11-11"), D("2026-11-11")), false, "si ya hay vela de cierre, la ejecuta el proceso diario");
   assert.equal(canFillLive(D("2026-11-10"), null, null), false);
 });
+
+const { marketOpenNow, meetingIntervalMinutes, meetingDue } = load("lib/trading/live-logic.ts");
+
+test("agentes: con la bolsa abierta (9:30-17:30, laborables) compran al momento; crypto siempre", () => {
+  assert.equal(marketOpenNow("bolsa", new Date("2026-11-11T08:20:00Z")), false, "9:20 en Madrid: aún sin apertura del proveedor");
+  assert.equal(marketOpenNow("bolsa", new Date("2026-11-11T08:31:00Z")), true, "9:31");
+  assert.equal(marketOpenNow("bolsa", new Date("2026-11-11T16:31:00Z")), false, "17:31");
+  assert.equal(marketOpenNow("bolsa", new Date("2026-11-14T10:00:00Z")), false, "sábado");
+  assert.equal(marketOpenNow("crypto", new Date("2026-11-14T03:00:00Z")), true);
+});
+
+test("agentes: cada hora con la bolsa abierta, cada 4 h fuera, configurable", () => {
+  const open = new Date("2026-11-11T10:00:00Z");
+  const night = new Date("2026-11-11T22:00:00Z");
+  assert.equal(meetingIntervalMinutes(open, {}), 60);
+  assert.equal(meetingIntervalMinutes(night, {}), 240);
+  assert.equal(meetingIntervalMinutes(open, { TRADING_AGENT_MEETING_MINUTES: "30" }), 30);
+  assert.equal(meetingIntervalMinutes(night, { TRADING_AGENT_MEETING_MINUTES_OFF: "0" }), 0);
+  const now = Date.parse("2026-11-11T10:00:00Z");
+  assert.equal(meetingDue(null, 60, now), true);
+  assert.equal(meetingDue(now - 59 * 60_000, 60, now), false);
+  assert.equal(meetingDue(now - 61 * 60_000, 60, now), true);
+  assert.equal(meetingDue(null, 0, now), false, "0 = desactivado");
+});

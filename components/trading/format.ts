@@ -59,6 +59,9 @@ export const card = "rounded-2xl border border-slate-100 bg-white shadow-[0_1px_
 export const panel = `${card} overflow-hidden`;
 export const th = "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500";
 
+/** Cuándo se reúnen los agentes (por defecto; el servidor puede cambiarlo). */
+export const MEETINGS_TEXT = "Se reúnen cada hora con la bolsa abierta y cada 4 horas fuera de ella; con el mercado abierto compran al momento.";
+
 export const DIRECTION_LABEL = { long: "Alcista", short: "Bajista" } as const;
 
 export const ACTION_LABEL: Record<string, string> = {

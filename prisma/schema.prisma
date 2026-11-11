@@ -2254,6 +2254,8 @@ model trading_accounts {
   broker_autonomy String @default("aprobacion")
   /// Conexión de bróker (broker_connections) que usa esta cartera. Null = ninguna.
   broker_connection_id String? @db.Uuid
+  /// Agentes: turno de reunión en curso (evita reuniones simultáneas del mismo agente).
+  meeting_lease_until DateTime? @db.Timestamptz(6)
   /// Cartera del usuario abierta (eligió su capital). Null = aún no ha abierto cuenta.
   opened_at DateTime? @db.Timestamptz(6)
   /// Subcartera de copia ('copia:<agente>'): % del patrimonio total asignado. Null = no se copia.

@@ -179,6 +179,8 @@ export async function replicate(
   agentKey: string,
   p: { id: string; action: string; symbol: string; price: number; quantity: number | null; stop: number | null; target: number | null; horizon_days: number },
   agentEquity: number,
+  /** Las copias se ejecutan igual que el agente: ya (mercado abierto) o en la próxima apertura. */
+  execution: "now" | "next_open" = "next_open",
 ) {
   const def = agentByKey(agentKey);
   if (!def) return { copies: 0, errors: 0 };
@@ -200,7 +202,7 @@ export async function replicate(
             quantity,
             stop: p.stop,
             target: p.target,
-            execution: "next_open",
+            execution,
             fractional: true,
             signalKey: `copia:${p.id}`,
             maxHoldDays: Math.round(p.horizon_days * 1.5),

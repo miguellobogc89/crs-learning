@@ -5,7 +5,9 @@ import "server-only";
 import type { trading_proposals } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { aiJson, aiModelInfo } from "../ai";
-import { accountState, closePosition, costOf, ensureAccount, madridDay, OPEN_STATUSES, placeOrder } from "../accounts";
+import { accountState, closePosition, costOf, ensureAccount, latestCloses, madridDay, OPEN_STATUSES, placeOrder } from "../accounts";
+import { marketOpenNow } from "../live-logic";
+import { ensureFreshLive } from "../live";
 import { replicate } from "../agents/copy";
 import { agentByKey, agentInstructions } from "../agents/roster";
 import { atrAt, indicatorBundle } from "../indicators";
@@ -104,6 +106,10 @@ async function buildContext(workspaceId: string, agent = "") {
     .filter((s) => s !== INDEX_SYMBOL)
     .slice(0, MAX_ASSETS);
 
+  // Durante la sesión, los agentes deciden con el precio en directo (no con el cierre de ayer).
+  const candidateIds = candidates.map((sym) => instruments.find((i) => i.symbol === sym)?.id).filter((id): id is string => !!id);
+  const nowPrices = await latestCloses(candidateIds);
+
   const assets: CommitteeAsset[] = [];
   for (const symbol of candidates) {
     const inst = instruments.find((i) => i.symbol === symbol);
@@ -112,6 +118,9 @@ async function buildContext(workspaceId: string, agent = "") {
     if (!inst || !row || row.close === null || c.length < 30) continue;
     const ind = indicatorBundle(c);
     const atr = atrAt(ind.atr14, c, c.length - 1);
+    const live = nowPrices.get(inst.id);
+    const price = live?.live ? live.close : row.close;
+    const change1d = live?.live ? ((live.close - row.close) / row.close) * 100 : row.change1d;
     evidence.set(`T:${symbol}`, {
       id: `T:${symbol}`,
       kind: "tecnico",
@@ -159,13 +168,13 @@ async function buildContext(workspaceId: string, agent = "") {
       symbol,
       name: inst.name,
       market: isCryptoMarket(inst.market) ? "crypto" : "bolsa",
-      price: row.close,
-      change1d: row.change1d,
+      price,
+      change1d,
       change20d: row.change20d,
       trend: row.trend,
       rsi: row.rsi,
       distSma200: row.distSma200,
-      atrPct: (atr / row.close) * 100,
+      atrPct: (atr / price) * 100,
       lotStep: lotStepOf(inst.market),
       signals,
       strength,
@@ -295,11 +304,25 @@ async function executeAgentRun(workspaceId: string, runId: string, agent: string
   // Primero ventas (liberan efectivo), luego protecciones y por último compras.
   const order = { vender: 0, mantener: 1, comprar: 2, vigilar: 3 } as Record<string, number>;
   list.sort((a, b) => (order[a.action] ?? 9) - (order[b.action] ?? 9));
+  // Con el mercado abierto, las compras se ejecutan ya, al precio en directo (recién consultado).
+  // Con la bolsa cerrada, quedan para la próxima apertura. Crypto no cierra nunca.
+  const buyNow = new Map(list.filter((p) => p.action === "comprar").map((p) => [p.id, marketOpenNow(p.market === "crypto" ? "crypto" : "bolsa")]));
+  const nowIds = await prisma.market_instruments.findMany({ where: { symbol: { in: list.filter((p) => buyNow.get(p.id)).map((p) => p.symbol) } }, select: { id: true, symbol: true } });
+  await ensureFreshLive(nowIds.map((i) => i.id)).catch(() => undefined);
+  const prices = await latestCloses(nowIds.map((i) => i.id));
   for (const p of list) {
     if (p.action === "vigilar" || (p.action === "mantener" && !p.stop)) continue;
     try {
-      await decideProposal(workspaceId, null, p.id, "ejecutar");
-      const c = await replicate(agent, p, equity);
+      let execution: "now" | "next_open" = "next_open";
+      if (buyNow.get(p.id)) {
+        const id = nowIds.find((i) => i.symbol === p.symbol)?.id;
+        const px = id ? prices.get(id) : undefined;
+        // Sin precio de hoy no se compra a ciegas: la siguiente reunión lo volverá a valorar.
+        if (p.market !== "crypto" && !px?.live) throw new Error("Sin precio en directo de la sesión; se valorará en la próxima reunión");
+        execution = "now";
+      }
+      await decideProposal(workspaceId, null, p.id, "ejecutar", { execution });
+      const c = await replicate(agent, p, equity, execution);
       out.push({ symbol: p.symbol, ok: true, detail: c.copies ? `${p.action} (copiado en ${c.copies} ${c.copies === 1 ? "cartera" : "carteras"})` : p.action });
     } catch (e) {
       const why = e instanceof Error ? e.message.slice(0, 300) : "error";

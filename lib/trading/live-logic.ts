@@ -52,3 +52,29 @@ export function preferLive(lastCandleDay: number | null, liveDay: number | null)
 export function canFillLive(createdDay: number, liveDay: number | null, firstStoredAfterCreated: number | null) {
   return liveDay !== null && liveDay > createdDay && firstStoredAfterCreated === null;
 }
+
+/**
+ * ¿Se puede operar ya a precio de mercado? Crypto siempre; bolsa en días laborables de 9:30 a 17:30
+ * (desde las 9:30 para que el proveedor ya tenga la apertura, que llega con ~15 min de retraso).
+ */
+export function marketOpenNow(market: "bolsa" | "crypto", now = new Date()) {
+  if (market === "crypto") return true;
+  const m = madrid(now);
+  if (m.weekday === "Sat" || m.weekday === "Sun") return false;
+  return m.minutes >= 9 * 60 + 30 && m.minutes < 17 * 60 + 30;
+}
+
+/**
+ * Cada cuánto se reúne un agente: más a menudo con la bolsa abierta y menos fuera (solo crypto).
+ * Configurable con TRADING_AGENT_MEETING_MINUTES y TRADING_AGENT_MEETING_MINUTES_OFF (0 = nunca).
+ */
+export function meetingIntervalMinutes(now = new Date(), env: Record<string, string | undefined> = process.env) {
+  const n = (v: string | undefined, d: number) => (v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : d);
+  return marketOpenNow("bolsa", now) ? n(env.TRADING_AGENT_MEETING_MINUTES, 60) : n(env.TRADING_AGENT_MEETING_MINUTES_OFF, 240);
+}
+
+/** ¿Le toca reunirse a un agente cuya última reunión fue en `lastAt`? */
+export function meetingDue(lastAt: number | null, intervalMinutes: number, now = Date.now()) {
+  if (intervalMinutes <= 0) return false;
+  return lastAt === null || now - lastAt >= intervalMinutes * 60_000;
+}

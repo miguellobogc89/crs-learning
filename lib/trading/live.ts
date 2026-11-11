@@ -1,7 +1,7 @@
 // lib/trading/live.ts
-// Precio en directo durante la sesión: cada ~10 minutos (cuando alguien usa el módulo o lo pide el
-// cron) se descarga la vela provisional de hoy de los valores que importan — los que hay en carteras
-// y los que han comprado los agentes — y se ejecutan las órdenes pendientes con la apertura.
+// Precio en directo: cada ~10 minutos (cuando alguien usa el módulo o lo pide el cron) se descarga la
+// vela provisional de hoy, primero de los valores en cartera o comprados por los agentes y después del
+// resto (los agentes deciden con estos precios), y se ejecutan las órdenes pendientes con la apertura.
 // Las velas de cierre siguen llegando en el proceso diario; esto no las sustituye.
 import "server-only";
 import { prisma } from "@/lib/prisma";
@@ -40,15 +40,15 @@ async function run(budgetMs: number): Promise<LiveSummary> {
     prisma.trading_proposals.findMany({ where: { action: "comprar", created_at: { gte: since } }, select: { symbol: true }, distinct: ["symbol"] }),
   ]);
   const stale = new Date(Date.now() - STALE_MS);
-  const instruments = await prisma.market_instruments.findMany({
-    where: {
-      active: true,
-      OR: [{ id: { in: held.map((h) => h.instrument_id) } }, { symbol: { in: proposed.map((p) => p.symbol) } }],
-      AND: [{ OR: [{ live_at: null }, { live_at: { lt: stale } }] }],
-    },
+  const all = await prisma.market_instruments.findMany({
+    where: { active: true, OR: [{ live_at: null }, { live_at: { lt: stale } }] },
     select: { id: true, symbol: true, market: true },
     orderBy: { live_at: { sort: "asc", nulls: "first" } },
   });
+  // Primero lo que afecta a carteras y órdenes; luego el resto, de más antiguo a más reciente.
+  const hot = new Set(held.map((h) => h.instrument_id));
+  const hotSymbols = new Set(proposed.map((p) => p.symbol));
+  const instruments = [...all.filter((i) => hot.has(i.id) || hotSymbols.has(i.symbol)), ...all.filter((i) => !hot.has(i.id) && !hotSymbols.has(i.symbol))];
 
   // Descargas en paralelo (de 4 en 4) mientras quede tiempo.
   const queue = [...instruments];
@@ -56,21 +56,7 @@ async function run(budgetMs: number): Promise<LiveSummary> {
     for (let inst = queue.shift(); inst; inst = queue.shift()) {
       if (Date.now() - started > budgetMs) return;
       out.checked++;
-      try {
-        const r = await fetchDailyCandles(inst.symbol, { since: new Date(Date.now() - 6 * 86_400_000), timeoutMs: 5_000 });
-        const bar = todayBar(r.candles, isCryptoMarket(inst.market));
-        await prisma.market_instruments.update({
-          where: { id: inst.id },
-          data: bar
-            ? { live_day: new Date(bar.t), live_open: bar.o, live_high: bar.h, live_low: bar.l, live_price: bar.c, live_at: new Date() }
-            : // Sin vela de hoy (noche, fin de semana o el proveedor aún no la tiene: la bolsa española
-              // llega con ~15 min de retraso): se vuelve a mirar en un par de minutos, no en diez.
-              { live_at: new Date(Date.now() - STALE_MS + 2 * 60_000) },
-        });
-        if (bar) out.updated++;
-      } catch {
-        // Un valor sin datos no frena al resto; se reintenta en la siguiente revisión.
-      }
+      if (await fetchLive(inst)) out.updated++;
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
@@ -83,4 +69,34 @@ async function run(budgetMs: number): Promise<LiveSummary> {
     out.cancelled += r.cancelled;
   }
   return out;
+}
+
+/** Descarga la vela de hoy de un valor y la guarda como precio en directo. true si había vela de hoy. */
+async function fetchLive(inst: { id: string; symbol: string; market: string }) {
+  try {
+    const r = await fetchDailyCandles(inst.symbol, { since: new Date(Date.now() - 6 * 86_400_000), timeoutMs: 5_000 });
+    const bar = todayBar(r.candles, isCryptoMarket(inst.market));
+    await prisma.market_instruments.update({
+      where: { id: inst.id },
+      data: bar
+        ? { live_day: new Date(bar.t), live_open: bar.o, live_high: bar.h, live_low: bar.l, live_price: bar.c, live_at: new Date() }
+        : // Sin vela de hoy (noche, fin de semana o el proveedor aún no la tiene: la bolsa española
+          // llega con ~15 min de retraso): se vuelve a mirar en un par de minutos, no en diez.
+          { live_at: new Date(Date.now() - STALE_MS + 2 * 60_000) },
+    });
+    return !!bar;
+  } catch {
+    // Un valor sin datos no frena al resto; se reintenta en la siguiente revisión.
+    return false;
+  }
+}
+
+/** Antes de operar a mercado: precio en directo de estos valores con como mucho `maxAgeMs` de antigüedad. */
+export async function ensureFreshLive(instrumentIds: string[], maxAgeMs = 2 * 60_000) {
+  if (!instrumentIds.length) return;
+  const old = await prisma.market_instruments.findMany({
+    where: { id: { in: instrumentIds }, OR: [{ live_at: null }, { live_at: { lt: new Date(Date.now() - maxAgeMs) } }] },
+    select: { id: true, symbol: true, market: true },
+  });
+  await Promise.all(old.map((i) => fetchLive(i)));
 }

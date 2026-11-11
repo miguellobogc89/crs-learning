@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Bot, CheckCircle2, ChevronDown, Copy, Info, LayoutGrid, List, Loader2, Play, RotateCcw, Search, XCircle } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
-import { api, dayFmt, errorText, eur, eur0, field, ghost, int, panel, pct, primary, th, tone } from "./format";
+import { api, dayFmt, errorText, eur, eur0, field, ghost, int, panel, pct, primary, th, tone, MEETINGS_TEXT } from "./format";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { EquityCurve, withLivePoint } from "./equity-chart";
 import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill, Rich } from "./ui";
@@ -120,7 +120,7 @@ export function AgentsPanel() {
             </h2>
             <p className="mt-2 text-sm text-slate-600">
               Todos ven <b>la misma información</b> (cotizaciones, figuras, fuerza relativa y noticias) y cada uno decide con <b>su carácter</b>, con{" "}
-              {eur0(data.agents[0]?.summary.initialCapital)} virtuales. Se reúnen solos cada día laborable a las 19:15.
+              {eur0(data.agents[0]?.summary.initialCapital)} virtuales. {MEETINGS_TEXT}
             </p>
           </div>
           {data.canManage && (

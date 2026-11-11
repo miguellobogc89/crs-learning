@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { connectorContext } from "@/lib/connectors/context";
 import {
   accountDetail,
@@ -22,7 +22,7 @@ import {
 } from "@/lib/trading/service";
 import { listNews, normalizeNewsFilters, syncNews } from "@/lib/trading/news/service";
 import { decideProposal, executeProposalOnBroker, getCommittee, runCommittee } from "@/lib/trading/committee/service";
-import { canDirectAgents, getAgents, resetAgent, runAgent } from "@/lib/trading/agents/service";
+import { canDirectAgents, getAgents, maybeRunAgents, resetAgent, runAgent } from "@/lib/trading/agents/service";
 import { getPortfolio, setCopy, stopCopy } from "@/lib/trading/agents/copy";
 import { getOpportunities } from "@/lib/trading/agents/opportunities";
 import { brokerLinks, brokerStatus, linkInstruments, listBrackets, runBrokerGuardian, setBrokerAutonomy } from "@/lib/trading/broker/service";
@@ -64,6 +64,8 @@ export async function GET(req: Request, route: RouteContext) {
         console.error("[trading] live", e);
         return null;
       });
+      // Y, sin hacer esperar a la pantalla, la reunión del agente al que le toque (si le toca).
+      after(() => maybeRunAgents().catch((e) => console.error("[trading] reunión de agentes", e)));
       return NextResponse.json({ ...(await getStatus(ctx.workspaceId)), canManage: ctx.canManage, live });
     }
     if (action === "news") return NextResponse.json({ ...(await listNews(normalizeNewsFilters(url.searchParams))), canManage: ctx.canManage });
