@@ -100,7 +100,11 @@ export type AgentMove = {
   /** Símbolo del valor (para su icono). */
   symbol: string;
   text: string | null;
+  /** Precio de stop propuesto, si se registró. */
+  stop: number | null;
+  /** Resultado realizado en cierre o resultado actual (latente) de la posición. */
   pnl: number | null;
+  pnlType: "realizado" | "latente" | null;
 };
 
 /** Últimos movimientos de los agentes: decisiones ejecutadas y cierres por stop, objetivo o tiempo. */
@@ -110,6 +114,7 @@ function movesOf(
     name: string;
     color: string;
     proposals: ReturnType<typeof proposalView>[];
+    positions: { id: string; unrealized: number | null }[];
     closed: { id: string; name: string; symbol: string; exitDay: string | null; exitReason: string | null; pnl: number | null }[];
   }[],
 ): AgentMove[] {
@@ -119,13 +124,25 @@ function movesOf(
       if (p.status !== "ejecutada") continue;
       const kind = p.action === "comprar" ? "compra" : p.action === "vender" ? "venta" : p.action === "mantener" ? "protege" : null;
       if (!kind) continue;
-      out.push({ id: p.id, agent: a.key, name: a.name, color: a.color, at: p.createdAt, kind, asset: p.name, symbol: p.symbol, text: p.rationale, pnl: null });
+      // P/L mostrado con su naturaleza: no atribuir ganancias realizadas a posiciones abiertas.
+      const openPosition = p.positionId ? a.positions.find((pos) => pos.id === p.positionId) : null;
+      const closedPosition = p.positionId ? a.closed.find((pos) => pos.id === p.positionId) : null;
+      const pnl = openPosition?.unrealized ?? closedPosition?.pnl ?? null;
+      const pnlType = openPosition?.unrealized != null ? "latente" : closedPosition?.pnl != null ? "realizado" : null;
+      out.push({
+        id: p.id, agent: a.key, name: a.name, color: a.color, at: p.createdAt, kind,
+        asset: p.name, symbol: p.symbol, text: p.rationale, stop: p.stop, pnl, pnlType,
+      });
     }
     for (const c of a.closed) {
       const r = (c.exitReason ?? "").toLowerCase();
       const kind = r.includes("stop") || r.includes("break") ? "stop" : r.includes("objetivo") ? "objetivo" : r.includes("tiempo") ? "tiempo" : null;
       if (!kind || !c.exitDay) continue;
-      out.push({ id: c.id, agent: a.key, name: a.name, color: a.color, at: `${c.exitDay}T17:30:00.000Z`, kind, asset: c.name, symbol: c.symbol, text: null, pnl: c.pnl });
+      out.push({
+        id: c.id, agent: a.key, name: a.name, color: a.color, at: `${c.exitDay}T17:30:00.000Z`,
+        kind, asset: c.name, symbol: c.symbol, text: null, stop: null,
+        pnl: c.pnl, pnlType: c.pnl === null ? null : "realizado",
+      });
     }
   }
   return out.sort((x, y) => y.at.localeCompare(x.at)).slice(0, 20);
