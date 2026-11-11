@@ -35,6 +35,11 @@ export type AdapterOrder = {
   limitPrice: number | null;
   stopPrice: number | null;
   timeInForce: TimeInForce;
+  /**
+   * Identificador de la orden puesto por CRS (derivado de la clave de idempotencia). Los proveedores
+   * que lo admiten lo envían: así se puede averiguar qué pasó con una orden de resultado incierto.
+   */
+  clientOrderId: string;
 };
 
 export type AdapterOrderResult = { orderId: string; status: OrderStatus; providerStatus: string | null };
@@ -68,6 +73,11 @@ export interface BrokerAdapter {
   /** null si el proveedor ya no la conoce. */
   getOrder?(session: BrokerSession, orderId: string): Promise<BrokerOrder | null>;
   cancelOrder?(session: BrokerSession, orderId: string): Promise<void>;
+  /**
+   * Busca una orden por el identificador que puso CRS (si el proveedor lo admite). Lo usa el gateway
+   * para resolver órdenes de resultado incierto sin reenviarlas. null si el proveedor no la conoce.
+   */
+  findOrderByClientId?(session: BrokerSession, order: { providerSymbol: string; clientOrderId: string }): Promise<BrokerOrder | null>;
 }
 
 /** Método que implementa cada capacidad (para comprobar que lo declarado coincide con lo implementado). */

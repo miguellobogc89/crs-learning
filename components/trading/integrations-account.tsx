@@ -141,7 +141,7 @@ export function AccountModal({ c, provider, onClose, onChanged }: { c: Connectio
               </thead>
               <tbody>
                 {positions.data?.map((p) => {
-                  const pnl = p.currentPrice !== null ? (p.currentPrice - p.averagePrice) * p.quantity : null;
+                  const pnl = p.currentPrice !== null && p.averagePrice !== null ? (p.currentPrice - p.averagePrice) * p.quantity : null;
                   return (
                     <tr key={p.providerSymbol} className="border-b border-slate-100/80">
                       <td className="px-3 py-2.5">
@@ -271,7 +271,7 @@ function Block({ title, error, empty, loading, children }: { title: string; erro
 
 /** Orden de prueba: pasa por el módulo central como cualquier otra (permisos, entorno, idempotencia, registro). */
 function TestOrder({ c, provider, canTrade, onSent }: { c: ConnectionView; provider: ProviderView; canTrade: boolean; onSent: () => void | Promise<void> }) {
-  const [symbol, setSymbol] = useState("IBE.MC");
+  const [symbol, setSymbol] = useState(provider.markets.includes("bolsa") ? "IBE.MC" : "BTC-EUR");
   const [side, setSide] = useState<OrderSide>("buy");
   const [type, setType] = useState<OrderType>("market");
   const [quantity, setQuantity] = useState("1");
@@ -331,7 +331,7 @@ function TestOrder({ c, provider, canTrade, onSent }: { c: ConnectionView; provi
           <div className="mt-3 grid gap-3 sm:grid-cols-6">
             <label className="sm:col-span-2">
               <span className="text-xs font-medium text-slate-600">Valor (símbolo de CRS)</span>
-              <input className={`${field} mt-1 w-full uppercase`} value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="IBE.MC" />
+              <input className={`${field} mt-1 w-full uppercase`} value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder={provider.markets.includes("bolsa") ? "IBE.MC" : "BTC-EUR"} />
             </label>
             <label>
               <span className="text-xs font-medium text-slate-600">Sentido</span>

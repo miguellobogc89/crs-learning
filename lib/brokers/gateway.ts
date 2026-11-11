@@ -353,6 +353,9 @@ const resultOf = (r: AuditRow, duplicate: boolean): PlaceOrderResult => ({
   environment: r.environment === "real" ? "real" : "demo",
 });
 
+/** Identificador de orden para el proveedor: corto, sin guiones y siempre el mismo para una solicitud. */
+const clientOrderIdOf = (requestId: string) => `crs${requestId.replace(/-/g, "")}`.slice(0, 35);
+
 const isUniqueViolation = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 
 /**
@@ -421,6 +424,7 @@ export async function placeOrder(actor: BrokerActor, input: PlaceOrderInput): Pr
       limitPrice: order.limitPrice,
       stopPrice: order.stopPrice,
       timeInForce: order.timeInForce,
+      clientOrderId: clientOrderIdOf(audit.id),
     });
     const done = await prisma.broker_orders.update({
       where: { id: audit.id },
@@ -450,6 +454,9 @@ async function reconcileRow(audit: AuditRow, adapter: BrokerAdapter, session: Br
   let found: BrokerOrder | null = null;
   if (audit.provider_order_id && adapter.getOrder) {
     found = await adapter.getOrder(session, audit.provider_order_id);
+  } else if (!audit.provider_order_id && adapter.findOrderByClientId && audit.provider_symbol) {
+    // El proveedor guarda nuestro identificador: respuesta exacta, sin adivinar.
+    found = await adapter.findOrderByClientId(session, { providerSymbol: audit.provider_symbol, clientOrderId: clientOrderIdOf(audit.id) });
   } else if (!audit.provider_order_id && adapter.getOrders) {
     const candidates = (await adapter.getOrders(session)).filter(
       (o) => o.providerSymbol === audit.provider_symbol && o.side === audit.side && Math.abs(o.quantity - audit.quantity) < 1e-9,

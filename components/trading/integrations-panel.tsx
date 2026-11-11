@@ -470,9 +470,10 @@ function ConnectModal({
   const [useServer, setUseServer] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const [perms, setPerms] = useState<BrokerPermission[]>(["read"]);
+  const [realOk, setRealOk] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const complete = useServer || provider.credentialFields.every((f) => (values[f.key] ?? "").trim());
+  const complete = (useServer || provider.credentialFields.every((f) => (values[f.key] ?? "").trim())) && (environment !== "real" || realOk);
 
   const save = async () => {
     setSaving(true);
@@ -550,6 +551,15 @@ function ConnectModal({
               {f.help && <span className="mt-1 block text-xs text-slate-500">{f.help}</span>}
             </label>
           ))}
+
+        {environment === "real" && (
+          <label className="flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-orange-900">
+            <input type="checkbox" className="mt-1" checked={realOk} onChange={(e) => setRealOk(e.target.checked)} />
+            <span>
+              <b>Es mi cuenta con dinero real.</b> Empiezo solo con permiso de lectura y mi clave no tiene los retiros habilitados.
+            </span>
+          </label>
+        )}
 
         <div>
           <div className="mb-1.5 text-xs font-medium text-slate-600">Qué permites a CRS</div>

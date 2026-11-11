@@ -186,7 +186,7 @@ export async function executeProtectedBuy(
 function snapshotFor(ticker: string, positions: BrokerPosition[], orders: BrokerOrder[]): BrokerSnapshot {
   const p = positions.find((x) => x.providerSymbol === ticker);
   return {
-    position: p && p.quantity > 0 ? { quantity: p.quantity, available: p.quantityAvailable, price: p.currentPrice ?? p.averagePrice } : null,
+    position: p && p.quantity > 0 ? { quantity: p.quantity, available: p.quantityAvailable, price: p.currentPrice ?? p.averagePrice ?? 0 } : null,
     orders: orders.filter((o) => o.providerSymbol === ticker).map((o) => ({ id: o.orderId, side: o.side === "sell" ? "SELL" : "BUY", type: o.type })),
   };
 }

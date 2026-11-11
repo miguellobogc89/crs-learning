@@ -11,7 +11,7 @@ policy.ts     propiedad de la conexión, permisos, entorno y capacidades (puro, 
 gateway.ts    carga la conexión, aplica la política, descifra credenciales, llama al adaptador
               y registra cada orden con clave de idempotencia (broker_orders)
 providers.ts  qué adaptadores hay registrados y cuáles se anuncian como «próximamente»
-adapters/<id>/  un adaptador por proveedor (hoy: trading212)
+adapters/<id>/  un adaptador por proveedor (hoy: trading212 y binance)
 ```
 
 ## Añadir un bróker

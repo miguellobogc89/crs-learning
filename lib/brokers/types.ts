@@ -97,7 +97,8 @@ export type BrokerPosition = {
   quantity: number;
   /** Cantidad libre para vender (no reservada por otras órdenes). */
   quantityAvailable: number | null;
-  averagePrice: number;
+  /** Precio medio de compra. null si el proveedor no lo da (p. ej. saldos al contado de un exchange). */
+  averagePrice: number | null;
   currentPrice: number | null;
   currency: string | null;
 };
