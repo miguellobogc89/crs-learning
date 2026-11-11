@@ -89,3 +89,16 @@ export function roundQty(q: number, step = 1) {
   const decimals = Math.min(10, Math.max(0, Math.round(-Math.log10(step))));
   return Number(q.toFixed(decimals));
 }
+
+/**
+ * Lo que costarán las compras pendientes al ejecutarse (precio previsto + deslizamiento + comisión).
+ * Ese dinero sigue en caja hasta la ejecución, pero no se puede volver a gastar.
+ */
+export function reservedFor(pending: { direction: string; quantity: number; planned_entry: number }[], cost: CostModel) {
+  return pending
+    .filter((p) => p.direction === "long")
+    .reduce((s, p) => {
+      const price = slipped(p.planned_entry, "buy", cost);
+      return s + p.quantity * price + commission(p.quantity * price, cost);
+    }, 0);
+}

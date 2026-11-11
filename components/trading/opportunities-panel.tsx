@@ -282,7 +282,7 @@ export function OpportunitiesPanel() {
                     {expanded && (
                       <tr className="border-b border-slate-100/80 bg-slate-50/70">
                         <td colSpan={cols} className="px-6 pb-5 pt-1">
-                          <Details b={b} lead={lead} onMoreInfo={() => setInfo({ idea: ideaOf(b), executable: false })} />
+                          <Details b={b} lead={lead} cash={data.account.cash} reserved={data.account.reserved} onMoreInfo={() => setInfo({ idea: ideaOf(b), executable: false })} />
                         </td>
                       </tr>
                     )}
@@ -346,7 +346,7 @@ function SortHeader({
 }
 
 /** Lo que se ve al desplegar una fila: el porqué, qué te juegas y qué dice cada agente. */
-function Details({ b, lead, onMoreInfo }: { b: Buy; lead: Buy["agents"][number]; onMoreInfo: () => void }) {
+function Details({ b, lead, cash, reserved, onMoreInfo }: { b: Buy; lead: Buy["agents"][number]; cash: number; reserved: number; onMoreInfo: () => void }) {
   const q = b.quantity ?? 0;
   const loss = b.stop !== null && q ? (b.price - b.stop) * q : null;
   const gain = b.target !== null && q ? (b.target - b.price) * q : null;
@@ -385,6 +385,13 @@ function Details({ b, lead, onMoreInfo }: { b: Buy; lead: Buy["agents"][number];
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Con tu cartera</div>
           {b.status === "ok" && q ? (
             <ul className="mt-2 space-y-1 tabular-nums">
+              <li className="flex justify-between gap-3">
+                <span className="text-slate-500">Efectivo libre</span>
+                <span className="text-slate-700">
+                  {eur0(cash)}
+                  {reserved > 0.5 && <span className="block text-right text-xs text-slate-400">{eur0(reserved)} reservados</span>}
+                </span>
+              </li>
               <li className="flex justify-between gap-3">
                 <span className="text-slate-500">Compras</span>
                 <b className="font-semibold text-slate-900">

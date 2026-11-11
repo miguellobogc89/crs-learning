@@ -158,7 +158,7 @@ export function HomePanel() {
                 </div>
                 <div className="mt-2 text-sm text-slate-500">
                   {account.copies.length > 0 && `${account.copies.map((c) => `${c.weightPct} % ${c.name}`).join(" · ")} · `}
-                  {eur0(s.cash)} en efectivo · {open === 1 ? "1 posición abierta" : `${open} posiciones abiertas`}
+                  {eur0(s.available)} libres{s.reserved > 0.5 ? ` (+${eur0(s.reserved)} reservados para órdenes pendientes)` : ""} · {open === 1 ? "1 posición abierta" : `${open} posiciones abiertas`}
                   {pending > 0 && ` · ${pending === 1 ? "1 orden pendiente" : `${pending} órdenes pendientes`}`}
                 </div>
               </div>

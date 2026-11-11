@@ -76,6 +76,8 @@ export async function getPortfolio(workspaceId: string) {
       initialCapital: totalInitial,
       returnPct: totalInitial > 0 ? ((totalEquity - totalInitial) / totalInitial) * 100 : 0,
       cash: main.summary.cash + copies.reduce((s, c) => s + c.summary.cash, 0),
+      reserved: main.summary.reserved + copies.reduce((s, c) => s + c.summary.reserved, 0),
+      available: main.summary.available + copies.reduce((s, c) => s + c.summary.available, 0),
       invested: main.summary.invested + copies.reduce((s, c) => s + c.summary.invested, 0),
       closed: main.summary.stats.closed + copies.reduce((s, c) => s + c.summary.stats.closed, 0),
     },

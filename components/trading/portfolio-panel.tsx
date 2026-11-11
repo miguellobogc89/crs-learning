@@ -118,7 +118,7 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
       <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {[
           ["Patrimonio", eur0(s.equity), pct(s.returnPct), tone(s.returnPct)],
-          ["Invertido", eur0(s.invested), `${num(s.equity ? (s.invested / s.equity) * 100 : 0, 0)} % de la cartera`, "text-slate-500"],
+          ["Invertido", eur0(s.invested), `${num(s.equity ? (s.invested / s.equity) * 100 : 0, 0)} % · ${eur0(s.available)} libres${s.reserved > 0.5 ? ` · ${eur0(s.reserved)} reservados` : ""}`, "text-slate-500"],
           ["Resultado cerrado", eur0(s.realized), `${s.stats.closed} operaciones`, tone(s.realized)],
           ["Latente", eur0(s.unrealized), `${active.filter((p) => p.status === "abierta").length} abiertas`, tone(s.unrealized)],
           ["Acierto", s.stats.closed ? `${num(s.stats.winRate * 100, 0)} %` : "—", `R medio ${num(s.stats.avgR, 2)}`, tone(s.stats.avgR)],

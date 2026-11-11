@@ -56,7 +56,8 @@ function accountView(state: Awaited<ReturnType<typeof accountState>>): AccountVi
   for (const p of state.positions) if ((OPEN_STATUSES as readonly string[]).includes(p.status)) holdings[p.symbol] = p.direction;
   return {
     equity: state.summary.equity,
-    cash: state.summary.cash,
+    // Para calcular tamaños cuenta el efectivo libre (sin lo reservado por órdenes pendientes).
+    cash: state.summary.available,
     riskPct: state.account.risk_per_trade_pct,
     maxPositionPct: state.account.max_position_pct,
     allowShort: state.account.allow_short,
@@ -397,7 +398,7 @@ export async function getStatus(workspaceId: string) {
     instruments: info._count._all,
     instrumentsWithData: withData,
     equity: portfolio.total.equity,
-    cash: portfolio.total.cash,
+    cash: portfolio.total.available,
     returnPct: portfolio.total.returnPct,
     openPositions: all.filter((p) => p.status === "abierta").length,
     pendingOrders: all.filter((p) => p.status === "pendiente").length,

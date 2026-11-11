@@ -163,7 +163,7 @@ export function TradingNavigation() {
             </div>
             {status && (
               <div className="text-xs text-slate-500">
-                {eur0(status.cash)} en efectivo · {status.openPositions} abiertas
+                {eur0(status.cash)} libres · {status.openPositions} abiertas
                 {status.pendingOrders ? ` · ${status.pendingOrders} pendientes` : ""}
               </div>
             )}

@@ -130,3 +130,12 @@ test("recomendaciones: una figura con historial negativo amplio queda vetada", (
   const r2 = recommendForInstrument({ symbol: "TST.MC", name: "Test", candles: c, ind, detections }, few, "alcista", account).find((x) => x.pattern === "double_bottom");
   assert.equal(r2.vetoed, false);
 });
+
+test("efectivo reservado: las compras pendientes comprometen su dinero (precio, deslizamiento y comisión)", () => {
+  const { reservedFor } = load("lib/trading/risk.ts");
+  const cost = { commissionPct: 0.1, commissionMin: 3, slippageBps: 10 };
+  const r = reservedFor([{ direction: "long", quantity: 100, planned_entry: 10 }, { direction: "short", quantity: 50, planned_entry: 20 }], cost);
+  // 100 × 10,01 = 1001 € + comisión mínima 3 €; las cortas no consumen efectivo.
+  assert.ok(Math.abs(r - 1004) < 1e-9, String(r));
+  assert.equal(reservedFor([], cost), 0);
+});

@@ -123,7 +123,8 @@ export async function getOpportunities(workspaceId: string) {
       status === "ok" && lead.stop !== null
         ? positionSize({
             equity: state.summary.equity,
-            cash: a.cash,
+            // Efectivo libre: lo reservado para órdenes pendientes no cuenta.
+            cash: state.summary.available,
             riskPct: a.risk_per_trade_pct,
             maxPositionPct: a.max_position_pct,
             entry: price,
@@ -150,7 +151,7 @@ export async function getOpportunities(workspaceId: string) {
   return {
     buys,
     sells,
-    account: { equity: state.summary.equity, cash: a.cash, riskPct: a.risk_per_trade_pct, opened: state.summary.opened },
+    account: { equity: state.summary.equity, cash: state.summary.available, reserved: state.summary.reserved, riskPct: a.risk_per_trade_pct, opened: state.summary.opened },
     lastRuns: runs.map((r, k) => ({ agent: AGENTS[k].key, name: AGENTS[k].name, at: r?.created_at.toISOString() ?? null })),
   };
 }

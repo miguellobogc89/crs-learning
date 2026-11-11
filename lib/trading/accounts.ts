@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { PATTERN_LIBRARY } from "./library";
 import { cashDelta, fillAtOpen, marketValue, realizedPnl, stepPosition } from "./paper";
 import { isCryptoMarket, lotStepOf } from "./market-data";
-import { closeSide, commission, openSide, roundQty, slipped, type CostModel } from "./risk";
+import { closeSide, commission, openSide, reservedFor, roundQty, slipped, type CostModel } from "./risk";
 import { dayDate, dayKey, loadSeries } from "./sync";
 import { canFillLive, preferLive } from "./live-logic";
 import type { Candle, Direction, PatternKey } from "./types";
@@ -113,6 +113,10 @@ export type AccountSummary = {
   name: string;
   initialCapital: number;
   cash: number;
+  /** Efectivo comprometido por las órdenes de compra pendientes (se pagará al ejecutarlas). */
+  reserved: number;
+  /** Efectivo libre para nuevas órdenes: el efectivo menos lo reservado. */
+  available: number;
   equity: number;
   invested: number;
   realized: number;
@@ -200,11 +204,17 @@ export async function accountState(workspaceId: string, agent = "") {
   const gw = wins.reduce((s, p) => s + p.pnl!, 0);
   const gl = -closed.filter((p) => p.pnl! < 0).reduce((s, p) => s + p.pnl!, 0);
   const rs = closed.map((p) => p.rMultiple ?? 0);
+  const reserved = reservedFor(
+    positions.filter((p) => p.status === "pendiente"),
+    costOf(account),
+  );
   const summary: AccountSummary = {
     id: account.id,
     name: account.name,
     initialCapital: account.initial_capital,
     cash: account.cash,
+    reserved,
+    available: Math.max(0, account.cash - reserved),
     equity,
     invested,
     realized: closed.reduce((s, p) => s + p.pnl!, 0),
@@ -403,8 +413,16 @@ export async function placeOrder(workspaceId: string, userId: string | null, ord
   if (openCount >= a.max_open_positions)
     throw new Error(`Ya tienes ${openCount} posiciones abiertas o pendientes (máximo ${a.max_open_positions})`);
   const notional = o.quantity * ref;
-  if (notional + commission(notional, cost) > a.cash + 1e-6)
-    throw new Error("No hay efectivo suficiente en la cartera virtual para esa cantidad");
+  // Las compras pendientes ya tienen su dinero comprometido: no se puede gastar dos veces.
+  const pending = await prisma.trading_positions.findMany({ where: { account_id: a.id, status: "pendiente" }, select: { direction: true, quantity: true, planned_entry: true } });
+  const reserved = reservedFor(pending, cost);
+  const needed = long ? slipped(ref, "buy", cost) * o.quantity + commission(notional, cost) : notional + commission(notional, cost);
+  if (needed > a.cash - reserved + 1e-6)
+    throw new Error(
+      reserved > 0
+        ? `No hay efectivo libre suficiente: tienes ${a.cash.toFixed(0)} € en caja, de los que ${reserved.toFixed(0)} € están reservados para órdenes pendientes`
+        : "No hay efectivo suficiente en la cartera virtual para esa cantidad",
+    );
   if (o.signalKey) {
     const dup = await prisma.trading_positions.findFirst({ where: { account_id: a.id, signal_key: o.signalKey, status: { not: "cancelada" } } });
     if (dup) throw new Error("Ya abriste una posición con esta señal");
