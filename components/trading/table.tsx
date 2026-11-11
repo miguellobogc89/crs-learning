@@ -10,9 +10,10 @@ export const TD = "px-2 py-3";
 export const PAGE_SIZES = [10, 15, 25, 50];
 
 /** Tarjeta a todo el alto disponible: el contenido desplaza por dentro y el pie queda abajo. */
-export function TablePanel({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
+export function TablePanel({ children, footer, header }: { children: ReactNode; footer?: ReactNode; header?: ReactNode }) {
   return (
     <section className={`${panel} flex ${FULL_H} min-h-[320px] flex-col`}>
+      {header && <div className="shrink-0 border-b border-slate-100 px-4 py-3">{header}</div>}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
       {footer}
     </section>
@@ -81,4 +82,37 @@ export function Money({ v, digits, sign = false, className = "" }: { v: number |
       <span className="text-[0.8em] opacity-80">{tail}</span>
     </span>
   );
+}
+
+/** Pestañas segmentadas (como «Vivas / Historial»). */
+export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: { key: T; label: string }[]; onChange: (v: T) => void }) {
+  return (
+    <div className="inline-flex rounded-xl bg-slate-100 p-1 text-sm">
+      {options.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          onClick={() => onChange(o.key)}
+          className={`rounded-lg px-3 py-1.5 font-medium ${value === o.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** «hace 2 horas», «hace 1 día», «hace una semana»… */
+export function sinceText(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const min = Math.max(0, (Date.now() - new Date(iso).getTime()) / 60_000);
+  const n = (v: number, one: string, many: string) => `hace ${v === 1 ? (one === "semana" ? "una" : "1") : v} ${v === 1 ? one : many}`;
+  if (min < 60) return n(Math.max(1, Math.round(min)), "minuto", "minutos");
+  const h = min / 60;
+  if (h < 24) return n(Math.round(h), "hora", "horas");
+  const d = h / 24;
+  if (d < 7) return n(Math.floor(d), "día", "días");
+  if (d < 30) return n(Math.floor(d / 7), "semana", "semanas");
+  if (d < 365) return n(Math.floor(d / 30), "mes", "meses");
+  return n(Math.floor(d / 365), "año", "años");
 }

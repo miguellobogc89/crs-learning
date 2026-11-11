@@ -10,7 +10,6 @@ import { PortfolioPanel, RulesPanel, UniversePanel } from "./portfolio-panel";
 import { AgentsPanel } from "./agents-panel";
 import { NewsPanel } from "./news-panel";
 import { FaroPanel } from "./faro-panel";
-import { ActivityPanel } from "./activity-panel";
 import { HomePanel } from "./home-panel";
 import { IntegrationsPanel } from "./integrations-panel";
 import type { TradingTab } from "./tabs";
@@ -69,7 +68,6 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
       );
     else if (data && tab === "mercado") body = <MarketPanel data={data} symbol={symbol} onSymbol={pickSymbol} />;
   } else if (tab === "inicio") body = <HomePanel />;
-  else if (tab === "actividad") body = <ActivityPanel />;
   else if (tab === "oportunidades") body = <FaroPanel />;
   else if (tab === "noticias") body = <NewsPanel />;
   else if (tab === "cartera") body = <PortfolioPanel onOpenChart={openChart} />;

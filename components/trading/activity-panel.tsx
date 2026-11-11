@@ -1,7 +1,7 @@
 "use client";
 // Actividad: lo último que han hecho los agentes (compras, ventas, stops, objetivos), en una tabla
 // con el estilo de Oportunidades. Al desplegar una fila se ve el porqué.
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import { Bot, ChevronDown } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
 import { api, eur, errorText, MEETINGS_TEXT } from "./format";
@@ -33,7 +33,7 @@ function MoveSummary({ move }: { move: Move }) {
   return <>Cierre por tiempo en {asset}</>;
 }
 
-export function ActivityPanel() {
+export function ActivityPanel({ header }: { header?: ReactNode } = {}) {
   const [data, setData] = useState<Agents | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export function ActivityPanel() {
   const rows = pageOf<Move>(moves, page, perPage);
 
   return (
-    <TablePanel footer={<Pager total={moves.length} page={page} perPage={perPage} onPage={setPage} onPerPage={setPerPage} label="movimientos" />}>
+    <TablePanel header={header} footer={<Pager total={moves.length} page={page} perPage={perPage} onPage={setPage} onPerPage={setPerPage} label="movimientos" />}>
       {moves.length === 0 ? (
         <p className="px-6 py-8 text-center text-sm text-slate-500">Los agentes aún no han operado. {MEETINGS_TEXT}</p>
       ) : (

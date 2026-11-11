@@ -71,6 +71,7 @@ export async function getPortfolio(workspaceId: string) {
   const totalInitial = main.summary.initialCapital + copies.reduce((s, c) => s + c.summary.initialCapital, 0);
   return {
     opened: main.summary.opened,
+    openedAt: main.account.opened_at?.toISOString() ?? null,
     total: {
       equity: totalEquity,
       initialCapital: totalInitial,
