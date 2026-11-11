@@ -1,21 +1,22 @@
 // lib/trading/mirror/service.ts
 // Copia de agentes en tu bróker. Cada pocos minutos (cron) compara las posiciones abiertas del agente con
 // tus tramos y compra o vende lo que falte. Dos modos:
-// - ensayo: calcula la orden exacta (par, cantidad ajustada a Binance, precio del momento) y la apunta sin enviarla;
-// - real: la envía a tu Binance por la pasarela de brókeres (permiso «automatismos», entorno real y
+// - ensayo: calcula la orden exacta (par, cantidad ajustada al exchange, precio del momento) y la apunta sin enviarla;
+// - real: la envía a tu exchange de cripto (Bitvavo, Binance…) por la pasarela de brókeres (permiso «automatismos», entorno real y
 //   BROKERS_REAL_ENABLED=true; cada orden con clave de idempotencia: nunca se envía dos veces).
 // Nunca toca retiros ni transferencias: solo compra y venta a mercado de pares en euros.
 import "server-only";
 import type { trading_mirror_legs, trading_mirrors } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import * as brokers from "@/lib/brokers/gateway";
+import { brokerRegistry } from "@/lib/brokers/providers";
 import { normalizePermissions, parsePermissions, realEnabledFromEnv } from "@/lib/brokers/policy";
 import { BrokerError } from "@/lib/brokers/types";
 import { accountState } from "../accounts";
 import { AGENTS_WORKSPACE, agentByKey } from "../agents/roster";
 import { kamikazeByKey } from "../kamikaze/roster";
-import { eurPairs, priceEur } from "../kamikaze/market";
-import { legResult, planMirror, stepQuantity } from "./logic";
+import { referencePrice } from "../kamikaze/market";
+import { legResult, MIN_ORDER_EUR, planMirror, stepQuantity } from "./logic";
 
 const MODES = ["ensayo", "real"] as const;
 export type MirrorMode = (typeof MODES)[number];
@@ -25,27 +26,28 @@ const STALE_MS = 10 * 60_000;
 const MAX_SELL_ATTEMPTS = 5;
 
 const agentName = (key: string) => agentByKey(key)?.name ?? kamikazeByKey(key)?.name ?? null;
-const pairOf = (symbol: string) => `${symbol.replace(/-EUR$/, "")}EUR`;
 
-/** Binance real conectada a la cartera, con permiso para automatismos. */
+/** Exchange de cripto conectado a la cartera (Binance, Bitvavo…) y si puede operar en real sin preguntar. */
 async function realConnection(workspaceId: string) {
   const conn = await brokers.tradingConnection(workspaceId, "copia de agentes");
   const row = conn ? await prisma.broker_connections.findUnique({ where: { id: conn.connectionId } }) : null;
+  const crypto = !!row && brokerRegistry.has(row.provider) && brokerRegistry.get(row.provider).info.markets.includes("crypto");
   const auto = !!row && normalizePermissions(parsePermissions(row.permissions)).includes("auto");
   return {
     conn,
-    provider: row?.provider ?? null,
+    crypto,
+    name: conn?.providerName ?? "el exchange",
     environment: conn?.environment ?? null,
     auto,
     realEnabled: realEnabledFromEnv(),
-    ready: !!conn && row?.provider === "binance" && conn.environment === "real" && auto && realEnabledFromEnv(),
+    ready: !!conn && crypto && conn.environment === "real" && auto && realEnabledFromEnv(),
   };
 }
 
 function realProblem(r: Awaited<ReturnType<typeof realConnection>>) {
-  if (!r.conn || r.provider !== "binance") return "Conecta Binance en Trading → Integraciones y úsala para la cartera";
-  if (r.environment !== "real") return "La conexión de Binance es de pruebas (testnet), no real";
-  if (!r.auto) return "Da a la conexión de Binance el permiso de automatismos (operar sin confirmar cada orden)";
+  if (!r.conn || !r.crypto) return "Conecta un exchange de cripto (Bitvavo, Binance…) en Trading → Integraciones y úsalo para la cartera";
+  if (r.environment !== "real") return `La conexión de ${r.name} es de pruebas, no real`;
+  if (!r.auto) return `Da a la conexión de ${r.name} el permiso de automatismos (operar sin confirmar cada orden)`;
   if (!r.realEnabled) return "El dinero real no está habilitado en el servidor (BROKERS_REAL_ENABLED=true)";
   return null;
 }
@@ -118,7 +120,7 @@ export async function setMirror(workspaceId: string, input: { agent?: unknown; b
   return { agent, budget: row.budget, mode: row.mode };
 }
 
-/** Deja de copiar: vende lo que haya abierto (en real, a mercado en tu Binance). */
+/** Deja de copiar: vende lo que haya abierto (en real, a mercado en tu exchange). */
 export async function stopMirror(workspaceId: string, agentInput: unknown) {
   const agent = String(agentInput ?? "");
   const m = await prisma.trading_mirrors.findUnique({ where: { workspace_id_agent: { workspace_id: workspaceId, agent } } });
@@ -139,9 +141,18 @@ export async function stopMirror(workspaceId: string, agentInput: unknown) {
 const note = (id: string, data: Partial<trading_mirror_legs>) =>
   prisma.trading_mirror_legs.update({ where: { id }, data: { ...data, updated_at: new Date() } });
 
-async function rulesFor(pair: string) {
-  const r = (await eurPairs()).get(pair);
-  return r && r.quote === "EUR" && r.trading ? r : null;
+type Venue = { name: string; pair: string; step: number | null } | { name: string; missing: string };
+
+/**
+ * Dónde se operaría el símbolo: en el exchange conectado (si lo hay), con su par y su paso de cantidad.
+ * En ensayo sin exchange conectado se da por bueno si hay precio de referencia.
+ */
+async function venueFor(workspaceId: string, symbol: string): Promise<Venue> {
+  const r = await realConnection(workspaceId);
+  if (!r.conn || !r.crypto) return { name: "tu exchange", pair: symbol, step: null };
+  const res = await brokers.resolveSymbol(r.conn.actor, r.conn.connectionId, { symbol, market: "crypto" });
+  if (res.status === "ok") return { name: r.name, pair: res.instrument.providerSymbol, step: res.instrument.quantityStep };
+  return { name: r.name, missing: res.status === "unsupported" ? res.reason : `${r.name} no tiene ${symbol}: no se puede copiar` };
 }
 
 /** Envía una orden a mercado y devuelve lo ejecutado (cantidad y precio medio). */
@@ -160,30 +171,28 @@ async function realOrder(workspaceId: string, side: "buy" | "sell", symbol: stri
     idempotencyKey: key,
     reference: `copia de agente ${symbol}`,
   });
-  if (res.status === "rejected" || !res.orderId) throw new BrokerError("conflict", res.status === "rejected" ? "Binance rechazó la orden" : "Orden sin confirmar: revisa Binance");
+  if (res.status === "rejected" || !res.orderId) throw new BrokerError("conflict", res.status === "rejected" ? `${r.name} rechazó la orden` : `Orden sin confirmar: revisa ${r.name}`);
   const o = await brokers.getOrder(r.conn.actor, r.conn.connectionId, res.orderId).catch(() => null);
-  return { orderId: res.orderId, filled: o?.filledQuantity ?? null, price: o?.averageFillPrice ?? null, conn: r.conn };
+  return { orderId: res.orderId, filled: o?.filledQuantity ?? null, price: o?.averageFillPrice ?? null, name: r.name };
 }
 
 async function buyLeg(m: trading_mirrors, legId: string, symbol: string, amount: number) {
-  const pair = pairOf(symbol);
-  const rules = await rulesFor(pair);
-  if (!rules) return note(legId, { status: "omitida", pair, note: `Binance no tiene ${pair} (par en euros): no se puede copiar` });
-  const price = await priceEur(pair);
-  if (!price) return note(legId, { status: "omitida", pair, note: "Sin precio de Binance en este momento" });
+  const venue = await venueFor(m.workspace_id, symbol).catch((e) => ({ name: "el exchange", missing: `No se pudo comprobar el par: ${e instanceof Error ? e.message.slice(0, 120) : "error"}` }) as Venue);
+  if ("missing" in venue) return note(legId, { status: "omitida", note: venue.missing });
+  const price = await referencePrice(symbol);
+  if (!price) return note(legId, { status: "omitida", pair: venue.pair, note: "Sin precio de referencia en este momento" });
 
   if (m.mode === "ensayo") {
-    const quantity = stepQuantity(amount, price, Number(rules.stepSize) || null);
-    if (!(quantity >= rules.minQty) || quantity * price < Math.max(rules.minNotional, 5))
-      return note(legId, { status: "omitida", pair, note: `Con ${amount.toFixed(2)} € no llega al mínimo de Binance en ${pair}` });
+    const quantity = stepQuantity(amount, price, venue.step);
+    if (!(quantity > 0) || quantity * price < MIN_ORDER_EUR) return note(legId, { status: "omitida", pair: venue.pair, note: `Con ${amount.toFixed(2)} € no llega al mínimo por orden` });
     return note(legId, {
       status: "abierta",
-      pair,
+      pair: venue.pair,
       quantity,
       entry_price: price,
       amount: quantity * price,
       opened_at: new Date(),
-      note: `Ensayo: se habría comprado ${quantity} ${symbol.replace(/-EUR$/, "")} a mercado (${pair})`,
+      note: `Ensayo: se habría comprado ${quantity} ${symbol.replace(/-EUR$/, "")} a mercado en ${venue.name} (${venue.pair})`,
     });
   }
 
@@ -192,27 +201,27 @@ async function buyLeg(m: trading_mirrors, legId: string, symbol: string, amount:
     if (!r.conn) throw new BrokerError("not_connected", realProblem(r) ?? "Sin conexión");
     const cash = (await brokers.getAccounts(r.conn.actor, r.conn.connectionId))[0]?.cashAvailable ?? 0;
     const spend = Math.min(amount, cash * 0.98);
-    if (spend < 5) return note(legId, { status: "omitida", pair, note: `Sin euros libres en Binance (hay ${cash.toFixed(2)} €)` });
-    const quantity = stepQuantity(spend, price, Number(rules.stepSize) || null);
-    const o = await realOrder(m.workspace_id, "buy", symbol, pair, quantity, `mirror:${legId}:compra`);
+    if (spend < MIN_ORDER_EUR) return note(legId, { status: "omitida", pair: venue.pair, note: `Sin euros libres en ${r.name} (hay ${cash.toFixed(2)} €)` });
+    const quantity = stepQuantity(spend, price, venue.step);
+    const o = await realOrder(m.workspace_id, "buy", symbol, venue.pair, quantity, `mirror:${legId}:compra`);
     const filled = o.filled && o.filled > 0 ? o.filled : quantity;
     const entry = o.price && o.price > 0 ? o.price : price;
     return note(legId, {
       status: "abierta",
-      pair,
+      pair: venue.pair,
       quantity: filled,
       entry_price: entry,
       amount: filled * entry,
       buy_order_id: o.orderId,
       opened_at: new Date(),
-      note: `Comprado en Binance (orden ${o.orderId})`,
+      note: `Comprado en ${o.name} (orden ${o.orderId})`,
     });
   } catch (e) {
     const unknown = e instanceof BrokerError && e.code === "unknown_outcome";
     return note(legId, {
       status: unknown ? "error" : "omitida",
-      pair,
-      note: unknown ? "No se sabe si la compra se hizo: revisa Binance" : `No se pudo comprar: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`,
+      pair: venue.pair,
+      note: unknown ? `No se sabe si la compra se hizo: revisa ${venue.name}` : `No se pudo comprar: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`,
     });
   }
 }
@@ -221,40 +230,35 @@ async function buyLeg(m: trading_mirrors, legId: string, symbol: string, amount:
 async function sellLeg(m: trading_mirrors, l: trading_mirror_legs, reason: string): Promise<string | null> {
   const claimed = await prisma.trading_mirror_legs.updateMany({ where: { id: l.id, status: "abierta" }, data: { status: "vendiendo", updated_at: new Date() } });
   if (claimed.count !== 1) return null;
-  const pair = l.pair ?? pairOf(l.symbol);
+  const pair = l.pair ?? l.symbol;
   const qty = l.quantity ?? 0;
   const entry = l.entry_price ?? 0;
   try {
     if (l.mode === "ensayo") {
-      const price = (await priceEur(pair)) ?? entry;
-      await note(l.id, {
-        status: "cerrada",
-        exit_price: price,
-        result: legResult(qty, entry, price),
-        closed_at: new Date(),
-        note: `Ensayo: se habría vendido a mercado (${reason})`,
-      });
+      const price = (await referencePrice(l.symbol)) ?? entry;
+      await note(l.id, { status: "cerrada", exit_price: price, result: legResult(qty, entry, price), closed_at: new Date(), note: `Ensayo: se habría vendido a mercado (${reason})` });
       return null;
     }
     const r = await realConnection(m.workspace_id);
     if (!r.conn) throw new BrokerError("not_connected", realProblem(r) ?? "Sin conexión");
-    const base = (await brokers.getPositions(r.conn.actor, r.conn.connectionId)).find((p) => p.providerSymbol === pair);
-    const available = base ? base.quantityAvailable ?? base.quantity : 0;
-    const rules = await rulesFor(pair);
-    const sellQty = stepQuantity(Math.min(qty, available), 1, rules ? Number(rules.stepSize) || null : null);
-    if (!(sellQty > 0) || (rules && sellQty < rules.minQty)) {
-      await note(l.id, { status: "cerrada", closed_at: new Date(), note: `Ya no estaba en tu Binance (vendida fuera de la app): ${reason}` });
+    const venue = await venueFor(m.workspace_id, l.symbol);
+    const step = "missing" in venue ? null : venue.step;
+    const held = (await brokers.getPositions(r.conn.actor, r.conn.connectionId)).find((p) => p.providerSymbol === pair);
+    const available = held ? held.quantityAvailable ?? held.quantity : 0;
+    const sellQty = stepQuantity(Math.min(qty, available), 1, step);
+    if (!(sellQty > 0)) {
+      await note(l.id, { status: "cerrada", closed_at: new Date(), note: `Ya no estaba en ${r.name} (vendida fuera de la app): ${reason}` });
       return null;
     }
     const o = await realOrder(m.workspace_id, "sell", l.symbol, pair, sellQty, `mirror:${l.id}:venta:${l.sell_attempts}`);
-    const exit = o.price && o.price > 0 ? o.price : ((await priceEur(pair)) ?? entry);
+    const exit = o.price && o.price > 0 ? o.price : ((await referencePrice(l.symbol)) ?? entry);
     await note(l.id, {
       status: "cerrada",
       exit_price: exit,
       result: legResult(o.filled && o.filled > 0 ? o.filled : sellQty, entry, exit),
       sell_order_id: o.orderId,
       closed_at: new Date(),
-      note: `Vendido en Binance (orden ${o.orderId}): ${reason}`,
+      note: `Vendido en ${o.name} (orden ${o.orderId}): ${reason}`,
     });
     return null;
   } catch (e) {
@@ -263,7 +267,7 @@ async function sellLeg(m: trading_mirrors, l: trading_mirror_legs, reason: strin
     await note(l.id, {
       status: attempts >= MAX_SELL_ATTEMPTS ? "error" : "abierta",
       sell_attempts: attempts,
-      note: attempts >= MAX_SELL_ATTEMPTS ? `No se pudo vender tras ${attempts} intentos: véndelo a mano en Binance (${msg})` : `Venta fallida, se reintenta: ${msg}`,
+      note: attempts >= MAX_SELL_ATTEMPTS ? `No se pudo vender tras ${attempts} intentos: véndelo a mano (${msg})` : `Venta fallida, se reintenta: ${msg}`,
     });
     return msg;
   }
@@ -283,7 +287,7 @@ export async function runMirrors() {
       });
       await prisma.trading_mirror_legs.updateMany({
         where: { mirror_id: m.id, status: "abriendo", updated_at: { lt: stale } },
-        data: { status: m.mode === "ensayo" ? "omitida" : "error", note: "Se cortó a medias al comprar: revisa Binance", updated_at: new Date() },
+        data: { status: m.mode === "ensayo" ? "omitida" : "error", note: "Se cortó a medias al comprar: revisa tu exchange", updated_at: new Date() },
       });
 
       const agent = await accountState(AGENTS_WORKSPACE, m.agent);

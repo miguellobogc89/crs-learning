@@ -406,7 +406,7 @@ function AgentDetail({
         <div className="flex flex-wrap gap-2">
           {canCopy && (
             <button type="button" className={a.kamikaze ? primary : ghost} onClick={() => setMirroring(true)}>
-              <Copy className="h-4 w-4" /> Copiar en mi Binance
+              <Copy className="h-4 w-4" /> Copiar con dinero real
             </button>
           )}
           {!a.kamikaze && (

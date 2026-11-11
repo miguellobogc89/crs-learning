@@ -2,6 +2,7 @@
 // Registro de proveedores de CRS. Para añadir un bróker: implementa su adaptador en
 // adapters/<id>/ y regístralo aquí. El gateway, la interfaz y los agentes no cambian.
 import { createBinanceAdapter } from "./adapters/binance";
+import { createBitvavoAdapter } from "./adapters/bitvavo";
 import { createTrading212Adapter } from "./adapters/trading212";
 import { createRegistry } from "./registry";
 import type { ProviderInfo } from "./types";
@@ -10,6 +11,7 @@ export const brokerRegistry = createRegistry();
 
 brokerRegistry.register(createTrading212Adapter());
 brokerRegistry.register(createBinanceAdapter());
+brokerRegistry.register(createBitvavoAdapter());
 
 // Anunciados en la interfaz como «próximamente». Sin adaptador: no se pueden conectar.
 const soon = (id: string, name: string, domain: string, markets: ProviderInfo["markets"], description: string): ProviderInfo => ({

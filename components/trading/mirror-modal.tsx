@@ -1,5 +1,5 @@
 "use client";
-// Copiar a un agente en tu Binance: presupuesto, modo (ensayo o dinero real) y las órdenes que se han
+// Copiar a un agente en tu exchange de cripto: presupuesto, modo (ensayo o dinero real) y las órdenes que se han
 // hecho (o se habrían hecho, en ensayo) siguiéndole.
 import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -49,15 +49,15 @@ export function MirrorModal({ agent, name, onClose }: { agent: string; name: str
   const valid = b >= 5 && b <= (view?.maxBudget ?? 100);
 
   const save = async () => {
-    if (mode === "real" && !window.confirm(`Vas a copiar a ${name} con DINERO REAL en tu Binance (hasta ${b} €). Cada vez que entre o salga, se enviará la orden a mercado. ¿Seguro?`)) return;
+    if (mode === "real" && !window.confirm(`Vas a copiar a ${name} con DINERO REAL en tu exchange (hasta ${b} €). Cada vez que entre o salga, se enviará la orden a mercado. ¿Seguro?`)) return;
     setSaving(true);
     setError(null);
     try {
       await api("mirror/set", { agent, budget: b, mode });
       setDone(
         mode === "real"
-          ? `Copiando a ${name} con dinero real (hasta ${b} €). La próxima vez que entre, se comprará en tu Binance.`
-          : `Ensayo en marcha: cada vez que ${name} entre o salga, verás aquí la orden que se habría enviado a tu Binance, sin enviarla.`,
+          ? `Copiando a ${name} con dinero real (hasta ${b} €). La próxima vez que entre, se comprará en tu exchange.`
+          : `Ensayo en marcha: cada vez que ${name} entre o salga, verás aquí la orden que se habría enviado a tu exchange, sin enviarla.`,
       );
       await load();
     } catch (e) {
@@ -67,12 +67,12 @@ export function MirrorModal({ agent, name, onClose }: { agent: string; name: str
     }
   };
   const stop = async () => {
-    if (!window.confirm(m?.mode === "real" ? `¿Dejar de copiar a ${name}? Si tienes una posición abierta, se vende a mercado en tu Binance.` : `¿Parar el ensayo con ${name}?`)) return;
+    if (!window.confirm(m?.mode === "real" ? `¿Dejar de copiar a ${name}? Si tienes una posición abierta, se vende a mercado en tu exchange.` : `¿Parar el ensayo con ${name}?`)) return;
     setSaving(true);
     setError(null);
     try {
       const r = await api<{ sold: number; errors: string[] }>("mirror/stop", { agent });
-      setDone(r.errors.length ? `Parado, pero no se pudo vender: ${r.errors.join("; ")}. Revísalo en Binance.` : `Has dejado de copiar a ${name}.${r.sold ? " Se ha vendido lo que tenías abierto." : ""}`);
+      setDone(r.errors.length ? `Parado, pero no se pudo vender: ${r.errors.join("; ")}. Revísalo en tu exchange.` : `Has dejado de copiar a ${name}.${r.sold ? " Se ha vendido lo que tenías abierto." : ""}`);
       await load();
     } catch (e) {
       setError(errorText(e));
@@ -86,7 +86,7 @@ export function MirrorModal({ agent, name, onClose }: { agent: string; name: str
       open
       onClose={onClose}
       width="max-w-3xl"
-      title={active ? `Copia de ${name} en Binance` : `Copiar a ${name} en tu Binance`}
+      title={active ? `Copia de ${name} con dinero real` : `Copiar a ${name} con dinero real`}
       subtitle={active ? (m!.mode === "real" ? "Dinero real" : "Ensayo: no se envía nada") : undefined}
       footer={
         <>
@@ -134,7 +134,7 @@ export function MirrorModal({ agent, name, onClose }: { agent: string; name: str
                   className={`rounded-xl border px-3 py-2 text-left disabled:opacity-50 ${mode === "real" ? "border-red-500 bg-red-50" : "border-slate-200"}`}
                 >
                   <b className="block text-slate-900">Dinero real</b>
-                  <span className="text-xs text-slate-500">Envía las órdenes a Binance</span>
+                  <span className="text-xs text-slate-500">Envía las órdenes a tu exchange</span>
                 </button>
               </div>
             </div>

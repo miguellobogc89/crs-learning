@@ -91,3 +91,11 @@ export const symbolOf = (pair: string, rules: Map<string, PairRules>) => {
   const r = rules.get(pair);
   return r ? `${r.base}-EUR` : null;
 };
+
+/** Precio de referencia en euros de un símbolo de CRS («SOL-EUR»): su par en euros o, si no, en USDC. */
+export async function referencePrice(symbol: string): Promise<number | null> {
+  const base = symbol.replace(/-EUR$/, "");
+  const rules = await eurPairs();
+  const pair = rules.has(`${base}EUR`) ? `${base}EUR` : rules.has(`${base}USDC`) ? `${base}USDC` : null;
+  return pair ? priceEur(pair) : null;
+}
