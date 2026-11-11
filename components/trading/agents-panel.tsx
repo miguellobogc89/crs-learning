@@ -110,53 +110,6 @@ export function AgentsPanel() {
 
   return (
     <div className="space-y-6">
-      <section className={`${card} px-6 py-5`}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-2xl">
-            <h2 className="flex items-center gap-3 text-lg font-semibold text-slate-900">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                <Bot className="h-5 w-5" />
-              </span>
-              Catálogo de agentes
-            </h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Todos ven <b>la misma información</b> (cotizaciones, figuras, fuerza relativa y noticias) y cada uno decide con <b>su carácter</b>, con{" "}
-              {eur0(data.agents[0]?.summary.initialCapital)} virtuales. {MEETINGS_TEXT}
-            </p>
-          </div>
-          {data.canManage && (
-            <button type="button" className={ghost} disabled={running} onClick={() => void meet(data.agents.map((a) => a.key))}>
-              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Reunir a los agentes ahora
-            </button>
-          )}
-        </div>
-        {run && (
-          <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-100 pt-3 text-sm">
-            {data.agents
-              .filter((a) => run[a.key])
-              .map((a) => {
-                const r = run[a.key];
-                return (
-                  <li key={a.key} className="flex items-center gap-1.5">
-                    {r.state === "ok" ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    ) : r.state === "error" ? (
-                      <XCircle className="h-4 w-4 text-red-600" />
-                    ) : r.state === "reunido" ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                    ) : (
-                      <span className="h-4 w-4 rounded border border-slate-300" />
-                    )}
-                    <b className="font-semibold text-slate-900">{a.name}</b>
-                    <span className={r.state === "error" ? "text-red-700" : "text-slate-500"}>
-                      {r.state === "reunido" ? "reunido…" : r.state === "esperando" ? "en espera" : r.detail}
-                    </span>
-                  </li>
-                );
-              })}
-          </ul>
-        )}
-      </section>
 
       {error && <ErrorNote>{error}</ErrorNote>}
 
@@ -233,7 +186,7 @@ export function AgentsPanel() {
       ) : (
         <DataTable<Agent>
           id="agentes"
-          height="h-[calc(100dvh-15rem)]"
+          height="h-[calc(100dvh-13rem)]"
           rows={list}
           rowKey={(a) => a.key}
           onRowClick={(a) => openDetail(a.key)}
