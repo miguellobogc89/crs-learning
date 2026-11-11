@@ -150,7 +150,7 @@ export function AccountModal({ c, provider, onClose, onChanged }: { c: Connectio
                           <span>
                             <span className="block font-medium text-slate-900">{p.name ?? p.providerSymbol}</span>
                             <span className="block text-xs text-slate-500">
-                              {p.symbol ?? "sin vincular"} · {p.providerSymbol}
+                              {p.symbol ?? "sin par en euros"} · {p.providerSymbol}
                             </span>
                           </span>
                         </span>

@@ -197,26 +197,72 @@ export const parsePrices = (data: unknown) => {
   return new Map((data as Record<string, unknown>[]).filter((p) => typeof p.symbol === "string").map((p) => [p.symbol as string, n(p.price)]));
 };
 
-/** Pares en euros de los activos con saldo (los que se pueden valorar y operar desde CRS). */
+/** Pares en euros de los activos con saldo (los que se pueden operar desde CRS). */
 export const eurPairsOf = (balances: Balance[], rules: Map<string, PairRules>) =>
   balances.map((b) => `${b.asset}${QUOTE}`).filter((p) => rules.has(p));
 
+/**
+ * Cómo valorar en euros cada activo: con su par en euros si lo tiene; si no, pasando por USDT
+ * (XUSDT y EURUSDT) o por BTC (XBTC y BTCEUR). Devuelve los pares de precio que hacen falta.
+ */
+export type Route = { kind: "eur"; pair: string } | { kind: "via"; pair: string; bridge: string; invertBridge: boolean } | { kind: "usdt" };
+export function valuationRoutes(balances: Balance[], rules: Map<string, PairRules>) {
+  const routes = new Map<string, Route>();
+  const usdtBridge = rules.has(`EURUSDT`) ? { bridge: "EURUSDT", invert: true } : rules.has("USDTEUR") ? { bridge: "USDTEUR", invert: false } : null;
+  for (const { asset } of balances) {
+    if (asset === QUOTE) continue;
+    if (rules.has(`${asset}${QUOTE}`)) routes.set(asset, { kind: "eur", pair: `${asset}${QUOTE}` });
+    else if (asset === "USDT" && usdtBridge) routes.set(asset, { kind: "usdt" });
+    else if (rules.has(`${asset}USDT`) && usdtBridge) routes.set(asset, { kind: "via", pair: `${asset}USDT`, bridge: usdtBridge.bridge, invertBridge: usdtBridge.invert });
+    else if (rules.has(`${asset}BTC`) && rules.has("BTCEUR")) routes.set(asset, { kind: "via", pair: `${asset}BTC`, bridge: "BTCEUR", invertBridge: false });
+  }
+  const pairs = new Set<string>();
+  for (const r of routes.values()) {
+    if (r.kind === "eur") pairs.add(r.pair);
+    else if (r.kind === "via") {
+      pairs.add(r.pair);
+      pairs.add(r.bridge);
+    } else if (usdtBridge) pairs.add(usdtBridge.bridge);
+  }
+  return { routes, pairs: [...pairs], usdtBridge };
+}
+
+/** Precio en euros de un activo según su ruta (null si no se puede valorar). */
+export function eurPrice(asset: string, v: ReturnType<typeof valuationRoutes>, prices: Map<string, number>): number | null {
+  const r = v.routes.get(asset);
+  if (!r) return null;
+  const px = (p: string) => {
+    const x = prices.get(p);
+    return x !== undefined && x > 0 ? x : null;
+  };
+  if (r.kind === "eur") return px(r.pair);
+  const bridge = (name: string, invert: boolean) => {
+    const b = px(name);
+    return b === null ? null : invert ? 1 / b : b;
+  };
+  if (r.kind === "usdt") return v.usdtBridge ? bridge(v.usdtBridge.bridge, v.usdtBridge.invert) : null;
+  const a = px(r.pair);
+  const b = bridge(r.bridge, r.invertBridge);
+  return a === null || b === null ? null : a * b;
+}
+
 export function toPositions(balances: Balance[], rules: Map<string, PairRules>, prices: Map<string, number>): BrokerPosition[] {
+  const v = valuationRoutes(balances, rules);
   return balances
     .filter((b) => b.asset !== QUOTE)
     .map((b) => {
       const pair = `${b.asset}${QUOTE}`;
-      const known = rules.has(pair);
-      const price = known ? prices.get(pair) ?? null : null;
+      // Operable desde CRS solo si tiene par en euros; valorado en euros siempre que haya ruta.
+      const tradable = rules.has(pair);
       return {
-        symbol: known ? `${b.asset}-EUR` : null,
-        providerSymbol: known ? pair : b.asset,
+        symbol: tradable ? `${b.asset}-EUR` : null,
+        providerSymbol: tradable ? pair : b.asset,
         name: b.asset,
         quantity: b.free + b.locked,
         quantityAvailable: b.free,
         // Binance no da el precio medio de compra de un saldo al contado.
         averagePrice: null,
-        currentPrice: price,
+        currentPrice: eurPrice(b.asset, v, prices),
         currency: QUOTE,
       };
     });

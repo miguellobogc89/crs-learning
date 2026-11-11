@@ -30,6 +30,8 @@ const EXCHANGE = {
     },
     { symbol: "ETHEUR", status: "TRADING", baseAsset: "ETH", quoteAsset: "EUR", orderTypes: ["LIMIT", "MARKET"], filters: [{ filterType: "LOT_SIZE", minQty: "0.0001", stepSize: "0.0001" }] },
     { symbol: "BTCUSDT", status: "TRADING", baseAsset: "BTC", quoteAsset: "USDT", orderTypes: ["MARKET"], filters: [] },
+    { symbol: "SLPUSDT", status: "TRADING", baseAsset: "SLP", quoteAsset: "USDT", orderTypes: ["MARKET"], filters: [] },
+    { symbol: "EURUSDT", status: "TRADING", baseAsset: "EUR", quoteAsset: "USDT", orderTypes: ["MARKET"], filters: [] },
   ],
 };
 
@@ -174,4 +176,26 @@ test("binance: errores normalizados", () => {
   assert.equal(mapBinanceError(418, null, "", false).code, "rate_limited");
   assert.equal(mapBinanceError(502, null, "", false).code, "provider_unavailable");
   assert.equal(mapBinanceError(502, null, "", true).code, "unknown_outcome");
+});
+
+test("binance: valora en euros lo que no tiene par en euros (vía USDT), aunque no se pueda operar desde CRS", async () => {
+  const account = { canTrade: true, balances: [{ asset: "EUR", free: "0.0015", locked: "0" }, { asset: "USDT", free: "0.028769", locked: "0" }, { asset: "SLP", free: "57803.14", locked: "0" }] };
+  const { adapter, calls } = adapterWith({
+    "GET /api/v3/account": account,
+    "GET /api/v3/ticker/price": [
+      { symbol: "SLPUSDT", price: "0.000483" },
+      { symbol: "EURUSDT", price: "1.165" },
+    ],
+  });
+  const pos = await adapter.getPositions(session());
+  const slp = pos.find((p) => p.name === "SLP");
+  assert.equal(slp.symbol, null, "SLP no tiene par en euros: no se opera desde CRS");
+  assert.ok(Math.abs(slp.currentPrice - 0.000483 / 1.165) < 1e-12);
+  const usdt = pos.find((p) => p.name === "USDT");
+  assert.ok(Math.abs(usdt.currentPrice - 1 / 1.165) < 1e-12);
+  const [acc] = await adapter.getAccounts(session());
+  assert.ok(Math.abs(acc.totalValue - (0.0015 + 57803.14 * (0.000483 / 1.165) + 0.028769 / 1.165)) < 1e-9, String(acc.totalValue));
+  assert.ok(acc.totalValue > 23 && acc.totalValue < 25, "≈ 24 € como en Binance");
+  const asked = JSON.parse(calls.find((c) => c.path === "/api/v3/ticker/price").params.symbols).sort();
+  assert.deepEqual(asked, ["EURUSDT", "SLPUSDT"]);
 });

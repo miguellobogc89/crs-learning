@@ -18,6 +18,7 @@ import {
   toAccount,
   toInstrument,
   toPositions,
+  valuationRoutes,
   type PairRules,
 } from "./mapping";
 
@@ -65,7 +66,7 @@ export function createBinanceAdapter(deps: ApiDeps = defaultDeps()): BrokerAdapt
   async function snapshot(s: BrokerSession) {
     const [account, r] = await Promise.all([api.read(s, "/api/v3/account", { omitZeroBalances: true }, 3_000), rules(s)]);
     const { accountId, balances } = parseBalances(account);
-    const p = await prices(s, eurPairsOf(balances, r));
+    const p = await prices(s, valuationRoutes(balances, r).pairs);
     const positions = toPositions(balances, r, p);
     return { account: toAccount(accountId, s.environment, balances, positions), positions, balances, rules: r };
   }
