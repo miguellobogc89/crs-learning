@@ -12,7 +12,7 @@ export const TRADING_SECTIONS: { title: string | null; items: TabDef[] }[] = [
     title: null,
     items: [
       { key: "inicio", label: "Inicio", icon: Home, description: "Tu cartera, cómo vas frente a los agentes y lo último que han hecho." },
-      { key: "oportunidades", label: "Oportunidades", icon: Flame, description: "Lo que han comprado los agentes, con la cantidad calculada para tu cartera. Tú decides qué ejecutar." },
+      { key: "oportunidades", label: "Oportunidades", icon: Flame, description: "Ideas de compra en cripto al momento, qué habría pasado siguiéndolas y quién entró. Tú decides qué ejecutar." },
       { key: "agentes", label: "Agentes", icon: Bot, description: "Tres gestores de IA con su propia cartera que deciden y operan solos." },
       { key: "cartera", label: "Mi cartera", icon: Wallet, description: "Tu dinero virtual: posiciones abiertas, órdenes pendientes, resultados y evolución." },
     ],

@@ -1,10 +1,11 @@
 "use client";
-// Tablón de ideas al momento (cripto): lo que publica el analista común cada ~30 min, quién entró en
-// cada idea y, una vez resuelta, qué habría pasado siguiéndola al pie de la letra.
-import { Fragment, useCallback, useEffect, useState } from "react";
-import { ChevronDown, Play, Radar } from "lucide-react";
+// Oportunidades: una sola tabla con las ideas cripto del analista común (vivas primero), qué habría
+// pasado siguiéndolas al pie de la letra y quién entró en cada una. Paginada.
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, Play } from "lucide-react";
 import type { faroView } from "@/lib/trading/faro/engine";
 import { api, errorText, eur, ghost, panel, pct, th } from "./format";
+import { OpenAccount } from "./open-account";
 import { ago } from "./home-panel";
 import { AgentAvatar, ErrorNote, LoadingCard, Pill, Rich } from "./ui";
 import { useTradingRefresh } from "./navigation";
@@ -31,11 +32,13 @@ const left = (iso: string) => {
   const h = (new Date(iso).getTime() - Date.now()) / 3_600_000;
   return h <= 0 ? "caducada" : h < 1 ? `${Math.max(1, Math.round(h * 60))} min` : `${Math.round(h)} h`;
 };
+const signed = (v: number | null) => (v === null ? "—" : `${v > 0 ? "+" : ""}${eur(v, 2)}`);
+const PAGE = 15;
 
 export function FaroPanel() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"vivas" | "historial">("vivas");
+  const [page, setPage] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<TradeIdea | null>(null);
 
@@ -52,8 +55,11 @@ export function FaroPanel() {
   }, [load]);
   useTradingRefresh(load);
 
+  const all = useMemo(() => (data ? [...data.live, ...data.past] : []), [data]);
   if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard />;
-  const rows = view === "vivas" ? data.live : data.past;
+  const pages = Math.max(1, Math.ceil(all.length / PAGE));
+  const current = Math.min(page, pages - 1);
+  const rows = all.slice(current * PAGE, current * PAGE + PAGE);
 
   const execute = (i: Idea) => {
     const a = data.account;
@@ -83,51 +89,12 @@ export function FaroPanel() {
   };
 
   return (
+    <div className="space-y-4">
+      {error && <ErrorNote>{error}</ErrorNote>}
+      {!data.account.opened && <OpenAccount compact />}
     <section className={panel}>
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-4">
-        <div className="min-w-0">
-          <h2 className="flex items-center gap-3 text-base font-semibold text-slate-900">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <Radar className="h-4 w-4" />
-            </span>
-            Ideas al momento · cripto
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Se renuevan cada {data.everyMinutes} min{data.lastRun ? ` · último análisis ${ago(data.lastRun.at)}` : " · aún sin análisis"}
-          </p>
-        </div>
-        <div className="flex rounded-xl bg-slate-100 p-1 text-sm">
-          {(["vivas", "historial"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={`rounded-lg px-3 py-1.5 font-medium ${view === v ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
-            >
-              {v === "vivas" ? `Vivas (${data.live.length})` : "Historial"}
-            </button>
-          ))}
-        </div>
-      </header>
-
-      {view === "vivas" && data.lastRun?.marketView && (
-        <div className="border-b border-slate-100 bg-slate-50/60 px-6 py-3 text-sm text-slate-700">
-          <Rich text={data.lastRun.marketView} />
-        </div>
-      )}
-      {view === "historial" && data.stats.length > 0 && (
-        <div className="flex flex-wrap gap-2 border-b border-slate-100 px-6 py-3 text-xs text-slate-600">
-          {data.stats.map((s) => (
-            <span key={s.kind} className="rounded-lg bg-slate-50 px-2.5 py-1.5">
-              <b className="font-semibold text-slate-800">{KIND[s.kind]?.label ?? s.kind}</b>: {s.n} ideas · {Math.round((s.hits / s.n) * 100)} % aciertos ·{" "}
-              <span className={tone(s.avgPct)}>{s.avgPct === null ? "—" : `${pct(s.avgPct, 1)} de media`}</span>
-            </span>
-          ))}
-        </div>
-      )}
-
       {rows.length === 0 ? (
-        <p className="px-6 py-8 text-center text-sm text-slate-500">{view === "vivas" ? "Ahora mismo no hay ideas vivas." : "Todavía no hay ideas resueltas."}</p>
+        <p className="px-6 py-8 text-center text-sm text-slate-500">Todavía no hay ideas. La primera tanda llega en el próximo análisis (cada {data.everyMinutes} min).</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] text-sm">
@@ -139,8 +106,9 @@ export function FaroPanel() {
                 <th className={`${th} text-right`}>Detectada a</th>
                 <th className={`${th} text-right`}>Invalidación</th>
                 <th className={`${th} text-right`}>Objetivo</th>
-                <th className={`${th} text-right`}>{view === "vivas" ? "Ahora" : "Resultado"}</th>
-                <th className={`${th} text-right`}>Por cada 100 €</th>
+                <th className={`${th} text-right`}>Precio ahora / salida</th>
+                <th className={`${th} text-right`}>Resultado por 100 €</th>
+                <th className={th}>Estado</th>
                 <th className={`${th} text-center`}>Participantes</th>
                 <th className={th} />
               </tr>
@@ -168,17 +136,13 @@ export function FaroPanel() {
                       <td className="px-3 py-3 text-right tabular-nums text-slate-700">{eur(i.price)}</td>
                       <td className="px-3 py-3 text-right tabular-nums text-rose-600">{eur(i.invalidation)}</td>
                       <td className="px-3 py-3 text-right tabular-nums text-emerald-600">{eur(i.target)}</td>
-                      <td className="px-3 py-3 text-right">
-                        {view === "vivas" ? (
-                          <span className="tabular-nums text-slate-700">
-                            {eur(i.lastPrice)} <span className="text-xs text-slate-400">· quedan {left(i.validUntil)}</span>
-                          </span>
-                        ) : (
+                      <td className="px-3 py-3 text-right tabular-nums text-slate-700">{eur(i.lastPrice)}</td>
+                      <td className={`px-3 py-3 text-right font-semibold tabular-nums ${tone(i.resultPct)}`}>{signed(i.resultPct)}</td>
+                      <td className="px-3 py-3">
+                        <span className="flex items-center gap-1.5 whitespace-nowrap">
                           <Pill color={st.color}>{st.label}</Pill>
-                        )}
-                      </td>
-                      <td className={`px-3 py-3 text-right font-semibold tabular-nums ${tone(i.resultPct)}`}>
-                        {i.resultPct === null ? "—" : `${i.resultPct > 0 ? "+" : ""}${eur(i.resultPct)}`}
+                          {i.status === "viva" && <span className="text-xs text-slate-400">{left(i.validUntil)}</span>}
+                        </span>
                       </td>
                       <td className="px-3 py-3 text-center">
                         <span className={`inline-flex min-w-7 justify-center rounded-lg px-2 py-0.5 text-xs font-semibold tabular-nums ${i.participants.length ? "bg-blue-50 text-blue-700" : "bg-slate-50 text-slate-400"}`}>
@@ -187,7 +151,7 @@ export function FaroPanel() {
                       </td>
                       <td className="px-3 py-3 text-right">
                         <span className="inline-flex items-center gap-2">
-                          {view === "vivas" && (
+                          {i.status === "viva" && (
                             <button
                               type="button"
                               className={ghost}
@@ -207,7 +171,7 @@ export function FaroPanel() {
                     </tr>
                     {expanded && (
                       <tr className="border-b border-slate-100 bg-slate-50/50">
-                        <td colSpan={10} className="px-6 py-4">
+                        <td colSpan={11} className="px-6 py-4">
                           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                             <div className="space-y-2 text-sm text-slate-700">
                               <Rich text={i.rationale} />
@@ -235,7 +199,7 @@ export function FaroPanel() {
                                         </span>
                                       </span>
                                       <span className={`font-semibold tabular-nums ${tone(p.result)}`}>
-                                        {p.result === null ? "—" : `${p.result > 0 ? "+" : ""}${eur(p.result)}`}
+                                        {signed(p.result)}
                                         {p.resultPct !== null && <span className="ml-1 text-xs font-normal">({pct(p.resultPct, 1)})</span>}
                                       </span>
                                     </li>
@@ -254,7 +218,26 @@ export function FaroPanel() {
           </table>
         </div>
       )}
-      {confirm && <ConfirmOrderModal idea={confirm} cash={data.account.cash} onClose={() => setConfirm(null)} />}
+      {all.length > PAGE && (
+        <footer className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 text-sm text-slate-500">
+          <span className="tabular-nums">
+            {current * PAGE + 1}–{Math.min(all.length, (current + 1) * PAGE)} de {all.length}
+          </span>
+          <span className="flex items-center gap-1">
+            <button type="button" className={ghost} disabled={current === 0} onClick={() => setPage(current - 1)} aria-label="Página anterior">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="px-2 tabular-nums">
+              {current + 1} / {pages}
+            </span>
+            <button type="button" className={ghost} disabled={current >= pages - 1} onClick={() => setPage(current + 1)} aria-label="Página siguiente">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </span>
+        </footer>
+      )}
     </section>
+      {confirm && <ConfirmOrderModal idea={confirm} cash={data.account.cash} onClose={() => setConfirm(null)} />}
+    </div>
   );
 }

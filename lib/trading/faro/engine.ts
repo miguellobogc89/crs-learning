@@ -287,7 +287,7 @@ export type FaroParticipant = {
 export async function faroView(workspaceId: string) {
   const [live, past, last, state, groups] = await Promise.all([
     prisma.trading_faro_ideas.findMany({ where: { status: "viva" }, orderBy: { created_at: "desc" } }),
-    prisma.trading_faro_ideas.findMany({ where: { status: { not: "viva" } }, orderBy: { created_at: "desc" }, take: 80 }),
+    prisma.trading_faro_ideas.findMany({ where: { status: { not: "viva" } }, orderBy: { created_at: "desc" }, take: 300 }),
     prisma.trading_faro_runs.findFirst({ where: { status: "ok" }, orderBy: { created_at: "desc" } }),
     accountState(workspaceId),
     prisma.trading_faro_ideas.groupBy({ by: ["kind", "status"], where: { status: { not: "viva" } }, _count: { _all: true }, _avg: { result_pct: true } }),
