@@ -109,12 +109,12 @@ export function AgentsPanel() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-4">
 
       {error && <ErrorNote>{error}</ErrorNote>}
 
       {/* Barra del catálogo: buscar, filtrar, ordenar y cambiar de vista */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
         <div className="relative min-w-[220px] flex-1 sm:max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <input className={`${field} w-full pl-9`} placeholder="Buscar agente, perfil o creador" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Buscar agentes" />
@@ -171,14 +171,14 @@ export function AgentsPanel() {
         </div>
       </div>
 
-      <p className="-mt-3 text-xs text-slate-500">
+      <p className="shrink-0 text-xs text-slate-500">
         {list.length === data.agents.length ? `${list.length} agentes` : `${list.length} de ${data.agents.length} agentes`}
       </p>
 
       {list.length === 0 ? (
         <div className={`${card} px-6 py-10 text-center text-sm text-slate-500`}>Ningún agente coincide con la búsqueda.</div>
       ) : layout === "cards" ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid min-h-0 flex-1 content-start gap-5 overflow-y-auto md:grid-cols-2 xl:grid-cols-3">
           {list.map((a) => (
             <AgentCard key={a.key} a={a} rank={rank.get(a.key) ?? 0} onDetail={() => openDetail(a.key)} />
           ))}
@@ -186,7 +186,9 @@ export function AgentsPanel() {
       ) : (
         <DataTable<Agent>
           id="agentes"
-          height="h-[calc(100dvh-13rem)]"
+          height="min-h-0 flex-1"
+          paginate
+          label="agentes"
           rows={list}
           rowKey={(a) => a.key}
           onRowClick={(a) => openDetail(a.key)}
