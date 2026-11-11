@@ -354,17 +354,7 @@ function runningFor(iso: string) {
 function AgentCard({ a, rank, onDetail }: { a: Agent; rank: number; onDetail: () => void }) {
   const open = a.positions.filter((p) => p.status === "abierta").length;
   const pending = a.positions.filter((p) => p.status === "pendiente").length;
-  const lastMove = a.proposals.find((p) => p.status === "ejecutada" && p.action !== "vigilar");
   const k = a.kamikaze;
-  const traits = k
-    ? [`meta ×${k.multiple} en ${k.days} días`, `caza ${k.style}`, "solo crypto", "una posición, todo dentro", "vigila cada pocos minutos"]
-    : [
-        `${pct(a.settings.riskPerTradePct, 1, false)} de riesgo por operación`,
-        `hasta ${a.settings.maxOpenPositions} posiciones`,
-        `máx. ${pct(a.settings.maxPositionPct, 0, false)} en un valor`,
-        `convicción ≥ ${a.rules.minConviction}/5`,
-        a.rules.buyInBearMarket ? "compra en mercado bajista" : "no compra en mercado bajista",
-      ];
   return (
     <article className={`${card} flex flex-col overflow-hidden transition-shadow hover:shadow-md`}>
       <div className="flex items-start justify-between gap-2 px-5 pt-5">
@@ -389,33 +379,24 @@ function AgentCard({ a, rank, onDetail }: { a: Agent; rank: number; onDetail: ()
           )}
         </span>
       </div>
-      <div className="mt-4 flex items-center gap-3 px-5">
-        <span className="text-2xl font-bold tracking-tight tabular-nums text-slate-900">{eur0(a.summary.equity)}</span>
-        <ReturnPill value={a.summary.returnPct} />
+      <div className="mt-4 px-5">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl font-bold tracking-tight tabular-nums text-slate-900">{eur0(a.summary.equity)}</span>
+          <ReturnPill value={a.summary.returnPct} />
+        </div>
+        <div className="mt-1 text-xs text-slate-500">
+          {open} abiertas{pending ? ` · ${pending} pendientes` : ""} · {a.summary.stats.closed} cerradas
+          {a.summary.stats.closed ? ` · acierto ${Math.round(a.summary.stats.winRate * 100)} %` : ""}
+        </div>
       </div>
-      <div className="mt-2 px-3">
-        <EquityCurve points={withLivePoint(a.equity, a.summary.equity)} initial={a.summary.initialCapital} height={64} empty="La línea aparece tras su primera sesión." />
+      <div className="mt-3 flex-1 px-3 pb-3">
+        <EquityCurve points={withLivePoint(a.equity, a.summary.equity)} initial={a.summary.initialCapital} height={110} empty="La línea aparece tras su primera sesión." />
       </div>
-      <ul className="mt-3 flex flex-wrap gap-1.5 px-5">
-        {traits.map((t) => (
-          <li key={t} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
-            {t}
-          </li>
-        ))}
-      </ul>
       {k && (
-        <div className="mx-5 mt-3">
+        <div className="mx-5 mb-3">
           <RoundProgress k={k} equity={a.summary.equity} />
         </div>
       )}
-      <div className="mt-3 px-5 text-xs text-slate-500">
-        {open} abiertas{pending ? ` · ${pending} pendientes` : ""} · {a.summary.stats.closed} cerradas
-        {a.summary.stats.closed ? ` · acierto ${Math.round(a.summary.stats.winRate * 100)} %` : ""}
-        <div className="mt-0.5 truncate">
-          {lastMove ? `Último: ${ACTION[lastMove.action] ?? lastMove.action} ${lastMove.name}` : a.lastRun ? "Aún no ha operado" : "Aún no se ha reunido"}
-          {a.lastRun ? ` · reunión ${when(a.lastRun.at)}` : ""}
-        </div>
-      </div>
       <footer className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 pt-3">
         <span className="flex min-w-0 flex-col gap-0.5">
           <Creator />
