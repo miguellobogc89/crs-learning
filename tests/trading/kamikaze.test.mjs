@@ -24,11 +24,11 @@ test("kamikazes: ritmo diario necesario", () => {
   assert.equal(L.requiredDailyPct(0, 200, DAY), Infinity);
 });
 
-test("kamikazes: fin de ronda por meta, plazo o sin capital", () => {
-  const base = { equity: 30, goal: 200, deadline: 1000, now: 500, holding: false, cash: 30, minOrder: 5 };
+test("kamikazes: fin de ronda solo por meta o sin capital, nunca por tiempo", () => {
+  const base = { equity: 30, goal: 200, holding: false, cash: 30, minOrder: 5 };
   assert.equal(L.roundOutcome(base), null);
   assert.equal(L.roundOutcome({ ...base, equity: 201 }), "meta");
-  assert.equal(L.roundOutcome({ ...base, now: 1000 }), "plazo");
+  assert.equal(L.roundOutcome({ ...base, deadline: 1000, now: 999999 }), null, "el plazo no cierra la ronda");
   assert.equal(L.roundOutcome({ ...base, equity: 4, cash: 4 }), "arruinado");
   assert.equal(L.roundOutcome({ ...base, equity: 4, cash: 0, holding: true }), null, "con posición abierta aún puede remontar");
 });
