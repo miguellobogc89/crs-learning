@@ -1,7 +1,7 @@
 "use client";
 // Gráfico de patrimonio: área con degradado, línea del capital inicial, ejes con valores
 // y fechas, selector de periodo y detalle del día al pasar el ratón.
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from "react";
 import { eur0, pct } from "./format";
 
 type Point = { day: string; equity: number };
@@ -105,7 +105,7 @@ export function EquityChart({
   const hp = hover !== null ? shown[hover] : null;
   const change = ((last - ref) / (ref || 1)) * 100;
 
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+  const onMove = (e: MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const px = ((e.clientX - rect.left) / rect.width) * w;
     const i = Math.round(((px - pad.l) / (w - pad.l - pad.r)) * (shown.length - 1));
