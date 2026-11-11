@@ -11,10 +11,45 @@ export const PAGE_SIZES = [10, 15, 25, 50];
 
 /** Tarjeta a todo el alto disponible: el contenido desplaza por dentro y el pie queda abajo. */
 export function TablePanel({ children, footer, header, height = FULL_H }: { children: ReactNode; footer?: ReactNode; header?: ReactNode; height?: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ top: false, bottom: false, headerHeight: 0 });
+  const checkScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const next = {
+      top: el.scrollTop > 1,
+      bottom: el.scrollTop + el.clientHeight < el.scrollHeight - 1,
+      headerHeight: el.querySelector("thead")?.getBoundingClientRect().height ?? 0,
+    };
+    setEdges((prev) =>
+      prev.top === next.top && prev.bottom === next.bottom && prev.headerHeight === next.headerHeight ? prev : next,
+    );
+  };
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(checkScroll) : null;
+    observer?.observe(el);
+    const table = el.querySelector("table");
+    if (table) observer?.observe(table);
+    checkScroll();
+    return () => observer?.disconnect();
+  }, [children]);
+
   return (
-    <section className={`${panel} flex ${height} min-h-[320px] flex-col`}>
+    <section className={`${panel} flex ${height} ${height === FULL_H ? "min-h-[320px]" : "min-h-0"} flex-col`}>
       {header && <div className="shrink-0 border-b border-slate-100 px-4 py-3">{header}</div>}
-      <div className="min-h-0 flex-1 overflow-auto overscroll-contain">{children}</div>
+      <div className="relative min-h-0 flex-1">
+        <div ref={scrollRef} onScroll={checkScroll} className="h-full overflow-auto overscroll-contain">
+          {children}
+        </div>
+        {edges.top && (
+          <div className="pointer-events-none absolute inset-x-0 z-[5] h-5 bg-gradient-to-b from-white via-white/85 to-transparent" style={{ top: edges.headerHeight }} aria-hidden="true" />
+        )}
+        {edges.bottom && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] h-6 bg-gradient-to-t from-white via-white/85 to-transparent" aria-hidden="true" />
+        )}
+      </div>
       {footer}
     </section>
   );
@@ -252,10 +287,15 @@ export function DataTable<T>({
               {columns.map((c) => {
                 const active = sort?.key === c.key;
                 return (
-                  <th key={c.key} className={`${TH} relative select-none !text-center ${c.sort ? "cursor-pointer hover:text-slate-800" : ""}`} onClick={() => pick(c)}>
-                    <span className="inline-flex items-center justify-center gap-1">
+                  <th
+                    key={c.key}
+                    className={`${TH} relative select-none ${c.align === "left" ? "!text-left" : c.align === "right" ? "!text-right" : "!text-center"} ${c.sort ? "cursor-pointer hover:text-slate-800" : ""}`}
+                    onClick={() => pick(c)}
+                    aria-sort={c.sort && active ? (sort!.dir === 1 ? "ascending" : "descending") : undefined}
+                  >
+                    <span className="inline-flex items-center gap-1">
                       {c.label}
-                      {c.sort && <span className={`text-[10px] ${active ? "text-blue-600" : "text-slate-300"}`}>{active ? (sort!.dir === 1 ? "▲" : "▼") : "↕"}</span>}
+                      {c.sort && active && <span className="text-[10px] text-blue-600" aria-hidden="true">{sort!.dir === 1 ? "▲" : "▼"}</span>}
                     </span>
                     <span
                       role="separator"
