@@ -29,3 +29,12 @@ test("binance: RSA firma con SHA-256 y una PEM rota da error claro", () => {
   assert.ok(verify("sha256", Buffer.from(payload), publicKey, Buffer.from(sig, "base64")));
   assert.throws(() => S.signPayload("-----BEGIN PRIVATE KEY-----nope-----END PRIVATE KEY-----", payload), /no es válida/);
 });
+
+test("binance: el contenido Ed25519 sin cabeceras (64 caracteres) no se confunde con un secreto HMAC", () => {
+  for (let i = 0; i < 300; i++) {
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const body = privateKey.export({ type: "pkcs8", format: "pem" }).split("\n")[1];
+    const sig = S.signPayload(body, payload);
+    assert.ok(verify(null, Buffer.from(payload), publicKey, Buffer.from(sig, "base64")));
+  }
+});

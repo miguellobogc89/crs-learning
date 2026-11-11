@@ -14,15 +14,16 @@ export function privateKeyOf(secret: string): KeyObject | null {
   let key: KeyObject | null = null;
   const s = secret.trim();
   const pem = /-----BEGIN ((?:RSA |EC |ENCRYPTED )?PRIVATE KEY)-----([\s\S]*?)-----END \1-----/.exec(s);
-  if (pem || !/^[A-Za-z0-9]{64}$/.test(s)) {
-    const body = (pem ? pem[2] : s).replace(/\s+/g, "");
-    if (/^[A-Za-z0-9+/=]{40,}$/.test(body)) {
-      try {
-        key = createPrivateKey({ key: Buffer.from(body, "base64"), format: "der", type: pem?.[1] === "RSA PRIVATE KEY" ? "pkcs1" : "pkcs8" });
-      } catch {
-        if (pem) throw new Error("La clave privada no es válida: pega el archivo .pem completo");
-      }
-    } else if (pem) throw new Error("La clave privada no es válida: pega el archivo .pem completo");
+  const body = (pem ? pem[2] : s).replace(/\s+/g, "");
+  if (pem && !/^[A-Za-z0-9+/=]{40,}$/.test(body)) throw new Error("La clave privada no es válida: pega el archivo .pem completo");
+  if (/^[A-Za-z0-9+/=]{40,}$/.test(body)) {
+    // Primero se intenta como clave privada (el contenido de una Ed25519 sin cabeceras mide 64
+    // caracteres, como un secreto HMAC); si no lo es, es un secreto HMAC.
+    try {
+      key = createPrivateKey({ key: Buffer.from(body, "base64"), format: "der", type: pem?.[1] === "RSA PRIVATE KEY" ? "pkcs1" : "pkcs8" });
+    } catch {
+      if (pem) throw new Error("La clave privada no es válida: pega el archivo .pem completo");
+    }
   }
   if (key && key.asymmetricKeyType !== "ed25519" && key.asymmetricKeyType !== "rsa") throw new Error("Binance solo admite claves Ed25519 o RSA");
   keys.set(secret, key);
