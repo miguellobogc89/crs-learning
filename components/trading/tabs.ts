@@ -40,4 +40,4 @@ export const isTradingTab = (v: string): v is TradingTab => (TRADING_TAB_KEYS as
 
 /** Secciones cuya página es una tabla a todo el alto (sin scroll de página: desplaza la tabla). */
 export const FITTED_TABS: readonly TradingTab[] = ["inicio", "oportunidades", "agentes"];
-export const isFittedTab = (tab: TradingTab) => FITTED_TABS.includes(tab);
+export const isFittedTab = (tab: string) => (FITTED_TABS as readonly string[]).includes(tab);

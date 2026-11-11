@@ -1,7 +1,7 @@
 "use client";
 // Inicio: tú contra los agentes, en una tabla con el estilo de Oportunidades. La actividad de los
 // agentes vive en su propia sección («Actividad»).
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Bot, User } from "lucide-react";
@@ -82,7 +82,6 @@ export function HomePanel() {
   }, [load]);
   useTradingRefresh(load);
 
-  if (view === "actividad") return <ActivityPanel header={tabs} />;
   if (!account || !agents)
     return error ? (
       <ErrorNote>{error}</ErrorNote>
@@ -91,6 +90,44 @@ export function HomePanel() {
     );
 
   const s = account.total;
+  // Indicadores de la cabecera: tu patrimonio, los agentes en conjunto, el líder y el mercado.
+  const agentEq = agents.agents.reduce((t, a) => t + a.summary.equity, 0);
+  const agentIni = agents.agents.reduce((t, a) => t + a.summary.initialCapital, 0);
+  const agentsRet = agentIni > 0 ? ((agentEq - agentIni) / agentIni) * 100 : 0;
+  const leader = [...agents.agents].sort((x, y) => y.summary.returnPct - x.summary.returnPct)[0];
+  const bench = agents.agents[0]?.benchmark;
+  const kpis = (
+    <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-2">
+      {account.opened && (
+        <Kpi label="Tu patrimonio">
+          <Money v={s.equity} digits={2} className="font-semibold text-slate-900" />
+          <ReturnPill value={s.returnPct} />
+        </Kpi>
+      )}
+      <Kpi label={`Agentes (${agents.agents.length}) en conjunto`}>
+        <Money v={agentEq} digits={2} className="font-semibold text-slate-900" />
+        <ReturnPill value={agentsRet} />
+      </Kpi>
+      {leader && (
+        <Kpi label="Va en cabeza">
+          <b className="max-w-[9rem] truncate font-semibold text-slate-900">{leader.name}</b>
+          <ReturnPill value={leader.summary.returnPct} />
+        </Kpi>
+      )}
+      {bench && bench.btcPct !== null && (
+        <Kpi label="Bitcoin desde el inicio">
+          <ReturnPill value={bench.btcPct} />
+        </Kpi>
+      )}
+    </div>
+  );
+  const header = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      {tabs}
+      {kpis}
+    </div>
+  );
+  if (view === "actividad") return <ActivityPanel header={header} />;
   const allPositions = [...account.main.positions, ...account.copies.flatMap((c) => c.positions)];
   const open = allPositions.filter((p) => p.status === "abierta").length;
   const pending = allPositions.filter((p) => p.status === "pendiente").length;
@@ -202,7 +239,16 @@ export function HomePanel() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       {!account.opened && <OpenAccount />}
-      <DataTable id="inicio-operadores" height="min-h-0 flex-1" header={tabs} columns={columns} rows={rows} rowKey={(r) => r.key} paginate label="operadores" />
+      <DataTable id="inicio-operadores" height="min-h-0 flex-1" header={header} columns={columns} rows={rows} rowKey={(r) => r.key} paginate label="operadores" />
+    </div>
+  );
+}
+
+function Kpi({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mt-0.5 flex items-center gap-2 text-sm">{children}</div>
     </div>
   );
 }

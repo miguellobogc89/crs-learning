@@ -4,7 +4,6 @@ import { AppSectionShell } from "@/components/app/section-sidebar";
 import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { TradingNavigation } from "@/components/trading/navigation";
 import { TradingWorkspace } from "@/components/trading/trading-workspace";
-import { HomeBalance } from "@/components/trading/home-panel";
 import { TRADING_TABS, isFittedTab, isTradingTab } from "@/components/trading/tabs";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +28,6 @@ export default async function Page({ params }: { params: Promise<{ tab: string }
         </span>
         <span className="truncate">{meta.label}</span>
       </h1>
-      {tab === "inicio" ? <HomeBalance /> : null}
     </div>
   );
   return (
