@@ -5,7 +5,7 @@ import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { TradingNavigation } from "@/components/trading/navigation";
 import { TradingWorkspace } from "@/components/trading/trading-workspace";
 import { HomeBalance } from "@/components/trading/home-panel";
-import { TRADING_TABS, isTradingTab } from "@/components/trading/tabs";
+import { TRADING_TABS, isFittedTab, isTradingTab } from "@/components/trading/tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export default async function Page({ params }: { params: Promise<{ tab: string }
   if (!ctx) redirect("/");
   const meta = TRADING_TABS.find((t) => t.key === tab)!;
   const Icon = meta.icon;
-  const fittedTable = tab === "inicio" || tab === "oportunidades" || tab === "agentes";
+  const fittedTable = isFittedTab(tab);
   // Cabecera de Trading: solo icono y título (sin migas ni subtítulo).
   const header = (
     <div className="flex min-w-0 items-center justify-between gap-6">

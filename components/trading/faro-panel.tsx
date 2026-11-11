@@ -8,7 +8,7 @@ import { api, errorText, eur, pct } from "./format";
 import { DataTable, Money, type Col } from "./table";
 import { OpenAccount } from "./open-account";
 import { ago } from "./home-panel";
-import { AgentAvatar, ErrorNote, LoadingCard, Pill, Rich } from "./ui";
+import { AgentAvatar, AVATAR, ErrorNote, LoadingCard, Pill, Rich } from "./ui";
 import { useTradingRefresh } from "./navigation";
 import { ConfirmOrderModal, type TradeIdea } from "./trade-modals";
 import { AssetIcon } from "./asset-icon";
@@ -84,26 +84,6 @@ export function FaroPanel() {
 
   const columns: Col<Idea>[] = [
     {
-      key: "who",
-      label: "Agente",
-      width: 14,
-      align: "left",
-      sort: (i) => i.participants.find((p) => p.who !== "tu")?.name ?? "FARO",
-      cell: (i) => {
-        const operators = i.participants.filter((p) => p.who !== "tu");
-        const lead = operators[0];
-        return (
-          <span className="flex min-w-0 items-center gap-2">
-            <AgentAvatar color={lead?.color ?? "blue"} size="sm" />
-            <span className="min-w-0">
-              <b className="block truncate font-semibold text-slate-900">{lead?.name ?? "FARO"}</b>
-              {operators.length > 1 && <span className="block text-[11px] text-slate-500">+{operators.length - 1} agentes</span>}
-            </span>
-          </span>
-        );
-      },
-    },
-    {
       key: "asset",
       label: "Activo",
       width: 12,
@@ -137,6 +117,25 @@ export function FaroPanel() {
           {i.status === "viva" && <span className="text-xs text-slate-400">{left(i.validUntil)}</span>}
         </span>
       ),
+    },
+    {
+      key: "who",
+      label: "Agentes",
+      width: 11,
+      sort: (i) => i.participants.length,
+      cell: (i) =>
+        i.participants.length === 0 ? (
+          <span className="text-xs text-slate-400">0</span>
+        ) : (
+          <span className="inline-flex items-center gap-2" title={i.participants.map((p) => p.name).join(", ")}>
+            <span className="flex -space-x-2">
+              {i.participants.slice(0, 4).map((p, n) => (
+                <span key={`${p.who}-${n}`} className={`h-5 w-5 rounded-full ring-2 ring-white ${AVATAR[p.color] ?? AVATAR.slate}`} />
+              ))}
+            </span>
+            <span className="text-xs font-semibold tabular-nums text-slate-700">{i.participants.length}</span>
+          </span>
+        ),
     },
     {
       key: "act",

@@ -284,12 +284,12 @@ export function DataTable<T>({
           </colgroup>
           <thead>
             <tr>
-              {columns.map((c) => {
+              {columns.map((c, ci) => {
                 const active = sort?.key === c.key;
                 return (
                   <th
                     key={c.key}
-                    className={`${TH} relative select-none ${c.align === "left" ? "!text-left" : c.align === "right" ? "!text-right" : "!text-center"} ${c.sort ? "cursor-pointer hover:text-slate-800" : ""}`}
+                    className={`${TH} relative select-none ${ci === 0 ? "!pl-5" : ""} ${c.align === "left" ? "!text-left" : c.align === "right" ? "!text-right" : "!text-center"} ${c.sort ? "cursor-pointer hover:text-slate-800" : ""}`}
                     onClick={() => pick(c)}
                     aria-sort={c.sort && active ? (sort!.dir === 1 ? "ascending" : "descending") : undefined}
                   >
@@ -320,8 +320,8 @@ export function DataTable<T>({
                     className={`border-b border-slate-100 hover:bg-slate-50/60 ${clickable ? "cursor-pointer" : ""}`}
                     onClick={clickable ? () => (expand ? setOpen(open === k ? null : k) : onRowClick?.(r)) : undefined}
                   >
-                    {columns.map((c) => (
-                      <td key={c.key} className={`${TD} ${ALIGN[c.align ?? "center"]} ${c.className ?? ""}`}>
+                    {columns.map((c, ci) => (
+                      <td key={c.key} className={`${TD} ${ci === 0 ? "pl-5" : ""} ${ALIGN[c.align ?? "center"]} ${c.className ?? ""}`}>
                         {c.cell(r)}
                       </td>
                     ))}

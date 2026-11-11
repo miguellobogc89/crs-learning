@@ -12,7 +12,7 @@ import { NewsPanel } from "./news-panel";
 import { FaroPanel } from "./faro-panel";
 import { HomePanel } from "./home-panel";
 import { IntegrationsPanel } from "./integrations-panel";
-import type { TradingTab } from "./tabs";
+import { isFittedTab, type TradingTab } from "./tabs";
 import { LoadingCard } from "./ui";
 
 export type Overview = Awaited<ReturnType<typeof getOverview>> & { canManage: boolean };
@@ -77,7 +77,7 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   else if (tab === "valores") body = <UniversePanel />;
   else if (tab === "integraciones") body = <IntegrationsPanel />;
 
-  const fittedTable = tab === "inicio" || tab === "oportunidades" || tab === "agentes";
+  const fittedTable = isFittedTab(tab);
   return (
     <div className={fittedTable ? "flex h-full min-h-0 flex-col gap-4" : "space-y-4"}>
       {error && (

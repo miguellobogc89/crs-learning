@@ -37,3 +37,7 @@ export const TRADING_SECTIONS: { title: string | null; items: TabDef[] }[] = [
 
 export const TRADING_TABS: TabDef[] = TRADING_SECTIONS.flatMap((s) => s.items);
 export const isTradingTab = (v: string): v is TradingTab => (TRADING_TAB_KEYS as readonly string[]).includes(v);
+
+/** Secciones cuya página es una tabla a todo el alto (sin scroll de página: desplaza la tabla). */
+export const FITTED_TABS: readonly TradingTab[] = ["inicio", "oportunidades", "agentes"];
+export const isFittedTab = (tab: TradingTab) => FITTED_TABS.includes(tab);
