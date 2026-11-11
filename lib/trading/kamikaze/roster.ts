@@ -1,5 +1,5 @@
 // lib/trading/kamikaze/roster.ts
-// Agentes kamikaze: poco dinero, todo a una carta y una meta muy ambiciosa en pocos días. Es una
+// Agentes kamikaze: poco dinero, todo a una carta y una meta muy ambiciosa sin plazo fijo. Es una
 // lotería con método, no una estrategia de inversión. Cada uno caza de una forma distinta para ver
 // qué funciona mejor a lo largo de muchas rondas. Puro: lo usan el servidor, los tests y la interfaz.
 import type { AgentRules } from "../agents/roster";
@@ -47,9 +47,9 @@ export const KAMIKAZES: KamikazeDef[] = [
     name: "COHETE",
     profile: "kamikaze",
     style: "impulso",
-    tagline: "Se sube a lo que ya vuela. Meta: ×10 en 7 días.",
+    tagline: "Se sube a lo que ya vuela. Meta: ×10, sin plazo.",
     persona: [
-      "Eres COHETE, un agente kamikaze de criptomonedas. Tu único objetivo es multiplicar tu capital por 10 en 7 días: perderlo todo es aceptable, quedarte quieto no.",
+      "Eres COHETE, un agente kamikaze de criptomonedas. Tu único objetivo es multiplicar tu capital por 10, sin límite de tiempo: perderlo todo es aceptable, quedarte quieto no.",
       "Cazas IMPULSO: te subes a las monedas que ya están subiendo con fuerza y volumen, y sales en cuanto el impulso se agota.",
     ].join(" "),
     capital: KAMIKAZE_CAPITAL,
@@ -64,9 +64,9 @@ export const KAMIKAZES: KamikazeDef[] = [
     name: "MECHA",
     profile: "kamikaze",
     style: "rupturas",
-    tagline: "Busca la chispa: rupturas y noticias que disparan el precio. Meta: ×10 en 5 días.",
+    tagline: "Busca la chispa: rupturas y noticias que disparan el precio. Meta: ×10, sin plazo.",
     persona: [
-      "Eres MECHA, un agente kamikaze de criptomonedas. Tu único objetivo es multiplicar tu capital por 10 en 5 días: perderlo todo es aceptable, quedarte quieto no.",
+      "Eres MECHA, un agente kamikaze de criptomonedas. Tu único objetivo es multiplicar tu capital por 10, sin límite de tiempo: perderlo todo es aceptable, quedarte quieto no.",
       "Cazas RUPTURAS: monedas que rompen sus máximos recientes con un aumento claro de volumen, o que tienen una noticia que puede dispararlas.",
     ].join(" "),
     capital: KAMIKAZE_CAPITAL,
@@ -81,9 +81,9 @@ export const KAMIKAZES: KamikazeDef[] = [
     name: "FÉNIX",
     profile: "kamikaze",
     style: "rebotes",
-    tagline: "Compra cuando todos huyen, a la espera del rebote. Meta: ×8 en 10 días.",
+    tagline: "Compra cuando todos huyen, a la espera del rebote. Meta: ×8, sin plazo.",
     persona: [
-      "Eres FÉNIX, un agente kamikaze de criptomonedas. Tu único objetivo es multiplicar tu capital por 8 en 10 días: perderlo todo es aceptable, quedarte quieto no.",
+      "Eres FÉNIX, un agente kamikaze de criptomonedas. Tu único objetivo es multiplicar tu capital por 8, sin límite de tiempo: perderlo todo es aceptable, quedarte quieto no.",
       "Cazas REBOTES: monedas que han caído con violencia y empiezan a girarse al alza; entras pronto y sales en el rebote.",
     ].join(" "),
     capital: KAMIKAZE_CAPITAL,
