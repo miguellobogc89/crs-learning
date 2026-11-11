@@ -15,7 +15,7 @@ test("mula: objetivo, stop, conservador si una vela toca ambos, hueco y fin del 
 });
 
 test("mula: «asegura» sube el stop al +1 % y deja correr", () => {
-  const run = runTrade([bar(1, 100, 101.1, 99.9, 101), bar(2, 101, 103, 101.2, 102.8), bar(3, 102.8, 103, 102, 102.5)], 100, 1, 1, "asegura");
+  const run = runTrade([bar(1, 100, 101.3, 99.9, 101.2), bar(2, 101.2, 103, 101.2, 102.8), bar(3, 102.8, 103, 102, 102.5)], 100, 1, 1, "asegura");
   assert.equal(run.why, "asegurado");
   assert.equal(run.pct.toFixed(1), "2.5");
   const back = runTrade([bar(1, 100, 101.2, 99.9, 101), bar(2, 101, 101.1, 100.5, 100.6)], 100, 1, 1, "asegura");
