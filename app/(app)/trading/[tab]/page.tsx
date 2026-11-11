@@ -2,12 +2,10 @@ import { notFound, redirect } from "next/navigation";
 import { connectorContext } from "@/lib/connectors/context";
 import { AppSectionShell } from "@/components/app/section-sidebar";
 import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
-import { AppPageHeader } from "@/components/app/layouts/app-page-header";
 import { TradingNavigation } from "@/components/trading/navigation";
 import { TradingWorkspace } from "@/components/trading/trading-workspace";
 import { HomeBalance } from "@/components/trading/home-panel";
 import { TRADING_TABS, isTradingTab } from "@/components/trading/tabs";
-import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +18,23 @@ export default async function Page({ params }: { params: Promise<{ tab: string }
   const ctx = await connectorContext();
   if (!ctx) redirect("/");
   const meta = TRADING_TABS.find((t) => t.key === tab)!;
+  const Icon = meta.icon;
+  // Cabecera de Trading: solo icono y título (sin migas ni subtítulo).
+  const header = (
+    <div className="flex min-w-0 items-center justify-between gap-6">
+      <h1 className="flex min-w-0 items-center gap-3 text-[26px] font-semibold leading-[1.2] tracking-tight text-slate-950">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+          <Icon className="h-5 w-5" />
+        </span>
+        <span className="truncate">{meta.label}</span>
+      </h1>
+      {tab === "inicio" ? <HomeBalance /> : null}
+    </div>
+  );
   return (
     <AppSectionShell sidebar={<TradingNavigation key={ctx.workspaceId} />}>
       <AppPageLayout
-        header={<AppPageHeader section={APP_SECTIONS.trading} items={[{ label: meta.label }]} title={meta.label} description={meta.description} actions={tab === "inicio" ? <HomeBalance /> : undefined} />}
+        header={header}
         contentClassName="!pb-6"
       >
         <TradingWorkspace key={`${ctx.workspaceId}:${tab}`} tab={tab} />

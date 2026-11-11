@@ -12,7 +12,7 @@ import { api, eur, errorText, pct } from "./format";
 import { useTradingRefresh } from "./navigation";
 import { OpenAccount } from "./open-account";
 import { AVATAR, cap, ErrorNote, LoadingCard, PILL, ReturnPill } from "./ui";
-import { Money, Segmented, sinceText, TablePanel, TD, TH } from "./table";
+import { DataTable, Money, Segmented, sinceText, type Col } from "./table";
 import { ActivityPanel } from "./activity-panel";
 
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
@@ -126,88 +126,83 @@ export function HomePanel() {
       closed: a.summary.stats.closed,
       startedAt: a.startedAt as string | null,
     })),
-  ].sort((x, y) => y.returnPct - x.returnPct);
+  ]
+    .sort((x, y) => y.returnPct - x.returnPct)
+    .map((r, i) => ({ ...r, rank: i + 1 }));
+
+  type Row = (typeof rows)[number];
+  const columns: Col<Row>[] = [
+    {
+      key: "rank",
+      label: "#",
+      width: 5,
+      sort: (r) => r.rank,
+      cell: (r) => <span className="mx-auto flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-xs font-semibold text-slate-600">{r.rank}</span>,
+    },
+    {
+      key: "name",
+      label: "Operador",
+      width: 21,
+      align: "left",
+      sort: (r) => r.name,
+      cell: (r) =>
+        r.key === "tu" ? (
+          <span className="flex items-center gap-2">
+            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR.slate} text-white`}>
+              <User className="h-4 w-4" />
+            </span>
+            <b className="font-semibold text-slate-900">Tú</b>
+          </span>
+        ) : (
+          <Link href={`/trading/agentes?agent=${r.key}`} className="group flex min-w-0 items-center gap-2">
+            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR[r.color] ?? AVATAR.slate} text-white`}>
+              <Bot className="h-4 w-4" />
+            </span>
+            <span className="min-w-0">
+              <b className="block truncate font-semibold text-slate-900 group-hover:underline">{r.name}</b>
+              <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${PILL[r.color] ?? PILL.slate}`}>{cap(r.profile)}</span>
+            </span>
+          </Link>
+        ),
+    },
+    { key: "since", label: "Inicio", width: 12, sort: (r) => (r.startedAt ? new Date(r.startedAt).getTime() : null), cell: (r) => <span className="text-slate-600">{sinceText(r.startedAt)}</span> },
+    { key: "equity", label: "Patrimonio", width: 13, sort: (r) => r.equity, cell: (r) => <Money v={r.equity} digits={2} className="font-semibold text-slate-900" /> },
+    { key: "ret", label: "Rentabilidad", width: 12, sort: (r) => r.returnPct, cell: (r) => <span className="inline-flex justify-center"><ReturnPill value={r.returnPct} /></span> },
+    { key: "ops", label: "Operaciones", width: 10, sort: (r) => r.open + r.closed, cell: (r) => <span className="tabular-nums text-slate-700">{r.open + r.closed}</span> },
+    {
+      key: "inv",
+      label: "Invertido",
+      width: 15,
+      sort: (r) => r.investedPct,
+      cell: (r) => (
+        <div className="flex items-center justify-center gap-2">
+          <span className="shrink-0 tabular-nums text-slate-700">{pct(r.investedPct, 0, false)}</span>
+          <span className="h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-slate-100">
+            <span className="block h-full rounded-full bg-blue-600" style={{ width: `${Math.min(100, Math.max(0, r.investedPct))}%` }} />
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "pos",
+      label: "Posiciones",
+      width: 12,
+      sort: (r) => r.open + r.pending,
+      cell: (r) =>
+        r.pending > 0 ? (
+          <span className="rounded-lg bg-orange-50 px-2.5 py-1 text-xs font-semibold tabular-nums text-orange-700">
+            {r.open} + {r.pending} pend.
+          </span>
+        ) : (
+          <span className="tabular-nums text-slate-700">{r.open}</span>
+        ),
+    },
+  ];
 
   return (
     <div className="space-y-4">
       {!account.opened && <OpenAccount />}
-      <TablePanel header={tabs}>
-        <table className="w-full table-fixed text-sm">
-          <colgroup>
-            {[5, 21, 12, 13, 12, 10, 15, 12].map((w, n) => (
-              <col key={n} style={{ width: `${w}%` }} />
-            ))}
-          </colgroup>
-          <thead>
-            <tr>
-              <th className={`${TH} text-center`}>#</th>
-              <th className={TH}>Operador</th>
-              <th className={`${TH} text-center`}>Inicio</th>
-              <th className={`${TH} text-center`}>Patrimonio</th>
-              <th className={`${TH} text-center`}>Rentabilidad</th>
-              <th className={`${TH} text-center`}>Operaciones</th>
-              <th className={`${TH} text-center`}>Invertido</th>
-              <th className={`${TH} text-center`}>Posiciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, k) => (
-              <tr key={r.key} className="border-b border-slate-100 hover:bg-slate-50/60">
-                <td className={`${TD} text-center`}>
-                  <span className="mx-auto flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-xs font-semibold text-slate-600">{k + 1}</span>
-                </td>
-                <td className={TD}>
-                  {r.key === "tu" ? (
-                    <span className="flex items-center gap-2">
-                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR.slate} text-white`}>
-                        <User className="h-4 w-4" />
-                      </span>
-                      <b className="font-semibold text-slate-900">Tú</b>
-                    </span>
-                  ) : (
-                    <Link href={`/trading/agentes?agent=${r.key}`} className="group flex min-w-0 items-center gap-2">
-                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR[r.color] ?? AVATAR.slate} text-white`}>
-                        <Bot className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0">
-                        <b className="block truncate font-semibold text-slate-900 group-hover:underline">{r.name}</b>
-                        <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${PILL[r.color] ?? PILL.slate}`}>{cap(r.profile)}</span>
-                      </span>
-                    </Link>
-                  )}
-                </td>
-                <td className={`${TD} text-center text-slate-600`}>{sinceText(r.startedAt)}</td>
-                <td className={`${TD} text-center font-semibold text-slate-900`}>
-                  <Money v={r.equity} digits={2} />
-                </td>
-                <td className={`${TD} text-center`}>
-                  <span className="inline-flex justify-center">
-                    <ReturnPill value={r.returnPct} />
-                  </span>
-                </td>
-                <td className={`${TD} text-center tabular-nums text-slate-700`}>{r.open + r.closed}</td>
-                <td className={TD}>
-                  <div className="flex items-center justify-center gap-2">
-                    <span className="shrink-0 tabular-nums text-slate-700">{pct(r.investedPct, 0, false)}</span>
-                    <span className="h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-slate-100">
-                      <span className="block h-full rounded-full bg-blue-600" style={{ width: `${Math.min(100, Math.max(0, r.investedPct))}%` }} />
-                    </span>
-                  </div>
-                </td>
-                <td className={`${TD} text-center`}>
-                  {r.pending > 0 ? (
-                    <span className="rounded-lg bg-orange-50 px-2.5 py-1 text-xs font-semibold tabular-nums text-orange-700">
-                      {r.open} + {r.pending} pend.
-                    </span>
-                  ) : (
-                    <span className="tabular-nums text-slate-700">{r.open}</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TablePanel>
+      <DataTable id="inicio-operadores" header={tabs} columns={columns} rows={rows} rowKey={(r) => r.key} />
     </div>
   );
 }

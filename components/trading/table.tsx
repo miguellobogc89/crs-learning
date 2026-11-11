@@ -1,7 +1,7 @@
 "use client";
 // Piezas comunes de las tablas del módulo (estilo de Oportunidades): cabecera fija, filas con líneas
 // suaves, pie con paginación y «Ver N por página», e importes con los decimales más pequeños.
-import type { ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { eur, FULL_H, ghost, panel, th } from "./format";
 
@@ -10,11 +10,11 @@ export const TD = "px-2 py-3";
 export const PAGE_SIZES = [10, 15, 25, 50];
 
 /** Tarjeta a todo el alto disponible: el contenido desplaza por dentro y el pie queda abajo. */
-export function TablePanel({ children, footer, header }: { children: ReactNode; footer?: ReactNode; header?: ReactNode }) {
+export function TablePanel({ children, footer, header, height = FULL_H }: { children: ReactNode; footer?: ReactNode; header?: ReactNode; height?: string }) {
   return (
-    <section className={`${panel} flex ${FULL_H} min-h-[320px] flex-col`}>
+    <section className={`${panel} flex ${height} min-h-[320px] flex-col`}>
       {header && <div className="shrink-0 border-b border-slate-100 px-4 py-3">{header}</div>}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+      <div className="min-h-0 flex-1 overflow-auto overscroll-contain">{children}</div>
       {footer}
     </section>
   );
@@ -115,4 +115,190 @@ export function sinceText(iso: string | null | undefined) {
   if (d < 30) return n(Math.floor(d / 7), "semana", "semanas");
   if (d < 365) return n(Math.floor(d / 30), "mes", "meses");
   return n(Math.floor(d / 365), "año", "años");
+}
+
+// ---------------------------------------------------------------------------
+// Tabla estándar del módulo: cabeceras centradas, orden al pulsar la cabecera (alterna ascendente /
+// descendente), ancho de columnas ajustable arrastrando el borde (se recuerda por tabla), filas
+// desplegables y paginación opcional.
+// ---------------------------------------------------------------------------
+export type Col<T> = {
+  key: string;
+  label: ReactNode;
+  /** Ancho inicial en % del total. */
+  width?: number;
+  align?: "left" | "center" | "right";
+  /** Valor para ordenar; sin él, la columna no se ordena. */
+  sort?: (r: T) => string | number | null | undefined;
+  cell: (r: T) => ReactNode;
+  className?: string;
+};
+
+type Sort = { key: string; dir: 1 | -1 } | null;
+const ALIGN = { left: "text-left", center: "text-center", right: "text-right" } as const;
+const readWidths = (id: string): Record<string, number> => {
+  try {
+    return JSON.parse(localStorage.getItem(`crs-table:${id}`) ?? "{}") ?? {};
+  } catch {
+    return {};
+  }
+};
+
+export function DataTable<T>({
+  id,
+  columns,
+  rows,
+  rowKey,
+  header,
+  empty,
+  paginate = false,
+  label = "registros",
+  expand,
+  onRowClick,
+  height,
+}: {
+  id: string;
+  columns: Col<T>[];
+  rows: T[];
+  rowKey: (r: T) => string;
+  header?: ReactNode;
+  empty?: ReactNode;
+  paginate?: boolean;
+  label?: string;
+  expand?: (r: T) => ReactNode;
+  onRowClick?: (r: T) => void;
+  /** Clase de alto si encima de la tabla hay más cosas (por defecto, todo el alto disponible). */
+  height?: string;
+}) {
+  const [sort, setSort] = useState<Sort>(null);
+  const [page, setPage] = useState(0);
+  const [perPage, setPerPage] = useState(15);
+  const [open, setOpen] = useState<string | null>(null);
+  const [widths, setWidths] = useState<Record<string, number>>({});
+  const tableRef = useRef<HTMLTableElement>(null);
+  useEffect(() => setWidths(readWidths(id)), [id]);
+
+  const sorted = useMemo(() => {
+    if (!sort) return rows;
+    const col = columns.find((c) => c.key === sort.key);
+    if (!col?.sort) return rows;
+    const val = col.sort;
+    return [...rows].sort((a, b) => {
+      const x = val(a);
+      const y = val(b);
+      if (x === y) return 0;
+      if (x === null || x === undefined) return 1;
+      if (y === null || y === undefined) return -1;
+      const c = typeof x === "string" && typeof y === "string" ? x.localeCompare(y, "es", { sensitivity: "base", numeric: true }) : x < y ? -1 : 1;
+      return c * sort.dir;
+    });
+  }, [rows, sort, columns]);
+  const visible = paginate ? pageOf(sorted, page, perPage) : sorted;
+
+  const pick = (c: Col<T>) => {
+    if (!c.sort) return;
+    const sample = rows.map(c.sort).find((v) => v !== null && v !== undefined);
+    const first: 1 | -1 = typeof sample === "string" ? 1 : -1; // texto A→Z; números de mayor a menor
+    setSort((s) => (s?.key === c.key ? { key: c.key, dir: (s.dir * -1) as 1 | -1 } : { key: c.key, dir: first }));
+    setPage(0);
+  };
+
+  // Arrastrar el borde derecho de una cabecera: fija todos los anchos en píxeles y ajusta ese.
+  const startResize = (e: ReactMouseEvent, key: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const ths = [...(tableRef.current?.querySelectorAll("thead th") ?? [])] as HTMLElement[];
+    const base: Record<string, number> = {};
+    columns.forEach((c, i) => (base[c.key] = widths[c.key] ?? ths[i]?.getBoundingClientRect().width ?? 100));
+    const x0 = e.clientX;
+    const w0 = base[key];
+    let latest = base;
+    const move = (ev: MouseEvent) => {
+      latest = { ...base, [key]: Math.max(48, Math.round(w0 + ev.clientX - x0)) };
+      setWidths(latest);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      try {
+        localStorage.setItem(`crs-table:${id}`, JSON.stringify(latest));
+      } catch {
+        // Sin almacenamiento: el ancho vale para esta visita.
+      }
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+  const fixed = columns.every((c) => widths[c.key]);
+  const total = fixed ? columns.reduce((s, c) => s + widths[c.key], 0) : null;
+
+  return (
+    <TablePanel
+      height={height}
+      header={header}
+      footer={paginate ? <Pager total={rows.length} page={page} perPage={perPage} onPage={setPage} onPerPage={setPerPage} label={label} /> : undefined}
+    >
+      {rows.length === 0 ? (
+        <div className="px-6 py-8 text-center text-sm text-slate-500">{empty ?? "Sin registros."}</div>
+      ) : (
+        <table ref={tableRef} className="w-full table-fixed text-sm" style={total ? { width: total, minWidth: "100%" } : undefined}>
+          <colgroup>
+            {columns.map((c) => (
+              <col key={c.key} style={{ width: fixed ? widths[c.key] : `${c.width ?? 100 / columns.length}%` }} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr>
+              {columns.map((c) => {
+                const active = sort?.key === c.key;
+                return (
+                  <th key={c.key} className={`${TH} relative select-none !text-center ${c.sort ? "cursor-pointer hover:text-slate-800" : ""}`} onClick={() => pick(c)}>
+                    <span className="inline-flex items-center justify-center gap-1">
+                      {c.label}
+                      {c.sort && <span className={`text-[10px] ${active ? "text-blue-600" : "text-slate-300"}`}>{active ? (sort!.dir === 1 ? "▲" : "▼") : "↕"}</span>}
+                    </span>
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      onMouseDown={(e) => startResize(e, c.key)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute inset-y-1 right-0 w-1.5 cursor-col-resize rounded hover:bg-blue-200"
+                    />
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((r) => {
+              const k = rowKey(r);
+              const extra = expand && open === k ? expand(r) : null;
+              const clickable = !!expand || !!onRowClick;
+              return (
+                <Fragment key={k}>
+                  <tr
+                    className={`border-b border-slate-100 hover:bg-slate-50/60 ${clickable ? "cursor-pointer" : ""}`}
+                    onClick={clickable ? () => (expand ? setOpen(open === k ? null : k) : onRowClick?.(r)) : undefined}
+                  >
+                    {columns.map((c) => (
+                      <td key={c.key} className={`${TD} ${ALIGN[c.align ?? "center"]} ${c.className ?? ""}`}>
+                        {c.cell(r)}
+                      </td>
+                    ))}
+                  </tr>
+                  {extra && (
+                    <tr className="border-b border-slate-100 bg-slate-50/50">
+                      <td colSpan={columns.length} className="px-6 py-4">
+                        {extra}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </TablePanel>
+  );
 }

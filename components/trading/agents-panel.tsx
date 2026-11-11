@@ -11,6 +11,7 @@ import { refreshTrading, useTradingRefresh } from "./navigation";
 import { EquityCurve, withLivePoint } from "./equity-chart";
 import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
+import { DataTable, Money } from "./table";
 
 type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean; canCopy: boolean };
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
@@ -177,6 +178,7 @@ export function AgentsPanel() {
             </button>
           ))}
         </div>
+        {layout === "cards" && (
         <label className="flex items-center gap-2 text-sm text-slate-500">
           Ordenar por
           <select className={`${field} py-1.5`} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
@@ -187,6 +189,7 @@ export function AgentsPanel() {
             ))}
           </select>
         </label>
+        )}
         <div className="ml-auto flex items-center gap-3">
           {bench && (
             <span className="hidden items-center gap-1 text-xs text-slate-500 lg:flex" title="Lo que ha hecho el mercado desde que empezaron los agentes, para comparar.">
@@ -228,69 +231,58 @@ export function AgentsPanel() {
           ))}
         </div>
       ) : (
-        <section className={`${panel} overflow-x-auto`}>
-          <table className="w-full min-w-[920px] text-sm">
-            <thead>
-              <tr>
-                <th className={`${th} pl-5`}>Agente</th>
-                <th className={th}>Creador</th>
-                <th className={th}>Lleva</th>
-                <th className={`${th} text-right`}>Patrimonio</th>
-                <th className={`${th} text-center`}>Rentabilidad</th>
-                <th className={`${th} text-right`}>Acierto</th>
-                <th className={`${th} text-right`}>Posiciones</th>
-                <th className={th}>Riesgo</th>
-                <th className={th} />
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((a) => {
-                const open = a.positions.filter((p) => p.status === "abierta").length;
-                return (
-                  <tr key={a.key} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50/60" onClick={() => openDetail(a.key)}>
-                    <td className="py-3 pl-5 pr-3">
-                      <span className="flex items-center gap-3">
-                        <AgentAvatar color={a.color} />
-                        <span>
-                          <span className="flex items-center gap-2">
-                            <b className="text-[15px] font-semibold text-slate-900">{a.name}</b>
-                            <Pill color={a.color}>{cap(a.profile)}</Pill>
-                          </span>
-                          <span className="block max-w-xs truncate text-xs text-slate-500">{a.tagline}</span>
-                        </span>
-                      </span>
-                    </td>
-                    <td className="px-3 py-3">
-                      <Creator />
-                    </td>
-                    <td className="px-3 py-3 text-slate-600">{runningFor(a.startedAt)}</td>
-                    <td className="px-3 py-3 text-right font-semibold tabular-nums text-slate-900">{eur0(a.summary.equity)}</td>
-                    <td className="px-3 py-3 text-center">
-                      <ReturnPill value={a.summary.returnPct} />
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">
-                      {a.summary.stats.closed ? `${Math.round(a.summary.stats.winRate * 100)} %` : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-right tabular-nums text-slate-700">{open}</td>
-                    <td className="px-3 py-3 text-slate-600">{pct(a.settings.riskPerTradePct, 1, false)} por operación</td>
-                    <td className="px-3 py-3 pr-5 text-right">
-                      <button
-                        type="button"
-                        className={ghost}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDetail(a.key);
-                        }}
-                      >
-                        Detalles
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
+        <DataTable<Agent>
+          id="agentes"
+          height="h-[calc(100dvh-15rem)]"
+          rows={list}
+          rowKey={(a) => a.key}
+          onRowClick={(a) => openDetail(a.key)}
+          columns={[
+            {
+              key: "name",
+              label: "Agente",
+              width: 26,
+              align: "left",
+              sort: (a) => a.name,
+              cell: (a) => (
+                <span className="flex min-w-0 items-center gap-3">
+                  <AgentAvatar color={a.color} />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2">
+                      <b className="truncate font-semibold text-slate-900">{a.name}</b>
+                      <Pill color={a.color}>{cap(a.profile)}</Pill>
+                    </span>
+                    <span className="block truncate text-xs text-slate-500">{a.tagline}</span>
+                  </span>
+                </span>
+              ),
+            },
+            { key: "creator", label: "Creador", width: 11, cell: () => <span className="inline-flex justify-center"><Creator /></span> },
+            { key: "since", label: "Lleva", width: 9, sort: (a) => new Date(a.startedAt).getTime(), cell: (a) => <span className="text-slate-600">{runningFor(a.startedAt)}</span> },
+            { key: "equity", label: "Patrimonio", width: 11, sort: (a) => a.summary.equity, cell: (a) => <Money v={a.summary.equity} digits={2} className="font-semibold text-slate-900" /> },
+            { key: "ret", label: "Rentabilidad", width: 10, sort: (a) => a.summary.returnPct, cell: (a) => <span className="inline-flex justify-center"><ReturnPill value={a.summary.returnPct} /></span> },
+            { key: "win", label: "Acierto", width: 8, sort: (a) => (a.summary.stats.closed ? a.summary.stats.winRate : null), cell: (a) => <span className="tabular-nums text-slate-700">{a.summary.stats.closed ? `${Math.round(a.summary.stats.winRate * 100)} %` : "—"}</span> },
+            { key: "pos", label: "Posiciones", width: 8, sort: (a) => a.positions.filter((p) => p.status === "abierta").length, cell: (a) => <span className="tabular-nums text-slate-700">{a.positions.filter((p) => p.status === "abierta").length}</span> },
+            { key: "risk", label: "Riesgo", width: 9, sort: (a) => a.settings.riskPerTradePct, cell: (a) => <span className="text-slate-600">{pct(a.settings.riskPerTradePct, 1, false)}</span> },
+            {
+              key: "act",
+              label: "",
+              width: 8,
+              cell: (a) => (
+                <button
+                  type="button"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openDetail(a.key);
+                  }}
+                >
+                  Detalles
+                </button>
+              ),
+            },
+          ]}
+        />
       )}
 
       {detail && (
