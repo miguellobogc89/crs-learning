@@ -758,41 +758,23 @@ const ROUND_END: Record<string, { label: string; color: string }> = {
   arruinado: { label: "Sin capital", color: "rose" },
 };
 
-/** Ritmo diario necesario para llegar a la meta en el tiempo que queda. */
-function neededPace(equity: number, goal: number, deadline: string) {
-  const days = Math.max((new Date(deadline).getTime() - Date.now()) / 86_400_000, 1 / 24);
-  if (equity <= 0) return null;
-  if (equity >= goal) return 0;
-  return (Math.pow(goal / equity, 1 / days) - 1) * 100;
-}
-
-/** Barra de la ronda en curso: dónde está frente a la meta y cuánto tiempo le queda. */
+/** Avance hacia el objetivo de la ronda, sin fecha límite. */
 function RoundProgress({ k, equity }: { k: Kamikaze; equity: number }) {
   const r = k.current;
   if (!r) return <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">La primera ronda empieza en la próxima revisión.</p>;
-  const total = new Date(r.deadline).getTime() - new Date(r.startedAt).getTime();
-  const elapsed = Math.min(1, Math.max(0, (Date.now() - new Date(r.startedAt).getTime()) / total));
-  // Progreso en escala logarítmica: de ×1 a ×N (duplicar cuenta lo mismo al principio que al final).
   const progress = equity > 0 ? Math.max(0, Math.min(1, Math.log(equity / r.startCapital) / Math.log(r.goal / r.startCapital))) : 0;
-  const pace = neededPace(equity, r.goal, r.deadline);
-  const daysLeft = Math.max(0, (new Date(r.deadline).getTime() - Date.now()) / 86_400_000);
   return (
     <div className="rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
       <div className="flex items-baseline justify-between gap-2">
-        <span>
-          <b className="font-semibold text-slate-900">Ronda {r.number}</b> · {eur0(equity)} de {eur0(r.goal)}
-        </span>
-        <span className="tabular-nums">{daysLeft >= 1 ? `${Math.floor(daysLeft)} d ${Math.round((daysLeft % 1) * 24)} h` : `${Math.round(daysLeft * 24)} h`}</span>
+        <span><b className="font-semibold text-slate-900">Ronda {r.number}</b> · {eur0(equity)} de {eur0(r.goal)}</span>
+        <span>Sin plazo</span>
       </div>
       <div className="relative mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200" title="Camino a la meta (escala de multiplicador)">
         <span className="absolute inset-y-0 left-0 rounded-full bg-rose-500" style={{ width: `${progress * 100}%` }} />
-        <span className="absolute inset-y-[-2px] w-px bg-slate-500" style={{ left: `${elapsed * 100}%` }} title="Tiempo transcurrido" />
       </div>
       <div className="mt-1.5 flex justify-between gap-2">
-        <span>{pace === null ? "Sin capital" : pace === 0 ? "¡Meta alcanzada!" : `Necesita +${pace >= 1000 ? "999+" : pace.toFixed(0)} % al día`}</span>
-        <span>
-          {k.stats.rounds} rondas · {k.stats.goals} metas
-        </span>
+        <span>{equity >= r.goal ? "¡Meta alcanzada!" : "Objetivo sin fecha límite"}</span>
+        <span>{k.stats.rounds} rondas · {k.stats.goals} metas</span>
       </div>
     </div>
   );
