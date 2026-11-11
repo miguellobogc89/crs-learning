@@ -1,7 +1,7 @@
 "use client";
 // Piezas comunes de las tablas del módulo (estilo de Oportunidades): cabecera fija, filas con líneas
 // suaves, pie con paginación y «Ver N por página», e importes con los decimales más pequeños.
-import { Fragment, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { eur, FULL_H, ghost, panel, th } from "./format";
 
@@ -13,7 +13,7 @@ export const PAGE_SIZES = [10, 15, 25, 50];
 export function TablePanel({ children, footer, header, height = FULL_H }: { children: ReactNode; footer?: ReactNode; header?: ReactNode; height?: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ top: false, bottom: false, headerHeight: 0 });
-  const checkScroll = () => {
+  const checkScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     const next = {
@@ -24,7 +24,7 @@ export function TablePanel({ children, footer, header, height = FULL_H }: { chil
     setEdges((prev) =>
       prev.top === next.top && prev.bottom === next.bottom && prev.headerHeight === next.headerHeight ? prev : next,
     );
-  };
+  }, []);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -34,7 +34,7 @@ export function TablePanel({ children, footer, header, height = FULL_H }: { chil
     if (table) observer?.observe(table);
     checkScroll();
     return () => observer?.disconnect();
-  }, [children]);
+  }, [children, checkScroll]);
 
   return (
     <section className={`${panel} flex ${height} ${height === FULL_H ? "min-h-[320px]" : "min-h-0"} flex-col`}>
