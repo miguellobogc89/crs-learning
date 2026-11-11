@@ -97,7 +97,12 @@ export function FaroPanel() {
         <p className="px-6 py-8 text-center text-sm text-slate-500">Todavía no hay ideas. La primera tanda llega en el próximo análisis (cada {data.everyMinutes} min).</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-sm">
+          <table className="w-full min-w-[980px] table-fixed text-sm">
+            <colgroup>
+              {[13, 8, 7, 9, 9, 9, 10, 9, 10, 7, 9].map((w, n) => (
+                <col key={n} style={{ width: `${w}%` }} />
+              ))}
+            </colgroup>
             <thead>
               <tr className="border-b border-slate-100">
                 <th className={th}>Activo</th>
@@ -125,8 +130,10 @@ export function FaroPanel() {
                       <td className="px-3 py-3">
                         <span className="flex items-center gap-2">
                           <AssetIcon symbol={i.symbol} name={i.symbol} size="sm" />
-                          <b className="font-semibold text-slate-900">{i.symbol.replace(/-EUR$/, "")}</b>
-                          <span className="text-xs text-slate-400">{ago(i.createdAt)}</span>
+                          <span className="min-w-0">
+                            <b className="block truncate font-semibold text-slate-900">{i.symbol.replace(/-EUR$/, "")}</b>
+                            <span className="block text-xs text-slate-400">{ago(i.createdAt)}</span>
+                          </span>
                         </span>
                       </td>
                       <td className="px-3 py-3">
