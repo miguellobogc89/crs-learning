@@ -19,6 +19,7 @@ export default async function Page({ params }: { params: Promise<{ tab: string }
   if (!ctx) redirect("/");
   const meta = TRADING_TABS.find((t) => t.key === tab)!;
   const Icon = meta.icon;
+  const fittedTable = tab === "inicio" || tab === "oportunidades" || tab === "agentes";
   // Cabecera de Trading: solo icono y título (sin migas ni subtítulo).
   const header = (
     <div className="flex min-w-0 items-center justify-between gap-6">
@@ -35,7 +36,7 @@ export default async function Page({ params }: { params: Promise<{ tab: string }
     <AppSectionShell sidebar={<TradingNavigation key={ctx.workspaceId} />}>
       <AppPageLayout
         header={header}
-        contentClassName="!pb-6"
+        contentClassName={fittedTable ? "!pb-6 !overflow-hidden flex flex-col" : "!pb-6"}
       >
         <TradingWorkspace key={`${ctx.workspaceId}:${tab}`} tab={tab} />
       </AppPageLayout>
