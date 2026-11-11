@@ -74,9 +74,9 @@ export function TradingNavigation() {
   }, []);
   useEffect(() => load(), [load]);
   useTradingRefresh(load);
-  // Mientras la pantalla esté abierta, se pide el precio en directo cada 5 minutos.
+  // Mientras la pantalla esté abierta, se revisa cada 3 minutos (precio en directo, kamikazes y reuniones).
   useEffect(() => {
-    const id = window.setInterval(load, 5 * 60_000);
+    const id = window.setInterval(load, 3 * 60_000);
     return () => window.clearInterval(id);
   }, [load]);
 

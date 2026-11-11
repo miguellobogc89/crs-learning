@@ -118,20 +118,23 @@ export function kamikazeTick(opts: { force?: string } = {}): Promise<KamikazeTic
 }
 
 async function tick(force: string | null): Promise<KamikazeTickSummary> {
-  const out: KamikazeTickSummary = { agents: [] };
+  const out: KamikazeTickSummary = { agents: KAMIKAZES.map((k) => ({ key: k.key, actions: [] as string[] })) };
   const rules = await eurPairs();
-  let market: Ticker[] | null = null;
-  let aiUsed = false;
-  for (const def of KAMIKAZES) {
-    const actions: string[] = [];
-    out.agents.push({ key: def.key, actions });
+  // El resumen de mercado se pide una sola vez por revisión, y solo si algún kamikaze decide.
+  let marketP: Promise<Ticker[]> | null = null;
+  const market = () => (marketP ??= tickers());
+  // Los tres en paralelo: son independientes y cada decisión con IA tarda lo suyo.
+  await Promise.all(KAMIKAZES.map((def, i) => one(def, out.agents[i].actions)));
+  return out;
+
+  async function one(def: KamikazeDef, actions: string[]) {
     const account = await ensureKamikaze(def);
     // Turno: evita que dos servidores muevan al mismo kamikaze a la vez.
     const got = await prisma.$executeRaw(Prisma.sql`UPDATE public.trading_accounts SET meeting_lease_until = now() + interval '3 minutes'
       WHERE id = ${account.id}::uuid AND (meeting_lease_until IS NULL OR meeting_lease_until < now())`);
     if (got !== 1) {
       actions.push("ocupado");
-      continue;
+      return;
     }
     try {
       let round = await activeRound(def);
@@ -178,14 +181,13 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
         await prisma.trading_kamikaze_rounds.update({ where: { id: round.id }, data: { status: end, end_equity: after, ended_at: new Date() } });
         actions.push(`ronda ${round.number}: ${end} con ${after.toFixed(2)} €`);
         await startRound(def);
-        continue;
+        return;
       }
 
-      // 3) Decisión con IA (una por revisión, salvo que se pida a mano).
+      // 3) Decisión con IA cuando le toca (o ya, si se pide a mano).
       const due =
         force === def.key ||
         (!force &&
-          !aiUsed &&
           decisionDue({
             now: Date.now(),
             holding: !!pos,
@@ -196,10 +198,8 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
             idleMin: IDLE_MIN(),
             holdMin: HOLD_MIN(),
           }));
-      if (!due) continue;
-      aiUsed = true;
-      market ??= await tickers();
-      const r = await decide(def, round, market, rules);
+      if (!due) return;
+      const r = await decide(def, round, await market(), rules);
       actions.push(r);
     } catch (e) {
       actions.push(`error: ${e instanceof Error ? e.message.slice(0, 160) : "desconocido"}`);
@@ -208,7 +208,6 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       await prisma.trading_accounts.update({ where: { id: account.id }, data: { meeting_lease_until: null } }).catch(() => undefined);
     }
   }
-  return out;
 }
 
 // ---------------------------------------------------------------------------
