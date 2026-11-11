@@ -5,6 +5,7 @@ import { AppPageLayout } from "@/components/app/layouts/app-page-layout";
 import { AppPageHeader } from "@/components/app/layouts/app-page-header";
 import { TradingNavigation } from "@/components/trading/navigation";
 import { TradingWorkspace } from "@/components/trading/trading-workspace";
+import { HomeBalance } from "@/components/trading/home-panel";
 import { TRADING_TABS, isTradingTab } from "@/components/trading/tabs";
 import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 
@@ -22,7 +23,7 @@ export default async function Page({ params }: { params: Promise<{ tab: string }
   return (
     <AppSectionShell sidebar={<TradingNavigation key={ctx.workspaceId} />}>
       <AppPageLayout
-        header={<AppPageHeader section={APP_SECTIONS.trading} items={[{ label: meta.label }]} title={meta.label} description={meta.description} />}
+        header={<AppPageHeader section={APP_SECTIONS.trading} items={[{ label: meta.label }]} title={meta.label} description={meta.description} actions={tab === "inicio" ? <HomeBalance /> : undefined} />}
         contentClassName="!pb-6"
       >
         <TradingWorkspace key={`${ctx.workspaceId}:${tab}`} tab={tab} />
