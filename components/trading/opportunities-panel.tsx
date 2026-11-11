@@ -11,6 +11,7 @@ import { refreshTrading, useTradingRefresh } from "./navigation";
 import { ConfirmOrderModal, EvidenceList, TradeInfoModal, type TradeIdea } from "./trade-modals";
 import { OpenAccount } from "./open-account";
 import { AssetIcon } from "./asset-icon";
+import { FaroPanel } from "./faro-panel";
 
 type Data = Awaited<ReturnType<typeof getOpportunities>>;
 type Buy = Data["buys"][number];
@@ -149,6 +150,7 @@ export function OpportunitiesPanel() {
     <div className="space-y-6">
       {error && <ErrorNote>{error}</ErrorNote>}
       {!data.account.opened && <OpenAccount compact />}
+      <FaroPanel />
 
       {data.sells.length > 0 && (
         <section className="overflow-hidden rounded-2xl border border-amber-100 bg-amber-50/60">

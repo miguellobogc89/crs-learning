@@ -2,19 +2,20 @@
 // Motor de los kamikazes. Cada pocos minutos (cuando alguien usa el módulo o lo pide el cron):
 //   1) vigilancia sin IA: precio al momento de Binance, stop y objetivo, protección del stop;
 //   2) rondas: termina la ronda al llegar a la meta o quedarse sin dinero, y empieza otra;
-//   3) decisión con IA cuando toca (cada 30 min sin posición, cada 60 con ella o si el precio se
-//      mueve mucho), con los candidatos de su estilo y datos de mercado de la última hora.
+//   3) sin posición, toma la mejor idea viva de su estilo del tablón de FARO (sin IA propia: el
+//      análisis lo hace FARO una vez para todos). Las salidas son reglas: stop, objetivo y stop
+//      protegido a partir de +30 %.
 // Opera en su cartera virtual de siempre (accounts.ts): mismas órdenes, mismos costes.
 import "server-only";
 import { Prisma, type trading_kamikaze_rounds } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { aiJson, aiModelInfo } from "../ai";
 import { accountState, closePosition, costOf, ensureAccount, madridDay, placeOrder } from "../accounts";
 import { AGENTS_WORKSPACE } from "../agents/roster";
-import { CRYPTO, CRYPTO_MARKET } from "../market-data";
 import { dayDate } from "../sync";
-import { allInQuantity, checkDecision, decisionDue, exitNow, metricsOf, prefilter, protectedStop, rank, roundOutcome, type AiDecision, type Metrics, type Ticker } from "./logic";
-import { eurPairs, hourly, priceEur, symbolOf, tickers } from "./market";
+import { boardIdeas, faroTick, lastMarketView, setLive } from "../faro/engine";
+import { pickIdea, type BoardIdea } from "../faro/logic";
+import { allInQuantity, exitNow, protectedStop, roundOutcome, type Ticker } from "./logic";
+import { eurPairs, priceEur, tickers } from "./market";
 import { KAMIKAZES, kamikazeByKey, type KamikazeDef } from "./roster";
 
 const WS = AGENTS_WORKSPACE;
@@ -25,9 +26,7 @@ const env = (k: string, d: number) => {
   const n = Number(process.env[k]);
   return Number.isFinite(n) && n > 0 ? n : d;
 };
-const IDLE_MIN = () => env("TRADING_KAMIKAZE_IDLE_MINUTES", 30);
-const HOLD_MIN = () => env("TRADING_KAMIKAZE_HOLD_MINUTES", 60);
-const COOLDOWN_MIN = 30;
+const COOLDOWN_MIN = () => env("TRADING_KAMIKAZE_COOLDOWN_MINUTES", 30);
 const TICK_GAP_MS = 2 * 60_000;
 
 const ensureKamikaze = (def: KamikazeDef) => ensureAccount(WS, def.key, { name: def.name, capital: def.capital, settings: def.settings });
@@ -71,28 +70,6 @@ async function activeRound(def: KamikazeDef) {
   return (await prisma.trading_kamikaze_rounds.findFirst({ where: { agent: def.key, status: "en_curso" } })) ?? startRound(def);
 }
 
-// ---------------------------------------------------------------------------
-// Precios: el de Binance pasa a ser el «precio en directo» del valor en CRS
-// ---------------------------------------------------------------------------
-async function ensureInstrument(symbol: string, base: string) {
-  const known = CRYPTO.find((c) => c.symbol === symbol);
-  return prisma.market_instruments.upsert({
-    where: { symbol },
-    create: { symbol, name: known?.name ?? base, sector: "Crypto", market: CRYPTO_MARKET, currency: "EUR", active: false },
-    update: {},
-  });
-}
-
-async function setLive(instrumentId: string, price: number) {
-  const day = new Date(new Date().toISOString().slice(0, 10));
-  await prisma.$executeRaw(Prisma.sql`UPDATE public.market_instruments SET
-      live_open = CASE WHEN live_day = ${day}::date THEN COALESCE(live_open, ${price}) ELSE ${price} END,
-      live_high = CASE WHEN live_day = ${day}::date THEN GREATEST(COALESCE(live_high, ${price}), ${price}) ELSE ${price} END,
-      live_low = CASE WHEN live_day = ${day}::date THEN LEAST(COALESCE(live_low, ${price}), ${price}) ELSE ${price} END,
-      live_price = ${price}, live_day = ${day}::date, live_at = now()
-    WHERE id = ${instrumentId}::uuid`);
-}
-
 async function snapshotEquity(accountId: string, equity: number, cash: number, invested: number) {
   const day = dayDate(madridDay());
   await prisma.trading_equity.upsert({
@@ -110,7 +87,7 @@ let lastTick = 0;
 
 export type KamikazeTickSummary = { agents: { key: string; actions: string[] }[]; skipped?: string };
 
-/** Revisión de los kamikazes. `force`: decide ya con IA (botón «Reunir»). */
+/** Revisión de FARO y de los kamikazes. `force`: análisis de FARO ya y ese kamikaze busca idea sin pausa. */
 export function kamikazeTick(opts: { force?: string } = {}): Promise<KamikazeTickSummary> {
   if (running) return running;
   if (!opts.force && Date.now() - lastTick < TICK_GAP_MS) return Promise.resolve({ agents: [], skipped: "reciente" });
@@ -124,10 +101,12 @@ export function kamikazeTick(opts: { force?: string } = {}): Promise<KamikazeTic
 async function tick(force: string | null): Promise<KamikazeTickSummary> {
   const out: KamikazeTickSummary = { agents: KAMIKAZES.map((k) => ({ key: k.key, actions: [] as string[] })) };
   const rules = await eurPairs();
-  // El resumen de mercado se pide una sola vez por revisión, y solo si algún kamikaze decide.
-  let marketP: Promise<Ticker[]> | null = null;
-  const market = () => (marketP ??= tickers());
-  // Los tres en paralelo: son independientes y cada decisión con IA tarda lo suyo.
+  const market: Ticker[] = await tickers();
+  // FARO primero: puntúa sus ideas y, si toca, publica nuevas (una sola llamada a la IA para todos).
+  const faro = await faroTick(market, rules, { force: !!force });
+  if (faro.ran) out.agents.forEach((a) => a.actions.push(`FARO: ${faro.ran}`));
+  const board = await boardIdeas();
+  const priceOf = (pair: string) => market.find((t) => t.pair === pair)?.price ?? null;
   await Promise.all(KAMIKAZES.map((def, i) => one(def, out.agents[i].actions)));
   return out;
 
@@ -163,7 +142,7 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
             const lost = (price - (pos.entryPrice ?? price)) < 0;
             round = await prisma.trading_kamikaze_rounds.update({
               where: { id: round.id },
-              data: { trades: { increment: 1 }, ...(lost ? { cooldown_until: new Date(Date.now() + COOLDOWN_MIN * 60_000) } : {}) },
+              data: { trades: { increment: 1 }, ...(lost ? { cooldown_until: new Date(Date.now() + COOLDOWN_MIN() * 60_000) } : {}) },
             });
             actions.push(`${pos.symbol}: ${hit}`);
           } else {
@@ -192,23 +171,15 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
         return;
       }
 
-      // 3) Decisión con IA cuando le toca (o ya, si se pide a mano).
-      const due =
-        force === def.key ||
-        (!force &&
-          decisionDue({
-            now: Date.now(),
-            holding: !!pos,
-            lastAt: round.last_decision_at?.getTime() ?? null,
-            lastPrice: round.last_decision_price,
-            price,
-            cooldownUntil: round.cooldown_until?.getTime() ?? null,
-            idleMin: IDLE_MIN(),
-            holdMin: HOLD_MIN(),
-          }));
-      if (!due) return;
-      const r = await decide(def, round, await market(), rules);
-      actions.push(r);
+      // 3) Sin posición: la mejor idea viva de su estilo en el tablón de FARO.
+      if (pos) return;
+      if (force !== def.key && round.cooldown_until && round.cooldown_until.getTime() > Date.now()) return;
+      // Una idea solo se toma una vez por ronda.
+      const mine = await prisma.trading_positions.findMany({ where: { account_id: account.id, signal_key: { startsWith: "faro:", endsWith: `:${round.id}` } }, select: { signal_key: true } });
+      const taken = new Set(mine.map((p) => p.signal_key?.split(":")[1] ?? ""));
+      const pick = pickIdea(def.style, board, priceOf, Date.now(), taken);
+      if (!pick) return;
+      actions.push(await takeIdea(def, round, pick));
     } catch (e) {
       actions.push(`error: ${e instanceof Error ? e.message.slice(0, 160) : "desconocido"}`);
       console.error("[kamikaze]", def.key, e);
@@ -219,221 +190,72 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
 }
 
 // ---------------------------------------------------------------------------
-// Decisión con IA
+// Tomar una idea de FARO
 // ---------------------------------------------------------------------------
-const SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  required: ["market_view", "decision"],
-  properties: {
-    market_view: { type: "string", description: "Cómo ves ahora tus candidatos, en 1-2 frases." },
-    decision: {
-      type: "object",
-      additionalProperties: false,
-      required: ["action", "symbol", "conviction", "stop", "target", "rationale", "risks"],
-      properties: {
-        action: { type: "string", enum: ["comprar", "vender", "mantener", "esperar"] },
-        symbol: { type: "string", description: "Par de Binance (p. ej. SOLEUR). Vacío si esperas." },
-        conviction: { type: "integer", minimum: 1, maximum: 5 },
-        stop: { type: "number", description: "Precio de stop en euros (0 si no aplica)." },
-        target: { type: "number", description: "Precio objetivo en euros (0 si no aplica)." },
-        rationale: { type: "string", description: "Por qué, en 2-3 frases. Puedes marcar lo clave con **negritas**." },
-        risks: { type: "string" },
-      },
-    },
-  },
-} as const;
+type Pick = { idea: BoardIdea & { symbol: string; rationale: string; runId: string | null }; price: number; stop: number; target: number };
 
-const STYLE_TEXT: Record<KamikazeDef["style"], string> = {
-  impulso: "Los candidatos son las monedas en euros que más suben con volumen. Busca la que tenga el impulso más limpio y aún no agotado.",
-  rupturas: "Los candidatos están cerca de sus máximos de 3 días con volumen al alza. Busca la ruptura con más fuerza o una noticia que pueda dispararla.",
-  rebotes: "Los candidatos han caído con fuerza desde sus máximos de 3 días. Busca la que empieza a girarse (sube en la última hora) con volumen.",
-};
-
-async function decide(def: KamikazeDef, round: trading_kamikaze_rounds, market: Ticker[], rules: Awaited<ReturnType<typeof eurPairs>>) {
+async function takeIdea(def: KamikazeDef, round: trading_kamikaze_rounds, pick: Pick) {
   const state = await accountState(WS, def.key);
-  const s = state.summary;
-  const pos = state.positions.find((p) => p.status === "abierta") ?? null;
-  const holdingPair = pos ? (market.find((t) => t.base === pos.symbol.replace(/-EUR$/, ""))?.pair ?? pairFor(pos.symbol, rules)) : null;
-
-  // Candidatos de su estilo: criba con el resumen de 24 h y detalle con velas horarias.
-  const pre = prefilter(def.style, market, 15);
-  if (holdingPair && !pre.some((t) => t.pair === holdingPair)) {
-    const t = market.find((x) => x.pair === holdingPair);
-    if (t) pre.push(t);
-  }
-  const detailed: Metrics[] = [];
-  for (const t of pre) {
-    try {
-      detailed.push(metricsOf(t, await hourly(t.pair)));
-    } catch {
-      // Sin velas de este par: se queda fuera.
-    }
-  }
-  const candidates = rank(def.style, detailed, 10);
-  const holdingMetrics = holdingPair ? detailed.find((m) => m.pair === holdingPair) ?? null : null;
-  const livePrice = (pair: string) => detailed.find((m) => m.pair === pair)?.price ?? market.find((m) => m.pair === pair)?.price ?? null;
-
-  const bases = [...new Set([...candidates.map((c) => c.base), ...(pos ? [pos.symbol.replace(/-EUR$/, "")] : [])])];
-  const news = await prisma.news_items.findMany({
-    where: { status: "clasificada", relevant: true, published_at: { gte: new Date(Date.now() - DAY) }, symbols: { hasSome: [...bases, "CRYPTO"] } },
-    orderBy: [{ impact: "desc" }, { published_at: "desc" }],
-    take: 12,
-    select: { title: true, summary: true, symbols: true, sentiment: true, impact: true, published_at: true },
+  const { idea } = pick;
+  const px = (await priceEur(idea.pair)) ?? pick.price;
+  const inst = await prisma.market_instruments.findUnique({ where: { symbol: idea.symbol }, select: { id: true } });
+  if (inst) await setLive(inst.id, px);
+  const quantity = allInQuantity(state.summary.available, px, costOf(state.account));
+  const view = await lastMarketView();
+  const run = await prisma.trading_committee_runs.create({
+    data: { workspace_id: WS, agent: def.key, as_of: dayDate(madridDay()), status: "ok", market_view: view?.marketView ?? null, context: { faro: idea.id } as Prisma.InputJsonValue },
   });
-
-  const r2 = (x: number) => Math.round(x * 100) / 100;
-  const input = {
-    ahora: new Date().toISOString(),
-    ronda: {
-      numero: round.number,
-      capital_inicial: round.start_capital,
-      patrimonio: r2(s.equity),
-      efectivo: r2(s.available),
-      meta: round.goal,
-      operaciones: round.trades,
-    },
-    posicion: pos
-      ? {
-          par: holdingPair,
-          entrada: pos.entryPrice,
-          precio: holdingMetrics?.price ?? pos.lastPrice,
-          resultado_pct: pos.entryPrice && pos.lastPrice ? r2(((pos.lastPrice - pos.entryPrice) / pos.entryPrice) * 100) : null,
-          stop: pos.stop,
-          objetivo: pos.target,
-          desde: pos.entryDay,
-          metricas: holdingMetrics ? summary(holdingMetrics) : null,
-        }
-      : null,
-    candidatos: candidates.map(summary),
-    noticias: news.map((n) => ({ hace_h: Math.round((Date.now() - n.published_at.getTime()) / 3_600_000), monedas: n.symbols, resumen: n.summary || n.title, sentimiento: n.sentiment, impacto: n.impact })),
-  };
-  const instructions = [
-    def.persona,
-    STYLE_TEXT[def.style],
-    "Reglas: una sola posición a la vez y con todo el efectivo. Para comprar, elige SOLO un par de la lista de candidatos, con stop entre un 5 % y un 40 % por debajo del precio y objetivo al menos un 10 % por encima (sin un plazo obligatorio para alcanzar la meta).",
-    "Si tienes posición: «mantener» (puedes subir el stop o mover el objetivo), «vender» si el movimiento se ha agotado o hay algo mejor, o déjala correr. Sin posición: «comprar» o «esperar» si de verdad no hay nada; espera si no hay una oportunidad válida.",
-    "Todos los precios y volúmenes están en euros (los pares en USDC ya vienen convertidos). Cambios en %, fromHigh3d = distancia al máximo de 3 días, volSurge = volumen de las últimas 4 h frente a la media (1 = normal).",
-    "Responde en español, claro y breve.",
-  ].join("\n");
-
-  const runBase = { workspace_id: WS, agent: def.key, as_of: dayDate(madridDay()), context: { ronda: input.ronda, candidatos: candidates.length } as Prisma.InputJsonValue, model: aiModelInfo().smart ?? null };
-  let ai: { market_view: string; decision: AiDecision };
-  try {
-    ai = await aiJson({ tier: "smart", purpose: "kamikaze", instructions, input: JSON.stringify(input), schemaName: "kamikaze_decision", schema: SCHEMA as unknown as Record<string, unknown>, maxOutputTokens: 2500, timeoutMs: 45_000 });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message.slice(0, 300) : "error";
-    await prisma.trading_committee_runs.create({ data: { ...runBase, status: "error", error: msg } });
-    await prisma.trading_kamikaze_rounds.update({ where: { id: round.id }, data: { last_decision_at: new Date() } });
-    return `IA: ${msg}`;
-  }
-
-  const d = ai.decision;
-  const checked = checkDecision(d, {
-    holding: pos && holdingPair ? { pair: holdingPair, entry: pos.entryPrice ?? 0, stop: pos.stop, target: pos.target } : null,
-    candidates: candidates.map((c) => ({ pair: c.pair, price: c.price })),
-    price: livePrice,
-  });
-  const run = await prisma.trading_committee_runs.create({ data: { ...runBase, status: "ok", market_view: ai.market_view, raw: ai as unknown as Prisma.InputJsonValue } });
-
   let status = "ejecutada";
   let rejection: string | null = null;
   let positionId: string | null = null;
-  let symbol = pos?.symbol ?? "";
-  let px = holdingPair ? livePrice(holdingPair) : null;
-  let quantity: number | null = null;
   try {
-    if (checked.action === "rechazada") {
-      status = "rechazada";
-      rejection = checked.reason;
-    } else if (checked.action === "comprar") {
-      symbol = symbolOf(checked.pair, rules) ?? `${checked.pair.replace(/EUR$/, "")}-EUR`;
-      const inst = await ensureInstrument(symbol, rules.get(checked.pair)?.base ?? symbol.replace(/-EUR$/, ""));
-      px = (await priceEur(checked.pair)) ?? livePrice(checked.pair);
-      if (!px) throw new Error("Sin precio al momento");
-      await setLive(inst.id, px);
-      quantity = allInQuantity(s.available, px, costOf(state.account));
-      const placed = await placeOrder(
-        WS,
-        null,
-        {
-          symbol,
-          direction: "long",
-          quantity,
-          stop: checked.stop,
-          target: checked.target,
-          execution: "now",
-          maxHoldDays: null,
-          notes: `${def.name}: ${d.rationale}`,
-          source: "agente",
-          signalKey: `kamikaze:${round.id}:${Date.now()}`,
-        },
-        def.key,
-      );
-      positionId = placed.id;
-      await prisma.trading_kamikaze_rounds.update({ where: { id: round.id }, data: { trades: { increment: 1 } } });
-    } else if (checked.action === "vender" && pos) {
-      await closePosition(WS, pos.id, def.key, "decisión del agente");
-      positionId = pos.id;
-      const lost = pos.unrealized !== null && pos.unrealized < 0;
-      if (lost) await prisma.trading_kamikaze_rounds.update({ where: { id: round.id }, data: { cooldown_until: new Date(Date.now() + COOLDOWN_MIN * 60_000) } });
-    } else if (checked.action === "mantener" && pos) {
-      await prisma.trading_positions.update({
-        where: { id: pos.id },
-        data: { ...(checked.stop ? { stop: checked.stop } : {}), ...(checked.target ? { target: checked.target } : {}), updated_at: new Date() },
-      });
-      positionId = pos.id;
-    }
+    const placed = await placeOrder(
+      WS,
+      null,
+      {
+        symbol: idea.symbol,
+        direction: "long",
+        quantity,
+        stop: pick.stop,
+        target: pick.target,
+        execution: "now",
+        maxHoldDays: null,
+        notes: `${def.name} toma una idea de ${idea.kind}: ${idea.rationale}`,
+        source: "agente",
+        signalKey: `faro:${idea.id}:${def.key}:${round.id}`,
+      },
+      def.key,
+    );
+    positionId = placed.id;
+    await prisma.trading_kamikaze_rounds.update({ where: { id: round.id }, data: { trades: { increment: 1 }, last_decision_at: new Date(), last_decision_price: px } });
   } catch (e) {
     status = "descartada";
     rejection = `No se pudo ejecutar: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`;
   }
-
-  if (checked.action !== "esperar" && symbol) {
-    await prisma.trading_proposals.create({
-      data: {
-        run_id: run.id,
-        workspace_id: WS,
-        agent: def.key,
-        symbol,
-        name: symbol.replace(/-EUR$/, ""),
-        market: "crypto",
-        action: d.action,
-        conviction: Math.max(1, Math.min(5, Math.round(d.conviction))),
-        horizon_days: 0,
-        price: px ?? 0,
-        stop: d.stop || null,
-        target: d.target || null,
-        quantity,
-        rationale: d.rationale,
-        risks: d.risks || null,
-        status,
-        rejection,
-        position_id: positionId,
-        decided_at: new Date(),
-      },
-    });
-  }
-  await prisma.trading_kamikaze_rounds.update({
-    where: { id: round.id },
-    data: { last_decision_at: new Date(), last_decision_price: px ?? null },
+  await prisma.trading_proposals.create({
+    data: {
+      run_id: run.id,
+      workspace_id: WS,
+      agent: def.key,
+      symbol: idea.symbol,
+      name: idea.symbol.replace(/-EUR$/, ""),
+      market: "crypto",
+      action: "comprar",
+      conviction: idea.conviction,
+      horizon_days: 1,
+      price: px,
+      stop: pick.stop,
+      target: pick.target,
+      quantity,
+      rationale: idea.rationale,
+      risks: null,
+      status,
+      rejection,
+      position_id: positionId,
+      decided_at: new Date(),
+    },
   });
-  return `${d.action}${symbol ? ` ${symbol}` : ""}${rejection ? ` (${rejection})` : ""}`;
-}
-
-function summary(m: Metrics) {
-  const r = (x: number) => Math.round(x * 100) / 100;
-  return {
-    par: m.pair,
-    precio: m.price,
-    cambio_1h: r(m.ch1h),
-    cambio_4h: r(m.ch4h),
-    cambio_24h: r(m.ch24h),
-    fromHigh3d: r(m.fromHigh3d),
-    fromLow3d: r(m.fromLow3d),
-    volSurge: r(m.volSurge),
-    volumen_24h_eur: Math.round(m.volume24h),
-  };
+  return `compra ${idea.symbol} (idea de ${idea.kind})${rejection ? ` (${rejection})` : ""}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -472,7 +294,7 @@ export async function kamikazeView(key: string) {
   };
 }
 
-/** «Reunir ahora» de un kamikaze: decisión con IA ya. */
+/** «Reunir ahora» de un kamikaze: análisis de FARO ya y, si hay idea de su estilo, entra. */
 export async function runKamikazeNow(key: string) {
   const r = await kamikazeTick({ force: key });
   const a = r.agents.find((x) => x.key === key);

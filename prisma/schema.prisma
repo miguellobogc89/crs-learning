@@ -2536,3 +2536,43 @@ model trading_kamikaze_rounds {
   @@unique([agent, number], map: "trading_kamikaze_rounds_agent_number")
   @@index([agent, status], map: "trading_kamikaze_rounds_agent_status")
 }
+
+/// FARO: cada análisis del mercado cripto (una llamada a la IA para todos los agentes).
+model trading_faro_runs {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  status      String   @default("en_curso")
+  market_view String?
+  ideas       Int      @default(0)
+  error       String?
+
+  @@index([created_at], map: "trading_faro_runs_created_at")
+}
+
+/// FARO: ideas del tablón común, con su resultado una vez resueltas (acierto, fallo o caducada).
+model trading_faro_ideas {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  run_id       String?   @db.Uuid
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  pair         String
+  symbol       String
+  kind         String
+  conviction   Int
+  price        Float
+  invalidation Float
+  target       Float
+  valid_until  DateTime  @db.Timestamptz(6)
+  rationale    String
+  risks        String?
+  status       String    @default("viva")
+  last_price   Float?
+  best_pct     Float?
+  worst_pct    Float?
+  exit_price   Float?
+  result_pct   Float?
+  resolved_at  DateTime? @db.Timestamptz(6)
+  checked_at   DateTime? @db.Timestamptz(6)
+
+  @@index([status], map: "trading_faro_ideas_status")
+  @@index([created_at], map: "trading_faro_ideas_created_at")
+}
