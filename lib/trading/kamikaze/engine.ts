@@ -141,6 +141,11 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       return;
     }
     try {
+      // Las posiciones anteriores también dejan de caducar por el plazo de la ronda.
+      await prisma.trading_positions.updateMany({
+        where: { account_id: account.id, status: { in: ["abierta", "pendiente"] }, max_hold_until: { not: null } },
+        data: { max_hold_until: null },
+      });
       let round = await activeRound(def);
 
       // 1) Vigilancia sin IA.
