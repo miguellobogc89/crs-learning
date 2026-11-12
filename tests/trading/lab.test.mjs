@@ -106,3 +106,20 @@ test("laboratorio: el corto gana cuando Bitcoin cae y pierde cuando sube (con fi
   const r2 = simulate(rise, shortOnly, { from: t0 + 250 * DAY, feePct: 0, slippagePct: 0 });
   assert.ok(Math.abs(r2.stats.totalPct) < 1, `en subida no está corto: ${r2.stats.totalPct}`);
 });
+
+test("laboratorio: el universo «de cada momento» solo ve las monedas con volumen y antigüedad", () => {
+  const { withUniverse, CHIP } = load("lib/trading/lab/strategies.ts");
+  const seen = [];
+  const spy = { key: "spy", name: "spy", idea: "", decide: (c) => (seen.push(c.coins), null) };
+  const mk = (n, f, v) => line(n, f).map((k) => ({ ...k, v }));
+  const coins = [
+    { symbol: "BTC-EUR", candles: mk(300, (i) => 100 + i, 1000) },
+    { symbol: "BIG-EUR", candles: mk(300, () => 10, 500) },
+    { symbol: "TINY-EUR", candles: mk(300, () => 10, 1) },
+    // Recién listada: aún sin 60 días
+    { symbol: "NEW-EUR", candles: mk(300, () => 10, 9999).map((k, i) => (i < 260 ? null : k)).filter(Boolean) },
+  ];
+  simulate(coins, withUniverse(spy, 2), { from: t0 + 280 * DAY });
+  assert.deepEqual([...seen[0]].sort(), ["BIG-EUR", "BTC-EUR"]);
+  assert.ok(CHIP.length > 0);
+});

@@ -29,6 +29,10 @@ export type Ctx = {
   holding: (symbol: string) => boolean;
   /** Si está corto (apostando a la baja) en ese valor. */
   short?: (symbol: string) => boolean;
+  /** Volumen medio diario en euros de los `n` días anteriores (sin contar hoy). */
+  volumeEur?: (symbol: string, n: number) => number | null;
+  /** Días de historia que tiene la moneda hasta hoy (incluido). */
+  age?: (symbol: string) => number;
 };
 
 export type Strategy = {
@@ -189,6 +193,12 @@ export function simulate(
       },
       holding: (s) => (units.get(s) ?? 0) > 0,
       short: (s) => (units.get(s) ?? 0) < 0,
+      volumeEur: (s, n) => volumeAt(bySym.get(s), day, n),
+      age: (s) => {
+        const d = bySym.get(s);
+        const i = d?.byDay.get(day);
+        return d && i !== undefined ? i + 1 : 0;
+      },
     };
     const w = busted ? null : strategy.decide(ctx);
     if (w) {
@@ -266,6 +276,44 @@ export function contextAt(coins: Coin[], day: number, step: number, holding: (s:
     },
     holding,
     short,
+    volumeEur: (s, n) => volumeAt(bySym.get(s), day, n),
+    age: (s) => {
+      const x = at(s);
+      return x ? x.i + 1 : 0;
+    },
+  };
+}
+
+function volumeAt(d: Prepared | undefined, day: number, n: number) {
+  const i = d?.byDay.get(dayOf(day));
+  if (!d || i === undefined || i - n < 0) return null;
+  let sum = 0;
+  for (let k = i - n; k < i; k++) sum += d.candles[k].v * d.candles[k].c;
+  return sum / n;
+}
+
+/**
+ * Universo «de cada momento»: la estrategia solo ve las `top` monedas con más volumen en euros en los
+ * 30 días anteriores (y con al menos `minAge` días cotizando), más las que ya tenga. Así no sabe qué
+ * monedas serán famosas en el futuro (evita el sesgo de supervivencia de usar la lista de hoy).
+ */
+export function withUniverse(inner: Strategy, top: number, minAge = 60): Strategy {
+  return {
+    key: `${inner.key}-u${top}`,
+    name: `${inner.name} · top ${top} de cada momento`,
+    idea: `${inner.idea} Solo entre las ${top} monedas con más volumen en euros del último mes (y con ${minAge} días cotizando).`,
+    decide: (c) => {
+      const ranked = c.coins
+        .filter((s) => (c.age?.(s) ?? 0) >= minAge)
+        .map((s) => ({ s, v: c.volumeEur?.(s, 30) ?? 0 }))
+        .filter((x) => x.v > 0)
+        .sort((a, b) => b.v - a.v)
+        .slice(0, top)
+        .map((x) => x.s);
+      const keep = c.coins.filter((s) => c.holding(s) || c.short?.(s));
+      const coins = [...new Set([...ranked, ...keep])];
+      return inner.decide({ ...c, coins });
+    },
   };
 }
 

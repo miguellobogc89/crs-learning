@@ -4,11 +4,11 @@
 // Solo LEE datos públicos: no toca la base de datos ni opera.
 //
 // Uso (en tu PC, desde la carpeta del proyecto):
-//   node scripts/trading/lab-universo.mjs                 (5 años, top 40)
+//   node scripts/trading/lab-universo.mjs                 (5 años, top 40; descarga todas las monedas en euros: unos minutos)
 //   node scripts/trading/lab-universo.mjs --top 60 --years 3
 import { load } from "../../tests/trading/helpers.mjs";
 
-const { simulate, CHIP, HOLD_BTC } = load("lib/trading/lab/strategies.ts");
+const { simulate, CHIP, HOLD_BTC, withUniverse } = load("lib/trading/lab/strategies.ts");
 const API = "https://api.bitvavo.com/v2";
 const BASE12 = ["BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "AVAX", "DOT", "LINK", "LTC", "TRX"];
 // Monedas estables y oro: no son inversiones con tendencia.
@@ -58,7 +58,8 @@ const pad = (s, n) => String(s).padStart(n);
 const markets = (await get("/markets")).filter((m) => m.quote === "EUR" && m.status === "trading" && !SKIP.has(m.base));
 const volume = new Map((await get("/ticker/24h")).map((t) => [t.market, Number(t.volumeQuote) || 0]));
 const ranked = markets.sort((a, b) => (volume.get(b.market) ?? 0) - (volume.get(a.market) ?? 0));
-const chosen = [...new Set([...BASE12.filter((b) => markets.some((m) => m.base === b)), ...ranked.slice(0, top).map((m) => m.base)])];
+// Para la prueba sin sesgo hacen falta TODAS las monedas en euros (la lista «de cada momento» se calcula con su volumen de entonces).
+const chosen = [...new Set([...BASE12.filter((b) => markets.some((m) => m.base === b)), ...ranked.map((m) => m.base)])];
 
 console.log(`\nDescargando ${chosen.length} monedas de Bitvavo…`);
 const coins = [];
@@ -82,15 +83,17 @@ const chipA = CHIP.find((s) => s.key === "chip-a-rupt");
 const entries = [
   { name: "Mantener Bitcoin", s: HOLD_BTC, coins: base12 },
   { name: `CAMALEÓN · 12 de siempre`, s: camaleon, coins: base12 },
-  { name: `CAMALEÓN · top ${top} Bitvavo`, s: camaleon, coins: topN },
-  { name: `CAMALEÓN · 12 + top ${top}`, s: camaleon, coins },
-  { name: `Chip A rupturas · top ${top}`, s: chipA, coins: topN },
+  { name: `CAMALEÓN · top ${top} de HOY (sesgo)`, s: camaleon, coins: topN },
+  { name: `CAMALEÓN · top ${top} de cada momento`, s: withUniverse(camaleon, top), coins },
+  { name: `CAMALEÓN · top 20 de cada momento`, s: withUniverse(camaleon, 20), coins },
+  { name: `Chip A rupt. · top ${top} cada momento`, s: withUniverse(chipA, top), coins },
 ];
 
 console.log(`\nCAMALEÓN con más monedas · velas diarias de Bitvavo en euros · comisión ${fee} % por orden + 0,05 % deslizamiento`);
-console.log(`Monedas con datos al empezar (${day(from)}): 12 de siempre ${withHistory(base12, from)} · top ${top} ${withHistory(topN, from)} · todas ${withHistory(coins, from)} (las nuevas entran cuando empiezan a cotizar)\n`);
+console.log(`Monedas con datos al empezar (${day(from)}): 12 de siempre ${withHistory(base12, from)} · top ${top} de hoy ${withHistory(topN, from)} · todas ${withHistory(coins, from)} de ${coins.length} (las nuevas entran cuando empiezan a cotizar)`);
+console.log(`«De cada momento»: cada día solo vigila las monedas con más volumen en euros del mes anterior y con 60 días cotizando: no sabe cuáles serán famosas.\n`);
 
-const W = 34;
+const W = 40;
 console.log(`Periodo completo (${years} años)`);
 console.log(`${"Agente".padEnd(W)} ${pad("Total", 10)} ${pad("Al año", 9)} ${pad("Caída", 9)} ${pad("Invert.", 8)} ${pad("Cambios", 8)}`);
 for (const e of entries) {
@@ -123,4 +126,4 @@ for (const e of entries) {
 
 const usedTop = topN.map((c) => c.symbol.replace("-EUR", "")).join(", ");
 console.log(`\nTop ${top} por volumen hoy en Bitvavo: ${usedTop}`);
-console.log(`Ojo: el «top» es el de hoy; hace años algunas eran desconocidas. Eso favorece un poco a las listas grandes (sesgo de supervivencia).\n`);
+console.log(`Ojo: «de HOY» usa la lista actual (sabe el futuro: sesgo). La que vale es «de cada momento». Aun así faltan las monedas que Bitvavo ya retiró.\n`);
