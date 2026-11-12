@@ -191,7 +191,7 @@ export function HomePanel() {
             <b className="font-semibold text-slate-900">Tú</b>
           </span>
         ) : (
-          <Link href={`/trading/agentes?agent=${r.key}`} className="group flex min-w-0 items-center gap-2">
+          <Link href={`/trading/agentes/${r.key}?from=inicio`} className="group flex min-w-0 items-center gap-2">
             <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR[r.color] ?? AVATAR.slate} text-white`}>
               <Bot className="h-4 w-4" />
             </span>
@@ -239,7 +239,17 @@ export function HomePanel() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       {!account.opened && <OpenAccount />}
-      <DataTable id="inicio-operadores" height="min-h-0 flex-1" header={header} columns={columns} rows={rows} rowKey={(r) => r.key} paginate label="operadores" />
+      <DataTable
+        id="inicio-operadores"
+        height="min-h-0 flex-1"
+        header={header}
+        columns={columns}
+        rows={rows}
+        rowKey={(r) => r.key}
+        onRowClick={(r) => router.push(r.key === "tu" ? "/trading/cartera" : `/trading/agentes/${r.key}?from=inicio`)}
+        paginate
+        label="operadores"
+      />
     </div>
   );
 }

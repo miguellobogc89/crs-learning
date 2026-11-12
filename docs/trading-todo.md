@@ -39,3 +39,11 @@ Apuntado el 10/11/2026. Sin empezar.
 ## UX (12/11/2026)
 - [ ] Quitar la sección «Reglas y riesgo»: aquí se opera por copia (sin ajustes de riesgo propios ni modo automático por figuras).
 - [ ] Nueva sección «Mercados» (debajo de Mi cartera) que unifica Valores seguidos, Gráficos, Noticias y Aprende, con pestañas horizontales: Valores (lista; al pulsar, su gráfico), Noticias y Aprende. Cada pestaña con su URL (`/trading/mercados?tab=…`); en móvil, fila desplazable.
+
+## Agentes (12/11/2026)
+- [x] Página propia de cada agente (`/trading/agentes/<clave>`, miga «Inicio > X» o «Agentes > X»).
+- [x] Tarjetas con menú de tres puntos, puesto junto al nombre y estado de tus copias.
+- [ ] Pausar / reanudar agente (en el menú como «Pronto»).
+- [ ] Duplicar agente y crear agente de verdad (el formulario ya está, sin guardar).
+- [ ] Eliminar (solo agentes de usuarios).
+- [ ] Páginas de usuarios con cartera pública (p. ej. Paco_Gomez), solo si el usuario la hace pública.

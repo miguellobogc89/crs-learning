@@ -75,7 +75,7 @@ export function CopiesPanel() {
               {data.copies.map((c) => (
                 <tr key={c.agent} className="border-t border-slate-100 align-top">
                   <td className="px-3 py-2.5">
-                    <Link href={`/trading/agentes?agent=${c.agent}`} className="flex items-center gap-3 hover:underline">
+                    <Link href={`/trading/agentes/${c.agent}`} className="flex items-center gap-3 hover:underline">
                       <AgentAvatar color={c.color} /> <b className="font-semibold text-slate-900">Copia de {c.name}</b>
                     </Link>
                   </td>

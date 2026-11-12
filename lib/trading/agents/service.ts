@@ -36,6 +36,13 @@ export async function getAgents(workspaceId?: string) {
   const copies = workspaceId
     ? await prisma.trading_accounts.findMany({ where: { workspace_id: workspaceId, agent: { in: AGENTS.map((a) => copyKey(a.key)) }, copy_weight_pct: { not: null } } })
     : [];
+  // Tus copias: la virtual (subcartera con su peso) y la de dinero real/ensayo en tu exchange.
+  const copyReturns = new Map<string, number>(
+    await Promise.all(copies.map(async (c) => [c.agent, (await accountState(c.workspace_id, c.agent)).summary.returnPct] as const)),
+  );
+  const mirrors = workspaceId
+    ? await prisma.trading_mirrors.findMany({ where: { workspace_id: workspaceId, active: true }, include: { legs: { select: { result: true, status: true } } } })
+    : [];
   const started = Math.min(...accounts.map((a) => a.created_at.getTime()));
   const benchInst = await prisma.market_instruments.findMany({ where: { symbol: { in: [INDEX_SYMBOL, CRYPTO_BENCHMARK] } } });
   const benchSeries = await loadSeries(benchInst.map((i) => i.id), new Date(started - 5 * 86_400_000));
@@ -74,6 +81,15 @@ export async function getAgents(workspaceId?: string) {
         },
         startedAt: account.created_at.toISOString(),
         copyWeightPct: copies.find((c) => c.agent === copyKey(def.key))?.copy_weight_pct ?? null,
+        /** Rentabilidad de tu copia virtual desde que la empezaste. */
+        copyReturnPct: copyReturns.get(copyKey(def.key)) ?? null,
+        /** Tu copia en el exchange (ensayo o dinero real): presupuesto y resultado cerrado. */
+        mirror: (() => {
+          const m = mirrors.find((x) => x.agent === def.key);
+          if (!m) return null;
+          const result = m.legs.reduce((s, l) => s + (l.status === "cerrada" ? l.result ?? 0 : 0), 0);
+          return { mode: m.mode as "ensayo" | "real", budget: m.budget, result, resultPct: m.budget > 0 ? (result / m.budget) * 100 : 0, since: m.started_at.toISOString() };
+        })(),
         summary: state.summary,
         positions: state.positions.filter((p) => p.status === "abierta" || p.status === "pendiente"),
         closed: state.positions.filter((p) => p.status === "cerrada").slice(0, 20),
