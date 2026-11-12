@@ -2677,3 +2677,15 @@ model trading_wallet_snapshots {
   @@id([connection_id, day])
   @@index([workspace_id, day], map: "trading_wallet_snapshots_workspace_day_idx")
 }
+
+/// Valor total en EUR de los exchanges reales de un usuario, agrupado en franjas de 5 minutos.
+/// El saldo incluye aportaciones y retiradas: NO es una serie de rentabilidad.
+model trading_wallet_intraday {
+  user_id     String   @db.Uuid
+  workspace_id String  @db.Uuid
+  sampled_at  DateTime @db.Timestamptz(6)
+  total       Float
+
+  @@id([user_id, workspace_id, sampled_at])
+  @@index([workspace_id, sampled_at(sort: Desc)], map: "trading_wallet_intraday_workspace_time_idx")
+}
