@@ -84,8 +84,43 @@ export async function getWallets(actor: Extract<BrokerActor, { kind: "user" }>) 
   );
   // Primero el que opera, luego los reales y al final las demos.
   items.sort((a, b) => Number(b.operating) - Number(a.operating) || Number(b.environment === "real") - Number(a.environment === "real"));
-  const total = items.filter((i) => i.environment === "real" && i.currency === "EUR" && i.total !== null).reduce((s, i) => s + (i.total ?? 0), 0);
-  return { total, items };
+  const realEur = items.filter((i) => i.environment === "real" && i.currency === "EUR");
+  const total = realEur.reduce((s, i) => s + (i.total ?? 0), 0);
+
+  // Solo una lectura válida y completa se guarda: una conexión fallida no debe verse como
+  // una caída artificial de patrimonio. El muestreo es idempotente por franja de 5 min.
+  const samplingNow = Date.now();
+  const bucket = new Date(Math.floor(samplingNow / (5 * 60_000)) * (5 * 60_000));
+  if (realEur.length > 0 && realEur.every((i) => i.total !== null && Number.isFinite(i.total))) {
+    await prisma.trading_wallet_intraday.upsert({
+      where: {
+        user_id_workspace_id_sampled_at: {
+          user_id: actor.userId,
+          workspace_id: actor.workspaceId,
+          sampled_at: bucket,
+        },
+      },
+      create: { user_id: actor.userId, workspace_id: actor.workspaceId, sampled_at: bucket, total },
+      update: { total },
+    }).catch((e) => console.error("[trading] No se pudo guardar el saldo intradía", e));
+    // Retención acotada (7 días) para que la tabla no crezca indefinidamente.
+    if (bucket.getUTCMinutes() === 0)
+      await prisma.trading_wallet_intraday.deleteMany({
+        where: {
+          user_id: actor.userId,
+          workspace_id: actor.workspaceId,
+          sampled_at: { lt: new Date(samplingNow - 7 * 86_400_000) },
+        },
+      }).catch((e) => console.error("[trading] No se pudo limpiar el historial intradía", e));
+  }
+  const history = await prisma.trading_wallet_intraday.findMany({
+    where: { user_id: actor.userId, workspace_id: actor.workspaceId, sampled_at: { gte: new Date(samplingNow - 7 * 86_400_000) } },
+    orderBy: { sampled_at: "asc" },
+    select: { sampled_at: true, total: true },
+  }).then((points) => points.map((p) => ({ day: p.sampled_at.toISOString(), equity: p.total })))
+    .catch(() => [] as { day: string; equity: number }[]); // Migración aún no aplicada: no bloquear la cartera.
+
+  return { total, items, history };
 }
 
 
