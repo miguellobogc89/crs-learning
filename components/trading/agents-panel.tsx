@@ -1,7 +1,7 @@
 "use client";
 // Agentes: catálogo de gestores de IA (en tarjetas o en lista) con la misma información, distinto carácter
 // y su propia cartera virtual. Cada tarjeta lleva a la página del agente (/trading/agentes/<clave>).
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Copy, CopyPlus, LayoutGrid, List, Loader2, MoreHorizontal, Pause, Play, Plus, RotateCcw, Search, Trash2, Wallet } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
@@ -72,11 +72,14 @@ export function AgentsPanel() {
   }, [load]);
   useTradingRefresh(load);
 
-  const q = query.trim().toLowerCase();
-  const list = data?.agents
-    .filter((a) => profile === "todos" || a.profile === profile)
-    .filter((a) => !q || [a.name, a.profile, a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
-    .sort(SORTS[sort].fn) ?? [];
+  const list = useMemo(() => {
+    if (!data) return [];
+    const q = query.trim().toLowerCase();
+    return data.agents
+      .filter((a) => profile === "todos" || a.profile === profile)
+      .filter((a) => !q || [a.name, a.profile, a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
+      .sort(SORTS[sort].fn);
+  }, [data, profile, query, sort]);
 
   // Animación FLIP: las tarjetas que permanecen se deslizan hacia su nueva posición.
   // Sin dependencias adicionales y respetando la preferencia de movimiento reducido.
@@ -118,7 +121,7 @@ export function AgentsPanel() {
     }
     previousPositions.current = next;
     hadCards.current = true;
-  }, [data, layout, query, profile, sort]);
+  }, [data, layout, list]);
 
   const meet = async (a: Agent) => {
     setBusy(a.key);
