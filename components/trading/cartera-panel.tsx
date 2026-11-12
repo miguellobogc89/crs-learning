@@ -60,6 +60,7 @@ export function CarteraPanel() {
   const [managing, setManaging] = useState<Row | null>(null);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<"24h" | "7d">("24h");
 
   const load = useCallback(async () => {
     try {
@@ -79,6 +80,11 @@ export function CarteraPanel() {
     void load();
   }, [load]);
   useTradingRefresh(load);
+  // Mientras esta página esté abierta, refrescar el saldo y registrar una muestra cada ~5 minutos.
+  useEffect(() => {
+    const interval = window.setInterval(() => { void load(); }, 5 * 60_000);
+    return () => window.clearInterval(interval);
+  }, [load]);
 
   const removeAgent = async (key: string, name: string) => {
     if (!window.confirm(`¿Quitar a ${name} de tus agentes? Seguirá en la plataforma y podrás volver a añadirlo.`)) return;
@@ -114,6 +120,10 @@ export function CarteraPanel() {
   const earnedBase = realRows.reduce((s, r) => s + (r.mirror?.budget ?? 0), 0);
   const operating = wallets.items.find((w) => w.operating) ?? wallets.items[0] ?? null;
   const current = rows.find((r) => r.key === selected) ?? rows[0] ?? null;
+  const cutoff = Date.now() - (chartPeriod === "24h" ? 1 : 7) * 86_400_000;
+  const recent = wallets.history.filter((p) => new Date(p.day).getTime() >= cutoff);
+  const hasIntraday = recent.length >= 2;
+  const graphPoints = hasIntraday ? recent : mine.history;
 
   return (
     <div className="space-y-5">
@@ -149,16 +159,38 @@ export function CarteraPanel() {
                 <span className="text-5xl font-bold tracking-tight tabular-nums text-slate-900">{eur(total, 2)}</span>
                 {earnedBase > 0 && <ReturnPill value={(earned / earnedBase) * 100} big />}
               </div>
-              <div className="mt-2">
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-slate-500">Evolución de tu saldo real · cada 5 min</span>
+                <div className="flex gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="Periodo del gráfico">
+                  {(["24h", "7d"] as const).map((period) => (
+                    <button
+                      key={period}
+                      type="button"
+                      aria-pressed={chartPeriod === period}
+                      onClick={() => setChartPeriod(period)}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${chartPeriod === period ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+                    >
+                      {period === "24h" ? "24 h" : "7 días"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-1">
                 <EquityChart
-                  points={mine.history}
-                  initial={mine.history[0]?.equity ?? total}
-                  height={110}
-                  bare
+                  points={graphPoints}
+                  initial={graphPoints[0]?.equity ?? total}
+                  height={145}
                   ranges={false}
-                  empty="Tu gráfica empieza hoy: cada día se guarda el saldo de tu exchange."
+                  intraday={hasIntraday}
+                  balanceOnly
+                  empty="La gráfica se completará tras la segunda lectura de saldo (aprox. 5 minutos)."
                 />
               </div>
+              <p className="mt-1 text-[11px] leading-snug text-slate-400">
+                {hasIntraday
+                  ? "Saldo valorado en EUR; las aportaciones y retiradas también cambian la curva. Se actualiza mientras Trading esté abierto."
+                  : "De momento se muestra el histórico diario. Las lecturas de cinco minutos se irán añadiendo mientras Trading esté abierto."}
+              </p>
             </>
           )}
         </section>
