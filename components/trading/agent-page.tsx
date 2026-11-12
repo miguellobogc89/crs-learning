@@ -2,10 +2,11 @@
 // Página de un agente: su gráfica arriba, sus datos y, en pestañas, lo que tiene abierto, su historial,
 // sus decisiones y (kamikazes) sus rondas. Para cualquier público: todo explicado sin jerga.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, Wallet } from "lucide-react";
+import { Copy, Info, Wallet } from "lucide-react";
 import { api, dayFmt, errorText, eur, eur0, ghost, int, pct, primary, tone } from "./format";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { EquityChart, withLivePoint } from "./equity-chart";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Pill, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { MirrorModal } from "./mirror-modal";
@@ -56,6 +57,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
   const open = a.positions.filter((p) => p.status === "abierta").length;
   const pending = a.positions.filter((p) => p.status === "pendiente").length;
   const dd = maxDrawdown(points);
+  const hasInsights = !!(a.chip || a.lastRun?.marketView || a.kamikaze?.current?.note || a.lastRun?.status === "error");
 
   const meet = async () => {
     setBusy(true);
@@ -88,11 +90,11 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
 
   return (
     <div className="grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-5 overflow-hidden xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] xl:grid-rows-1">
-      {/* Izquierda: presentación del agente e información de mercado */}
-      <div className="flex min-h-0 min-w-0 flex-col gap-5 overflow-y-auto xl:overflow-hidden">
+      {/* Izquierda: gráfico adaptable y KPIs compactos; sin scroll exterior */}
+      <div className="flex min-h-0 min-w-0 flex-col gap-4">
         {error && <ErrorNote>{error}</ErrorNote>}
-        <section className={`${card} max-h-[65%] shrink-0 overflow-y-auto px-6 py-5`}>
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <section className={`${card} flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4`}>
+          <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-4">
               <AgentAvatar color={a.color} size="lg" />
               <div className="min-w-0">
@@ -102,6 +104,62 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                   <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
                     #{rank} de {data.agents.length}
                   </span>
+                  {hasInsights && (
+                    <TooltipProvider delayDuration={150}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={`Ver información y análisis de ${a.name}`}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600 transition-colors hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          >
+                            <Info className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="bottom"
+                          align="start"
+                          sideOffset={8}
+                          collisionPadding={12}
+                          className="!block w-[min(30rem,calc(100vw-2rem))] !max-w-none rounded-2xl border border-slate-200 bg-white p-4 text-sm font-normal leading-relaxed text-slate-700 shadow-xl [&>svg]:!fill-white [&>svg]:!bg-white"
+                        >
+                          <div className="max-h-[min(58dvh,28rem)] overflow-y-auto pr-1">
+                            {a.chip && (
+                              <div>
+                                <h3 className="mb-2 font-semibold text-slate-900">Su detector</h3>
+                                <p className="mb-2 text-xs text-slate-500">Ataca solo si se cumplen las tres condiciones.</p>
+                                <ul className="space-y-1.5">
+                                  {a.chip.checks.map((c) => (
+                                    <li key={c.text} className="flex items-start gap-2">
+                                      <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${c.ok ? "bg-emerald-500" : "bg-slate-300"}`}>
+                                        {c.ok ? "✓" : "✗"}
+                                      </span>
+                                      <span className={c.ok ? "text-slate-800" : "text-slate-500"}>{c.text}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                                <p className="mt-2 text-xs text-slate-500">
+                                  En ataque compra las crypto que superan su máximo de 20 días (hasta 3) y las vende si pierden su mínimo de 10. En defensa, todo en efectivo.
+                                  Decide una vez al día con el cierre de ayer.
+                                </p>
+                              </div>
+                            )}
+                            {(a.lastRun?.marketView || a.kamikaze?.current?.note) && (
+                              <div className={a.chip ? "mt-4 border-t border-slate-100 pt-4" : ""}>
+                                <h3 className="mb-2 font-semibold text-slate-900">Cómo ve el mercado</h3>
+                                <Rich text={a.lastRun?.marketView ?? a.kamikaze?.current?.note ?? ""} />
+                              </div>
+                            )}
+                            {a.lastRun?.status === "error" && (
+                              <div className="mt-4 border-t border-red-100 pt-3 text-sm text-red-700">
+                                Última reunión: {a.lastRun.error}
+                              </div>
+                            )}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                 </div>
                 <p className="mt-1 max-w-xl text-sm text-slate-600">{a.tagline}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -135,59 +193,23 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
             </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap items-end gap-3">
+          <div className="mt-4 flex shrink-0 flex-wrap items-end gap-3">
             <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur0(s.equity)}</span>
             <ReturnPill value={s.returnPct} big />
             <ChipMode a={a} big />
             <span className="pb-1 text-sm text-slate-500">desde {eur0(s.initialCapital)}</span>
           </div>
-          <div className="mt-3">
-            <EquityChart points={points} initial={s.initialCapital} height={240} empty="Su gráfica se dibuja con el cierre de cada sesión desde que empezó." />
-          </div>
           {(a.copyWeightPct !== null || a.mirror) && (
-            <div className="mt-3">
+            <div className="mt-2 shrink-0">
               <CopyBadges a={a} />
             </div>
           )}
+          <div className="mt-2 min-h-0 flex-1">
+            <EquityChart points={points} initial={s.initialCapital} fill empty="Su gráfica se dibuja con el cierre de cada sesión desde que empezó." />
+          </div>
         </section>
 
-        {(a.chip || a.lastRun?.marketView || a.kamikaze?.current?.note || a.lastRun?.status === "error") && (
-          <section className={`${card} min-h-0 flex-1 overflow-y-auto px-5 py-4 text-sm text-slate-700`}>
-            {a.chip && (
-              <div>
-                <h3 className="mb-2 text-xs font-semibold text-slate-500">Su detector: ataca solo si se cumplen las tres</h3>
-                <ul className="space-y-1.5">
-                  {a.chip.checks.map((c) => (
-                    <li key={c.text} className="flex items-start gap-2">
-                      <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${c.ok ? "bg-emerald-500" : "bg-slate-300"}`}>
-                        {c.ok ? "✓" : "✗"}
-                      </span>
-                      <span className={c.ok ? "text-slate-800" : "text-slate-500"}>{c.text}</span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-xs text-slate-500">
-                  En ataque compra las crypto que superan su máximo de 20 días (hasta 3) y las vende si pierden su mínimo de 10. En defensa, todo en efectivo.
-                  Decide una vez al día con el cierre de ayer.
-                </p>
-              </div>
-            )}
-            {(a.lastRun?.marketView || a.kamikaze?.current?.note) && (
-              <div className={a.chip ? "mt-4 border-t border-slate-100 pt-4" : ""}>
-                <h3 className="mb-1 text-xs font-semibold text-slate-500">Cómo ve el mercado</h3>
-                <div className="leading-relaxed"><Rich text={a.lastRun?.marketView ?? a.kamikaze?.current?.note ?? ""} /></div>
-              </div>
-            )}
-            {a.lastRun?.status === "error" && (
-              <div className="mt-4"><ErrorNote>La última reunión falló: {a.lastRun.error}</ErrorNote></div>
-            )}
-          </section>
-        )}
-      </div>
-
-      {/* Derecha: KPIs agrupados y actividad con su propio scroll */}
-      <div className="flex min-h-0 min-w-0 flex-col gap-5 overflow-hidden">
-        <section className={`${card} max-h-[45%] shrink-0 overflow-y-auto`}>
+        <section className={`${card} shrink-0 overflow-hidden`}>
           <dl className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3">
             {[
               ["Efectivo", eur0(s.cash), "sin invertir"],
@@ -205,7 +227,11 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
             ))}
           </dl>
         </section>
-        <section className={`${card} flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden`}>
+
+      </div>
+
+      {/* Derecha: actividad a toda altura, con scroll solo dentro de las pestañas */}
+      <section className={`${card} flex min-h-0 min-w-0 flex-col overflow-hidden`}>
           <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-100 px-3 pt-3 [scrollbar-width:none]" role="tablist">
           {tabs.map((t) => (
             <button
@@ -305,8 +331,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
 
           {tab === "rondas" && a.kamikaze && <Rounds k={a.kamikaze} equity={s.equity} />}
         </div>
-        </section>
-      </div>
+      </section>
 
       {copying && <CopyModal agent={a as Agent} onClose={() => setCopying(false)} />}
       {mirroring && <MirrorModal agent={a.key} name={a.name} onClose={() => setMirroring(false)} />}
