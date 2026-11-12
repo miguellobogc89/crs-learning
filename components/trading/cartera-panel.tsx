@@ -64,7 +64,7 @@ export function CarteraPanel() {
 
   const load = useCallback(async () => {
     try {
-      const [w, m, a, o] = await Promise.all([api<Wallets>("wallets"), api<Mirrors>("mirror"), api<AgentsData>("agents"), api<Mine>("mine")]);
+      const [w, m, a, o] = await Promise.all([api<Wallets>("wallets?history=1"), api<Mirrors>("mirror"), api<AgentsData>("agents"), api<Mine>("mine")]);
       setWallets(w);
       setMirrors(m);
       setAgents(a);
