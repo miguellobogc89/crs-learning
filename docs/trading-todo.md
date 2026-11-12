@@ -47,3 +47,7 @@ Apuntado el 10/11/2026. Sin empezar.
 - [ ] Duplicar agente y crear agente de verdad (el formulario ya está, sin guardar).
 - [ ] Eliminar (solo agentes de usuarios).
 - [ ] Páginas de usuarios con cartera pública (p. ej. Paco_Gomez), solo si el usuario la hace pública.
+
+## Ideas (12/11/2026)
+- [ ] **Equipos de agentes con selector**: el detector de mercado avisa de cambios de ciclo y un selector decide qué agente del equipo mueve tu cartera en cada momento. Al cambiar, se liquida lo del agente saliente y entra el nuevo («se pasan la cartera»). Solo idea, sin diseñar.
+- [ ] Tarjetas de agentes: el minigráfico se corta por la derecha en algunas.
