@@ -2,7 +2,7 @@
 // Gráfico de patrimonio: área con degradado, línea del capital inicial, ejes con valores
 // y fechas, selector de periodo y detalle del día al pasar el ratón.
 import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from "react";
-import { eur0, pct } from "./format";
+import { eur, eur0, pct } from "./format";
 
 type Point = { day: string; equity: number };
 
@@ -103,7 +103,7 @@ export function EquityChart({
 
   if (points.length < 2) return <p className="px-6 py-8 text-sm text-slate-500">{empty}</p>;
 
-  const pad = bare ? { l: 4, r: 6, t: 6, b: 4 } : { l: 56, r: 16, t: 14, b: 26 };
+  const pad = bare ? { l: 4, r: 6, t: 6, b: 4 } : { l: balanceOnly ? 88 : 56, r: 16, t: 14, b: 26 };
   const w = width;
   const h = fill ? measuredHeight : height;
   const base = shown[0].equity;
@@ -160,7 +160,7 @@ export function EquityChart({
         <div className="text-sm text-slate-500">
           {hp ? (
             <>
-              <b className="text-base font-semibold tabular-nums text-slate-900">{eur0(hp.equity)}</b> · {dayLabel(hp.day, true, intraday)}
+              <b className="text-base font-semibold tabular-nums text-slate-900">{balanceOnly ? eur(hp.equity, 2) : eur0(hp.equity)}</b> · {dayLabel(hp.day, true, intraday)}
               {!balanceOnly && <> · <span className={hp.equity >= ref ? "text-emerald-700" : "text-red-700"}>{pct(((hp.equity - ref) / (ref || 1)) * 100)}</span></>}
             </>
           ) : (
@@ -213,7 +213,7 @@ export function EquityChart({
             <g key={v}>
               <line x1={pad.l} x2={w - pad.r} y1={y(v)} y2={y(v)} stroke="#f1f5f9" />
               <text x={pad.l - 8} y={y(v) + 3.5} fontSize="11" fill="#94a3b8" textAnchor="end">
-                {eur0(v)}
+                {balanceOnly ? eur(v, 2) : eur0(v)}
               </text>
             </g>
           ))}
