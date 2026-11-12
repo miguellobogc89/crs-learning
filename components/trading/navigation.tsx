@@ -125,7 +125,7 @@ export function TradingNavigation() {
                 return (
                   <Link
                     key={t.key}
-                    href={`/trading/${t.key}`}
+                    href={t.key === "mercados" ? "/trading/mercados?tab=valores" : `/trading/${t.key}`}
                     aria-current={active ? "page" : undefined}
                     className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${active ? "bg-blue-50 font-semibold text-blue-600" : "text-slate-600 hover:bg-slate-50"}`}
                   >
