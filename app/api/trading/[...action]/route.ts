@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { getWallets, myAgents } from "@/lib/trading/wallets";
+import { getMarketPhase } from "@/lib/trading/chip/phase-service";
 import { connectorContext } from "@/lib/connectors/context";
 import {
   accountDetail,
@@ -62,6 +63,7 @@ export async function GET(req: Request, route: RouteContext) {
       if (!symbol) return fail("Falta el valor");
       return NextResponse.json(await getInstrument(ctx.workspaceId, symbol));
     }
+    if (action === "phase") return NextResponse.json(await getMarketPhase());
     if (action === "mine") return NextResponse.json(await myAgents(ctx.workspaceId));
     if (action === "wallets") {
       return NextResponse.json(await getWallets({ kind: "user", userId: ctx.userId, workspaceId: ctx.workspaceId, canManage: ctx.canManage }));

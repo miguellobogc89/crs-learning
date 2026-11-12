@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link2, Loader2 } from "lucide-react";
 import type { getWallets } from "@/lib/trading/wallets";
+import type { MarketPhase } from "@/lib/trading/chip/phase";
 import { TRADING_SECTIONS } from "./tabs";
 import { api, errorText, eur, eur0, tone } from "./format";
 
@@ -228,6 +229,8 @@ function MoneyPanel({ status, syncing, msg, onSync }: { status: TradingStatus | 
         </>
       )}
 
+      <PhaseCard />
+
       {status && (
         <div className="mt-3 border-t border-slate-100 pt-3">
           {status.opened ? (
@@ -256,5 +259,68 @@ function MoneyPanel({ status, syncing, msg, onSync }: { status: TradingStatus | 
         </p>
       )}
     </div>
+  );
+}
+
+const days = (n: number) => `${Math.round(n)} ${Math.round(n) === 1 ? "día" : "días"}`;
+const pct1 = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
+
+/** Indicador siempre visible: ¿el mercado está en ataque o en defensa (detector de CAMALEÓN)? */
+function PhaseCard() {
+  const [phase, setPhase] = useState<MarketPhase | null | undefined>(undefined);
+  const load = useCallback(() => {
+    api<MarketPhase | null>("phase").then(setPhase, () => setPhase(null));
+  }, []);
+  useEffect(() => load(), [load]);
+  useEffect(() => {
+    const id = window.setInterval(load, 5 * 60_000);
+    return () => window.clearInterval(id);
+  }, [load]);
+
+  if (phase === undefined) return <div className="mt-3 h-16 animate-pulse rounded-xl bg-slate-50" />;
+  if (!phase) return null;
+  const attack = phase.mode === "ataque";
+  // Si ya cruzó el nivel, cambiará al cierre de hoy si se mantiene así.
+  const crossed = attack ? phase.flipPct >= 0 : phase.flipPct <= 0;
+  const left = phase.remainingDays !== null && phase.samples >= 5 ? phase.remainingDays : null;
+  return (
+    <Link
+      href="/trading/agentes/camaleon?from=cartera"
+      className={`mt-3 block rounded-xl border p-3 transition hover:shadow-sm ${attack ? "border-emerald-100 bg-emerald-50/60" : "border-amber-100 bg-amber-50/60"}`}
+      title="Detector de CAMALEÓN: ataque si Bitcoin está sobre sus medias de 200 y 50 días y por encima de hace 10 días. Se decide al cierre de cada día."
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Mercado</span>
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold ${attack ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${attack ? "bg-emerald-500" : "bg-amber-500"}`} />
+          {attack ? "Ataque" : "Defensa"}
+        </span>
+      </div>
+      <div className="mt-1.5 text-xs text-slate-700">
+        Lleva <b className="tabular-nums">{days(phase.days)}</b>
+        {left !== null ? (
+          <>
+            {" "}· suele quedarle <b className="tabular-nums">~{days(left)}</b>
+          </>
+        ) : phase.typicalDays !== null && phase.samples >= 5 ? (
+          <span className="text-slate-500"> · ya dura más de lo normal</span>
+        ) : null}
+      </div>
+      <div className="mt-1 text-[11px] leading-snug text-slate-500">
+        {crossed ? (
+          <>Si cierra hoy así, mañana pasa a {attack ? "defensa" : "ataque"}.</>
+        ) : (
+          <>
+            Para pasar a {attack ? "defensa" : "ataque"}: Bitcoin{" "}
+            <b className={`tabular-nums ${attack ? "text-rose-600" : "text-emerald-700"}`}>{pct1(phase.flipPct)}</b> ({eur0(phase.flipPrice)})
+          </>
+        )}
+      </div>
+      <div className="mt-1.5 flex gap-1">
+        {phase.checks.map((c) => (
+          <span key={c.label} title={`${c.label}: ${eur0(c.level)}`} className={`h-1.5 flex-1 rounded-full ${c.ok ? "bg-emerald-400" : "bg-slate-200"}`} />
+        ))}
+      </div>
+    </Link>
   );
 }
