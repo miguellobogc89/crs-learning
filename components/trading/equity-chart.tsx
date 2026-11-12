@@ -29,10 +29,15 @@ const RANGES = [
 ] as const;
 type RangeKey = (typeof RANGES)[number]["key"];
 
-const dayLabel = (d: string, long = false) =>
-  new Intl.DateTimeFormat("es-ES", long ? { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" } : { day: "numeric", month: "short", timeZone: "UTC" }).format(
-    new Date(d),
-  );
+const dayLabel = (d: string, long = false, intraday = false) =>
+  new Intl.DateTimeFormat(
+    "es-ES",
+    intraday
+      ? { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }
+      : long
+        ? { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }
+        : { day: "numeric", month: "short", timeZone: "UTC" },
+  ).format(new Date(d));
 
 /** Cuatro valores redondos para el eje vertical. */
 function ticks(lo: number, hi: number) {
@@ -52,6 +57,8 @@ export function EquityChart({
   ranges = true,
   bare = false,
   fill = false,
+  intraday = false,
+  balanceOnly = false,
   empty = "El gráfico se dibuja con el cierre de cada sesión a partir de que la cartera tenga actividad.",
 }: {
   points: Point[];
@@ -62,6 +69,10 @@ export function EquityChart({
   bare?: boolean;
   /** Ajusta la gráfica a la altura disponible del contenedor en lugar de imponer una altura fija. */
   fill?: boolean;
+  /** Hora en puntos y ejes; posición horizontal proporcional al tiempo transcurrido. */
+  intraday?: boolean;
+  /** Gráfico de saldo real: no presentar ingresos y retiradas como rentabilidad. */
+  balanceOnly?: boolean;
   empty?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -105,13 +116,18 @@ export function EquityChart({
   const span = max - min || Math.abs(max) * 0.01 || 1;
   const lo = bare ? min - span * 0.15 : Math.min(yt[0], Math.min(...vals) - span * 0.08);
   const hi = bare ? max + span * 0.15 : Math.max(yt[yt.length - 1], Math.max(...vals) + span * 0.12);
-  const x = (i: number) => pad.l + (i / (shown.length - 1)) * (w - pad.l - pad.r);
+  const startAt = new Date(shown[0].day).getTime();
+  const endAt = new Date(shown[shown.length - 1].day).getTime();
+  const duration = Math.max(1, endAt - startAt);
+  const x = (i: number) => pad.l + (
+    intraday ? (new Date(shown[i].day).getTime() - startAt) / duration : i / (shown.length - 1)
+  ) * (w - pad.l - pad.r);
   const y = (v: number) => pad.t + ((hi - v) / (hi - lo)) * (h - pad.t - pad.b);
   const line = shown.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.equity).toFixed(1)}`).join("");
   const last = shown[shown.length - 1].equity;
   const ref = range === "all" ? initial : base;
   const up = last >= ref;
-  const col = up ? "#16a34a" : "#dc2626";
+  const col = balanceOnly ? "#2563eb" : up ? "#16a34a" : "#dc2626";
   const grad = `eq-${uid}`;
   const xIdx = shown.length <= 4 ? shown.map((_, i) => i) : [0, Math.round((shown.length - 1) / 3), Math.round(((shown.length - 1) * 2) / 3), shown.length - 1];
   const hp = hover !== null ? shown[hover] : null;
@@ -120,8 +136,21 @@ export function EquityChart({
   const onMove = (e: MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const px = ((e.clientX - rect.left) / rect.width) * w;
-    const i = Math.round(((px - pad.l) / (w - pad.l - pad.r)) * (shown.length - 1));
-    setHover(Math.max(0, Math.min(shown.length - 1, i)));
+    const fraction = Math.max(0, Math.min(1, (px - pad.l) / (w - pad.l - pad.r)));
+    if (intraday) {
+      const target = startAt + fraction * duration;
+      let lo = 0;
+      let hi = shown.length - 1;
+      while (lo < hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (new Date(shown[mid].day).getTime() < target) lo = mid + 1;
+        else hi = mid;
+      }
+      const before = Math.max(0, lo - 1);
+      setHover(Math.abs(new Date(shown[before].day).getTime() - target) < Math.abs(new Date(shown[lo].day).getTime() - target) ? before : lo);
+    } else {
+      setHover(Math.max(0, Math.min(shown.length - 1, Math.round(fraction * (shown.length - 1)))));
+    }
   };
 
   return (
@@ -131,13 +160,19 @@ export function EquityChart({
         <div className="text-sm text-slate-500">
           {hp ? (
             <>
-              <b className="text-base font-semibold tabular-nums text-slate-900">{eur0(hp.equity)}</b> · {dayLabel(hp.day, true)} ·{" "}
-              <span className={hp.equity >= ref ? "text-emerald-700" : "text-red-700"}>{pct(((hp.equity - ref) / (ref || 1)) * 100)}</span>
+              <b className="text-base font-semibold tabular-nums text-slate-900">{eur0(hp.equity)}</b> · {dayLabel(hp.day, true, intraday)}
+              {!balanceOnly && <> · <span className={hp.equity >= ref ? "text-emerald-700" : "text-red-700"}>{pct(((hp.equity - ref) / (ref || 1)) * 100)}</span></>}
             </>
           ) : (
             <>
-              <b className={`font-semibold tabular-nums ${up ? "text-emerald-700" : "text-red-700"}`}>{pct(change)}</b>{" "}
-              {range === "all" ? "desde el capital inicial" : "en el periodo"}
+              {balanceOnly ? (
+                <span className="font-medium text-slate-600">Evolución del saldo en euros</span>
+              ) : (
+                <>
+                  <b className={`font-semibold tabular-nums ${up ? "text-emerald-700" : "text-red-700"}`}>{pct(change)}</b>{" "}
+                  {range === "all" ? "desde el capital inicial" : "en el periodo"}
+                </>
+              )}
             </>
           )}
         </div>
@@ -182,7 +217,7 @@ export function EquityChart({
               </text>
             </g>
           ))}
-          {!bare && range === "all" && initial >= lo && initial <= hi && (
+          {!bare && !balanceOnly && range === "all" && initial >= lo && initial <= hi && (
             <g>
               <line x1={pad.l} x2={w - pad.r} y1={y(initial)} y2={y(initial)} stroke="#94a3b8" strokeDasharray="4 4" />
               <text x={w - pad.r} y={y(initial) - 5} fontSize="10" fill="#64748b" textAnchor="end">
@@ -194,7 +229,7 @@ export function EquityChart({
           <path d={line} fill="none" stroke={col} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
           {!bare && xIdx.map((i, k) => (
             <text key={i} x={x(i)} y={h - 6} fontSize="11" fill="#94a3b8" textAnchor={k === 0 ? "start" : k === xIdx.length - 1 ? "end" : "middle"}>
-              {dayLabel(shown[i].day)}
+              {dayLabel(shown[i].day, false, intraday)}
             </text>
           ))}
           {hover !== null && hp ? (
