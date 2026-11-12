@@ -87,11 +87,11 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
   const pendingIds = new Set(a.positions.filter((p) => p.status === "pendiente").map((p) => p.id));
 
   return (
-    <div className="grid gap-5 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-      {/* Izquierda: quién es, su gráfica y sus números */}
-      <div className="flex min-w-0 flex-col gap-5 xl:min-h-0 xl:overflow-y-auto">
+    <div className="grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-5 overflow-hidden xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] xl:grid-rows-1">
+      {/* Izquierda: presentación del agente e información de mercado */}
+      <div className="flex min-h-0 min-w-0 flex-col gap-5 overflow-y-auto xl:overflow-hidden">
         {error && <ErrorNote>{error}</ErrorNote>}
-        <section className={`${card} px-6 py-5`}>
+        <section className={`${card} shrink-0 px-6 py-5`}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-4">
               <AgentAvatar color={a.color} size="lg" />
@@ -151,53 +151,61 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
           )}
         </section>
 
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {[
-            ["Efectivo", eur0(s.cash), "sin invertir"],
-            ["Posiciones", `${open}${pending ? ` + ${pending}` : ""}`, pending ? "abiertas + pendientes" : "abiertas"],
-            ["Operaciones", int(s.stats.closed), "cerradas"],
-            ["Acierto", s.stats.closed ? `${Math.round(s.stats.winRate * 100)} %` : "—", s.stats.closed ? `${s.stats.wins} de ${s.stats.closed} con ganancia` : "aún sin cerradas"],
-            ["Peor caída", dd < -0.05 ? pct(dd) : "—", "desde su máximo"],
-            ["Mejor / peor", s.stats.closed ? `${eur(s.stats.bestTrade, 2)}` : "—", s.stats.closed ? `peor ${eur(s.stats.worstTrade, 2)}` : "por operación"],
-          ].map(([label, value, sub]) => (
-            <div key={label} className={`${card} px-4 py-3`}>
-              <dt className="text-xs text-slate-500">{label}</dt>
-              <dd className="mt-0.5 text-lg font-semibold tabular-nums text-slate-900">{value}</dd>
-              <dd className="text-[11px] text-slate-400">{sub}</dd>
-            </div>
-          ))}
-        </dl>
-
-        {a.chip && (
-          <section className={`${card} px-5 py-4 text-sm`}>
-            <div className="mb-2 text-xs font-semibold text-slate-500">Su detector: ataca solo si se cumplen las tres</div>
-            <ul className="space-y-1.5">
-              {a.chip.checks.map((c) => (
-                <li key={c.text} className="flex items-start gap-2">
-                  <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${c.ok ? "bg-emerald-500" : "bg-slate-300"}`}>
-                    {c.ok ? "✓" : "✗"}
-                  </span>
-                  <span className={c.ok ? "text-slate-800" : "text-slate-500"}>{c.text}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 text-xs text-slate-500">
-              En ataque compra las crypto que superan su máximo de 20 días (hasta 3) y las vende si pierden su mínimo de 10. En defensa, todo en efectivo.
-              Decide una vez al día con el cierre de ayer.
-            </p>
+        {(a.chip || a.lastRun?.marketView || a.kamikaze?.current?.note || a.lastRun?.status === "error") && (
+          <section className={`${card} min-h-0 flex-1 overflow-y-auto px-5 py-4 text-sm text-slate-700`}>
+            {a.chip && (
+              <div>
+                <h3 className="mb-2 text-xs font-semibold text-slate-500">Su detector: ataca solo si se cumplen las tres</h3>
+                <ul className="space-y-1.5">
+                  {a.chip.checks.map((c) => (
+                    <li key={c.text} className="flex items-start gap-2">
+                      <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${c.ok ? "bg-emerald-500" : "bg-slate-300"}`}>
+                        {c.ok ? "✓" : "✗"}
+                      </span>
+                      <span className={c.ok ? "text-slate-800" : "text-slate-500"}>{c.text}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-slate-500">
+                  En ataque compra las crypto que superan su máximo de 20 días (hasta 3) y las vende si pierden su mínimo de 10. En defensa, todo en efectivo.
+                  Decide una vez al día con el cierre de ayer.
+                </p>
+              </div>
+            )}
+            {(a.lastRun?.marketView || a.kamikaze?.current?.note) && (
+              <div className={a.chip ? "mt-4 border-t border-slate-100 pt-4" : ""}>
+                <h3 className="mb-1 text-xs font-semibold text-slate-500">Cómo ve el mercado</h3>
+                <div className="leading-relaxed"><Rich text={a.lastRun?.marketView ?? a.kamikaze?.current?.note ?? ""} /></div>
+              </div>
+            )}
+            {a.lastRun?.status === "error" && (
+              <div className="mt-4"><ErrorNote>La última reunión falló: {a.lastRun.error}</ErrorNote></div>
+            )}
           </section>
         )}
-        {(a.lastRun?.marketView || a.kamikaze?.current?.note) && (
-          <section className={`${card} px-5 py-4 text-sm leading-relaxed text-slate-700`}>
-            <div className="mb-1 text-xs font-semibold text-slate-500">Cómo ve el mercado</div>
-            <Rich text={a.lastRun?.marketView ?? a.kamikaze?.current?.note ?? ""} />
-          </section>
-        )}
-        {a.lastRun?.status === "error" && <ErrorNote>La última reunión falló: {a.lastRun.error}</ErrorNote>}
       </div>
 
-      {/* Derecha: lo que tiene, lo que hizo y lo que decidió */}
-      <section className={`${card} flex min-w-0 flex-col overflow-hidden xl:min-h-0`}>
+            {/* Derecha: KPIs agrupados y actividad con su propio scroll */}
+      <div className="flex min-h-0 min-w-0 flex-col gap-5 overflow-hidden">
+        <section className={`${card} shrink-0 overflow-hidden`}>
+          <dl className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3">
+            {[
+              ["Efectivo", eur0(s.cash), "sin invertir"],
+              ["Posiciones", `${open}${pending ? ` + ${pending}` : ""}`, pending ? "abiertas + pendientes" : "abiertas"],
+              ["Operaciones", int(s.stats.closed), "cerradas"],
+              ["Acierto", s.stats.closed ? `${Math.round(s.stats.winRate * 100)} %` : "—", s.stats.closed ? `${s.stats.wins} de ${s.stats.closed} con ganancia` : "aún sin cerradas"],
+              ["Peor caída", dd < -0.05 ? pct(dd) : "—", "desde su máximo"],
+              ["Mejor / peor", s.stats.closed ? `${eur(s.stats.bestTrade, 2)}` : "—", s.stats.closed ? `peor ${eur(s.stats.worstTrade, 2)}` : "por operación"],
+            ].map(([label, value, sub]) => (
+              <div key={label} className="min-w-0 bg-white px-3 py-3">
+                <dt className="text-xs text-slate-500">{label}</dt>
+                <dd className="mt-0.5 break-words text-base font-semibold tabular-nums text-slate-900">{value}</dd>
+                <dd className="text-[11px] leading-snug text-slate-400">{sub}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+        <section className={`${card} flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden`}>
         <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-100 px-3 pt-3 [scrollbar-width:none]" role="tablist">
           {tabs.map((t) => (
             <button
@@ -297,7 +305,8 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
 
           {tab === "rondas" && a.kamikaze && <Rounds k={a.kamikaze} equity={s.equity} />}
         </div>
-      </section>
+        </section>
+      </div>
 
       {copying && <CopyModal agent={a as Agent} onClose={() => setCopying(false)} />}
       {mirroring && <MirrorModal agent={a.key} name={a.name} onClose={() => setMirroring(false)} />}
