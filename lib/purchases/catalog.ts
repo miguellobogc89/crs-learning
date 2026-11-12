@@ -17,8 +17,21 @@ import { normalizePurchases, purchaseCatalog } from "./analytics";
  * - estado: «Revisar» when no purchase gives a price, or when the list price (before discount) moved more than 10 %
  *   from the purchase before; «Regalo» when it only came as a gift; otherwise «OK». A different discount is not a
  *   change of price.
+ * - dto_pct / ultima_factura: the discount of the purchase that sets the price, and the document of the latest purchase.
+ * - aviso: every warning of the product, one word each (joined with « · »), to filter the catalog by kind of warning.
+ * The catalog shows these even when the table has no field for them (they are not stored: see LIVE_CATALOG_LABELS).
+ * `history`: every purchase of each product, newest first, to open under its row.
  */
-export const LIVE_CATALOG_FIELDS = ["compras", "no_cuadran", "notas", "estado", "precio_envase", "precio_unidad", "precio_tarifa", "desde"] as const;
+export const LIVE_CATALOG_FIELDS = ["compras", "no_cuadran", "notas", "estado", "precio_envase", "precio_unidad", "precio_tarifa", "desde", "dto_pct", "ultima_factura", "aviso"] as const;
+/** How the live columns are titled when the catalog table has no field of its own for them. */
+export const LIVE_CATALOG_LABELS: Record<(typeof LIVE_CATALOG_FIELDS)[number], { label: string; kind?: "money" | "number" | "document" }> = {
+  compras: { label: "Compras", kind: "number" }, no_cuadran: { label: "No cuadran", kind: "number" }, notas: { label: "Notas" }, estado: { label: "Estado" },
+  precio_envase: { label: "Precio envase", kind: "money" }, precio_unidad: { label: "Precio Kg/L/ud", kind: "money" },
+  precio_tarifa: { label: "Precio sin dto.", kind: "money" }, desde: { label: "Desde" },
+  dto_pct: { label: "Dto. %", kind: "number" }, ultima_factura: { label: "Factura", kind: "document" }, aviso: { label: "Aviso" },
+};
+/** The kinds of warning of the «aviso» column, in the order they are listed. */
+export const CATALOG_WARNINGS = ["Subida de tarifa", "No cuadra", "Sin precio", "Por completar", "Solo regalo", "Solo 1 compra", "Sin compras"] as const;
 /** A list price that moves more than this (from one purchase to the next) is flagged. */
 export const TARIFF_JUMP = 0.1;
 
@@ -29,7 +42,17 @@ const dmy = (d: string | null) => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.sl
 
 /** A list price that moved more than TARIFF_JUMP between the last two purchases that add up. */
 export type TariffJump = { change: number; prevFecha: string | null; lastFecha: string | null; lastLineId: string };
-export type LiveCatalog = { typeKey: string; values: Map<string, Partial<Record<(typeof LIVE_CATALOG_FIELDS)[number], CellValue>>>; jumps: Map<string, TariffJump> };
+/** One purchase of a product, as it opens under its catalog row. Amounts without VAT unless said. */
+export type PurchaseHistoryRow = { id: string; fecha: string | null; cantidad: number | null; unidad: string | null;
+  /** List price of one unit bought (before discount), as read. */
+  precio: number | null; dto_pct: number | null;
+  /** What one unit bought really cost: amount without VAT ÷ units (discounts in). */
+  precio_ud: number | null; importe: number | null; importe_iva: number | null;
+  tipo: "Compra" | "Regalo" | "No cuadra"; factura: string | null; documento: string | null;
+  /** Its price per unit differs from the purchase before it (gifts aside). */
+  cambio: boolean };
+export type LiveCatalog = { typeKey: string; values: Map<string, Partial<Record<(typeof LIVE_CATALOG_FIELDS)[number], CellValue>>>; jumps: Map<string, TariffJump>;
+  history: Map<string, PurchaseHistoryRow[]> };
 
 /** The id of a tariff jump in the correction agent (a newer purchase makes it a new one). */
 export const tariffJumpId = (rowId: string, lastLineId: string) => `tarifa:${rowId}:${lastLineId}`;
@@ -52,6 +75,8 @@ export function liveCatalog(data: AnalyticsData): LiveCatalog | null {
   }
   const values: LiveCatalog["values"] = new Map();
   const jumps: LiveCatalog["jumps"] = new Map();
+  const history: LiveCatalog["history"] = new Map();
+  const invoiceNumber = new Map(data.invoices.map(i => [i.id, typeof i.values.invoice_number === "string" && i.values.invoice_number.trim() ? i.values.invoice_number.trim() : null]));
   const dismissed = agentDismissed(data, linked.catalog.typeKey);
   for (const row of linked.catalog.rows) {
     const own = byRow.get(row.id) ?? [];
@@ -95,7 +120,43 @@ export function liveCatalog(data: AnalyticsData): LiveCatalog | null {
     else if (paid.length === 1) notes.push("Solo hay 1 compra: precio sin comparar.");
     out.notas = notes.length ? notes.join(" ") : null;
     out.estado = revisar ? "Revisar" : gifts ? "Regalo" : "OK";
+    out.dto_pct = last ? n(last.id)?.descuento_pct ?? null : null;
+    const byDate = [...own].sort((a, b) => (b.fecha ?? "").localeCompare(a.fecha ?? ""));
+    out.ultima_factura = (last && own.find(l => l.id === last.id)?.documento) || byDate.find(l => l.documento)?.documento || null;
+    const avisos: string[] = [];
+    if (jumps.has(row.id)) avisos.push("Subida de tarifa");
+    if (noCuadran.length) avisos.push("No cuadra");
+    if (!last && !gifts && own.length > 0) avisos.push("Sin precio");
+    if (num(row.values.envase) === null || !(typeof row.values.unidad === "string" && row.values.unidad.trim())) avisos.push("Por completar");
+    if (gifts) avisos.push("Solo regalo");
+    if (paid.length === 1) avisos.push("Solo 1 compra");
+    if (!own.length) avisos.push("Sin compras");
+    out.aviso = avisos.length ? avisos.join(" · ") : "OK";
     values.set(row.id, out);
+    history.set(row.id, purchaseHistory(own, normalized, invoiceNumber));
   }
-  return { typeKey: linked.catalog.typeKey, values, jumps };
+  return { typeKey: linked.catalog.typeKey, values, jumps, history };
+}
+
+/** Every purchase of one product, newest first, with what each unit really cost and where its price changed. */
+function purchaseHistory(own: ReturnType<typeof normalizePurchases>["lines"], normalized: ReturnType<typeof normalizePurchases>["normalized"],
+  invoiceNumber: Map<string, string | null>): PurchaseHistoryRow[] {
+  const rows = [...own].sort((a, b) => (a.fecha ?? "").localeCompare(b.fecha ?? "")).map((l): PurchaseHistoryRow => {
+    const x = normalized.get(l.id);
+    const iva = l.iva;
+    const sinIva = x?.importe_corregido ?? l.importeSinIvaLeido ?? (l.importeIvaLeido != null && iva != null ? r(l.importeIvaLeido / (1 + iva / 100), 2) : null);
+    const conIva = l.importeIvaLeido ?? (sinIva !== null && iva != null ? r(sinIva * (1 + iva / 100), 2) : null);
+    const units = x?.unidades ?? l.cantidad;
+    const tipo = x?.estado === "regalo" ? "Regalo" : x?.estado === "no_cuadra" ? "No cuadra" : "Compra";
+    return { id: l.id, fecha: l.fecha, cantidad: l.cantidad, unidad: l.unidad, precio: l.precio, dto_pct: x?.descuento_pct ?? l.descuentoPct ?? null,
+      precio_ud: tipo === "Regalo" ? 0 : sinIva !== null && units ? r(sinIva / units, 4) : null, importe: sinIva, importe_iva: conIva, tipo,
+      factura: l.factura ? invoiceNumber.get(l.factura) ?? null : null, documento: l.documento, cambio: false };
+  });
+  let prev: number | null = null;
+  for (const h of rows) {
+    if (h.tipo !== "Compra" || h.precio_ud === null) continue;
+    if (prev !== null && Math.abs(h.precio_ud - prev) > Math.max(0.005, prev * 0.005)) h.cambio = true;
+    prev = h.precio_ud;
+  }
+  return rows.reverse();
 }

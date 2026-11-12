@@ -28,11 +28,14 @@ export function cellText(value: CellValue, kind?: Column["kind"]): string {
   return value;
 }
 export const filterValue = (value: CellValue) => value === null || value === "" ? "__empty" : typeof value === "boolean" ? (value ? "sí" : "no") : String(value);
+/** The values a cell is filtered by: one, or each of a «multi» cell («No cuadra · Por completar»). */
+export const filterValues = (value: CellValue, multi?: boolean): string[] =>
+  multi && typeof value === "string" && value.includes(" · ") ? value.split(" · ").map(v => v.trim()).filter(Boolean) : [filterValue(value)];
 
 /** Distinct values of a filterable column, most frequent first, with how many rows have each. */
 export function filterOptions(rows: RowT[], column: Column): { value: string; label: string; count: number }[] {
   const counts = new Map<string, number>();
-  for (const r of rows) { const v = filterValue(r[column.key] ?? null); counts.set(v, (counts.get(v) ?? 0) + 1); }
+  for (const r of rows) for (const v of filterValues(r[column.key] ?? null, column.multi)) counts.set(v, (counts.get(v) ?? 0) + 1);
   return [...counts].map(([value, count]) => ({ value, count, label: value === "__empty" ? "(vacío)" : value === "sí" ? "Sí" : value === "no" ? "No" : value }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "es"));
 }
@@ -46,8 +49,8 @@ const parseBound = (v: string | undefined, kind?: Column["kind"]): number | stri
 };
 
 /** Whether a value passes a column-header filter. A range never lets empty values through. */
-export function passesColumnFilter(value: CellValue, filter: ColumnFilter, kind?: Column["kind"]): boolean {
-  if (filter.values && !filter.values.includes(filterValue(value))) return false;
+export function passesColumnFilter(value: CellValue, filter: ColumnFilter, kind?: Column["kind"], multi?: boolean): boolean {
+  if (filter.values && !filterValues(value, multi).some(v => filter.values!.includes(v))) return false;
   const min = parseBound(filter.min, kind), max = parseBound(filter.max, kind);
   if (min === null && max === null) return true;
   if (value === null || value === "") return false;
@@ -70,10 +73,11 @@ export function queryRows(rows: RowT[], columns: Column[], q: Query): { rows: Ro
   const terms = fold(q.search.trim()).split(/\s+/).filter(Boolean);
   const visible = columns.filter(c => c.kind !== "document");
   const kinds = new Map(columns.map(c => [c.key, c.kind]));
+  const multis = new Set(columns.filter(c => c.multi).map(c => c.key));
   const headerFilters = Object.entries(q.columnFilters ?? {}).filter(([, f]) => activeColumnFilter(f));
   let out = rows.filter(r => {
-    for (const [key, value] of Object.entries(q.filters)) if (value && filterValue(r[key] ?? null) !== value) return false;
-    for (const [key, f] of headerFilters) if (!passesColumnFilter(r[key] ?? null, f, kinds.get(key))) return false;
+    for (const [key, value] of Object.entries(q.filters)) if (value && !filterValues(r[key] ?? null, multis.has(key)).includes(value)) return false;
+    for (const [key, f] of headerFilters) if (!passesColumnFilter(r[key] ?? null, f, kinds.get(key), multis.has(key))) return false;
     if (!terms.length) return true;
     const text = fold(visible.map(c => cellText(r[c.key] ?? null, c.kind)).join(" "));
     return terms.every(t => text.includes(t));

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } f
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileText, GitMerge, History, Loader2, MoreHorizontal, Pencil, Plus, Trash2, Undo2, X } from "lucide-react";
 import type { CellValue, Column, Table } from "@/lib/analytics/compute";
+import type { PurchaseHistoryRow } from "@/lib/purchases/catalog";
 import { activeColumnFilter, queryRows, type ColumnFilter } from "@/lib/analytics/table-query";
 import { addDefaults, addExtras, groupEdits, rowCapabilities, type PendingEdit } from "@/lib/analytics/table-rows";
 import { groupRows, PAGE_SIZES } from "@/lib/analytics/table-view";
@@ -65,6 +66,10 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
     options: x.type === "company" ? companies.map(c => ({ value: c.id, label: c.nombre, hint: c.nif })) : x.type === "invoice" ? invoices : undefined })), [table.key, companies, invoices]);
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<Set<string>>(new Set());
+  // Product catalog: the rows whose purchase history is open underneath.
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+  const purchaseHistory = table.history;
+  const toggleRow = (id: string) => setOpenRows(o => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const { view, update } = useTableView(table.columns);
   const { sort, pageSize, groupBy } = view;
   const groupColumn = groupBy ? table.columns.find(c => c.key === groupBy) : undefined;
@@ -190,8 +195,9 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
             const p = edits.get(`${r._id}:${c.key}`);
             const missing = !p && c.completar && (r[c.key] === null || r[c.key] === undefined || r[c.key] === "");
             const staged = p ? <span className="font-medium text-slate-900">{p.text || <span className="italic text-slate-400">vacío</span>}</span> : undefined;
-            return <td key={c.key} title={p ? (p.error ?? `Antes: ${editText(p.before, c) || "vacío"} · sin guardar`) : undefined}
-              className={cn("px-4 py-1.5 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" && "whitespace-nowrap", missing && "bg-amber-50/70",
+            return <td key={c.key} title={p ? (p.error ?? `Antes: ${editText(p.before, c) || "vacío"} · sin guardar`) : typeof r[c.key] === "string" && !c.edit ? r[c.key] as string : undefined}
+              className={cn("px-2.5 py-1.5 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" ? "whitespace-nowrap"
+                : !c.edit && typeof r[c.key] === "string" && "max-w-[18rem] truncate", missing && "bg-amber-50/70",
                 p && (p.error ? "bg-rose-100/70" : "bg-amber-100/80"))}>
               {c.kind === "document" ? (typeof r[c.key] === "string"
                   ? <a href={`/api/knowledge/intake/files/${r[c.key]}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-[#0A58FF] hover:underline"><FileText className="size-3.5" />Ver</a>
@@ -223,8 +229,18 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
             </td>;
           });
   // A row that needs the person (`_attention`: why) stands out in light yellow.
-  const row = (r: Row, key: string) => <tr key={key} title={typeof r._attention === "string" ? r._attention : undefined}
-    className={cn("border-t border-slate-100", typeof r._attention === "string" ? "bg-amber-50/60 hover:bg-amber-50" : "hover:bg-slate-50/60")}>
+  const extraCols = (mergeable ? 1 : 0) + (recordRows ? 1 : 0) + (purchaseHistory ? 1 : 0);
+  const row = (r: Row, key: string) => {
+    const id = typeof r._id === "string" ? r._id : null;
+    const purchases = id && purchaseHistory ? purchaseHistory[id] ?? [] : null;
+    const expanded = !!id && openRows.has(id);
+    return [<tr key={key} title={typeof r._attention === "string" ? r._attention : undefined}
+    className={cn("border-t border-slate-100", typeof r._attention === "string" ? "bg-amber-50/60 hover:bg-amber-50" : "hover:bg-slate-50/60", expanded && "bg-[#0A58FF]/[0.03]")}>
+    {purchaseHistory && <td className="w-8 py-1.5 pl-2 pr-0">{purchases && purchases.length > 0
+      ? <button type="button" onClick={() => toggleRow(id!)} aria-expanded={expanded} aria-label={`${expanded ? "Ocultar" : "Ver"} compras de ${titleOf(r)}`}
+          title={`${purchases.length} ${purchases.length === 1 ? "compra" : "compras"}`} className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-[#0A58FF]">
+          <ChevronDown className={cn("size-4 transition-transform", !expanded && "-rotate-90")} /></button>
+      : null}</td>}
     {cells(r)}
     {mergeable && <td className="whitespace-nowrap px-4 py-1.5 text-right">{typeof r._id === "string" &&
       <MergeControl row={r} rows={table.rows} busy={busy === `${r._id}:merge`} onMerge={target => merge(r._id as string, target)} />}</td>}
@@ -241,7 +257,11 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
             <DropdownMenuItem variant="destructive" onSelect={() => setRemoving(r)}><Trash2 className="size-4" />Eliminar</DropdownMenuItem></>}
         </DropdownMenuContent>
       </DropdownMenu>}</td>}
-  </tr>;
+  </tr>,
+    expanded && purchases ? <tr key={`${key}:compras`} className="bg-slate-50/60">
+      <td colSpan={columns.length + extraCols} className="px-3 pb-3 pt-1"><PurchaseHistory rows={purchases} /></td>
+    </tr> : null];
+  };
 
   return <section className="overflow-clip rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
     <div className="border-b border-slate-200 px-5 py-3.5">
@@ -272,13 +292,14 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
     {table.rows.length ? <>
       <div className="max-h-[65vh] overflow-auto"><table className="w-full min-w-[640px] border-collapse text-left text-sm">
         <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500"><tr>
-          {columns.map(c => <th key={c.key} className={cn("whitespace-nowrap px-4 py-2.5 font-semibold", right(c) && "text-right")}
+          {purchaseHistory && <th className="w-8 bg-slate-50 py-2.5 pl-2 pr-0" aria-label="Compras" />}
+          {columns.map(c => <th key={c.key} className={cn("whitespace-nowrap bg-slate-50 px-2.5 py-2.5 font-semibold", right(c) && "text-right")}
             aria-sort={sort?.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}>
             {c.kind === "document" ? c.label : <ColumnMenu column={c} rows={table.rows} sort={sort} filter={columnFilters[c.key]} alignRight={right(c)}
               onSort={dir => setSort(c.key, dir)} onFilter={f => setFilter(c.key, f)}
               onHide={columns.length > 1 ? () => update({ hidden: [...view.hidden, c.key] }) : undefined} />}
           </th>)}
-          {mergeable && <th className="px-4 py-2.5" />}
+          {mergeable && <th className="px-2.5 py-2.5" />}
           {recordRows && <th className="sticky right-0 w-10 bg-slate-50 px-2 py-2.5" />}
         </tr></thead>
         <tbody>{groups ? shownGroups.map(g => {
@@ -294,7 +315,8 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
             return <span className="text-xs italic text-slate-400">{cell.count} distintos</span>;
           };
           return [<tr key={`g:${g.key}`} className="border-t border-slate-200 bg-slate-50/70 hover:bg-slate-100/70">
-            {columns.map((c, ci) => <td key={c.key} className={cn("px-4 py-2 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" && "whitespace-nowrap")}>
+            {purchaseHistory && <td />}
+            {columns.map((c, ci) => <td key={c.key} className={cn("px-2.5 py-2 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" && "whitespace-nowrap")}>
               {ci === 0 ? <button type="button" onClick={() => toggleGroup(g.key)} aria-expanded={expanded} className="flex w-full items-center gap-2 text-left">
                 <ChevronDown className={cn("size-4 shrink-0 text-slate-400 transition-transform", !expanded && "-rotate-90")} />
                 <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium tabular-nums text-slate-500 ring-1 ring-slate-200" title="Filas en el grupo">{g.rows.length.toLocaleString("es-ES")}</span>
@@ -303,9 +325,9 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
             </td>)}
             {mergeable && <td />}
             {recordRows && <td />}
-          </tr>, ...(expanded ? g.rows.map((r, i) => row(r, typeof r._id === "string" ? r._id : `${g.key}-${i}`)) : [])];
-        }) : result.rows.map((r, i) => row(r, typeof r._id === "string" ? r._id : `${result.page}-${i}`))}
-        {!result.rows.length && <tr><td colSpan={columns.length + (mergeable ? 1 : 0) + (recordRows ? 1 : 0)} className="px-4 py-10 text-center text-sm text-slate-500">Ninguna fila coincide con la búsqueda o los filtros.</td></tr>}</tbody>
+          </tr>, ...(expanded ? g.rows.flatMap((r, i) => row(r, typeof r._id === "string" ? r._id : `${g.key}-${i}`)) : [])];
+        }) : result.rows.flatMap((r, i) => row(r, typeof r._id === "string" ? r._id : `${result.page}-${i}`))}
+        {!result.rows.length && <tr><td colSpan={columns.length + extraCols} className="px-4 py-10 text-center text-sm text-slate-500">Ninguna fila coincide con la búsqueda o los filtros.</td></tr>}</tbody>
       </table></div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-5 py-2.5 text-xs text-slate-500">
         <span className="flex items-center gap-2">{groups ? "Grupos" : "Filas"} por página
@@ -390,6 +412,41 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
       <RecordHistory recordId={history._id} title={titleOf(history)} columns={table.columns} currentRevision={history._rev}
         onClose={() => setHistory(null)} onRestored={() => { setHistory(null); setNotice("Versión restaurada."); refresh(); }} />}
   </section>;
+}
+
+/**
+ * Every purchase of a catalog product, newest first: what it cost before and after the discount, the amounts without
+ * and with VAT, gifts, and its invoice. A purchase whose price per unit differs from the one before it is marked.
+ */
+function PurchaseHistory({ rows }: { rows: PurchaseHistoryRow[] }) {
+  const prices = new Set(rows.filter(r => r.tipo === "Compra" && r.precio_ud !== null).map(r => r.precio_ud!.toFixed(4)));
+  return <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+    <p className="border-b border-slate-100 px-3 py-1.5 text-xs text-slate-500">
+      {rows.length} {rows.length === 1 ? "compra" : "compras"} · {prices.size} {prices.size === 1 ? "precio" : "precios distintos"}
+      {rows.some(r => r.tipo === "Regalo") && <> · {rows.filter(r => r.tipo === "Regalo").length} regalo{rows.filter(r => r.tipo === "Regalo").length === 1 ? "" : "s"}</>} · importes sin IVA salvo «c/IVA»</p>
+    <table className="w-full min-w-[720px] border-collapse text-left text-xs">
+      <thead className="text-slate-500"><tr>
+        {["Fecha", "Cantidad", "Ud.", "Precio ud.", "Dto. %", "Precio ud. con dto.", "Importe s/IVA", "Importe c/IVA", "Tipo", "Factura", ""].map((h, i) =>
+          <th key={i} className={cn("whitespace-nowrap px-2.5 py-1.5 font-semibold", i >= 3 && i <= 7 && "text-right", i === 1 && "text-right")}>{h}</th>)}
+      </tr></thead>
+      <tbody>{rows.map(h => <tr key={h.id} className={cn("border-t border-slate-100", h.tipo === "Regalo" ? "bg-emerald-50/60" : h.tipo === "No cuadra" ? "bg-rose-50/60" : h.cambio && "bg-amber-50/70")}>
+        <td className="whitespace-nowrap px-2.5 py-1">{h.fecha ? fmtDate(h.fecha) : "—"}</td>
+        <td className="px-2.5 py-1 text-right tabular-nums">{h.cantidad !== null ? fmtNumber(h.cantidad) : "—"}</td>
+        <td className="px-2.5 py-1">{h.unidad ?? "—"}</td>
+        <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums">{h.precio !== null ? fmtMoney(h.precio) : "—"}</td>
+        <td className="px-2.5 py-1 text-right tabular-nums">{h.dto_pct ? `${fmtNumber(h.dto_pct)} %` : "—"}</td>
+        <td className="whitespace-nowrap px-2.5 py-1 text-right font-medium tabular-nums text-slate-900">{h.precio_ud !== null ? fmtMoney(h.precio_ud) : "—"}
+          {h.cambio && <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-800" title="Precio distinto al de la compra anterior">cambio</span>}</td>
+        <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums">{h.importe !== null ? fmtMoney(h.importe) : "—"}</td>
+        <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums">{h.importe_iva !== null ? fmtMoney(h.importe_iva) : "—"}</td>
+        <td className={cn("px-2.5 py-1", h.tipo === "Regalo" ? "font-medium text-emerald-700" : h.tipo === "No cuadra" && "font-medium text-rose-700")}>{h.tipo}</td>
+        <td className="whitespace-nowrap px-2.5 py-1">{h.factura ?? "—"}</td>
+        <td className="px-2.5 py-1">{h.documento
+          ? <a href={`/api/knowledge/intake/files/${h.documento}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-[#0A58FF] hover:underline"><FileText className="size-3.5" />Ver</a>
+          : null}</td>
+      </tr>)}</tbody>
+    </table>
+  </div>;
 }
 
 /** 1 … 4 5 6 … 12 */

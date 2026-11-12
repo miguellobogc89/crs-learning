@@ -27,6 +27,9 @@ export type Line = {
   iva: number | null;
   /** Amount WITH VAT printed on the invoice, when it prints both (it can confirm what the amount without VAT hides). */
   importeConIva?: number | null;
+  /** The amounts exactly as read: without VAT and with VAT (either can be missing). For showing, not for validating. */
+  importeSinIvaLeido?: number | null;
+  importeIvaLeido?: number | null;
   /** Unit printed on the invoice (kg, l, ud…). */
   unidad: string | null;
   /** Content of one unit bought (catalog, or read from the name) and its unit. */

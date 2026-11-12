@@ -194,3 +194,26 @@ test('catálogo de productos: su resumen de compras se ve en vivo y no se edita 
   assert.equal(t.rows[0].precio_envase,38.6); assert.equal(t.rows[0].estado,'OK'); assert.equal(t.rows[0].envase,25);
   assert.equal(t.columns.find(c=>c.key==='precio_envase').edit,undefined); assert.ok(t.columns.find(c=>c.key==='envase').edit);
 });
+
+test('catálogo: cada producto trae su historial de compras, sus avisos y las columnas que faltan', () => {
+  const row=(id,values)=>({id,values});
+  const d={companies:[row('s',{legal_name:'Proveedor S.L.'})],
+    invoices:[row('f1',{issue_date:'2026-08-01',invoice_number:'A-1'}),row('f2',{issue_date:'2026-09-01',invoice_number:'A-2'})],
+    lines:[row('l1',{description:'AZUCAR S/25 KGS.',quantity:'1',unit_price:'38.60',line_total:'38.60'}),
+      row('l2',{description:'AZUCAR S/25 KGS.',quantity:'1',unit_price:'40.00',line_total:'40.00'})],
+    supplies:[],consumption:[],telecom:[],relations:{invoice_lines:[['f1','l1'],['f2','l2']],invoice_issuer:[['s','f1'],['s','f2']],invoice_customer:[],invoice_supply_point:[],invoice_energy_consumption:[],supply_point_holder:[]},
+    custom:[{typeId:'t',typeKey:'catalogo',nombre:'Catálogo',descripcion:'',titulo:'producto',
+      campos:[{key:'producto',label:'Producto',type:'text'},{key:'alias',label:'Alias',type:'text'},{key:'envase',label:'Envase',type:'decimal'}],
+      rows:[row('p',{producto:'AZUCAR S/25 KGS.',alias:'Azúcar',envase:25})]}],
+    links:[{from:'compras',columna:'cat',nombre:'Producto',to:'tabla:catalogo',relationId:'r',relationKey:'r',completar:false,pairs:[['l1','p'],['l2','p']]}]};
+  const t=a.buildTable(d,'tabla:catalogo');
+  const aviso=t.columns.find(c=>c.key==='aviso');
+  assert.ok(aviso&&aviso.multi&&!aviso.edit,'aviso is a virtual, multi-valued column');
+  assert.ok(t.columns.find(c=>c.key==='dto_pct')); assert.ok(t.columns.find(c=>c.key==='ultima_factura'));
+  const h=t.history.p;
+  assert.equal(h.length,2); assert.equal(h[0].fecha,'2026-09-01','newest first');
+  assert.equal(h[0].cambio,true,'price change is flagged'); assert.equal(h[1].cambio,false);
+  assert.equal(h[0].importe,40); assert.equal(h[0].factura,'A-2');
+  const c=a.buildTable(d,'compras');
+  assert.equal(c.rows[0].alias,'Azúcar'); assert.ok(c.columns.find(x=>x.key==='importe_iva'));
+});

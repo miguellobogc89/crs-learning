@@ -53,6 +53,7 @@ export function purchaseLines(data: AnalyticsData): Line[] {
       importe: num(l.values.line_total) ?? num(l.values.line_total_with_tax), iva: num(l.values.tax_rate), unidad: str(l.values.unit),
       // Only when the amount without VAT was read too: then the one with VAT can confirm it.
       importeConIva: num(l.values.line_total) !== null ? num(l.values.line_total_with_tax) : null,
+      importeSinIvaLeido: num(l.values.line_total), importeIvaLeido: num(l.values.line_total_with_tax),
       envase: measure?.cantidad ?? null, unidadEnvase: measure?.unidad ?? null };
   });
 }

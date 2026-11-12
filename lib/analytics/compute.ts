@@ -1,7 +1,7 @@
 import type { AnalyticsData, CustomTable, Row } from "./data";
 import { extraCopies } from "@/lib/knowledge/intake/writer/duplicates";
 import { normalizePurchases, PURCHASE_COLUMNS, purchaseCatalog, purchaseCells } from "@/lib/purchases/analytics";
-import { LIVE_CATALOG_FIELDS, liveCatalog, type LiveCatalog } from "@/lib/purchases/catalog";
+import { LIVE_CATALOG_FIELDS, LIVE_CATALOG_LABELS, liveCatalog, type LiveCatalog, type PurchaseHistoryRow } from "@/lib/purchases/catalog";
 
 /**
  * Pure analytics over the workspace's records: income and expenses, costs by category, products and prices,
@@ -336,9 +336,13 @@ export type Column = { key: string; label: string; kind?: "money" | "number" | "
   link?: string;
   /** The person is expected to fill it (rows with it empty are «por completar»). */
   completar?: boolean;
+  /** The cell lists several values joined with « · »: each one is offered (and filtered) on its own. */
+  multi?: boolean;
   edit?: { field: string; type: "text" | "number" | "date" | "select" | "boolean" | "party" | "link"; options?: { value: string; label: string }[] } };
 /** `title`: the column that names each row (used to point at rows: links, the assistant). Rows of records carry `_id`. */
-export type Table = { key: string; label: string; description: string; columns: Column[]; rows: Record<string, CellValue>[]; title?: string };
+export type Table = { key: string; label: string; description: string; columns: Column[]; rows: Record<string, CellValue>[]; title?: string;
+  /** The product catalog: every purchase of each row (by `_id`), opened under the row. */
+  history?: Record<string, PurchaseHistoryRow[]> };
 export const TABLE_KEYS = ["facturas", "compras", "empresas", "suministros", "consumos"] as const;
 /** Edits allowed from Analítica (record type → fields). Anything else is changed in Tablas of the engine. */
 export const EDITABLE: Record<string, Record<string, "text" | "boolean" | "direction" | "category">> = {
@@ -412,13 +416,21 @@ function customTable(key: string, t: CustomTable, live?: LiveCatalog | null): Ta
   const title = t.titulo && t.campos.some(f => f.key === t.titulo) ? t.titulo : t.campos.find(f => f.type === "text")?.key;
   // The product catalog's purchase summary is computed from the purchases, not typed: shown live, not editable.
   const computed = live && live.typeKey === t.typeKey ? new Set<string>(LIVE_CATALOG_FIELDS) : null;
+  // Live columns the table has no field for are shown anyway (after its own columns), never stored.
+  const own = new Set(t.campos.map(f => f.key));
+  const virtual = computed ? LIVE_CATALOG_FIELDS.filter(k => !own.has(k)) : [];
   return { key, label: t.nombre, description: t.descripcion || "Tabla creada con el asistente.", title,
-    columns: t.campos.map((f): Column => ({ key: f.key, label: f.label, kind: kind(f), ...(f.completar ? { completar: true } : {}),
+    columns: [...t.campos.map((f): Column => ({ key: f.key, label: f.label, kind: kind(f), ...(f.completar ? { completar: true } : {}),
+      ...(f.key === "aviso" && computed ? { multi: true, filter: true } : {}),
       ...(computed?.has(f.key) ? {} : { edit: { field: f.key, type: f.type === "boolean" ? "boolean" : f.type === "date" ? "date" : f.type === "decimal" || f.type === "integer" ? "number" : "text" } }) })),
+      ...virtual.map((k): Column => ({ key: k, label: LIVE_CATALOG_LABELS[k].label, ...(LIVE_CATALOG_LABELS[k].kind ? { kind: LIVE_CATALOG_LABELS[k].kind } : {}),
+        ...(k === "aviso" ? { multi: true, filter: true } : {}) }))],
     rows: t.rows.map(r => {
-      const own = computed ? live!.values.get(r.id) ?? {} : {};
-      return { _id: r.id, _rev: r.revision ?? null, ...Object.fromEntries(t.campos.map(f => [f.key, computed?.has(f.key) && f.key in own ? own[f.key as keyof typeof own] ?? null : value(f, r.values[f.key])])) };
-    }) };
+      const values = computed ? live!.values.get(r.id) ?? {} : {};
+      return { _id: r.id, _rev: r.revision ?? null, ...Object.fromEntries(t.campos.map(f => [f.key, computed?.has(f.key) && f.key in values ? values[f.key as keyof typeof values] ?? null : value(f, r.values[f.key])])),
+        ...Object.fromEntries(virtual.map(k => [k, values[k] ?? null])) };
+    }),
+    ...(computed ? { history: Object.fromEntries(live!.history) } : {}) };
 }
 
 function buildBaseTable(data: AnalyticsData, key: string): Table {
@@ -441,26 +453,41 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
   const label = (c: string) => CATEGORIES.find(x => x.key === c)?.label ?? c;
   const doc = (invoiceId: string | undefined) => (invoiceId && data.documents?.[invoiceId]?.fileId) || null;
   switch (key) {
-    case "compras": { const purchases = normalizePurchases(data).normalized; return { key, label: "Productos comprados", description: "Cada línea de compra con su fecha real (la del ticket cuando la factura agrupa varios) y lo que se pagó de verdad por unidad (descuentos y ofertas incluidos).", title: "producto",
+    case "compras": {
+      const purchases = normalizePurchases(data).normalized;
+      // The alias of each line comes from its product in the catalog (corrected there, it changes here too).
+      const linked = purchaseCatalog(data);
+      const aliasOf = new Map((linked?.catalog.rows ?? []).map(r => [r.id, str(r.values.alias)]));
+      const pc = (k: string) => PURCHASE_COLUMNS.find(c => c.key === k)!;
+      return { key, label: "Productos comprados", description: "Cada línea de compra con su fecha real (la del ticket cuando la factura agrupa varios) y lo que se pagó de verdad por unidad (descuentos y ofertas incluidos). Importes sin IVA salvo «Importe c/IVA».", title: "producto",
       columns: [{ key: "fecha", label: "Fecha", kind: "date", edit: { field: "source_ticket_date", type: "date" } }, { key: "producto", label: "Producto", edit: { field: "description", type: "text" } },
-        { key: "proveedor", label: "Proveedor", filter: true },
-        { key: "cantidad", label: "Cantidad", kind: "number", edit: { field: "quantity", type: "number" } }, { key: "unidad", label: "Unidad", edit: { field: "unit", type: "text" } },
-        { key: "precio", label: "Precio unitario", kind: "money", edit: { field: "unit_price", type: "number" } },
-        { key: "descuento", label: "Descuento", kind: "money", edit: { field: "discount_amount", type: "number" } }, { key: "importe", label: "Importe", kind: "money", edit: { field: "line_total", type: "number" } },
-        { key: "precio_pagado", label: "Precio pagado por unidad", kind: "money" }, ...PURCHASE_COLUMNS, { key: "referencia", label: "Referencia", edit: { field: "product_reference", type: "text" } },
+        { key: "alias", label: "Alias" }, { key: "proveedor", label: "Proveedor", filter: true },
+        { key: "cantidad", label: "Cantidad", kind: "number", edit: { field: "quantity", type: "number" } }, { key: "unidad", label: "Ud.", edit: { field: "unit", type: "text" } },
+        { key: "precio", label: "Precio ud.", kind: "money", edit: { field: "unit_price", type: "number" } }, pc("descuento_pct"),
+        { key: "precio_pagado", label: "Precio ud. con dto.", kind: "money" },
+        { key: "importe", label: "Importe s/IVA", kind: "money", edit: { field: "line_total", type: "number" } },
+        { key: "importe_iva", label: "Importe c/IVA", kind: "money", edit: { field: "line_total_with_tax", type: "number" } },
+        pc("tipo"), { key: "descuento", label: "Dto. €", kind: "money", edit: { field: "discount_amount", type: "number" } },
+        ...PURCHASE_COLUMNS.filter(c => c.key !== "tipo" && c.key !== "descuento_pct"), { key: "referencia", label: "Ref.", edit: { field: "product_reference", type: "text" } },
         { key: "factura", label: "Factura" }, { key: "documento", label: "Documento", kind: "document" }],
       rows: data.lines.map(l => {
         const inv = ix.byId.get(ix.invoiceOfLine.get(l.id) ?? "");
-        // The price and amount shown may come from the «with tax» field: editing writes back to that same field.
+        const n = purchases.get(l.id);
+        const iva = num(l.values.tax_rate), q = num(l.values.quantity);
+        const sinIva = num(l.values.line_total) ?? n?.importe_corregido ?? null;
+        const conIva = num(l.values.line_total_with_tax) ?? (sinIva !== null && iva !== null ? Math.round(sinIva * (1 + iva / 100) * 100) / 100 : null);
+        const catalogRow = linked?.catalogOf.get(l.id);
+        // The price shown may come from the «with tax» field: editing writes back to that same field.
         return { _id: l.id, _rev: l.revision ?? null, _type: "invoice_line",
-          _src_precio: num(l.values.unit_price_with_tax) !== null ? "unit_price_with_tax" : "unit_price",
-          _src_importe: num(l.values.line_total_with_tax) !== null ? "line_total_with_tax" : "line_total", fecha: str(l.values.source_ticket_date) ?? (inv ? str(inv.values.issue_date) : null), producto: str(l.values.description),
-          proveedor: inv ? companyName(ix.byId.get(ix.issuerOf.get(inv.id) ?? "")) : null, cantidad: num(l.values.quantity),
-          precio: num(l.values.unit_price_with_tax) ?? num(l.values.unit_price), importe: num(l.values.line_total_with_tax) ?? num(l.values.line_total),
+          _src_precio: num(l.values.unit_price_with_tax) !== null && num(l.values.unit_price) === null ? "unit_price_with_tax" : "unit_price",
+          fecha: str(l.values.source_ticket_date) ?? (inv ? str(inv.values.issue_date) : null), producto: str(l.values.description),
+          alias: catalogRow ? aliasOf.get(catalogRow) ?? null : null,
+          proveedor: inv ? companyName(ix.byId.get(ix.issuerOf.get(inv.id) ?? "")) : null, cantidad: q,
+          precio: num(l.values.unit_price) ?? num(l.values.unit_price_with_tax), importe: sinIva, importe_iva: conIva,
           unidad: str(l.values.unit), descuento: num(l.values.discount_amount), referencia: str(l.values.product_reference),
-          // What was really paid per unit (after discounts and offers): amount ÷ quantity.
-          precio_pagado: (() => { const q = num(l.values.quantity), t = num(l.values.line_total_with_tax) ?? num(l.values.line_total); return q && t !== null ? Math.round((t / q) * 10000) / 10000 : null; })(),
-          factura: inv ? str(inv.values.invoice_number) : null, documento: doc(inv?.id), ...purchaseCells(purchases.get(l.id)),
+          // What was really paid per unit, without VAT (after discounts and offers): amount ÷ quantity.
+          precio_pagado: q && sinIva !== null ? Math.round((sinIva / q) * 10000) / 10000 : null,
+          factura: inv ? str(inv.values.invoice_number) : null, documento: doc(inv?.id), ...purchaseCells(n),
           _skip: inv ? category(inv) === "suministros" || isIncome(inv, ix) : false };
       }).filter(r => !r._skip).map(({ _skip, ...r }) => r).sort((a, b) => String(b.fecha ?? "").localeCompare(String(a.fecha ?? ""))) }; }
     case "proveedores":

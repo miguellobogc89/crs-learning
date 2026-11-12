@@ -56,3 +56,11 @@ test("tablas del asistente: filtros automáticos en columnas que se repiten y en
   const f = Object.fromEntries(t.columns.map(c => [c.key, !!c.filter]));
   assert.deepEqual(f, { producto: false, estado: true, envase: true, precio: false });
 });
+
+test('multi columns: each part of «a · b» is its own filter option and matches on its own',()=>{
+ const c=[{key:'aviso',label:'Aviso',filter:true,multi:true}];
+ const r=[{_id:'1',aviso:'No cuadra · Por completar'},{_id:'2',aviso:'Por completar'},{_id:'3',aviso:'OK'}];
+ assert.deepEqual(q.filterOptions(r,c[0]).map(o=>[o.label,o.count]).sort(),[['No cuadra',1],['OK',1],['Por completar',2]]);
+ const out=q.queryRows(r,c,{...base,filters:{aviso:'No cuadra'}});
+ assert.deepEqual(out.rows.map(x=>x._id),['1']);
+});
