@@ -47,7 +47,7 @@ export type LabStats = {
   exposurePct: number;
 };
 
-export type LabResult = { key: string; name: string; from: number; to: number; curve: { day: number; equity: number }[]; stats: LabStats; delisted: string[] };
+export type LabResult = { key: string; name: string; from: number; to: number; curve: { day: number; equity: number }[]; stats: LabStats; delisted: string[]; lastWeights: Record<string, number> };
 
 type Prepared = { symbol: string; candles: Candle[]; byDay: Map<number, number>; closes: number[]; sma: Map<number, (number | null)[]> };
 
@@ -187,6 +187,7 @@ export function simulate(coins: Coin[], strategy: Strategy, opts: { from: number
     curve,
     stats: statsOf(curve, rebalances, turnover, invested),
     delisted: [...delisted],
+    lastWeights: Object.fromEntries([...units.keys()].map((k) => [k, 1])),
   };
 }
 
@@ -311,8 +312,78 @@ export const BREAKOUT: Strategy = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Agentes de dos modos («cambiar el chip»): ataque cuando el mercado va bien, efectivo cuando no.
+// El detector entra con calma y sale rápido. Sin memoria: cada día mira solo los datos hasta hoy.
+// ---------------------------------------------------------------------------
+type Gate = (c: Ctx) => boolean;
+
+/** Caída de Bitcoin desde su máximo de los últimos 30 días (en %, negativa). */
+const btcDrawdown30 = (c: Ctx) => {
+  const p = c.close(BTC);
+  const hi = c.highest(BTC, 30);
+  return p !== null && hi !== null ? (p / Math.max(hi, p) - 1) * 100 : 0;
+};
+
+/** Detector A: ataque solo si Bitcoin está sobre su media de 200 Y de 50 días y no ha caído más de un 10 % desde su máximo de 30 días. */
+export const DETECTOR_A: Gate = (c) => {
+  const p = c.close(BTC);
+  const m200 = c.ma(BTC, 200);
+  const m50 = c.ma(BTC, 50);
+  return p !== null && m200 !== null && m50 !== null && p > m200 && p > m50 && btcDrawdown30(c) > -10;
+};
+
+/** Detector B: ataque si Bitcoin está sobre su media de 200 y de 50 días y por encima de su precio de hace 10 días (impulso corto a favor). */
+export const DETECTOR_B: Gate = (c) => {
+  const p = c.close(BTC);
+  const m200 = c.ma(BTC, 200);
+  const m50 = c.ma(BTC, 50);
+  const p10 = c.close(BTC, 10);
+  return p !== null && m200 !== null && m50 !== null && p10 !== null && p > m200 && p > m50 && p > p10;
+};
+
+function gated(key: string, name: string, idea: string, gate: Gate, attack: (c: Ctx) => string[] | null): Strategy {
+  return {
+    key,
+    name,
+    idea,
+    decide: (c) => {
+      const holding = c.coins.some((s) => c.holding(s));
+      if (!gate(c)) return holding ? {} : null; // defensa: todo a efectivo
+      const picks = attack(c);
+      if (picks === null || sameSet(c, picks)) return null;
+      return equal(picks);
+    },
+  };
+}
+
+const attackTop3: (c: Ctx) => string[] | null = (c) => (c.step % 7 !== 0 && c.coins.some((s) => c.holding(s)) ? null : strongest(c, 3, 60));
+const attackBreakout: (c: Ctx) => string[] | null = (c) => {
+  const keep = c.coins.filter((s) => {
+    if (!c.holding(s)) return false;
+    const p = c.close(s);
+    const low = c.lowest(s, 10);
+    return p !== null && low !== null && p >= low;
+  });
+  const fresh = c.coins.filter((s) => {
+    if (c.holding(s)) return false;
+    const p = c.close(s);
+    const high = c.highest(s, 20);
+    return p !== null && high !== null && p > high;
+  });
+  return [...keep, ...strongest(c, 12, 30).filter((s) => fresh.includes(s))].slice(0, 3);
+};
+
+export const CHIP: Strategy[] = [
+  gated("chip-a-btc", "Chip A · Bitcoin", "Detector A; en ataque, solo Bitcoin.", DETECTOR_A, () => [BTC]),
+  gated("chip-a-top3", "Chip A · top 3", "Detector A; en ataque, las 3 crypto más fuertes de 60 días (cada semana).", DETECTOR_A, attackTop3),
+  gated("chip-a-rupt", "Chip A · rupturas", "Detector A; en ataque, rupturas 20/10 (hasta 3).", DETECTOR_A, attackBreakout),
+  gated("chip-b-top3", "Chip B · top 3", "Detector B; en ataque, las 3 crypto más fuertes de 60 días (cada semana).", DETECTOR_B, attackTop3),
+  gated("chip-b-rupt", "Chip B · rupturas", "Detector B; en ataque, rupturas 20/10 (hasta 3).", DETECTOR_B, attackBreakout),
+];
+
 /** Las candidatas que se comparan en el laboratorio. */
-export const CANDIDATES: Strategy[] = [BTC_FILTER, rotation(1, 60), rotation(2, 60), rotation(3, 60), rotation(3, 30), rotation(3, 90), BREAKOUT, rotation(2, 60, false), rotation(3, 30, false)];
+export const CANDIDATES: Strategy[] = [BTC_FILTER, rotation(2, 60), rotation(3, 60), BREAKOUT, rotation(3, 30, false)];
 
 /** Mantener Bitcoin sin más (la vara de medir). */
 export const HOLD_BTC: Strategy = {

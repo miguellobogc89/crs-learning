@@ -8,7 +8,7 @@
 //   node scripts/trading/lab.mjs --months 6      (periodo corto: mes a mes y ventanas de 3 meses)
 import { load } from "../../tests/trading/helpers.mjs";
 
-const { simulate, CANDIDATES, HOLD_BTC } = load("lib/trading/lab/strategies.ts");
+const { simulate, CANDIDATES, CHIP, HOLD_BTC } = load("lib/trading/lab/strategies.ts");
 const BINANCE = "https://data-api.binance.vision";
 const COINS = ["BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "AVAX", "DOT", "LINK", "LTC", "TRX"];
 const arg = (name, def) => {
@@ -54,7 +54,7 @@ const from = Date.now() - periodDays * DAY;
 // Pares que dejan de cotizar en euros dentro del periodo (se venden a su último cierre).
 const ended = coins.filter((c) => c.candles.length && c.candles[c.candles.length - 1].t < Date.now() - 5 * DAY);
 if (ended.length) console.log(`Ojo: sin datos recientes de ${ended.map((c) => `${c.symbol} (hasta ${day(c.candles[c.candles.length - 1].t)})`).join(", ")}`);
-const all = [HOLD_BTC, ...CANDIDATES];
+const all = [HOLD_BTC, ...CANDIDATES, ...CHIP];
 
 console.log(`\nLaboratorio de agentes · ${coins.length} crypto en euros · comisión ${fee} % por orden + 0,05 % deslizamiento\n`);
 const head = `${"Estrategia".padEnd(30)} ${pad("Total", 10)} ${pad("Al año", 9)} ${pad("Semana", 8)} ${pad("Sem.+", 6)} ${pad("Caída", 9)} ${pad("Invert.", 8)} ${pad("Cambios", 8)}`;
@@ -102,6 +102,15 @@ if (starts.length > 2) {
   }
 }
 
+// Modo en el que está hoy cada agente de dos modos.
+const modeNow = CHIP.map((st) => {
+  const r = simulate(coins, st, { from: Date.now() - 400 * DAY, feePct: fee });
+  return `${st.name}: ${r.lastWeights && Object.keys(r.lastWeights).length ? `ATAQUE (${Object.keys(r.lastWeights).join(", ")})` : "DEFENSA (efectivo)"}`;
+});
+console.log(`\nHoy:\n  ${modeNow.join("\n  ")}`);
+console.log(`\nDetectores: A = Bitcoin sobre sus medias de 200 y 50 días y sin caer más de un 10 % desde su máximo de 30 días.`);
+console.log(`            B = Bitcoin sobre sus medias de 200 y 50 días y por encima de su precio de hace 10 días.`);
+console.log(`            Si falla una condición, a efectivo (sale rápido); para volver tienen que cumplirse todas (entra con calma).`);
 console.log(`\nQué hace cada una:`);
 for (const s of all) console.log(`  · ${s.name}: ${s.idea}`);
 console.log(`\nSem.+ = semanas en positivo · Caída = peor caída desde un máximo · Invert. = tiempo con dinero dentro.`);

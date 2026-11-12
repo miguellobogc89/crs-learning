@@ -61,3 +61,15 @@ test("laboratorio: si un par deja de cotizar, se vende a su último cierre (no v
   assert.ok(r.stats.totalPct > 10, `total ${r.stats.totalPct}`);
   assert.ok(r.stats.maxDrawdownPct > -5, `caída ${r.stats.maxDrawdownPct}`);
 });
+
+test("laboratorio: el chip pasa a efectivo en cuanto Bitcoin cae y vuelve a atacar cuando se recupera", () => {
+  const { CHIP } = load("lib/trading/lab/strategies.ts");
+  const chipBtc = CHIP.find((s) => s.key === "chip-a-btc");
+  // Sube 300 días, cae un 25 % en 20 días y luego se queda plano.
+  const f = (i) => (i < 300 ? 100 * 1.003 ** i : i < 320 ? 100 * 1.003 ** 300 * 0.9857 ** (i - 300) : 100 * 1.003 ** 300 * 0.9857 ** 20);
+  const coins = [{ symbol: "BTC-EUR", candles: line(380, f) }];
+  const r = simulate(coins, chipBtc, { from: t0 + 250 * DAY, feePct: 0, slippagePct: 0 });
+  const hold = simulate(coins, HOLD_BTC, { from: t0 + 250 * DAY, feePct: 0, slippagePct: 0 });
+  assert.ok(r.stats.maxDrawdownPct > hold.stats.maxDrawdownPct + 5, `chip ${r.stats.maxDrawdownPct} vs mantener ${hold.stats.maxDrawdownPct}`);
+  assert.deepEqual(Object.keys(r.lastWeights), [], "al final está en defensa");
+});
