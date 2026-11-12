@@ -6,7 +6,8 @@ import { api, errorText } from "./format";
 import { useTradingRefresh } from "./navigation";
 import { MarketPanel } from "./market-panel";
 import { LibraryPanel } from "./library-panel";
-import { PortfolioPanel, RulesPanel, UniversePanel } from "./portfolio-panel";
+import { RulesPanel, UniversePanel } from "./portfolio-panel";
+import { CarteraPanel } from "./cartera-panel";
 import { AgentsPanel } from "./agents-panel";
 import { NewsPanel } from "./news-panel";
 import { FaroPanel } from "./faro-panel";
@@ -70,7 +71,7 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   } else if (tab === "inicio") body = <HomePanel />;
   else if (tab === "oportunidades") body = <FaroPanel />;
   else if (tab === "noticias") body = <NewsPanel />;
-  else if (tab === "cartera") body = <PortfolioPanel onOpenChart={openChart} />;
+  else if (tab === "cartera") body = <CarteraPanel onOpenChart={openChart} />;
   else if (tab === "agentes") body = <AgentsPanel />;
   else if (tab === "patrones") body = <LibraryPanel />;
   else if (tab === "reglas") body = <RulesPanel />;

@@ -138,16 +138,18 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
         ))}
       </div>
 
-      <section className={panel}>
-        <header className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                <TrendingUp className="h-5 w-5 text-blue-600" /> Evolución del patrimonio
-              </h2>
-          <span className="text-xs text-slate-500">Capital inicial {eur0(s.initialCapital)}</span>
-        </header>
-        <EquityChart points={withLivePoint(data.equity, s.equity)} initial={s.initialCapital} />
-      </section>
       <CopiesPanel />
+      <details className={`${panel} group`}>
+        <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-sm font-medium text-slate-600 hover:text-slate-900">
+          <span className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-slate-400" /> Ver evolución del patrimonio
+          </span>
+          <span className="text-xs text-slate-400 group-open:hidden">Capital inicial {eur0(s.initialCapital)}</span>
+        </summary>
+        <div className="border-t border-slate-100">
+          <EquityChart points={withLivePoint(data.equity, s.equity)} initial={s.initialCapital} height={200} />
+        </div>
+      </details>
       </>
       )}
 
