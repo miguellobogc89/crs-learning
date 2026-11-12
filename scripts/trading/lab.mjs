@@ -5,6 +5,7 @@
 // Uso (en tu PC, desde la carpeta del proyecto):
 //   node scripts/trading/lab.mjs              (3 años)
 //   node scripts/trading/lab.mjs --years 2 --fee 0.15
+//   node scripts/trading/lab.mjs --months 6      (periodo corto: mes a mes y ventanas de 3 meses)
 import { load } from "../../tests/trading/helpers.mjs";
 
 const { simulate, CANDIDATES, HOLD_BTC } = load("lib/trading/lab/strategies.ts");
@@ -14,7 +15,9 @@ const arg = (name, def) => {
   const k = process.argv.indexOf(`--${name}`);
   return k > 0 ? Number(process.argv[k + 1]) : def;
 };
-const years = arg("years", 3);
+const months = arg("months", 0);
+const years = months ? months / 12 : arg("years", 3);
+const periodDays = Math.round(years * 365);
 const fee = arg("fee", 0.25);
 const DAY = 86_400_000;
 
@@ -42,55 +45,59 @@ const pad = (s, n) => String(s).padStart(n);
 const coins = [];
 for (const c of COINS) {
   try {
-    coins.push({ symbol: `${c}-EUR`, candles: await klines(`${c}EUR`, Math.round(years * 365) + 230) });
+    coins.push({ symbol: `${c}-EUR`, candles: await klines(`${c}EUR`, periodDays + 230) });
   } catch (e) {
     console.log(`(sin datos de ${c}: ${e.message})`);
   }
 }
-const from = Date.now() - Math.round(years * 365) * DAY;
+const from = Date.now() - periodDays * DAY;
 // Pares que dejan de cotizar en euros dentro del periodo (se venden a su último cierre).
 const ended = coins.filter((c) => c.candles.length && c.candles[c.candles.length - 1].t < Date.now() - 5 * DAY);
 if (ended.length) console.log(`Ojo: sin datos recientes de ${ended.map((c) => `${c.symbol} (hasta ${day(c.candles[c.candles.length - 1].t)})`).join(", ")}`);
 const all = [HOLD_BTC, ...CANDIDATES];
 
 console.log(`\nLaboratorio de agentes · ${coins.length} crypto en euros · comisión ${fee} % por orden + 0,05 % deslizamiento\n`);
-const head = `${"Estrategia".padEnd(26)} ${pad("Total", 10)} ${pad("Al año", 9)} ${pad("Semana", 8)} ${pad("Sem.+", 6)} ${pad("Caída", 9)} ${pad("Invert.", 8)} ${pad("Cambios", 8)}`;
-console.log(`Periodo completo (${years} años)`);
+const head = `${"Estrategia".padEnd(30)} ${pad("Total", 10)} ${pad("Al año", 9)} ${pad("Semana", 8)} ${pad("Sem.+", 6)} ${pad("Caída", 9)} ${pad("Invert.", 8)} ${pad("Cambios", 8)}`;
+console.log(`Periodo completo (${months ? `${months} meses` : `${years} años`}: ${day(from)} → hoy)`);
 console.log(head);
 const results = all.map((s) => simulate(coins, s, { from, feePct: fee }));
 for (const r of results) {
   const x = r.stats;
   console.log(
-    `${r.name.padEnd(26)} ${pad(pct(x.totalPct), 10)} ${pad(pct(x.yearlyPct), 9)} ${pad(pct(x.weeklyPct, 2), 8)} ${pad(`${x.positiveWeeksPct.toFixed(0)} %`, 6)} ${pad(pct(x.maxDrawdownPct), 9)} ${pad(`${x.exposurePct.toFixed(0)} %`, 8)} ${pad(x.rebalances, 8)}`,
+    `${r.name.padEnd(30)} ${pad(pct(x.totalPct), 10)} ${pad(pct(x.yearlyPct), 9)} ${pad(pct(x.weeklyPct, 2), 8)} ${pad(`${x.positiveWeeksPct.toFixed(0)} %`, 6)} ${pad(pct(x.maxDrawdownPct), 9)} ${pad(`${x.exposurePct.toFixed(0)} %`, 8)} ${pad(x.rebalances, 8)}`,
   );
 }
 
-// Año a año: una buena estrategia no puede depender de un solo año.
-console.log(`\nAño a año (rentabilidad)`);
+// Por tramos: años en periodos largos; meses en periodos cortos.
+const short = periodDays < 730;
+const step = short ? 30.4 * DAY : 365 * DAY;
+console.log(`\n${short ? "Mes a mes" : "Año a año"} (rentabilidad)`);
 const cuts = [];
-for (let y = 0; y < years; y++) cuts.push([from + y * 365 * DAY, Math.min(Date.now(), from + (y + 1) * 365 * DAY)]);
-console.log(`${"Estrategia".padEnd(26)} ${cuts.map(([a]) => pad(day(a).slice(0, 7), 10)).join(" ")}`);
+for (let t = from; t < Date.now() - 7 * DAY; t += step) cuts.push([t, Math.min(Date.now(), t + step)]);
+console.log(`${"Estrategia".padEnd(30)} ${cuts.map(([a]) => pad(day(a).slice(0, 7), short ? 9 : 10)).join(" ")}`);
 for (const s of all) {
-  const row = cuts.map(([a, b]) => pad(pct(simulate(coins, s, { from: a, to: b, feePct: fee }).stats.totalPct), 10));
-  console.log(`${s.name.padEnd(26)} ${row.join(" ")}`);
+  const row = cuts.map(([a, b]) => pad(pct(simulate(coins, s, { from: a, to: b, feePct: fee }).stats.totalPct), short ? 9 : 10));
+  console.log(`${s.name.padEnd(30)} ${row.join(" ")}`);
 }
 
 // Ventanas de 1 año que empiezan cada 2 semanas: el resultado no puede depender del día en que empiezas.
+const win = short ? 91 : 365;
+const every = short ? 7 : 14;
 const starts = [];
-for (let t = from; t + 365 * DAY <= Date.now(); t += 14 * DAY) starts.push(t);
+for (let t = from; t + win * DAY <= Date.now(); t += every * DAY) starts.push(t);
 if (starts.length > 2) {
-  const btcWin = starts.map((a) => simulate(coins, HOLD_BTC, { from: a, to: a + 365 * DAY, feePct: fee }).stats.totalPct);
-  console.log(`\nRobustez: ${starts.length} ventanas de 1 año, empezando cada 2 semanas`);
-  console.log(`${"Estrategia".padEnd(26)} ${pad("Mediana", 10)} ${pad("Peor", 10)} ${pad("Mejor", 10)} ${pad("En +", 7)} ${pad("Gana a BTC", 11)} ${pad("Caída med.", 11)}`);
+  const btcWin = starts.map((a) => simulate(coins, HOLD_BTC, { from: a, to: a + win * DAY, feePct: fee }).stats.totalPct);
+  console.log(`\nRobustez: ${starts.length} ventanas de ${short ? "3 meses, empezando cada semana" : "1 año, empezando cada 2 semanas"}`);
+  console.log(`${"Estrategia".padEnd(30)} ${pad("Mediana", 10)} ${pad("Peor", 10)} ${pad("Mejor", 10)} ${pad("En +", 7)} ${pad("Gana a BTC", 11)} ${pad("Caída med.", 11)}`);
   for (const s of all) {
-    const rs = starts.map((a) => simulate(coins, s, { from: a, to: a + 365 * DAY, feePct: fee }).stats);
+    const rs = starts.map((a) => simulate(coins, s, { from: a, to: a + win * DAY, feePct: fee }).stats);
     const tot = rs.map((x) => x.totalPct);
     const sorted = [...tot].sort((x, y) => x - y);
     const dds = rs.map((x) => x.maxDrawdownPct).sort((x, y) => x - y);
     const med = (v) => v[Math.floor(v.length / 2)];
     const beat = tot.filter((v, k) => v > btcWin[k]).length;
     console.log(
-      `${s.name.padEnd(26)} ${pad(pct(med(sorted)), 10)} ${pad(pct(sorted[0]), 10)} ${pad(pct(sorted[sorted.length - 1]), 10)} ${pad(`${Math.round((tot.filter((v) => v > 0).length / tot.length) * 100)} %`, 7)} ${pad(`${Math.round((beat / tot.length) * 100)} %`, 11)} ${pad(pct(med(dds)), 11)}`,
+      `${s.name.padEnd(30)} ${pad(pct(med(sorted)), 10)} ${pad(pct(sorted[0]), 10)} ${pad(pct(sorted[sorted.length - 1]), 10)} ${pad(`${Math.round((tot.filter((v) => v > 0).length / tot.length) * 100)} %`, 7)} ${pad(`${Math.round((beat / tot.length) * 100)} %`, 11)} ${pad(pct(med(dds)), 11)}`,
     );
   }
 }

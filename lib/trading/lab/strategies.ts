@@ -269,13 +269,13 @@ export const BTC_FILTER: Strategy = {
 };
 
 /** MULA-T: rotación semanal hacia las más fuertes, solo con Bitcoin en tendencia. */
-export function rotation(n: number, lookback: number): Strategy {
+export function rotation(n: number, lookback: number, filter = true): Strategy {
   return {
-    key: `rot-${n}-${lookback}`,
-    name: `MULA-T top ${n} · ${lookback}d`,
-    idea: `Cada semana, las ${n} crypto que más han subido en ${lookback} días, a partes iguales; todo a efectivo si Bitcoin cae bajo su media de 200 días.`,
+    key: `rot-${n}-${lookback}${filter ? "" : "-libre"}`,
+    name: `MULA-T top ${n} · ${lookback}d${filter ? "" : " sin filtro"}`,
+    idea: `Cada semana, las ${n} crypto que más han subido en ${lookback} días, a partes iguales; ${filter ? "todo a efectivo si Bitcoin cae bajo su media de 200 días" : "siempre dentro (solo modo ataque)"}.`,
     decide: (c) => {
-      if (!btcUp(c)) return c.coins.some((s) => c.holding(s)) ? {} : null;
+      if (filter && !btcUp(c)) return c.coins.some((s) => c.holding(s)) ? {} : null;
       if (c.step % 7 !== 0 && c.coins.some((s) => c.holding(s))) return null;
       const picks = strongest(c, n, lookback);
       if (sameSet(c, picks)) return null;
@@ -312,7 +312,7 @@ export const BREAKOUT: Strategy = {
 };
 
 /** Las candidatas que se comparan en el laboratorio. */
-export const CANDIDATES: Strategy[] = [BTC_FILTER, rotation(1, 60), rotation(2, 60), rotation(3, 60), rotation(3, 30), rotation(3, 90), BREAKOUT];
+export const CANDIDATES: Strategy[] = [BTC_FILTER, rotation(1, 60), rotation(2, 60), rotation(3, 60), rotation(3, 30), rotation(3, 90), BREAKOUT, rotation(2, 60, false), rotation(3, 30, false)];
 
 /** Mantener Bitcoin sin más (la vara de medir). */
 export const HOLD_BTC: Strategy = {
