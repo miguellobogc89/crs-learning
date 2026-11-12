@@ -1,5 +1,5 @@
 import { after, NextResponse } from "next/server";
-import { getWallets, myAgents } from "@/lib/trading/wallets";
+import { addMyAgent, getWallets, myAgents, removeMyAgent } from "@/lib/trading/wallets";
 import { getMarketPhase } from "@/lib/trading/chip/phase-service";
 import { connectorContext } from "@/lib/connectors/context";
 import {
@@ -146,6 +146,10 @@ export async function POST(req: Request, route: RouteContext) {
       if (action === "agents/run") return NextResponse.json(await runAgent(agent, ctx.userId));
       await resetAgent(agent);
       return NextResponse.json({ ok: true });
+    }
+    if (action === "mine/add" || action === "mine/remove") {
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede cambiar sus agentes", 403);
+      return NextResponse.json(action === "mine/add" ? await addMyAgent(ctx.workspaceId, body.agent) : await removeMyAgent(ctx.workspaceId, body.agent));
     }
     if (action === "account/open") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede abrir la cuenta del espacio", 403);

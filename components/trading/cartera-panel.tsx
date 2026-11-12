@@ -55,6 +55,8 @@ export function CarteraPanel() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [managing, setManaging] = useState<Row | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -72,6 +74,19 @@ export function CarteraPanel() {
     void load();
   }, [load]);
   useTradingRefresh(load);
+
+  const removeAgent = async (key: string, name: string) => {
+    if (!window.confirm(`¿Quitar a ${name} de tus agentes? Seguirá en la plataforma y podrás volver a añadirlo.`)) return;
+    setRemoving(key);
+    try {
+      await api("mine/remove", { agent: key });
+      await load();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setRemoving(null);
+    }
+  };
 
   const rows: Row[] = useMemo(() => {
     if (!agents || !mirrors || !mine) return [];
@@ -167,15 +182,28 @@ export function CarteraPanel() {
           </h2>
           <ul className="space-y-1.5">
             {rows.map((r) => (
-              <AgentRow key={r.key} r={r} active={current?.key === r.key} onClick={() => setSelected(r.key)} />
+              <AgentRow
+                key={r.key}
+                r={r}
+                active={current?.key === r.key}
+                onClick={() => setSelected(r.key)}
+                onRemove={r.mine && !r.mirror && mirrors.canManage ? () => removeAgent(r.key, r.agent?.name ?? r.key) : undefined}
+                removing={removing === r.key}
+              />
             ))}
             {Array.from({ length: Math.max(0, mine.max - mine.owned.length) }).map((_, i) => (
-              <li key={`hueco-${i}`} className="flex items-center gap-4 rounded-2xl border-2 border-dashed border-slate-200 px-4 py-3.5 text-slate-400">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-slate-200">
-                  <Plus className="h-5 w-5" />
-                </span>
-                <span className="flex-1 text-[15px]">Crear agente</span>
-                <span className="text-sm">Pronto</span>
+              <li key={`hueco-${i}`}>
+                <button
+                  type="button"
+                  disabled={!mirrors.canManage}
+                  onClick={() => setAdding(true)}
+                  className="flex w-full items-center gap-4 rounded-2xl border-2 border-dashed border-slate-200 px-4 py-3.5 text-left text-slate-400 transition-colors enabled:hover:border-blue-300 enabled:hover:bg-blue-50/40 enabled:hover:text-blue-700"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-current">
+                    <Plus className="h-5 w-5" />
+                  </span>
+                  <span className="flex-1 text-[15px] font-medium">Añadir agente</span>
+                </button>
               </li>
             ))}
           </ul>
@@ -190,6 +218,18 @@ export function CarteraPanel() {
         </section>
       </div>
 
+      {adding && (
+        <AddAgentModal
+          agents={agents.agents.filter((a) => !mine.owned.includes(a.key))}
+          onClose={() => setAdding(false)}
+          onAdded={async (key) => {
+            setAdding(false);
+            await load();
+            setSelected(key);
+          }}
+        />
+      )}
+
       {managing && (
         <ManageModal
           r={managing}
@@ -202,11 +242,13 @@ export function CarteraPanel() {
   );
 }
 
-function AgentRow({ r, active, onClick }: { r: Row; active: boolean; onClick: () => void }) {
+function AgentRow({ r, active, onClick, onRemove, removing }: { r: Row; active: boolean; onClick: () => void; onRemove?: () => void; removing?: boolean }) {
   const m = money(r.mirror);
   const st = statusOf(r);
+  // Sin dinero tuyo: al pasar por encima (o seleccionado), «Quitar agente» deja el hueco libre.
+  const hide = onRemove ? (active ? "invisible" : "group-hover:invisible") : "";
   return (
-    <li>
+    <li className="group relative">
       <button
         type="button"
         onClick={onClick}
@@ -236,11 +278,21 @@ function AgentRow({ r, active, onClick }: { r: Row; active: boolean; onClick: ()
               </span>
             </>
           ) : (
-            <span className="text-sm text-slate-400">Sin dinero tuyo</span>
+            <span className={`text-sm text-slate-400 ${hide}`}>Sin dinero tuyo</span>
           )}
         </span>
-        <ChevronRight className="h-5 w-5 shrink-0 text-slate-400" />
+        <ChevronRight className={`h-5 w-5 shrink-0 text-slate-400 ${hide}`} />
       </button>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={removing}
+          className={`absolute right-4 top-1/2 -translate-y-1/2 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500 shadow-sm transition-colors hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 ${active ? "inline-flex" : "hidden group-hover:inline-flex"}`}
+        >
+          {removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Minus className="h-3.5 w-3.5" />} Quitar agente
+        </button>
+      )}
     </li>
   );
 }
@@ -448,6 +500,55 @@ function ManageModal({ r, free, maxBudget, onClose }: { r: Row; free: number; ma
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-red-700">{error}</p>}
         </div>
       )}
+    </Modal>
+  );
+}
+
+const KIND_TEXT: Record<string, string> = { agente: "Comité de IA", kamikaze: "Kamikaze", chip: "Reglas fijas" };
+
+/** Catálogo de la plataforma: eliges uno y pasa a «Tus agentes» (luego le das dinero desde «Gestionar»). */
+function AddAgentModal({ agents, onClose, onAdded }: { agents: Agent[]; onClose: () => void; onAdded: (key: string) => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const list = [...agents].sort((a, b) => b.summary.returnPct - a.summary.returnPct);
+  const add = async (key: string) => {
+    setBusy(key);
+    setError(null);
+    try {
+      await api("mine/add", { agent: key });
+      onAdded(key);
+    } catch (e) {
+      setError(errorText(e));
+      setBusy(null);
+    }
+  };
+  return (
+    <Modal open onClose={onClose} title="Añadir agente" subtitle="Agentes de la plataforma. Añádelo y luego dale dinero desde «Gestionar»." width="max-w-2xl">
+      {error && <ErrorNote>{error}</ErrorNote>}
+      <ul className="max-h-[60vh] space-y-1.5 overflow-y-auto pr-1">
+        {list.map((a) => (
+          <li key={a.key} className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2.5 hover:bg-slate-50">
+            <AgentAvatar color={a.color} size="lg" />
+            <Link href={`/trading/agentes/${a.key}?from=cartera`} className="min-w-0 flex-1">
+              <span className="flex items-center gap-2">
+                <b className="truncate text-sm font-semibold text-slate-900">{a.name}</b>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">{KIND_TEXT[a.kind] ?? a.kind}</span>
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">{a.tagline}</span>
+            </Link>
+            <ReturnPill value={a.summary.returnPct} />
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => add(a.key)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {busy === a.key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Añadir
+            </button>
+          </li>
+        ))}
+        {!list.length && <li className="py-8 text-center text-sm text-slate-500">Ya tienes todos los agentes de la plataforma.</li>}
+      </ul>
     </Modal>
   );
 }

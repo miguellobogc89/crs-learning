@@ -10,6 +10,9 @@ import { referencePrice } from "./kamikaze/market";
 import { legResult } from "./mirror/logic";
 import { madridDay } from "./accounts";
 import { dayDate, dayKey } from "./sync";
+import { agentByKey } from "./agents/roster";
+import { chipByKey } from "./chip/roster";
+import { kamikazeByKey } from "./kamikaze/roster";
 
 /** Los saldos se piden como mucho una vez por minuto (el panel lateral se refresca solo). */
 const TTL_MS = 60_000;
@@ -106,4 +109,24 @@ export async function myAgents(workspaceId: string) {
     max: MAX_OWN,
     history: [...byDay.entries()].map(([day, equity]) => ({ day, equity })),
   };
+}
+
+/** Añade un agente del catálogo a «Tus agentes» (como mucho MAX_OWN). */
+export async function addMyAgent(workspaceId: string, key: unknown) {
+  const agent = String(key ?? "");
+  if (!(agentByKey(agent) || kamikazeByKey(agent) || chipByKey(agent))) throw new Error("Ese agente no existe");
+  const owned = await prisma.trading_user_agents.findMany({ where: { workspace_id: workspaceId }, select: { agent: true } });
+  if (owned.some((o) => o.agent === agent)) return { ok: true };
+  if (owned.length >= MAX_OWN) throw new Error(`Ya tienes ${MAX_OWN} agentes: quita uno para dejar hueco`);
+  await prisma.trading_user_agents.create({ data: { workspace_id: workspaceId, agent } });
+  return { ok: true };
+}
+
+/** Quita un agente de «Tus agentes» para dejar hueco. Solo si no tiene dinero tuyo trabajando. */
+export async function removeMyAgent(workspaceId: string, key: unknown) {
+  const agent = String(key ?? "");
+  const mirror = await prisma.trading_mirrors.findFirst({ where: { workspace_id: workspaceId, agent, active: true }, select: { id: true } });
+  if (mirror) throw new Error("Tiene dinero tuyo: despídelo primero desde «Gestionar»");
+  await prisma.trading_user_agents.deleteMany({ where: { workspace_id: workspaceId, agent } });
+  return { ok: true };
 }
