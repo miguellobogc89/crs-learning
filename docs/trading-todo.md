@@ -51,3 +51,8 @@ Apuntado el 10/11/2026. Sin empezar.
 ## Ideas (12/11/2026)
 - [ ] **Equipos de agentes con selector**: el detector de mercado avisa de cambios de ciclo y un selector decide qué agente del equipo mueve tu cartera en cada momento. Al cambiar, se liquida lo del agente saliente y entra el nuevo («se pasan la cartera»). Solo idea, sin diseñar.
 - [ ] Tarjetas de agentes: el minigráfico se corta por la derecha en algunas.
+
+## Oportunidades y Mis operaciones (12/11/2026)
+- [ ] Marcar en Oportunidades las ideas de monedas que **no existen en Bitvavo** (p. ej. SOPH-EUR: «Bitvavo no tiene SOPH-EUR: no se puede copiar»): etiqueta «No está en Bitvavo» y «Ejecutar» desactivado. Comprobar también que FARO no proponga monedas fuera de Bitvavo (el filtro de `venueBases()` falla abierto si Bitvavo no responde).
+- [ ] En ideas abiertas, el «Resultado por 100 €» en gris o como «va: …» (no es un resultado hasta que termina).
+- [ ] Repetir la prueba a ciegas de FARO (`scripts/trading/faro-ciego.mjs`) con 100+ ideas de días distintos, midiendo también si la convicción alta acierta más; probar kamikaze «repartido» (hasta 3 ideas a la vez).
