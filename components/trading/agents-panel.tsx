@@ -1,7 +1,7 @@
 "use client";
 // Agentes: catálogo de gestores de IA (en tarjetas o en lista) con la misma información, distinto carácter
 // y su propia cartera virtual. Cada tarjeta lleva a la página del agente (/trading/agentes/<clave>).
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Copy, CopyPlus, LayoutGrid, List, Loader2, MoreHorizontal, Pause, Play, Plus, RotateCcw, Search, Trash2, Wallet } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
@@ -72,6 +72,54 @@ export function AgentsPanel() {
   }, [load]);
   useTradingRefresh(load);
 
+  const q = query.trim().toLowerCase();
+  const list = data?.agents
+    .filter((a) => profile === "todos" || a.profile === profile)
+    .filter((a) => !q || [a.name, a.profile, a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
+    .sort(SORTS[sort].fn) ?? [];
+
+  // Animación FLIP: las tarjetas que permanecen se deslizan hacia su nueva posición.
+  // Sin dependencias adicionales y respetando la preferencia de movimiento reducido.
+  const cardNodes = useRef(new Map<string, HTMLElement>());
+  const previousPositions = useRef(new Map<string, DOMRect>());
+  const hadCards = useRef(false);
+  useLayoutEffect(() => {
+    if (!data || layout !== "cards") {
+      previousPositions.current.clear();
+      hadCards.current = false;
+      return;
+    }
+    const next = new Map<string, DOMRect>();
+    for (const a of list) {
+      const node = cardNodes.current.get(a.key);
+      if (node) next.set(a.key, node.getBoundingClientRect());
+    }
+    if (hadCards.current && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      for (const a of list) {
+        const node = cardNodes.current.get(a.key);
+        const current = next.get(a.key);
+        if (!node || !current) continue;
+        const previous = previousPositions.current.get(a.key);
+        if (previous) {
+          const dx = previous.left - current.left;
+          const dy = previous.top - current.top;
+          if (Math.abs(dx) > 1 || Math.abs(dy) > 1)
+            node.animate(
+              [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "translate(0, 0)" }],
+              { duration: 280, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
+            );
+        } else {
+          node.animate(
+            [{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "translateY(0)" }],
+            { duration: 230, easing: "ease-out" },
+          );
+        }
+      }
+    }
+    previousPositions.current = next;
+    hadCards.current = true;
+  }, [data, layout, query, profile, sort]);
+
   const meet = async (a: Agent) => {
     setBusy(a.key);
     try {
@@ -96,13 +144,7 @@ export function AgentsPanel() {
 
   if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard />;
 
-  const q = query.trim().toLowerCase();
-  const list = data.agents
-    .filter((a) => profile === "todos" || a.profile === profile)
-    .filter((a) => !q || [a.name, a.profile, a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
-    .sort(SORTS[sort].fn);
   const rank = new Map([...data.agents].sort((x, y) => y.summary.returnPct - x.summary.returnPct).map((a, k) => [a.key, k + 1]));
-  const bench = data.agents[0]?.benchmark;
   const openDetail = (key: string) => router.push(`/trading/agentes/${key}`);
 
   return (
@@ -140,12 +182,7 @@ export function AgentsPanel() {
           </select>
         </label>
         )}
-        <div className="ml-auto flex items-center gap-3">
-          {bench && (
-            <span className="hidden items-center gap-1 text-xs text-slate-500 lg:flex" title="Lo que ha hecho el mercado desde que empezaron los agentes, para comparar.">
-              Mercado desde que empezaron: IBEX 35 <b className={tone(bench.ibexPct)}>{pct(bench.ibexPct)}</b> · Bitcoin <b className={tone(bench.btcPct)}>{pct(bench.btcPct)}</b>
-            </span>
-          )}
+        <div className="ml-auto flex items-center gap-2">
           <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label="Vista">
             {(
               [
@@ -165,6 +202,9 @@ export function AgentsPanel() {
               </button>
             ))}
           </div>
+          <button type="button" onClick={() => setCreating(true)} className={`${primary} whitespace-nowrap`}>
+            <Plus className="h-4 w-4" /> Crear agente
+          </button>
         </div>
       </div>
 
@@ -176,20 +216,13 @@ export function AgentsPanel() {
         <div className={`${card} px-6 py-10 text-center text-sm text-slate-500`}>Ningún agente coincide con la búsqueda.</div>
       ) : layout === "cards" ? (
         <div className="grid min-h-0 flex-1 content-start gap-5 overflow-y-auto md:grid-cols-2 xl:grid-cols-3">
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-white/60 px-6 text-center text-slate-500 transition-colors hover:border-blue-300 hover:bg-blue-50/40 hover:text-blue-700"
-          >
-            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-              <Plus className="h-6 w-6" />
-            </span>
-            <span className="text-[15px] font-semibold text-slate-900">Crear agente</span>
-            <span className="max-w-[240px] text-xs">Elige su carácter, su riesgo y en qué mercados opera.</span>
-          </button>
           {list.map((a) => (
             <AgentCard
               key={a.key}
+              cardRef={(node) => {
+                if (node) cardNodes.current.set(a.key, node);
+                else cardNodes.current.delete(a.key);
+              }}
               a={a}
               rank={rank.get(a.key) ?? 0}
               canManage={data.canManage}
@@ -421,6 +454,7 @@ export function agentMenu(
 function AgentCard({
   a,
   rank,
+  cardRef,
   canManage,
   canCopy,
   busy,
@@ -432,6 +466,7 @@ function AgentCard({
 }: {
   a: Agent;
   rank: number;
+  cardRef: (node: HTMLElement | null) => void;
   canManage: boolean;
   canCopy: boolean;
   busy: boolean;
@@ -447,6 +482,7 @@ function AgentCard({
   const chartPoints = withLivePoint(a.equity, a.summary.equity);
   return (
     <article
+      ref={cardRef}
       role="link"
       tabIndex={0}
       onClick={onDetail}
