@@ -70,7 +70,7 @@ export function EquityChart({
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setWidth(Math.max(240, Math.round(e.contentRect.width))));
+    const ro = new ResizeObserver(([e]) => setWidth(Math.max(bare ? 1 : 240, Math.round(e.contentRect.width))));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
