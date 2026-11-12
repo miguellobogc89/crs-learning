@@ -68,7 +68,7 @@ export async function GET(req: Request, route: RouteContext) {
     if (action === "phase") return NextResponse.json(await getMarketPhase());
     if (action === "mine") return NextResponse.json(await myAgents(ctx.workspaceId));
     if (action === "wallets") {
-      return NextResponse.json(await getWallets({ kind: "user", userId: ctx.userId, workspaceId: ctx.workspaceId, canManage: ctx.canManage }));
+      return NextResponse.json(await getWallets({ kind: "user", userId: ctx.userId, workspaceId: ctx.workspaceId, canManage: ctx.canManage }, url.searchParams.get("history") === "1"));
     }
     if (action === "status") {
       // Con la bolsa abierta: precio en directo y órdenes pendientes ejecutadas en la apertura (si toca).
