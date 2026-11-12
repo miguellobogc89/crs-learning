@@ -35,3 +35,7 @@ Apuntado el 10/11/2026. Sin empezar.
 ## Dinero real (más adelante)
 - [ ] Reactivar Trading 212 (NEXT_PUBLIC_TRADING212_UI) y conectar la copia con la ejecución protegida.
 - [ ] Revisar el programa de referidos de Trading 212.
+
+## UX (12/11/2026)
+- [ ] Quitar la sección «Reglas y riesgo»: aquí se opera por copia (sin ajustes de riesgo propios ni modo automático por figuras).
+- [ ] Unificar Valores seguidos, Gráficos, Noticias y Aprende en una sola sección.
