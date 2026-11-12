@@ -2,10 +2,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, Loader2, RefreshCw } from "lucide-react";
+import { Link2, Loader2 } from "lucide-react";
+import type { getWallets } from "@/lib/trading/wallets";
 import { TRADING_SECTIONS } from "./tabs";
-import { api, dayFmt, errorText, eur0 } from "./format";
-import { ReturnPill } from "./ui";
+import { api, errorText, eur, eur0, tone } from "./format";
 
 export type TradingStatus = {
   regime: "alcista" | "bajista" | "lateral";
@@ -50,11 +50,6 @@ export function useTradingRefresh(fn: () => void) {
   }, []);
 }
 
-const REGIME = {
-  alcista: { label: "Alcista", dot: "bg-emerald-500", text: "El mercado sube: buen momento para compras." },
-  bajista: { label: "Bajista", dot: "bg-red-500", text: "El mercado baja: más prudencia con las compras." },
-  lateral: { label: "Lateral", dot: "bg-slate-400", text: "El mercado no tiene una dirección clara." },
-} as const;
 
 export function TradingNavigation() {
   const pathname = usePathname();
@@ -148,74 +143,117 @@ export function TradingNavigation() {
           ))}
         </nav>
 
-        <div className="mx-3 mb-3 space-y-3 rounded-2xl border border-slate-100 bg-white p-4 text-sm shadow-sm">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Mi patrimonio virtual</div>
-            {status && !status.opened ? (
-              <Link href="/trading/inicio" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">
-                Abre tu cuenta →
-              </Link>
-            ) : (
-            <>
-            <div className="mt-1 flex items-center gap-2">
-              <span className="text-xl font-bold tracking-tight tabular-nums text-slate-900">{status ? eur0(status.equity) : "—"}</span>
-              {status && <ReturnPill value={status.returnPct} />}
-            </div>
-            {status && (
-              <div className="text-xs text-slate-500">
-                {eur0(status.cash)} libres · {status.openPositions} abiertas
-                {status.pendingOrders ? ` · ${status.pendingOrders} pendientes` : ""}
-              </div>
-            )}
-            </>
-            )}
-            {status?.autoTrade && (
-              <div className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-blue-700">
-                <Bot className="h-3.5 w-3.5" /> Modo automático activo
-              </div>
-            )}
-          </div>
-          <div className="border-t border-slate-100 pt-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Cómo está el mercado</div>
-            {status ? (
-              <div className="mt-1 space-y-1.5">
-                {[
-                  { label: "Bolsa (IBEX 35)", r: REGIME[status.regime] },
-                  ...(status.cryptoRegime ? [{ label: "Crypto (Bitcoin)", r: REGIME[status.cryptoRegime] }] : []),
-                ].map(({ label, r }) => (
-                  <div key={label} className="flex items-center justify-between gap-2" title={r.text}>
-                    <span className="text-xs text-slate-600">{label}</span>
-                    <span className="flex items-center gap-1.5 text-xs font-medium text-slate-900">
-                      <span className={`h-2 w-2 rounded-full ${r.dot}`} /> {r.label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-slate-400">—</div>
-            )}
-          </div>
-          <div className="border-t border-slate-100 pt-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Datos</div>
-            <div className="text-xs text-slate-600">
-              Cierre del {dayFmt(status?.asOf)}
-              {status ? ` · ${status.instrumentsWithData}/${status.instruments} valores` : ""}
-            </div>
-            {status?.canManage && (
-              <button
-                type="button"
-                onClick={sync}
-                disabled={syncing}
-                className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                {syncing ? "Actualizando…" : "Actualizar cotizaciones"}
-              </button>
-            )}
-            {msg && <p className="mt-2 text-xs text-slate-500">{msg}</p>}
-          </div>
-        </div>
+        <MoneyPanel status={status} syncing={syncing} msg={msg} onSync={sync} />
       </div>
+    </div>
+  );
+}
+
+type Wallets = Awaited<ReturnType<typeof getWallets>>;
+
+/** Sin velas de cierre en más de 4 días (o con valores sin datos): algo no ha corrido solo. */
+const isStale = (s: TradingStatus) =>
+  s.instrumentsWithData < s.instruments || !s.asOf || Date.now() - new Date(s.asOf).getTime() > 4 * 86_400_000;
+
+function BrokerLogo({ src, muted }: { src: string | null; muted?: boolean }) {
+  return (
+    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-white ${muted ? "opacity-60 grayscale" : ""}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- logotipos externos pequeños */}
+      {src ? <img src={src} alt="" className="h-5 w-5 object-contain" /> : <Link2 className="h-4 w-4 text-slate-400" />}
+    </span>
+  );
+}
+
+/** Panel lateral: tu dinero real en cada exchange conectado y, discreta, la cartera virtual. */
+function MoneyPanel({ status, syncing, msg, onSync }: { status: TradingStatus | null; syncing: boolean; msg: string | null; onSync: () => void }) {
+  const [wallets, setWallets] = useState<Wallets | null>(null);
+  const load = useCallback(() => {
+    api<Wallets>("wallets").then(setWallets, () => undefined);
+  }, []);
+  useEffect(() => load(), [load]);
+  useTradingRefresh(load);
+  useEffect(() => {
+    const id = window.setInterval(load, 3 * 60_000);
+    return () => window.clearInterval(id);
+  }, [load]);
+
+  const items = wallets?.items ?? [];
+  const reals = items.filter((i) => i.environment === "real");
+  return (
+    <div className="mx-3 mb-3 rounded-2xl border border-slate-100 bg-white p-4 text-sm shadow-sm">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Mi dinero</div>
+      {!wallets ? (
+        <div className="mt-2 h-7 w-28 animate-pulse rounded-md bg-slate-100" />
+      ) : items.length === 0 ? (
+        <Link href="/trading/integraciones" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">
+          Conecta un exchange →
+        </Link>
+      ) : (
+        <>
+          {reals.length > 1 && <div className="mt-1 text-xl font-bold tracking-tight tabular-nums text-slate-900">{eur(wallets.total, 2)}</div>}
+          <ul className="mt-2 space-y-2.5">
+            {items.map((w) => {
+              const muted = !w.operating;
+              return (
+                <li key={w.id}>
+                  <Link href="/trading/integraciones" className="flex items-center gap-2.5 rounded-lg hover:bg-slate-50">
+                    <BrokerLogo src={w.logo} muted={muted} />
+                    <span className="min-w-0 flex-1">
+                      <span className={`block truncate text-xs font-semibold ${muted ? "text-slate-500" : "text-slate-900"}`}>
+                        {w.name}
+                        {w.environment !== "real" && <span className="ml-1 font-normal text-slate-400">demo</span>}
+                      </span>
+                      <span className="block truncate text-[11px] text-slate-400">
+                        {w.error ? "No se pudo leer el saldo" : w.operating ? (w.copies ? `Opera · ${w.copies.copies} ${w.copies.copies === 1 ? "copia" : "copias"}` : "Opera") : "Solo consulta"}
+                      </span>
+                    </span>
+                    <span className="text-right">
+                      <span className={`block tabular-nums ${muted ? "text-xs text-slate-500" : "text-sm font-bold text-slate-900"}`}>
+                        {w.total === null ? "—" : w.currency === "EUR" ? eur(w.total, 2) : `${w.total.toFixed(2)} ${w.currency}`}
+                      </span>
+                      {w.operating && w.copies && (
+                        <span className={`block text-[11px] font-semibold tabular-nums ${tone(w.copies.result)}`}>
+                          {w.copies.result >= 0 ? "+" : ""}
+                          {eur(w.copies.result, 2)}
+                          {w.copies.pct !== null && ` · ${w.copies.pct >= 0 ? "+" : ""}${w.copies.pct.toFixed(1).replace(".", ",")} %`}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+
+      {status && (
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          {status.opened ? (
+            <Link href="/trading/cartera" className="flex items-center justify-between gap-2 text-xs text-slate-500 hover:text-slate-700">
+              <span>Cartera virtual</span>
+              <span className="tabular-nums">
+                {eur0(status.equity)} <span className={tone(status.returnPct)}>{status.returnPct >= 0 ? "+" : ""}{status.returnPct.toFixed(1).replace(".", ",")} %</span>
+              </span>
+            </Link>
+          ) : (
+            <Link href="/trading/inicio" className="text-xs text-slate-500 hover:text-slate-700">
+              Cartera virtual: ábrela →
+            </Link>
+          )}
+        </div>
+      )}
+      {/* Los datos se actualizan solos (proceso diario y precio en directo). Solo si se quedan atrás, se ofrece forzarlo. */}
+      {status?.canManage && !syncing && isStale(status) && (
+        <button type="button" onClick={onSync} className="mt-2 text-[11px] font-medium text-amber-700 hover:underline">
+          Datos del {status.asOf ?? "—"}: actualizar
+        </button>
+      )}
+      {(syncing || msg) && (
+        <p className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-400">
+          {syncing && <Loader2 className="h-3 w-3 animate-spin" />} {msg}
+        </p>
+      )}
     </div>
   );
 }

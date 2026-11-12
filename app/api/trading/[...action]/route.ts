@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { getWallets } from "@/lib/trading/wallets";
 import { connectorContext } from "@/lib/connectors/context";
 import {
   accountDetail,
@@ -60,6 +61,9 @@ export async function GET(req: Request, route: RouteContext) {
       const symbol = (url.searchParams.get("symbol") || "").trim().toUpperCase();
       if (!symbol) return fail("Falta el valor");
       return NextResponse.json(await getInstrument(ctx.workspaceId, symbol));
+    }
+    if (action === "wallets") {
+      return NextResponse.json(await getWallets({ kind: "user", userId: ctx.userId, workspaceId: ctx.workspaceId, canManage: ctx.canManage }));
     }
     if (action === "status") {
       // Con la bolsa abierta: precio en directo y órdenes pendientes ejecutadas en la apertura (si toca).
