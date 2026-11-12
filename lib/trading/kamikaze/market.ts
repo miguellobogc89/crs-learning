@@ -34,17 +34,45 @@ async function usdcInEur(): Promise<number> {
   return 1 / p;
 }
 
+// ---------------------------------------------------------------------------
+// Dónde se copia de verdad: solo monedas que se pueden comprar en euros en el exchange de los usuarios
+// (Bitvavo). Si no, el agente compraría algo que la copia real no puede seguir.
+// ---------------------------------------------------------------------------
+const VENUE = (process.env.TRADING_CRYPTO_VENUE ?? "bitvavo").toLowerCase();
+let venueCache: { bases: Set<string>; until: number } | null = null;
+
+/** Monedas con mercado en euros abierto en Bitvavo (lista pública, sin clave; se guarda 1 h). null = sin filtro. */
+export async function venueBases(): Promise<Set<string> | null> {
+  if (VENUE !== "bitvavo") return null;
+  if (venueCache && venueCache.until > Date.now()) return venueCache.bases;
+  try {
+    const res = await fetch("https://api.bitvavo.com/v2/markets", { cache: "no-store", signal: AbortSignal.timeout(8_000) });
+    if (!res.ok) throw new Error(`Bitvavo: error ${res.status}`);
+    const rows = (await res.json()) as { base?: string; quote?: string; status?: string }[];
+    const bases = new Set(rows.filter((m) => m.quote === "EUR" && m.status === "trading" && m.base).map((m) => m.base!.toUpperCase()));
+    if (!bases.size) throw new Error("Bitvavo: lista de mercados vacía");
+    venueCache = { bases, until: Date.now() + 60 * 60_000 };
+    return bases;
+  } catch (e) {
+    console.error("[trading] mercados de Bitvavo", e);
+    // Sin respuesta: se usa la última lista buena; si nunca la hubo, no se filtra (mejor que dejar a los agentes sin monedas).
+    return venueCache?.bases ?? null;
+  }
+}
+
 /** Resumen de 24 h de los pares EUR y USDC, en euros. De cada moneda, el par con más volumen. */
 export async function tickers(): Promise<Ticker[]> {
   const rules = await eurPairs();
   const pairs = [...rules.keys()];
   if (!pairs.length) return [];
-  const [data, fx] = await Promise.all([get("/api/v3/ticker/24hr", { symbols: JSON.stringify(pairs) }), usdcInEur()]);
+  const [data, fx, venue] = await Promise.all([get("/api/v3/ticker/24hr", { symbols: JSON.stringify(pairs) }), usdcInEur(), venueBases()]);
   if (!Array.isArray(data)) throw new Error("Datos de Binance: resumen de 24 h no válido");
   const best = new Map<string, Ticker>();
   for (const t of data as Record<string, unknown>[]) {
     const r = typeof t.symbol === "string" ? rules.get(t.symbol) : undefined;
     if (!r) continue;
+    // Solo lo que se puede copiar en el exchange de los usuarios.
+    if (venue && !venue.has(r.base.toUpperCase())) continue;
     const k = r.quote === "USDC" ? fx : 1;
     const row: Ticker = {
       pair: r.pair,
