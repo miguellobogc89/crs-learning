@@ -6,9 +6,10 @@
 //   node scripts/trading/lab.mjs              (3 años)
 //   node scripts/trading/lab.mjs --years 2 --fee 0.15
 //   node scripts/trading/lab.mjs --months 6      (periodo corto: mes a mes y ventanas de 3 meses)
+//   node scripts/trading/lab.mjs --years 5 --cortos   (solo los agentes que apuestan a la baja en defensa)
 import { load } from "../../tests/trading/helpers.mjs";
 
-const { simulate, CANDIDATES, CHIP, HOLD_BTC } = load("lib/trading/lab/strategies.ts");
+const { simulate: sim, CANDIDATES, CHIP, SHORTS, HOLD_BTC } = load("lib/trading/lab/strategies.ts");
 const BINANCE = "https://data-api.binance.vision";
 const COINS = ["BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "AVAX", "DOT", "LINK", "LTC", "TRX"];
 const arg = (name, def) => {
@@ -19,6 +20,9 @@ const months = arg("months", 0);
 const years = months ? months / 12 : arg("years", 3);
 const periodDays = Math.round(years * 365);
 const fee = arg("fee", 0.25);
+// Coste de estar corto (financiación de futuros), en % al día. 0,03 % ≈ 11 % al año: prudente.
+const shortFunding = arg("funding", 0.03);
+const simulate = (coins, s, o) => sim(coins, s, { ...o, shortFundingPct: shortFunding });
 const DAY = 86_400_000;
 
 async function klines(pair, days) {
@@ -54,9 +58,10 @@ const from = Date.now() - periodDays * DAY;
 // Pares que dejan de cotizar en euros dentro del periodo (se venden a su último cierre).
 const ended = coins.filter((c) => c.candles.length && c.candles[c.candles.length - 1].t < Date.now() - 5 * DAY);
 if (ended.length) console.log(`Ojo: sin datos recientes de ${ended.map((c) => `${c.symbol} (hasta ${day(c.candles[c.candles.length - 1].t)})`).join(", ")}`);
-const all = [HOLD_BTC, ...CANDIDATES, ...CHIP];
+const only = process.argv.includes("--cortos");
+const all = only ? [HOLD_BTC, CHIP.find((s) => s.key === "chip-b-rupt"), ...SHORTS] : [HOLD_BTC, ...CANDIDATES, ...CHIP, ...SHORTS];
 
-console.log(`\nLaboratorio de agentes · ${coins.length} crypto en euros · comisión ${fee} % por orden + 0,05 % deslizamiento\n`);
+console.log(`\nLaboratorio de agentes · ${coins.length} crypto en euros · comisión ${fee} % por orden + 0,05 % deslizamiento · corto: ${shortFunding} % al día de financiación, sin apalancamiento\n`);
 const head = `${"Estrategia".padEnd(30)} ${pad("Total", 10)} ${pad("Al año", 9)} ${pad("Semana", 8)} ${pad("Sem.+", 6)} ${pad("Caída", 9)} ${pad("Invert.", 8)} ${pad("Cambios", 8)}`;
 console.log(`Periodo completo (${months ? `${months} meses` : `${years} años`}: ${day(from)} → hoy)`);
 console.log(head);

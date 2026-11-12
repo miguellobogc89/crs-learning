@@ -27,6 +27,8 @@ export type Ctx = {
   ma: (symbol: string, n: number) => number | null;
   /** Lo que tiene ahora la cartera (pesos al cierre). */
   holding: (symbol: string) => boolean;
+  /** Si está corto (apostando a la baja) en ese valor. */
+  short?: (symbol: string) => boolean;
 };
 
 export type Strategy = {
@@ -57,11 +59,17 @@ function prepare(coins: Coin[]): Prepared[] {
     .map((c) => ({ symbol: c.symbol, candles: c.candles, byDay: new Map(c.candles.map((k, i) => [dayOf(k.t), i])), closes: c.candles.map((k) => k.c), sma: new Map() }));
 }
 
-export function simulate(coins: Coin[], strategy: Strategy, opts: { from: number; to?: number; feePct?: number; slippagePct?: number }): LabResult {
+export function simulate(
+  coins: Coin[],
+  strategy: Strategy,
+  opts: { from: number; to?: number; feePct?: number; slippagePct?: number; /** Coste diario de estar corto, en % (financiación de futuros). */ shortFundingPct?: number },
+): LabResult {
   const data = prepare(coins);
   const bySym = new Map(data.map((d) => [d.symbol, d]));
   const days = [...new Set(data.flatMap((d) => d.candles.map((k) => dayOf(k.t))))].sort((a, b) => a - b).filter((d) => d >= dayOf(opts.from) && (opts.to === undefined || d <= opts.to));
   const cost = ((opts.feePct ?? 0.25) + (opts.slippagePct ?? 0.05)) / 100;
+  const funding = (opts.shortFundingPct ?? 0.03) / 100;
+  let busted = false;
 
   const idx = (s: string, day: number) => bySym.get(s)?.byDay.get(day);
   let cash = 1;
@@ -105,7 +113,7 @@ export function simulate(coins: Coin[], strategy: Strategy, opts: { from: number
             units.set(s, have + spend / (p * (1 + cost)));
           }
         }
-      for (const [s, u] of units) if (u <= 1e-12) units.delete(s);
+      for (const [s, u] of units) if (Math.abs(u) <= 1e-12) units.delete(s);
       if (moved > 0) {
         rebalances++;
         turnover += moved / Math.max(equity, 1e-9);
@@ -130,10 +138,19 @@ export function simulate(coins: Coin[], strategy: Strategy, opts: { from: number
         equity += v * (1 - cost);
         continue;
       }
+      // Corto: cada día se paga la financiación sobre lo que se debe.
+      if (u < 0) cash -= -v * funding;
       equity += v;
-      inMarket += v;
+      inMarket += Math.abs(v);
     }
-    if (inMarket > equity * 0.05) invested++;
+    // Sin apalancamiento: si el corto se come todo el patrimonio, se cierra todo (quiebra).
+    if (equity <= 0.01 && !busted) {
+      busted = true;
+      units.clear();
+      cash = Math.max(0, equity);
+      equity = cash;
+    }
+    if (inMarket > Math.max(equity, 0) * 0.05) invested++;
     curve.push({ day, equity });
 
     // 3) Decisión al cierre.
@@ -171,10 +188,11 @@ export function simulate(coins: Coin[], strategy: Strategy, opts: { from: number
         return d.sma.get(n)![i] ?? null;
       },
       holding: (s) => (units.get(s) ?? 0) > 0,
+      short: (s) => (units.get(s) ?? 0) < 0,
     };
-    const w = strategy.decide(ctx);
+    const w = busted ? null : strategy.decide(ctx);
     if (w) {
-      const sum = Object.values(w).reduce((a, b) => a + b, 0);
+      const sum = Object.values(w).reduce((a, b) => a + Math.abs(b), 0);
       pending = sum > 1 ? Object.fromEntries(Object.entries(w).map(([k, v]) => [k, v / sum])) : w;
     }
   });
@@ -210,7 +228,7 @@ function lastIndexAtOrBefore(c: Candle[], day: number) {
  * Contexto de un día para usar una estrategia en directo (un agente real): mismas reglas que en la
  * simulación. `day` es el último día cerrado; `holding` dice qué tiene hoy la cartera.
  */
-export function contextAt(coins: Coin[], day: number, step: number, holding: (s: string) => boolean): Ctx {
+export function contextAt(coins: Coin[], day: number, step: number, holding: (s: string) => boolean, short: (s: string) => boolean = () => false): Ctx {
   const data = prepare(coins);
   const bySym = new Map(data.map((d) => [d.symbol, d]));
   const at = (s: string) => {
@@ -247,6 +265,7 @@ export function contextAt(coins: Coin[], day: number, step: number, holding: (s:
       return x.d.sma.get(n)![x.i] ?? null;
     },
     holding,
+    short,
   };
 }
 
@@ -439,6 +458,37 @@ export const CHIP: Strategy[] = [
   gated("chip-a-rupt", "Chip A · rupturas", "Detector A; en ataque, rupturas 20/10 (hasta 3).", DETECTOR_A, attackBreakout),
   gated("chip-b-top3", "Chip B · top 3", "Detector B; en ataque, las 3 crypto más fuertes de 60 días (cada semana).", DETECTOR_B, attackTop3),
   gated("chip-b-rupt", "Chip B · rupturas", "Detector B; en ataque, rupturas 20/10 (hasta 3).", DETECTOR_B, attackBreakout),
+];
+
+/**
+ * Como `gated`, pero en defensa apuesta a la baja contra Bitcoin con `shortWeight` del patrimonio
+ * (1 = todo; 0,5 = la mitad corta y la mitad en efectivo). Sin apalancamiento.
+ */
+function gatedShort(key: string, name: string, idea: string, gate: Gate, attack: ((c: Ctx) => string[] | null) | null, shortWeight: number): Strategy {
+  return {
+    key,
+    name,
+    idea,
+    decide: (c) => {
+      const longs = c.coins.some((s) => c.holding(s));
+      const shortNow = !!c.short?.(BTC);
+      if (!gate(c)) {
+        if (shortNow && !longs) return null;
+        return { [BTC]: -shortWeight };
+      }
+      if (!attack) return shortNow || longs ? {} : null;
+      const picks = attack(c);
+      if (picks === null) return shortNow ? {} : null;
+      if (!shortNow && sameSet(c, picks)) return null;
+      return equal(picks);
+    },
+  };
+}
+
+export const SHORTS: Strategy[] = [
+  gatedShort("short-only", "Solo corto en defensa", "Detector B; en defensa, corto en Bitcoin con todo; en ataque, efectivo (para ver qué aporta el corto por sí solo).", DETECTOR_B, null, 1),
+  gatedShort("chip-b-rupt-short", "Chip B · rupturas + corto", "Detector B; en ataque, rupturas 20/10; en defensa, corto en Bitcoin con todo.", DETECTOR_B, attackBreakout, 1),
+  gatedShort("chip-b-rupt-short50", "Chip B · rupturas + ½ corto", "Detector B; en ataque, rupturas 20/10; en defensa, corto en Bitcoin con la mitad y la otra mitad en efectivo.", DETECTOR_B, attackBreakout, 0.5),
 ];
 
 /** Las candidatas que se comparan en el laboratorio. */

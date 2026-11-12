@@ -92,3 +92,17 @@ test("agente en directo: el contexto de un día da el mismo modo que la simulaci
   assert.ok(strat);
   assert.equal(strat.decide(down), null);
 });
+
+test("laboratorio: el corto gana cuando Bitcoin cae y pierde cuando sube (con financiación)", () => {
+  const { SHORTS } = load("lib/trading/lab/strategies.ts");
+  const shortOnly = SHORTS.find((s) => s.key === "short-only");
+  const fall = [{ symbol: "BTC-EUR", candles: line(400, (i) => 100 * 0.997 ** i) }];
+  const r = simulate(fall, shortOnly, { from: t0 + 250 * DAY, feePct: 0, slippagePct: 0, shortFundingPct: 0 });
+  assert.ok(r.stats.totalPct > 20, `corto en caída: ${r.stats.totalPct}`);
+  const paid = simulate(fall, shortOnly, { from: t0 + 250 * DAY, feePct: 0, slippagePct: 0, shortFundingPct: 0.05 });
+  assert.ok(paid.stats.totalPct < r.stats.totalPct, "la financiación resta");
+  // En subida, el detector está en ataque: el agente «solo corto» se queda en efectivo.
+  const rise = [{ symbol: "BTC-EUR", candles: line(400, (i) => 100 * 1.003 ** i) }];
+  const r2 = simulate(rise, shortOnly, { from: t0 + 250 * DAY, feePct: 0, slippagePct: 0 });
+  assert.ok(Math.abs(r2.stats.totalPct) < 1, `en subida no está corto: ${r2.stats.totalPct}`);
+});
