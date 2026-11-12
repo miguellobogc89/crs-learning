@@ -65,17 +65,28 @@ export async function mirrorView(workspaceId: string) {
     }),
     realConnection(workspaceId),
   ]);
+  // Lo abierto, a precio de ahora (para «ahora tiene»).
+  const openSymbols: string[] = [...new Set<string>(mirrors.flatMap((m) => m.legs.filter((l) => l.status === "abierta").map((l) => l.symbol)))];
+  const prices = new Map<string, number | null>(await Promise.all(openSymbols.map(async (s) => [s, await referencePrice(s).catch(() => null)] as const)));
+  const unrealizedOf = (m: (typeof mirrors)[number]) =>
+    m.legs.reduce((sum, l) => {
+      const p = l.status === "abierta" && l.mode === m.mode ? prices.get(l.symbol) : null;
+      return p && l.quantity && l.entry_price ? sum + legResult(l.quantity, l.entry_price, p) : sum;
+    }, 0);
   return {
     maxBudget: maxBudget(),
     real: { ready: real.ready, problem: realProblem(real) },
     mirrors: mirrors.map((m) => ({
       agent: m.agent,
+      /** Resultado de lo abierto a precio de ahora (con comisiones de salida estimadas). */
+      unrealized: unrealizedOf(m),
       name: agentName(m.agent) ?? m.agent,
       budget: m.budget,
       mode: m.mode as MirrorMode,
       active: m.active,
       startedAt: m.started_at.toISOString(),
-      result: m.legs.reduce((s, l) => s + (l.result ?? 0), 0),
+      // Solo lo del modo actual: al pasar de prueba a real, lo de prueba no cuenta como dinero tuyo.
+      result: m.legs.filter((l) => l.mode === m.mode).reduce((s, l) => s + (l.result ?? 0), 0),
       legs: m.legs.map((l) => ({
         id: l.id,
         mode: l.mode,

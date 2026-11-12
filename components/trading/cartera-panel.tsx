@@ -1,27 +1,50 @@
 "use client";
-// Mi cartera: tu dinero real. Arriba, su evolución y el resumen; debajo, tus agentes (como mucho 3)
-// y, al elegir uno, su detalle para darle o quitarle capital y cerrar sus posiciones.
+// Mi cartera: tu dinero real, trabajando con tus agentes (operarios que trabajan para ti).
+// Arriba: saldo, evolución y en qué está tu dinero. Debajo: tus agentes (le diste → ahora tiene)
+// y, a la derecha, el elegido con sus últimas órdenes y «Gestionar» (añadir, retirar, cerrar, despedir).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ArrowRightLeft, Link2, Loader2, Plus, Trash2, Wallet, XCircle } from "lucide-react";
+import { ArrowRight, ChevronRight, Clock, Crosshair, Layers, Link2, Loader2, Minus, Pause, Play, Plus, Shield, Trash2, TrendingUp, Users, Wallet } from "lucide-react";
 import type { getWallets, myAgents } from "@/lib/trading/wallets";
 import type { mirrorView } from "@/lib/trading/mirror/service";
-import { api, errorText, eur, field, ghost, pct, primary, tone } from "./format";
+import { api, errorText, eur, field, primary, tone } from "./format";
 import { refreshTrading, useTradingRefresh } from "./navigation";
-import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Pill, ReturnPill } from "./ui";
-import { AssetIcon } from "./asset-icon";
+import { AgentAvatar, card, ErrorNote, LoadingCard, Modal, ReturnPill } from "./ui";
 import { EquityChart } from "./equity-chart";
-import { ChipMode, type Agent, type Data as AgentsData } from "./agents-panel";
+import type { Agent, Data as AgentsData } from "./agents-panel";
 
 type Wallets = Awaited<ReturnType<typeof getWallets>>;
 type Mine = Awaited<ReturnType<typeof myAgents>>;
 type Mirrors = Awaited<ReturnType<typeof mirrorView>> & { canManage: boolean };
 type Mirror = Mirrors["mirrors"][number];
+type Row = { key: string; agent: Agent | null; mirror: Mirror | null; mine: boolean };
 
 const HOLDING = ["abriendo", "abierta", "vendiendo"];
-const when = (iso: string) =>
-  new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(iso));
 const coin = (s: string) => s.replace(/-EUR$/, "");
+const signed = (v: number) => `${v >= 0 ? "+" : ""}${eur(v, 2)}`;
+const pctText = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
+const ago = (iso: string) => {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (m < 60) return `hace ${Math.max(1, m)} min`;
+  if (m < 48 * 60) return `hace ${Math.round(m / 60)} h`;
+  return `hace ${Math.round(m / 1440)} d`;
+};
+
+/** Lo tuyo con un agente: le diste, resultado (cerrado + abierto) y lo que tiene ahora. */
+function money(m: Mirror | null) {
+  if (!m) return null;
+  const result = m.result + (m.unrealized ?? 0);
+  return { given: m.budget, result, now: m.budget + result, pct: m.budget > 0 ? (result / m.budget) * 100 : 0, test: m.mode !== "real" };
+}
+
+/** Qué está haciendo, en pocas palabras y con su icono. */
+function statusOf(r: Row) {
+  const open = r.mirror?.legs.filter((l) => HOLDING.includes(l.status) && l.mode === r.mirror?.mode) ?? [];
+  if (open.length) return { icon: Play, text: `Trabajando · tiene ${open.map((l) => coin(l.symbol)).join(", ")}` };
+  if (r.agent?.chip?.mode === "defensa") return { icon: Shield, text: "En defensa · efectivo" };
+  if (!r.mirror) return { icon: Pause, text: "Sin dinero tuyo" };
+  return { icon: Clock, text: "Esperando · efectivo" };
+}
 
 export function CarteraPanel() {
   const [wallets, setWallets] = useState<Wallets | null>(null);
@@ -30,6 +53,7 @@ export function CarteraPanel() {
   const [mine, setMine] = useState<Mine | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [managing, setManaging] = useState<Row | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -48,90 +72,31 @@ export function CarteraPanel() {
   }, [load]);
   useTradingRefresh(load);
 
-  const rows = useMemo(() => {
+  const rows: Row[] = useMemo(() => {
     if (!agents || !mirrors || !mine) return [];
     const mirrorOf = (k: string) => mirrors.mirrors.find((m) => m.agent === k && m.active) ?? null;
-    const ownRows = mine.owned.map((k) => ({ agent: agents.agents.find((a) => a.key === k) ?? null, key: k, mirror: mirrorOf(k), mine: true }));
-    // Copias de agentes que no son tuyos (de antes): se ven aparte para poder quitarlas.
+    const own = mine.owned.map((k) => ({ key: k, agent: agents.agents.find((a) => a.key === k) ?? null, mirror: mirrorOf(k), mine: true }));
     const others = mirrors.mirrors
       .filter((m) => m.active && !mine.owned.includes(m.agent))
-      .map((m) => ({ agent: agents.agents.find((a) => a.key === m.agent) ?? null, key: m.agent, mirror: m, mine: false }));
-    return [...ownRows, ...others];
+      .map((m) => ({ key: m.agent, agent: agents.agents.find((a) => a.key === m.agent) ?? null, mirror: m, mine: false }));
+    return [...own, ...others];
   }, [agents, mirrors, mine]);
 
   if (!wallets || !mirrors || !agents || !mine) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard height="h-96" />;
 
-  const real = wallets.items.filter((w) => w.environment === "real" && w.total !== null);
-  const total = real.reduce((s, w) => s + (w.currency === "EUR" ? w.total ?? 0 : 0), 0);
-  const free = real.reduce((s, w) => s + (w.currency === "EUR" ? w.cash ?? 0 : 0), 0);
-  const realMirrors = mirrors.mirrors.filter((m) => m.active && m.mode === "real");
-  const assigned = realMirrors.reduce((s, m) => s + m.budget, 0);
-  const copies = wallets.items.find((w) => w.operating)?.copies ?? null;
+  const real = wallets.items.filter((w) => w.environment === "real" && w.total !== null && w.currency === "EUR");
+  const total = real.reduce((s, w) => s + (w.total ?? 0), 0);
+  const realRows = rows.filter((r) => r.mirror && r.mirror.mode === "real");
+  const working = Math.min(total, realRows.reduce((s, r) => s + (money(r.mirror)?.now ?? 0), 0));
+  const earned = realRows.reduce((s, r) => s + (money(r.mirror)?.result ?? 0), 0);
+  const free = Math.max(0, total - working);
+  const earnedBase = realRows.reduce((s, r) => s + (r.mirror?.budget ?? 0), 0);
+  const operating = wallets.items.find((w) => w.operating) ?? wallets.items[0] ?? null;
   const current = rows.find((r) => r.key === selected) ?? rows[0] ?? null;
-  const ownCount = mine.owned.length;
 
   return (
     <div className="space-y-5">
       {error && <ErrorNote>{error}</ErrorNote>}
-
-      {/* Cabecera: evolución + resumen */}
-      <div className="grid gap-5 lg:grid-cols-3">
-        <section className={`${card} overflow-hidden lg:col-span-2`}>
-          <div className="px-2 pt-2">
-            <EquityChart
-              points={mine.history}
-              initial={mine.history[0]?.equity ?? total}
-              height={210}
-              empty="Tu gráfica empieza hoy: cada día se guarda el saldo de tus exchanges."
-            />
-          </div>
-        </section>
-        <section className={`${card} flex flex-col px-6 py-5`}>
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Tu dinero real</div>
-          <div className="mt-1 text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(total, 2)}</div>
-          {copies && copies.pct !== null && (
-            <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
-              <ReturnPill value={copies.pct} /> con tus agentes ({copies.result >= 0 ? "+" : ""}
-              {eur(copies.result, 2)})
-            </div>
-          )}
-          <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <dt className="text-xs text-slate-500">Libre</dt>
-              <dd className="font-semibold tabular-nums text-slate-900">{eur(free, 2)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500">Asignado a agentes</dt>
-              <dd className={`font-semibold tabular-nums ${assigned > total + 0.01 ? "text-amber-700" : "text-slate-900"}`}>{eur(assigned, 2)}</dd>
-            </div>
-          </dl>
-          {assigned > total + 0.01 && (
-            <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Asignas más de lo que tienes: si dos agentes compran a la vez, el segundo usará solo lo que quede libre.
-            </p>
-          )}
-          <div className="mt-auto space-y-1.5 border-t border-slate-100 pt-3">
-            {wallets.items.length === 0 ? (
-              <Link href="/trading/integraciones" className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-700 hover:underline">
-                <Link2 className="h-4 w-4" /> Conecta tu exchange
-              </Link>
-            ) : (
-              wallets.items.map((w) => (
-                <Link key={w.id} href="/trading/integraciones" className={`flex items-center justify-between gap-2 text-xs hover:text-slate-900 ${w.operating ? "text-slate-700" : "text-slate-400"}`}>
-                  <span className="flex items-center gap-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- logotipos externos pequeños */}
-                    {w.logo ? <img src={w.logo} alt="" className={`h-4 w-4 ${w.operating ? "" : "grayscale"}`} /> : <Wallet className="h-4 w-4" />}
-                    {w.name}
-                    {!w.operating && " · solo consulta"}
-                  </span>
-                  <span className="tabular-nums">{w.total === null ? "—" : eur(w.total, 2)}</span>
-                </Link>
-              ))
-            )}
-          </div>
-        </section>
-      </div>
-
       {mirrors.real.problem && wallets.items.length > 0 && (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {mirrors.real.problem}.{" "}
@@ -141,107 +106,225 @@ export function CarteraPanel() {
         </p>
       )}
 
-      {/* Tus agentes + detalle */}
-      <div className="grid gap-5 lg:grid-cols-3">
-        <section className={`${card} lg:col-span-2`}>
-          <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
-            <div>
-              <h2 className="text-base font-semibold text-slate-900">Tus agentes</h2>
-              <p className="text-xs text-slate-500">
-                {ownCount} de {mine.max} · solo tus agentes mueven tu dinero real
-              </p>
+      {/* Cabecera */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
+        <section className={`${card} px-6 pb-3 pt-5`}>
+          <div className="flex items-center gap-3 text-[15px] font-medium text-slate-800">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Wallet className="h-5 w-5" />
+            </span>
+            Tu dinero real{operating ? ` · ${operating.name}` : ""}
+          </div>
+          {wallets.items.length === 0 ? (
+            <div className="py-6">
+              <p className="text-sm text-slate-600">Conecta tu exchange para que tus agentes trabajen con tu dinero.</p>
+              <Link href="/trading/integraciones" className={`${primary} mt-3`}>
+                <Link2 className="h-4 w-4" /> Conectar exchange
+              </Link>
             </div>
-          </header>
-          <ul className="divide-y divide-slate-100">
+          ) : (
+            <>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <span className="text-5xl font-bold tracking-tight tabular-nums text-slate-900">{eur(total, 2)}</span>
+                {earnedBase > 0 && <ReturnPill value={(earned / earnedBase) * 100} big />}
+              </div>
+              <div className="mt-2">
+                <EquityChart
+                  points={mine.history}
+                  initial={mine.history[0]?.equity ?? total}
+                  height={110}
+                  bare
+                  ranges={false}
+                  empty="Tu gráfica empieza hoy: cada día se guarda el saldo de tu exchange."
+                />
+              </div>
+            </>
+          )}
+        </section>
+
+        <section className={`${card} flex flex-col justify-center divide-y divide-slate-100 px-6 py-2`}>
+          {[
+            { icon: Layers, label: "Trabajando para ti", value: eur(working, 2), cls: "text-slate-900" },
+            { icon: Wallet, label: "Libre", value: eur(free, 2), cls: "text-slate-900" },
+            { icon: TrendingUp, label: "Ganado por tus agentes", value: signed(earned), cls: tone(earned) },
+          ].map((x) => (
+            <div key={x.label} className="flex items-center justify-between gap-3 py-4">
+              <span className="flex items-center gap-3 text-[15px] text-slate-700">
+                <x.icon className={`h-5 w-5 ${x.label.startsWith("Ganado") ? "text-emerald-600" : "text-blue-600"}`} /> {x.label}
+              </span>
+              <span className={`text-2xl font-bold tabular-nums ${x.cls}`}>{x.value}</span>
+            </div>
+          ))}
+        </section>
+      </div>
+
+      {/* Agentes + detalle */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
+        <section className={`${card} px-4 py-4`}>
+          <h2 className="flex items-center gap-3 px-2 pb-3 text-lg font-semibold text-slate-900">
+            <Users className="h-5 w-5 text-slate-500" /> Tus agentes <span className="font-normal text-slate-400">· {mine.owned.length} de {mine.max}</span>
+          </h2>
+          <ul className="space-y-1.5">
             {rows.map((r) => (
               <AgentRow key={r.key} r={r} active={current?.key === r.key} onClick={() => setSelected(r.key)} />
             ))}
-            {Array.from({ length: Math.max(0, mine.max - ownCount) }).map((_, i) => (
-              <li key={`hueco-${i}`} className="flex items-center gap-4 px-5 py-4 text-slate-400">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-dashed border-slate-200">
-                  <Plus className="h-4 w-4" />
+            {Array.from({ length: Math.max(0, mine.max - mine.owned.length) }).map((_, i) => (
+              <li key={`hueco-${i}`} className="flex items-center gap-4 rounded-2xl border-2 border-dashed border-slate-200 px-4 py-3.5 text-slate-400">
+                <span className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-slate-200">
+                  <Plus className="h-5 w-5" />
                 </span>
-                <span className="flex-1 text-sm">
-                  <b className="font-semibold text-slate-500">Crear agente</b> · te queda {mine.max - ownCount === 1 ? "1 hueco" : `${mine.max - ownCount} huecos`}
-                </span>
-                <Pill>Pronto</Pill>
+                <span className="flex-1 text-[15px]">Crear agente</span>
+                <span className="text-sm">Pronto</span>
               </li>
             ))}
           </ul>
         </section>
 
-        <section className={`${card} lg:sticky lg:top-0 lg:self-start`}>
+        <section className={`${card} px-5 py-5 lg:self-start`}>
           {current ? (
-            <AgentDetail key={current.key} r={current} canManage={mirrors.canManage} maxBudget={mirrors.maxBudget} free={free} />
+            <Detail r={current} canManage={mirrors.canManage} onManage={() => setManaging(current)} />
           ) : (
-            <p className="px-5 py-10 text-center text-sm text-slate-500">Elige un agente para ver su detalle.</p>
+            <p className="py-10 text-center text-sm text-slate-500">Elige un agente para ver su detalle.</p>
           )}
         </section>
       </div>
+
+      {managing && (
+        <ManageModal
+          r={managing}
+          free={free}
+          maxBudget={mirrors.maxBudget}
+          onClose={() => setManaging(null)}
+        />
+      )}
     </div>
   );
 }
 
-type Row = { agent: Agent | null; key: string; mirror: Mirror | null; mine: boolean };
-
 function AgentRow({ r, active, onClick }: { r: Row; active: boolean; onClick: () => void }) {
-  const a = r.agent;
-  const m = r.mirror;
-  const open = m?.legs.filter((l) => HOLDING.includes(l.status)) ?? [];
+  const m = money(r.mirror);
+  const st = statusOf(r);
   return (
     <li>
-      <button type="button" onClick={onClick} className={`flex w-full items-center gap-4 px-5 py-4 text-left transition-colors ${active ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
-        <AgentAvatar color={a?.color ?? "slate"} size="lg" />
+      <button
+        type="button"
+        onClick={onClick}
+        className={`flex w-full items-center gap-4 rounded-2xl border-l-4 px-4 py-3 text-left transition-colors ${active ? "border-blue-600 bg-blue-50/70" : "border-transparent hover:bg-slate-50"}`}
+      >
+        <AgentAvatar color={r.agent?.color ?? "slate"} size="lg" />
         <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2">
-            <b className="font-semibold text-slate-900">{a?.name ?? m?.name ?? r.key}</b>
-            {a && <Pill color={a.color}>{cap(a.profile)}</Pill>}
-            {a && <ChipMode a={a} />}
-            {!r.mine && <Pill>No es tuyo</Pill>}
+          <span className="flex items-center gap-2">
+            <b className="truncate text-[15px] font-semibold text-slate-900">{r.agent?.name ?? r.mirror?.name ?? r.key}</b>
+            {!r.mine && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">No es tuyo</span>}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-slate-500">
-            {!m
-              ? "Sin dinero real: solo opera con su dinero virtual"
-              : m.mode !== "real"
-                ? `Sin enviar órdenes (prueba) · ${eur(m.budget, 2)}`
-                : open.length
-                  ? `Tiene ${open.map((l) => `${coin(l.symbol)} (${eur(l.amount, 2)})`).join(", ")}`
-                  : "En efectivo"}
+          <span className="mt-0.5 flex items-center gap-1.5 truncate text-sm text-slate-500">
+            <st.icon className="h-4 w-4 shrink-0" /> {st.text}
           </span>
         </span>
         <span className="shrink-0 text-right">
-          <span className="block font-semibold tabular-nums text-slate-900">{m ? eur(m.budget, 2) : "—"}</span>
           {m ? (
-            <span className={`block text-xs font-semibold tabular-nums ${tone(m.result)}`}>
-              {m.result >= 0 ? "+" : ""}
-              {eur(m.result, 2)}
-            </span>
+            <>
+              <span className="block text-sm text-slate-600">
+                {r.mine && !m.test ? "Le diste " : ""}
+                {eur(m.given, 2)} <ArrowRight className="inline h-3.5 w-3.5" /> {r.mine && !m.test ? "ahora " : ""}
+                <b className="font-semibold text-slate-900">{eur(m.now, 2)}</b>
+              </span>
+              <span className={`block text-sm font-semibold tabular-nums ${tone(m.result)}`}>
+                {signed(m.result)} · {pctText(m.pct)}
+                {m.test && <span className="ml-1 font-normal text-amber-700">(prueba)</span>}
+              </span>
+            </>
           ) : (
-            a && <span className={`block text-xs tabular-nums ${tone(a.summary.returnPct)}`}>{pct(a.summary.returnPct)} virtual</span>
+            <span className="text-sm text-slate-400">Sin dinero tuyo</span>
           )}
         </span>
+        <ChevronRight className="h-5 w-5 shrink-0 text-slate-400" />
       </button>
     </li>
   );
 }
 
-function AgentDetail({ r, canManage, maxBudget, free }: { r: Row; canManage: boolean; maxBudget: number; free: number }) {
-  const a = r.agent;
-  const m = r.mirror;
-  const [budget, setBudget] = useState(String(m?.budget ?? 20));
+function Detail({ r, canManage, onManage }: { r: Row; canManage: boolean; onManage: () => void }) {
+  const m = money(r.mirror);
+  const legs = (r.mirror?.legs ?? []).filter((l) => l.mode === r.mirror?.mode && l.status !== "omitida").slice(0, 5);
+  return (
+    <div>
+      <div className="flex items-center gap-3">
+        <AgentAvatar color={r.agent?.color ?? "slate"} size="lg" />
+        <b className="flex-1 text-xl font-semibold text-slate-900">{r.agent?.name ?? r.key}</b>
+        <Link href={`/trading/agentes/${r.key}?from=cartera`} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline">
+          Ver <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 items-center divide-x divide-slate-200 rounded-2xl border border-slate-200 px-2 py-3">
+        <div className="px-3">
+          <div className="text-xs text-slate-500">Le diste</div>
+          <div className="text-xl font-bold tabular-nums text-slate-900">{m ? eur(m.given, 2) : "—"}</div>
+        </div>
+        <div className="flex justify-center px-2">
+          {m ? (
+            <span className={`rounded-full px-3 py-1 text-lg font-bold tabular-nums ${m.result >= 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{signed(m.result)}</span>
+          ) : (
+            <span className="text-slate-300">—</span>
+          )}
+        </div>
+        <div className="px-3 text-right">
+          <div className="text-xs text-slate-500">Tiene</div>
+          <div className="text-xl font-bold tabular-nums text-slate-900">{m ? eur(m.now, 2) : "—"}</div>
+        </div>
+      </div>
+      {m?.test && <p className="mt-2 text-xs text-amber-700">Ahora en prueba: calcula las órdenes pero no las envía. Pásalo a real desde Gestionar.</p>}
+
+      <div className="mt-5 flex items-center gap-2 text-[15px] font-medium text-slate-700">
+        <Clock className="h-4 w-4 text-slate-400" /> Últimas órdenes
+      </div>
+      {legs.length === 0 ? (
+        <p className="mt-2 text-sm text-slate-500">{r.mirror ? "Todavía no ha operado con tu dinero." : "No tiene dinero tuyo: dale una cantidad para que trabaje para ti."}</p>
+      ) : (
+        <ul className="mt-1 divide-y divide-slate-100">
+          {legs.map((l) => (
+            <li key={l.id} className="flex items-center justify-between gap-2 py-2.5 text-[15px]">
+              <span className="text-slate-800">
+                {l.status === "cerrada" ? `Vendió ${coin(l.symbol)}` : l.status === "error" ? `Error con ${coin(l.symbol)}` : `Compró ${coin(l.symbol)}${l.amount ? ` · ${eur(l.amount, 0)}` : ""}`}
+              </span>
+              {l.result !== null && l.status === "cerrada" ? (
+                <span className={`font-semibold tabular-nums ${tone(l.result)}`}>{signed(l.result)}</span>
+              ) : (
+                <span className="text-sm text-slate-400">{ago(l.closedAt ?? l.openedAt ?? l.createdAt)}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {canManage && (
+        <button type="button" onClick={onManage} className="mt-4 w-full rounded-xl bg-blue-600 py-3 text-base font-semibold text-white hover:bg-blue-700">
+          {r.mirror ? "Gestionar" : "Darle dinero"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ManageModal({ r, free, maxBudget, onClose }: { r: Row; free: number; maxBudget: number; onClose: () => void }) {
+  const m = money(r.mirror);
+  const name = r.agent?.name ?? r.key;
+  const [mode, setMode] = useState<"add" | "remove">("add");
+  const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
-  const value = Number(budget.replace(",", "."));
-  const valid = value >= 5 && value <= maxBudget;
-  const open = m?.legs.filter((l) => HOLDING.includes(l.status)) ?? [];
-  const legs = (m?.legs ?? []).filter((l) => l.status !== "omitida" || l.mode === "real").slice(0, 8);
+  const budget = r.mirror?.budget ?? 0;
+  const value = Number(amount.replace(",", ".")) || 0;
+  const target = Math.round((mode === "add" ? budget + value : budget - value) * 100) / 100;
+  const maxAdd = Math.max(0, Math.min(maxBudget - budget, free));
+  const valid = value > 0 && (mode === "add" ? value <= maxAdd + 1e-9 && target >= 5 : target >= 5 || target <= 0);
 
-  const run = async (what: string, path: string, body: unknown, ok: string, confirm?: string) => {
+  const call = async (what: string, path: string, body: unknown, ok: string, confirm?: string) => {
     if (confirm && !window.confirm(confirm)) return;
     setBusy(what);
     setError(null);
-    setDone(null);
     try {
       await api(path, body);
       setDone(ok);
@@ -252,149 +335,104 @@ function AgentDetail({ r, canManage, maxBudget, free }: { r: Row; canManage: boo
       setBusy(null);
     }
   };
+  const save = () =>
+    target <= 0
+      ? call("guardar", "mirror/stop", { agent: r.key }, `${name} ya no trabaja con tu dinero.`)
+      : call("guardar", "mirror/set", { agent: r.key, budget: target, mode: "real" }, mode === "add" ? `Ahora le das ${eur(target, 2)}.` : `Ahora le das ${eur(target, 2)}.`);
 
   return (
-    <div>
-      <header className="flex items-start gap-3 border-b border-slate-100 px-5 py-4">
-        <AgentAvatar color={a?.color ?? "slate"} size="lg" />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <b className="text-base font-semibold text-slate-900">{a?.name ?? r.key}</b>
-            {a && <ChipMode a={a} />}
-          </div>
-          {a && (
-            <p className="mt-0.5 text-xs text-slate-500">
-              Con su dinero virtual: <span className={`font-semibold ${tone(a.summary.returnPct)}`}>{pct(a.summary.returnPct)}</span>
-            </p>
-          )}
+    <Modal
+      open
+      onClose={onClose}
+      title={
+        <span className="flex items-center gap-3">
+          <AgentAvatar color={r.agent?.color ?? "slate"} /> {r.mirror ? `Gestionar ${name}` : `Darle dinero a ${name}`}
+        </span>
+      }
+      subtitle={m ? `Tiene ${eur(m.now, 2)} tuyos · tienes ${eur(free, 2)} libres` : `Tienes ${eur(free, 2)} libres`}
+    >
+      {done ? (
+        <div className="space-y-3">
+          <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{done}</p>
+          <button type="button" className={`${primary} w-full justify-center`} onClick={onClose}>
+            Hecho
+          </button>
         </div>
-        <Link href={`/trading/agentes/${r.key}?from=cartera`} className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-blue-700 hover:underline">
-          Ver <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
-      </header>
-
-      <div className="space-y-4 px-5 py-4 text-sm">
-        {/* Capital */}
-        <div>
-          <div className="mb-1.5 flex items-center justify-between gap-2 text-xs font-medium text-slate-600">
-            <span>{m ? "Le das" : "Darle dinero real"}</span>
-            {m && m.mode !== "real" && <span className="text-amber-700">Ahora sin enviar órdenes</span>}
-          </div>
-          <div className="flex items-center gap-2">
-            <input className={`${field} w-28 text-right tabular-nums`} inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} disabled={!canManage} />
-            <span className="text-slate-500">€</span>
+      ) : (
+        <div className="space-y-4 text-sm">
+          {r.mirror && (
+            <div className="grid grid-cols-2 gap-3">
+              {(
+                [
+                  ["add", "Añadir", Plus],
+                  ["remove", "Retirar", Minus],
+                ] as const
+              ).map(([k, label, Icon]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setMode(k)}
+                  className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 text-[15px] font-semibold ${mode === k ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}
+                >
+                  <Icon className="h-4 w-4" /> {label}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-3">
+            {[10, 50].map((v) => (
+              <button key={v} type="button" onClick={() => setAmount(String(v))} className="rounded-xl border border-slate-200 py-2 font-medium text-slate-700 hover:bg-slate-50">
+                {v} €
+              </button>
+            ))}
             <button
               type="button"
-              className={primary}
-              disabled={!canManage || !valid || !!busy || (m?.mode === "real" && value === m.budget)}
-              onClick={() => void run("capital", "mirror/set", { agent: r.key, budget: value, mode: "real" }, m ? "Importe actualizado." : "Ya mueve tu dinero real.")}
+              onClick={() => setAmount(String(mode === "add" ? Math.floor(maxAdd * 100) / 100 : budget))}
+              className="rounded-xl border border-slate-200 py-2 font-medium text-slate-700 hover:bg-slate-50"
             >
-              {busy === "capital" && <Loader2 className="h-4 w-4 animate-spin" />}
-              {!m ? "Darle" : m.mode !== "real" ? (
-                <>
-                  <ArrowRightLeft className="h-4 w-4" /> Pasar a real
-                </>
-              ) : (
-                "Guardar"
-              )}
+              Todo
             </button>
           </div>
-          <p className="mt-1.5 text-xs text-slate-500">
-            Entre 5 € y {eur(maxBudget, 0)} · tienes {eur(free, 2)} libres. Se aplica a sus próximas compras.
+          <div className="flex items-center gap-2">
+            <input className={`${field} flex-1 text-right text-base tabular-nums`} inputMode="decimal" placeholder="Importe" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <span className="text-slate-500">€</span>
+            <button type="button" className={primary} disabled={!valid || !!busy} onClick={() => void save()}>
+              {busy === "guardar" && <Loader2 className="h-4 w-4 animate-spin" />} {mode === "add" ? "Añadir" : "Retirar"}
+            </button>
+          </div>
+          <p className="text-xs text-slate-500">
+            {value > 0 ? (target <= 0 ? "Retiras todo: deja de trabajar con tu dinero." : `Le quedarán ${eur(target, 2)} para sus próximas compras.`) : `Entre 5 € y ${eur(maxBudget, 0)} por agente. Se aplica a sus próximas compras.`}
+            {r.mirror?.mode !== "real" && r.mirror && " Al guardar, pasa a dinero real."}
           </p>
-        </div>
 
-        {/* Lo que tiene */}
-        {m && (
-          <div>
-            <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-slate-600">
-              <span>Ahora tiene con tu dinero</span>
-              {open.length > 0 && canManage && (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 font-semibold text-red-700 hover:underline disabled:opacity-50"
-                  disabled={!!busy}
-                  onClick={() =>
-                    void run(
-                      "cerrar",
-                      "mirror/close",
-                      { agent: r.key },
-                      "Posiciones cerradas. Seguirá copiando sus próximas compras.",
-                      `¿Vender ahora lo que tiene ${a?.name ?? r.key} con tu dinero? Seguirá copiando sus próximas compras.`,
-                    )
-                  }
-                >
-                  {busy === "cerrar" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />} Cerrar posiciones
-                </button>
-              )}
+          {r.mirror && (
+            <div className="space-y-1 border-t border-slate-100 pt-3 text-[15px]">
+              <button
+                type="button"
+                disabled={!!busy}
+                onClick={() =>
+                  void call("cerrar", "mirror/close", { agent: r.key }, "Posiciones cerradas. Seguirá trabajando con sus próximas compras.", `¿Vender ahora lo que tiene ${name} con tu dinero?`)
+                }
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-slate-800 hover:bg-slate-50"
+              >
+                {busy === "cerrar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />} Cerrar sus posiciones
+              </button>
+              <button type="button" disabled className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-slate-400" title="Muy pronto">
+                <Pause className="h-4 w-4" /> Pausar <span className="ml-auto text-xs">Pronto</span>
+              </button>
+              <button
+                type="button"
+                disabled={!!busy}
+                onClick={() => void call("despedir", "mirror/stop", { agent: r.key }, `${name} ya no trabaja con tu dinero.`, `¿Despedir a ${name}? Se vende todo lo que tenga tuyo.`)}
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-red-700 hover:bg-red-50"
+              >
+                {busy === "despedir" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Despedirlo (vende todo)
+              </button>
             </div>
-            {open.length === 0 ? (
-              <p className="rounded-lg bg-slate-50 px-3 py-2 text-slate-500">Nada: en efectivo.</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {open.map((l) => (
-                  <li key={l.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
-                    <span className="flex items-center gap-2">
-                      <AssetIcon symbol={l.symbol} name={l.symbol} size="xs" /> {coin(l.symbol)}
-                    </span>
-                    <span className="tabular-nums text-slate-600">
-                      {eur(l.amount, 2)} a {eur(l.entryPrice)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {/* Movimientos */}
-        {legs.length > 0 && (
-          <div>
-            <div className="mb-1.5 text-xs font-medium text-slate-600">Lo último con tu dinero</div>
-            <ul className="divide-y divide-slate-100 text-xs">
-              {legs.map((l) => (
-                <li key={l.id} className="flex items-center justify-between gap-2 py-1.5">
-                  <span className="min-w-0 truncate text-slate-700">
-                    {l.status === "cerrada" ? "Vendió" : l.status === "omitida" ? "No copió" : l.status === "error" ? "Error con" : "Compró"} {coin(l.symbol)}
-                    {l.mode !== "real" && <span className="text-amber-700"> (prueba)</span>}
-                  </span>
-                  <span className="shrink-0 text-right">
-                    {l.result !== null && (
-                      <span className={`mr-2 font-semibold tabular-nums ${tone(l.result)}`}>
-                        {l.result >= 0 ? "+" : ""}
-                        {eur(l.result, 2)}
-                      </span>
-                    )}
-                    <span className="text-slate-400">{when(l.closedAt ?? l.openedAt ?? l.createdAt)}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {done && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-800">{done}</p>}
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-red-700">{error}</p>}
-
-        {m && canManage && (
-          <button
-            type="button"
-            className={`${ghost} w-full justify-center text-red-700`}
-            disabled={!!busy}
-            onClick={() =>
-              void run(
-                "quitar",
-                "mirror/stop",
-                { agent: r.key },
-                "Le has quitado el dinero. Sigue operando solo con su dinero virtual.",
-                `¿Quitarle el dinero a ${a?.name ?? r.key}? Si tiene algo comprado, se vende ahora.`,
-              )
-            }
-          >
-            {busy === "quitar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Quitarle el dinero
-          </button>
-        )}
-      </div>
-    </div>
+          )}
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-red-700">{error}</p>}
+        </div>
+      )}
+    </Modal>
   );
 }
