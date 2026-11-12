@@ -291,6 +291,21 @@ export function runningFor(iso: string) {
   return `lleva ${years} ${years === 1 ? "año" : "años"}`;
 }
 
+/** Modo de un agente de dos modos (ataque / defensa). */
+export function ChipMode({ a, big = false }: { a: Agent; big?: boolean }) {
+  if (!a.chip) return null;
+  const attack = a.chip.mode === "ataque";
+  return (
+    <span
+      title={a.chip.checks.map((c) => `${c.ok ? "✓" : "✗"} ${c.text}`).join("\n")}
+      className={`inline-flex items-center gap-1.5 rounded-full font-semibold ${big ? "px-3 py-1 text-sm" : "px-2 py-0.5 text-[11px]"} ${attack ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${attack ? "bg-emerald-500" : "bg-slate-400"}`} />
+      {attack ? "Modo ataque" : "Modo defensa"}
+    </span>
+  );
+}
+
 /** Lo que tienes con este agente: copia virtual y/o copia en tu exchange. */
 export function CopyBadges({ a }: { a: Agent }) {
   if (a.copyWeightPct === null && !a.mirror) return null;
@@ -463,6 +478,7 @@ function AgentCard({
         <div className="flex items-center gap-3">
           <span className="text-2xl font-bold tracking-tight tabular-nums text-slate-900">{eur0(a.summary.equity)}</span>
           <ReturnPill value={a.summary.returnPct} />
+          <ChipMode a={a} />
         </div>
         <div className="mt-1 text-xs text-slate-500">
           {open} abiertas{pending ? ` · ${pending} pendientes` : ""} · {a.summary.stats.closed} cerradas

@@ -7,7 +7,12 @@ import { accountState, costOf, latestCloses, OPEN_STATUSES, type PositionView } 
 import type { Evidence } from "../committee/service";
 import { isCryptoMarket, lotStepOf } from "../market-data";
 import { positionSize } from "../risk";
-import { AGENTS, AGENTS_WORKSPACE, agentByKey } from "./roster";
+import { AGENTS as CLASSIC, AGENTS_WORKSPACE, agentByKey as classicByKey } from "./roster";
+import { CHIP_AGENTS, chipByKey } from "../chip/roster";
+
+/** Agentes cuyas compras salen en Oportunidades: los clásicos y los de dos modos. */
+const AGENTS = [...CLASSIC, ...CHIP_AGENTS];
+const agentByKey = (key: string) => classicByKey(key) ?? chipByKey(key);
 
 /** Solo cuentan las reuniones recientes. */
 const MAX_AGE_DAYS = 4;

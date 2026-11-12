@@ -6,7 +6,11 @@ import type { trading_accounts } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { accountState, closePosition, ensureAccount, madridDay, OPEN_STATUSES, placeOrder } from "../accounts";
 import { dayDate, dayKey } from "../sync";
-import { AGENTS, AGENTS_WORKSPACE, agentByKey, copyKey } from "./roster";
+import { AGENTS, AGENTS_WORKSPACE, agentByKey as classicByKey, copyKey } from "./roster";
+import { CHIP_AGENTS, chipByKey } from "../chip/roster";
+
+/** Agentes que se pueden copiar en la cartera virtual: los clásicos y los de dos modos. */
+const agentByKey = (key: string) => classicByKey(key) ?? chipByKey(key);
 
 const COPY_PREFIX = "copia:";
 
@@ -193,7 +197,7 @@ export async function replicate(
   let errors = 0;
   for (const f of followers) {
     try {
-      if (p.action === "comprar" && p.quantity && p.stop && p.target) {
+      if (p.action === "comprar" && p.quantity && p.stop) {
         const mine = await accountState(f.workspace_id, key);
         const quantity = (fractionOf(p.quantity, p.price, agentEquity) * mine.summary.equity) / p.price;
         await placeOrder(
@@ -204,11 +208,12 @@ export async function replicate(
             direction: "long",
             quantity,
             stop: p.stop,
-            target: p.target,
+            // Sin objetivo (agentes de dos modos): salen por el stop o cuando el agente vende.
+            target: p.target ?? p.price * 10,
             execution,
             fractional: true,
             signalKey: `copia:${p.id}`,
-            maxHoldDays: Math.round(p.horizon_days * 1.5),
+            maxHoldDays: p.target === null ? null : Math.round(p.horizon_days * 1.5),
             notes: `Copia de ${def.name}`,
             source: "agente",
           },
@@ -230,4 +235,4 @@ export async function replicate(
   return { copies, errors };
 }
 
-export const COPYABLE = AGENTS.map((a) => a.key);
+export const COPYABLE = [...AGENTS, ...CHIP_AGENTS].map((a) => a.key);

@@ -73,3 +73,22 @@ test("laboratorio: el chip pasa a efectivo en cuanto Bitcoin cae y vuelve a atac
   assert.ok(r.stats.maxDrawdownPct > hold.stats.maxDrawdownPct + 5, `chip ${r.stats.maxDrawdownPct} vs mantener ${hold.stats.maxDrawdownPct}`);
   assert.deepEqual(Object.keys(r.lastWeights), [], "al final está en defensa");
 });
+
+test("agente en directo: el contexto de un día da el mismo modo que la simulación", () => {
+  const { contextAt, explainDetectorB, CHIP } = load("lib/trading/lab/strategies.ts");
+  const { CHIP_AGENTS } = load("lib/trading/chip/roster.ts");
+  const f = (i) => (i < 300 ? 100 * 1.003 ** i : 100 * 1.003 ** 300 * 0.985 ** (i - 300));
+  const coins = [
+    { symbol: "BTC-EUR", candles: line(330, f) },
+    { symbol: "AAA-EUR", candles: line(330, (i) => 10 * 1.004 ** i) },
+  ];
+  const up = contextAt(coins, t0 + 299 * DAY, 0, () => false);
+  const down = contextAt(coins, t0 + 325 * DAY, 0, () => false);
+  assert.equal(explainDetectorB(up).attack, true);
+  assert.equal(explainDetectorB(down).attack, false);
+  assert.equal(explainDetectorB(down).checks.length, 3);
+  // La estrategia del agente existe en el laboratorio y en defensa no compra nada.
+  const strat = CHIP.find((s) => s.key === CHIP_AGENTS[0].strategy);
+  assert.ok(strat);
+  assert.equal(strat.decide(down), null);
+});

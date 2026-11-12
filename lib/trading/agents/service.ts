@@ -11,13 +11,15 @@ import { meetingDue, meetingIntervalMinutes } from "../live-logic";
 import { AGENTS, AGENTS_WORKSPACE, agentByKey, copyKey, type AgentDef } from "./roster";
 import { isKamikaze, KAMIKAZES, type KamikazeDef } from "../kamikaze/roster";
 import { kamikazeView, resetKamikaze, runKamikazeNow } from "../kamikaze/engine";
+import { CHIP_AGENTS, isChip, type ChipDef } from "../chip/roster";
+import { chipModeOf, resetChip, runChipNow } from "../chip/engine";
 
 const WS = AGENTS_WORKSPACE;
 
 /** Todos los agentes del catálogo: los clásicos y los kamikazes. */
-const CATALOG: (AgentDef | KamikazeDef)[] = [...AGENTS, ...KAMIKAZES];
+const CATALOG: (AgentDef | KamikazeDef | ChipDef)[] = [...AGENTS, ...CHIP_AGENTS, ...KAMIKAZES];
 
-async function ensureAgent(a: AgentDef | KamikazeDef) {
+async function ensureAgent(a: AgentDef | KamikazeDef | ChipDef) {
   return ensureAccount(WS, a.key, { name: a.name, capital: a.capital, settings: a.settings });
 }
 
@@ -34,7 +36,7 @@ function changeSince(candles: { t: number; c: number }[], since: number) {
 export async function getAgents(workspaceId?: string) {
   const accounts = await Promise.all(CATALOG.map((a) => ensureAgent(a)));
   const copies = workspaceId
-    ? await prisma.trading_accounts.findMany({ where: { workspace_id: workspaceId, agent: { in: AGENTS.map((a) => copyKey(a.key)) }, copy_weight_pct: { not: null } } })
+    ? await prisma.trading_accounts.findMany({ where: { workspace_id: workspaceId, agent: { in: [...AGENTS, ...CHIP_AGENTS].map((a) => copyKey(a.key)) }, copy_weight_pct: { not: null } } })
     : [];
   // Tus copias: la virtual (subcartera con su peso) y la de dinero real/ensayo en tu exchange.
   const copyReturns = new Map<string, number>(
@@ -66,11 +68,13 @@ export async function getAgents(workspaceId?: string) {
       // Kamikazes: la curva y la rentabilidad son las de la ronda en curso.
       const roundStart = kamikaze?.current ? new Date(kamikaze.current.startedAt.slice(0, 10)).getTime() : null;
       return {
-        kind: (kamikaze ? "kamikaze" : "agente") as "kamikaze" | "agente",
+        kind: (kamikaze ? "kamikaze" : isChip(def.key) ? "chip" : "agente") as "kamikaze" | "agente" | "chip",
+        /** Agentes de dos modos: si están en ataque o en defensa, y por qué. */
+        chip: isChip(def.key) && last ? chipModeOf(last.context) : null,
         kamikaze,
         key: def.key,
         name: def.name,
-        profile: def.profile as AgentDef["profile"] | KamikazeDef["profile"],
+        profile: def.profile as AgentDef["profile"] | KamikazeDef["profile"] | ChipDef["profile"],
         tagline: def.tagline,
         color: def.color,
         rules: def.rules,
@@ -167,6 +171,7 @@ function movesOf(
 /** Reunión de un agente: pone al día su cartera, decide y ejecuta. */
 export async function runAgent(key: string, userId: string | null) {
   if (isKamikaze(key)) return runKamikazeNow(key);
+  if (isChip(key)) return runChipNow(key);
   const def = agentByKey(key);
   if (!def) throw new Error("Agente desconocido");
   const account = await ensureAgent(def);
@@ -184,6 +189,7 @@ export function canDirectAgents(workspaceId: string) {
 /** Vuelve a empezar con el capital inicial y los ajustes de su perfil. */
 export async function resetAgent(key: string) {
   if (isKamikaze(key)) return resetKamikaze(key);
+  if (isChip(key)) return resetChip(key);
   const def = agentByKey(key);
   if (!def) throw new Error("Agente desconocido");
   const account = await ensureAgent(def);

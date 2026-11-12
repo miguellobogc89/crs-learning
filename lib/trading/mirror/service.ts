@@ -15,6 +15,7 @@ import { BrokerError } from "@/lib/brokers/types";
 import { accountState } from "../accounts";
 import { AGENTS_WORKSPACE, agentByKey } from "../agents/roster";
 import { kamikazeByKey } from "../kamikaze/roster";
+import { chipByKey } from "../chip/roster";
 import { referencePrice } from "../kamikaze/market";
 import { legResult, MIN_ORDER_EUR, planMirror, stepQuantity } from "./logic";
 
@@ -25,7 +26,7 @@ export const maxBudget = () => Math.max(5, Number(process.env.TRADING_MIRROR_MAX
 const STALE_MS = 10 * 60_000;
 const MAX_SELL_ATTEMPTS = 5;
 
-const agentName = (key: string) => agentByKey(key)?.name ?? kamikazeByKey(key)?.name ?? null;
+const agentName = (key: string) => agentByKey(key)?.name ?? kamikazeByKey(key)?.name ?? chipByKey(key)?.name ?? null;
 
 /** Exchange de cripto conectado a la cartera (Binance, Bitvavo…) y si puede operar en real sin preguntar. */
 async function realConnection(workspaceId: string) {

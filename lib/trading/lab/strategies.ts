@@ -206,6 +206,64 @@ function lastIndexAtOrBefore(c: Candle[], day: number) {
   return out;
 }
 
+/**
+ * Contexto de un día para usar una estrategia en directo (un agente real): mismas reglas que en la
+ * simulación. `day` es el último día cerrado; `holding` dice qué tiene hoy la cartera.
+ */
+export function contextAt(coins: Coin[], day: number, step: number, holding: (s: string) => boolean): Ctx {
+  const data = prepare(coins);
+  const bySym = new Map(data.map((d) => [d.symbol, d]));
+  const at = (s: string) => {
+    const d = bySym.get(s);
+    const i = d?.byDay.get(dayOf(day));
+    return d && i !== undefined ? { d, i } : null;
+  };
+  return {
+    day: dayOf(day),
+    step,
+    coins: data.map((d) => d.symbol),
+    close: (s, back = 0) => {
+      const x = at(s);
+      return x && x.i - back >= 0 ? x.d.closes[x.i - back] : null;
+    },
+    highest: (s, n) => {
+      const x = at(s);
+      if (!x || x.i - n < 0) return null;
+      let m = -Infinity;
+      for (let k = x.i - n; k < x.i; k++) m = Math.max(m, x.d.candles[k].h);
+      return m;
+    },
+    lowest: (s, n) => {
+      const x = at(s);
+      if (!x || x.i - n < 0) return null;
+      let m = Infinity;
+      for (let k = x.i - n; k < x.i; k++) m = Math.min(m, x.d.candles[k].l);
+      return m;
+    },
+    ma: (s, n) => {
+      const x = at(s);
+      if (!x) return null;
+      if (!x.d.sma.has(n)) x.d.sma.set(n, sma(x.d.closes, n));
+      return x.d.sma.get(n)![x.i] ?? null;
+    },
+    holding,
+  };
+}
+
+/** Por qué el detector B está en ataque o en defensa, en frases sencillas. */
+export function explainDetectorB(c: Ctx) {
+  const p = c.close(BTC);
+  const m200 = c.ma(BTC, 200);
+  const m50 = c.ma(BTC, 50);
+  const p10 = c.close(BTC, 10);
+  const checks = [
+    { ok: p !== null && m200 !== null && p > m200, text: "Bitcoin está por encima de su media de 200 días (tendencia de fondo)" },
+    { ok: p !== null && m50 !== null && p > m50, text: "Bitcoin está por encima de su media de 50 días (tendencia de las últimas semanas)" },
+    { ok: p !== null && p10 !== null && p > p10, text: "Bitcoin vale más que hace 10 días (impulso reciente)" },
+  ];
+  return { attack: checks.every((x) => x.ok), checks, btc: p, ma200: m200, ma50: m50 };
+}
+
 export function statsOf(curve: { day: number; equity: number }[], rebalances = 0, turnover = 0, invested = 0): LabStats {
   let peak = 0;
   let mdd = 0;
@@ -265,7 +323,8 @@ export const BTC_FILTER: Strategy = {
   decide: (c) => {
     const want = btcUp(c);
     if (want === c.holding(BTC) && c.step > 0) return null;
-    return want ? { [BTC]: 1 } : {};
+    const w: Weights = want ? { [BTC]: 1 } : {};
+    return w;
   },
 };
 

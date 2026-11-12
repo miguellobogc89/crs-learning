@@ -9,7 +9,7 @@ import { EquityChart, withLivePoint } from "./equity-chart";
 import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Pill, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { MirrorModal } from "./mirror-modal";
-import { agentMenu, CopyBadges, CopyModal, Creator, Decision, DotsMenu, Rounds, runningFor, when, type Agent, type Data } from "./agents-panel";
+import { agentMenu, ChipMode, CopyBadges, CopyModal, Creator, Decision, DotsMenu, Rounds, runningFor, when, type Agent, type Data } from "./agents-panel";
 
 type Tab = "abiertas" | "historial" | "decisiones" | "rondas";
 
@@ -138,6 +138,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
           <div className="mt-5 flex flex-wrap items-end gap-3">
             <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur0(s.equity)}</span>
             <ReturnPill value={s.returnPct} big />
+            <ChipMode a={a} big />
             <span className="pb-1 text-sm text-slate-500">desde {eur0(s.initialCapital)}</span>
           </div>
           <div className="mt-3">
@@ -167,6 +168,25 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
           ))}
         </dl>
 
+        {a.chip && (
+          <section className={`${card} px-5 py-4 text-sm`}>
+            <div className="mb-2 text-xs font-semibold text-slate-500">Su detector: ataca solo si se cumplen las tres</div>
+            <ul className="space-y-1.5">
+              {a.chip.checks.map((c) => (
+                <li key={c.text} className="flex items-start gap-2">
+                  <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${c.ok ? "bg-emerald-500" : "bg-slate-300"}`}>
+                    {c.ok ? "✓" : "✗"}
+                  </span>
+                  <span className={c.ok ? "text-slate-800" : "text-slate-500"}>{c.text}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-slate-500">
+              En ataque compra las crypto que superan su máximo de 20 días (hasta 3) y las vende si pierden su mínimo de 10. En defensa, todo en efectivo.
+              Decide una vez al día con el cierre de ayer.
+            </p>
+          </section>
+        )}
         {(a.lastRun?.marketView || a.kamikaze?.current?.note) && (
           <section className={`${card} px-5 py-4 text-sm leading-relaxed text-slate-700`}>
             <div className="mb-1 text-xs font-semibold text-slate-500">Cómo ve el mercado</div>

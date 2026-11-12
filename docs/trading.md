@@ -125,3 +125,11 @@ Sección *Agentes* (`/trading/agentes`), que sustituye al simulador histórico e
 - **Abrir cuenta**: `trading_accounts.opened_at`. Sin abrir, Inicio, Oportunidades y Mi cartera muestran «Abre tu cuenta» (500 € - 100.000 €). `openAccount` reinicia la cartera sin comisiones y borra las copias. Las cuentas existentes quedan abiertas.
 - **Copias** (`lib/trading/agents/copy.ts`): subcartera `agent = 'copia:<agente>'` en el espacio del usuario con `copy_weight_pct` (% del patrimonio total). Al asignar o cambiar el peso se traspasa efectivo entre la cartera principal y la copia (ajustando el capital inicial de ambas). `replicate` se llama tras cada decisión ejecutada de un agente: compras en proporción (mismo % de su patrimonio, con fracciones), ventas y subidas de stop. «Igualar cartera» replica sus posiciones actuales al seguirle. Dejar de copiar vende al último precio y devuelve el dinero.
 - API: `GET portfolio`, `POST account/open { capital }`, `POST copy/set { agent, weightPct, mirror }`, `POST copy/stop { agent }`.
+
+## Agentes de dos modos («chip»): CAMALEÓN-4
+
+- Reglas fijas, sin IA, las mismas que se probaron en el laboratorio (`scripts/trading/lab.mjs`, estrategia `chip-b-rupt`):
+  - **Detector B**: ataque si Bitcoin está por encima de su media de 200 días, de su media de 50 y de su precio de hace 10 días. Si falla una, defensa (todo a efectivo).
+  - **Ataque**: compra las crypto que superan su máximo de 20 días (hasta 3, a partes iguales) y las vende si pierden su mínimo de 10 (stop que sube cada día).
+- `lib/trading/chip/roster.ts` (definición) y `lib/trading/chip/engine.ts` (`chipTick`): una decisión al día con la vela de ayer cerrada, desde el cron `agents-tick`. Compra y vende al precio de ahora (crypto no cierra), deja una «reunión» con el modo y las condiciones (`context.chip`) y sus compras/ventas como propuestas ejecutadas (salen en su página, en Inicio y en Oportunidades). Las copias virtuales replican compras, ventas y subidas de stop; la copia en el exchange funciona igual que con los kamikazes.
+- 5.000 € virtuales, comisión 0,25 % por orden (como Bitvavo). En el laboratorio (5 años): +153,8 % frente a +17,5 % de mantener Bitcoin, peor caída −42,7 % frente a −73,3 %.
