@@ -163,7 +163,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                 </div>
                 <p className="mt-1 max-w-xl text-sm text-slate-600">{a.tagline}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <Creator /> · {runningFor(a.startedAt)}
+                  <Creator mine={a.mine} /> · {runningFor(a.startedAt)}
                   {a.lastRun && <> · última decisión {when(a.lastRun.at)}</>}
                 </div>
               </div>

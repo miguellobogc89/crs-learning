@@ -22,7 +22,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const ctx = await connectorContext();
   if (!ctx) redirect("/");
   const { from } = await searchParams;
-  const parent = TRADING_TABS.find((t) => t.key === (from === "inicio" ? "inicio" : "agentes"))!;
+  const parent = TRADING_TABS.find((t) => t.key === (from === "inicio" ? "inicio" : from === "cartera" ? "cartera" : "agentes"))!;
   const header = (
     <nav aria-label="Ruta" className="flex min-w-0 items-center gap-2 text-[22px] font-semibold leading-[1.2] tracking-tight sm:text-[26px]">
       <Link href={`/trading/${parent.key}`} className="flex shrink-0 items-center gap-3 text-slate-400 hover:text-slate-700">

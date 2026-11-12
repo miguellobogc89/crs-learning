@@ -45,6 +45,9 @@ export async function getAgents(workspaceId?: string) {
   const mirrors = workspaceId
     ? await prisma.trading_mirrors.findMany({ where: { workspace_id: workspaceId, active: true }, include: { legs: { select: { result: true, status: true } } } })
     : [];
+  const owned = new Set(
+    workspaceId ? (await prisma.trading_user_agents.findMany({ where: { workspace_id: workspaceId }, select: { agent: true } })).map((o) => o.agent) : [],
+  );
   const started = Math.min(...accounts.map((a) => a.created_at.getTime()));
   const benchInst = await prisma.market_instruments.findMany({ where: { symbol: { in: [INDEX_SYMBOL, CRYPTO_BENCHMARK] } } });
   const benchSeries = await loadSeries(benchInst.map((i) => i.id), new Date(started - 5 * 86_400_000));
@@ -84,6 +87,8 @@ export async function getAgents(workspaceId?: string) {
           maxOpenPositions: def.settings.max_open_positions,
         },
         startedAt: account.created_at.toISOString(),
+        /** Es uno de tus agentes (los que mueven tu dinero real). */
+        mine: owned.has(def.key),
         copyWeightPct: copies.find((c) => c.agent === copyKey(def.key))?.copy_weight_pct ?? null,
         /** Rentabilidad de tu copia virtual desde que la empezaste. */
         copyReturnPct: copyReturns.get(copyKey(def.key)) ?? null,

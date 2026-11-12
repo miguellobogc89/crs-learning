@@ -121,6 +121,20 @@ export async function setMirror(workspaceId: string, input: { agent?: unknown; b
   return { agent, budget: row.budget, mode: row.mode };
 }
 
+/** Cierra ahora lo que tenga abierto la copia (sigue activa: copiará sus próximas compras). */
+export async function closeMirrorPositions(workspaceId: string, agentInput: unknown) {
+  const agent = String(agentInput ?? "");
+  const m = await prisma.trading_mirrors.findUnique({ where: { workspace_id_agent: { workspace_id: workspaceId, agent } } });
+  if (!m) throw new Error("No estás copiando a este agente");
+  const open = await prisma.trading_mirror_legs.findMany({ where: { mirror_id: m.id, status: "abierta" } });
+  const errors: string[] = [];
+  for (const l of open) {
+    const r = await sellLeg(m, l, "lo cierras tú");
+    if (r) errors.push(r);
+  }
+  return { sold: open.length - errors.length, errors };
+}
+
 /** Deja de copiar: vende lo que haya abierto (en real, a mercado en tu exchange). */
 export async function stopMirror(workspaceId: string, agentInput: unknown) {
   const agent = String(agentInput ?? "");

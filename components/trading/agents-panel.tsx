@@ -268,7 +268,7 @@ export function AgentsPanel() {
                 </span>
               ),
             },
-            { key: "creator", label: "Creador", width: 11, cell: () => <span className="inline-flex justify-center"><Creator /></span> },
+            { key: "creator", label: "Creador", width: 11, cell: (a) => <span className="inline-flex justify-center"><Creator mine={a.mine} /></span> },
             { key: "since", label: "Lleva", width: 9, sort: (a) => new Date(a.startedAt).getTime(), cell: (a) => <span className="text-slate-600">{runningFor(a.startedAt)}</span> },
             { key: "equity", label: "Patrimonio", width: 11, sort: (a) => a.summary.equity, cell: (a) => <Money v={a.summary.equity} digits={2} className="font-semibold text-slate-900" /> },
             { key: "ret", label: "Rentabilidad", width: 10, sort: (a) => a.summary.returnPct, cell: (a) => <span className="inline-flex justify-center"><ReturnPill value={a.summary.returnPct} /></span> },
@@ -306,7 +306,14 @@ export function AgentsPanel() {
 /** Los agentes de ahora son de la casa; cuando haya agentes de usuarios, aquí irá su autor. */
 const CREATOR = { name: "Crussader", logo: "/email/logo-mark.png" };
 
-export function Creator() {
+export function Creator({ mine = false }: { mine?: boolean }) {
+  if (mine)
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700">
+        <span className="flex h-[18px] w-[18px] items-center justify-center rounded-md bg-blue-600 text-[10px] font-bold text-white">Tú</span>
+        Tuyo
+      </span>
+    );
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
       {/* eslint-disable-next-line @next/next/no-img-element -- logo propio, pequeño */}
@@ -540,7 +547,7 @@ function AgentCard({
       )}
       <footer className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-3">
         <span className="flex min-w-0 items-center gap-2">
-          <Creator />
+          <Creator mine={a.mine} />
           <span className="text-[11px] text-slate-400">· {runningFor(a.startedAt)}</span>
         </span>
         <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700">

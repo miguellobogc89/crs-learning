@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import type { getOverview } from "@/lib/trading/service";
 import { api, errorText } from "./format";
 import { useTradingRefresh } from "./navigation";
@@ -22,7 +22,6 @@ export type Overview = Awaited<ReturnType<typeof getOverview>> & { canManage: bo
 const NEEDS_OVERVIEW: TradingTab[] = ["mercado"];
 
 export function TradingWorkspace({ tab }: { tab: TradingTab }) {
-  const router = useRouter();
   const params = useSearchParams();
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(NEEDS_OVERVIEW.includes(tab));
@@ -46,7 +45,6 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   }, [load]);
   useTradingRefresh(load);
 
-  const openChart = (s: string) => router.push(`/trading/mercado?symbol=${encodeURIComponent(s)}`);
   const pickSymbol = (s: string) => {
     setSymbol(s);
     window.history.replaceState(null, "", `/trading/mercado?symbol=${encodeURIComponent(s)}`);
@@ -71,7 +69,7 @@ export function TradingWorkspace({ tab }: { tab: TradingTab }) {
   } else if (tab === "inicio") body = <HomePanel />;
   else if (tab === "oportunidades") body = <FaroPanel />;
   else if (tab === "noticias") body = <NewsPanel />;
-  else if (tab === "cartera") body = <CarteraPanel onOpenChart={openChart} />;
+  else if (tab === "cartera") body = <CarteraPanel />;
   else if (tab === "agentes") body = <AgentsPanel />;
   else if (tab === "patrones") body = <LibraryPanel />;
   else if (tab === "reglas") body = <RulesPanel />;

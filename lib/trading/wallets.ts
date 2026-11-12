@@ -8,6 +8,8 @@ import { brokerRegistry } from "@/lib/brokers/providers";
 import type { BrokerActor } from "@/lib/brokers/types";
 import { referencePrice } from "./kamikaze/market";
 import { legResult } from "./mirror/logic";
+import { madridDay } from "./accounts";
+import { dayDate, dayKey } from "./sync";
 
 /** Los saldos se piden como mucho una vez por minuto (el panel lateral se refresca solo). */
 const TTL_MS = 60_000;
@@ -62,6 +64,15 @@ export async function getWallets(actor: Extract<BrokerActor, { kind: "user" }>) 
       };
       try {
         const b = await balance(actor, c.id);
+        // Foto del día para la gráfica de Mi cartera (la última del día se queda).
+        if (c.environment === "real" && b.total > 0)
+          await prisma.trading_wallet_snapshots
+            .upsert({
+              where: { connection_id_day: { connection_id: c.id, day: dayDate(madridDay()) } },
+              create: { connection_id: c.id, workspace_id: actor.workspaceId, day: dayDate(madridDay()), total: b.total, currency: b.currency },
+              update: { total: b.total, currency: b.currency, updated_at: new Date() },
+            })
+            .catch(() => undefined);
         return { ...base, ...b, error: null as string | null, copies: c.usedByTrading ? await copiesResult(actor.workspaceId) : null };
       } catch (e) {
         return { ...base, total: null, cash: null, currency: c.currency ?? "EUR", error: e instanceof Error ? e.message : "No se pudo leer el saldo", copies: null };
@@ -72,4 +83,27 @@ export async function getWallets(actor: Extract<BrokerActor, { kind: "user" }>) 
   items.sort((a, b) => Number(b.operating) - Number(a.operating) || Number(b.environment === "real") - Number(a.environment === "real"));
   const total = items.filter((i) => i.environment === "real" && i.currency === "EUR" && i.total !== null).reduce((s, i) => s + (i.total ?? 0), 0);
   return { total, items };
+}
+
+
+/** Agentes del usuario (como mucho MAX_OWN) y la evolución de su dinero real. */
+export const MAX_OWN = 3;
+
+export async function myAgents(workspaceId: string) {
+  const [owned, snaps] = await Promise.all([
+    prisma.trading_user_agents.findMany({ where: { workspace_id: workspaceId }, orderBy: { created_at: "asc" } }),
+    prisma.trading_wallet_snapshots.findMany({ where: { workspace_id: workspaceId, currency: "EUR" }, orderBy: { day: "asc" } }),
+  ]);
+  // Suma por día de todos los exchanges (cada uno arrastra su último valor).
+  const last = new Map<string, number>();
+  const byDay = new Map<string, number>();
+  for (const s of snaps) {
+    last.set(s.connection_id, s.total);
+    byDay.set(dayKey(s.day), [...last.values()].reduce((a, b) => a + b, 0));
+  }
+  return {
+    owned: owned.map((o) => o.agent),
+    max: MAX_OWN,
+    history: [...byDay.entries()].map(([day, equity]) => ({ day, equity })),
+  };
 }

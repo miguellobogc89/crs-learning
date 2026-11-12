@@ -2623,3 +2623,25 @@ model trading_mirror_legs {
   @@unique([mirror_id, source_position_id], map: "trading_mirror_legs_source")
   @@index([mirror_id, status], map: "trading_mirror_legs_status")
 }
+
+/// Agentes de cada usuario (espacio): como mucho 3. Siguen siendo públicos; esto dice de quién son.
+model trading_user_agents {
+  workspace_id String   @db.Uuid
+  agent        String
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([workspace_id, agent])
+}
+
+/// Saldo de cada exchange conectado, una foto por día (la última del día).
+model trading_wallet_snapshots {
+  connection_id String   @db.Uuid
+  workspace_id  String   @db.Uuid
+  day           DateTime @db.Date
+  total         Float
+  currency      String   @default("EUR")
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([connection_id, day])
+  @@index([workspace_id, day], map: "trading_wallet_snapshots_workspace_day_idx")
+}
