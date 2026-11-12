@@ -91,8 +91,13 @@ export function EquityChart({
   const base = shown[0].equity;
   const vals = shown.map((p) => p.equity).concat(range === "all" ? [initial] : []);
   const yt = ticks(Math.min(...vals), Math.max(...vals));
-  const lo = yt[0];
-  const hi = yt[yt.length - 1] > lo ? yt[yt.length - 1] : lo + 1;
+  // La mini gráfica no tiene ejes: escala con los extremos reales y deja aire arriba y abajo.
+  // Los ticks redondeados pueden terminar por debajo del máximo y recortar los picos.
+  const min = Math.min(...shown.map((p) => p.equity));
+  const max = Math.max(...shown.map((p) => p.equity));
+  const span = max - min || Math.abs(max) * 0.01 || 1;
+  const lo = bare ? min - span * 0.15 : yt[0];
+  const hi = bare ? max + span * 0.15 : yt[yt.length - 1] > lo ? yt[yt.length - 1] : lo + 1;
   const x = (i: number) => pad.l + (i / (shown.length - 1)) * (w - pad.l - pad.r);
   const y = (v: number) => pad.t + ((hi - v) / (hi - lo)) * (h - pad.t - pad.b);
   const line = shown.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.equity).toFixed(1)}`).join("");
