@@ -50,7 +50,7 @@ async function copiesResult(workspaceId: string) {
   return { result, pct: budget > 0 ? (result / budget) * 100 : null, budget, copies: mirrors.filter((m) => m.active).length };
 }
 
-export async function getWallets(actor: Extract<BrokerActor, { kind: "user" }>) {
+export async function getWallets(actor: Extract<BrokerActor, { kind: "user" }>, includeHistory = false) {
   const { connections } = await brokers.listIntegrations(actor);
   const live = connections.filter((c) => c.status !== "disconnected");
   const items = await Promise.all(
@@ -113,12 +113,15 @@ export async function getWallets(actor: Extract<BrokerActor, { kind: "user" }>) 
         },
       }).catch((e) => console.error("[trading] No se pudo limpiar el historial intradía", e));
   }
-  const history = await prisma.trading_wallet_intraday.findMany({
-    where: { user_id: actor.userId, workspace_id: actor.workspaceId, sampled_at: { gte: new Date(samplingNow - 7 * 86_400_000) } },
-    orderBy: { sampled_at: "asc" },
-    select: { sampled_at: true, total: true },
-  }).then((points) => points.map((p) => ({ day: p.sampled_at.toISOString(), equity: p.total })))
-    .catch(() => [] as { day: string; equity: number }[]); // Migración aún no aplicada: no bloquear la cartera.
+  // El panel lateral pide solo saldos; el histórico (hasta ~2.000 puntos) lo solicita Mi cartera.
+  const history = includeHistory
+    ? await prisma.trading_wallet_intraday.findMany({
+        where: { user_id: actor.userId, workspace_id: actor.workspaceId, sampled_at: { gte: new Date(samplingNow - 7 * 86_400_000) } },
+        orderBy: { sampled_at: "asc" },
+        select: { sampled_at: true, total: true },
+      }).then((points) => points.map((p) => ({ day: p.sampled_at.toISOString(), equity: p.total })))
+        .catch(() => [] as { day: string; equity: number }[]) // Migración aún no aplicada: no bloquear la cartera.
+    : [] as { day: string; equity: number }[];
 
   return { total, items, history };
 }
