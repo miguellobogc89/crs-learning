@@ -17,8 +17,8 @@ export function TradingMobileTabs() {
     <nav aria-label="Secciones de Trading" className="-mx-5 mt-3 overflow-x-auto px-5 [scrollbar-width:none] sm:-mx-6 sm:px-6 lg:hidden [&::-webkit-scrollbar]:hidden">
       <div className="flex w-max gap-2 pb-1">
         {TRADING_TABS.map((t) => {
-          const href = `/trading/${t.key}`;
-          const on = pathname === href || (t.key === "inicio" && pathname === "/trading");
+          const href = t.key === "mercados" ? "/trading/mercados?tab=valores" : `/trading/${t.key}`;
+          const on = pathname === `/trading/${t.key}` || (t.key === "inicio" && pathname === "/trading");
           const Icon = t.icon;
           return (
             <Link
