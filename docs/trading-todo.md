@@ -38,4 +38,4 @@ Apuntado el 10/11/2026. Sin empezar.
 
 ## UX (12/11/2026)
 - [ ] Quitar la sección «Reglas y riesgo»: aquí se opera por copia (sin ajustes de riesgo propios ni modo automático por figuras).
-- [ ] Unificar Valores seguidos, Gráficos, Noticias y Aprende en una sola sección.
+- [ ] Nueva sección «Mercados» (debajo de Mi cartera) que unifica Valores seguidos, Gráficos, Noticias y Aprende, con pestañas horizontales: Valores (lista; al pulsar, su gráfico), Noticias y Aprende. Cada pestaña con su URL (`/trading/mercados?tab=…`); en móvil, fila desplazable.
