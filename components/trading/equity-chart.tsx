@@ -41,7 +41,7 @@ function ticks(lo: number, hi: number) {
   const pow = 10 ** Math.floor(Math.log10(raw));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * pow).find((s) => s >= raw) ?? raw;
   const out: number[] = [];
-  for (let v = Math.floor(lo / step) * step; v <= hi + step * 0.01; v += step) out.push(v);
+  for (let v = Math.floor(lo / step) * step; v <= Math.ceil(hi / step) * step + step * 0.01; v += step) out.push(v);
   return out;
 }
 
@@ -51,6 +51,7 @@ export function EquityChart({
   height = 260,
   ranges = true,
   bare = false,
+  fill = false,
   empty = "El gráfico se dibuja con el cierre de cada sesión a partir de que la cartera tenga actividad.",
 }: {
   points: Point[];
@@ -59,10 +60,13 @@ export function EquityChart({
   ranges?: boolean;
   /** Sin ejes ni textos: solo la línea (tarjetas pequeñas). */
   bare?: boolean;
+  /** Ajusta la gráfica a la altura disponible del contenedor en lugar de imponer una altura fija. */
+  fill?: boolean;
   empty?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
+  const [measuredHeight, setMeasuredHeight] = useState(height);
   const [range, setRange] = useState<RangeKey>("all");
   const [hover, setHover] = useState<number | null>(null);
   const uid = useId().replace(/:/g, "");
@@ -70,10 +74,13 @@ export function EquityChart({
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setWidth(Math.max(bare ? 1 : 240, Math.round(e.contentRect.width))));
+    const ro = new ResizeObserver(([e]) => {
+      setWidth(Math.max(bare ? 1 : 240, Math.round(e.contentRect.width)));
+      if (fill) setMeasuredHeight(Math.max(1, Math.round(e.contentRect.height)));
+    });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [bare]);
+  }, [bare, fill]);
 
   const shown = useMemo(() => {
     const r = RANGES.find((x) => x.key === range)!;
@@ -87,7 +94,7 @@ export function EquityChart({
 
   const pad = bare ? { l: 4, r: 6, t: 6, b: 4 } : { l: 56, r: 16, t: 14, b: 26 };
   const w = width;
-  const h = height;
+  const h = fill ? measuredHeight : height;
   const base = shown[0].equity;
   const vals = shown.map((p) => p.equity).concat(range === "all" ? [initial] : []);
   const yt = ticks(Math.min(...vals), Math.max(...vals));
@@ -96,8 +103,8 @@ export function EquityChart({
   const min = Math.min(...shown.map((p) => p.equity));
   const max = Math.max(...shown.map((p) => p.equity));
   const span = max - min || Math.abs(max) * 0.01 || 1;
-  const lo = bare ? min - span * 0.15 : yt[0];
-  const hi = bare ? max + span * 0.15 : yt[yt.length - 1] > lo ? yt[yt.length - 1] : lo + 1;
+  const lo = bare ? min - span * 0.15 : Math.min(yt[0], Math.min(...vals) - span * 0.08);
+  const hi = bare ? max + span * 0.15 : Math.max(yt[yt.length - 1], Math.max(...vals) + span * 0.12);
   const x = (i: number) => pad.l + (i / (shown.length - 1)) * (w - pad.l - pad.r);
   const y = (v: number) => pad.t + ((hi - v) / (hi - lo)) * (h - pad.t - pad.b);
   const line = shown.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.equity).toFixed(1)}`).join("");
@@ -118,7 +125,7 @@ export function EquityChart({
   };
 
   return (
-    <div className={bare ? "" : "px-4 pb-4 pt-2"}>
+    <div className={bare ? "" : fill ? "flex h-full min-h-0 flex-col px-2 pb-2 pt-2" : "px-4 pb-4 pt-2"}>
       {!bare && (
       <div className="flex flex-wrap items-center justify-between gap-3 px-2 pb-2">
         <div className="text-sm text-slate-500">
@@ -150,12 +157,12 @@ export function EquityChart({
         )}
       </div>
       )}
-      <div ref={box} className="w-full">
+      <div ref={box} className={fill ? "min-h-0 w-full flex-1" : "w-full"}>
         <svg
           width={w}
           height={h}
           viewBox={`0 0 ${w} ${h}`}
-          className="block max-w-full touch-none select-none"
+          className={fill ? "block h-full w-full touch-none select-none" : "block max-w-full touch-none select-none"}
           role="img"
           aria-label="Evolución del patrimonio"
           onMouseMove={onMove}
