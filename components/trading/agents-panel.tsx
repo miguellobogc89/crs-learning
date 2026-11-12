@@ -444,6 +444,7 @@ function AgentCard({
   const open = a.positions.filter((p) => p.status === "abierta").length;
   const pending = a.positions.filter((p) => p.status === "pendiente").length;
   const k = a.kamikaze;
+  const chartPoints = withLivePoint(a.equity, a.summary.equity);
   return (
     <article
       role="link"
@@ -474,19 +475,23 @@ function AgentCard({
           )}
         </div>
       </div>
-      <div className="mt-4 px-5">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl font-bold tracking-tight tabular-nums text-slate-900">{eur0(a.summary.equity)}</span>
-          <ReturnPill value={a.summary.returnPct} />
-          <ChipMode a={a} />
+      <div className="mt-4 flex min-w-0 items-center gap-3 px-5 pb-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-2xl font-bold tracking-tight tabular-nums text-slate-900">{eur0(a.summary.equity)}</span>
+            <ReturnPill value={a.summary.returnPct} />
+            <ChipMode a={a} />
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {open} abiertas{pending ? ` · ${pending} pendientes` : ""} · {a.summary.stats.closed} cerradas
+            {a.summary.stats.closed ? ` · acierto ${Math.round(a.summary.stats.winRate * 100)} %` : ""}
+          </div>
         </div>
-        <div className="mt-1 text-xs text-slate-500">
-          {open} abiertas{pending ? ` · ${pending} pendientes` : ""} · {a.summary.stats.closed} cerradas
-          {a.summary.stats.closed ? ` · acierto ${Math.round(a.summary.stats.winRate * 100)} %` : ""}
-        </div>
-      </div>
-      <div className="mt-2 px-3">
-        <EquityCurve points={withLivePoint(a.equity, a.summary.equity)} initial={a.summary.initialCapital} height={90} empty="La línea aparece tras su primera sesión." />
+        {chartPoints.length >= 2 && (
+          <div className="w-24 shrink-0 sm:w-28">
+            <EquityCurve points={chartPoints} initial={a.summary.initialCapital} height={54} />
+          </div>
+        )}
       </div>
       {(k || a.copyWeightPct !== null || a.mirror) && (
         <div className="mx-5 mb-3 space-y-2">
