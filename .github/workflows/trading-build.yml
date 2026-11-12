@@ -1,0 +1,33 @@
+name: Trading build
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "components/trading/**"
+      - "app/(app)/trading/**"
+      - ".github/workflows/trading-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/crs_ci
+      NEXTAUTH_SECRET: ci-only-not-a-production-secret-0123456789
+      NEXTAUTH_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Next.js build
+        run: npm run build
