@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot, Briefcase, History, TrendingUp, ListChecks, Loader2, Pencil, RotateCcw, ShieldCheck, Wallet, X } from "lucide-react";
+import { Bot, Briefcase, ChevronRight, History, TrendingUp, ListChecks, Loader2, Pencil, RotateCcw, ShieldCheck, Wallet, X } from "lucide-react";
 import type { accountDetail, PositionView } from "@/lib/trading/accounts";
 import { PATTERN_LIBRARY } from "@/lib/trading/library";
 import { refreshTrading, useTradingRefresh } from "./navigation";
@@ -538,7 +538,7 @@ function Settings({ summary, onSaved }: { summary: Detail["summary"]; onSaved: (
   );
 }
 
-export function UniversePanel() {
+export function UniversePanel({ onSelect }: { onSelect?: (symbol: string) => void }) {
   const onChanged = refreshTrading;
   const [data, setData] = useState<Instruments | null>(null);
   const [symbol, setSymbol] = useState("");
@@ -588,15 +588,22 @@ export function UniversePanel() {
       <div className="grid gap-px bg-slate-100 sm:grid-cols-2 lg:grid-cols-4">
         {data.items.map((i) => (
           <div key={i.symbol} className={`flex items-center justify-between gap-2 bg-white px-3 py-2 text-sm ${i.active ? "" : "opacity-50"}`}>
-            <span className="flex min-w-0 items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => onSelect?.(i.symbol)}
+              disabled={!onSelect}
+              aria-label={`Ver gráfico y figuras de ${i.name}`}
+              className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg py-1 text-left enabled:cursor-pointer enabled:hover:text-blue-700 disabled:cursor-default"
+            >
               <AssetIcon symbol={i.symbol} name={i.name} size="sm" />
-              <span className="min-w-0">
-              <span className="block truncate font-medium text-slate-800">{i.name}</span>
-              <span className="text-xs text-slate-500">
-                {i.symbol} · {i.lastError ? <span className="text-red-600">error</span> : i.lastCandle ? dayFmt(i.lastCandle) : "sin datos"}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-slate-800">{i.name}</span>
+                <span className="block text-xs text-slate-500">
+                  {i.symbol} · {i.lastError ? <span className="text-red-600">error</span> : i.lastCandle ? dayFmt(i.lastCandle) : "sin datos"}
+                </span>
               </span>
-            </span>
-            </span>
+              {onSelect && <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />}
+            </button>
             {canManage && !i.isIndex && (
               <button
                 type="button"
