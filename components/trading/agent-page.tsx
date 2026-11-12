@@ -272,7 +272,19 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
 
           {tab === "decisiones" &&
             (a.proposals.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-slate-500">Todavía no se ha reunido.</p>
+              <div className="px-5 py-8 text-center text-sm text-slate-500">
+                {a.lastRun ? (
+                  <>
+                    <p>
+                      Última decisión: <b className="font-semibold text-slate-700">{when(a.lastRun.at)}</b>.{" "}
+                      {a.chip ? (a.chip.mode === "defensa" ? "Está en modo defensa: se queda en efectivo." : "Está en modo ataque, esperando una ruptura para entrar.") : "No propuso nada: prefirió esperar."}
+                    </p>
+                    <p className="mt-1 text-xs">Aquí aparecerán sus compras y ventas, con el porqué de cada una.</p>
+                  </>
+                ) : (
+                  "Todavía no ha tomado ninguna decisión."
+                )}
+              </div>
             ) : (
               <ul className="divide-y divide-slate-100 px-5">
                 {a.proposals
