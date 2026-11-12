@@ -40,6 +40,7 @@ function money(m: Mirror | null) {
 /** Qué está haciendo, en pocas palabras y con su icono. */
 function statusOf(r: Row) {
   const open = r.mirror?.legs.filter((l) => HOLDING.includes(l.status) && l.mode === r.mirror?.mode) ?? [];
+  if (r.mirror?.paused) return { icon: Pause, text: open.length ? `En pausa · aún tiene ${open.map((l) => coin(l.symbol)).join(", ")}` : "En pausa · no compra nada nuevo" };
   if (open.length) return { icon: Play, text: `Trabajando · tiene ${open.map((l) => coin(l.symbol)).join(", ")}` };
   if (r.agent?.chip?.mode === "defensa") return { icon: Shield, text: "En defensa · efectivo" };
   if (!r.mirror) return { icon: Pause, text: "Sin dinero tuyo" };
@@ -417,8 +418,22 @@ function ManageModal({ r, free, maxBudget, onClose }: { r: Row; free: number; ma
               >
                 {busy === "cerrar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />} Cerrar sus posiciones
               </button>
-              <button type="button" disabled className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-slate-400" title="Muy pronto">
-                <Pause className="h-4 w-4" /> Pausar <span className="ml-auto text-xs">Pronto</span>
+              <button
+                type="button"
+                disabled={!!busy}
+                onClick={() =>
+                  void call(
+                    "pausa",
+                    "mirror/pause",
+                    { agent: r.key, paused: !r.mirror?.paused },
+                    r.mirror?.paused ? `${name} vuelve a trabajar: copiará sus próximas compras.` : `${name} en pausa: no comprará nada nuevo con tu dinero. Lo que tiene lo venderá cuando él salga.`,
+                  )
+                }
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-slate-800 hover:bg-slate-50"
+              >
+                {busy === "pausa" ? <Loader2 className="h-4 w-4 animate-spin" /> : r.mirror?.paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                {r.mirror?.paused ? "Reanudar" : "Pausar"}
+                <span className="ml-auto text-xs text-slate-400">{r.mirror?.paused ? "volverá a comprar" : "no compra, conserva lo que tiene"}</span>
               </button>
               <button
                 type="button"

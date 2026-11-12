@@ -2588,6 +2588,8 @@ model trading_mirrors {
   budget       Float
   mode         String                @default("ensayo")
   active       Boolean               @default(true)
+  /// En pausa: no compra nada nuevo; lo que tiene se sigue vendiendo cuando el agente sale.
+  paused       Boolean               @default(false)
   started_at   DateTime              @default(now()) @db.Timestamptz(6)
   created_at   DateTime              @default(now()) @db.Timestamptz(6)
   updated_at   DateTime              @default(now()) @db.Timestamptz(6)

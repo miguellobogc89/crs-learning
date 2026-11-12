@@ -31,7 +31,7 @@ import { isBrokerError, type BrokerActor } from "@/lib/brokers/types";
 import { refreshLive } from "@/lib/trading/live";
 import { kamikazeTick } from "@/lib/trading/kamikaze/engine";
 import { faroView } from "@/lib/trading/faro/engine";
-import { closeMirrorPositions, mirrorView, setMirror, stopMirror } from "@/lib/trading/mirror/service";
+import { closeMirrorPositions, mirrorView, pauseMirror, setMirror, stopMirror } from "@/lib/trading/mirror/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -159,10 +159,11 @@ export async function POST(req: Request, route: RouteContext) {
       await stopCopy(ctx.workspaceId, body.agent);
       return NextResponse.json({ ok: true });
     }
-    if (action === "mirror/set" || action === "mirror/stop" || action === "mirror/close") {
+    if (action === "mirror/set" || action === "mirror/stop" || action === "mirror/close" || action === "mirror/pause") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede copiar agentes en el bróker", 403);
       if (action === "mirror/set") return NextResponse.json(await setMirror(ctx.workspaceId, body));
       if (action === "mirror/close") return NextResponse.json(await closeMirrorPositions(ctx.workspaceId, body.agent));
+      if (action === "mirror/pause") return NextResponse.json(await pauseMirror(ctx.workspaceId, body.agent, body.paused === true));
       return NextResponse.json(await stopMirror(ctx.workspaceId, body.agent));
     }
     if (action === "committee/run") {

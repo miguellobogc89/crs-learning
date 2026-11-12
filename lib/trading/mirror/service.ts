@@ -84,6 +84,7 @@ export async function mirrorView(workspaceId: string) {
       budget: m.budget,
       mode: m.mode as MirrorMode,
       active: m.active,
+      paused: m.paused,
       startedAt: m.started_at.toISOString(),
       // Solo lo del modo actual: al pasar de prueba a real, lo de prueba no cuenta como dinero tuyo.
       result: m.legs.filter((l) => l.mode === m.mode).reduce((s, l) => s + (l.result ?? 0), 0),
@@ -130,6 +131,15 @@ export async function setMirror(workspaceId: string, input: { agent?: unknown; b
     update: { budget, mode, active: true, ...(restart ? { started_at: new Date() } : {}), updated_at: new Date() },
   });
   return { agent, budget: row.budget, mode: row.mode };
+}
+
+/** Pausa o reanuda una copia: en pausa no compra nada nuevo, pero vende lo que tiene cuando el agente sale. */
+export async function pauseMirror(workspaceId: string, agentInput: unknown, paused: boolean) {
+  const agent = String(agentInput ?? "");
+  const m = await prisma.trading_mirrors.findUnique({ where: { workspace_id_agent: { workspace_id: workspaceId, agent } } });
+  if (!m || !m.active) throw new Error("Este agente no trabaja con tu dinero");
+  await prisma.trading_mirrors.update({ where: { id: m.id }, data: { paused, updated_at: new Date() } });
+  return { agent, paused };
 }
 
 /** Cierra ahora lo que tenga abierto la copia (sigue activa: copiará sus próximas compras). */
@@ -335,6 +345,11 @@ export async function runMirrors() {
         if (!l) continue;
         const err = await sellLeg(m, l, `${agentName(m.agent)} ha salido`);
         actions.push(`${m.agent} ${l.symbol}: ${err ? `venta fallida (${err})` : "vendido"}`);
+      }
+      // En pausa: no compra nada nuevo (queda anotado); las ventas de lo que ya tiene siguen.
+      if (m.paused) {
+        for (const b of plan.buys) plan.skips.push({ source: b.source, reason: "En pausa: no compra nada nuevo" });
+        plan.buys = [];
       }
       for (const s of plan.skips) {
         await prisma.trading_mirror_legs
