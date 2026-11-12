@@ -9,6 +9,7 @@ import { AgentPage } from "@/components/trading/agent-page";
 import { TRADING_TABS } from "@/components/trading/tabs";
 import { agentByKey } from "@/lib/trading/agents/roster";
 import { kamikazeByKey } from "@/lib/trading/kamikaze/roster";
+import { chipByKey } from "@/lib/trading/chip/roster";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function Page({ params, searchParams }: { params: Promise<{ tab: string; key: string }>; searchParams: Promise<{ from?: string }> }) {
   const { tab, key } = await params;
   if (tab !== "agentes") notFound();
-  const def = agentByKey(key) ?? kamikazeByKey(key);
+  const def = agentByKey(key) ?? kamikazeByKey(key) ?? chipByKey(key);
   if (!def) notFound();
   const ctx = await connectorContext();
   if (!ctx) redirect("/");
