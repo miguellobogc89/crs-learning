@@ -142,7 +142,8 @@ export function TradingNavigation() {
             </div>
           ))}
         </nav>
-
+      </div>
+      <div className="max-h-[50%] shrink-0 overflow-y-auto">
         <MoneyPanel status={status} syncing={syncing} msg={msg} onSync={sync} />
       </div>
     </div>
