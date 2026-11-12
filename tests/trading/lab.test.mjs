@@ -123,3 +123,25 @@ test("laboratorio: el universo «de cada momento» solo ve las monedas con volum
   assert.deepEqual([...seen[0]].sort(), ["BIG-EUR", "BTC-EUR"]);
   assert.ok(CHIP.length > 0);
 });
+
+test("laboratorio 2: termómetro, CAMALEÓN-0 y reparto por riesgo", () => {
+  const { contextAt, breadth, LAB2 } = load("lib/trading/lab/strategies.ts");
+  const up = (i) => 100 * 1.003 ** i;
+  const wobble = (amp) => (i) => 10 * 1.004 ** i * (1 + amp * (i % 2 ? 1 : -1));
+  const coins = [
+    { symbol: "BTC-EUR", candles: line(320, up) },
+    { symbol: "AAA-EUR", candles: line(320, wobble(0.001)) },
+    { symbol: "BBB-EUR", candles: line(320, wobble(0.03)) },
+    { symbol: "CCC-EUR", candles: line(320, (i) => 50 * 0.997 ** i) },
+  ];
+  const c = contextAt(coins, t0 + 310 * DAY, 0, () => false);
+  // AAA y BBB suben, CCC baja: 2 de 3 por encima de su media de 50 días.
+  assert.equal(Math.round(breadth(c) * 3), 2);
+  const zero = LAB2.find((s) => s.key === "camaleon-0");
+  assert.deepEqual(Object.keys(zero.decide(c) ?? {}), ["BTC-EUR"]);
+  // Reparto por riesgo: la moneda tranquila pesa más que la nerviosa y no se pasa del 100 %.
+  const risk = LAB2.find((s) => s.key === "camaleon-riesgo");
+  const r = simulate(coins, risk, { from: t0 + 250 * DAY, feePct: 0, slippagePct: 0 });
+  assert.ok(Number.isFinite(r.stats.totalPct));
+  for (const s of LAB2) assert.ok(Number.isFinite(simulate(coins, s, { from: t0 + 250 * DAY, feePct: 0.25 }).stats.totalPct), s.key);
+});

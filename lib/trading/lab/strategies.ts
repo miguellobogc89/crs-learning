@@ -539,6 +539,79 @@ export const SHORTS: Strategy[] = [
   gatedShort("chip-b-rupt-short50", "Chip B · rupturas + ½ corto", "Detector B; en ataque, rupturas 20/10; en defensa, corto en Bitcoin con la mitad y la otra mitad en efectivo.", DETECTOR_B, attackBreakout, 0.5),
 ];
 
+// ---------------------------------------------------------------------------
+// Segunda tanda (12/11/2026): ¿de dónde sale la ventaja de CAMALEÓN? Reglas fijadas antes de ver resultados.
+// ---------------------------------------------------------------------------
+/** Volatilidad diaria (desviación de los rendimientos) de los últimos `n` días. */
+function volatility(c: Ctx, s: string, n = 20) {
+  const r: number[] = [];
+  for (let k = 0; k < n; k++) {
+    const a = c.close(s, k);
+    const b = c.close(s, k + 1);
+    if (a === null || b === null || b <= 0) return null;
+    r.push(a / b - 1);
+  }
+  const m = r.reduce((x, y) => x + y, 0) / n;
+  return Math.sqrt(r.reduce((x, y) => x + (y - m) ** 2, 0) / (n - 1));
+}
+
+/** Participación: % de las demás monedas (no Bitcoin) que están por encima de su media de 50 días. */
+export function breadth(c: Ctx) {
+  let up = 0;
+  let n = 0;
+  for (const s of c.coins) {
+    if (s === BTC) continue;
+    const p = c.close(s);
+    const m = c.ma(s, 50);
+    if (p === null || m === null) continue;
+    n++;
+    if (p > m) up++;
+  }
+  return n ? up / n : 0;
+}
+
+/** Como `gated`, pero con pesos propios (no tienen que sumar 1: lo que falta queda en efectivo). */
+function gatedWeights(key: string, name: string, idea: string, gate: Gate, attack: (c: Ctx) => string[] | null, weigh: (c: Ctx, picks: string[]) => Weights): Strategy {
+  return {
+    key,
+    name,
+    idea,
+    decide: (c) => {
+      const holding = c.coins.some((s) => c.holding(s));
+      if (!gate(c)) return holding ? {} : null;
+      const picks = attack(c);
+      if (picks === null || (sameSet(c, picks) && holding)) return null;
+      return weigh(c, picks);
+    },
+  };
+}
+
+/** Reparto por riesgo: cada moneda pesa en proporción inversa a su volatilidad de 20 días. */
+const inverseVol = (c: Ctx, picks: string[]): Weights => {
+  const inv = picks.map((s) => ({ s, w: 1 / Math.max(volatility(c, s) ?? 0.05, 0.005) }));
+  const sum = inv.reduce((a, b) => a + b.w, 0);
+  return Object.fromEntries(inv.map((x) => [x.s, x.w / sum]));
+};
+
+/** Termómetro: con participación ≥ 50 % todo dentro; por debajo, solo la mitad (resto en efectivo). */
+const byBreadth = (c: Ctx, picks: string[]): Weights => {
+  const k = breadth(c) >= 0.5 ? 1 : 0.5;
+  return Object.fromEntries(picks.map((s) => [s, k / Math.max(1, picks.length)]));
+};
+
+export const LAB2: Strategy[] = [
+  gated("camaleon-0", "CAMALEÓN-0 · solo Bitcoin", "Detector de CAMALEÓN (B); en ataque, solo Bitcoin. ¿La ventaja es saber cuándo estar dentro?", DETECTOR_B, () => [BTC]),
+  gatedWeights("camaleon-riesgo", "CAMALEÓN · reparto por riesgo", "Como CAMALEÓN-4, pero cada moneda pesa según su volatilidad (las más tranquilas, más).", DETECTOR_B, attackBreakout, inverseVol),
+  gatedWeights(
+    "camaleon-termometro",
+    "CAMALEÓN · termómetro",
+    "Como CAMALEÓN-4, pero si menos de la mitad de las demás monedas están sobre su media de 50 días, solo invierte la mitad.",
+    DETECTOR_B,
+    attackBreakout,
+    byBreadth,
+  ),
+];
+
 /** Las candidatas que se comparan en el laboratorio. */
 export const CANDIDATES: Strategy[] = [BTC_FILTER, rotation(2, 60), rotation(3, 60), BREAKOUT, rotation(3, 30, false)];
 
