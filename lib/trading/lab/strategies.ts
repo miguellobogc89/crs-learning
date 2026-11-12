@@ -47,7 +47,7 @@ export type LabStats = {
   exposurePct: number;
 };
 
-export type LabResult = { key: string; name: string; from: number; to: number; curve: { day: number; equity: number }[]; stats: LabStats };
+export type LabResult = { key: string; name: string; from: number; to: number; curve: { day: number; equity: number }[]; stats: LabStats; delisted: string[] };
 
 type Prepared = { symbol: string; candles: Candle[]; byDay: Map<number, number>; closes: number[]; sma: Map<number, (number | null)[]> };
 
@@ -71,6 +71,7 @@ export function simulate(coins: Coin[], strategy: Strategy, opts: { from: number
   let rebalances = 0;
   let turnover = 0;
   let invested = 0;
+  const delisted = new Set<string>();
 
   days.forEach((day, step) => {
     // 1) Ejecutar a la apertura lo decidido ayer.
@@ -112,15 +113,23 @@ export function simulate(coins: Coin[], strategy: Strategy, opts: { from: number
       pending = null;
     }
 
-    // 2) Valor al cierre.
+    // 2) Valor al cierre. Sin vela hoy: último cierre conocido. Si el par deja de cotizar (p. ej. Binance
+    //    retira el par en euros), se vende a su último cierre tras 3 días sin datos.
     let equity = cash;
     let inMarket = 0;
-    for (const [s, u] of units) {
+    for (const [s, u] of [...units]) {
       const d = bySym.get(s)!;
-      let i = d.byDay.get(day);
-      // Sin vela hoy (no debería en crypto): último cierre conocido.
-      if (i === undefined) i = d.candles.findIndex((k) => dayOf(k.t) > day) - 1;
-      const v = u * (i !== undefined && i >= 0 ? d.candles[i].c : 0);
+      const i = lastIndexAtOrBefore(d.candles, day);
+      if (i < 0) continue;
+      const v = u * d.candles[i].c;
+      if (!d.byDay.has(day) && day - dayOf(d.candles[i].t) > 3 * DAY) {
+        cash += v * (1 - cost);
+        units.delete(s);
+        delisted.add(s);
+        rebalances++;
+        equity += v * (1 - cost);
+        continue;
+      }
       equity += v;
       inMarket += v;
     }
@@ -170,7 +179,30 @@ export function simulate(coins: Coin[], strategy: Strategy, opts: { from: number
     }
   });
 
-  return { key: strategy.key, name: strategy.name, from: days[0] ?? opts.from, to: days[days.length - 1] ?? opts.from, curve, stats: statsOf(curve, rebalances, turnover, invested) };
+  return {
+    key: strategy.key,
+    name: strategy.name,
+    from: days[0] ?? opts.from,
+    to: days[days.length - 1] ?? opts.from,
+    curve,
+    stats: statsOf(curve, rebalances, turnover, invested),
+    delisted: [...delisted],
+  };
+}
+
+/** Índice de la última vela del día `day` o anterior (-1 si no hay). */
+function lastIndexAtOrBefore(c: Candle[], day: number) {
+  let lo = 0;
+  let hi = c.length - 1;
+  let out = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (dayOf(c[mid].t) <= day) {
+      out = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return out;
 }
 
 export function statsOf(curve: { day: number; equity: number }[], rebalances = 0, turnover = 0, invested = 0): LabStats {

@@ -48,3 +48,16 @@ test("laboratorio: las comisiones se notan y las rupturas no fallan con datos co
   assert.ok(paid.stats.totalPct <= free.stats.totalPct);
   assert.ok(Number.isFinite(paid.stats.maxDrawdownPct));
 });
+
+test("laboratorio: si un par deja de cotizar, se vende a su último cierre (no vale cero)", () => {
+  const btc = line(400, (i) => 100 * 1.001 ** i);
+  const gone = line(300, (i) => 10 * 1.004 ** i); // deja de cotizar el día 300
+  const coins = [
+    { symbol: "BTC-EUR", candles: btc },
+    { symbol: "AAA-EUR", candles: gone },
+  ];
+  const r = simulate(coins, rotation(1, 60), { from: t0 + 250 * DAY, feePct: 0, slippagePct: 0 });
+  assert.deepEqual(r.delisted, ["AAA-EUR"]);
+  assert.ok(r.stats.totalPct > 10, `total ${r.stats.totalPct}`);
+  assert.ok(r.stats.maxDrawdownPct > -5, `caída ${r.stats.maxDrawdownPct}`);
+});

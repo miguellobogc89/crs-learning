@@ -48,6 +48,9 @@ for (const c of COINS) {
   }
 }
 const from = Date.now() - Math.round(years * 365) * DAY;
+// Pares que dejan de cotizar en euros dentro del periodo (se venden a su último cierre).
+const ended = coins.filter((c) => c.candles.length && c.candles[c.candles.length - 1].t < Date.now() - 5 * DAY);
+if (ended.length) console.log(`Ojo: sin datos recientes de ${ended.map((c) => `${c.symbol} (hasta ${day(c.candles[c.candles.length - 1].t)})`).join(", ")}`);
 const all = [HOLD_BTC, ...CANDIDATES];
 
 console.log(`\nLaboratorio de agentes · ${coins.length} crypto en euros · comisión ${fee} % por orden + 0,05 % deslizamiento\n`);
