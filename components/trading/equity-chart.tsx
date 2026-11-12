@@ -73,7 +73,7 @@ export function EquityChart({
     const ro = new ResizeObserver(([e]) => setWidth(Math.max(bare ? 1 : 240, Math.round(e.contentRect.width))));
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [bare]);
 
   const shown = useMemo(() => {
     const r = RANGES.find((x) => x.key === range)!;
