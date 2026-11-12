@@ -37,7 +37,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   );
   return (
     <AppSectionShell sidebar={<TradingNavigation key={ctx.workspaceId} />}>
-      <AppPageLayout header={header} contentClassName="!pb-6 xl:!overflow-hidden flex flex-col">
+      <AppPageLayout header={header} contentClassName="!pb-6 !overflow-hidden flex flex-col">
         <AgentPage key={key} agentKey={key} />
       </AppPageLayout>
     </AppSectionShell>
