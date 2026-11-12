@@ -75,7 +75,28 @@ for (const s of all) {
   console.log(`${s.name.padEnd(26)} ${row.join(" ")}`);
 }
 
+// Ventanas de 1 año que empiezan cada 2 semanas: el resultado no puede depender del día en que empiezas.
+const starts = [];
+for (let t = from; t + 365 * DAY <= Date.now(); t += 14 * DAY) starts.push(t);
+if (starts.length > 2) {
+  const btcWin = starts.map((a) => simulate(coins, HOLD_BTC, { from: a, to: a + 365 * DAY, feePct: fee }).stats.totalPct);
+  console.log(`\nRobustez: ${starts.length} ventanas de 1 año, empezando cada 2 semanas`);
+  console.log(`${"Estrategia".padEnd(26)} ${pad("Mediana", 10)} ${pad("Peor", 10)} ${pad("Mejor", 10)} ${pad("En +", 7)} ${pad("Gana a BTC", 11)} ${pad("Caída med.", 11)}`);
+  for (const s of all) {
+    const rs = starts.map((a) => simulate(coins, s, { from: a, to: a + 365 * DAY, feePct: fee }).stats);
+    const tot = rs.map((x) => x.totalPct);
+    const sorted = [...tot].sort((x, y) => x - y);
+    const dds = rs.map((x) => x.maxDrawdownPct).sort((x, y) => x - y);
+    const med = (v) => v[Math.floor(v.length / 2)];
+    const beat = tot.filter((v, k) => v > btcWin[k]).length;
+    console.log(
+      `${s.name.padEnd(26)} ${pad(pct(med(sorted)), 10)} ${pad(pct(sorted[0]), 10)} ${pad(pct(sorted[sorted.length - 1]), 10)} ${pad(`${Math.round((tot.filter((v) => v > 0).length / tot.length) * 100)} %`, 7)} ${pad(`${Math.round((beat / tot.length) * 100)} %`, 11)} ${pad(pct(med(dds)), 11)}`,
+    );
+  }
+}
+
 console.log(`\nQué hace cada una:`);
 for (const s of all) console.log(`  · ${s.name}: ${s.idea}`);
 console.log(`\nSem.+ = semanas en positivo · Caída = peor caída desde un máximo · Invert. = tiempo con dinero dentro.`);
+console.log(`Robustez: «En +» = ventanas con ganancia · «Gana a BTC» = ventanas en las que supera a mantener Bitcoin.`);
 console.log(`Es historia, no garantía: buscamos algo que gane a mantener Bitcoin con menos caída, y que no dependa de un solo año.\n`);
