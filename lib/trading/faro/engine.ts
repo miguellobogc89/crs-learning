@@ -325,6 +325,29 @@ export async function faroView(workspaceId: string) {
     });
     byIdea.set(ideaId, list);
   }
+  // Tus compras con dinero real (Mis operaciones).
+  const manual = await prisma.trading_manual_trades
+    .findMany({ where: { workspace_id: workspaceId, idea_id: { not: null }, status: { in: ["abierta", "vendiendo", "cerrada", "error"] } } })
+    .catch(() => []);
+  for (const t of manual) {
+    const idea = all.find((i) => i.id === t.idea_id);
+    if (!idea || !t.idea_id) continue;
+    const invested = (t.quantity ?? 0) * (t.entry_price ?? 0) || t.amount;
+    const now = t.status === "cerrada" ? t.exit_price : (idea.last_price ?? null);
+    const result = t.status === "cerrada" ? t.result : t.entry_price && now && t.quantity ? (now - t.entry_price) * t.quantity : null;
+    const list = byIdea.get(t.idea_id) ?? [];
+    list.push({
+      who: "tu",
+      name: "Tú (dinero real)",
+      color: "slate",
+      status: t.status,
+      entry: t.entry_price,
+      invested,
+      result,
+      resultPct: result !== null && invested > 0 ? (result / invested) * 100 : null,
+    });
+    byIdea.set(t.idea_id, list);
+  }
   const view = (i: (typeof all)[number]) => ({
     id: i.id,
     pair: i.pair,

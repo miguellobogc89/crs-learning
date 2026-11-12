@@ -6,11 +6,10 @@ import { ChevronDown, Play } from "lucide-react";
 import type { faroView } from "@/lib/trading/faro/engine";
 import { api, errorText, eur, pct } from "./format";
 import { DataTable, Money, type Col } from "./table";
-import { OpenAccount } from "./open-account";
 import { ago } from "./home-panel";
 import { AgentAvatar, AVATAR, ErrorNote, LoadingCard, Pill, Rich } from "./ui";
 import { useTradingRefresh } from "./navigation";
-import { ConfirmOrderModal, type TradeIdea } from "./trade-modals";
+import { ManualBuyModal, type BuyIdea } from "./manual-buy-modal";
 import { AssetIcon } from "./asset-icon";
 
 type Data = Awaited<ReturnType<typeof faroView>>;
@@ -37,7 +36,7 @@ const left = (iso: string) => {
 export function FaroPanel() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<TradeIdea | null>(null);
+  const [confirm, setConfirm] = useState<BuyIdea | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -56,31 +55,13 @@ export function FaroPanel() {
   if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard />;
 
   const execute = (i: Idea) => {
-    const a = data.account;
-    const px = i.lastPrice ?? i.price;
-    const risk = (a.equity * a.riskPct) / 100;
-    const q = Math.floor((Math.min(risk / Math.max(px - i.invalidation, px * 0.01), (a.cash * 0.98) / px) || 0) * 1e6) / 1e6;
-    setConfirm({
-      key: `faro-${i.id}`,
-      source: "comite",
-      symbol: i.symbol,
-      name: i.symbol.replace(/-EUR$/, ""),
-      market: "crypto",
-      action: "comprar",
-      direction: "long",
-      price: px,
-      stop: i.invalidation,
-      target: i.target,
-      quantity: q > 0 ? q : null,
-      rationale: i.rationale,
-      pros: [],
-      cons: i.risks ? [i.risks] : [],
-      evidence: [],
-      origin: `Idea de ${KIND[i.kind]?.label.toLowerCase() ?? i.kind}`,
-      conviction: i.conviction,
-      signalKey: `faro:${i.id}:tu`,
-    });
+    setConfirm({ id: i.id, symbol: i.symbol, kind: i.kind, price: i.lastPrice ?? i.price, invalidation: i.invalidation, target: i.target, rationale: i.rationale });
   };
+  // Desde el precio de ahora (o el de la idea, si ya terminó): cuánto cae hasta la invalidación y cuánto sube hasta el objetivo.
+  const ref = (i: Idea) => (i.status === "viva" ? i.lastPrice ?? i.price : i.price);
+  const downPct = (i: Idea) => ((i.invalidation - ref(i)) / ref(i)) * 100;
+  const upPct = (i: Idea) => ((i.target - ref(i)) / ref(i)) * 100;
+  const pct1 = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
 
   const columns: Col<Idea>[] = [
     {
@@ -104,6 +85,8 @@ export function FaroPanel() {
     { key: "price", label: "Detectada a", width: 8, sort: (i) => i.price, cell: (i) => <Money v={i.price} className="text-slate-700" /> },
     { key: "inv", label: "Invalidación", width: 8, sort: (i) => i.invalidation, cell: (i) => <Money v={i.invalidation} className="text-rose-600" /> },
     { key: "target", label: "Objetivo", width: 8, sort: (i) => i.target, cell: (i) => <Money v={i.target} className="text-emerald-600" /> },
+    { key: "down", label: "Puedes perder", width: 7, sort: (i) => downPct(i), cell: (i) => <span className="tabular-nums font-semibold text-rose-600">{pct1(downPct(i))}</span> },
+    { key: "up", label: "Puedes ganar", width: 7, sort: (i) => upPct(i), cell: (i) => <span className="tabular-nums font-semibold text-emerald-600">{pct1(upPct(i))}</span> },
     { key: "now", label: "Precio ahora / salida", width: 8, sort: (i) => i.lastPrice, cell: (i) => <Money v={i.lastPrice} className="text-slate-700" /> },
     { key: "res", label: "Resultado por 100 €", width: 9, sort: (i) => i.resultPct, cell: (i) => <Money v={i.resultPct} digits={2} sign className={`font-semibold ${tone(i.resultPct)}`} /> },
     {
@@ -150,8 +133,8 @@ export function FaroPanel() {
               <button
                 type="button"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-                disabled={!data.account.opened || mineIn}
-                title={!data.account.opened ? "Abre tu cuenta primero" : mineIn ? "Ya has entrado en esta idea" : "Ver la operación y ejecutarla"}
+                disabled={mineIn}
+                title={mineIn ? "Ya has entrado en esta idea" : "Comprar con tu dinero"}
                 onClick={(e) => {
                   e.stopPropagation();
                   execute(i);
@@ -208,7 +191,6 @@ export function FaroPanel() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       {error && <ErrorNote>{error}</ErrorNote>}
-      {!data.account.opened && <OpenAccount compact />}
       <DataTable
         id="oportunidades"
         height="min-h-0 flex-1"
@@ -220,7 +202,7 @@ export function FaroPanel() {
         empty={`Todavía no hay ideas. La primera tanda llega en el próximo análisis (cada ${data.everyMinutes} min).`}
         expand={detail}
       />
-      {confirm && <ConfirmOrderModal idea={confirm} cash={data.account.cash} onClose={() => setConfirm(null)} />}
+      {confirm && <ManualBuyModal idea={confirm} onClose={() => setConfirm(null)} />}
     </div>
   );
 }

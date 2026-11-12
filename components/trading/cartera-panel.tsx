@@ -7,6 +7,7 @@ import Link from "next/link";
 import { ArrowRight, ChevronRight, Clock, Crosshair, Layers, Link2, Loader2, Minus, Pause, Play, Plus, Shield, Trash2, TrendingUp, Users, Wallet } from "lucide-react";
 import type { getWallets, myAgents } from "@/lib/trading/wallets";
 import type { mirrorView } from "@/lib/trading/mirror/service";
+import type { manualView } from "@/lib/trading/manual/service";
 import { api, errorText, eur, field, primary, tone } from "./format";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { AgentAvatar, card, ErrorNote, LoadingCard, Modal, ReturnPill } from "./ui";
@@ -17,6 +18,7 @@ type Wallets = Awaited<ReturnType<typeof getWallets>>;
 type Mine = Awaited<ReturnType<typeof myAgents>>;
 type Mirrors = Awaited<ReturnType<typeof mirrorView>> & { canManage: boolean };
 type Mirror = Mirrors["mirrors"][number];
+type Manual = Awaited<ReturnType<typeof manualView>>;
 type Row = { key: string; agent: Agent | null; mirror: Mirror | null; mine: boolean };
 
 const HOLDING = ["abriendo", "abierta", "vendiendo"];
@@ -52,6 +54,7 @@ export function CarteraPanel() {
   const [mirrors, setMirrors] = useState<Mirrors | null>(null);
   const [agents, setAgents] = useState<AgentsData | null>(null);
   const [mine, setMine] = useState<Mine | null>(null);
+  const [manual, setManual] = useState<Manual | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [managing, setManaging] = useState<Row | null>(null);
@@ -66,6 +69,8 @@ export function CarteraPanel() {
       setAgents(a);
       setMine(o);
       setError(null);
+      // Mis operaciones: si falta la tabla (migración sin pasar), la pantalla sigue funcionando.
+      api<Manual>("manual").then(setManual, () => setManual(null));
     } catch (e) {
       setError(errorText(e));
     }
@@ -103,7 +108,7 @@ export function CarteraPanel() {
   const real = wallets.items.filter((w) => w.environment === "real" && w.total !== null && w.currency === "EUR");
   const total = real.reduce((s, w) => s + (w.total ?? 0), 0);
   const realRows = rows.filter((r) => r.mirror && r.mirror.mode === "real");
-  const working = Math.min(total, realRows.reduce((s, r) => s + (money(r.mirror)?.now ?? 0), 0));
+  const working = Math.min(total, realRows.reduce((s, r) => s + (money(r.mirror)?.now ?? 0), 0) + (manual?.working ?? 0));
   const earned = realRows.reduce((s, r) => s + (money(r.mirror)?.result ?? 0), 0);
   const free = Math.max(0, total - working);
   const earnedBase = realRows.reduce((s, r) => s + (r.mirror?.budget ?? 0), 0);
@@ -207,6 +212,7 @@ export function CarteraPanel() {
               </li>
             ))}
           </ul>
+          {manual && manual.trades.length > 0 && <MyTrades data={manual} onChange={load} />}
         </section>
 
         <section className={`${card} px-5 py-5 lg:self-start`}>
@@ -550,5 +556,67 @@ function AddAgentModal({ agents, onClose, onAdded }: { agents: Agent[]; onClose:
         {!list.length && <li className="py-8 text-center text-sm text-slate-500">Ya tienes todos los agentes de la plataforma.</li>}
       </ul>
     </Modal>
+  );
+}
+
+const TRADE_STATUS: Record<string, string> = { abriendo: "Comprando…", abierta: "Abierta", vendiendo: "Vendiendo…", cerrada: "Cerrada", omitida: "No se compró", error: "Revisa el exchange" };
+
+/** Tus compras desde Oportunidades con dinero real: abiertas (con «Vender ya») y las últimas cerradas. */
+function MyTrades({ data, onChange }: { data: Manual; onChange: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const sell = async (id: string, name: string) => {
+    if (!window.confirm(`¿Vender ya ${name} a mercado?`)) return;
+    setBusy(id);
+    setError(null);
+    try {
+      await api("manual/sell", { id });
+      onChange();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="mt-4 border-t border-slate-100 px-2 pt-3">
+      <h3 className="flex items-center justify-between pb-2 text-sm font-semibold text-slate-900">
+        <span className="flex items-center gap-2">
+          <Crosshair className="h-4 w-4 text-slate-500" /> Mis operaciones
+        </span>
+        <span className={`text-sm tabular-nums ${tone(data.result)}`}>{signed(data.result)}</span>
+      </h3>
+      {error && <p className="mb-2 text-xs text-rose-600">{error}</p>}
+      <ul className="max-h-48 space-y-1 overflow-y-auto">
+        {data.trades.map((t) => {
+          const name = coin(t.symbol);
+          const open = t.status === "abierta";
+          return (
+            <li key={t.id} className="flex items-center gap-3 rounded-xl px-2 py-1.5 text-sm hover:bg-slate-50" title={t.note ?? undefined}>
+              <b className="w-16 shrink-0 truncate font-semibold text-slate-900">{name}</b>
+              <span className="min-w-0 flex-1 truncate text-xs text-slate-500">
+                {TRADE_STATUS[t.status] ?? t.status}
+                {open && ` · stop ${eur(t.stop)}${t.trailing ? " (subiendo)" : ` · objetivo ${eur(t.target)}`}`}
+                {t.status === "cerrada" && t.closedAt && ` · ${ago(t.closedAt)}`}
+              </span>
+              <span className="shrink-0 text-right text-xs text-slate-600 tabular-nums">{eur(t.invested, 2)}</span>
+              <span className={`w-20 shrink-0 text-right font-semibold tabular-nums ${tone(t.result ?? 0)}`}>{t.result === null ? "—" : signed(t.result)}</span>
+              {open ? (
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => sell(t.id, name)}
+                  className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:border-rose-200 hover:text-rose-600 disabled:opacity-50"
+                >
+                  {busy === t.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Vender ya"}
+                </button>
+              ) : (
+                <span className="w-[68px] shrink-0" />
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

@@ -29,7 +29,7 @@ const MAX_SELL_ATTEMPTS = 5;
 const agentName = (key: string) => agentByKey(key)?.name ?? kamikazeByKey(key)?.name ?? chipByKey(key)?.name ?? null;
 
 /** Exchange de cripto conectado a la cartera (Binance, Bitvavo…) y si puede operar en real sin preguntar. */
-async function realConnection(workspaceId: string) {
+export async function realConnection(workspaceId: string) {
   const conn = await brokers.tradingConnection(workspaceId, "copia de agentes");
   const row = conn ? await prisma.broker_connections.findUnique({ where: { id: conn.connectionId } }) : null;
   const crypto = !!row && brokerRegistry.has(row.provider) && brokerRegistry.get(row.provider).info.markets.includes("crypto");
@@ -45,7 +45,7 @@ async function realConnection(workspaceId: string) {
   };
 }
 
-function realProblem(r: Awaited<ReturnType<typeof realConnection>>) {
+export function realProblem(r: Awaited<ReturnType<typeof realConnection>>) {
   if (!r.conn || !r.crypto) return "Conecta un exchange de cripto (Bitvavo, Binance…) en Trading → Integraciones y úsalo para la cartera";
   if (r.environment !== "real") return `La conexión de ${r.name} es de pruebas, no real`;
   if (!r.auto) return `Da a la conexión de ${r.name} el permiso de automatismos (operar sin confirmar cada orden)`;
@@ -183,7 +183,7 @@ type Venue = { name: string; pair: string; step: number | null } | { name: strin
  * Dónde se operaría el símbolo: en el exchange conectado (si lo hay), con su par y su paso de cantidad.
  * En ensayo sin exchange conectado se da por bueno si hay precio de referencia.
  */
-async function venueFor(workspaceId: string, symbol: string): Promise<Venue> {
+export async function venueFor(workspaceId: string, symbol: string): Promise<Venue> {
   const r = await realConnection(workspaceId);
   if (!r.conn || !r.crypto) return { name: "tu exchange", pair: symbol, step: null };
   const res = await brokers.resolveSymbol(r.conn.actor, r.conn.connectionId, { symbol, market: "crypto" });
@@ -192,7 +192,7 @@ async function venueFor(workspaceId: string, symbol: string): Promise<Venue> {
 }
 
 /** Envía una orden a mercado y devuelve lo ejecutado (cantidad y precio medio). */
-async function realOrder(workspaceId: string, side: "buy" | "sell", symbol: string, pair: string, quantity: number, key: string) {
+export async function realOrder(workspaceId: string, side: "buy" | "sell", symbol: string, pair: string, quantity: number, key: string, reference = `copia de agente ${symbol}`) {
   const r = await realConnection(workspaceId);
   const problem = realProblem(r);
   if (problem || !r.conn) throw new BrokerError("permission_denied", problem ?? "Sin conexión");
@@ -205,7 +205,7 @@ async function realOrder(workspaceId: string, side: "buy" | "sell", symbol: stri
     type: "market",
     quantity,
     idempotencyKey: key,
-    reference: `copia de agente ${symbol}`,
+    reference,
   });
   if (res.status === "rejected" || !res.orderId) throw new BrokerError("conflict", res.status === "rejected" ? `${r.name} rechazó la orden` : `Orden sin confirmar: revisa ${r.name}`);
   const o = await brokers.getOrder(r.conn.actor, r.conn.connectionId, res.orderId).catch(() => null);
