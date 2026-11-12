@@ -384,7 +384,7 @@ export const BREAKOUT: Strategy = {
           return p !== null && high !== null && p > high;
         })
       : [];
-    const picks = [...keep, ...strongest(c, 12, 30).filter((s) => fresh.includes(s))].slice(0, 3);
+    const picks = [...keep, ...strongest(c, c.coins.length, 30).filter((s) => fresh.includes(s))].slice(0, 3);
     if (sameSet(c, picks)) return null;
     return equal(picks);
   },
@@ -449,7 +449,7 @@ const attackBreakout: (c: Ctx) => string[] | null = (c) => {
     const high = c.highest(s, 20);
     return p !== null && high !== null && p > high;
   });
-  return [...keep, ...strongest(c, 12, 30).filter((s) => fresh.includes(s))].slice(0, 3);
+  return [...keep, ...strongest(c, c.coins.length, 30).filter((s) => fresh.includes(s))].slice(0, 3);
 };
 
 export const CHIP: Strategy[] = [
