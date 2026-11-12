@@ -91,7 +91,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
       {/* Izquierda: presentación del agente e información de mercado */}
       <div className="flex min-h-0 min-w-0 flex-col gap-5 overflow-y-auto xl:overflow-hidden">
         {error && <ErrorNote>{error}</ErrorNote>}
-        <section className={`${card} shrink-0 px-6 py-5`}>
+        <section className={`${card} max-h-[65%] shrink-0 overflow-y-auto px-6 py-5`}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-4">
               <AgentAvatar color={a.color} size="lg" />
@@ -185,9 +185,9 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
         )}
       </div>
 
-            {/* Derecha: KPIs agrupados y actividad con su propio scroll */}
+      {/* Derecha: KPIs agrupados y actividad con su propio scroll */}
       <div className="flex min-h-0 min-w-0 flex-col gap-5 overflow-hidden">
-        <section className={`${card} shrink-0 overflow-hidden`}>
+        <section className={`${card} max-h-[45%] shrink-0 overflow-y-auto`}>
           <dl className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3">
             {[
               ["Efectivo", eur0(s.cash), "sin invertir"],
@@ -206,7 +206,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
           </dl>
         </section>
         <section className={`${card} flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden`}>
-        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-100 px-3 pt-3 [scrollbar-width:none]" role="tablist">
+          <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-100 px-3 pt-3 [scrollbar-width:none]" role="tablist">
           {tabs.map((t) => (
             <button
               key={t.key}
