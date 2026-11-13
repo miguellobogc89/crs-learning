@@ -54,6 +54,24 @@ export function mapBitvavoError(status: number, code: number | null, msg: string
   return err("invalid_request", text);
 }
 
+/** Motivo técnico de un fallo de red (DNS, conexión cortada, tiempo agotado, certificado…). */
+export function networkCause(e: unknown): string {
+  const c = (e as { cause?: { code?: unknown; message?: unknown } } | null)?.cause;
+  if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) return "tiempo de espera agotado";
+  const code = typeof c?.code === "string" ? c.code : null;
+  const known: Record<string, string> = {
+    ENOTFOUND: "no se encuentra el servidor: DNS o red bloqueada",
+    ECONNREFUSED: "conexión rechazada",
+    ECONNRESET: "conexión cortada: posible cortafuegos o proxy",
+    ETIMEDOUT: "tiempo de espera agotado",
+    UND_ERR_CONNECT_TIMEOUT: "tiempo de espera agotado al conectar",
+    SELF_SIGNED_CERT_IN_CHAIN: "certificado no válido: posible proxy de empresa",
+    UNABLE_TO_GET_ISSUER_CERT_LOCALLY: "certificado no válido: posible proxy de empresa",
+  };
+  if (code) return known[code] ?? code;
+  return typeof c?.message === "string" ? c.message.slice(0, 120) : e instanceof Error ? e.message.slice(0, 120) : "error de red";
+}
+
 type Params = Record<string, string | number | undefined>;
 
 export function createApi(deps: ApiDeps) {
@@ -88,9 +106,9 @@ export function createApi(deps: ApiDeps) {
     let res: Response;
     try {
       res = await deps.fetch(`${ROOT}${full}`, { method, headers, body: payload || undefined, cache: "no-store", signal: AbortSignal.timeout(10_000) });
-    } catch {
+    } catch (e) {
       if (write) throw err("unknown_outcome", "Sin respuesta de Bitvavo: comprueba el estado de la orden antes de repetir");
-      throw err("provider_unavailable", "No se pudo conectar con Bitvavo", true);
+      throw err("provider_unavailable", `No se pudo conectar con Bitvavo (${networkCause(e)})`, true);
     }
     let data: unknown = null;
     try {

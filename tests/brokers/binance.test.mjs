@@ -205,3 +205,14 @@ test("binance: bloqueo por ubicación del servidor (451) con mensaje claro", () 
   assert.equal(e.code, "provider_unavailable");
   assert.match(e.message, /ubicación del servidor/);
 });
+
+test("binance: fallo de red con el motivo técnico", async () => {
+  const { networkCause } = load("lib/brokers/adapters/binance/api.ts");
+  assert.match(networkCause(Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } })), /DNS/);
+  assert.match(networkCause(Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNRESET" } })), /cortafuegos/);
+  const t = new Error("x");
+  t.name = "TimeoutError";
+  assert.match(networkCause(t), /tiempo/);
+  const net = adapterWith({ "GET /api/v3/account": "network" });
+  await assert.rejects(net.adapter.getAccounts(session()), (e) => /No se pudo conectar con Binance \(/.test(e.message));
+});
