@@ -48,6 +48,7 @@ export type ConnectionView = {
   currency: string | null;
   permissions: BrokerPermission[];
   credentialsSource: "stored" | "server";
+  hasSavedCredentials: boolean;
   lastError: string | null;
   lastCheckedAt: string | null;
   createdAt: string;
@@ -82,6 +83,7 @@ function view(row: broker_connections, tradingId: string | null): ConnectionView
     currency: row.currency,
     permissions: normalizePermissions(parsePermissions(row.permissions)),
     credentialsSource: row.credentials_source === "server" ? "server" : "stored",
+    hasSavedCredentials: row.credentials_source === "stored" && !!row.credentials_enc,
     lastError: row.last_error,
     lastCheckedAt: row.last_checked_at?.toISOString() ?? null,
     createdAt: row.created_at.toISOString(),
@@ -134,12 +136,71 @@ function readCredentials(provider: ProviderInfo, raw: unknown): Record<string, s
 }
 
 /**
+ * Guarda las credenciales cifradas para conectar más adelante, sin dar permisos
+ * ni crear una conexión activa. Nunca se devuelve el secreto al navegador.
+ */
+export async function saveCredentials(
+  actor: BrokerActor,
+  input: { provider: string; environment: BrokerEnvironment; credentials: unknown },
+): Promise<{ saved: true }> {
+  const user = userOnly(actor);
+  const info = brokerRegistry.get(input.provider).info;
+  if (input.environment !== "demo" && input.environment !== "real") {
+    throw new BrokerError("invalid_request", "Entorno no válido");
+  }
+  if (!info.environments.includes(input.environment)) {
+    throw new BrokerError("unsupported", `${info.name} no admite el entorno ${input.environment}`, { provider: info.id });
+  }
+  if (input.environment === "real" && !policy().realEnabled) {
+    throw new BrokerError("environment_disabled", "Las conexiones con dinero real no están habilitadas en este servidor", { provider: info.id });
+  }
+  const credentials = readCredentials(info, input.credentials);
+  const sealed = sealCredentials(credentials);
+  const key = {
+    user_id: user.userId,
+    workspace_id: user.workspaceId,
+    provider: info.id,
+    environment: input.environment,
+  };
+  const current = await prisma.broker_connections.findUnique({
+    where: { user_id_workspace_id_provider_environment: key },
+    select: { status: true },
+  });
+  if (current?.status === "active") {
+    throw new BrokerError("invalid_request", "La cuenta ya está conectada; sus credenciales ya están guardadas", { provider: info.id });
+  }
+  await prisma.broker_connections.upsert({
+    where: { user_id_workspace_id_provider_environment: key },
+    create: {
+      ...key,
+      status: "disconnected",
+      permissions: [],
+      credentials_enc: sealed,
+      credentials_source: "stored",
+    },
+    update: {
+      status: "disconnected",
+      credentials_enc: sealed,
+      credentials_source: "stored",
+      permissions: [],
+      account_id: null,
+      account_label: null,
+      currency: null,
+      last_error: null,
+      last_checked_at: null,
+      updated_at: new Date(),
+    },
+  });
+  return { saved: true };
+}
+
+/**
  * Conecta (o vuelve a conectar) una cuenta. Comprueba las credenciales contra el proveedor
  * leyendo la cuenta; no envía ninguna orden. El entorno queda fijado para siempre.
  */
 export async function connect(
   actor: BrokerActor,
-  input: { provider: string; environment: BrokerEnvironment; credentials?: unknown; useServerCredentials?: boolean; permissions?: BrokerPermission[] },
+  input: { provider: string; environment: BrokerEnvironment; credentials?: unknown; useServerCredentials?: boolean; useSavedCredentials?: boolean; permissions?: BrokerPermission[] },
 ): Promise<ConnectionView> {
   const user = userOnly(actor);
   const adapter = brokerRegistry.get(input.provider);
@@ -150,11 +211,34 @@ export async function connect(
 
   let credentials: Record<string, string>;
   let source: "stored" | "server";
+  if (input.useServerCredentials && input.useSavedCredentials) {
+    throw new BrokerError("invalid_request", "Elige solo una fuente de credenciales", { provider: info.id });
+  }
   if (input.useServerCredentials) {
     const server = serverCredentialsAllowed(user) ? adapter.serverCredentials?.(input.environment) ?? null : null;
     if (!server) throw new BrokerError("forbidden", "No hay credenciales del servidor disponibles para ti en este entorno", { provider: info.id });
     credentials = server;
     source = "server";
+  } else if (input.useSavedCredentials) {
+    const saved = await prisma.broker_connections.findUnique({
+      where: {
+        user_id_workspace_id_provider_environment: {
+          user_id: user.userId,
+          workspace_id: user.workspaceId,
+          provider: info.id,
+          environment: input.environment,
+        },
+      },
+    });
+    if (!saved || saved.credentials_source !== "stored" || !saved.credentials_enc) {
+      throw new BrokerError("not_connected", "No hay una API key guardada para este entorno", { provider: info.id });
+    }
+    try {
+      credentials = readCredentials(info, JSON.parse(decrypt(saved.credentials_enc)));
+    } catch {
+      throw new BrokerError("misconfigured", "No se pudo descifrar la API key guardada (¿cambió CONNECTORS_ENCRYPTION_KEY?)", { provider: info.id });
+    }
+    source = "stored";
   } else {
     credentials = readCredentials(info, input.credentials);
     source = "stored";
