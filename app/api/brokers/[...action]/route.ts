@@ -66,6 +66,13 @@ export async function POST(req: Request, route: RouteContext) {
     const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>;
     const id = String(body.connectionId ?? "");
 
+    if (action === "save-credentials") {
+      return json(await brokers.saveCredentials(actor, {
+        provider: String(body.provider ?? ""),
+        environment: env(body.environment),
+        credentials: body.credentials,
+      }));
+    }
     if (action === "connect") {
       return json(
         await brokers.connect(actor, {
@@ -73,6 +80,7 @@ export async function POST(req: Request, route: RouteContext) {
           environment: env(body.environment),
           credentials: body.credentials,
           useServerCredentials: body.useServerCredentials === true,
+          useSavedCredentials: body.useSavedCredentials === true,
           permissions: Array.isArray(body.permissions) ? (body.permissions as BrokerPermission[]) : undefined,
         }),
       );
