@@ -540,7 +540,7 @@ function ConnectModal({
           <Logo p={provider} size="h-8 w-8" /> Conectar {provider.name}
         </span>
       }
-      subtitle="Se comprueba leyendo tu saldo: no se envía ninguna orden."
+      subtitle="Guardar cifra la API key sin conectarte. Conectar verifica tus credenciales leyendo el saldo, sin enviar órdenes."
       footer={
         <>
           <button type="button" className={ghost} onClick={onClose}>
