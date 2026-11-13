@@ -203,6 +203,25 @@ export function FaroPanel() {
     },
   ];
 
+  const cardIdeas = [...ideas];
+  if (sort) {
+    const col = columns.find((column) => column.key === sort.key);
+    if (col?.sort) {
+      const value = col.sort;
+      cardIdeas.sort((a, b) => {
+        const left = value(a);
+        const right = value(b);
+        if (left === right) return 0;
+        if (left === null || left === undefined) return 1;
+        if (right === null || right === undefined) return -1;
+        const comparison = typeof left === "string" && typeof right === "string"
+          ? left.localeCompare(right, "es", { sensitivity: "base", numeric: true })
+          : left < right ? -1 : 1;
+        return comparison * sort.dir;
+      });
+    }
+  }
+
   const detail = (i: Idea) => (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="space-y-2 text-sm text-slate-700">
@@ -282,7 +301,7 @@ export function FaroPanel() {
             </p>
           ) : (
             <div className="grid gap-4 pb-4 md:grid-cols-2 xl:grid-cols-3">
-              {ideas.map((idea) => {
+              {cardIdeas.map((idea) => {
                 const mineIn = idea.participants.some((p) => p.who === "tu");
                 const expanded = expandedCard === idea.id;
                 return (
