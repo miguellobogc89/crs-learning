@@ -169,7 +169,7 @@ export type Col<T> = {
   className?: string;
 };
 
-type Sort = { key: string; dir: 1 | -1 } | null;
+export type TableSort = { key: string; dir: 1 | -1 } | null;
 const ALIGN = { left: "text-left", center: "text-center", right: "text-right" } as const;
 const readWidths = (id: string): Record<string, number> => {
   try {
@@ -204,6 +204,8 @@ export function DataTable<T>({
   expand,
   onRowClick,
   height,
+  sortBy,
+  onSortChange,
 }: {
   id: string;
   columns: Col<T>[];
@@ -217,8 +219,12 @@ export function DataTable<T>({
   onRowClick?: (r: T) => void;
   /** Clase de alto si encima de la tabla hay más cosas (por defecto, todo el alto disponible). */
   height?: string;
+  /** Orden externo opcional: permite sincronizar cabeceras y una toolbar. */
+  sortBy?: TableSort;
+  onSortChange?: (value: TableSort) => void;
 }) {
-  const [sort, setSort] = useState<Sort>(null);
+  const [localSort, setLocalSort] = useState<TableSort>(null);
+  const sort = sortBy === undefined ? localSort : sortBy;
   const [page, setPage] = useState(0);
   const [perPage, setPerPage] = useState(15);
   const [open, setOpen] = useState<string | null>(null);
@@ -248,7 +254,11 @@ export function DataTable<T>({
     if (!c.sort) return;
     const sample = rows.map(c.sort).find((v) => v !== null && v !== undefined);
     const first: 1 | -1 = typeof sample === "string" ? 1 : -1; // texto A→Z; números de mayor a menor
-    setSort((s) => (s?.key === c.key ? { key: c.key, dir: (s.dir * -1) as 1 | -1 } : { key: c.key, dir: first }));
+    const next: TableSort = sort?.key === c.key
+      ? { key: c.key, dir: (sort.dir * -1) as 1 | -1 }
+      : { key: c.key, dir: first };
+    if (sortBy === undefined) setLocalSort(next);
+    else onSortChange?.(next);
     setPage(0);
   };
 
