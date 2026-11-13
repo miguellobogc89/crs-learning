@@ -340,6 +340,10 @@ export function IntegrationsPanel() {
           provider={connecting}
           taken={data.connections.filter((c) => c.provider === connecting.id && c.status !== "disconnected").map((c) => c.environment)}
           realEnabled={data.realEnabled}
+          savedEnvironments={data.connections
+            .filter((c) => c.provider === connecting.id && c.hasSavedCredentials)
+            .map((c) => c.environment)}
+          onStored={() => void load()}
           onClose={() => setConnecting(null)}
           onDone={async () => {
             setConnecting(null);
@@ -388,11 +392,15 @@ function ConnectionRow({
           <Pill color={c.environment === "real" ? "orange" : "blue"}>{envLabel(c.environment)}</Pill>
           <b className="font-semibold text-slate-900">{c.accountLabel ?? "Cuenta"}</b>
           {c.currency && <span className="text-xs text-slate-500">{c.currency}</span>}
-          {c.credentialsSource === "server" && (
+          {c.credentialsSource === "server" ? (
             <span className="inline-flex items-center gap-1 text-xs text-slate-500" title="Usa la clave configurada en el servidor (solo desarrollo)">
               <KeyRound className="h-3.5 w-3.5" /> clave del servidor
             </span>
-          )}
+          ) : c.hasSavedCredentials ? (
+            <span className="inline-flex items-center gap-1 text-xs text-emerald-700" title="API key guardada cifrada en el servidor">
+              <KeyRound className="h-3.5 w-3.5" /> API key guardada
+            </span>
+          ) : null}
         </div>
         <div className="flex gap-1.5">
           {c.status === "active" && (
@@ -456,12 +464,16 @@ function ConnectModal({
   provider,
   taken,
   realEnabled,
+  savedEnvironments,
+  onStored,
   onClose,
   onDone,
 }: {
   provider: ProviderView;
   taken: BrokerEnvironment[];
   realEnabled: boolean;
+  savedEnvironments: BrokerEnvironment[];
+  onStored: () => void;
   onClose: () => void;
   onDone: () => void | Promise<void>;
 }) {
@@ -472,14 +484,44 @@ function ConnectModal({
   const [perms, setPerms] = useState<BrokerPermission[]>(["read"]);
   const [realOk, setRealOk] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [storing, setStoring] = useState(false);
+  const [storedLocally, setStoredLocally] = useState<BrokerEnvironment[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const complete = (useServer || provider.credentialFields.every((f) => (values[f.key] ?? "").trim())) && (environment !== "real" || realOk);
+  const filled = provider.credentialFields.every((f) => (values[f.key] ?? "").trim());
+  const empty = provider.credentialFields.every((f) => !(values[f.key] ?? "").trim());
+  const hasSaved = savedEnvironments.includes(environment) || storedLocally.includes(environment);
+  const useSaved = !useServer && hasSaved && empty;
+  const complete = (useServer || filled || useSaved) && (environment !== "real" || realOk);
+
+  const storeCredentials = async () => {
+    if (!filled || storing || saving || useServer) return;
+    setStoring(true);
+    setError(null);
+    try {
+      await brokerApi("save-credentials", { provider: provider.id, environment, credentials: values });
+      setStoredLocally((current) => [...new Set([...current, environment])]);
+      setValues({});
+      onStored();
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setStoring(false);
+    }
+  };
 
   const save = async () => {
+    if (!complete || saving || storing) return;
     setSaving(true);
     setError(null);
     try {
-      await brokerApi("connect", { provider: provider.id, environment, credentials: useServer ? undefined : values, useServerCredentials: useServer, permissions: perms });
+      await brokerApi("connect", {
+        provider: provider.id,
+        environment,
+        credentials: useServer || useSaved ? undefined : values,
+        useServerCredentials: useServer,
+        useSavedCredentials: useSaved,
+        permissions: perms,
+      });
       setValues({});
       await onDone();
     } catch (e) {
@@ -504,7 +546,12 @@ function ConnectModal({
           <button type="button" className={ghost} onClick={onClose}>
             Cancelar
           </button>
-          <button type="button" className={primary} disabled={!complete || saving || !envs.length} onClick={() => void save()}>
+          {!useServer && (
+            <button type="button" className={ghost} disabled={!filled || saving || storing || !envs.length} onClick={() => void storeCredentials()}>
+              {storing && <Loader2 className="h-4 w-4 animate-spin" />} Guardar API key
+            </button>
+          )}
+          <button type="button" className={primary} disabled={!complete || saving || storing || !envs.length} onClick={() => void save()}>
             {saving && <Loader2 className="h-4 w-4 animate-spin" />} Conectar
           </button>
         </>
@@ -518,7 +565,12 @@ function ConnectModal({
               <button
                 key={e}
                 type="button"
-                onClick={() => setEnvironment(e)}
+                onClick={() => {
+                  setEnvironment(e);
+                  setValues({});
+                  setUseServer(false);
+                  setError(null);
+                }}
                 className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium ${environment === e ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
               >
                 {e === "real" ? "Real (dinero de verdad)" : "Demo (dinero ficticio)"}
@@ -551,6 +603,17 @@ function ConnectModal({
               {f.help && <span className="mt-1 block text-xs text-slate-500">{f.help}</span>}
             </label>
           ))}
+        {!useServer && hasSaved && (
+          <p className="flex items-center gap-2 text-xs text-emerald-700">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            API key guardada cifrada. Deja los campos vacíos y pulsa Conectar para reutilizarla.
+          </p>
+        )}
+        {!useServer && !hasSaved && (
+          <p className="text-xs text-slate-500">
+            Puedes guardar la API key sin conectar todavía. Quedará cifrada en tu cuenta y no tendrás que introducirla otra vez.
+          </p>
+        )}
 
         {environment === "real" && (
           <label className="flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-orange-900">
