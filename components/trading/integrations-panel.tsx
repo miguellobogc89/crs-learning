@@ -483,6 +483,7 @@ function ConnectModal({
   const [values, setValues] = useState<Record<string, string>>({});
   const [perms, setPerms] = useState<BrokerPermission[]>(["read"]);
   const [realOk, setRealOk] = useState(false);
+  const [remember, setRemember] = useState(true);
   const [saving, setSaving] = useState(false);
   const [storing, setStoring] = useState(false);
   const [storedLocally, setStoredLocally] = useState<BrokerEnvironment[]>([]);
@@ -514,6 +515,12 @@ function ConnectModal({
     setSaving(true);
     setError(null);
     try {
+      // «Recordar»: se guarda cifrada antes de conectar, así se conserva aunque la conexión falle.
+      if (remember && !useServer && !useSaved && filled) {
+        await brokerApi("save-credentials", { provider: provider.id, environment, credentials: values });
+        setStoredLocally((current) => [...new Set([...current, environment])]);
+        onStored();
+      }
       await brokerApi("connect", {
         provider: provider.id,
         environment,
@@ -603,6 +610,14 @@ function ConnectModal({
               {f.help && <span className="mt-1 block text-xs text-slate-500">{f.help}</span>}
             </label>
           ))}
+        {!useServer && !useSaved && (
+          <label className="flex items-start gap-2">
+            <input type="checkbox" className="mt-1" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            <span>
+              <b>Recordar API key</b>: se guarda cifrada en tu cuenta aunque la conexión falle, para no tener que volver a pegarla.
+            </span>
+          </label>
+        )}
         {!useServer && hasSaved && (
           <p className="flex items-center gap-2 text-xs text-emerald-700">
             <CheckCircle2 className="h-4 w-4 shrink-0" />

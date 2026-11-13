@@ -199,3 +199,9 @@ test("binance: valora en euros lo que no tiene par en euros (vía USDT), aunque 
   const asked = JSON.parse(calls.find((c) => c.path === "/api/v3/ticker/price").params.symbols).sort();
   assert.deepEqual(asked, ["EURUSDT", "SLPUSDT"]);
 });
+
+test("binance: bloqueo por ubicación del servidor (451) con mensaje claro", () => {
+  const e = mapBinanceError(451, 0, "Service unavailable from a restricted location according to 'b. Eligibility'", false);
+  assert.equal(e.code, "provider_unavailable");
+  assert.match(e.message, /ubicación del servidor/);
+});

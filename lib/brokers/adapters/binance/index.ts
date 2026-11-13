@@ -100,7 +100,8 @@ export function createBinanceAdapter(deps: ApiDeps = defaultDeps()): BrokerAdapt
           restrictions = (await api.call(s, "GET", "/sapi/v1/account/apiRestrictions")) as Restrictions;
         } catch (e) {
           if (e instanceof BrokerError && e.code === "auth_failed") throw e;
-          throw new BrokerError("forbidden", "No se pudieron comprobar los permisos de la clave en Binance; por seguridad no se conecta", { provider: PROVIDER_ID });
+          const cause = e instanceof Error ? e.message.replace(/^Binance:\s*/, "").slice(0, 200) : "error desconocido";
+          throw new BrokerError("forbidden", `No se pudieron comprobar los permisos de la clave en Binance (${cause}); por seguridad no se conecta`, { provider: PROVIDER_ID });
         }
         if (restrictions?.enableWithdrawals !== false) {
           throw new BrokerError("forbidden", "Esta clave de Binance tiene los retiros habilitados: desactívalos (o crea otra clave sin retiros) y vuelve a conectar", { provider: PROVIDER_ID });

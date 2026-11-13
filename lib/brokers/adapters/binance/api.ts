@@ -37,6 +37,9 @@ const err = (code: BrokerErrorCode, message: string, retryable?: boolean) => new
 /** Traducción de los códigos de error de Binance (los que importan) al formato común. */
 export function mapBinanceError(status: number, code: number | null, msg: string, write: boolean): BrokerError {
   const text = `Binance: ${msg || `error ${status}`}`;
+  // Binance.com no da servicio a peticiones desde ubicaciones restringidas (p. ej. servidores en EE. UU.).
+  if (status === 451 || /restricted location/i.test(msg))
+    return err("provider_unavailable", "Binance rechaza la petición por la ubicación del servidor (restricted location): el servidor de la app tiene que ejecutarse en Europa");
   if (status === 429 || status === 418 || code === -1003) return err("rate_limited", "Binance: demasiadas peticiones; espera un poco", true);
   if (code === -2014 || code === -2015 || status === 401) return err("auth_failed", "Binance rechazó la clave (clave, IP permitida o permisos)");
   if (code === -2010 && /insufficient balance/i.test(msg)) return err("insufficient_funds", "Binance: saldo insuficiente");
