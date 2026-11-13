@@ -2,7 +2,7 @@
 // Oportunidades: lo que han comprado (o vendido) los agentes, agrupado por valor y con el tamaño
 // calculado para tu cartera, en una tabla ordenable. Tú decides qué ejecutar.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowDownAZ, ArrowDownZA, ArrowUp, Check, ChevronDown, ChevronsUpDown, Filter, Grid2X2, List, ListFilter, Loader2, Play } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, Loader2, Play } from "lucide-react";
 import type { getOpportunities } from "@/lib/trading/agents/opportunities";
 import { api, errorText, eur, eur0, ghost, int, pct, primary, MEETINGS_TEXT } from "./format";
 import { ago } from "./home-panel";
@@ -11,16 +11,6 @@ import { refreshTrading, useTradingRefresh } from "./navigation";
 import { ConfirmOrderModal, EvidenceList, TradeInfoModal, type TradeIdea } from "./trade-modals";
 import { OpenAccount } from "./open-account";
 import { AssetIcon } from "./asset-icon";
-import { SearchInput } from "@/components/ui/search-input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 type Data = Awaited<ReturnType<typeof getOpportunities>>;
 type Buy = Data["buys"][number];
@@ -33,11 +23,6 @@ const STATUS: Record<Buy["status"], { label: string; color: string; text: string
 };
 
 type SortKey = "valor" | "agentes" | "precio" | "cambio" | "stop" | "objetivo" | "importe" | "conviccion" | "cuando" | "estado";
-type MarketFilter = "all" | "crypto" | "stocks";
-type StatusFilter = "all" | Buy["status"];
-type ViewMode = "list" | "grid";
-type SortState = { key: SortKey; dir: 1 | -1 };
-
 type Row = {
   b: Buy;
   lead: Buy["agents"][number];
@@ -62,31 +47,6 @@ const SORT: Record<SortKey, (r: Row) => number | string> = {
 };
 /** Al pulsar una cabecera por primera vez: de mayor a menor salvo en texto, stop (menos riesgo) y estado. */
 const ASC_FIRST: SortKey[] = ["valor", "stop", "estado"];
-
-const TOOLBAR_SORTS: { label: string; sort: SortState }[] = [
-  { label: "Estado", sort: { key: "estado", dir: 1 } },
-  { label: "Más recientes", sort: { key: "cuando", dir: -1 } },
-  { label: "Más antiguas", sort: { key: "cuando", dir: 1 } },
-  { label: "Nombre A-Z", sort: { key: "valor", dir: 1 } },
-  { label: "Nombre Z-A", sort: { key: "valor", dir: -1 } },
-  { label: "Más agentes", sort: { key: "agentes", dir: -1 } },
-  { label: "Mayor convicción", sort: { key: "conviccion", dir: -1 } },
-  { label: "Mayor potencial", sort: { key: "objetivo", dir: -1 } },
-  { label: "Menor riesgo", sort: { key: "stop", dir: 1 } },
-];
-
-const SORT_TITLES: Record<SortKey, string> = {
-  valor: "Nombre",
-  agentes: "Agentes",
-  precio: "Precio",
-  cambio: "Desde la compra",
-  stop: "Stop",
-  objetivo: "Objetivo",
-  importe: "Para ti",
-  conviccion: "Convicción",
-  cuando: "Fecha",
-  estado: "Estado",
-};
 
 const unit = (b: Pick<Buy, "market" | "symbol">) => (b.market === "crypto" ? b.symbol.replace(/-EUR$/, "") : "acciones");
 
@@ -125,10 +85,6 @@ export function OpportunitiesPanel() {
   const [selling, setSelling] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "estado", dir: 1 });
   const [open, setOpen] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
 
   const load = useCallback(async () => {
     try {
@@ -157,24 +113,15 @@ export function OpportunitiesPanel() {
         conviction: Math.max(...b.agents.map((a) => a.conviction)),
       };
     });
-    const query = search.trim().toLocaleLowerCase("es");
-    const filtered = list.filter(({ b }) => {
-      if (marketFilter === "crypto" && b.market !== "crypto") return false;
-      if (marketFilter === "stocks" && b.market === "crypto") return false;
-      if (statusFilter !== "all" && b.status !== statusFilter) return false;
-      if (!query) return true;
-      return [b.name, b.symbol, ...b.agents.map((agent) => agent.name)]
-        .some((value) => value.toLocaleLowerCase("es").includes(query));
-    });
     const f = SORT[sort.key];
     // Desempate estable: más agentes y más convicción primero.
-    return filtered.sort((x, y) => {
+    return list.sort((x, y) => {
       const a = f(x);
       const b = f(y);
       const c = a < b ? -1 : a > b ? 1 : 0;
       return c * sort.dir || (SORT.agentes(y) as number) - (SORT.agentes(x) as number);
     });
-  }, [data, sort, search, marketFilter, statusFilter]);
+  }, [data, sort]);
 
   const sell = async (positionId: string, name: string, pending: boolean) => {
     if (!window.confirm(pending ? `¿Cancelar tu orden de compra de ${name}?` : `¿Vender tu posición en ${name} al último precio?`)) return;
@@ -232,89 +179,8 @@ export function OpportunitiesPanel() {
         </section>
       )}
 
-      <OpportunitiesToolbar
-        search={search}
-        onSearchChange={setSearch}
-        marketFilter={marketFilter}
-        onMarketFilterChange={setMarketFilter}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-        sort={sort}
-        onSortChange={setSort}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-      />
-
       {rows.length === 0 ? (
-        <p className="py-10 text-center text-sm text-slate-500">
-          {data.buys.length === 0
-            ? <>Ahora mismo no hay compras de los agentes. {MEETINGS_TEXT}</>
-            : "Ninguna oportunidad coincide con la búsqueda o los filtros."}
-        </p>
-      ) : viewMode === "grid" ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {rows.map(({ b, lead, moved, risk, upside, conviction }) => {
-            const st = STATUS[b.status];
-            const q = b.quantity ?? 0;
-            return (
-              <article key={b.symbol} className="flex min-w-0 flex-col gap-4 rounded-2xl border border-slate-100 bg-white p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <AssetIcon symbol={b.symbol} name={b.name} />
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-slate-900">{b.name}</p>
-                      <p className="text-xs text-slate-500">{b.market === "crypto" ? "Crypto" : "Bolsa"} · {ago(lead.at)}</p>
-                    </div>
-                  </div>
-                  <Pill color={st.color}>{st.label}</Pill>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-slate-600">
-                  <div className="flex items-center">
-                    {b.agents.map((agent, index) => (
-                      <span key={agent.agent} className={index ? "-ml-1.5 rounded-full ring-2 ring-white" : "rounded-full ring-2 ring-white"} title={agent.name}>
-                        <AgentAvatar color={agent.color} size="sm" />
-                      </span>
-                    ))}
-                  </div>
-                  <span className="truncate">{b.agents.length > 1 ? b.agents.length + " agentes coinciden" : lead.name}</span>
-                  <span className="ml-auto shrink-0 text-slate-400">{conviction}/5</span>
-                </div>
-                <dl className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <dt className="text-xs text-slate-500">Precio</dt>
-                    <dd className="font-semibold tabular-nums text-slate-900">{eur(b.price)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-slate-500">Desde la compra</dt>
-                    <dd className={moved > 0.05 ? "tabular-nums text-emerald-700" : moved < -0.05 ? "tabular-nums text-red-700" : "tabular-nums text-slate-600"}>{pct(moved)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-slate-500">Stop</dt>
-                    <dd className="tabular-nums text-red-700">{eur(b.stop)}{risk !== null && <span className="ml-1 text-xs text-slate-400">−{pct(risk, 1, false)}</span>}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-slate-500">Objetivo</dt>
-                    <dd className="tabular-nums text-emerald-700">{eur(b.target)}{upside !== null && <span className="ml-1 text-xs text-slate-400">{pct(upside)}</span>}</dd>
-                  </div>
-                </dl>
-                <div className="mt-auto flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
-                  <button type="button" className={ghost} onClick={() => setInfo({ idea: ideaOf(b), executable: false })}>
-                    Detalles
-                  </button>
-                  <button
-                    type="button"
-                    className={primary}
-                    disabled={b.status !== "ok" || !data.account.opened || !q}
-                    title={b.status !== "ok" ? st.text : !data.account.opened ? "Abre tu cuenta primero" : "Ver la operación y ejecutarla"}
-                    onClick={() => setInfo({ idea: ideaOf(b), executable: true })}
-                  >
-                    <Play className="h-3.5 w-3.5" /> Ejecutar
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+        <p className="py-10 text-center text-sm text-slate-500">Ahora mismo no hay compras de los agentes. {MEETINGS_TEXT}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1100px] text-sm">
@@ -443,160 +309,6 @@ export function OpportunitiesPanel() {
         />
       )}
       {confirm && <ConfirmOrderModal idea={confirm} cash={data.account.cash} onClose={() => setConfirm(null)} />}
-    </div>
-  );
-}
-
-
-function OpportunitiesToolbar({
-  search,
-  onSearchChange,
-  marketFilter,
-  onMarketFilterChange,
-  statusFilter,
-  onStatusFilterChange,
-  sort,
-  onSortChange,
-  viewMode,
-  onViewModeChange,
-}: {
-  search: string;
-  onSearchChange: (value: string) => void;
-  marketFilter: MarketFilter;
-  onMarketFilterChange: (value: MarketFilter) => void;
-  statusFilter: StatusFilter;
-  onStatusFilterChange: (value: StatusFilter) => void;
-  sort: SortState;
-  onSortChange: (value: SortState) => void;
-  viewMode: ViewMode;
-  onViewModeChange: (value: ViewMode) => void;
-}) {
-  const activeFilterCount = Number(marketFilter !== "all") + Number(statusFilter !== "all");
-  const selectedSort = TOOLBAR_SORTS.find((option) =>
-    option.sort.key === sort.key && option.sort.dir === sort.dir,
-  );
-  const sortLabel = selectedSort?.label ?? SORT_TITLES[sort.key] + (sort.dir === 1 ? " ↑" : " ↓");
-  const SortIcon = sort.key === "valor" ? (sort.dir === 1 ? ArrowDownAZ : ArrowDownZA) : ListFilter;
-  const toolbarButtonClassName =
-    "inline-flex h-control-lg items-center gap-2 rounded-xl border-0 bg-white px-3.5 text-body font-medium text-slate-700 shadow-none outline-none transition-colors duration-150 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
-  const viewButtonClassName =
-    "inline-flex size-control-md items-center justify-center rounded-lg border-0 shadow-none outline-none transition-colors duration-150 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
-
-  return (
-    <div className="knowledge-toolbar-container">
-      <div className="knowledge-explorer-controls">
-        <SearchInput
-          className="knowledge-explorer-controls__search min-w-0"
-          placeholder="Buscar en Oportunidades..."
-          value={search}
-          onChange={onSearchChange}
-        />
-        <div className="knowledge-explorer-controls__actions">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={toolbarButtonClassName + " knowledge-filter-trigger"} title="Filtrar" aria-label="Filtrar">
-                <Filter className="size-icon-md" strokeWidth={2.25} />
-                <span className="knowledge-toolbar-label">Filtrar</span>
-                {activeFilterCount > 0 && (
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 text-[11px] font-semibold text-white">
-                    {activeFilterCount}
-                  </span>
-                )}
-                <ChevronDown className="knowledge-toolbar-chevron size-icon-md text-slate-400" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <div className="flex items-center justify-between px-2 py-1.5">
-                <DropdownMenuLabel className="p-0">Filtros</DropdownMenuLabel>
-                {activeFilterCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      onMarketFilterChange("all");
-                      onStatusFilterChange("all");
-                    }}
-                    className="text-caption font-medium text-slate-700 transition-colors hover:text-slate-950 hover:underline"
-                  >
-                    Limpiar
-                  </button>
-                )}
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-caption text-muted-foreground">Mercado</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={marketFilter} onValueChange={(value) => onMarketFilterChange(value as MarketFilter)}>
-                <DropdownMenuRadioItem value="all"><ListFilter className="mr-2 size-icon-md" />Todos los mercados</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="crypto">Criptomonedas</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="stocks">Acciones</DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-caption text-muted-foreground">Estado de la oportunidad</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={statusFilter} onValueChange={(value) => onStatusFilterChange(value as StatusFilter)}>
-                <DropdownMenuRadioItem value="all"><Check className="mr-2 size-icon-md" />Todos los estados</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="ok">Disponible</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="tienes">Ya la tienes</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="stop_superado">Ya no vale</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="objetivo_alcanzado">Llegas tarde</DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className={toolbarButtonClassName + " knowledge-sort-trigger min-w-40 max-w-full justify-between"}
-                title={"Ordenar por " + sortLabel}
-                aria-label={"Ordenar por " + sortLabel}
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <SortIcon className="size-icon-md" />
-                  <span className="knowledge-toolbar-label truncate">{sortLabel}</span>
-                </span>
-                <ChevronDown className="knowledge-toolbar-chevron size-icon-md text-slate-400" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Ordenar por</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup
-                value={sort.key + ":" + sort.dir}
-                onValueChange={(value) => {
-                  const option = TOOLBAR_SORTS.find((item) => item.sort.key + ":" + item.sort.dir === value);
-                  if (option) onSortChange(option.sort);
-                }}
-              >
-                {TOOLBAR_SORTS.map(({ label, sort: option }) => (
-                  <DropdownMenuRadioItem key={label} value={option.key + ":" + option.dir}>{label}</DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <div className="knowledge-view-toggle ml-1 flex h-control-lg items-center rounded-xl border-0 bg-white p-1 shadow-none">
-            <button
-              type="button"
-              onClick={() => onViewModeChange("grid")}
-              className={viewButtonClassName + (viewMode === "grid" ? " bg-slate-100 text-slate-950" : " bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-700")}
-              title="Vista de tarjetas"
-              aria-label="Vista de tarjetas"
-              aria-pressed={viewMode === "grid"}
-            >
-              <Grid2X2 className="size-icon-md" strokeWidth={2.25} />
-            </button>
-            <button
-              type="button"
-              onClick={() => onViewModeChange("list")}
-              className={viewButtonClassName + (viewMode === "list" ? " bg-slate-100 text-slate-950" : " bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-700")}
-              title="Vista de lista"
-              aria-label="Vista de lista"
-              aria-pressed={viewMode === "list"}
-            >
-              <List className="size-icon-md" strokeWidth={2.25} />
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
