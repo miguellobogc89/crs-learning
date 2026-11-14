@@ -86,6 +86,8 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] Rebotes apagados (0/58 aciertos, −2,1 % de media del 11 al 14/11). Configurable con `TRADING_FARO_OFF` (lista de tipos; vacío = ninguno).
 - [x] Contexto reconstruido de las ideas antiguas con velas públicas de Binance, fase del mercado de ese día y noticias de entonces (unas 10 por revisión del cron).
 - [x] **FARO-2 en pruebas**: mismas ideas, solo las que pasan filtros fijos (sin rebotes, sin perseguir +12 % 24 h / +4 % 1 h, sin impulsos en máximos, Bitcoin > −2 % 24 h, mercado no en defensa, objetivo ≥ 1,5 × riesgo). Comparado en Análisis (todas / pasa / descarta, motivos) y marcado «F2» en cada idea. No cambia lo que se publica.
+- [x] Aviso al ejecutar una idea que FARO-2 descarta (con el motivo).
+- [x] **Control al azar**: en cada análisis, tantas ideas como publica la IA, con monedas al azar entre las mismas candidatas y el mismo riesgo, recorrido y validez. No se enseñan ni se operan. En Análisis: «¿Elige mejor que el azar?» (FARO, FARO-2, azar y azar que pasa FARO-2 en el mismo periodo) y segmento «Al azar». **Aplicar en Neon la migración `20261114220000_trading_faro_controls`.**
 - [ ] Si FARO-2 gana unos días: publicar solo sus ideas (y kamikazes solo de ahí).
 - [ ] Stop y objetivo calculados con datos en vez de a ojo por la IA.
 - [ ] Memoria de FARO: resumen de su propio historial en cada análisis.

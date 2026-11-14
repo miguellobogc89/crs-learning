@@ -13,7 +13,7 @@ import { CRYPTO, CRYPTO_MARKET } from "../market-data";
 import { metricsOf, prefilter, rank, type Metrics, type Ticker } from "../kamikaze/logic";
 import { barsSince, eurPairs, hourly, hourlyUntil, symbolOf } from "../kamikaze/market";
 import { kamikazeByKey, type KamikazeStyle } from "../kamikaze/roster";
-import { checkIdeas, ENABLED_KINDS, faro2Verdict, ideaFeatures, KINDS, pastTicker, scoreIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
+import { checkIdeas, controlIdeas, ENABLED_KINDS, faro2Verdict, ideaFeatures, KINDS, pastTicker, scoreIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
 import { getMarketPhase, marketPhaseAt } from "../chip/phase-service";
 import { analyze, type ResolvedIdea } from "./analysis";
 
@@ -67,6 +67,7 @@ export async function faroTick(market: Ticker[], rules: Rules, opts: { force?: b
   });
   // Contexto de las ideas antiguas, poco a poco (no frena la revisión si falla).
   await backfillFeatures(10).catch(() => 0);
+  await scoreControls(market).catch(() => 0);
   const ran = await maybeRun(market, rules, !!opts.force).catch((e) => {
     console.error("[faro] análisis", e);
     return `error: ${e instanceof Error ? e.message.slice(0, 160) : "desconocido"}`;
@@ -210,6 +211,89 @@ export async function backfillFeatures(limit = 10): Promise<number> {
   return n;
 }
 
+// ---------------------------------------------------------------------------
+// Ideas de control (al azar). Tabla trading_faro_controls, solo por SQL directo: sin su migración
+// (20261114220000_trading_faro_controls) no se crean ni se puntúan y nada más se ve afectado.
+// ---------------------------------------------------------------------------
+type Candidate = { m: Metrics; styles: KamikazeStyle[] };
+
+async function createControls(
+  runId: string,
+  candidates: Candidate[],
+  ideas: { price: number; invalidation: number; target: number; validHours: number }[],
+  rules: Rules,
+  ctx: { phase: { mode: string; days: number } | null; btc24h: number | null; newsOf: (base: string) => number },
+) {
+  const now = Date.now();
+  for (const c of controlIdeas(candidates.map((x) => ({ pair: x.m.pair, price: x.m.price })), ideas)) {
+    const cand = candidates.find((x) => x.m.pair === c.pair)!;
+    const symbol = symbolOf(c.pair, rules) ?? `${c.pair.replace(/(EUR|USDC)$/, "")}-EUR`;
+    const f = ideaFeatures(cand.m, cand.styles, c, { now, phase: ctx.phase, btc24h: ctx.btc24h, news: ctx.newsOf(cand.m.base) });
+    await prisma.$executeRaw(Prisma.sql`INSERT INTO public.trading_faro_controls
+      (run_id, pair, symbol, price, invalidation, target, valid_until, last_price, best_pct, worst_pct, features)
+      VALUES (${runId}::uuid, ${c.pair}, ${symbol}, ${c.price}, ${c.invalidation}, ${c.target}, ${new Date(now + c.validHours * 3_600_000)}, ${c.price}, 0, 0, ${JSON.stringify(f)}::jsonb)`);
+  }
+}
+
+type ControlRow = { id: string; pair: string; created_at: Date; price: number; invalidation: number; target: number; valid_until: Date; best_pct: number | null; worst_pct: number | null };
+
+async function scoreControls(market: Ticker[]): Promise<number> {
+  let live: ControlRow[];
+  try {
+    live = await prisma.$queryRaw(Prisma.sql`SELECT id::text AS id, pair, created_at, price, invalidation, target, valid_until, best_pct, worst_pct
+      FROM public.trading_faro_controls
+      WHERE status = 'viva' AND (checked_at IS NULL OR checked_at < now() - make_interval(mins => ${CHECK_MIN}::int))
+      ORDER BY created_at ASC LIMIT 40`);
+  } catch {
+    return 0;
+  }
+  let n = 0;
+  for (const i of live) {
+    try {
+      const livePrice = market.find((t) => t.pair === i.pair)?.price ?? null;
+      const bars = await barsSince(i.pair, i.created_at.getTime());
+      const sc = scoreIdea(
+        { price: i.price, invalidation: i.invalidation, target: i.target, createdAt: i.created_at.getTime(), validUntil: i.valid_until.getTime(), best: i.best_pct, worst: i.worst_pct },
+        bars,
+        Date.now(),
+        livePrice,
+      );
+      await prisma.$executeRaw(Prisma.sql`UPDATE public.trading_faro_controls SET status = ${sc.status}, best_pct = ${sc.best}, worst_pct = ${sc.worst},
+        last_price = ${sc.lastPrice}, exit_price = ${sc.exitPrice}, result_pct = ${sc.resultPct},
+        resolved_at = ${sc.resolvedAt ? new Date(sc.resolvedAt) : null}, checked_at = now() WHERE id = ${i.id}::uuid`);
+      n++;
+    } catch (e) {
+      console.error("[faro] puntuar control", i.pair, e instanceof Error ? e.message.slice(0, 160) : e);
+    }
+  }
+  return n;
+}
+
+async function loadControls(): Promise<ResolvedIdea[]> {
+  try {
+    const rows = await prisma.$queryRaw<(ControlRow & { status: string; result_pct: number; resolved_at: Date | null; features: IdeaFeatures | null })[]>(
+      Prisma.sql`SELECT id::text AS id, pair, created_at, price, invalidation, target, valid_until, best_pct, worst_pct, status, result_pct, resolved_at, features
+        FROM public.trading_faro_controls WHERE status IN ('acierto', 'fallo', 'caducada') AND result_pct IS NOT NULL ORDER BY created_at ASC LIMIT 5000`,
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      createdAt: r.created_at.getTime(),
+      resolvedAt: r.resolved_at?.getTime() ?? null,
+      kind: "control",
+      conviction: 0,
+      status: r.status as ResolvedIdea["status"],
+      resultPct: r.result_pct,
+      bestPct: r.best_pct ?? 0,
+      worstPct: r.worst_pct ?? 0,
+      rewardPct: ((r.target - r.price) / r.price) * 100,
+      riskPct: ((r.price - r.invalidation) / r.price) * 100,
+      features: r.features,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
   // Un solo análisis por intervalo aunque haya varias revisiones a la vez.
   const minutes = force ? 0 : RUN_MIN();
@@ -325,6 +409,12 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
       });
       if (features) await saveFeatures(created.id, features);
     }
+    // Control: las mismas veces, monedas al azar entre las candidatas, mismo riesgo y recorrido.
+    await createControls(runId, candidates, ok, rules, {
+      phase: phase ? { mode: phase.mode, days: phase.days } : null,
+      btc24h: btc ? btc.ch24h : null,
+      newsOf: (base) => news.filter((n) => n.symbols.includes(base)).length,
+    }).catch((e) => console.error("[faro] control", e instanceof Error ? e.message.slice(0, 200) : e));
     await prisma.trading_faro_runs.update({
       where: { id: runId },
       data: { status: "ok", market_view: ai.market_view, ideas: ok.length, error: rejected.length ? `Descartadas: ${rejected.map((x) => `${x.pair} (${x.reason})`).join("; ").slice(0, 900)}` : null },
@@ -480,20 +570,21 @@ export async function faroView(workspaceId: string) {
   };
 }
 
-export type AnalysisSegment = "todas" | "faro2" | "descartadas";
+export type AnalysisSegment = "todas" | "faro2" | "descartadas" | "azar";
 
 /**
  * Análisis del rendimiento de FARO con sus ideas ya resueltas (pestaña «Análisis»). `segment` elige qué
  * ideas: todas, las que habría dejado pasar FARO-2 o las que habría descartado (solo las que tienen contexto).
  */
 export async function faroAnalysis(segment: AnalysisSegment = "todas") {
-  const [rows, features] = await Promise.all([
+  const [rows, features, controls] = await Promise.all([
     prisma.trading_faro_ideas.findMany({
       where: { status: { in: ["acierto", "fallo", "caducada"] }, result_pct: { not: null } },
       orderBy: { created_at: "asc" },
       take: 5000,
     }),
     loadFeatures(),
+    loadControls(),
   ]);
   const ideas: (ResolvedIdea & { verdict: ReturnType<typeof faro2Verdict> })[] = rows.map((r) => {
     const f = features.get(r.id) ?? null;
@@ -528,7 +619,11 @@ export async function faroAnalysis(segment: AnalysisSegment = "todas") {
     const a = analyze(list);
     return { n: a.n, avgPct: a.total.avgPct, hitRate: a.total.hitRate, totalEur: a.total.totalEur, profitFactor: a.profitFactor };
   };
-  const chosen = segment === "faro2" ? pass : segment === "descartadas" ? rejected : ideas;
+  // Control al azar: se compara con las ideas de FARO del mismo periodo (desde el primer control).
+  const controlSince = controls.length ? Math.min(...controls.map((c) => c.createdAt)) : null;
+  const sameWindow = controlSince === null ? [] : ideas.filter((i) => i.createdAt >= controlSince);
+  const controlPass = controls.filter((c) => faro2Verdict("control", c.features)?.pass);
+  const chosen = segment === "faro2" ? pass : segment === "descartadas" ? rejected : segment === "azar" ? controls : ideas;
   return {
     ...analyze(chosen),
     segment,
@@ -538,6 +633,12 @@ export async function faroAnalysis(segment: AnalysisSegment = "todas") {
       all: summary(judged),
       pass: summary(pass),
       rejected: summary(rejected),
+      /** Control al azar (mismas candidatas, mismo riesgo y recorrido) y FARO en el mismo periodo. */
+      controlSince,
+      control: summary(controls),
+      controlPass: summary(controlPass),
+      faroSameWindow: summary(sameWindow),
+      faro2SameWindow: summary(sameWindow.filter((i) => i.verdict?.pass)),
       reasons: [...reasons.entries()].map(([reason, v]) => ({ reason, n: v.n, avgPct: Math.round((v.sum / v.n) * 100) / 100 })).sort((a, b) => b.n - a.n),
     },
   };

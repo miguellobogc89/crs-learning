@@ -354,3 +354,27 @@ export function pastTicker(pair: string, base: string, price: number, bars: { h:
     volume24h: last24.reduce((s, b) => s + b.qv, 0),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Ideas de control (al azar): ¿elige la IA mejor que el azar?
+// ---------------------------------------------------------------------------
+export type ControlIdea = { pair: string; price: number; invalidation: number; target: number; validHours: number };
+
+/**
+ * Por cada idea que publica la IA, una de control: una moneda al azar entre las mismas candidatas (sin
+ * repetir en la misma revisión), con el mismo riesgo, recorrido y validez que esa idea. Así lo único que
+ * cambia es QUÉ moneda se elige.
+ */
+export function controlIdeas(candidates: { pair: string; price: number }[], ideas: { price: number; invalidation: number; target: number; validHours: number }[], rnd: () => number = Math.random): ControlIdea[] {
+  const pool = candidates.filter((c) => c.price > 0);
+  const out: ControlIdea[] = [];
+  for (const i of ideas) {
+    if (!pool.length) break;
+    const k = Math.floor(rnd() * pool.length) % pool.length;
+    const c = pool.splice(k, 1)[0];
+    const risk = (i.price - i.invalidation) / i.price;
+    const reward = (i.target - i.price) / i.price;
+    out.push({ pair: c.pair, price: c.price, invalidation: c.price * (1 - risk), target: c.price * (1 + reward), validHours: i.validHours });
+  }
+  return out;
+}

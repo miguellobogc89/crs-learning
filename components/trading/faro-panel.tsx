@@ -147,7 +147,7 @@ function FaroIdeas() {
   if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard />;
 
   const execute = (i: Idea) => {
-    setConfirm({ id: i.id, symbol: i.symbol, kind: i.kind, price: i.lastPrice ?? i.price, invalidation: i.invalidation, target: i.target, rationale: i.rationale });
+    setConfirm({ id: i.id, symbol: i.symbol, kind: i.kind, price: i.lastPrice ?? i.price, invalidation: i.invalidation, target: i.target, rationale: i.rationale, faro2: i.faro2 });
   };
   // Desde el precio de ahora (o el de la idea, si ya terminó): cuánto cae hasta la invalidación y cuánto sube hasta el objetivo.
   const ref = (i: Idea) => (i.status === "viva" ? i.lastPrice ?? i.price : i.price);

@@ -100,3 +100,19 @@ test("faro: métricas de un momento pasado a partir de las velas anteriores", ()
   assert.equal(t.high24h, 40);
   assert.equal(t.low24h, 15);
 });
+
+test("faro: ideas de control — misma cantidad, monedas al azar sin repetir y el mismo riesgo/recorrido", () => {
+  const { controlIdeas } = load("lib/trading/faro/logic.ts");
+  const cands = [{ pair: "AEUR", price: 10 }, { pair: "BEUR", price: 200 }, { pair: "CEUR", price: 1 }];
+  const ideas = [
+    { price: 50, invalidation: 47.5, target: 55, validHours: 6 },
+    { price: 4, invalidation: 3.8, target: 4.6, validHours: 12 },
+  ];
+  const seq = [0.99, 0];
+  const out = controlIdeas(cands, ideas, () => seq.shift());
+  assert.deepEqual(out.map((o) => o.pair), ["CEUR", "AEUR"]);
+  assert.ok(Math.abs(out[0].invalidation - 0.95) < 1e-9 && Math.abs(out[0].target - 1.1) < 1e-9, "−5 % / +10 % como la primera idea");
+  assert.ok(Math.abs(out[1].invalidation - 9.5) < 1e-9 && Math.abs(out[1].target - 11.5) < 1e-9);
+  assert.equal(out[1].validHours, 12);
+  assert.equal(controlIdeas(cands.slice(0, 1), ideas).length, 1, "no más que candidatas");
+});

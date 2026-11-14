@@ -13,7 +13,17 @@ import { Modal, Rich } from "./ui";
 
 type Wallets = Awaited<ReturnType<typeof getWallets>>;
 type Manual = Awaited<ReturnType<typeof manualView>>;
-export type BuyIdea = { id: string; symbol: string; kind: string; price: number; invalidation: number; target: number; rationale: string };
+export type BuyIdea = {
+  id: string;
+  symbol: string;
+  kind: string;
+  price: number;
+  invalidation: number;
+  target: number;
+  rationale: string;
+  /** FARO-2 (en pruebas): si la habría publicado y, si no, por qué. null = sin contexto. */
+  faro2?: { pass: boolean; reasons: string[] } | null;
+};
 
 const AMOUNTS = [10, 25, 50, 100];
 const pct = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
@@ -106,6 +116,11 @@ export function ManualBuyModal({ idea, onClose }: { idea: BuyIdea; onClose: () =
       }
     >
       <div className="space-y-4 text-sm text-slate-700">
+        {idea.faro2 && !idea.faro2.pass && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-900">
+            <b>FARO-2 la descarta</b> (filtros en pruebas): {idea.faro2.reasons.join("; ")}. Si la compras, mejor con poco dinero.
+          </div>
+        )}
         <div className="line-clamp-3 text-[13px] text-slate-600">
           <Rich text={idea.rationale} />
         </div>

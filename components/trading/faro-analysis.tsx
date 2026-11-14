@@ -26,11 +26,12 @@ const tone = (v: number) => (v > 0.005 ? "text-emerald-700" : v < -0.005 ? "text
 const day = (t: number) => new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", timeZone: "Europe/Madrid" }).format(new Date(t));
 const dayTime = (t: number) => new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(t));
 
-type Segment = "todas" | "faro2" | "descartadas";
+type Segment = "todas" | "faro2" | "descartadas" | "azar";
 const SEGMENTS: [Segment, string][] = [
   ["todas", "Todas las ideas"],
   ["faro2", "FARO-2: las que pasa"],
   ["descartadas", "FARO-2: las que descarta"],
+  ["azar", "Al azar (control)"],
 ];
 
 export function FaroAnalysis() {
@@ -84,14 +85,19 @@ export function FaroAnalysis() {
       </div>
       <p className="text-sm text-slate-600">
         {int(data.n)} ideas resueltas{data.since ? ` desde el ${day(data.since)}` : ""}. Cada una cuenta como <b>100 €</b> siguiendo la idea al pie de la letra (entrar al publicarla, salir en la invalidación, el objetivo o al caducar), con costes.
-        {segment !== "todas" && " Solo ideas con contexto (lo que veía FARO al publicarlas)."}
+        {segment === "faro2" || segment === "descartadas" ? " Solo ideas con contexto (lo que veía FARO al publicarlas)." : ""}
+        {segment === "azar" && " Ideas de control: monedas al azar entre las mismas candidatas, con el mismo riesgo, recorrido y validez que las de FARO. No se publican ni se operan."}
       </p>
 
       <Faro2Card f2={f2} totalIdeas={data.totalIdeas} />
 
       {data.n === 0 ? (
         <p className={`${card} px-6 py-10 text-center text-sm text-slate-500`}>
-          {segment === "todas" ? "Todavía no hay ideas resueltas para analizar." : "Todavía no hay ideas con contexto en este grupo: se va reconstruyendo con cada revisión (unos 5 min)."}
+          {segment === "todas"
+            ? "Todavía no hay ideas resueltas para analizar."
+            : segment === "azar"
+              ? "Todavía no hay ideas de control resueltas: se crean con cada análisis de FARO desde ahora (si no aparecen en unas horas, falta aplicar la migración de «controls»)."
+              : "Todavía no hay ideas con contexto en este grupo: se va reconstruyendo con cada revisión (unos 5 min)."}
         </p>
       ) : (
         <>
@@ -227,7 +233,42 @@ function Faro2Card({ f2, totalIdeas }: { f2: A["faro2"]; totalIdeas: number }) {
           </div>
         </div>
       )}
+      <ControlTable f2={f2} />
     </section>
+  );
+}
+
+/** ¿Elige la IA mejor que el azar? Mismo periodo, mismas candidatas, mismo riesgo y recorrido. */
+function ControlTable({ f2 }: { f2: A["faro2"] }) {
+  const rows: [string, A["faro2"]["all"]][] = [
+    ["FARO", f2.faroSameWindow],
+    ["FARO-2", f2.faro2SameWindow],
+    ["Al azar", f2.control],
+    ["Al azar que pasa FARO-2", f2.controlPass],
+  ];
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">¿Elige mejor que el azar?</div>
+        <span className="text-xs text-slate-500">{f2.controlSince ? `Mismo periodo: desde ${dayTime(f2.controlSince)}` : "Empieza con el próximo análisis de FARO"}</span>
+      </div>
+      {f2.control.n === 0 ? (
+        <p className="py-2 text-sm text-slate-500">Aún sin ideas de control resueltas. Con cada análisis, FARO publica sus ideas y la app crea las mismas al azar; en unas horas empezarán a resolverse.</p>
+      ) : (
+        <table className="mt-1.5 w-full text-sm">
+          <tbody>
+            {rows.map(([label, r]) => (
+              <tr key={label} className="border-b border-slate-100/70">
+                <td className="py-1.5 pr-2 font-medium text-slate-700">{label}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-slate-600">{int(r.n)} ideas</td>
+                <td className={`px-2 py-1.5 text-right font-semibold tabular-nums ${tone(r.avgPct)}`}>{r.n ? sPct(r.avgPct) : "—"}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums text-slate-600">{r.n ? `acierto ${r.hitRate.toFixed(0)} %` : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 

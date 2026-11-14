@@ -99,7 +99,7 @@ export async function GET(req: Request, route: RouteContext) {
     if (action === "faro") return NextResponse.json(await faroView(ctx.workspaceId));
     if (action === "faro/analysis") {
       const seg = url.searchParams.get("segmento");
-      return NextResponse.json(await faroAnalysis(seg === "faro2" || seg === "descartadas" ? seg : "todas"));
+      return NextResponse.json(await faroAnalysis(seg === "faro2" || seg === "descartadas" || seg === "azar" ? seg : "todas"));
     }
     if (action === "mirror") return NextResponse.json({ ...(await mirrorView(ctx.workspaceId)), canManage: ctx.canManage });
     if (action === "agents") return NextResponse.json({ ...(await getAgents(ctx.workspaceId)), canManage: canDirectAgents(ctx.workspaceId), canCopy: ctx.canManage });
