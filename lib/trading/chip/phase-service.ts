@@ -54,3 +54,10 @@ export async function getMarketPhase(): Promise<MarketPhase | null> {
   const [candles, price] = await Promise.all([dailyBtc(), btcPrice()]);
   return marketPhase(candles, price);
 }
+
+/** Fase del mercado tal como estaba en un momento pasado (solo con las velas cerradas antes de ese día). */
+export async function marketPhaseAt(t: number): Promise<MarketPhase | null> {
+  const day = Math.floor(t / DAY) * DAY;
+  const list = (await dailyBtc()).filter((c) => c.t < day);
+  return list.length ? marketPhase(list, null) : null;
+}

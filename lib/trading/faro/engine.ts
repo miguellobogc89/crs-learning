@@ -11,10 +11,10 @@ import { accountState } from "../accounts";
 import { agentByKey, AGENTS_WORKSPACE } from "../agents/roster";
 import { CRYPTO, CRYPTO_MARKET } from "../market-data";
 import { metricsOf, prefilter, rank, type Metrics, type Ticker } from "../kamikaze/logic";
-import { barsSince, eurPairs, hourly, symbolOf } from "../kamikaze/market";
+import { barsSince, eurPairs, hourly, hourlyUntil, symbolOf } from "../kamikaze/market";
 import { kamikazeByKey, type KamikazeStyle } from "../kamikaze/roster";
-import { checkIdeas, ideaFeatures, KINDS, scoreIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
-import { getMarketPhase } from "../chip/phase-service";
+import { checkIdeas, ENABLED_KINDS, faro2Verdict, ideaFeatures, KINDS, pastTicker, scoreIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
+import { getMarketPhase, marketPhaseAt } from "../chip/phase-service";
 import { analyze, type ResolvedIdea } from "./analysis";
 
 const env = (k: string, d: number) => {
@@ -26,6 +26,12 @@ const RUN_MIN = () => env("TRADING_FARO_MINUTES", 30);
 const CHECK_MIN = 4;
 const DAY = 86_400_000;
 const STYLES: KamikazeStyle[] = ["impulso", "rupturas", "rebotes"];
+const KIND_TEXT: Record<string, string> = {
+  impulso: "«impulso» (sube con fuerza y volumen y no parece agotado)",
+  ruptura: "«ruptura» (rompe máximos recientes con volumen)",
+  rebote: "«rebote» (ha caído fuerte y empieza a girarse)",
+  noticia: "«noticia» (una noticia concreta puede moverla)",
+};
 
 // ---------------------------------------------------------------------------
 // Precio en directo de un valor de CRS (lo usan FARO, los kamikazes y las órdenes del usuario)
@@ -59,6 +65,8 @@ export async function faroTick(market: Ticker[], rules: Rules, opts: { force?: b
     console.error("[faro] puntuar", e);
     return 0;
   });
+  // Contexto de las ideas antiguas, poco a poco (no frena la revisión si falla).
+  await backfillFeatures(10).catch(() => 0);
   const ran = await maybeRun(market, rules, !!opts.force).catch((e) => {
     console.error("[faro] análisis", e);
     return `error: ${e instanceof Error ? e.message.slice(0, 160) : "desconocido"}`;
@@ -121,7 +129,7 @@ const SCHEMA = {
         required: ["pair", "kind", "conviction", "invalidation", "target", "valid_hours", "rationale", "risks"],
         properties: {
           pair: { type: "string", description: "Par de la lista de candidatos (p. ej. SOLEUR)." },
-          kind: { type: "string", enum: KINDS },
+          kind: { type: "string", enum: ENABLED_KINDS },
           conviction: { type: "integer", minimum: 1, maximum: 5 },
           invalidation: { type: "number", description: "Precio en euros por debajo del cual la idea deja de valer (mínimo reciente, soporte…)." },
           target: { type: "number", description: "Precio en euros hasta donde tiene recorrido razonable (máximo anterior, resistencia…)." },
@@ -147,10 +155,59 @@ async function saveFeatures(id: string, features: IdeaFeatures) {
 async function loadFeatures(): Promise<Map<string, IdeaFeatures>> {
   try {
     const rows = await prisma.$queryRaw<{ id: string; features: IdeaFeatures }[]>(Prisma.sql`SELECT id::text AS id, features FROM public.trading_faro_ideas WHERE features IS NOT NULL`);
-    return new Map(rows.map((r) => [r.id, r.features]));
+    // Las que no se pudieron reconstruir (sin velas) se guardan marcadas y no cuentan como contexto.
+    return new Map(rows.filter((r) => r.features && !(r.features as { noData?: boolean }).noData).map((r) => [r.id, r.features]));
   } catch {
     return new Map();
   }
+}
+
+/**
+ * Reconstruye lo que veía FARO en ideas antiguas (sin contexto guardado) con velas horarias públicas de
+ * Binance de antes de publicarlas, la fase del mercado de ese día y las noticias de entonces. Unas pocas
+ * en cada revisión del cron. Sin la migración de «features», no hace nada.
+ */
+export async function backfillFeatures(limit = 10): Promise<number> {
+  let rows: { id: string; pair: string; created_at: Date; price: number; invalidation: number; target: number; valid_until: Date }[];
+  try {
+    rows = await prisma.$queryRaw(Prisma.sql`SELECT id::text AS id, pair, created_at, price, invalidation, target, valid_until
+      FROM public.trading_faro_ideas WHERE features IS NULL ORDER BY created_at DESC LIMIT ${limit}`);
+  } catch {
+    return 0;
+  }
+  const rules = await eurPairs().catch(() => null);
+  const btcCache = new Map<number, number | null>();
+  let n = 0;
+  for (const r of rows) {
+    const t = r.created_at.getTime();
+    const base = rules?.get(r.pair)?.base ?? r.pair.replace(/(EUR|USDC)$/, "");
+    try {
+      const bars = await hourlyUntil(r.pair, t);
+      if (bars.length < 6) {
+        await saveFeatures(r.id, { backfilled: true, noData: true } as unknown as IdeaFeatures);
+        continue;
+      }
+      const hourKey = Math.floor(t / 3_600_000);
+      if (!btcCache.has(hourKey)) {
+        const btc = await hourlyUntil("BTCEUR", t).catch(() => []);
+        const from = btc.length >= 25 ? btc[btc.length - 25].c : null;
+        const to = btc.length ? btc[btc.length - 1].c : null;
+        btcCache.set(hourKey, from && to ? ((to - from) / from) * 100 : null);
+      }
+      const [phase, news] = await Promise.all([
+        marketPhaseAt(t).catch(() => null),
+        prisma.news_items.count({ where: { status: "clasificada", relevant: true, published_at: { gte: new Date(t - DAY), lte: new Date(t) }, symbols: { has: base } } }).catch(() => 0),
+      ]);
+      const m = metricsOf(pastTicker(r.pair, base, r.price, bars), bars);
+      const validHours = Math.max(1, Math.round((r.valid_until.getTime() - t) / 3_600_000));
+      const f = ideaFeatures(m, [], { price: r.price, invalidation: r.invalidation, target: r.target, validHours }, { now: t, phase: phase ? { mode: phase.mode, days: phase.days } : null, btc24h: btcCache.get(hourKey) ?? null, news });
+      await saveFeatures(r.id, { ...f, backfilled: true });
+      n++;
+    } catch (e) {
+      console.error("[faro] reconstruir contexto", r.pair, e instanceof Error ? e.message.slice(0, 160) : e);
+    }
+  }
+  return n;
 }
 
 async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
@@ -214,7 +271,7 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
     };
     const instructions = [
       "Eres un analista de criptomonedas que publica ideas de compra a corto plazo (horas) en un tablón común. Otros agentes deciden si entran, cuánto y dónde salen: tú solo señalas qué hay, por qué y entre qué niveles.",
-      "Tipos: «impulso» (sube con fuerza y volumen y no parece agotado), «ruptura» (rompe máximos recientes con volumen), «rebote» (ha caído fuerte y empieza a girarse) y «noticia» (una noticia concreta puede moverla).",
+      `Tipos que puedes usar: ${ENABLED_KINDS.map((k) => KIND_TEXT[k]).join(", ")}. No propongas otros tipos.`,
       "Para cada idea: invalidación = nivel real del gráfico por debajo del cual la idea deja de valer (no un % fijo); objetivo = nivel donde es razonable que se frene; valid_hours = cuánto sigue valiendo.",
       "Publica solo lo que de verdad veas (de 0 a 8 ideas, mejor pocas y buenas). No repitas pares de «ideas_ya_publicadas». Elige SOLO pares de la lista de candidatos.",
       "Precios y volúmenes en euros (los pares en USDC ya vienen convertidos). fromHigh3d = distancia al máximo de 3 días en %, volSurge = volumen de las últimas 4 h frente a la media (1 = normal).",
@@ -319,12 +376,13 @@ export type FaroParticipant = {
 
 /** Tablón para la interfaz: ideas vivas, historial con resultado, quién entró en cada una y aciertos por tipo. */
 export async function faroView(workspaceId: string) {
-  const [live, past, last, state, groups] = await Promise.all([
+  const [live, past, last, state, groups, features] = await Promise.all([
     prisma.trading_faro_ideas.findMany({ where: { status: "viva" }, orderBy: { created_at: "desc" } }),
     prisma.trading_faro_ideas.findMany({ where: { status: { not: "viva" } }, orderBy: { created_at: "desc" }, take: 300 }),
     prisma.trading_faro_runs.findFirst({ where: { status: "ok" }, orderBy: { created_at: "desc" } }),
     accountState(workspaceId),
     prisma.trading_faro_ideas.groupBy({ by: ["kind", "status"], where: { status: { not: "viva" } }, _count: { _all: true }, _avg: { result_pct: true } }),
+    loadFeatures(),
   ]);
   const all = [...live, ...past];
   const since = all.length ? new Date(Math.min(...all.map((i) => i.created_at.getTime()))) : new Date();
@@ -402,6 +460,8 @@ export async function faroView(workspaceId: string) {
     resultPct: i.result_pct,
     resolvedAt: i.resolved_at?.toISOString() ?? null,
     participants: byIdea.get(i.id) ?? [],
+    /** FARO-2 (en pruebas): si la habría dejado pasar y por qué no. null = sin contexto guardado. */
+    faro2: faro2Verdict(i.kind, features.get(i.id) ?? null),
   });
   const stats = KINDS.map((kind) => {
     const rows = groups.filter((g) => g.kind === kind);
@@ -420,8 +480,13 @@ export async function faroView(workspaceId: string) {
   };
 }
 
-/** Análisis del rendimiento de FARO con todas sus ideas ya resueltas (para la pestaña «Análisis»). */
-export async function faroAnalysis() {
+export type AnalysisSegment = "todas" | "faro2" | "descartadas";
+
+/**
+ * Análisis del rendimiento de FARO con sus ideas ya resueltas (pestaña «Análisis»). `segment` elige qué
+ * ideas: todas, las que habría dejado pasar FARO-2 o las que habría descartado (solo las que tienen contexto).
+ */
+export async function faroAnalysis(segment: AnalysisSegment = "todas") {
   const [rows, features] = await Promise.all([
     prisma.trading_faro_ideas.findMany({
       where: { status: { in: ["acierto", "fallo", "caducada"] }, result_pct: { not: null } },
@@ -430,19 +495,50 @@ export async function faroAnalysis() {
     }),
     loadFeatures(),
   ]);
-  const ideas: ResolvedIdea[] = rows.map((r) => ({
-    id: r.id,
-    createdAt: r.created_at.getTime(),
-    resolvedAt: r.resolved_at?.getTime() ?? null,
-    kind: r.kind,
-    conviction: r.conviction,
-    status: r.status as ResolvedIdea["status"],
-    resultPct: r.result_pct ?? 0,
-    bestPct: r.best_pct ?? 0,
-    worstPct: r.worst_pct ?? 0,
-    rewardPct: ((r.target - r.price) / r.price) * 100,
-    riskPct: ((r.price - r.invalidation) / r.price) * 100,
-    features: features.get(r.id) ?? null,
-  }));
-  return analyze(ideas);
+  const ideas: (ResolvedIdea & { verdict: ReturnType<typeof faro2Verdict> })[] = rows.map((r) => {
+    const f = features.get(r.id) ?? null;
+    return {
+      id: r.id,
+      createdAt: r.created_at.getTime(),
+      resolvedAt: r.resolved_at?.getTime() ?? null,
+      kind: r.kind,
+      conviction: r.conviction,
+      status: r.status as ResolvedIdea["status"],
+      resultPct: r.result_pct ?? 0,
+      bestPct: r.best_pct ?? 0,
+      worstPct: r.worst_pct ?? 0,
+      rewardPct: ((r.target - r.price) / r.price) * 100,
+      riskPct: ((r.price - r.invalidation) / r.price) * 100,
+      features: f,
+      verdict: faro2Verdict(r.kind, f),
+    };
+  });
+  const judged = ideas.filter((i) => i.verdict);
+  const pass = judged.filter((i) => i.verdict!.pass);
+  const rejected = judged.filter((i) => !i.verdict!.pass);
+  const reasons = new Map<string, { n: number; sum: number }>();
+  for (const i of rejected)
+    for (const why of i.verdict!.reasons) {
+      // Agrupar por el motivo sin las cifras («ya había subido … en 24 h»).
+      const key = why.replace(/[+−-]?\d+(,\d+)?\s?%/g, "…").replace(/\(.*\)/, "").trim();
+      const e = reasons.get(key) ?? { n: 0, sum: 0 };
+      reasons.set(key, { n: e.n + 1, sum: e.sum + i.resultPct });
+    }
+  const summary = (list: ResolvedIdea[]) => {
+    const a = analyze(list);
+    return { n: a.n, avgPct: a.total.avgPct, hitRate: a.total.hitRate, totalEur: a.total.totalEur, profitFactor: a.profitFactor };
+  };
+  const chosen = segment === "faro2" ? pass : segment === "descartadas" ? rejected : ideas;
+  return {
+    ...analyze(chosen),
+    segment,
+    totalIdeas: ideas.length,
+    faro2: {
+      judged: judged.length,
+      all: summary(judged),
+      pass: summary(pass),
+      rejected: summary(rejected),
+      reasons: [...reasons.entries()].map(([reason, v]) => ({ reason, n: v.n, avgPct: Math.round((v.sum / v.n) * 100) / 100 })).sort((a, b) => b.n - a.n),
+    },
+  };
 }

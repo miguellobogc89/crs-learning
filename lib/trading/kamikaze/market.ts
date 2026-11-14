@@ -98,6 +98,14 @@ export async function hourly(pair: string): Promise<Bar[]> {
   return bars.map((b) => ({ ...b, o: b.o * k, h: b.h * k, l: b.l * k, c: b.c * k, qv: b.qv * k }));
 }
 
+/** Velas horarias de los ~3 días anteriores a un momento pasado, en euros (para reconstruir lo que se veía). */
+export async function hourlyUntil(pair: string, end: number): Promise<Bar[]> {
+  const bars = parseKlines(await get("/api/v3/klines", { symbol: pair, interval: "1h", endTime: String(Math.floor(end)), limit: "72" })).filter((b) => b.t < end);
+  if (!pair.endsWith("USDC")) return bars;
+  const k = await usdcInEur();
+  return bars.map((b) => ({ ...b, o: b.o * k, h: b.h * k, l: b.l * k, c: b.c * k, qv: b.qv * k }));
+}
+
 /** Velas de 5 minutos desde un momento (hasta ~83 h), en euros: para puntuar las ideas de FARO. */
 export async function barsSince(pair: string, since: number): Promise<Bar[]> {
   const bars = parseKlines(await get("/api/v3/klines", { symbol: pair, interval: "5m", startTime: String(Math.floor(since)), limit: "1000" }));

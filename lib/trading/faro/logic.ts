@@ -6,6 +6,16 @@ import type { KamikazeStyle } from "../kamikaze/roster";
 
 export type IdeaKind = "impulso" | "ruptura" | "rebote" | "noticia";
 export const KINDS: IdeaKind[] = ["impulso", "ruptura", "rebote", "noticia"];
+/**
+ * Tipos que FARO ya no publica. Rebotes: 0 aciertos en 58 ideas (−2,1 % de media) del 11 al 14/11/2026.
+ * Se puede cambiar con TRADING_FARO_OFF (lista separada por comas; vacío = ninguno apagado).
+ */
+export const DISABLED_KINDS: IdeaKind[] = (() => {
+  const raw = typeof process !== "undefined" ? process.env.TRADING_FARO_OFF : undefined;
+  const list = raw === undefined ? ["rebote"] : raw.split(",").map((x) => x.trim()).filter(Boolean);
+  return KINDS.filter((k) => list.includes(k));
+})();
+export const ENABLED_KINDS: IdeaKind[] = KINDS.filter((k) => !DISABLED_KINDS.includes(k));
 export type IdeaStatus = "viva" | "acierto" | "fallo" | "caducada";
 
 /** Qué tipos de idea toma cada estilo de kamikaze. */
@@ -64,6 +74,10 @@ export function checkIdeas(
     }
     if (!KINDS.includes(i.kind as IdeaKind)) {
       reject(`tipo desconocido: ${i.kind}`);
+      continue;
+    }
+    if (DISABLED_KINDS.includes(i.kind as IdeaKind)) {
+      reject(`tipo apagado: ${i.kind}`);
       continue;
     }
     if (seen.has(pair)) {
@@ -261,6 +275,8 @@ export type IdeaFeatures = {
   btc24h: number | null;
   /** Noticias relevantes de esa moneda en las últimas 24 h. */
   news: number;
+  /** Reconstruido después con velas públicas (no lo guardó FARO en el momento): sin «styles». */
+  backfilled?: boolean;
 };
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
@@ -290,5 +306,51 @@ export function ideaFeatures(
     phaseDays: ctx.phase?.days ?? null,
     btc24h: ctx.btc24h === null ? null : round2(ctx.btc24h),
     news: ctx.news,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// FARO-2 (en pruebas, en paralelo): las mismas ideas, pero solo las que pasan unos filtros fijados de
+// antemano (no ajustados a los datos para que «salgan bien»). Se compara en la pestaña Análisis.
+// ---------------------------------------------------------------------------
+export const FARO2_RULES = {
+  /** Ya había subido demasiado: llega tarde. */
+  maxCh24h: 12,
+  maxCh1h: 4,
+  /** Un impulso pegado al máximo de 3 días (a menos de un 1 %) suele estar agotado. */
+  impulseMinFromHigh3d: -1,
+  /** Bitcoin cayendo con fuerza en 24 h arrastra a casi todo. */
+  minBtc24h: -2,
+  /** El objetivo tiene que estar al menos a 1,5 veces lo que se arriesga. */
+  minRewardRisk: 1.5,
+} as const;
+
+export function faro2Verdict(kind: string, f: IdeaFeatures | null): { pass: boolean; reasons: string[] } | null {
+  if (!f) return null;
+  const r = FARO2_RULES;
+  const reasons: string[] = [];
+  const p = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
+  if (kind === "rebote") reasons.push("los rebotes están apagados");
+  if (f.ch24h > r.maxCh24h) reasons.push(`ya había subido ${p(f.ch24h)} en 24 h`);
+  if (f.ch1h > r.maxCh1h) reasons.push(`subió ${p(f.ch1h)} en la última hora: llega tarde`);
+  if (kind === "impulso" && f.fromHigh3d > r.impulseMinFromHigh3d) reasons.push("impulso pegado al máximo de 3 días");
+  if (f.btc24h !== null && f.btc24h < r.minBtc24h) reasons.push(`Bitcoin cae ${p(f.btc24h)} en 24 h`);
+  if (f.phase === "defensa") reasons.push("mercado en defensa");
+  if (f.riskPct > 0 && f.rewardPct < r.minRewardRisk * f.riskPct) reasons.push(`objetivo corto para lo que arriesga (${p(f.rewardPct)} frente a −${f.riskPct.toFixed(1).replace(".", ",")} %)`);
+  return { pass: reasons.length === 0, reasons };
+}
+
+/** Las métricas de un par en un momento pasado a partir de sus velas horarias anteriores (para reconstruir). */
+export function pastTicker(pair: string, base: string, price: number, bars: { h: number; l: number; c: number; qv: number }[]) {
+  const last24 = bars.slice(-24);
+  const open24 = bars.length >= 25 ? bars[bars.length - 25].c : bars[0]?.c;
+  return {
+    pair,
+    base,
+    price,
+    ch24h: open24 && open24 > 0 ? ((price - open24) / open24) * 100 : 0,
+    high24h: last24.length ? Math.max(...last24.map((b) => b.h)) : price,
+    low24h: last24.length ? Math.min(...last24.map((b) => b.l)) : price,
+    volume24h: last24.reduce((s, b) => s + b.qv, 0),
   };
 }

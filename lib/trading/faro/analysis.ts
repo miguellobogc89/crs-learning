@@ -70,6 +70,7 @@ const HOUR_BANDS = [
   { key: "tarde", label: "Tarde (12-18 h)", from: 12, to: 18 },
   { key: "noche2", label: "Noche (18-24 h)", from: 18, to: 24 },
 ];
+const madridDay = (t: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date(t));
 const madridHour = (t: number) => Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, timeZone: "Europe/Madrid" }).format(new Date(t))) % 24;
 
 export function analyze(ideas: ResolvedIdea[], opts: { rollingWindow?: number } = {}) {
@@ -94,6 +95,9 @@ export function analyze(ideas: ResolvedIdea[], opts: { rollingWindow?: number } 
   // Semana a semana y media móvil de las últimas N.
   const weeks = [...new Set(list.map((i) => weekOf(i.createdAt)))].sort();
   const weekly = weeks.map((w) => ({ week: w, ...bucket(w, w, list.filter((i) => weekOf(i.createdAt) === w)) }));
+  // Con pocas semanas, día a día (fecha de Madrid).
+  const days = [...new Set(list.map((i) => madridDay(i.createdAt)))].sort();
+  const daily = days.map((d) => ({ week: d, ...bucket(d, d, list.filter((i) => madridDay(i.createdAt) === d)) }));
   const win = Math.max(5, opts.rollingWindow ?? 50);
   const rolling = list.length >= win ? list.slice(win - 1).map((_, k) => {
     const slice = list.slice(k, k + win);
@@ -122,6 +126,7 @@ export function analyze(ideas: ResolvedIdea[], opts: { rollingWindow?: number } 
     maxDrawdownEur: round(maxDrawdown),
     equity,
     weekly,
+    daily,
     rolling,
     rollingWindow: win,
     byKind: groupBy(list, (i) => i.kind, Object.entries(KIND_LABEL).map(([key, label]) => ({ key, label }))),

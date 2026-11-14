@@ -2,7 +2,7 @@
 // Análisis de FARO: si sus ideas ganan dinero, cómo evoluciona, qué tipos, convicciones, horas y fases del
 // mercado funcionan, si falla al elegir o al gestionar (lo que subieron antes de caer) y qué objetivo le
 // habría ido mejor. Cada idea cuenta como 100 € seguidos al pie de la letra, con costes.
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { faroAnalysis } from "@/lib/trading/faro/engine";
 import { api, errorText, eur, int } from "./format";
@@ -26,43 +26,75 @@ const tone = (v: number) => (v > 0.005 ? "text-emerald-700" : v < -0.005 ? "text
 const day = (t: number) => new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", timeZone: "Europe/Madrid" }).format(new Date(t));
 const dayTime = (t: number) => new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(t));
 
+type Segment = "todas" | "faro2" | "descartadas";
+const SEGMENTS: [Segment, string][] = [
+  ["todas", "Todas las ideas"],
+  ["faro2", "FARO-2: las que pasa"],
+  ["descartadas", "FARO-2: las que descarta"],
+];
+
 export function FaroAnalysis() {
   const [data, setData] = useState<A | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [segment, setSegment] = useState<Segment>("todas");
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await api<A>("faro/analysis"));
+      setData(await api<A>(`faro/analysis?segmento=${segment}`));
       setError(null);
     } catch (e) {
       setError(errorText(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [segment]);
   useEffect(() => {
     void load();
   }, [load]);
   useTradingRefresh(load);
 
   if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard height="h-96" />;
-  if (data.n === 0) return <p className={`${card} px-6 py-10 text-center text-sm text-slate-500`}>Todavía no hay ideas resueltas para analizar.</p>;
 
   const t = data.total;
   const best = [...data.targetScan.levels].sort((a, b) => b.avgPct - a.avgPct)[0];
   const m = data.management;
+  const f2 = data.faro2;
+  const byDay = data.weekly.length < 3;
   return (
     <div className="space-y-4 pb-4">
       {error && <ErrorNote>{error}</ErrorNote>}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-slate-600">
-          {int(data.n)} ideas resueltas{data.since ? ` desde el ${day(data.since)}` : ""}. Cada una cuenta como <b>100 €</b> siguiendo la idea al pie de la letra (entrar al publicarla, salir en la invalidación, el objetivo o al caducar), con costes.
-        </p>
+        <div className="flex gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="Qué ideas analizar">
+          {SEGMENTS.map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={segment === k}
+              onClick={() => setSegment(k)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium ${segment === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60">
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Actualizar
         </button>
       </div>
+      <p className="text-sm text-slate-600">
+        {int(data.n)} ideas resueltas{data.since ? ` desde el ${day(data.since)}` : ""}. Cada una cuenta como <b>100 €</b> siguiendo la idea al pie de la letra (entrar al publicarla, salir en la invalidación, el objetivo o al caducar), con costes.
+        {segment !== "todas" && " Solo ideas con contexto (lo que veía FARO al publicarlas)."}
+      </p>
+
+      <Faro2Card f2={f2} totalIdeas={data.totalIdeas} />
+
+      {data.n === 0 ? (
+        <p className={`${card} px-6 py-10 text-center text-sm text-slate-500`}>
+          {segment === "todas" ? "Todavía no hay ideas resueltas para analizar." : "Todavía no hay ideas con contexto en este grupo: se va reconstruyendo con cada revisión (unos 5 min)."}
+        </p>
+      ) : (
+        <>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Tile label="Resultado total" value={sEur(t.totalEur)} cls={tone(t.totalEur)} hint={`${int(data.n)} ideas × 100 €`} />
@@ -78,8 +110,8 @@ export function FaroAnalysis() {
       </Panel>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="¿Mejora o empeora?" sub="Resultado medio por idea, semana a semana (por fecha de publicación).">
-          <WeekBars weeks={data.weekly} />
+        <Panel title="¿Mejora o empeora?" sub={`Resultado medio por idea, ${byDay ? "día a día" : "semana a semana"} (por fecha de publicación).`}>
+          <WeekBars weeks={byDay ? data.daily : data.weekly} byDay={byDay} />
         </Panel>
         <Panel title={`Acierto de las últimas ${data.rollingWindow}`} sub="Media móvil: si la línea sube, FARO está acertando más que antes.">
           {data.rolling.length ? <RollingLine points={data.rolling} /> : <Empty>Hacen falta al menos {data.rollingWindow} ideas resueltas.</Empty>}
@@ -119,10 +151,83 @@ export function FaroAnalysis() {
           <BucketBars rows={data.byHour} />
         </Panel>
         <Panel title="¿En qué mercado acierta?" sub="Fase de Bitcoin (detector de CAMALEÓN) al publicar la idea.">
-          {data.byPhase.length ? <BucketBars rows={data.byPhase} /> : <Empty>Se empieza a guardar desde hoy con cada idea nueva ({data.withFeatures} con contexto por ahora).</Empty>}
+          {data.byPhase.length ? <BucketBars rows={data.byPhase} /> : <Empty>Aún sin ideas con la fase del mercado ({data.withFeatures} con contexto por ahora).</Empty>}
         </Panel>
       </div>
+        </>
+      )}
     </div>
+  );
+}
+
+/** FARO-2 (en pruebas) frente a FARO: mismas ideas, solo las que pasan sus filtros. */
+function Faro2Card({ f2, totalIdeas }: { f2: A["faro2"]; totalIdeas: number }) {
+  const rows: [string, A["faro2"]["all"], string][] = [
+    ["FARO (todas con contexto)", f2.all, "text-slate-900"],
+    ["FARO-2: las que pasa", f2.pass, "text-slate-900"],
+    ["Las que descarta", f2.rejected, "text-slate-500"],
+  ];
+  return (
+    <section className={`${card} px-5 py-4`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[15px] font-semibold text-slate-900">FARO-2 en pruebas</h3>
+        <span className="text-xs text-slate-500">
+          Contexto disponible en {int(f2.judged)} de {int(totalIdeas)} ideas{f2.judged < totalIdeas ? " · se reconstruyen unas 10 cada 5 min" : ""}
+        </span>
+      </div>
+      <p className="mt-0.5 text-xs text-slate-500">
+        Las mismas ideas de FARO, pero solo las que pasan unos filtros fijos: sin rebotes, sin perseguir subidas (más de +12 % en 24 h o +4 % en 1 h), sin impulsos pegados al máximo, nada con Bitcoin cayendo más de un 2 % o el mercado en defensa, y objetivo de al menos 1,5 veces el riesgo.
+      </p>
+      {f2.judged === 0 ? (
+        <p className="py-4 text-sm text-slate-500">Todavía no hay ideas con contexto. Si no aparecen en unos minutos, falta aplicar la migración de «features».</p>
+      ) : (
+        <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <th className="py-1.5 pr-2" />
+                <th className="px-2 py-1.5 text-right">Ideas</th>
+                <th className="px-2 py-1.5 text-right">Por idea</th>
+                <th className="px-2 py-1.5 text-right">Acierto</th>
+                <th className="px-2 py-1.5 text-right">Total</th>
+                <th className="px-2 py-1.5 text-right">Factor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(([label, r, cls]) => (
+                <tr key={label} className="border-b border-slate-100/70">
+                  <td className={`py-2 pr-2 font-medium ${cls}`}>{label}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-slate-600">{int(r.n)}</td>
+                  <td className={`px-2 py-2 text-right font-semibold tabular-nums ${tone(r.avgPct)}`}>{r.n ? sPct(r.avgPct) : "—"}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-slate-600">{r.n ? `${r.hitRate.toFixed(0)} %` : "—"}</td>
+                  <td className={`px-2 py-2 text-right tabular-nums ${tone(r.totalEur)}`}>{r.n ? sEur(r.totalEur) : "—"}</td>
+                  <td className="px-2 py-2 text-right tabular-nums text-slate-600">{r.profitFactor === null ? "—" : r.profitFactor.toFixed(2).replace(".", ",")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div>
+            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Por qué descarta (y cómo les fue)</div>
+            {f2.reasons.length === 0 ? (
+              <p className="text-sm text-slate-500">No descarta ninguna.</p>
+            ) : (
+              <ul className="space-y-1 text-sm">
+                {f2.reasons.map((r) => (
+                  <li key={r.reason} className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate text-slate-700" title={r.reason}>
+                      {r.reason}
+                    </span>
+                    <span className="shrink-0 tabular-nums text-xs text-slate-500">
+                      {r.n} · <b className={tone(r.avgPct)}>{sPct(r.avgPct, 1)}</b>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -179,9 +284,25 @@ function Tip({ h, w, height }: { h: Hover; w: number; height: number }) {
   );
 }
 
-const W = 640;
+/** Ancho real del contenedor (el SVG se dibuja a ese ancho para que el texto no crezca al estirarse). */
+function useWidth(initial = 640) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [w, setW] = useState(initial);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const next = Math.round(entries[0]?.contentRect.width ?? 0);
+      if (next > 0) setW(next);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, Math.max(280, w)] as const;
+}
 
 function EquityLine({ points }: { points: A["equity"] }) {
+  const [ref, W] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const H = 220;
   const pad = { l: 52, r: 12, t: 12, b: 24 };
@@ -197,7 +318,7 @@ function EquityLine({ points }: { points: A["equity"] }) {
   const h = hover !== null ? points[hover] : null;
   const labels = [0, Math.floor((points.length - 1) / 2), points.length - 1].filter((v, i, a) => a.indexOf(v) === i);
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Resultado acumulado de FARO"
         onMouseLeave={() => setHover(null)}
         onMouseMove={(e) => {
@@ -233,6 +354,7 @@ function EquityLine({ points }: { points: A["equity"] }) {
 }
 
 function RollingLine({ points }: { points: A["rolling"] }) {
+  const [ref, W] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const H = 180;
   const pad = { l: 40, r: 12, t: 12, b: 24 };
@@ -241,7 +363,7 @@ function RollingLine({ points }: { points: A["rolling"] }) {
   const path = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.hitRate).toFixed(1)}`).join("");
   const h = hover !== null ? points[hover] : null;
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Acierto en media móvil"
         onMouseLeave={() => setHover(null)}
         onMouseMove={(e) => {
@@ -267,7 +389,8 @@ function RollingLine({ points }: { points: A["rolling"] }) {
 }
 
 /** Barras verticales con base en 0 (positivas arriba en verde, negativas abajo en rojo). */
-function WeekBars({ weeks }: { weeks: A["weekly"] }) {
+function WeekBars({ weeks, byDay = false }: { weeks: A["weekly"]; byDay?: boolean }) {
+  const [ref, W] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const H = 180;
   const pad = { l: 40, r: 8, t: 12, b: 24 };
@@ -279,7 +402,7 @@ function WeekBars({ weeks }: { weeks: A["weekly"] }) {
   const bw = Math.max(4, Math.min(36, slot - 6));
   const h = hover !== null ? weeks[hover] : null;
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Resultado medio por semana" onMouseLeave={() => setHover(null)}>
         {ticks(lo, hi).map((v) => (
           <g key={v}>
@@ -303,7 +426,7 @@ function WeekBars({ weeks }: { weeks: A["weekly"] }) {
         })}
       </svg>
       {h && hover !== null && (
-        <Tip w={W} height={H} h={{ x: pad.l + slot * hover + slot / 2, y: y(Math.max(0, h.avgPct)), lines: [`Semana del ${day(new Date(`${h.week}T12:00:00Z`).getTime())}`, `${sPct(h.avgPct)} por idea · ${sEur(h.totalEur)}`, `${h.n} ideas · acierto ${h.hitRate.toFixed(0)} %`] }} />
+        <Tip w={W} height={H} h={{ x: pad.l + slot * hover + slot / 2, y: y(Math.max(0, h.avgPct)), lines: [`${byDay ? "Día" : "Semana del"} ${day(new Date(`${h.week}T12:00:00Z`).getTime())}`, `${sPct(h.avgPct)} por idea · ${sEur(h.totalEur)}`, `${h.n} ideas · acierto ${h.hitRate.toFixed(0)} %`] }} />
       )}
     </div>
   );
@@ -363,6 +486,7 @@ function TargetBars({ scan }: { scan: A["targetScan"] }) {
 }
 
 function ExcursionScatter({ points }: { points: A["excursions"] }) {
+  const [ref, W] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
   const H = 240;
   const pad = { l: 40, r: 12, t: 12, b: 28 };
@@ -373,7 +497,7 @@ function ExcursionScatter({ points }: { points: A["excursions"] }) {
   const counts = useMemo(() => points.reduce<Record<string, number>>((s, p) => ({ ...s, [p.status]: (s[p.status] ?? 0) + 1 }), {}), [points]);
   const h = hover !== null ? points[hover] : null;
   return (
-    <div>
+    <div ref={ref}>
       <div className="mb-1 flex flex-wrap gap-3 text-[11px] text-slate-600">
         {["acierto", "fallo", "caducada"].map((s) => (
           <span key={s} className="inline-flex items-center gap-1.5">

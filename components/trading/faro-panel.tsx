@@ -172,7 +172,19 @@ function FaroIdeas() {
         </span>
       ),
     },
-    { key: "kind", label: "Tipo", width: 7, sort: (i) => KIND[i.kind]?.label ?? i.kind, cell: (i) => <Pill color={(KIND[i.kind] ?? { color: "slate" }).color}>{KIND[i.kind]?.label ?? i.kind}</Pill> },
+    { key: "kind", label: "Tipo", width: 7, sort: (i) => KIND[i.kind]?.label ?? i.kind, cell: (i) => (
+        <span className="inline-flex flex-wrap items-center gap-1">
+          <Pill color={(KIND[i.kind] ?? { color: "slate" }).color}>{KIND[i.kind]?.label ?? i.kind}</Pill>
+          {i.faro2 && (
+            <span
+              title={i.faro2.pass ? "FARO-2 (en pruebas) la habría publicado" : `FARO-2 (en pruebas) la habría descartado: ${i.faro2.reasons.join("; ")}`}
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${i.faro2.pass ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400 line-through"}`}
+            >
+              F2
+            </span>
+          )}
+        </span>
+      ) },
     { key: "conv", label: "Convicción", width: 6, sort: (i) => i.conviction, cell: (i) => <span className="tabular-nums text-slate-700">{i.conviction}/5</span> },
     { key: "price", label: "Detectada a", width: 8, sort: (i) => i.price, cell: (i) => <Money v={i.price} className="text-slate-700" /> },
     { key: "inv", label: "Invalidación", width: 8, sort: (i) => i.invalidation, cell: (i) => <Money v={i.invalidation} className="text-rose-600" /> },

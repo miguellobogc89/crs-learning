@@ -73,3 +73,30 @@ test("faro: contexto guardado con cada idea (riesgo, recorrido, hora de Madrid, 
   assert.equal(f.phase, "ataque");
   assert.equal(f.btc24h, -1.23);
 });
+
+test("FARO-2: descarta rebotes, subidas perseguidas, impulsos en máximos, Bitcoin cayendo, defensa y poco recorrido", () => {
+  const { faro2Verdict } = load("lib/trading/faro/logic.ts");
+  const base = { styles: [], ch1h: 0.5, ch4h: 1, ch24h: 5, fromHigh3d: -4, fromLow3d: 10, volSurge: 1.5, volume24hEur: 100000, riskPct: 3, rewardPct: 6, validHours: 6, hour: 10, weekday: 2, phase: "ataque", phaseDays: 5, btc24h: 0.5, news: 0 };
+  assert.deepEqual(faro2Verdict("impulso", base), { pass: true, reasons: [] });
+  assert.equal(faro2Verdict("impulso", null), null, "sin contexto no opina");
+  const why = (kind, over) => faro2Verdict(kind, { ...base, ...over }).reasons;
+  assert.match(why("rebote", {})[0], /rebotes/);
+  assert.match(why("ruptura", { ch24h: 20 })[0], /\+20,0 % en 24 h/);
+  assert.match(why("ruptura", { ch1h: 6 })[0], /última hora/);
+  assert.match(why("impulso", { fromHigh3d: -0.3 })[0], /máximo/);
+  assert.deepEqual(why("ruptura", { fromHigh3d: -0.3 }), [], "una ruptura en máximos es lo normal");
+  assert.match(why("noticia", { btc24h: -3.5 })[0], /Bitcoin cae/);
+  assert.match(why("noticia", { phase: "defensa" })[0], /defensa/);
+  assert.match(why("noticia", { riskPct: 4, rewardPct: 5 })[0], /objetivo corto/);
+  assert.equal(faro2Verdict("noticia", { ...base, btc24h: null, phase: null }).pass, true, "lo que no se sabe no descarta");
+});
+
+test("faro: métricas de un momento pasado a partir de las velas anteriores", () => {
+  const { pastTicker } = load("lib/trading/faro/logic.ts");
+  const bars = Array.from({ length: 30 }, (_, i) => ({ h: 11 + i, l: 9 + i, c: 10 + i, qv: 100 }));
+  const t = pastTicker("SOLEUR", "SOL", 44, bars);
+  assert.equal(t.ch24h, ((44 - 15) / 15) * 100, "cierre de hace 25 velas = 15");
+  assert.equal(t.volume24h, 2400);
+  assert.equal(t.high24h, 40);
+  assert.equal(t.low24h, 15);
+});
