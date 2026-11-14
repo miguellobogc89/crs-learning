@@ -345,10 +345,13 @@ export function IntegrationsPanel() {
             .map((c) => c.environment)}
           onStored={() => void load()}
           onClose={() => setConnecting(null)}
-          onDone={async () => {
+          onDone={async (created) => {
+            const p = connecting;
             setConnecting(null);
             await load();
             refreshTrading();
+            // Exchanges con efectivo en USDC: se abre la cuenta para ofrecer el cambio de euros a USDC.
+            if (created && p && p.cashCurrencies?.includes("USDC")) setViewing({ c: created, p });
           }}
         />
       )}
@@ -475,7 +478,7 @@ function ConnectModal({
   savedEnvironments: BrokerEnvironment[];
   onStored: () => void;
   onClose: () => void;
-  onDone: () => void | Promise<void>;
+  onDone: (created?: ConnectionView) => void | Promise<void>;
 }) {
   const envs = provider.environments.filter((e) => (e !== "real" || realEnabled) && !taken.includes(e));
   const [environment, setEnvironment] = useState<BrokerEnvironment>(envs[0] ?? "demo");
@@ -521,7 +524,7 @@ function ConnectModal({
         setStoredLocally((current) => [...new Set([...current, environment])]);
         onStored();
       }
-      await brokerApi("connect", {
+      const created = await brokerApi<ConnectionView>("connect", {
         provider: provider.id,
         environment,
         credentials: useServer || useSaved ? undefined : values,
@@ -530,7 +533,7 @@ function ConnectModal({
         permissions: perms,
       });
       setValues({});
-      await onDone();
+      await onDone(created);
     } catch (e) {
       setError(errorText(e));
     } finally {

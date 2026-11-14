@@ -216,3 +216,31 @@ test("binance: fallo de red con el motivo técnico", async () => {
   const net = adapterWith({ "GET /api/v3/account": "network" });
   await assert.rejects(net.adapter.getAccounts(session()), (e) => /No se pudo conectar con Binance \(/.test(e.message));
 });
+
+test("binance: con el efectivo en USDC se opera contra USDC; el USDC suma como efectivo en euros", async () => {
+  const usdcPair = (symbol, baseAsset, quoteAsset) => ({ symbol, status: "TRADING", baseAsset, quoteAsset, orderTypes: ["MARKET", "LIMIT"], filters: [{ filterType: "LOT_SIZE", minQty: "0.01", stepSize: "0.01" }, { filterType: "NOTIONAL", minNotional: "5" }] });
+  const exchange = { symbols: [...EXCHANGE.symbols, usdcPair("BTCUSDC", "BTC", "USDC"), usdcPair("PEPEUSDC", "PEPE", "USDC"), usdcPair("EURUSDC", "EUR", "USDC")] };
+  const prices = [
+    { symbol: "EURUSDC", price: "1.16" },
+    { symbol: "BTCEUR", price: "60000" },
+    { symbol: "PEPEUSDC", price: "0.00001" },
+  ];
+  const routes = (balances) => ({ "GET /api/v3/exchangeInfo": exchange, "GET /api/v3/account": { canTrade: true, balances }, "GET /api/v3/ticker/price": prices });
+  const inUsdc = adapterWith(routes([{ asset: "EUR", free: "1", locked: "0" }, { asset: "USDC", free: "116", locked: "0" }, { asset: "PEPE", free: "1000000", locked: "0" }]));
+  const [acc] = await inUsdc.adapter.getAccounts(session());
+  assert.deepEqual(acc.cash.map((c) => [c.currency, c.amount, Math.round(c.valueEur * 100) / 100]), [["EUR", 1, 1], ["USDC", 116, 100]]);
+  assert.ok(Math.abs(acc.cashAvailable - 101) < 1e-9);
+  const pos = await inUsdc.adapter.getPositions(session());
+  assert.deepEqual(pos.map((p) => p.name), ["PEPE"], "el USDC es efectivo, no una posición");
+  assert.equal(pos[0].symbol, "PEPE-EUR");
+  assert.ok(Math.abs(pos[0].currentPrice - 0.00001 / 1.16) < 1e-12);
+  assert.equal((await inUsdc.adapter.resolveSymbol(session(), { symbol: "BTC-EUR", market: "crypto" })).instrument.providerSymbol, "BTCUSDC");
+  const inEur = adapterWith(routes([{ asset: "EUR", free: "100", locked: "0" }]));
+  assert.equal((await inEur.adapter.resolveSymbol(session(), { symbol: "BTC-EUR", market: "crypto" })).instrument.providerSymbol, "BTCEUR");
+  assert.equal((await inEur.adapter.resolveSymbol(session(), { symbol: "PEPE-EUR", market: "crypto" })).instrument.providerSymbol, "PEPEUSDC", "si solo cotiza en USDC, se usa");
+  const plan = await inEur.adapter.planCashConversion(session(), "USDC", 20);
+  assert.deepEqual(plan, { symbol: "EUR-USDC", providerSymbol: "EURUSDC", side: "sell", quantity: 20, expected: { currency: "USDC", amount: 20 * 1.16 } });
+  const back = await inEur.adapter.planCashConversion(session(), "EUR", 23.2);
+  assert.equal(back.side, "buy");
+  assert.equal(back.quantity, 19.9, "23,2 USDC × 0,995 / 1,16 = 19,9 €");
+});

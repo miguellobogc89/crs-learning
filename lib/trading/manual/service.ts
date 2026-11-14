@@ -119,7 +119,8 @@ async function sellTrade(t: trading_manual_trades, reason: string): Promise<stri
     const venue = await venueFor(t.workspace_id, t.symbol);
     const step = "missing" in venue ? null : venue.step;
     const pair = t.pair ?? t.symbol;
-    const held = (await brokers.getPositions(real.conn.actor, real.conn.connectionId)).find((p) => p.providerSymbol === pair);
+    // Por par o por moneda: la misma moneda puede figurar con su par en euros o en USDC.
+    const held = (await brokers.getPositions(real.conn.actor, real.conn.connectionId)).find((p) => p.providerSymbol === pair || p.symbol === t.symbol);
     const available = held ? held.quantityAvailable ?? held.quantity : 0;
     const sellQty = stepQuantity(Math.min(qty, available), 1, step);
     if (!(sellQty > 0)) {

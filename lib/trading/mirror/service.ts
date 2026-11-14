@@ -4,7 +4,8 @@
 // - ensayo: calcula la orden exacta (par, cantidad ajustada al exchange, precio del momento) y la apunta sin enviarla;
 // - real: la envía a tu exchange de cripto (Bitvavo, Binance…) por la pasarela de brókeres (permiso «automatismos», entorno real y
 //   BROKERS_REAL_ENABLED=true; cada orden con clave de idempotencia: nunca se envía dos veces).
-// Nunca toca retiros ni transferencias: solo compra y venta a mercado de pares en euros.
+// Nunca toca retiros ni transferencias: solo compra y venta a mercado de pares en euros (o en USDC si tu efectivo
+// en ese exchange está en USDC; los precios y resultados se guardan siempre en euros).
 import "server-only";
 import type { trading_mirror_legs, trading_mirrors } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -209,7 +210,9 @@ export async function realOrder(workspaceId: string, side: "buy" | "sell", symbo
   });
   if (res.status === "rejected" || !res.orderId) throw new BrokerError("conflict", res.status === "rejected" ? `${r.name} rechazó la orden` : `Orden sin confirmar: revisa ${r.name}`);
   const o = await brokers.getOrder(r.conn.actor, r.conn.connectionId, res.orderId).catch(() => null);
-  return { orderId: res.orderId, filled: o?.filledQuantity ?? null, price: o?.averageFillPrice ?? null, name: r.name };
+  // En euros aunque el par cotice en USDC (Binance, Coinbase): los resultados de la app van en euros.
+  const price = o ? (o.averageFillPriceEur !== undefined ? o.averageFillPriceEur : o.averageFillPrice) : null;
+  return { orderId: res.orderId, filled: o?.filledQuantity ?? null, price: price ?? null, name: r.name };
 }
 
 async function buyLeg(m: trading_mirrors, legId: string, symbol: string, amount: number) {
@@ -279,7 +282,8 @@ async function sellLeg(m: trading_mirrors, l: trading_mirror_legs, reason: strin
     if (!r.conn) throw new BrokerError("not_connected", realProblem(r) ?? "Sin conexión");
     const venue = await venueFor(m.workspace_id, l.symbol);
     const step = "missing" in venue ? null : venue.step;
-    const held = (await brokers.getPositions(r.conn.actor, r.conn.connectionId)).find((p) => p.providerSymbol === pair);
+    // Por par o por moneda: la misma moneda puede figurar con su par en euros o en USDC.
+    const held = (await brokers.getPositions(r.conn.actor, r.conn.connectionId)).find((p) => p.providerSymbol === pair || p.symbol === l.symbol);
     const available = held ? held.quantityAvailable ?? held.quantity : 0;
     const sellQty = stepQuantity(Math.min(qty, available), 1, step);
     if (!(sellQty > 0)) {

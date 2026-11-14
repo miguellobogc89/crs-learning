@@ -13,6 +13,7 @@ import { isKamikaze, KAMIKAZES, type KamikazeDef } from "../kamikaze/roster";
 import { kamikazeView, resetKamikaze, runKamikazeNow } from "../kamikaze/engine";
 import { CHIP_AGENTS, isChip, type ChipDef } from "../chip/roster";
 import { chipModeOf, resetChip, runChipNow } from "../chip/engine";
+import { agentVenues } from "./venues";
 
 const WS = AGENTS_WORKSPACE;
 
@@ -48,6 +49,8 @@ export async function getAgents(workspaceId?: string) {
   const owned = new Set(
     workspaceId ? (await prisma.trading_user_agents.findMany({ where: { workspace_id: workspaceId }, select: { agent: true } })).map((o) => o.agent) : [],
   );
+  // Qué opera cada uno y dónde se le puede copiar (sobre su universo; listas públicas guardadas unas horas).
+  const venues = await agentVenues(CATALOG.map((a) => a.key));
   const started = Math.min(...accounts.map((a) => a.created_at.getTime()));
   const benchInst = await prisma.market_instruments.findMany({ where: { symbol: { in: [INDEX_SYMBOL, CRYPTO_BENCHMARK] } } });
   const benchSeries = await loadSeries(benchInst.map((i) => i.id), new Date(started - 5 * 86_400_000));
@@ -80,6 +83,8 @@ export async function getAgents(workspaceId?: string) {
         profile: def.profile as AgentDef["profile"] | KamikazeDef["profile"] | ChipDef["profile"],
         tagline: def.tagline,
         color: def.color,
+        /** Crypto, valores o los dos, y los exchanges donde se le puede copiar (null si no se pudo saber). */
+        venues: venues?.get(def.key) ?? null,
         rules: def.rules,
         settings: {
           riskPerTradePct: def.settings.risk_per_trade_pct,

@@ -88,7 +88,18 @@ export type BrokerAccount = {
   /** Valor total (efectivo + inversiones). */
   totalValue: number;
   investedValue: number | null;
+  /**
+   * Efectivo por moneda cuando el exchange guarda el dinero en más de una (euros y USDC). cashAvailable
+   * ya es la suma en euros; esto es el detalle para enseñarlo y para cambiar de una a otra.
+   */
+  cash?: CashBalance[];
 };
+
+/** Efectivo libre en una moneda (EUR o un dólar digital como USDC) y su valor en euros. */
+export type CashBalance = { currency: string; amount: number; valueEur: number };
+
+/** Monedas de efectivo entre las que se puede cambiar dentro de un exchange. */
+export type CashCurrency = "EUR" | "USDC";
 
 export type BrokerPosition = {
   symbol: string | null;
@@ -118,6 +129,11 @@ export type BrokerOrder = {
   limitPrice: number | null;
   stopPrice: number | null;
   averageFillPrice: number | null;
+  /**
+   * Precio medio en euros cuando el par no cotiza en euros (p. ej. BTC-USDC, convertido al cambio del
+   * momento). Si falta, averageFillPrice ya está en euros.
+   */
+  averageFillPriceEur?: number | null;
   /** Si la creó una integración por API (las creadas a mano en la app del bróker no se tocan). */
   createdByApi: boolean | null;
   createdAt: string | null;
@@ -254,4 +270,9 @@ export type ProviderInfo = {
   credentialFields: CredentialField[];
   /** Particularidades que conviene enseñar (límites de la API, órdenes no soportadas…). */
   notes: string[];
+  /**
+   * Monedas en las que puede estar el efectivo si no es solo euros (p. ej. ["EUR", "USDC"]): al conectar
+   * se ofrece cambiar los euros a USDC para poder operar las monedas que solo cotizan en USDC.
+   */
+  cashCurrencies?: CashCurrency[];
 };

@@ -108,6 +108,16 @@ export async function POST(req: Request, route: RouteContext) {
       };
       return json(await brokers.placeOrder(actor, order));
     }
+    if (action === "convert-cash") {
+      return json(
+        await brokers.convertCash(actor, {
+          connectionId: id,
+          to: body.to === "EUR" ? "EUR" : body.to === "USDC" ? "USDC" : (String(body.to) as "EUR"),
+          amount: Number(body.amount),
+          idempotencyKey: String(body.idempotencyKey ?? ""),
+        }),
+      );
+    }
     if (action === "cancel") return json(await brokers.cancelOrder(actor, id, String(body.orderId ?? "")));
     if (action === "refresh-order") return json(await brokers.refreshOrder(actor, String(body.requestId ?? "")));
     return fail("No encontrado", 404, "not_found");

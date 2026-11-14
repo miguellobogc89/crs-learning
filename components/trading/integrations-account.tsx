@@ -8,6 +8,7 @@ import type { ConnectionView, ProviderView } from "@/lib/brokers/gateway";
 import type { BrokerAccount, BrokerExecution, BrokerOrder, BrokerPosition, OrderSide, OrderType, PlaceOrderResult } from "@/lib/brokers/types";
 import { errorText, eur, field, ghost, int, primary, th } from "./format";
 import { AssetIcon } from "./asset-icon";
+import { CashConversion } from "./cash-conversion";
 import { ErrorNote, Modal, Pill } from "./ui";
 
 async function brokerApi<T>(path: string, body?: unknown): Promise<T> {
@@ -123,6 +124,20 @@ export function AccountModal({ c, provider, onClose, onChanged }: { c: Connectio
                 </div>
               ))}
             </div>
+            {acc?.cash && acc.cash.some((x) => x.currency === "USDC") && (
+              <div className="mt-3">
+                <CashConversion
+                  connectionId={c.id}
+                  providerName={provider.name}
+                  cash={acc.cash}
+                  canTrade={canTrade}
+                  onDone={() => {
+                    void load();
+                    onChanged();
+                  }}
+                />
+              </div>
+            )}
           </section>
         )}
 

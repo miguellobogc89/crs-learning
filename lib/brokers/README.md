@@ -11,7 +11,7 @@ policy.ts     propiedad de la conexión, permisos, entorno y capacidades (puro, 
 gateway.ts    carga la conexión, aplica la política, descifra credenciales, llama al adaptador
               y registra cada orden con clave de idempotencia (broker_orders)
 providers.ts  qué adaptadores hay registrados y cuáles se anuncian como «próximamente»
-adapters/<id>/  un adaptador por proveedor (hoy: trading212 y binance)
+adapters/<id>/  un adaptador por proveedor (hoy: trading212, binance, bitvavo y coinbase)
 ```
 
 ## Añadir un bróker
@@ -24,6 +24,17 @@ adapters/<id>/  un adaptador por proveedor (hoy: trading212 y binance)
 4. Añade sus tests con un `fetch` simulado, como `tests/brokers/trading212.test.mjs`.
 
 Nada más cambia: ni el gateway, ni la interfaz de Integraciones, ni los agentes.
+
+## Euros y USDC (Binance, Coinbase)
+
+En la UE no hay USDT al contado y muchas monedas solo cotizan contra USDC. Estos adaptadores:
+
+- cuentan como efectivo los euros y los USDC (en euros) y dan el detalle en `account.cash`;
+- compran cada moneda con el efectivo que tengas: si está en USDC, contra USDC (BTC-USDC); si está en
+  euros, contra euros; si una moneda solo cotiza en una de las dos, en esa;
+- dan en euros los precios de las posiciones y `averageFillPriceEur` en las órdenes en USDC;
+- implementan `planCashConversion` para cambiar euros ↔ USDC (`gateway.convertCash`, acción
+  `convert-cash` de la API), con auditoría e idempotencia como cualquier otra orden.
 
 ## Reglas que no se saltan
 

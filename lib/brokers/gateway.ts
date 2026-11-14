@@ -24,6 +24,7 @@ import {
   type BrokerOrder,
   type BrokerPermission,
   type BrokerPosition,
+  type CashCurrency,
   type InstrumentRef,
   type OrderStatus,
   type PlaceOrderInput,
@@ -561,6 +562,32 @@ async function reconcileRow(audit: AuditRow, adapter: BrokerAdapter, session: Br
     where: { id: audit.id },
     data: { status: found.status, provider_order_id: found.orderId, provider_status: found.providerStatus, updated_at: new Date() },
   });
+}
+
+/**
+ * Cambia efectivo entre euros y USDC dentro del exchange (Binance, Coinbase): en Europa muchas monedas
+ * solo cotizan en USDC. Es una orden a mercado más, con su auditoría y su clave de idempotencia.
+ * `amount` va en la moneda de origen (euros si `to` es USDC; USDC si `to` es EUR).
+ */
+export async function convertCash(actor: BrokerActor, input: { connectionId: string; to: CashCurrency; amount: number; idempotencyKey: string }) {
+  if (input.to !== "USDC" && input.to !== "EUR") throw new BrokerError("invalid_request", "Moneda de destino no válida");
+  const { row, adapter, session } = await open(actor, input.connectionId, { kind: "trade", capability: "place_order" });
+  if (!adapter.planCashConversion) throw new BrokerError("unsupported", `${adapter.info.name} no necesita cambiar euros: opera directamente en euros`, { provider: row.provider });
+  const amount = Number(input.amount);
+  if (!(Number.isFinite(amount) && amount > 0)) throw new BrokerError("invalid_request", "Indica cuánto quieres cambiar");
+  const plan = await guarded(row, () => adapter.planCashConversion!(session, input.to, amount));
+  const result = await placeOrder(actor, {
+    connectionId: row.id,
+    environment: row.environment === "real" ? "real" : "demo",
+    instrument: { symbol: plan.symbol, market: "crypto" },
+    providerSymbol: plan.providerSymbol,
+    side: plan.side,
+    type: "market",
+    quantity: plan.quantity,
+    idempotencyKey: `cambio:${input.idempotencyKey}`.slice(0, 120),
+    reference: input.to === "USDC" ? "cambio de euros a USDC" : "cambio de USDC a euros",
+  });
+  return { ...result, expected: plan.expected };
 }
 
 /** Consulta al bróker el estado de una orden registrada (y actualiza el registro). */

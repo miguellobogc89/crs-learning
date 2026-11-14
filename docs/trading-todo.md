@@ -60,15 +60,15 @@ Apuntado el 10/11/2026. Sin empezar.
 ## Integraciones (13/11/2026)
 - [ ] Aviso claro cuando el fallo al conectar un bróker es de red, en lugar del mensaje técnico encadenado (hoy: «No se pudieron comprobar los permisos… (No se pudo conectar con Binance (certificado no válido: posible proxy de empresa))»). Por ejemplo, certificado: «Tu conexión a internet no permite conectar con Binance de forma segura. Parece una red de empresa o con proxy que intercepta las conexiones. Prueba desde otra red»; DNS: «no se encuentra Binance (red o DNS bloqueados)»; tiempo agotado: «Binance no responde, inténtalo en un rato». Igual para Bitvavo. La causa ya la detecta `networkCause()` en `lib/brokers/adapters/*/api.ts`.
 
-## Varios exchanges y Binance en USDC (14/11/2026)
-Bloqueado hasta poder operar desde Binance (hoy solo se opera en real desde Bitvavo).
-- [ ] **Una copia vive en un solo exchange**: copia = agente + exchange + cantidad. El dinero nunca pasa de un exchange a otro. Hoy solo se usa el exchange marcado «Usar para la cartera» y lo que no está allí sale «omitida».
-- [ ] Modal «Copiar a X» con los exchanges operativos, su saldo libre y cuánto usar en cada uno. Por dentro, una subcartera independiente por exchange: cada una replica al agente con los mismos pesos y se salta lo que no exista allí (si la moneda está en los dos, se compra en los dos).
-- [ ] **Binance se activa cambiando a USDC** (en el EEE no hay USDT en contado por MiCA). Al conectar Binance: «Para operar en Binance tu dinero tiene que estar en USDC. ¿Cuánto quieres cambiar?» → se hace el cambio y la cuenta queda operativa. Todo en Binance se compra y se vende en USDC, también lo que tenga par en euros.
-  - [ ] Botón «Volver a euros» (Integraciones / Mi dinero) cuando el usuario quiera. Con copias activas: avisar de que se pausan y preguntar si se venden también las monedas compradas.
-  - [ ] Detectar euros nuevos sin cambiar en Binance y ofrecer cambiarlos.
-  - [ ] En el aviso, una línea: cada cambio tiene comisión y el saldo en euros varía un poco con el dólar.
-  - [ ] En la cartera todo en euros; el USDC solo como detalle (p. ej. «20,30 € (21,95 USDC)»).
-  - [ ] Precios de Binance para los agentes que operen monedas que no están en Bitvavo (hoy las velas salen de Bitvavo).
-- [ ] **Pill de exchanges compatibles** en la tarjeta y la página de cada agente, calculada sobre su universo (lo que mira y puede comprar), no sobre lo que tiene ahora: «Bitvavo» si están todas, «Binance 18/25» si solo parte, en gris si el exchange está «Pronto». Calcularlo una vez al día.
-- [ ] Decidir el universo cuando haya más exchanges: el de Bitvavo, las monedas comunes de todos o uno propio por agente (y que la pill lo diga).
+## Varios exchanges, Coinbase y USDC (14/11/2026)
+- [x] **Coinbase conectado** (Advanced Trade, solo real): clave ECDSA con «View» y «Trade»; se rechazan las claves con «Transfer». Pares en euros y en USDC.
+- [x] **Cambio a USDC** en Coinbase y Binance (en el EEE no hay USDT al contado por MiCA): en «Ver cuenta», bloque «Efectivo» con «Cambiar a USDC» y «Volver a euros» (orden a mercado con auditoría e idempotencia). Al conectar Coinbase o Binance se abre la cuenta para ofrecer el cambio. Aviso de comisión y del efecto del dólar.
+  - [x] Cada moneda se compra con el efectivo que tengas (USDC → BTC-USDC; euros → BTC-EUR; si solo cotiza en una, esa). Todo se enseña en euros; los precios de las copias se guardan en euros.
+  - [ ] Con copias activas, «Volver a euros» no avisa de que se saltarán las monedas que solo cotizan en USDC ni ofrece vender lo comprado.
+  - [ ] Detectar euros nuevos sin cambiar y avisar fuera de «Ver cuenta» (hoy solo se ve allí).
+  - [ ] Precios de Binance/Coinbase para agentes que operen monedas que no están en Bitvavo (hoy los kamikazes y FARO se filtran a Bitvavo).
+- [x] **Pills en los agentes** (tarjeta, lista y página): qué operan (Crypto / Valores) y dónde se les puede copiar, sobre su universo (no sobre lo que tienen): verde si están todas, ámbar «Coinbase 10/12» si solo parte, gris si aún no hay dinero real (Trading 212 Demo). Listas públicas de Bitvavo, Coinbase y Binance, guardadas 6 h.
+- [ ] **Una copia vive en un solo exchange**: copia = agente + exchange + cantidad. Hoy todas las copias usan el exchange marcado «Usar para la cartera» y lo que no está allí sale «omitida». Falta el modal «Copiar a X» con los exchanges operativos, su saldo libre y cuánto usar en cada uno (una subcartera independiente por exchange).
+- [ ] Comisión de «Mis operaciones» fija a la de Bitvavo (0,25 %): en Coinbase es más alta (~0,5 % a mercado).
+- [ ] Decidir el universo cuando haya más exchanges: el de Bitvavo, las monedas comunes de todos o uno propio por agente.
+- [ ] Binance: el trading por API sigue sin estar permitido en tu región.

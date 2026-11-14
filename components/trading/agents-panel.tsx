@@ -13,6 +13,7 @@ import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill
 import { AssetIcon } from "./asset-icon";
 import { DataTable, Money } from "./table";
 import { MirrorModal } from "./mirror-modal";
+import { AgentVenuePills } from "./agent-venues";
 
 export type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean; canCopy: boolean };
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
@@ -264,6 +265,7 @@ export function AgentsPanel() {
                       <Pill color={a.color}>{cap(a.profile)}</Pill>
                     </span>
                     <span className="block truncate text-xs text-slate-500">{a.tagline}</span>
+                    <AgentVenuePills v={a.venues} className="mt-1" />
                   </span>
                 </span>
               ),
@@ -511,6 +513,7 @@ function AgentCard({
               </span>
             </div>
             <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500">{a.tagline}</p>
+            <AgentVenuePills v={a.venues} className="mt-2" />
           </div>
         </div>
         <div className="-mr-2 -mt-1 shrink-0">

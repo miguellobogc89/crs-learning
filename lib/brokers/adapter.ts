@@ -10,6 +10,7 @@ import type {
   BrokerInstrument,
   BrokerOrder,
   BrokerPosition,
+  CashCurrency,
   InstrumentRef,
   OrderSide,
   OrderStatus,
@@ -45,6 +46,20 @@ export type AdapterOrder = {
 export type AdapterOrderResult = { orderId: string; status: OrderStatus; providerStatus: string | null };
 
 /**
+ * Orden a mercado que cambia efectivo de una moneda a otra dentro del exchange (euros ↔ USDC).
+ * La envía el gateway como cualquier otra orden (auditoría e idempotencia incluidas).
+ */
+export type CashConversionPlan = {
+  /** Símbolo con el que se registra (p. ej. «USDC-EUR»). */
+  symbol: string;
+  providerSymbol: string;
+  side: OrderSide;
+  quantity: number;
+  /** Lo que se espera recibir, para enseñarlo antes de confirmar. */
+  expected: { currency: CashCurrency; amount: number };
+};
+
+/**
  * Cada método opcional corresponde a una capacidad. Si el proveedor no la tiene, no se implementa
  * (y no se declara en `info.capabilities`): el gateway responde «unsupported» sin llamar a nada.
  */
@@ -78,6 +93,11 @@ export interface BrokerAdapter {
    * para resolver órdenes de resultado incierto sin reenviarlas. null si el proveedor no la conoce.
    */
   findOrderByClientId?(session: BrokerSession, order: { providerSymbol: string; clientOrderId: string }): Promise<BrokerOrder | null>;
+  /**
+   * Prepara el cambio de `amount` (en la moneda de origen) a la moneda `to` (EUR ↔ USDC). Solo los
+   * exchanges donde muchas monedas cotizan en USDC (Binance, Coinbase). No envía nada.
+   */
+  planCashConversion?(session: BrokerSession, to: CashCurrency, amount: number): Promise<CashConversionPlan>;
 }
 
 /** Método que implementa cada capacidad (para comprobar que lo declarado coincide con lo implementado). */

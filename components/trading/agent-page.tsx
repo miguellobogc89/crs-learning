@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Pill, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { MirrorModal } from "./mirror-modal";
+import { AgentVenuePills } from "./agent-venues";
 import { agentMenu, ChipMode, CopyBadges, CopyModal, Creator, Decision, DotsMenu, Rounds, runningFor, when, type Agent, type Data } from "./agents-panel";
 
 type Tab = "abiertas" | "historial" | "decisiones" | "rondas";
@@ -162,6 +163,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                   )}
                 </div>
                 <p className="mt-1 max-w-xl text-sm text-slate-600">{a.tagline}</p>
+                <AgentVenuePills v={a.venues} className="mt-2" />
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   <Creator mine={a.mine} /> · {runningFor(a.startedAt)}
                   {a.lastRun && <> · última decisión {when(a.lastRun.at)}</>}
