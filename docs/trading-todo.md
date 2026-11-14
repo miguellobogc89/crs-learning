@@ -72,3 +72,10 @@ Apuntado el 10/11/2026. Sin empezar.
 - [ ] Comisión de «Mis operaciones» fija a la de Bitvavo (0,25 %): en Coinbase es más alta (~0,5 % a mercado).
 - [ ] Decidir el universo cuando haya más exchanges: el de Bitvavo, las monedas comunes de todos o uno propio por agente.
 - [ ] Binance: el trading por API sigue sin estar permitido en tu región.
+
+## Mi cartera y conexiones (14/11/2026)
+- [x] Al conectar una cuenta real queda operativa: permisos «Leer», «Operar» y «Automático» marcados por defecto y, si la cartera no tenía exchange activo, pasa a ser el de la cartera.
+- [x] Mi cartera: saldo, Disponible / Trabajando para ti / En oportunidades / Ganado dentro del bloque de la gráfica, con botón «Actualizar».
+- [x] «Mis oportunidades»: abiertas e historial en una sola lista (filtros Todas / Abiertas / Historial), con stop y objetivo, resultado en € y %, «Seguir si sube» activable en las abiertas y «Cerrar» (vende ya).
+- [x] Tus agentes en pequeño al lado (clic → Gestionar); fuera el panel de detalle del agente seleccionado.
+- [ ] Cambiar stop u objetivo de una oportunidad abierta a mano.

@@ -1,7 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { addMyAgent, getWallets, myAgents, removeMyAgent } from "@/lib/trading/wallets";
 import { getMarketPhase } from "@/lib/trading/chip/phase-service";
-import { buyManual, manualView, sellManual } from "@/lib/trading/manual/service";
+import { buyManual, manualView, sellManual, setManualTrail } from "@/lib/trading/manual/service";
 import { connectorContext } from "@/lib/connectors/context";
 import {
   accountDetail,
@@ -152,6 +152,10 @@ export async function POST(req: Request, route: RouteContext) {
     if (action === "manual/buy" || action === "manual/sell") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede operar con el dinero del exchange", 403);
       return NextResponse.json(action === "manual/buy" ? await buyManual(ctx.workspaceId, body) : await sellManual(ctx.workspaceId, body.id));
+    }
+    if (action === "manual/trail") {
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede operar con el dinero del exchange", 403);
+      return NextResponse.json(await setManualTrail(ctx.workspaceId, body.id, body.trail));
     }
     if (action === "mine/add" || action === "mine/remove") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede cambiar sus agentes", 403);

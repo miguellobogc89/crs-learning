@@ -484,7 +484,8 @@ function ConnectModal({
   const [environment, setEnvironment] = useState<BrokerEnvironment>(envs[0] ?? "demo");
   const [useServer, setUseServer] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
-  const [perms, setPerms] = useState<BrokerPermission[]>(["read"]);
+  // Operativa desde el principio: leer, operar y automatismos (Oportunidades y copias). Se pueden quitar.
+  const [perms, setPerms] = useState<BrokerPermission[]>(["read", "trade", "auto"]);
   const [realOk, setRealOk] = useState(false);
   const [remember, setRemember] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -637,7 +638,7 @@ function ConnectModal({
           <label className="flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-orange-900">
             <input type="checkbox" className="mt-1" checked={realOk} onChange={(e) => setRealOk(e.target.checked)} />
             <span>
-              <b>Es mi cuenta con dinero real.</b> Empiezo solo con permiso de lectura y mi clave no tiene los retiros habilitados.
+              <b>Es mi cuenta con dinero real</b> y mi clave no tiene los retiros habilitados. Con «Operar» y «Automático» la app podrá comprar y vender por mí (Oportunidades y copias).
             </span>
           </label>
         )}

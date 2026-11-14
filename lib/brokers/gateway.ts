@@ -266,6 +266,14 @@ export async function connect(
     create: { user_id: user.userId, workspace_id: user.workspaceId, provider: info.id, environment: input.environment, ...data },
     update: data,
   });
+  // Que quede operativa al conectar: una cuenta real pasa a ser la de la cartera si no hay otra activa.
+  if (user.canManage && input.environment === "real") {
+    const current = await tradingConnectionId(user.workspaceId);
+    const active = current ? await prisma.broker_connections.findUnique({ where: { id: current }, select: { status: true } }) : null;
+    if (!current || active?.status !== "active") {
+      await prisma.trading_accounts.updateMany({ where: { workspace_id: user.workspaceId, agent: "" }, data: { broker_connection_id: row.id, updated_at: new Date() } });
+    }
+  }
   return view(row, await tradingConnectionId(user.workspaceId));
 }
 

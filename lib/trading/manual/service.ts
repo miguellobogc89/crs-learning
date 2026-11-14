@@ -23,7 +23,7 @@ const save = (id: string, data: Prisma.trading_manual_tradesUpdateInput) => pris
 export async function manualView(workspaceId: string) {
   const [open, closed, real] = await Promise.all([
     prisma.trading_manual_trades.findMany({ where: { workspace_id: workspaceId, status: { in: ["abriendo", "abierta", "vendiendo", "error"] } }, orderBy: { created_at: "desc" } }),
-    prisma.trading_manual_trades.findMany({ where: { workspace_id: workspaceId, status: { in: ["cerrada", "omitida"] } }, orderBy: { created_at: "desc" }, take: 10 }),
+    prisma.trading_manual_trades.findMany({ where: { workspace_id: workspaceId, status: { in: ["cerrada", "omitida"] } }, orderBy: { created_at: "desc" }, take: 100 }),
     realConnection(workspaceId),
   ]);
   const trades = await Promise.all(
@@ -34,6 +34,7 @@ export async function manualView(workspaceId: string) {
         id: t.id,
         ideaId: t.idea_id,
         symbol: t.symbol,
+        pair: t.pair,
         status: t.status,
         amount: t.amount,
         invested: t.quantity && t.entry_price ? t.quantity * t.entry_price : t.amount,
@@ -158,6 +159,22 @@ export async function sellManual(workspaceId: string, idInput: unknown) {
   const err = await sellTrade(t, "la vendiste tú");
   if (err) throw new Error(`No se pudo vender: ${err}`);
   return { ok: true };
+}
+
+/**
+ * «Seguir si sube» en una operación abierta: al llegar al objetivo, en vez de vender, el stop sube y la
+ * sigue mientras suba. Si se quita y ya pasó el objetivo, se vende en la siguiente revisión (~5 min).
+ */
+export async function setManualTrail(workspaceId: string, idInput: unknown, trailInput: unknown) {
+  const t = await prisma.trading_manual_trades.findFirst({ where: { id: String(idInput ?? ""), workspace_id: workspaceId } });
+  if (!t) throw new Error("Esa operación no existe");
+  if (t.status !== "abierta") throw new Error("Esa operación no está abierta");
+  const trail = trailInput === true;
+  await save(t.id, {
+    trail,
+    note: trail ? "Seguir si sube: al llegar al objetivo el stop sube y acompaña al precio" : t.trailing ? "Ya no sigue: se vende en la siguiente revisión si sigue por encima del objetivo" : "Vende al llegar al objetivo",
+  });
+  return { ok: true, trail };
 }
 
 /** Una pasada de todas las operaciones abiertas (desde el cron, cada ~5 min). */
