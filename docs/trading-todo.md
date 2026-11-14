@@ -59,3 +59,16 @@ Apuntado el 10/11/2026. Sin empezar.
 
 ## Integraciones (13/11/2026)
 - [ ] Aviso claro cuando el fallo al conectar un bróker es de red, en lugar del mensaje técnico encadenado (hoy: «No se pudieron comprobar los permisos… (No se pudo conectar con Binance (certificado no válido: posible proxy de empresa))»). Por ejemplo, certificado: «Tu conexión a internet no permite conectar con Binance de forma segura. Parece una red de empresa o con proxy que intercepta las conexiones. Prueba desde otra red»; DNS: «no se encuentra Binance (red o DNS bloqueados)»; tiempo agotado: «Binance no responde, inténtalo en un rato». Igual para Bitvavo. La causa ya la detecta `networkCause()` en `lib/brokers/adapters/*/api.ts`.
+
+## Varios exchanges y Binance en USDC (14/11/2026)
+Bloqueado hasta poder operar desde Binance (hoy solo se opera en real desde Bitvavo).
+- [ ] **Una copia vive en un solo exchange**: copia = agente + exchange + cantidad. El dinero nunca pasa de un exchange a otro. Hoy solo se usa el exchange marcado «Usar para la cartera» y lo que no está allí sale «omitida».
+- [ ] Modal «Copiar a X» con los exchanges operativos, su saldo libre y cuánto usar en cada uno. Por dentro, una subcartera independiente por exchange: cada una replica al agente con los mismos pesos y se salta lo que no exista allí (si la moneda está en los dos, se compra en los dos).
+- [ ] **Binance se activa cambiando a USDC** (en el EEE no hay USDT en contado por MiCA). Al conectar Binance: «Para operar en Binance tu dinero tiene que estar en USDC. ¿Cuánto quieres cambiar?» → se hace el cambio y la cuenta queda operativa. Todo en Binance se compra y se vende en USDC, también lo que tenga par en euros.
+  - [ ] Botón «Volver a euros» (Integraciones / Mi dinero) cuando el usuario quiera. Con copias activas: avisar de que se pausan y preguntar si se venden también las monedas compradas.
+  - [ ] Detectar euros nuevos sin cambiar en Binance y ofrecer cambiarlos.
+  - [ ] En el aviso, una línea: cada cambio tiene comisión y el saldo en euros varía un poco con el dólar.
+  - [ ] En la cartera todo en euros; el USDC solo como detalle (p. ej. «20,30 € (21,95 USDC)»).
+  - [ ] Precios de Binance para los agentes que operen monedas que no están en Bitvavo (hoy las velas salen de Bitvavo).
+- [ ] **Pill de exchanges compatibles** en la tarjeta y la página de cada agente, calculada sobre su universo (lo que mira y puede comprar), no sobre lo que tiene ahora: «Bitvavo» si están todas, «Binance 18/25» si solo parte, en gris si el exchange está «Pronto». Calcularlo una vez al día.
+- [ ] Decidir el universo cuando haya más exchanges: el de Bitvavo, las monedas comunes de todos o uno propio por agente (y que la pill lo diga).
