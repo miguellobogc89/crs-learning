@@ -79,3 +79,11 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] «Mis oportunidades»: abiertas e historial en una sola lista (filtros Todas / Abiertas / Historial), con stop y objetivo, resultado en € y %, «Seguir si sube» activable en las abiertas y «Cerrar» (vende ya).
 - [x] Tus agentes en pequeño al lado (clic → Gestionar); fuera el panel de detalle del agente seleccionado.
 - [ ] Cambiar stop u objetivo de una oportunidad abierta a mano.
+
+## FARO: análisis y aprendizaje (14/11/2026)
+- [x] Oportunidades → pestaña **Análisis** (`?vista=analisis`): resultado total con 100 € por idea, por idea, acierto, ganan/pierden, factor de beneficio, peor caída; curva acumulada; semana a semana; acierto en media móvil (últimas 50); por tipo, convicción, franja horaria y fase del mercado; máxima subida frente a máxima bajada (¿falla al elegir o al gestionar?) y qué habría pasado con un objetivo fijo más corto.
+- [x] Cada idea nueva guarda lo que veía FARO al publicarla (`features`: cambios 1 h/4 h/24 h, distancia a máximos/mínimos de 3 días, volumen, riesgo y recorrido, hora y día, fase del mercado, Bitcoin 24 h, noticias). **Aplicar en Neon la migración `20261114160000_trading_faro_features`** (sin ella todo sigue funcionando, pero no se guarda el contexto).
+- [ ] Ajustes por reglas según el análisis (objetivo/invalidación por datos, menos ideas en defensa, apagar tipos que pierden).
+- [ ] Memoria de FARO: resumen de su propio historial en cada análisis.
+- [ ] FARO-2 en paralelo y comparación en Análisis.
+- [ ] Filtro estadístico con ~300 ideas con contexto.

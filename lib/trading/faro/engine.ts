@@ -13,7 +13,9 @@ import { CRYPTO, CRYPTO_MARKET } from "../market-data";
 import { metricsOf, prefilter, rank, type Metrics, type Ticker } from "../kamikaze/logic";
 import { barsSince, eurPairs, hourly, symbolOf } from "../kamikaze/market";
 import { kamikazeByKey, type KamikazeStyle } from "../kamikaze/roster";
-import { checkIdeas, KINDS, scoreIdea, type AiIdea, type BoardIdea } from "./logic";
+import { checkIdeas, ideaFeatures, KINDS, scoreIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
+import { getMarketPhase } from "../chip/phase-service";
+import { analyze, type ResolvedIdea } from "./analysis";
 
 const env = (k: string, d: number) => {
   const n = Number(process.env[k]);
@@ -132,6 +134,25 @@ const SCHEMA = {
   },
 } as const;
 
+// ---------------------------------------------------------------------------
+// Lo que veía FARO en cada idea (columna «features», fuera del esquema de Prisma a propósito: si la
+// migración 20261114160000_trading_faro_features aún no se ha pasado, todo lo demás sigue funcionando).
+// ---------------------------------------------------------------------------
+async function saveFeatures(id: string, features: IdeaFeatures) {
+  await prisma
+    .$executeRaw(Prisma.sql`UPDATE public.trading_faro_ideas SET features = ${JSON.stringify(features)}::jsonb WHERE id = ${id}::uuid`)
+    .catch((e) => console.error("[faro] guardar contexto (¿falta la migración trading_faro_features?)", e instanceof Error ? e.message.slice(0, 200) : e));
+}
+
+async function loadFeatures(): Promise<Map<string, IdeaFeatures>> {
+  try {
+    const rows = await prisma.$queryRaw<{ id: string; features: IdeaFeatures }[]>(Prisma.sql`SELECT id::text AS id, features FROM public.trading_faro_ideas WHERE features IS NOT NULL`);
+    return new Map(rows.map((r) => [r.id, r.features]));
+  } catch {
+    return new Map();
+  }
+}
+
 async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
   // Un solo análisis por intervalo aunque haya varias revisiones a la vez.
   const minutes = force ? 0 : RUN_MIN();
@@ -211,11 +232,23 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
       timeoutMs: 60_000,
     });
     const { ok, rejected } = checkIdeas(ai.ideas ?? [], { candidates: candidates.map((c) => ({ pair: c.m.pair, price: c.m.price })), livePairs: live.map((i) => i.pair) });
+    // Contexto para guardar con cada idea (fase del mercado y Bitcoin): si falla, se guarda sin él.
+    const phase = await getMarketPhase().catch(() => null);
+    const btc = market.find((t) => t.base === "BTC");
     for (const i of ok) {
       const symbol = symbolOf(i.pair, rules) ?? `${i.pair.replace(/(EUR|USDC)$/, "")}-EUR`;
       const inst = await ensureInstrument(symbol, rules.get(i.pair)?.base ?? symbol.replace(/-EUR$/, ""));
       await setLive(inst.id, i.price);
-      await prisma.trading_faro_ideas.create({
+      const cand = candidates.find((c) => c.m.pair === i.pair);
+      const features = cand
+        ? ideaFeatures(cand.m, cand.styles, i, {
+            now: Date.now(),
+            phase: phase ? { mode: phase.mode, days: phase.days } : null,
+            btc24h: btc ? btc.ch24h : null,
+            news: news.filter((n) => n.symbols.includes(cand.m.base)).length,
+          })
+        : null;
+      const created = await prisma.trading_faro_ideas.create({
         data: {
           run_id: runId,
           pair: i.pair,
@@ -233,6 +266,7 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
           worst_pct: 0,
         },
       });
+      if (features) await saveFeatures(created.id, features);
     }
     await prisma.trading_faro_runs.update({
       where: { id: runId },
@@ -384,4 +418,31 @@ export async function faroView(workspaceId: string) {
     stats,
     account: { opened: state.summary.opened, equity: state.summary.equity, cash: state.summary.available, riskPct: state.account.risk_per_trade_pct },
   };
+}
+
+/** Análisis del rendimiento de FARO con todas sus ideas ya resueltas (para la pestaña «Análisis»). */
+export async function faroAnalysis() {
+  const [rows, features] = await Promise.all([
+    prisma.trading_faro_ideas.findMany({
+      where: { status: { in: ["acierto", "fallo", "caducada"] }, result_pct: { not: null } },
+      orderBy: { created_at: "asc" },
+      take: 5000,
+    }),
+    loadFeatures(),
+  ]);
+  const ideas: ResolvedIdea[] = rows.map((r) => ({
+    id: r.id,
+    createdAt: r.created_at.getTime(),
+    resolvedAt: r.resolved_at?.getTime() ?? null,
+    kind: r.kind,
+    conviction: r.conviction,
+    status: r.status as ResolvedIdea["status"],
+    resultPct: r.result_pct ?? 0,
+    bestPct: r.best_pct ?? 0,
+    worstPct: r.worst_pct ?? 0,
+    rewardPct: ((r.target - r.price) / r.price) * 100,
+    riskPct: ((r.price - r.invalidation) / r.price) * 100,
+    features: features.get(r.id) ?? null,
+  }));
+  return analyze(ideas);
 }

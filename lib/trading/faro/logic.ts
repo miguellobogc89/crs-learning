@@ -231,3 +231,64 @@ export function trailingStop(p: { entry: number; initialStop: number; stop: numb
 }
 
 export const hoursLeft = (validUntil: number, now: number) => Math.max(0, (validUntil - now) / HOUR);
+
+// ---------------------------------------------------------------------------
+// Lo que veía FARO al publicar una idea (para analizar y aprender)
+// ---------------------------------------------------------------------------
+export type IdeaFeatures = {
+  /** Estilos de kamikaze en los que encajaba el par (impulso, rupturas, rebotes). */
+  styles: string[];
+  ch1h: number;
+  ch4h: number;
+  ch24h: number;
+  /** Distancia al máximo y al mínimo de 3 días, en %. */
+  fromHigh3d: number;
+  fromLow3d: number;
+  /** Volumen de las últimas 4 h frente a la media (1 = normal). */
+  volSurge: number;
+  volume24hEur: number;
+  /** Cuánto se arriesga hasta la invalidación y cuánto hay hasta el objetivo, en %. */
+  riskPct: number;
+  rewardPct: number;
+  validHours: number;
+  /** Hora de Madrid (0-23) y día de la semana (0 = domingo) al publicarla. */
+  hour: number;
+  weekday: number;
+  /** Fase del mercado (detector de CAMALEÓN sobre Bitcoin): ataque o defensa, y días que lleva. */
+  phase: string | null;
+  phaseDays: number | null;
+  /** Cambio de Bitcoin en 24 h, en %. */
+  btc24h: number | null;
+  /** Noticias relevantes de esa moneda en las últimas 24 h. */
+  news: number;
+};
+
+const round2 = (x: number) => Math.round(x * 100) / 100;
+
+export function ideaFeatures(
+  m: { ch1h: number; ch4h: number; ch24h: number; fromHigh3d: number; fromLow3d: number; volSurge: number; volume24h: number },
+  styles: string[],
+  idea: { price: number; invalidation: number; target: number; validHours: number },
+  ctx: { now: number; phase: { mode: string; days: number } | null; btc24h: number | null; news: number },
+): IdeaFeatures {
+  const madrid = new Date(new Date(ctx.now).toLocaleString("en-US", { timeZone: "Europe/Madrid" }));
+  return {
+    styles,
+    ch1h: round2(m.ch1h),
+    ch4h: round2(m.ch4h),
+    ch24h: round2(m.ch24h),
+    fromHigh3d: round2(m.fromHigh3d),
+    fromLow3d: round2(m.fromLow3d),
+    volSurge: round2(m.volSurge),
+    volume24hEur: Math.round(m.volume24h),
+    riskPct: round2(((idea.price - idea.invalidation) / idea.price) * 100),
+    rewardPct: round2(((idea.target - idea.price) / idea.price) * 100),
+    validHours: idea.validHours,
+    hour: madrid.getHours(),
+    weekday: madrid.getDay(),
+    phase: ctx.phase?.mode ?? null,
+    phaseDays: ctx.phase?.days ?? null,
+    btc24h: ctx.btc24h === null ? null : round2(ctx.btc24h),
+    news: ctx.news,
+  };
+}

@@ -11,6 +11,8 @@ import { AgentAvatar, AVATAR, ErrorNote, LoadingCard, Pill, Rich } from "./ui";
 import { useTradingRefresh } from "./navigation";
 import { ManualBuyModal, type BuyIdea } from "./manual-buy-modal";
 import { AssetIcon } from "./asset-icon";
+import { FaroAnalysis } from "./faro-analysis";
+import { useRouter, useSearchParams } from "next/navigation";
 import { SearchInput } from "@/components/ui/search-input";
 import {
   DropdownMenu,
@@ -65,7 +67,44 @@ const left = (iso: string) => {
   return h <= 0 ? "caducada" : h < 1 ? `${Math.max(1, Math.round(h * 60))} min` : `${Math.round(h)} h`;
 };
 
+/** Oportunidades: las ideas (tablón) y su análisis (rendimiento de FARO), en dos pestañas. */
 export function FaroPanel() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const view = params.get("vista") === "analisis" ? "analisis" : "ideas";
+  const go = (v: "ideas" | "analisis") => {
+    const q = new URLSearchParams(params.toString());
+    if (v === "ideas") q.delete("vista");
+    else q.set("vista", v);
+    router.replace(`?${q.toString()}`, { scroll: false });
+  };
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <div className="flex shrink-0 gap-1 self-start rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Oportunidades">
+        {(
+          [
+            ["ideas", "Ideas"],
+            ["analisis", "Análisis"],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={view === k}
+            onClick={() => go(k)}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${view === k ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="min-h-0 flex-1">{view === "analisis" ? <div className="h-full overflow-y-auto pr-1"><FaroAnalysis /></div> : <FaroIdeas />}</div>
+    </div>
+  );
+}
+
+function FaroIdeas() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<BuyIdea | null>(null);
