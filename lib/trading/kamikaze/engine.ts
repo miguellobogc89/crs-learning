@@ -13,7 +13,7 @@ import { accountState, closePosition, costOf, ensureAccount, madridDay, placeOrd
 import { AGENTS_WORKSPACE } from "../agents/roster";
 import { dayDate } from "../sync";
 import { boardIdeas, faroTick, lastMarketView, setLive } from "../faro/engine";
-import { chooseIdea, trailingStop, type BoardIdea } from "../faro/logic";
+import { chooseIdea, STYLE_KINDS, trailingStop, type BoardIdea } from "../faro/logic";
 import { allInQuantity, exitNow, protectedStop, roundOutcome, type Ticker } from "./logic";
 import { eurPairs, priceEur, tickers } from "./market";
 import { KAMIKAZES, kamikazeByKey, type KamikazeDef } from "./roster";
@@ -105,7 +105,12 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
   // FARO primero: puntúa sus ideas y, si toca, publica nuevas (una sola llamada a la IA para todos).
   const faro = await faroTick(market, rules, { force: !!force });
   if (faro.ran) out.agents.forEach((a) => a.actions.push(`FARO: ${faro.ran}`));
-  const board = await boardIdeas();
+  // Solo las ideas que deja pasar FARO-2 (las que no tienen contexto guardado, también). Se puede
+  // desactivar con TRADING_KAMIKAZE_FARO2=false.
+  const all = await boardIdeas();
+  const useFaro2 = process.env.TRADING_KAMIKAZE_FARO2 !== "false";
+  const board = useFaro2 ? all.filter((i) => !i.faro2 || i.faro2.pass) : all;
+  const dropped = (kinds: string[]) => (useFaro2 ? all.filter((i) => kinds.includes(i.kind) && i.faro2 && !i.faro2.pass).length : 0);
   const priceOf = (pair: string) => market.find((t) => t.pair === pair)?.price ?? null;
   await Promise.all(KAMIKAZES.map((def, i) => one(def, out.agents[i].actions)));
   return out;
@@ -189,7 +194,8 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       const taken = new Set<string>(mine.map((p) => p.signal_key?.split(":")[1] ?? ""));
       const choice = chooseIdea(def.style, board, priceOf, Date.now(), taken, { maxChasePct: def.maxChasePct, stopMode: def.stopMode });
       if ("reason" in choice) {
-        await note(choice.reason);
+        const off = dropped(STYLE_KINDS[def.style]);
+        await note(off ? `${choice.reason} (FARO-2 descartó ${off === 1 ? "1 idea" : `${off} ideas`} de su estilo)` : choice.reason);
         return;
       }
       const done = await takeIdea(def, round, choice.pick);

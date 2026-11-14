@@ -154,9 +154,14 @@ async function saveFeatures(id: string, features: IdeaFeatures) {
     .catch((e) => console.error("[faro] guardar contexto (¿falta la migración trading_faro_features?)", e instanceof Error ? e.message.slice(0, 200) : e));
 }
 
-async function loadFeatures(): Promise<Map<string, IdeaFeatures>> {
+async function loadFeatures(ids?: string[]): Promise<Map<string, IdeaFeatures>> {
+  if (ids && !ids.length) return new Map();
   try {
-    const rows = await prisma.$queryRaw<{ id: string; features: IdeaFeatures }[]>(Prisma.sql`SELECT id::text AS id, features FROM public.trading_faro_ideas WHERE features IS NOT NULL`);
+    const rows = await prisma.$queryRaw<{ id: string; features: IdeaFeatures }[]>(
+      ids
+        ? Prisma.sql`SELECT id::text AS id, features FROM public.trading_faro_ideas WHERE features IS NOT NULL AND id IN (${Prisma.join(ids.map((x) => Prisma.sql`${x}::uuid`))})`
+        : Prisma.sql`SELECT id::text AS id, features FROM public.trading_faro_ideas WHERE features IS NOT NULL`,
+    );
     // Las que no se pudieron reconstruir (sin velas) se guardan marcadas y no cuentan como contexto.
     return new Map(rows.filter((r) => r.features && !(r.features as { noData?: boolean }).noData).map((r) => [r.id, r.features]));
   } catch {
@@ -476,9 +481,12 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
 // ---------------------------------------------------------------------------
 // Para los agentes y la interfaz
 // ---------------------------------------------------------------------------
-export async function boardIdeas(): Promise<(BoardIdea & { symbol: string; rationale: string; runId: string | null })[]> {
+export async function boardIdeas(): Promise<(BoardIdea & { symbol: string; rationale: string; runId: string | null; faro2: ReturnType<typeof faro2Verdict> })[]> {
   const rows = await prisma.trading_faro_ideas.findMany({ where: { status: "viva", valid_until: { gt: new Date() } }, orderBy: { created_at: "desc" } });
+  const features = await loadFeatures(rows.map((r) => r.id));
   return rows.map((i) => ({
+    /** FARO-2: si la deja pasar (null = sin contexto guardado). */
+    faro2: faro2Verdict(i.kind, features.get(i.id) ?? null),
     id: i.id,
     pair: i.pair,
     symbol: i.symbol,

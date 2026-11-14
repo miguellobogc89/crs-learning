@@ -88,7 +88,9 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] **FARO-2 en pruebas**: mismas ideas, solo las que pasan filtros fijos (sin rebotes, sin perseguir +12 % 24 h / +4 % 1 h, sin impulsos en máximos, Bitcoin > −2 % 24 h, mercado no en defensa, objetivo ≥ 1,5 × riesgo). Comparado en Análisis (todas / pasa / descarta, motivos) y marcado «F2» en cada idea. No cambia lo que se publica.
 - [x] Aviso al ejecutar una idea que FARO-2 descarta (con el motivo).
 - [x] **Control al azar**: en cada análisis, tantas ideas como publica la IA, con monedas al azar entre las mismas candidatas y el mismo riesgo, recorrido y validez. No se enseñan ni se operan. En Análisis: «¿Elige mejor que el azar?» (FARO, FARO-2, azar y azar que pasa FARO-2 en el mismo periodo) y segmento «Al azar». **Aplicar en Neon la migración `20261114220000_trading_faro_controls`.**
-- [ ] Si FARO-2 gana unos días: publicar solo sus ideas (y kamikazes solo de ahí).
+- [x] Kamikazes solo con ideas que pasan FARO-2 (las que no tienen contexto, también); se desactiva con `TRADING_KAMIKAZE_FARO2=false`. Si no entran, el motivo dice cuántas descartó FARO-2.
+- [ ] FÉNIX (estilo rebotes) se queda sin ideas al estar apagados los rebotes: decidir si cambia de estilo o se para.
+- [ ] Si FARO-2 gana unos días: publicar solo sus ideas.
 - [x] Stop y objetivo según la volatilidad, **probado con las ideas pasadas**: ATR de 1 h guardado con cada idea (y añadido a las antiguas) y simulación de 4 stops × 5 objetivos (1–4 ATR) con las velas de 5 min de cada idea resuelta. En Análisis: rejilla, mejor combinación y si aguanta en las dos mitades del periodo.
 - [ ] Si una combinación aguanta: usarla en FARO-2 (niveles por ATR en vez de los de la IA).
 - [ ] Memoria de FARO: resumen de su propio historial en cada análisis.
