@@ -152,6 +152,13 @@ export function FaroAnalysis() {
         </Panel>
       </div>
 
+      <Panel
+        title="¿Stop y objetivo según la volatilidad?"
+        sub="En vez de que la IA ponga los niveles a ojo: stop y objetivo a varias veces lo que suele moverse la moneda en una hora (ATR), probado con las velas de 5 min de las ideas pasadas. Resultado medio por idea y acierto."
+      >
+        <LevelGrid g={data.levels} />
+      </Panel>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="¿A qué hora acierta?" sub="Por la hora de Madrid a la que publicó la idea.">
           <BucketBars rows={data.byHour} />
@@ -566,6 +573,110 @@ function ExcursionScatter({ points }: { points: A["excursions"] }) {
         ))}
       </svg>
       {h && hover !== null && <Tip w={W} height={H} h={{ x: x(h.best), y: y(h.worst), lines: [`${STATUS_LABEL[h.status] ?? h.status} · ${h.kind}`, `subió hasta ${sPct(h.best, 1)} · bajó hasta ${sPct(h.worst, 1)}`, `resultado ${sPct(h.resultPct)}`] }} />}
+      </div>
+    </div>
+  );
+}
+
+/** Rejilla stop × objetivo (en ATR): cada celda, resultado medio por idea (color) y acierto. */
+function LevelGrid({ g }: { g: A["levels"] }) {
+  if (g.n === 0) return <Empty>Se va calculando con cada revisión (unas 10 ideas cada 5 min). Necesita la migración de «features».</Empty>;
+  const max = Math.max(0.5, ...g.grid.flatMap((r) => r.cells.map((c) => Math.abs(c.avgPct))));
+  const bg = (v: number) => {
+    const a = Math.min(1, Math.abs(v) / max) * 0.55 + 0.05;
+    return v >= 0 ? `rgba(5, 150, 105, ${a})` : `rgba(225, 29, 72, ${a})`;
+  };
+  const b = g.best;
+  const atr = (m: number) => (g.medianAtrPct ? ` ≈ ${(m * g.medianAtrPct).toFixed(1).replace(".", ",")} %` : "");
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px] border-separate border-spacing-1 text-sm">
+          <thead>
+            <tr>
+              <th className="px-2 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">Stop ↓ / objetivo →</th>
+              {g.targets.map((t) => (
+                <th key={t} className="px-2 py-1 text-center text-[11px] font-semibold text-slate-500" title={`objetivo a ${t} ATR${atr(t)}`}>
+                  {t.toString().replace(".", ",")}×
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {g.grid.map((r) => (
+              <tr key={r.stop}>
+                <td className="px-2 py-1 text-[11px] font-semibold text-slate-500" title={`stop a ${r.stop} ATR${atr(r.stop)}`}>
+                  {r.stop.toString().replace(".", ",")}×
+                </td>
+                {r.cells.map((c) => {
+                  const isBest = b && b.stop === r.stop && b.target === c.target;
+                  return (
+                    <td
+                      key={c.target}
+                      className={`rounded-md px-1 py-1.5 text-center tabular-nums ${isBest ? "ring-2 ring-slate-900" : ""}`}
+                      style={{ background: c.n ? bg(c.avgPct) : "#f8fafc" }}
+                      title={c.n ? `stop ${r.stop}× · objetivo ${c.target}× ATR: ${sPct(c.avgPct)} por idea, acierto ${c.hitRate.toFixed(0)} % (${c.n} ideas)` : "sin datos"}
+                    >
+                      {c.n ? (
+                        <>
+                          <span className="block text-xs font-semibold text-slate-900">{sPct(c.avgPct, 2)}</span>
+                          <span className="block text-[10px] text-slate-700">{c.hitRate.toFixed(0)} %</span>
+                        </>
+                      ) : (
+                        <span className="text-xs text-slate-300">—</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="mt-1 text-[11px] text-slate-400">
+          {g.n} ideas simuladas{g.medianAtrPct ? ` · ATR típico ${g.medianAtrPct.toFixed(1).replace(".", ",")} % por hora` : ""}. Arriba de cada celda, resultado medio por idea; abajo, acierto.
+        </p>
+      </div>
+      <div className="space-y-2 text-sm text-slate-700">
+        <p>
+          Con sus propios niveles, estas mismas ideas dan <b className={tone(g.currentAvgPct)}>{sPct(g.currentAvgPct)}</b> por idea.
+        </p>
+        {b && (
+          <p>
+            La mejor combinación: stop a <b>{b.stop.toString().replace(".", ",")}×</b> y objetivo a <b>{b.target.toString().replace(".", ",")}×</b> ATR → <b className={tone(b.avgPct)}>{sPct(b.avgPct)}</b> por idea (acierto {b.hitRate.toFixed(0)} %).
+          </p>
+        )}
+        {b?.firstHalf && b.secondHalf && (
+          <div className="rounded-lg bg-slate-50 px-3 py-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">¿Aguanta o es suerte?</div>
+            <table className="mt-1 w-full text-xs tabular-nums">
+              <tbody>
+                <tr>
+                  <td className="py-0.5 text-slate-500" />
+                  <td className="py-0.5 text-right text-slate-500">1.ª mitad</td>
+                  <td className="py-0.5 text-right text-slate-500">2.ª mitad</td>
+                </tr>
+                <tr>
+                  <td className="py-0.5">Mejor combinación</td>
+                  <td className={`py-0.5 text-right font-semibold ${tone(b.firstHalf.avgPct)}`}>{sPct(b.firstHalf.avgPct)}</td>
+                  <td className={`py-0.5 text-right font-semibold ${tone(b.secondHalf.avgPct)}`}>{sPct(b.secondHalf.avgPct)}</td>
+                </tr>
+                <tr>
+                  <td className="py-0.5">Sus niveles</td>
+                  <td className={`py-0.5 text-right ${tone(b.ownFirstHalf ?? 0)}`}>{sPct(b.ownFirstHalf ?? 0)}</td>
+                  <td className={`py-0.5 text-right ${tone(b.ownSecondHalf ?? 0)}`}>{sPct(b.ownSecondHalf ?? 0)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="mt-1 text-[11px] text-slate-500">
+              {b.firstHalf.avgPct > (b.ownFirstHalf ?? 0) && b.secondHalf.avgPct > (b.ownSecondHalf ?? 0)
+                ? b.firstHalf.avgPct > 0 && b.secondHalf.avgPct > 0
+                  ? "Mejora y gana en las dos mitades: buena señal (con pocos datos, aún con cautela)."
+                  : "Mejora a sus niveles en las dos mitades, pero no llega a ganar: ayuda, pero no basta."
+                : "No mejora en las dos mitades: probablemente es suerte de una parte del periodo."}
+            </p>
+          </div>
+        )}
+        <p className="text-[11px] text-slate-400">Elegir la mejor de 20 combinaciones con el mismo periodo siempre sale algo optimista: por eso la comparación por mitades.</p>
       </div>
     </div>
   );

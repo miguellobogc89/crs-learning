@@ -116,3 +116,41 @@ test("faro: ideas de control — misma cantidad, monedas al azar sin repetir y e
   assert.equal(out[1].validHours, 12);
   assert.equal(controlIdeas(cands.slice(0, 1), ideas).length, 1, "no más que candidatas");
 });
+
+test("faro: ATR en % y simulación de stop/objetivo por volatilidad con velas de 5 min", () => {
+  const { atrPct, simulateLevels } = load("lib/trading/faro/logic.ts");
+  const hourly = Array.from({ length: 30 }, () => ({ h: 101, l: 99, c: 100 }));
+  assert.equal(atrPct(hourly, 100), 2, "rango de 2 € sobre 100 €");
+  assert.equal(atrPct([], 100), null);
+  // Sube a 102 (+2 %) y luego cae a 97 (−3 %).
+  const t0 = 1_000_000;
+  const bars = [
+    { t: t0 + 300_000, o: 100, h: 100.5, l: 99.8, c: 100.4, qv: 1 },
+    { t: t0 + 600_000, o: 100.4, h: 102.1, l: 100.3, c: 102, qv: 1 },
+    { t: t0 + 900_000, o: 102, h: 102, l: 96.9, c: 97, qv: 1 },
+  ];
+  const sim = simulateLevels({ price: 100, createdAt: t0, validUntil: t0 + 3_600_000 }, 1, bars, t0 + 7_200_000);
+  assert.deepEqual(sim["1|2"], [1.65, "a"], "objetivo +2 % (2 ATR) tocado antes que el stop −1 %");
+  assert.equal(sim["1|3"][1], "f", "objetivo +3 % no llega; cae al stop −1 %");
+  assert.equal(sim["3|4"][1], "f", "stop −3 % tocado al caer a 96,9");
+  assert.equal(Object.keys(sim).length, 20);
+});
+
+test("faro análisis: rejilla stop × objetivo, la mejor y si aguanta en las dos mitades", () => {
+  const { levelGrid } = load("lib/trading/faro/analysis.ts");
+  const mk = (n, good) =>
+    Array.from({ length: n }, (_, j) =>
+      idea({ status: "fallo", resultPct: -2, features: { atrPct: 1.5, sim: { "1|2": [good ? 1.65 : -1.35, good ? "a" : "f"], "2|3": [-2.35, "f"] } } }),
+    );
+  const g = levelGrid([...mk(6, true), ...mk(6, true)]);
+  assert.equal(g.n, 12);
+  assert.equal(g.best.stop, 1);
+  assert.equal(g.best.target, 2);
+  assert.equal(g.best.avgPct, 1.65);
+  assert.equal(g.best.firstHalf.avgPct, 1.65);
+  assert.equal(g.best.secondHalf.avgPct, 1.65);
+  assert.equal(g.currentAvgPct, -2);
+  assert.equal(g.medianAtrPct, 1.5);
+  const cell = g.grid.find((r) => r.stop === 1.5).cells[0];
+  assert.equal(cell.n, 0, "combinaciones sin simular quedan vacías");
+});

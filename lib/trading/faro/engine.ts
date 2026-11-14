@@ -13,7 +13,7 @@ import { CRYPTO, CRYPTO_MARKET } from "../market-data";
 import { metricsOf, prefilter, rank, type Metrics, type Ticker } from "../kamikaze/logic";
 import { barsSince, eurPairs, hourly, hourlyUntil, symbolOf } from "../kamikaze/market";
 import { kamikazeByKey, type KamikazeStyle } from "../kamikaze/roster";
-import { checkIdeas, controlIdeas, ENABLED_KINDS, faro2Verdict, ideaFeatures, KINDS, pastTicker, scoreIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
+import { atrPct, checkIdeas, controlIdeas, ENABLED_KINDS, faro2Verdict, simulateLevels, ideaFeatures, KINDS, pastTicker, scoreIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
 import { getMarketPhase, marketPhaseAt } from "../chip/phase-service";
 import { analyze, type ResolvedIdea } from "./analysis";
 
@@ -68,6 +68,7 @@ export async function faroTick(market: Ticker[], rules: Rules, opts: { force?: b
   // Contexto de las ideas antiguas, poco a poco (no frena la revisión si falla).
   await backfillFeatures(10).catch(() => 0);
   await scoreControls(market).catch(() => 0);
+  await enrichFeatures(10).catch(() => 0);
   const ran = await maybeRun(market, rules, !!opts.force).catch((e) => {
     console.error("[faro] análisis", e);
     return `error: ${e instanceof Error ? e.message.slice(0, 160) : "desconocido"}`;
@@ -201,7 +202,7 @@ export async function backfillFeatures(limit = 10): Promise<number> {
       ]);
       const m = metricsOf(pastTicker(r.pair, base, r.price, bars), bars);
       const validHours = Math.max(1, Math.round((r.valid_until.getTime() - t) / 3_600_000));
-      const f = ideaFeatures(m, [], { price: r.price, invalidation: r.invalidation, target: r.target, validHours }, { now: t, phase: phase ? { mode: phase.mode, days: phase.days } : null, btc24h: btcCache.get(hourKey) ?? null, news });
+      const f = ideaFeatures(m, [], { price: r.price, invalidation: r.invalidation, target: r.target, validHours }, { now: t, phase: phase ? { mode: phase.mode, days: phase.days } : null, btc24h: btcCache.get(hourKey) ?? null, news, atrPct: atrPct(bars, r.price) });
       await saveFeatures(r.id, { ...f, backfilled: true });
       n++;
     } catch (e) {
@@ -222,13 +223,13 @@ async function createControls(
   candidates: Candidate[],
   ideas: { price: number; invalidation: number; target: number; validHours: number }[],
   rules: Rules,
-  ctx: { phase: { mode: string; days: number } | null; btc24h: number | null; newsOf: (base: string) => number },
+  ctx: { phase: { mode: string; days: number } | null; btc24h: number | null; newsOf: (base: string) => number; atrOf: (pair: string) => number | null },
 ) {
   const now = Date.now();
   for (const c of controlIdeas(candidates.map((x) => ({ pair: x.m.pair, price: x.m.price })), ideas)) {
     const cand = candidates.find((x) => x.m.pair === c.pair)!;
     const symbol = symbolOf(c.pair, rules) ?? `${c.pair.replace(/(EUR|USDC)$/, "")}-EUR`;
-    const f = ideaFeatures(cand.m, cand.styles, c, { now, phase: ctx.phase, btc24h: ctx.btc24h, news: ctx.newsOf(cand.m.base) });
+    const f = ideaFeatures(cand.m, cand.styles, c, { now, phase: ctx.phase, btc24h: ctx.btc24h, news: ctx.newsOf(cand.m.base), atrPct: ctx.atrOf(c.pair) });
     await prisma.$executeRaw(Prisma.sql`INSERT INTO public.trading_faro_controls
       (run_id, pair, symbol, price, invalidation, target, valid_until, last_price, best_pct, worst_pct, features)
       VALUES (${runId}::uuid, ${c.pair}, ${symbol}, ${c.price}, ${c.invalidation}, ${c.target}, ${new Date(now + c.validHours * 3_600_000)}, ${c.price}, 0, 0, ${JSON.stringify(f)}::jsonb)`);
@@ -294,6 +295,46 @@ async function loadControls(): Promise<ResolvedIdea[]> {
   }
 }
 
+/**
+ * Completa el contexto para probar stop y objetivo según la volatilidad: añade el ATR a las ideas que no
+ * lo tienen y, en las ya resueltas, simula la rejilla stop × objetivo con sus velas de 5 min.
+ * Unas pocas por revisión del cron.
+ */
+export async function enrichFeatures(limit = 10): Promise<number> {
+  let n = 0;
+  try {
+    const noAtr = await prisma.$queryRaw<{ id: string; pair: string; created_at: Date; price: number }[]>(Prisma.sql`
+      SELECT id::text AS id, pair, created_at, price FROM public.trading_faro_ideas
+      WHERE features IS NOT NULL AND features->'atrPct' IS NULL AND features->'noData' IS NULL
+      ORDER BY created_at DESC LIMIT ${limit}`);
+    for (const r of noAtr) {
+      const bars = await hourlyUntil(r.pair, r.created_at.getTime()).catch(() => []);
+      const atr = atrPct(bars, r.price);
+      await prisma.$executeRaw(Prisma.sql`UPDATE public.trading_faro_ideas
+        SET features = features || ${JSON.stringify(atr ? { atrPct: Math.round(atr * 100) / 100 } : { atrPct: 0 })}::jsonb WHERE id = ${r.id}::uuid`);
+      n++;
+    }
+    const toSim = await prisma.$queryRaw<{ id: string; pair: string; created_at: Date; price: number; valid_until: Date; atr: number }[]>(Prisma.sql`
+      SELECT id::text AS id, pair, created_at, price, valid_until, (features->>'atrPct')::float AS atr FROM public.trading_faro_ideas
+      WHERE status IN ('acierto', 'fallo', 'caducada') AND (features->>'atrPct')::float > 0 AND features->'sim' IS NULL
+      ORDER BY created_at DESC LIMIT ${limit}`);
+    for (const r of toSim) {
+      try {
+        const bars = await barsSince(r.pair, r.created_at.getTime());
+        const sim = simulateLevels({ price: r.price, createdAt: r.created_at.getTime(), validUntil: r.valid_until.getTime() }, r.atr, bars, Date.now());
+        await prisma.$executeRaw(Prisma.sql`UPDATE public.trading_faro_ideas
+          SET features = features || jsonb_build_object('sim', ${JSON.stringify(sim)}::jsonb) WHERE id = ${r.id}::uuid`);
+        n++;
+      } catch (e) {
+        console.error("[faro] simular niveles", r.pair, e instanceof Error ? e.message.slice(0, 160) : e);
+      }
+    }
+  } catch {
+    // Sin la columna «features»: nada que hacer.
+  }
+  return n;
+}
+
 async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
   // Un solo análisis por intervalo aunque haya varias revisiones a la vez.
   const minutes = force ? 0 : RUN_MIN();
@@ -311,9 +352,12 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
     const pre = new Map<string, Ticker>();
     for (const st of STYLES) for (const t of prefilter(st, market, 12)) pre.set(t.pair, t);
     const detailed: Metrics[] = [];
+    const atrOf = new Map<string, number | null>();
     for (const t of pre.values()) {
       try {
-        detailed.push(metricsOf(t, await hourly(t.pair)));
+        const hb = await hourly(t.pair);
+        detailed.push(metricsOf(t, hb));
+        atrOf.set(t.pair, atrPct(hb, t.price));
       } catch {
         // Sin velas de este par: se queda fuera.
       }
@@ -387,6 +431,7 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
             phase: phase ? { mode: phase.mode, days: phase.days } : null,
             btc24h: btc ? btc.ch24h : null,
             news: news.filter((n) => n.symbols.includes(cand.m.base)).length,
+            atrPct: atrOf.get(i.pair) ?? null,
           })
         : null;
       const created = await prisma.trading_faro_ideas.create({
@@ -414,6 +459,7 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
       phase: phase ? { mode: phase.mode, days: phase.days } : null,
       btc24h: btc ? btc.ch24h : null,
       newsOf: (base) => news.filter((n) => n.symbols.includes(base)).length,
+      atrOf: (pair) => atrOf.get(pair) ?? null,
     }).catch((e) => console.error("[faro] control", e instanceof Error ? e.message.slice(0, 200) : e));
     await prisma.trading_faro_runs.update({
       where: { id: runId },

@@ -277,6 +277,10 @@ export type IdeaFeatures = {
   news: number;
   /** Reconstruido después con velas públicas (no lo guardó FARO en el momento): sin «styles». */
   backfilled?: boolean;
+  /** Volatilidad: rango medio de una vela de 1 h (ATR de 24 h) en % del precio. */
+  atrPct?: number;
+  /** Simulación con stop y objetivo según la volatilidad: «s|t» → [resultado %, a/f/c]. Solo en resueltas. */
+  sim?: Record<string, [number, "a" | "f" | "c"]>;
 };
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
@@ -285,7 +289,7 @@ export function ideaFeatures(
   m: { ch1h: number; ch4h: number; ch24h: number; fromHigh3d: number; fromLow3d: number; volSurge: number; volume24h: number },
   styles: string[],
   idea: { price: number; invalidation: number; target: number; validHours: number },
-  ctx: { now: number; phase: { mode: string; days: number } | null; btc24h: number | null; news: number },
+  ctx: { now: number; phase: { mode: string; days: number } | null; btc24h: number | null; news: number; atrPct?: number | null },
 ): IdeaFeatures {
   const madrid = new Date(new Date(ctx.now).toLocaleString("en-US", { timeZone: "Europe/Madrid" }));
   return {
@@ -306,6 +310,7 @@ export function ideaFeatures(
     phaseDays: ctx.phase?.days ?? null,
     btc24h: ctx.btc24h === null ? null : round2(ctx.btc24h),
     news: ctx.news,
+    ...(ctx.atrPct ? { atrPct: round2(ctx.atrPct) } : {}),
   };
 }
 
@@ -376,5 +381,51 @@ export function controlIdeas(candidates: { pair: string; price: number }[], idea
     const reward = (i.target - i.price) / i.price;
     out.push({ pair: c.pair, price: c.price, invalidation: c.price * (1 - risk), target: c.price * (1 + reward), validHours: i.validHours });
   }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Stop y objetivo según la volatilidad (ATR): probarlo con las ideas pasadas antes de usarlo
+// ---------------------------------------------------------------------------
+/** Rango verdadero medio de las últimas `n` velas (1 h), en % de `price`. null si no hay velas. */
+export function atrPct(bars: { h: number; l: number; c: number }[], price: number, n = 24): number | null {
+  const list = bars.slice(-(n + 1));
+  if (list.length < 2 || !(price > 0)) return null;
+  let sum = 0;
+  for (let k = 1; k < list.length; k++) {
+    const b = list[k];
+    const prev = list[k - 1].c;
+    sum += Math.max(b.h - b.l, Math.abs(b.h - prev), Math.abs(b.l - prev));
+  }
+  return (sum / (list.length - 1) / price) * 100;
+}
+
+/** Múltiplos de ATR que se prueban para el stop (por debajo) y el objetivo (por encima). */
+export const SIM_STOPS = [1, 1.5, 2, 3] as const;
+export const SIM_TARGETS = [1, 1.5, 2, 3, 4] as const;
+export const simKey = (s: number, t: number) => `${s}|${t}`;
+
+/**
+ * Lo que habría pasado con cada combinación de stop y objetivo (en ATR) siguiendo las velas de 5 min
+ * desde la idea y con su misma validez. Misma regla que el tablón (si una vela toca los dos, fallo).
+ */
+export function simulateLevels(
+  idea: { price: number; createdAt: number; validUntil: number },
+  atr: number,
+  bars: Bar[],
+  now: number,
+): Record<string, [number, "a" | "f" | "c"]> {
+  const out: Record<string, [number, "a" | "f" | "c"]> = {};
+  for (const sm of SIM_STOPS)
+    for (const tm of SIM_TARGETS) {
+      const sc = scoreIdea(
+        { price: idea.price, invalidation: idea.price * (1 - (sm * atr) / 100), target: idea.price * (1 + (tm * atr) / 100), createdAt: idea.createdAt, validUntil: idea.validUntil, best: null, worst: null },
+        bars,
+        Math.max(now, idea.validUntil),
+        null,
+      );
+      if (sc.resultPct === null) continue;
+      out[simKey(sm, tm)] = [sc.resultPct, sc.status === "acierto" ? "a" : sc.status === "fallo" ? "f" : "c"];
+    }
   return out;
 }

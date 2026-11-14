@@ -3,7 +3,7 @@
 // cómo evoluciona, qué tipos y convicciones funcionan, si el objetivo está bien puesto, a qué horas y en
 // qué fase del mercado acierta. Cada idea cuenta como si se hubieran puesto 100 € al pie de la letra
 // (resultado neto de costes, como en el tablón). Puro: lo prueban los tests.
-import { IDEA_COST_PCT, type IdeaFeatures } from "./logic";
+import { IDEA_COST_PCT, SIM_STOPS, SIM_TARGETS, simKey, type IdeaFeatures } from "./logic";
 
 export type ResolvedIdea = {
   id: string;
@@ -73,6 +73,41 @@ const HOUR_BANDS = [
 const madridDay = (t: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date(t));
 const madridHour = (t: number) => Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, timeZone: "Europe/Madrid" }).format(new Date(t))) % 24;
 
+/**
+ * Rejilla de stop × objetivo (en ATR) con las ideas que tienen simulación: resultado medio y acierto de
+ * cada combinación, lo que hicieron con sus propios niveles, y si la mejor combinación aguanta en las dos
+ * mitades del periodo (si solo funciona en una, es suerte).
+ */
+export function levelGrid(list: ResolvedIdea[]) {
+  const sims = list.filter((i) => i.features?.sim && Object.keys(i.features.sim).length).sort((a, b) => a.createdAt - b.createdAt);
+  const cell = (ideas: ResolvedIdea[], key: string) => {
+    const rows = ideas.map((i) => i.features!.sim![key]).filter(Boolean);
+    const n = rows.length;
+    return { n, avgPct: n ? round(rows.reduce((s, r) => s + r[0], 0) / n) : 0, hitRate: n ? round((rows.filter((r) => r[1] === "a").length / n) * 100, 1) : 0 };
+  };
+  const grid = SIM_STOPS.map((s) => ({ stop: s, cells: SIM_TARGETS.map((t) => ({ target: t, ...cell(sims, simKey(s, t)) })) }));
+  const flat = grid.flatMap((r) => r.cells.map((c) => ({ stop: r.stop, ...c })));
+  const best = flat.filter((c) => c.n > 0).sort((a, b) => b.avgPct - a.avgPct)[0] ?? null;
+  const half = Math.floor(sims.length / 2);
+  const own = (ideas: ResolvedIdea[]) => (ideas.length ? round(ideas.reduce((s, i) => s + i.resultPct, 0) / ideas.length) : 0);
+  const atrs = sims.map((i) => i.features!.atrPct ?? 0).filter((x) => x > 0).sort((a, b) => a - b);
+  return {
+    n: sims.length,
+    stops: [...SIM_STOPS],
+    targets: [...SIM_TARGETS],
+    grid,
+    currentAvgPct: own(sims),
+    medianAtrPct: atrs.length ? round(atrs[Math.floor(atrs.length / 2)]) : null,
+    best: best && {
+      ...best,
+      firstHalf: half >= 5 ? cell(sims.slice(0, half), simKey(best.stop, best.target)) : null,
+      secondHalf: half >= 5 ? cell(sims.slice(half), simKey(best.stop, best.target)) : null,
+      ownFirstHalf: half >= 5 ? own(sims.slice(0, half)) : null,
+      ownSecondHalf: half >= 5 ? own(sims.slice(half)) : null,
+    },
+  };
+}
+
 export function analyze(ideas: ResolvedIdea[], opts: { rollingWindow?: number } = {}) {
   const list = [...ideas].sort((a, b) => (a.resolvedAt ?? a.createdAt) - (b.resolvedAt ?? b.createdAt));
   const n = list.length;
@@ -139,6 +174,7 @@ export function analyze(ideas: ResolvedIdea[], opts: { rollingWindow?: number } 
     withFeatures: withFeatures.length,
     management: { fails: fails.length, nearMiss, wentUp2, straightDown },
     targetScan: targetScan(list),
+    levels: levelGrid(list),
     /** Puntos para el gráfico de lo máximo que subió frente a lo máximo que bajó (las últimas 400). */
     excursions: list.slice(-400).map((i) => ({ id: i.id, best: round(i.bestPct), worst: round(i.worstPct), status: i.status, kind: i.kind, resultPct: round(i.resultPct) })),
   };
