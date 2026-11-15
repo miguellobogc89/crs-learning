@@ -149,3 +149,24 @@ export const signalLabel = (p: string) => (p === "tendencia" ? "Tendencia" : PAT
  * estructura propia de Trading (barra de 3,5 rem en móvil; cabecera grande en tablet y ordenador).
  */
 export const FULL_H = "h-[calc(100dvh-6.5rem)] md:h-[calc(100dvh-7.5rem)] lg:h-[calc(100dvh-6.5rem)]";
+
+/**
+ * Precarga en segundo plano: lee, una a una y cuando el navegador está libre, las rutas que aún no están
+ * en la caché. Así al abrir otra pantalla ya hay datos y se ve al instante. Una sola vez por sesión.
+ */
+let prefetched = false;
+export function prefetchTrading(paths: string[]) {
+  if (prefetched || typeof window === "undefined") return;
+  prefetched = true;
+  const idle = (fn: () => void) => {
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(fn, { timeout: 3000 });
+    else setTimeout(fn, 1500);
+  };
+  idle(async () => {
+    for (const path of paths) {
+      if (peek(path)) continue;
+      await api(path).catch(() => undefined);
+    }
+  });
+}
+

@@ -6,7 +6,7 @@ import { Bot, ChevronDown } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
 import { api, eur, errorText, MEETINGS_TEXT } from "./format";
 import { ago } from "./home-panel";
-import { useTradingRefresh } from "./navigation";
+import { useTradingRefresh, useWarmStart } from "./navigation";
 import { AVATAR, ErrorNote, LoadingCard, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { DataTable, Money, type Col } from "./table";
@@ -35,6 +35,8 @@ function MoveSummary({ move }: { move: Move }) {
 
 export function ActivityPanel({ header }: { header?: ReactNode } = {}) {
   const [data, setData] = useState<Agents | null>(null);
+  // Usa los mismos datos que Operadores: si ya están cargados, se ve al instante.
+  useWarmStart<Agents>("agents", setData);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {

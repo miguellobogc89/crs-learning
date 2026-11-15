@@ -53,7 +53,8 @@ export function HomePanel() {
   const router = useRouter();
   const params = useSearchParams();
   const view: View = params.get("vista") === "actividad" ? "actividad" : "operadores";
-  const setView = (v: View) => router.replace(v === "actividad" ? "/trading/inicio?vista=actividad" : "/trading/inicio", { scroll: false });
+  // Solo cambia la URL en el navegador (sin ir al servidor): el cambio es instantáneo.
+  const setView = (v: View) => window.history.replaceState(null, "", v === "actividad" ? "/trading/inicio?vista=actividad" : "/trading/inicio");
   const tabs = (
     <Segmented<View>
       value={view}

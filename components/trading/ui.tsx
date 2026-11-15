@@ -3,8 +3,8 @@
 // cabeceras de sección, modal, texto con negritas y barra de progreso.
 import { Fragment, useEffect, type ComponentType, type ReactNode } from "react";
 import { ArrowDownRight, ArrowUpRight, Bot, X } from "lucide-react";
-import { card, flat, pct } from "./format";
-import { Bone, SkeletonList } from "./skeletons";
+import { card, pct } from "./format";
+import { SkeletonList, TradingSkeleton } from "./skeletons";
 
 export { card };
 
@@ -117,16 +117,11 @@ export function CardHeader({ children, actions, divider = false }: { children: R
 }
 
 /** Cargando… dentro de una tarjeta. */
-/** Cargando: esqueleto con la forma de una lista (en vez de un panel vacío con un círculo girando). */
-export function LoadingCard({ height = "h-48" }: { height?: string }) {
-  return (
-    <div className={`${card} ${flat} ${height} overflow-hidden`} aria-busy="true" aria-label="Cargando">
-      <div className="space-y-3 px-4 pt-4">
-        <Bone className="h-4 w-36" />
-      </div>
-      <SkeletonList rows={6} />
-    </div>
-  );
+/** Cargando: esqueleto a pantalla completa y sin marco, con la forma de la pantalla (no un panel). */
+/** Con `height="h-40"` (bloques pequeños dentro de una pantalla) solo unas filas. */
+export function LoadingCard({ height }: { height?: string }) {
+  if (height === "h-40") return <SkeletonList rows={4} />;
+  return <TradingSkeleton />;
 }
 
 /** Aviso de error. */

@@ -11,6 +11,10 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { ArrowLeft, Menu, X } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { TradingNavigation } from "./navigation";
+import { prefetchTrading } from "./format";
+
+// Lo que leen Inicio (Operadores y Actividad), Oportunidades, Mi cartera y Agentes.
+const PREFETCH = ["portfolio", "agents", "faro", "mine", "mirror", "wallets?history=1", "manual"];
 import { isFittedTab, isTradingTab, TRADING_TABS } from "./tabs";
 
 /** Lo que una pantalla «hija» (la página de un agente) le dice a la estructura: su título y a dónde volver. */
@@ -47,6 +51,8 @@ export function TradingShell({ children }: { children: ReactNode }) {
   const fitted = child || isFittedTab(section);
   const Icon = tabDef.icon;
   const [open, setOpen] = useState(false);
+  // Tras la primera carga, el resto de pantallas se va leyendo en segundo plano.
+  useEffect(() => prefetchTrading(PREFETCH), []);
   // Al navegar, el menú se cierra solo.
   useEffect(() => setOpen(false), [pathname]);
 

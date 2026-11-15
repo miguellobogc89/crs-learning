@@ -12,7 +12,7 @@ import { useTradingRefresh, useWarmStart } from "./navigation";
 import { ManualBuyModal, type BuyIdea } from "./manual-buy-modal";
 import { AssetIcon } from "./asset-icon";
 import { FaroAnalysis } from "./faro-analysis";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { SearchInput } from "@/components/ui/search-input";
 import {
   DropdownMenu,
@@ -70,13 +70,14 @@ const left = (iso: string) => {
 /** Oportunidades: las ideas (tablón) y su análisis (rendimiento de FARO), en dos pestañas. */
 export function FaroPanel() {
   const params = useSearchParams();
-  const router = useRouter();
   const view = params.get("vista") === "analisis" ? "analisis" : "ideas";
   const go = (v: "ideas" | "analisis") => {
     const q = new URLSearchParams(params.toString());
     if (v === "ideas") q.delete("vista");
     else q.set("vista", v);
-    router.replace(`?${q.toString()}`, { scroll: false });
+    const qs = q.toString();
+    // Solo en el navegador (sin ir al servidor): el cambio de pestaña es instantáneo.
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
   };
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
