@@ -5,8 +5,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { faroAnalysis } from "@/lib/trading/faro/engine";
-import { api, errorText, eur, flat, int } from "./format";
-import { card, ErrorNote, LoadingCard } from "./ui";
+import { api, errorText, eur, int } from "./format";
+import { ErrorNote, LoadingCard } from "./ui";
 import { useTradingRefresh } from "./navigation";
 
 type A = Awaited<ReturnType<typeof faroAnalysis>>;
@@ -92,7 +92,7 @@ export function FaroAnalysis() {
       <Faro2Card f2={f2} totalIdeas={data.totalIdeas} />
 
       {data.n === 0 ? (
-        <p className={`${card} px-6 py-10 text-center text-sm text-slate-500`}>
+        <p className="border-t border-slate-100 px-6 py-10 text-center text-sm text-slate-500">
           {segment === "todas"
             ? "Todavía no hay ideas resueltas para analizar."
             : segment === "azar"
@@ -115,7 +115,7 @@ export function FaroAnalysis() {
         <EquityLine points={data.equity} />
       </Panel>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-x-10 gap-y-4 lg:grid-cols-2">
         <Panel title="¿Mejora o empeora?" sub={`Resultado medio por idea, ${byDay ? "día a día" : "semana a semana"} (por fecha de publicación).`}>
           <WeekBars weeks={byDay ? data.daily : data.weekly} byDay={byDay} />
         </Panel>
@@ -124,7 +124,7 @@ export function FaroAnalysis() {
         </Panel>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-x-10 gap-y-4 lg:grid-cols-2">
         <Panel title="¿Qué tipo de idea funciona?" sub="Resultado medio por idea (barra) y acierto. Un tipo que pierde siempre se puede apagar.">
           <BucketBars rows={data.byKind} />
         </Panel>
@@ -133,7 +133,7 @@ export function FaroAnalysis() {
         </Panel>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-x-10 gap-y-4 lg:grid-cols-2">
         <Panel title="¿Falla al elegir o al gestionar?" sub="Cada punto es una idea: lo máximo que subió (→) frente a lo máximo que bajó (↓) antes de resolverse.">
           <ExcursionScatter points={data.excursions} />
           <p className="mt-3 text-sm text-slate-700">
@@ -159,7 +159,7 @@ export function FaroAnalysis() {
         <LevelGrid g={data.levels} />
       </Panel>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-x-10 gap-y-4 lg:grid-cols-2">
         <Panel title="¿A qué hora acierta?" sub="Por la hora de Madrid a la que publicó la idea.">
           <BucketBars rows={data.byHour} />
         </Panel>
@@ -181,7 +181,7 @@ function Faro2Card({ f2, totalIdeas }: { f2: A["faro2"]; totalIdeas: number }) {
     ["Las que descarta", f2.rejected, "text-slate-500"],
   ];
   return (
-    <section className={`${card} ${flat} px-4 py-4 sm:px-5`}>
+    <section className="border-t border-slate-100 pt-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-[15px] font-semibold text-slate-900">FARO-2 en pruebas</h3>
         <span className="text-xs text-slate-500">
@@ -284,7 +284,7 @@ function ControlTable({ f2 }: { f2: A["faro2"] }) {
 // ---------------------------------------------------------------------------
 function Tile({ label, value, hint, cls = "text-slate-900" }: { label: string; value: string; hint?: string; cls?: string }) {
   return (
-    <div className={`${card} px-4 py-3`}>
+    <div className="rounded-xl bg-slate-50 px-4 py-3">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className={`mt-1 text-xl font-bold tabular-nums ${cls}`}>{value}</div>
       {hint && <div className="mt-0.5 text-[11px] text-slate-400">{hint}</div>}
@@ -294,7 +294,7 @@ function Tile({ label, value, hint, cls = "text-slate-900" }: { label: string; v
 
 function Panel({ title, sub, children }: { title: string; sub?: string; children: ReactNode }) {
   return (
-    <section className={`${card} ${flat} px-4 py-4 sm:px-5`}>
+    <section className="border-t border-slate-100 pt-5">
       <h3 className="text-[15px] font-semibold text-slate-900">{title}</h3>
       {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
       <div className="mt-3">{children}</div>

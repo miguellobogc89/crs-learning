@@ -3,7 +3,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { accountState, ensureAccount, processAccount, resetAccount } from "../accounts";
+import { accountState, ensureAccount, processAccount, resetAccount, type PositionView } from "../accounts";
 import { runCommittee, view as proposalView } from "../committee/service";
 import { CRYPTO_BENCHMARK, INDEX_SYMBOL } from "../market-data";
 import { dayKey, loadSeries } from "../sync";
@@ -135,7 +135,48 @@ export type AgentMove = {
   /** Resultado realizado en cierre o resultado actual (latente) de la posición. */
   pnl: number | null;
   pnlType: "realizado" | "latente" | null;
+  /** Detalle de la posición (para el panel lateral). */
+  detail: {
+    status: "abierta" | "pendiente" | "cerrada" | null;
+    quantity: number | null;
+    entryPrice: number | null;
+    entryDay: string | null;
+    lastPrice: number | null;
+    exitPrice: number | null;
+    exitDay: string | null;
+    exitReason: string | null;
+    stop: number | null;
+    target: number | null;
+    /** Resultado en % sobre lo invertido. */
+    pnlPct: number | null;
+    conviction: number | null;
+  };
 };
+
+type MovePosition = Pick<
+  PositionView,
+  "id" | "status" | "quantity" | "entryPrice" | "plannedEntry" | "entryDay" | "lastPrice" | "exitPrice" | "exitDay" | "exitReason" | "stop" | "target" | "pnl" | "unrealized"
+>;
+
+function detailOf(pos: MovePosition | null | undefined, pnl: number | null, fallback: { price?: number | null; stop?: number | null; target?: number | null; quantity?: number | null; conviction?: number | null } = {}): AgentMove["detail"] {
+  const entry = pos?.entryPrice ?? pos?.plannedEntry ?? fallback.price ?? null;
+  const qty = pos?.quantity ?? fallback.quantity ?? null;
+  const invested = entry !== null && qty ? entry * qty : null;
+  return {
+    status: pos ? (pos.status === "cerrada" ? "cerrada" : pos.status === "pendiente" ? "pendiente" : "abierta") : null,
+    quantity: qty,
+    entryPrice: entry,
+    entryDay: pos?.entryDay ?? null,
+    lastPrice: pos?.lastPrice ?? null,
+    exitPrice: pos?.exitPrice ?? null,
+    exitDay: pos?.exitDay ?? null,
+    exitReason: pos?.exitReason ?? null,
+    stop: pos?.stop ?? fallback.stop ?? null,
+    target: pos?.target ?? fallback.target ?? null,
+    pnlPct: pnl !== null && invested ? (pnl / invested) * 100 : null,
+    conviction: fallback.conviction ?? null,
+  };
+}
 
 /** Últimos movimientos de los agentes: decisiones ejecutadas y cierres por stop, objetivo o tiempo. */
 function movesOf(
@@ -144,8 +185,8 @@ function movesOf(
     name: string;
     color: string;
     proposals: ReturnType<typeof proposalView>[];
-    positions: { id: string; unrealized: number | null }[];
-    closed: { id: string; name: string; symbol: string; exitDay: string | null; exitReason: string | null; pnl: number | null }[];
+    positions: MovePosition[];
+    closed: (MovePosition & { name: string; symbol: string })[];
   }[],
 ): AgentMove[] {
   const out: AgentMove[] = [];
@@ -162,6 +203,7 @@ function movesOf(
       out.push({
         id: p.id, agent: a.key, name: a.name, color: a.color, at: p.createdAt, kind,
         asset: p.name, symbol: p.symbol, text: p.rationale, stop: p.stop, pnl, pnlType,
+        detail: detailOf(openPosition ?? closedPosition, pnl, { price: p.price, stop: p.stop, target: p.target, quantity: p.quantity, conviction: p.conviction }),
       });
     }
     for (const c of a.closed) {
@@ -172,6 +214,7 @@ function movesOf(
         id: c.id, agent: a.key, name: a.name, color: a.color, at: `${c.exitDay}T17:30:00.000Z`,
         kind, asset: c.name, symbol: c.symbol, text: null, stop: null,
         pnl: c.pnl, pnlType: c.pnl === null ? null : "realizado",
+        detail: detailOf(c, c.pnl),
       });
     }
   }

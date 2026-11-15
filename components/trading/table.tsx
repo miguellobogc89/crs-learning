@@ -3,7 +3,7 @@
 // suaves, pie con paginación y «Ver N por página», e importes con los decimales más pequeños.
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { eur, flat, FULL_H, ghost, panel, th } from "./format";
+import { eur, FULL_H, ghost, th } from "./format";
 
 export const TH = `${th} sticky top-0 z-10 bg-white whitespace-normal px-2 leading-tight shadow-[inset_0_-1px_0_rgb(241,245,249)]`;
 export const TD = "px-2 py-3";
@@ -37,8 +37,8 @@ export function TablePanel({ children, footer, header, height = FULL_H }: { chil
   }, [children, checkScroll]);
 
   return (
-    <section className={`${panel} ${flat} flex ${height} ${height === FULL_H ? "min-h-[320px]" : "min-h-0"} flex-col`}>
-      {header && <div className="shrink-0 border-b border-slate-100 px-4 py-3">{header}</div>}
+    <section className={`max-md:-mx-3 flex ${height} ${height === FULL_H ? "min-h-[320px]" : "min-h-0"} flex-col overflow-hidden bg-white`}>
+      {header && <div className="shrink-0 border-b border-slate-100 px-4 pb-3 md:px-2">{header}</div>}
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} onScroll={checkScroll} className="h-full overflow-auto overscroll-contain">
           {children}
@@ -449,7 +449,7 @@ export function DataTable<T>({
                 return (
                   <th
                     key={c.key}
-                    className={`${TH} relative select-none ${ci === 0 ? "!pl-5" : ""} ${c.align === "left" ? "!text-left" : c.align === "right" ? "!text-right" : "!text-center"} ${c.sort ? "cursor-pointer hover:text-slate-800" : ""}`}
+                    className={`${TH} relative select-none ${ci === 0 ? "!pl-2" : ""} ${c.align === "left" ? "!text-left" : c.align === "right" ? "!text-right" : "!text-center"} ${c.sort ? "cursor-pointer hover:text-slate-800" : ""}`}
                     onClick={() => pick(c)}
                     aria-sort={c.sort && active ? (sort!.dir === 1 ? "ascending" : "descending") : undefined}
                   >
@@ -481,7 +481,7 @@ export function DataTable<T>({
                     onClick={clickable ? () => (expand ? setOpen(open === k ? null : k) : onRowClick?.(r)) : undefined}
                   >
                     {columns.map((c, ci) => (
-                      <td key={c.key} className={`${TD} ${ci === 0 ? "pl-5" : ""} ${ALIGN[c.align ?? "center"]} ${c.className ?? ""}`}>
+                      <td key={c.key} className={`${TD} ${ci === 0 ? "pl-2" : ""} ${ALIGN[c.align ?? "center"]} ${c.className ?? ""}`}>
                         {c.cell(r)}
                       </td>
                     ))}

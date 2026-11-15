@@ -109,4 +109,5 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] Agentes sin scroll horizontal en móvil; la cabecera de la página de un agente ya no sale cortada (la rejilla de alto fijo solo en ordenador).
 - [x] Esqueletos de carga (web y app) en vez del panel con el círculo girando; la barra y el menú se quedan montados al cambiar de sección (layout de /trading + loading.tsx).
 - [x] Esqueleto a pantalla completa y sin marco (forma de tabla); cambiar Operadores/Actividad y las pestañas de Oportunidades ya no va al servidor; precarga en segundo plano de Inicio, Oportunidades, Cartera y Agentes.
+- [x] Actividad rediseñada: Operador (abre su página) · Operación (pastilla con icono) · Activo · Precio entrada → salida/ahora · Resultado (€ y %) · Cuándo; al pulsar un movimiento, panel lateral con el detalle. Tablas y Análisis sin recuadros.
 - [x] Búfer: las lecturas se guardan en memoria y en sessionStorage; al volver a una pantalla se ve al instante lo último conocido y se actualiza por detrás.
