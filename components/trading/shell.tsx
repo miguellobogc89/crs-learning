@@ -7,29 +7,45 @@
 // - tablet en horizontal y ordenador (≥ 1024 px): barra lateral completa, como antes.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, Menu, X } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { TradingNavigation } from "./navigation";
-import { TRADING_TABS, type TradingTab } from "./tabs";
+import { isFittedTab, isTradingTab, TRADING_TABS } from "./tabs";
 
-type Props = {
-  /** Título de la pantalla (en móvil va en la barra de arriba). */
-  title: string;
-  /** Sección de la que se toma el icono (desde el servidor no se pueden pasar componentes). */
-  section: TradingTab;
-  /** Pantalla «hija» (p. ej. la página de un agente): enlace para volver y nombre del padre. */
-  back?: { href: string; label: string };
-  /** En ordenador, la página no hace scroll: solo las tablas por dentro. En móvil y tablet, scroll normal. */
-  fitted?: boolean;
-  children: ReactNode;
-};
+/** Lo que una pantalla «hija» (la página de un agente) le dice a la estructura: su título y a dónde volver. */
+type Meta = { title?: string; back?: { href: string; label: string } };
+const MetaContext = createContext<(m: Meta | null) => void>(() => undefined);
+
+/** Desde una página: fija el título y el «volver» de la barra mientras esté abierta. */
+export function ShellMeta({ title, back }: Meta) {
+  const set = useContext(MetaContext);
+  const backHref = back?.href;
+  const backLabel = back?.label;
+  useEffect(() => {
+    set({ title, back: backHref && backLabel ? { href: backHref, label: backLabel } : undefined });
+    return () => set(null);
+  }, [set, title, backHref, backLabel]);
+  return null;
+}
 
 const hrefOf = (key: string) => (key === "mercados" ? "/trading/mercados?tab=valores" : `/trading/${key}`);
 
-export function TradingShell({ title, section, back, fitted = false, children }: Props) {
+/**
+ * Va en el layout de /trading: se queda montada al cambiar de sección (el menú, Mi dinero y la barra no
+ * se recargan) y solo cambia el contenido. El título y el icono salen de la ruta.
+ */
+export function TradingShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const Icon = TRADING_TABS.find((t) => t.key === section)?.icon ?? TRADING_TABS[0].icon;
+  const parts = pathname.split("/").filter(Boolean);
+  const section = parts[1] && isTradingTab(parts[1]) ? parts[1] : "inicio";
+  const child = parts.length > 2;
+  const tabDef = TRADING_TABS.find((t) => t.key === section) ?? TRADING_TABS[0];
+  const [meta, setMeta] = useState<Meta | null>(null);
+  const title = meta?.title ?? (child ? "" : tabDef.label);
+  const back = child ? meta?.back ?? { href: `/trading/${section}`, label: tabDef.label } : undefined;
+  const fitted = child || isFittedTab(section);
+  const Icon = tabDef.icon;
   const [open, setOpen] = useState(false);
   // Al navegar, el menú se cierra solo.
   useEffect(() => setOpen(false), [pathname]);
@@ -104,11 +120,11 @@ export function TradingShell({ title, section, back, fitted = false, children }:
         </div>
 
         <main
-          className={`min-h-0 min-w-0 flex-1 overflow-y-auto px-3 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3 sm:px-5 md:px-6 md:pt-0 lg:px-8 ${
+          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3 md:px-6 md:pt-0 lg:px-8 ${
             fitted ? "lg:flex lg:flex-col lg:overflow-hidden lg:pb-6" : ""
           }`}
         >
-          {children}
+          <MetaContext.Provider value={setMeta}>{children}</MetaContext.Provider>
         </main>
       </div>
 

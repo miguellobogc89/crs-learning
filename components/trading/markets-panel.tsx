@@ -74,7 +74,7 @@ export function MarketsPanel() {
         </div>
       </nav>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1">
+      <div className="pb-1 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
         {active === "noticias" ? (
           <NewsPanel />
         ) : active === "aprende" ? (

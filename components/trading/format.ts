@@ -34,6 +34,42 @@ export function errorText(e: unknown) {
   return e instanceof Error ? e.message : "No se pudo completar la operación";
 }
 
+// ---------------------------------------------------------------------------
+// Caché de lecturas (búfer): cada GET correcto se guarda en memoria y en sessionStorage. Al volver a una
+// pantalla se pinta al instante con lo último conocido (peek) mientras se pide lo nuevo por detrás.
+// sessionStorage y no localStorage: se borra al cerrar la pestaña, así no quedan datos de dinero de un
+// usuario a la vista del siguiente en un navegador compartido.
+// ---------------------------------------------------------------------------
+const memory = new Map<string, unknown>();
+const storeKey = (path: string) => `crs-trading:${path}`;
+const MAX_STORED = 1_500_000;
+
+/** Lo último que se leyó de esta ruta (o null). Para inicializar el estado sin esperar a la red. */
+export function peek<T>(path: string): T | null {
+  if (memory.has(path)) return memory.get(path) as T;
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(storeKey(path));
+    if (!raw) return null;
+    const value = JSON.parse(raw) as T;
+    memory.set(path, value);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function remember(path: string, value: unknown) {
+  memory.set(path, value);
+  if (typeof window === "undefined") return;
+  try {
+    const raw = JSON.stringify(value);
+    if (raw.length <= MAX_STORED) window.sessionStorage.setItem(storeKey(path), raw);
+  } catch {
+    // Sin espacio o sin almacenamiento: queda solo en memoria.
+  }
+}
+
 export async function api<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api/trading/${path}`, {
     method: body === undefined ? "GET" : "POST",
@@ -42,6 +78,7 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || "No se pudo completar la operación");
+  if (body === undefined) remember(path, data);
   return data as T;
 }
 

@@ -3,8 +3,8 @@
 // sus decisiones y (kamikazes) sus rondas. Para cualquier público: todo explicado sin jerga.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, Info, Wallet } from "lucide-react";
-import { api, dayFmt, errorText, eur, eur0, ghost, int, pct, primary, tone } from "./format";
-import { refreshTrading, useTradingRefresh } from "./navigation";
+import { api, dayFmt, errorText, eur, eur0, flat, ghost, int, pct, primary, tone } from "./format";
+import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
 import { EquityChart, withLivePoint } from "./equity-chart";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Pill, ReturnPill, Rich } from "./ui";
@@ -28,6 +28,7 @@ function maxDrawdown(points: { equity: number }[]) {
 
 export function AgentPage({ agentKey }: { agentKey: string }) {
   const [data, setData] = useState<Data | null>(null);
+  useWarmStart<Data>("agents", setData);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("abiertas");
   const [copying, setCopying] = useState(false);
@@ -90,11 +91,12 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
   const pendingIds = new Set(a.positions.filter((p) => p.status === "pendiente").map((p) => p.id));
 
   return (
-    <div className="grid h-full min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-5 overflow-hidden xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] xl:grid-rows-1">
-      {/* Izquierda: gráfico adaptable y KPIs compactos; sin scroll exterior */}
-      <div className="flex min-h-0 min-w-0 flex-col gap-4">
+    // En ordenador, sin scroll exterior (paneles con scroll dentro). En móvil y tablet, todo seguido.
+    <div className="flex flex-col gap-4 lg:grid lg:h-full lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-5 lg:overflow-hidden xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] xl:grid-rows-1">
+      {/* Izquierda: gráfico adaptable y KPIs compactos */}
+      <div className="flex min-w-0 flex-col gap-4 lg:min-h-0">
         {error && <ErrorNote>{error}</ErrorNote>}
-        <section className={`${card} flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4`}>
+        <section className={`${card} ${flat} flex flex-col px-4 py-4 sm:px-5 lg:min-h-0 lg:flex-1 lg:overflow-hidden`}>
           <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-4">
               <AgentAvatar color={a.color} size="lg" />
@@ -196,7 +198,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
           </div>
 
           <div className="mt-4 flex shrink-0 flex-wrap items-end gap-3">
-            <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur0(s.equity)}</span>
+            <span className="text-3xl font-bold tracking-tight tabular-nums text-slate-900 sm:text-4xl">{eur0(s.equity)}</span>
             <ReturnPill value={s.returnPct} big />
             <ChipMode a={a} big />
             <span className="pb-1 text-sm text-slate-500">desde {eur0(s.initialCapital)}</span>
@@ -206,12 +208,12 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
               <CopyBadges a={a} />
             </div>
           )}
-          <div className="mt-2 min-h-0 flex-1">
+          <div className="mt-2 h-56 lg:h-auto lg:min-h-0 lg:flex-1">
             <EquityChart points={points} initial={s.initialCapital} fill empty="Su gráfica se dibuja con el cierre de cada sesión desde que empezó." />
           </div>
         </section>
 
-        <section className={`${card} shrink-0 overflow-hidden`}>
+        <section className={`${card} ${flat} shrink-0 overflow-hidden`}>
           <dl className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-3">
             {[
               ["Efectivo", eur0(s.cash), "sin invertir"],
@@ -233,7 +235,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
       </div>
 
       {/* Derecha: actividad a toda altura, con scroll solo dentro de las pestañas */}
-      <section className={`${card} flex min-h-0 min-w-0 flex-col overflow-hidden`}>
+      <section className={`${card} ${flat} flex min-w-0 flex-col lg:min-h-0 lg:overflow-hidden`}>
           <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-100 px-3 pt-3 [scrollbar-width:none]" role="tablist">
           {tabs.map((t) => (
             <button
@@ -249,7 +251,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
             </button>
           ))}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
           {tab === "abiertas" &&
             (a.positions.length === 0 ? (
               <p className="px-5 py-8 text-center text-sm text-slate-500">Ahora mismo no tiene nada: todo en efectivo.</p>

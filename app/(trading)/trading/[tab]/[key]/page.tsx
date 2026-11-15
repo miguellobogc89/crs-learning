@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { connectorContext } from "@/lib/connectors/context";
-import { TradingShell } from "@/components/trading/shell";
+import { ShellMeta } from "@/components/trading/shell";
 import { AgentPage } from "@/components/trading/agent-page";
 import { TRADING_TABS } from "@/components/trading/tabs";
 import { agentByKey } from "@/lib/trading/agents/roster";
@@ -20,8 +20,9 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const { from } = await searchParams;
   const parent = TRADING_TABS.find((t) => t.key === (from === "inicio" ? "inicio" : from === "cartera" ? "cartera" : "agentes"))!;
   return (
-    <TradingShell title={def.name} section={parent.key} back={{ href: `/trading/${parent.key}`, label: parent.label }} fitted>
+    <>
+      <ShellMeta title={def.name} back={{ href: `/trading/${parent.key}`, label: parent.label }} />
       <AgentPage key={key} agentKey={key} />
-    </TradingShell>
+    </>
   );
 }

@@ -9,7 +9,7 @@ import type { getPortfolio } from "@/lib/trading/agents/copy";
 import type { TradingStatus } from "./navigation";
 import type { getAgents } from "@/lib/trading/agents/service";
 import { api, eur, errorText, pct } from "./format";
-import { useTradingRefresh } from "./navigation";
+import { useTradingRefresh, useWarmStart } from "./navigation";
 import { OpenAccount } from "./open-account";
 import { AVATAR, cap, ErrorNote, LoadingCard, PILL, ReturnPill } from "./ui";
 import { DataTable, Money, Segmented, sinceText, type Col } from "./table";
@@ -65,7 +65,9 @@ export function HomePanel() {
     />
   );
   const [account, setAccount] = useState<Portfolio | null>(null);
+  useWarmStart<Portfolio>("portfolio", setAccount);
   const [agents, setAgents] = useState<Agents | null>(null);
+  useWarmStart<Agents>("agents", setAgents);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {

@@ -10,7 +10,7 @@ import type { mirrorView } from "@/lib/trading/mirror/service";
 import type { manualView } from "@/lib/trading/manual/service";
 import { api, errorText, eur, field, flat, primary, tone } from "./format";
 import { AssetIcon } from "./asset-icon";
-import { refreshTrading, useTradingRefresh } from "./navigation";
+import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
 import { AgentAvatar, card, ErrorNote, LoadingCard, Modal, ReturnPill, StopTargetBar } from "./ui";
 import { EquityChart } from "./equity-chart";
 import type { Agent, Data as AgentsData } from "./agents-panel";
@@ -48,10 +48,15 @@ function statusOf(r: Row) {
 
 export function CarteraPanel() {
   const [wallets, setWallets] = useState<Wallets | null>(null);
+  useWarmStart<Wallets>("wallets?history=1", setWallets);
   const [mirrors, setMirrors] = useState<Mirrors | null>(null);
+  useWarmStart<Mirrors>("mirror", setMirrors);
   const [agents, setAgents] = useState<AgentsData | null>(null);
+  useWarmStart<AgentsData>("agents", setAgents);
   const [mine, setMine] = useState<Mine | null>(null);
+  useWarmStart<Mine>("mine", setMine);
   const [manual, setManual] = useState<Manual | null>(null);
+  useWarmStart<Manual>("manual", setManual);
   const [error, setError] = useState<string | null>(null);
   const [managing, setManaging] = useState<Row | null>(null);
   const [adding, setAdding] = useState(false);

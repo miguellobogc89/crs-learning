@@ -8,7 +8,7 @@ import { api, errorText, eur, pct } from "./format";
 import { DataTable, Money, useIsMobile, type Col, type TableSort } from "./table";
 import { ago } from "./home-panel";
 import { AgentAvatar, AVATAR, ErrorNote, LoadingCard, Modal, Pill, Rich } from "./ui";
-import { useTradingRefresh } from "./navigation";
+import { useTradingRefresh, useWarmStart } from "./navigation";
 import { ManualBuyModal, type BuyIdea } from "./manual-buy-modal";
 import { AssetIcon } from "./asset-icon";
 import { FaroAnalysis } from "./faro-analysis";
@@ -99,13 +99,14 @@ export function FaroPanel() {
           </button>
         ))}
       </div>
-      <div className="min-h-0 flex-1">{view === "analisis" ? <div className="h-full overflow-y-auto pr-1"><FaroAnalysis /></div> : <FaroIdeas />}</div>
+      <div className="min-h-0 flex-1">{view === "analisis" ? <div className="lg:h-full lg:overflow-y-auto lg:pr-1"><FaroAnalysis /></div> : <FaroIdeas />}</div>
     </div>
   );
 }
 
 function FaroIdeas() {
   const [data, setData] = useState<Data | null>(null);
+  useWarmStart<Data>("faro", setData);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<BuyIdea | null>(null);
   const [search, setSearch] = useState("");

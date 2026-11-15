@@ -7,7 +7,7 @@ import { ArrowRight, Copy, CopyPlus, LayoutGrid, List, Loader2, MoreHorizontal, 
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import { api, dayFmt, errorText, eur, eur0, field, flat, ghost, int, pct, primary, th, tone } from "./format";
-import { refreshTrading, useTradingRefresh } from "./navigation";
+import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
 import { EquityCurve, withLivePoint } from "./equity-chart";
 import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
@@ -44,6 +44,7 @@ const SORTS: Record<SortKey, { label: string; fn: (a: Agent, b: Agent) => number
 
 export function AgentsPanel() {
   const [data, setData] = useState<Data | null>(null);
+  useWarmStart<Data>("agents", setData);
   const [error, setError] = useState<string | null>(null);
   const params = useSearchParams();
   const router = useRouter();
@@ -223,7 +224,7 @@ export function AgentsPanel() {
       {list.length === 0 ? (
         <div className={`${card} px-6 py-10 text-center text-sm text-slate-500`}>Ningún agente coincide con la búsqueda.</div>
       ) : layout === "cards" ? (
-        <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto md:grid-cols-2 md:gap-5 xl:grid-cols-3">
+        <div className="grid min-h-0 flex-1 content-start gap-3 max-md:overflow-visible md:grid-cols-2 md:gap-5 md:overflow-y-auto xl:grid-cols-3">
           {list.map((a) => (
             <AgentCard
               key={a.key}

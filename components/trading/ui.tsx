@@ -2,8 +2,9 @@
 // Piezas de interfaz compartidas del módulo, con el estilo de Inicio: tarjetas, pastillas, avatares,
 // cabeceras de sección, modal, texto con negritas y barra de progreso.
 import { Fragment, useEffect, type ComponentType, type ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, Bot, Loader2, X } from "lucide-react";
-import { card, pct } from "./format";
+import { ArrowDownRight, ArrowUpRight, Bot, X } from "lucide-react";
+import { card, flat, pct } from "./format";
+import { Bone, SkeletonList } from "./skeletons";
 
 export { card };
 
@@ -116,10 +117,14 @@ export function CardHeader({ children, actions, divider = false }: { children: R
 }
 
 /** Cargando… dentro de una tarjeta. */
+/** Cargando: esqueleto con la forma de una lista (en vez de un panel vacío con un círculo girando). */
 export function LoadingCard({ height = "h-48" }: { height?: string }) {
   return (
-    <div className={`${card} flex ${height} items-center justify-center`}>
-      <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+    <div className={`${card} ${flat} ${height} overflow-hidden`} aria-busy="true" aria-label="Cargando">
+      <div className="space-y-3 px-4 pt-4">
+        <Bone className="h-4 w-36" />
+      </div>
+      <SkeletonList rows={6} />
     </div>
   );
 }

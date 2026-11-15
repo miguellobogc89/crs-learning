@@ -1,8 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { connectorContext } from "@/lib/connectors/context";
-import { TradingShell } from "@/components/trading/shell";
 import { TradingWorkspace } from "@/components/trading/trading-workspace";
-import { TRADING_TABS, isFittedTab, isTradingTab } from "@/components/trading/tabs";
+import { isTradingTab } from "@/components/trading/tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -32,10 +31,6 @@ export default async function Page({
   if (!isTradingTab(tab)) notFound();
   const ctx = await connectorContext();
   if (!ctx) redirect("/");
-  const meta = TRADING_TABS.find((t) => t.key === tab)!;
-  return (
-    <TradingShell title={meta.label} section={meta.key} fitted={isFittedTab(tab)}>
-      <TradingWorkspace key={`${ctx.workspaceId}:${tab}`} tab={tab} />
-    </TradingShell>
-  );
+  // La estructura (barra, menú) está en el layout: aquí solo el contenido de la sección.
+  return <TradingWorkspace key={`${ctx.workspaceId}:${tab}`} tab={tab} />;
 }

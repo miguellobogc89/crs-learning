@@ -106,3 +106,6 @@ Apuntado el 10/11/2026. Sin empezar.
 - [ ] Script de capturas (iPhone, iPad vertical y horizontal) para revisar cada sección.
 - [x] Fase 2/3 (primera tanda, 15/11): instalable como app (manifest e iconos en `public/trading-app`), menú a pantalla completa, secciones «sin panel» en móvil (`flat`), ventanas desde abajo; Mi cartera (lista de oportunidades con detalle y acciones), Oportunidades (lista compacta con «Ver más» y detalle con Ejecutar), Inicio (filas de dos líneas), Agentes (barra mínima, solo tarjetas), Análisis (secciones a todo el ancho). Tablas comunes en móvil: sin páginas ni scroll interno, orden en desplegable y fila compacta opcional (`mobileRow`).
 - [ ] Siguiente tanda móvil: Actividad, Mercados, Integraciones, página de agente, ventanas de comprar/gestionar.
+- [x] Agentes sin scroll horizontal en móvil; la cabecera de la página de un agente ya no sale cortada (la rejilla de alto fijo solo en ordenador).
+- [x] Esqueletos de carga (web y app) en vez del panel con el círculo girando; la barra y el menú se quedan montados al cambiar de sección (layout de /trading + loading.tsx).
+- [x] Búfer: las lecturas se guardan en memoria y en sessionStorage; al volver a una pantalla se ve al instante lo último conocido y se actualiza por detrás.

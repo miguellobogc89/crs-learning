@@ -1,12 +1,12 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link2, Loader2 } from "lucide-react";
 import type { getWallets } from "@/lib/trading/wallets";
 import type { MarketPhase } from "@/lib/trading/chip/phase";
 import { TRADING_SECTIONS } from "./tabs";
-import { api, errorText, eur, eur0, tone } from "./format";
+import { api, errorText, eur, eur0, peek, tone } from "./format";
 
 export type TradingStatus = {
   regime: "alcista" | "bajista" | "lateral";
@@ -33,6 +33,19 @@ type SyncResult = {
   pending: boolean;
 };
 
+/**
+ * Arranque en caliente: antes de pintar, pone en el estado lo último que se leyó de `path` (caché de
+ * format.ts), si aún no hay nada. Así una pantalla ya visitada se ve al instante y se actualiza después.
+ * En un efecto (no en el useState inicial) para que no difiera de lo que pintó el servidor.
+ */
+export function useWarmStart<T>(path: string, set: (fn: (v: T | null) => T | null) => void) {
+  useLayoutEffect(() => {
+    const cached = peek<T>(path);
+    if (cached) set((v) => v ?? cached);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar
+  }, [path]);
+}
+
 export const REFRESH_EVENT = "trading:refresh";
 export function refreshTrading() {
   window.dispatchEvent(new Event(REFRESH_EVENT));
@@ -56,6 +69,7 @@ export function useTradingRefresh(fn: () => void) {
 export function TradingNavigation({ large = false }: { large?: boolean } = {}) {
   const pathname = usePathname();
   const [status, setStatus] = useState<TradingStatus | null>(null);
+  useWarmStart<TradingStatus>("status", setStatus);
   const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const auto = useRef(false);
@@ -184,6 +198,7 @@ function BrokerLogo({ src, muted }: { src: string | null; muted?: boolean }) {
 /** Panel lateral: tu dinero real en cada exchange conectado y, discreta, la cartera virtual. */
 function MoneyPanel({ status, syncing, msg, onSync }: { status: TradingStatus | null; syncing: boolean; msg: string | null; onSync: () => void }) {
   const [wallets, setWallets] = useState<Wallets | null>(null);
+  useWarmStart<Wallets>("wallets", setWallets);
   const load = useCallback(() => {
     api<Wallets>("wallets").then(setWallets, () => undefined);
   }, []);
