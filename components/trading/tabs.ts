@@ -25,7 +25,7 @@ export const TRADING_SECTIONS: { title: string | null; items: TabDef[] }[] = [
   {
     title: "Ajustes",
     items: [
-      { key: "integraciones", label: "Integraciones", icon: Plug, description: "Tus brókeres conectados: cuentas, entorno demo o real, permisos y registro de órdenes." },
+      { key: "integraciones", label: "Conexiones", icon: Plug, description: "Tus brókeres conectados: cuentas, entorno demo o real, permisos y registro de órdenes." },
     ],
   },
 ];
