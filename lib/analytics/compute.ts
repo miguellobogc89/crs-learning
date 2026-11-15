@@ -454,7 +454,9 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
   const doc = (invoiceId: string | undefined) => (invoiceId && data.documents?.[invoiceId]?.fileId) || null;
   switch (key) {
     case "compras": {
-      const purchases = normalizePurchases(data).normalized;
+      const { lines: purchaseLineList, normalized: purchases } = normalizePurchases(data);
+      // What the product's configuration in the catalog says (pack content, VAT): set there once, it applies to every purchase.
+      const lineOf = new Map(purchaseLineList.map(l => [l.id, l]));
       // The alias of each line comes from its product in the catalog (corrected there, it changes here too).
       const linked = purchaseCatalog(data);
       const aliasOf = new Map((linked?.catalog.rows ?? []).map(r => [r.id, str(r.values.alias)]));
@@ -463,9 +465,11 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
       columns: [{ key: "fecha", label: "Fecha", kind: "date", edit: { field: "source_ticket_date", type: "date" } }, { key: "producto", label: "Producto", edit: { field: "description", type: "text" } },
         { key: "alias", label: "Alias" }, { key: "proveedor", label: "Proveedor", filter: true },
         { key: "cantidad", label: "Cantidad", kind: "number", edit: { field: "quantity", type: "number" } }, { key: "unidad", label: "Ud.", edit: { field: "unit", type: "text" } },
+        { key: "envase", label: "Envase" },
         { key: "precio", label: "Precio ud.", kind: "money", edit: { field: "unit_price", type: "number" } }, pc("descuento_pct"),
         { key: "precio_pagado", label: "Precio ud. con dto.", kind: "money" },
         { key: "importe", label: "Importe s/IVA", kind: "money", edit: { field: "line_total", type: "number" } },
+        { key: "iva", label: "IVA %", kind: "number" },
         { key: "importe_iva", label: "Importe c/IVA", kind: "money", edit: { field: "line_total_with_tax", type: "number" } },
         pc("tipo"), { key: "descuento", label: "Dto. €", kind: "money", edit: { field: "discount_amount", type: "number" } },
         ...PURCHASE_COLUMNS.filter(c => c.key !== "tipo" && c.key !== "descuento_pct"), { key: "referencia", label: "Ref.", edit: { field: "product_reference", type: "text" } },
@@ -473,8 +477,10 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
       rows: data.lines.map(l => {
         const inv = ix.byId.get(ix.invoiceOfLine.get(l.id) ?? "");
         const n = purchases.get(l.id);
-        const iva = num(l.values.tax_rate), q = num(l.values.quantity);
-        const sinIva = num(l.values.line_total) ?? n?.importe_corregido ?? null;
+        const pl = lineOf.get(l.id);
+        const iva = pl ? pl.iva : num(l.values.tax_rate), q = num(l.values.quantity);
+        const conIvaLeido = num(l.values.line_total_with_tax);
+        const sinIva = num(l.values.line_total) ?? n?.importe_corregido ?? (conIvaLeido !== null && iva !== null ? Math.round(conIvaLeido / (1 + iva / 100) * 100) / 100 : null);
         const conIva = num(l.values.line_total_with_tax) ?? (sinIva !== null && iva !== null ? Math.round(sinIva * (1 + iva / 100) * 100) / 100 : null);
         const catalogRow = linked?.catalogOf.get(l.id);
         // The price shown may come from the «with tax» field: editing writes back to that same field.
@@ -484,7 +490,8 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
           alias: catalogRow ? aliasOf.get(catalogRow) ?? null : null,
           proveedor: inv ? companyName(ix.byId.get(ix.issuerOf.get(inv.id) ?? "")) : null, cantidad: q,
           precio: num(l.values.unit_price) ?? num(l.values.unit_price_with_tax), importe: sinIva, importe_iva: conIva,
-          unidad: str(l.values.unit), descuento: num(l.values.discount_amount), referencia: str(l.values.product_reference),
+          unidad: str(l.values.unit), iva,
+          envase: pl?.envase && pl.unidadEnvase ? `${String(pl.envase).replace(".", ",")} ${pl.unidadEnvase}` : null, descuento: num(l.values.discount_amount), referencia: str(l.values.product_reference),
           // What was really paid per unit, without VAT (after discounts and offers): amount ÷ quantity.
           precio_pagado: q && sinIva !== null ? Math.round((sinIva / q) * 1e5) / 1e5 : null,
           factura: inv ? str(inv.values.invoice_number) : null, documento: doc(inv?.id), ...purchaseCells(n),

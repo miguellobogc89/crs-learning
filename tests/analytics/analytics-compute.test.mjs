@@ -217,3 +217,18 @@ test('catálogo: cada producto trae su historial de compras, sus avisos y las co
   const c=a.buildTable(d,'compras');
   assert.equal(c.rows[0].alias,'Azúcar'); assert.ok(c.columns.find(x=>x.key==='importe_iva'));
 });
+
+test('el catálogo manda: su envase, unidad e IVA valen para todas las compras del producto', () => {
+  const row=(id,values)=>({id,values});
+  const d={companies:[row('s',{legal_name:'Proveedor S.L.'})],invoices:[row('f1',{issue_date:'2026-09-01'})],
+    // The invoice read 10 per pack and no amount without VAT; the catalog says 200 units and 21 %.
+    lines:[row('l1',{description:'SERVILLETAS 200UDS',quantity:'2',unit_price:'3.00',line_total_with_tax:'7.26',package_content:'10',package_unit:'ud',tax_rate:'10'})],
+    supplies:[],consumption:[],telecom:[],relations:{invoice_lines:[['f1','l1']],invoice_issuer:[['s','f1']],invoice_customer:[],invoice_supply_point:[],invoice_energy_consumption:[],supply_point_holder:[]},
+    custom:[{typeId:'t',typeKey:'catalogo',nombre:'Catálogo',descripcion:'',titulo:'producto',
+      campos:[{key:'producto',label:'Producto',type:'text'},{key:'envase',label:'Envase',type:'decimal'},{key:'unidad',label:'Unidad',type:'text'},{key:'iva',label:'IVA %',type:'decimal'}],
+      rows:[row('p',{producto:'SERVILLETAS 200UDS',envase:200,unidad:'1',iva:21})]}],
+    links:[{from:'compras',columna:'cat',nombre:'Producto',to:'tabla:catalogo',relationId:'r',relationKey:'r',completar:false,pairs:[['l1','p']]}]};
+  const c=a.buildTable(d,'compras').rows[0];
+  assert.equal(c.iva,21); assert.equal(c.envase,'200 ud'); assert.equal(c.importe,6,'7,26 € with 21 % VAT');
+  assert.equal(c.cantidad_real,400); assert.equal(c.precio_final,0.015,'6 € ÷ 400 servilletas');
+});
