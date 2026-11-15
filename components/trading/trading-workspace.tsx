@@ -8,6 +8,7 @@ import { HomePanel } from "./home-panel";
 import { IntegrationsPanel } from "./integrations-panel";
 import { MarketsPanel } from "./markets-panel";
 import { PortfolioPanel } from "./portfolio-panel";
+import { ShellMeta } from "./shell";
 import { isFittedTab, type TradingTab } from "./tabs";
 
 export type Overview = Awaited<ReturnType<typeof getOverview>> & { canManage: boolean };
@@ -19,7 +20,10 @@ export function TradingWorkspace({ tab, virtual = false }: { tab: TradingTab; vi
   else if (tab === "oportunidades") body = <FaroPanel />;
   else if (tab === "cartera") {
     body = virtual ? (
-      <PortfolioPanel onOpenChart={(symbol) => router.push(`/trading/mercados?${new URLSearchParams({ tab: "valores", symbol })}`)} />
+      <>
+        <ShellMeta title="Mi cartera virtual" />
+        <PortfolioPanel onOpenChart={(symbol) => router.push(`/trading/mercados?${new URLSearchParams({ tab: "valores", symbol })}`)} />
+      </>
     ) : <CarteraPanel />;
   }
   else if (tab === "agentes") body = <AgentsPanel />;

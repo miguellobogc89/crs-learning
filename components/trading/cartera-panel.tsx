@@ -4,15 +4,15 @@
 // gestionarlas: seguir si sube, cerrar) y, al lado, tus agentes en pequeño (clic → Gestionar).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronRight, Clock, Crosshair, Flame, Layers, Link2, Loader2, Minus, Pause, Play, Plus, RefreshCw, Shield, Trash2, TrendingUp, Users, Wallet } from "lucide-react";
+import { ArrowRight, ChevronRight, Clock, Crosshair, Flame, Link2, Loader2, Minus, Pause, Play, Plus, Shield, Trash2 } from "lucide-react";
 import type { getWallets, myAgents } from "@/lib/trading/wallets";
 import type { mirrorView } from "@/lib/trading/mirror/service";
 import type { manualView } from "@/lib/trading/manual/service";
-import { api, errorText, eur, field, flat, primary, tone } from "./format";
+import { api, errorText, eur, field, primary, tone } from "./format";
 import { AssetIcon } from "./asset-icon";
 import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
-import { AgentAvatar, card, ErrorNote, LoadingCard, Modal, ReturnPill, StopTargetBar } from "./ui";
-import { EquityChart } from "./equity-chart";
+import { AgentAvatar, ErrorNote, LoadingCard, Modal, ReturnPill, StopTargetBar } from "./ui";
+import { PortfolioAgents, PortfolioBalance, PortfolioColumns, PortfolioOpportunities } from "./portfolio-layout";
 import type { Agent, Data as AgentsData } from "./agents-panel";
 
 type Wallets = Awaited<ReturnType<typeof getWallets>>;
@@ -133,12 +133,6 @@ export function CarteraPanel() {
   const recent = wallets.history.filter((p) => new Date(p.day).getTime() >= cutoff);
   const hasIntraday = recent.length >= 2;
   const graphPoints = hasIntraday ? recent : mine.history;
-  const kpis = [
-    { icon: Wallet, label: "Disponible", value: eur(free, 2), cls: "text-slate-900", tip: "Dinero libre en tu exchange" },
-    { icon: Layers, label: "Trabajando para ti", value: eur(working, 2), cls: "text-slate-900", tip: "En oportunidades abiertas y en copias de agentes" },
-    { icon: Flame, label: "En oportunidades", value: eur(inTrades, 2), cls: "text-slate-900", tip: "Lo que valen ahora tus oportunidades abiertas" },
-    { icon: TrendingUp, label: "Ganado", value: signed(earned), cls: tone(earned), tip: "Oportunidades (cerradas y abiertas) y copias de agentes, con comisiones" },
-  ];
 
   return (
     <div className="space-y-5">
@@ -152,122 +146,68 @@ export function CarteraPanel() {
         </p>
       )}
 
-      {/* Tu dinero: saldo, en qué está y evolución */}
-      <section className={`${card} ${flat} px-4 pb-3 pt-4 sm:px-6 sm:pt-5`}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 text-[15px] font-medium text-slate-800">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <Wallet className="h-5 w-5" />
-            </span>
-            Tu dinero real{operating ? ` · ${operating.name}` : ""}
-          </div>
-          {wallets.items.length > 0 && (
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="Periodo del gráfico">
-                {(["24h", "7d"] as const).map((period) => (
-                  <button
-                    key={period}
-                    type="button"
-                    aria-pressed={chartPeriod === period}
-                    onClick={() => setChartPeriod(period)}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium ${chartPeriod === period ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
-                  >
-                    {period === "24h" ? "24 h" : "7 días"}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => void refresh()}
-                disabled={refreshing}
-                title="Actualizar saldo, gráfica y oportunidades"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
-              </button>
-            </div>
-          )}
-        </div>
-        {wallets.items.length === 0 ? (
+      <PortfolioBalance
+        title={`Tu dinero real${operating ? ` · ${operating.name}` : ""}`}
+        total={total}
+        available={free}
+        working={working}
+        opportunities={inTrades}
+        earned={earned}
+        returnPct={earnedBase > 0 ? (earned / earnedBase) * 100 : null}
+        points={graphPoints}
+        initial={graphPoints[0]?.equity ?? total}
+        intraday={hasIntraday}
+        periods={[{ key: "24h", label: "24 h" }, { key: "7d", label: "7 días" }]}
+        period={chartPeriod}
+        onPeriodChange={setChartPeriod}
+        refreshing={refreshing}
+        onRefresh={() => void refresh()}
+        note={hasIntraday
+          ? "Saldo valorado en EUR cada 5 min; las aportaciones y retiradas también cambian la curva."
+          : "De momento se muestra el histórico diario. Las lecturas de cinco minutos se irán añadiendo mientras Trading esté abierto."}
+        empty="La gráfica se completará tras la segunda lectura de saldo (aprox. 5 minutos)."
+        setup={wallets.items.length === 0 ? (
           <div className="py-6">
             <p className="text-sm text-slate-600">Conecta tu exchange para ejecutar oportunidades y copiar agentes con tu dinero.</p>
             <Link href="/trading/integraciones" className={`${primary} mt-3`}>
               <Link2 className="h-4 w-4" /> Conectar exchange
             </Link>
           </div>
-        ) : (
-          <>
-            <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:items-center">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900 sm:text-5xl">{eur(total, 2)}</span>
-                {earnedBase > 0 && <ReturnPill value={(earned / earnedBase) * 100} big />}
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {kpis.map((x) => (
-                  <div key={x.label} className="rounded-xl bg-slate-50 px-3 py-2.5" title={x.tip}>
-                    <div className="flex items-center gap-1.5 whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
-                      <x.icon className={`h-3.5 w-3.5 ${x.label === "Ganado" ? "text-emerald-600" : "text-blue-600"}`} /> {x.label}
-                    </div>
-                    <div className={`mt-0.5 text-base font-bold tabular-nums sm:text-lg ${x.cls}`}>{x.value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="mt-3">
-              <EquityChart
-                points={graphPoints}
-                initial={graphPoints[0]?.equity ?? total}
-                height={145}
-                ranges={false}
-                intraday={hasIntraday}
-                balanceOnly
-                empty="La gráfica se completará tras la segunda lectura de saldo (aprox. 5 minutos)."
-              />
-            </div>
-            <p className="mt-1 text-[11px] leading-snug text-slate-400">
-              {hasIntraday
-                ? "Saldo valorado en EUR cada 5 min; las aportaciones y retiradas también cambian la curva."
-                : "De momento se muestra el histórico diario. Las lecturas de cinco minutos se irán añadiendo mientras Trading esté abierto."}
-            </p>
-          </>
+        ) : undefined}
+      />
+
+      <PortfolioColumns
+        opportunities={<MyOpportunities data={manual} canManage={mirrors.canManage} onChange={load} />}
+        agents={(
+          <PortfolioAgents count={`${mine.owned.length} de ${mine.max}`}>
+            <ul className="space-y-1">
+              {rows.map((r) => (
+                <AgentRow
+                  key={r.key}
+                  r={r}
+                  onClick={mirrors.canManage ? () => setManaging(r) : undefined}
+                  onRemove={r.mine && !r.mirror && mirrors.canManage ? () => removeAgent(r.key, r.agent?.name ?? r.key) : undefined}
+                  removing={removing === r.key}
+                />
+              ))}
+              {mine.owned.length < mine.max && (
+                <li>
+                  <button
+                    type="button"
+                    disabled={!mirrors.canManage}
+                    onClick={() => setAdding(true)}
+                    className="flex w-full items-center gap-3 rounded-xl border border-dashed border-slate-200 px-3 py-2 text-left text-sm text-slate-400 transition-colors enabled:hover:border-blue-300 enabled:hover:bg-blue-50/40 enabled:hover:text-blue-700"
+                  >
+                    <Plus className="h-4 w-4" /> Añadir agente
+                    <span className="ml-auto text-xs">{mine.max - mine.owned.length} libres</span>
+                  </button>
+                </li>
+              )}
+            </ul>
+            {!rows.length && <p className="px-1 pt-1 text-xs text-slate-500">Aún sin agentes: mientras los evalúas, ejecuta oportunidades.</p>}
+          </PortfolioAgents>
         )}
-      </section>
-
-      {/* Oportunidades ejecutadas (lo principal) + tus agentes en pequeño */}
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
-        <MyOpportunities data={manual} canManage={mirrors.canManage} onChange={load} />
-
-        <section className={`${card} ${flat} px-4 py-4 lg:self-start`}>
-          <h2 className="flex items-center gap-2 px-1 pb-2 text-[15px] font-semibold text-slate-900">
-            <Users className="h-4 w-4 text-slate-500" /> Tus agentes <span className="font-normal text-slate-400">· {mine.owned.length} de {mine.max}</span>
-          </h2>
-          <ul className="space-y-1">
-            {rows.map((r) => (
-              <AgentRow
-                key={r.key}
-                r={r}
-                onClick={mirrors.canManage ? () => setManaging(r) : undefined}
-                onRemove={r.mine && !r.mirror && mirrors.canManage ? () => removeAgent(r.key, r.agent?.name ?? r.key) : undefined}
-                removing={removing === r.key}
-              />
-            ))}
-            {mine.owned.length < mine.max && (
-              <li>
-                <button
-                  type="button"
-                  disabled={!mirrors.canManage}
-                  onClick={() => setAdding(true)}
-                  className="flex w-full items-center gap-3 rounded-xl border border-dashed border-slate-200 px-3 py-2 text-left text-sm text-slate-400 transition-colors enabled:hover:border-blue-300 enabled:hover:bg-blue-50/40 enabled:hover:text-blue-700"
-                >
-                  <Plus className="h-4 w-4" /> Añadir agente
-                  <span className="ml-auto text-xs">{mine.max - mine.owned.length} libres</span>
-                </button>
-              </li>
-            )}
-          </ul>
-          {!rows.length && <p className="px-1 pt-1 text-xs text-slate-500">Aún sin agentes: mientras los evalúas, ejecuta oportunidades.</p>}
-        </section>
-      </div>
+      />
 
       {adding && (
         <AddAgentModal
@@ -572,7 +512,7 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
   const trail = (id: string, on: boolean) => void run(`seguir:${id}`, () => api("manual/trail", { id, trail: on }));
 
   return (
-    <section className={`${card} ${flat} flex min-w-0 flex-col px-4 py-4`}>
+    <PortfolioOpportunities>
       <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-3">
         <h2 className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-lg font-semibold text-slate-900">
           <Flame className="h-5 w-5 text-orange-500" /> Mis oportunidades
@@ -715,7 +655,7 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
         </>
       )}
       <p className="mt-2 px-1 text-[11px] text-slate-400">La app revisa cada ~5 min: vende al tocar el stop o el objetivo (o sube el stop si marcaste «Seguir si sube»). Resultados con comisiones.</p>
-    </section>
+    </PortfolioOpportunities>
   );
 }
 

@@ -59,7 +59,7 @@ export function TradingShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-dvh min-h-0 w-full overflow-hidden bg-white text-foreground">
       {/* Ordenador y tablet en horizontal: barra lateral completa. */}
-      <aside className="hidden w-64 shrink-0 border-r border-slate-200/70 bg-slate-50/40 lg:block">
+      <aside className="hidden w-72 shrink-0 border-r border-slate-200/70 bg-slate-50/40 lg:block">
         <TradingNavigation />
       </aside>
 

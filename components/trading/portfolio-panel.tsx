@@ -1,18 +1,21 @@
 "use client";
+import type { getPortfolio } from "@/lib/trading/agents/copy";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot, Briefcase, ChevronRight, History, TrendingUp, ListChecks, Loader2, Pencil, RotateCcw, ShieldCheck, Wallet, X } from "lucide-react";
+import { Bot, Briefcase, ChevronRight, Flame, History, TrendingUp, ListChecks, Loader2, Pencil, RotateCcw, ShieldCheck, Wallet, X } from "lucide-react";
 import type { accountDetail, PositionView } from "@/lib/trading/accounts";
 import { PATTERN_LIBRARY } from "@/lib/trading/library";
-import { refreshTrading, useTradingRefresh } from "./navigation";
-import { card, ErrorNote, LoadingCard, ReturnPill } from "./ui";
+import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
+import { ErrorNote, LoadingCard } from "./ui";
 import { CopiesPanel } from "./copies-panel";
-import { EquityChart, withLivePoint } from "./equity-chart";
+import { PortfolioBalance, PortfolioColumns, PortfolioOpportunities } from "./portfolio-layout";
+import { withLivePoint } from "./equity-chart";
 import { AssetIcon } from "./asset-icon";
 import { OpenAccount } from "./open-account";
-import { PATTERN_SHORT, api, dayFmt, errorText, eur, eur0, field, ghost, int, num, panel, pct, primary, th, tone } from "./format";
+import { PATTERN_SHORT, api, dayFmt, errorText, eur, eur0, field, ghost, int, num, panel, primary, th, tone } from "./format";
 
 type Detail = Awaited<ReturnType<typeof accountDetail>>;
+type VirtualPortfolio = Awaited<ReturnType<typeof getPortfolio>>;
 type Instruments = {
   items: { symbol: string; name: string; sector: string | null; isIndex: boolean; active: boolean; lastCandle: string | null; lastError: string | null }[];
   canManage: boolean;
@@ -29,14 +32,13 @@ export { EquityCurve } from "./equity-chart";
 
 type PortfolioView = "global" | "abiertas" | "historial" | "caja";
 const VIEWS: { key: PortfolioView; label: string }[] = [
-  { key: "global", label: "Posición global" },
-  { key: "abiertas", label: "Posiciones abiertas" },
+  { key: "global", label: "Todas" },
+  { key: "abiertas", label: "Abiertas" },
   { key: "historial", label: "Historial" },
-  { key: "caja", label: "Movimientos de caja" },
+  { key: "caja", label: "Caja" },
 ];
 
 export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => void }) {
-  const onChanged = refreshTrading;
   const params = useSearchParams();
   const view = VIEWS.find(({ key }) => key === params.get("vista"))?.key ?? "global";
   const pickView = (v: PortfolioView) => {
@@ -46,13 +48,20 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
     window.history.replaceState(null, "", url);
   };
   const [data, setData] = useState<Detail | null>(null);
+  const [portfolio, setPortfolio] = useState<VirtualPortfolio | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<"7d" | "all">("7d");
+  const [refreshing, setRefreshing] = useState(false);
+  useWarmStart<Detail>("account", setData);
+  useWarmStart<VirtualPortfolio>("portfolio", setPortfolio);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<PositionView | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setData(await api<Detail>("account"));
+      const [account, totals] = await Promise.all([api<Detail>("account"), api<VirtualPortfolio>("portfolio")]);
+      setData(account);
+      setPortfolio(totals);
       setError(null);
     } catch (e) {
       setError(errorText(e));
@@ -68,7 +77,7 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
     setError(null);
     try {
       await api(path, body);
-      onChanged();
+      refreshTrading();
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -76,7 +85,7 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
     }
   };
 
-  if (!data)
+  if (!data || !portfolio)
     return error ? (
       <ErrorNote>{error}</ErrorNote>
     ) : (
@@ -85,258 +94,265 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
 
   const s = data.summary;
   if (!s.opened) return <OpenAccount />;
+  const total = portfolio.total;
+  const points = withLivePoint(portfolio.equity, total.equity);
+  const cutoff = Date.parse(points.at(-1)?.day ?? "") - 6 * 86_400_000;
+  const recent = points.filter(({ day }) => new Date(day).getTime() >= cutoff);
+  const refresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
   const active = data.positions.filter((p) => p.status === "abierta" || p.status === "pendiente");
   const history = data.positions.filter((p) => p.status === "cerrada" || p.status === "cancelada");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {error && <ErrorNote>{error}</ErrorNote>}
+      <PortfolioBalance
+        title="Tu dinero virtual"
+        total={total.equity}
+        available={total.available}
+        working={total.invested + total.reserved}
+        opportunities={s.invested}
+        earned={total.equity - total.initialCapital}
+        returnPct={total.returnPct}
+        points={chartPeriod === "7d" ? recent : points}
+        initial={total.initialCapital}
+        periods={[{ key: "7d", label: "7 días" }, { key: "all", label: "Todo" }]}
+        period={chartPeriod}
+        onPeriodChange={setChartPeriod}
+        refreshing={refreshing}
+        onRefresh={() => void refresh()}
+        note="Evolución diaria de tu cartera virtual, incluidas las copias de agentes."
+        empty="La gráfica se completará cuando haya dos lecturas de patrimonio."
+      />
 
-      <div role="tablist" aria-label="Partes de tu cartera" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
-        {VIEWS.map((v) => {
-          const count = v.key === "abiertas" ? active.length : v.key === "historial" ? history.length : null;
-          return (
-            <button
-              key={v.key}
-              type="button"
-              role="tab"
-              aria-selected={view === v.key}
-              onClick={() => pickView(v.key)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium ${view === v.key ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
-            >
-              {v.label}
-              {count ? <span className="rounded-full bg-slate-200/70 px-1.5 text-[11px] font-semibold tabular-nums text-slate-600">{count}</span> : null}
-            </button>
-          );
-        })}
-      </div>
-
-      {view === "global" && (
-      <>
-
-      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        {[
-          ["Patrimonio", eur0(s.equity), pct(s.returnPct), tone(s.returnPct)],
-          ["Invertido", eur0(s.invested), `${num(s.equity ? (s.invested / s.equity) * 100 : 0, 0)} % · ${eur0(s.available)} libres${s.reserved > 0.5 ? ` · ${eur0(s.reserved)} reservados` : ""}`, "text-slate-500"],
-          ["Resultado cerrado", eur0(s.realized), `${s.stats.closed} operaciones`, tone(s.realized)],
-          ["Latente", eur0(s.unrealized), `${active.filter((p) => p.status === "abierta").length} abiertas`, tone(s.unrealized)],
-          ["Acierto", s.stats.closed ? `${num(s.stats.winRate * 100, 0)} %` : "—", `R medio ${num(s.stats.avgR, 2)}`, tone(s.stats.avgR)],
-          ["Factor de beneficio", s.stats.profitFactor ? num(s.stats.profitFactor, 2) : "—", `mejor ${eur0(s.stats.bestTrade)} · peor ${eur0(s.stats.worstTrade)}`, "text-slate-500"],
-        ].map(([label, value, sub, cls]) => (
-          <div key={label} className={`${card} px-5 py-4`}>
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-            <div className="mt-1 text-xl font-bold tracking-tight tabular-nums text-slate-900">{value}</div>
-            {label === "Patrimonio" ? (
-              <div className="mt-1">
-                <ReturnPill value={s.returnPct} />
-              </div>
-            ) : (
-              <div className={`mt-0.5 text-xs ${cls}`}>{sub}</div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <CopiesPanel />
-      <details className={`${panel} group`}>
-        <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-sm font-medium text-slate-600 hover:text-slate-900">
-          <span className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-slate-400" /> Ver evolución del patrimonio
-          </span>
-          <span className="text-xs text-slate-400 group-open:hidden">Capital inicial {eur0(s.initialCapital)}</span>
-        </summary>
-        <div className="border-t border-slate-100">
-          <EquityChart points={withLivePoint(data.equity, s.equity)} initial={s.initialCapital} height={200} />
-        </div>
-      </details>
-      </>
-      )}
-
-      {view === "abiertas" && (
-
-      <section className={`${panel} overflow-x-auto`}>
-        <header className="border-b border-slate-100 px-5 py-4">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                <Briefcase className="h-5 w-5 text-blue-600" /> Posiciones abiertas y órdenes pendientes
+      <PortfolioColumns
+        agents={<CopiesPanel data={portfolio} />}
+        opportunities={(
+          <PortfolioOpportunities>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-3">
+              <h2 className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-lg font-semibold text-slate-900">
+                <Flame className="h-5 w-5 text-orange-500" /> Mis oportunidades
+                <span className={`text-sm font-semibold tabular-nums ${tone(s.realized + s.unrealized)}`}>
+                  {s.realized + s.unrealized >= 0 ? "+" : ""}{eur(s.realized + s.unrealized, 2)}
+                </span>
+                {s.stats.closed > 0 && (
+                  <span className="text-xs font-normal text-slate-400">· acierto {Math.round(s.stats.winRate * 100)} % ({s.stats.wins}/{s.stats.closed})</span>
+                )}
               </h2>
-          <p className="text-xs text-slate-500">
-            Se revisan cada día al cierre: si el precio toca el stop o el objetivo, la posición se cierra sola
-            {s.settings.breakeven ? "; al ganar 1 R el stop sube a precio de entrada" : ""}.
-          </p>
-        </header>
-        <table className="w-full min-w-[980px] text-sm">
-          <thead>
-            <tr>
-              <th className={th}>Valor</th>
-              <th className={th}>Estado</th>
-              <th className={`${th} text-right`}>Cantidad</th>
-              <th className={`${th} text-right`}>Entrada</th>
-              <th className={`${th} text-right`}>Actual</th>
-              <th className={`${th} text-right`}>Stop</th>
-              <th className={`${th} text-right`}>Objetivo</th>
-              <th className={`${th} text-right`}>Latente</th>
-              <th className={th}>Origen</th>
-              <th className={th} />
-            </tr>
-          </thead>
-          <tbody>
-            {active.length === 0 ? (
-              <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
-                  Sin posiciones. Abre una desde «Oportunidades» o activa el modo automático en «Reglas y riesgo».
-                </td>
-              </tr>
-            ) : (
-              active.map((p) => (
-                <tr key={p.id} className="border-t border-slate-100">
-                  <td className="px-3 py-2.5">
-                    <button type="button" className="flex items-center gap-2.5 text-left" onClick={() => onOpenChart(p.symbol)}>
-                      <AssetIcon symbol={p.symbol} name={p.name} />
-                      <span>
-                        <span className="block font-medium text-slate-900 hover:text-blue-700">{p.name}</span>
-                        <span className="block text-xs text-slate-500">
-                          {p.symbol} · {p.direction === "long" ? "largo" : "corto"}
-                          {p.pattern ? ` · ${PATTERN_SHORT[p.pattern]}` : ""}
-                        </span>
-                      </span>
+              <div className="flex w-full flex-wrap gap-1 rounded-lg bg-slate-100 p-1 sm:w-auto" role="group" aria-label="Filtrar oportunidades">
+                {VIEWS.map(({ key, label }) => {
+                  const count = key === "global" ? active.length + history.length : key === "abiertas" ? active.length : key === "historial" ? history.length : null;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      aria-pressed={view === key}
+                      onClick={() => pickView(key)}
+                      className={`flex-1 whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium sm:flex-none sm:py-1 ${view === key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+                    >
+                      {label}{count !== null ? ` · ${count}` : ""}
                     </button>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_TONE[p.status]}`}>{p.status}</span>
-                    {p.status === "pendiente" && <div className="mt-0.5 text-xs text-slate-500">próxima apertura</div>}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{int(p.quantity)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
-                    {eur(p.entryPrice ?? p.plannedEntry)}
-                    <div className="text-xs text-slate-500">{p.entryDay ? dayFmt(p.entryDay) : "prevista"}</div>
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{eur(p.lastPrice)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-red-700">
-                    {eur(p.stop)}
-                    {p.stop !== p.initialStop && <div className="text-xs text-slate-500">inicial {eur(p.initialStop)}</div>}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700">{eur(p.target)}</td>
-                  <td className={`px-3 py-2.5 text-right tabular-nums ${tone(p.unrealized)}`}>
-                    {p.unrealized !== null ? eur0(p.unrealized) : "—"}
-                    {p.unrealizedR !== null && <div className="text-xs">{num(p.unrealizedR, 2)} R</div>}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-slate-600">
-                    {p.source === "auto" ? (
-                      <span className="inline-flex items-center gap-1">
-                        <Bot className="h-3.5 w-3.5" /> automático
-                      </span>
-                    ) : p.source === "comite" ? (
-                      "comité de inversión"
-                    ) : p.source === "agente" ? (
-                      "idea de los agentes"
+                  );
+                })}
+              </div>
+            </div>
+            <div className="space-y-3">
+              {(view === "global" || view === "abiertas") && (
+
+              <section className="min-w-0 overflow-hidden rounded-xl border border-slate-100">
+                <header className="border-b border-slate-100 px-5 py-4">
+                  <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                        <Briefcase className="h-5 w-5 text-blue-600" /> Posiciones abiertas y órdenes pendientes
+                      </h2>
+                  <p className="text-xs text-slate-500">
+                    Se revisan cada día al cierre: si el precio toca el stop o el objetivo, la posición se cierra sola
+                    {s.settings.breakeven ? "; al ganar 1 R el stop sube a precio de entrada" : ""}.
+                  </p>
+                </header>
+                <div className="max-h-[32rem] overflow-y-auto md:overflow-auto">
+                <table className="block w-full text-sm md:table md:min-w-[690px]">
+                  <thead className="hidden md:table-header-group">
+                    <tr className="block md:table-row">
+                      <th className={th}>Valor</th>
+                      <th className={th}>Estado</th>
+                      <th className={`${th} text-right`}>Cantidad</th>
+                      <th className={`${th} text-right`}>Entrada</th>
+                      <th className={`${th} text-right`}>Actual</th>
+                      <th className={`${th} text-right`}>Stop</th>
+                      <th className={`${th} text-right`}>Objetivo</th>
+                      <th className={`${th} text-right`}>Latente</th>
+                      <th className={th}>Origen</th>
+                      <th className={th} />
+                    </tr>
+                  </thead>
+                  <tbody className="block md:table-row-group">
+                    {active.length === 0 ? (
+                      <tr className="block md:table-row">
+                        <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
+                          Sin posiciones. Abre una desde «Oportunidades» o activa el modo automático en «Reglas y riesgo».
+                        </td>
+                      </tr>
                     ) : (
-                      "manual"
+                      active.map((p) => (
+                        <tr key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-slate-100 px-2 py-2 md:table-row md:p-0">
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2.5">
+                            <button type="button" className="flex items-center gap-2.5 text-left" onClick={() => onOpenChart(p.symbol)}>
+                              <AssetIcon symbol={p.symbol} name={p.name} />
+                              <span>
+                                <span className="block font-medium text-slate-900 hover:text-blue-700">{p.name}</span>
+                                <span className="block text-xs text-slate-500">
+                                  {p.symbol} · {p.direction === "long" ? "largo" : "corto"}
+                                  {p.pattern ? ` · ${PATTERN_SHORT[p.pattern]}` : ""}
+                                </span>
+                              </span>
+                            </button>
+                          </td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2.5">
+                            <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_TONE[p.status]}`}>{p.status}</span>
+                            {p.status === "pendiente" && <div className="mt-0.5 text-xs text-slate-500">próxima apertura</div>}
+                          </td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2.5 text-right tabular-nums"><span className="block text-left text-[10px] text-slate-500 md:hidden">Cantidad</span>{int(p.quantity)}</td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2.5 text-right tabular-nums"><span className="block text-left text-[10px] text-slate-500 md:hidden">Entrada</span>
+                            {eur(p.entryPrice ?? p.plannedEntry)}
+                            <div className="text-xs text-slate-500">{p.entryDay ? dayFmt(p.entryDay) : "prevista"}</div>
+                          </td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2.5 text-right tabular-nums"><span className="block text-left text-[10px] text-slate-500 md:hidden">Actual</span>{eur(p.lastPrice)}</td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2.5 text-right tabular-nums text-red-700"><span className="block text-left text-[10px] text-slate-500 md:hidden">Stop</span>
+                            {eur(p.stop)}
+                            {p.stop !== p.initialStop && <div className="text-xs text-slate-500">inicial {eur(p.initialStop)}</div>}
+                          </td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2.5 text-right tabular-nums text-emerald-700"><span className="block text-left text-[10px] text-slate-500 md:hidden">Objetivo</span>{eur(p.target)}</td>
+                          <td className={`min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2.5 text-right tabular-nums ${tone(p.unrealized)}`}><span className="block text-left text-[10px] text-slate-500 md:hidden">Latente</span>
+                            {p.unrealized !== null ? eur0(p.unrealized) : "—"}
+                            {p.unrealizedR !== null && <div className="text-xs">{num(p.unrealizedR, 2)} R</div>}
+                          </td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2.5 text-xs text-slate-600"><span className="block text-left text-[10px] text-slate-500 md:hidden">Origen</span>
+                            {p.source === "auto" ? (
+                              <span className="inline-flex items-center gap-1">
+                                <Bot className="h-3.5 w-3.5" /> automático
+                              </span>
+                            ) : p.source === "comite" ? (
+                              "comité de inversión"
+                            ) : p.source === "agente" ? (
+                              "idea de los agentes"
+                            ) : (
+                              "manual"
+                            )}
+                            {p.score !== null && <div>puntuación {p.score}</div>}
+                          </td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2.5">
+                            <div className="flex justify-end gap-1">
+                              <button type="button" title="Ver gráfico" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => onOpenChart(p.symbol)}>
+                                <TrendingUp className="h-4 w-4" />
+                              </button>
+                              <button type="button" title="Cambiar stop y objetivo" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => setEditing(p)}>
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                className={ghost}
+                                disabled={busy === p.id}
+                                onClick={() => act(p.id, "close", { positionId: p.id })}
+                              >
+                                {busy === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                                {p.status === "pendiente" ? "Cancelar" : "Cerrar"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
                     )}
-                    {p.score !== null && <div>puntuación {p.score}</div>}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex justify-end gap-1">
-                      <button type="button" title="Ver gráfico" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => onOpenChart(p.symbol)}>
-                        <TrendingUp className="h-4 w-4" />
-                      </button>
-                      <button type="button" title="Cambiar stop y objetivo" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" onClick={() => setEditing(p)}>
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        className={ghost}
-                        disabled={busy === p.id}
-                        onClick={() => act(p.id, "close", { positionId: p.id })}
-                      >
-                        {busy === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                        {p.status === "pendiente" ? "Cancelar" : "Cerrar"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </section>
-      )}
+                  </tbody>
+                </table>
+                </div>
+              </section>
+              )}
 
-      {view === "historial" && (
-      <section className={`${panel} overflow-x-auto`}>
-        <header className="border-b border-slate-100 px-5 py-4">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                <History className="h-5 w-5 text-blue-600" /> Historial de operaciones
-              </h2>
-        </header>
-        <table className="w-full min-w-[880px] text-sm">
-          <thead>
-            <tr>
-              <th className={th}>Valor</th>
-              <th className={th}>Figura</th>
-              <th className={th}>Entrada</th>
-              <th className={th}>Salida</th>
-              <th className={th}>Motivo</th>
-              <th className={`${th} text-right`}>Cantidad</th>
-              <th className={`${th} text-right`}>Resultado</th>
-              <th className={`${th} text-right`}>R</th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                  Aún no hay operaciones cerradas.
-                </td>
-              </tr>
-            ) : (
-              history.map((p) => (
-                <tr key={p.id} className={`border-t border-slate-100 ${p.status === "cancelada" ? "text-slate-400" : ""}`}>
-                  <td className="px-3 py-2">
-                    <span className="flex items-center gap-2.5">
-                      <AssetIcon symbol={p.symbol} name={p.name} size="sm" />
-                      <span>
-                        <span className="block font-medium">{p.name}</span>
-                        <span className="block text-xs text-slate-500">{p.direction === "long" ? "largo" : "corto"}</span>
+              {(view === "global" || view === "historial") && (
+              <section className="min-w-0 overflow-hidden rounded-xl border border-slate-100">
+                <header className="border-b border-slate-100 px-5 py-4">
+                  <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                        <History className="h-5 w-5 text-blue-600" /> Historial de operaciones
+                      </h2>
+                </header>
+                <div className="max-h-[32rem] overflow-y-auto md:overflow-auto">
+                <table className="block w-full text-sm md:table md:min-w-[650px]">
+                  <thead className="hidden md:table-header-group">
+                    <tr className="block md:table-row">
+                      <th className={th}>Valor</th>
+                      <th className={th}>Figura</th>
+                      <th className={th}>Entrada</th>
+                      <th className={th}>Salida</th>
+                      <th className={th}>Motivo</th>
+                      <th className={`${th} text-right`}>Cantidad</th>
+                      <th className={`${th} text-right`}>Resultado</th>
+                      <th className={`${th} text-right`}>R</th>
+                    </tr>
+                  </thead>
+                  <tbody className="block md:table-row-group">
+                    {history.length === 0 ? (
+                      <tr className="block md:table-row">
+                        <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                          Aún no hay operaciones cerradas.
+                        </td>
+                      </tr>
+                    ) : (
+                      history.map((p) => (
+                        <tr key={p.id} className={`flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-slate-100 px-2 py-2 md:table-row md:p-0 ${p.status === "cancelada" ? "text-slate-400" : ""}`}>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2">
+                            <span className="flex items-center gap-2.5">
+                              <AssetIcon symbol={p.symbol} name={p.name} size="sm" />
+                              <span>
+                                <span className="block font-medium">{p.name}</span>
+                                <span className="block text-xs text-slate-500">{p.direction === "long" ? "largo" : "corto"}</span>
+                              </span>
+                            </span>
+                          </td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2"><span className="block text-left text-[10px] text-slate-500 md:hidden">Figura</span>{p.pattern ? PATTERN_SHORT[p.pattern] : "manual"}</td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2 tabular-nums"><span className="block text-left text-[10px] text-slate-500 md:hidden">Entrada</span>
+                            {p.entryPrice !== null ? `${eur(p.entryPrice)} · ${dayFmt(p.entryDay)}` : "—"}
+                          </td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2 tabular-nums"><span className="block text-left text-[10px] text-slate-500 md:hidden">Salida</span>{p.exitPrice !== null ? `${eur(p.exitPrice)} · ${dayFmt(p.exitDay)}` : "—"}</td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2 text-xs"><span className="block text-left text-[10px] text-slate-500 md:hidden">Motivo</span>{p.status === "cancelada" ? `Cancelada: ${p.exitReason ?? ""}` : p.exitReason}</td>
+                          <td className="min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2 text-right tabular-nums"><span className="block text-left text-[10px] text-slate-500 md:hidden">Cantidad</span>{int(p.quantity)}</td>
+                          <td className={`min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2 text-right font-medium tabular-nums ${tone(p.pnl)}`}><span className="block text-left text-[10px] text-slate-500 md:hidden">Resultado</span>{p.pnl !== null ? eur0(p.pnl) : "—"}</td>
+                          <td className={`min-w-0 max-w-full px-1 py-1 md:px-3 md:py-2 text-right tabular-nums ${tone(p.rMultiple)}`}><span className="block text-left text-[10px] text-slate-500 md:hidden">R</span>{p.rMultiple !== null ? num(p.rMultiple, 2) : "—"}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                </div>
+              </section>
+              )}
+
+              {view === "caja" && (
+              <section className={panel}>
+                <header className="border-b border-slate-100 px-5 py-4">
+                  <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                        <Wallet className="h-5 w-5 text-blue-600" /> Movimientos de caja
+                      </h2>
+                </header>
+                <ul className="divide-y divide-slate-100 overflow-y-auto text-sm">
+                  {data.transactions.map((t) => (
+                    <li key={t.id} className="flex items-center justify-between gap-4 px-5 py-3">
+                      <span className="text-slate-700">
+                        <span className="mr-2 text-xs text-slate-500">{dayFmt(t.day)}</span>
+                        {t.description}
                       </span>
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">{p.pattern ? PATTERN_SHORT[p.pattern] : "manual"}</td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {p.entryPrice !== null ? `${eur(p.entryPrice)} · ${dayFmt(p.entryDay)}` : "—"}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums">{p.exitPrice !== null ? `${eur(p.exitPrice)} · ${dayFmt(p.exitDay)}` : "—"}</td>
-                  <td className="px-3 py-2 text-xs">{p.status === "cancelada" ? `Cancelada: ${p.exitReason ?? ""}` : p.exitReason}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{int(p.quantity)}</td>
-                  <td className={`px-3 py-2 text-right font-medium tabular-nums ${tone(p.pnl)}`}>{p.pnl !== null ? eur0(p.pnl) : "—"}</td>
-                  <td className={`px-3 py-2 text-right tabular-nums ${tone(p.rMultiple)}`}>{p.rMultiple !== null ? num(p.rMultiple, 2) : "—"}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </section>
-      )}
-
-      {view === "caja" && (
-      <section className={panel}>
-        <header className="border-b border-slate-100 px-5 py-4">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-                <Wallet className="h-5 w-5 text-blue-600" /> Movimientos de caja
-              </h2>
-        </header>
-        <ul className="divide-y divide-slate-100 overflow-y-auto text-sm">
-          {data.transactions.map((t) => (
-            <li key={t.id} className="flex items-center justify-between gap-4 px-5 py-3">
-              <span className="text-slate-700">
-                <span className="mr-2 text-xs text-slate-500">{dayFmt(t.day)}</span>
-                {t.description}
-              </span>
-              <span className={`shrink-0 tabular-nums ${tone(t.amount)}`}>{eur(t.amount, 2)}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-      )}
+                      <span className={`shrink-0 tabular-nums ${tone(t.amount)}`}>{eur(t.amount, 2)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              )}
+            </div>
+          </PortfolioOpportunities>
+        )}
+      />
 
       {editing && (
         <EditStops
@@ -344,7 +360,7 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
-            onChanged();
+            refreshTrading();
           }}
         />
       )}
@@ -554,7 +570,7 @@ export function UniversePanel({ onSelect }: { onSelect?: (symbol: string) => voi
       await api("instruments", body);
       setMsg(ok);
       await load();
-      onChanged();
+      refreshTrading();
     } catch (e) {
       setMsg(errorText(e));
     } finally {
