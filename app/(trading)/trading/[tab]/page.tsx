@@ -10,7 +10,7 @@ export default async function Page({
   searchParams,
 }: {
   params: Promise<{ tab: string }>;
-  searchParams: Promise<{ symbol?: string | string[] }>;
+  searchParams: Promise<{ symbol?: string | string[]; modo?: string | string[] }>;
 }) {
   const { tab } = await params;
   // Mantener los enlaces existentes: todas las pantallas antiguas aterrizan en su nueva ubicación.
@@ -32,5 +32,6 @@ export default async function Page({
   const ctx = await connectorContext();
   if (!ctx) redirect("/");
   // La estructura (barra, menú) está en el layout: aquí solo el contenido de la sección.
-  return <TradingWorkspace key={`${ctx.workspaceId}:${tab}`} tab={tab} />;
+  const virtual = tab === "cartera" && (await searchParams).modo === "virtual";
+  return <TradingWorkspace key={`${ctx.workspaceId}:${tab}`} tab={tab} virtual={virtual} />;
 }

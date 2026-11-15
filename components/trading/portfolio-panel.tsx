@@ -38,13 +38,12 @@ const VIEWS: { key: PortfolioView; label: string }[] = [
 export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) => void }) {
   const onChanged = refreshTrading;
   const params = useSearchParams();
-  const [view, setView] = useState<PortfolioView>(() => {
-    const v = params.get("vista");
-    return VIEWS.some((x) => x.key === v) ? (v as PortfolioView) : "global";
-  });
+  const view = VIEWS.find(({ key }) => key === params.get("vista"))?.key ?? "global";
   const pickView = (v: PortfolioView) => {
-    setView(v);
-    window.history.replaceState(null, "", v === "global" ? "/trading/cartera" : `/trading/cartera?vista=${v}`);
+    const url = new URL(window.location.href);
+    if (v === "global") url.searchParams.delete("vista");
+    else url.searchParams.set("vista", v);
+    window.history.replaceState(null, "", url);
   };
   const [data, setData] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);

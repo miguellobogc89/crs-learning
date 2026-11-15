@@ -1,11 +1,14 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Link2, Loader2 } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowLeft, Link2, Loader2, LogOut, Settings, UserRound } from "lucide-react";
+import { logout } from "@/app/actions/auth";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { getWallets } from "@/lib/trading/wallets";
 import type { MarketPhase } from "@/lib/trading/chip/phase";
-import { TRADING_SECTIONS } from "./tabs";
+import { CARTERA_REAL_HREF, CARTERA_VIRTUAL_HREF, TRADING_SECTIONS } from "./tabs";
 import { api, errorText, eur, eur0, peek, tone } from "./format";
 
 export type TradingStatus = {
@@ -65,8 +68,74 @@ export function useTradingRefresh(fn: () => void) {
 }
 
 
+function PortfolioSwitcher({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const virtual = pathname === CARTERA_REAL_HREF && params.get("modo") === "virtual";
+
+  return (
+    <nav aria-label="Tipo de cartera" className="flex shrink-0 rounded-lg bg-slate-100 p-0.5 text-xs font-medium">
+      {([
+        { href: CARTERA_REAL_HREF, label: "Real", active: !virtual },
+        { href: CARTERA_VIRTUAL_HREF, label: "Virtual", active: virtual },
+      ]).map(({ href, label, active }) => (
+        <Link
+          key={href}
+          href={href}
+          onClick={onNavigate}
+          aria-current={pathname === CARTERA_REAL_HREF && active ? "page" : undefined}
+          className={`rounded-md px-2 py-1.5 ${active ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+        >
+          {label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+export function TradingNavigationHeader({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+      <Link href="/trading/inicio" onClick={onNavigate} aria-label="Inicio de Trading" className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+        <Image src="/trading-app/icon-192.png" alt="" width={28} height={28} className="shrink-0 rounded-md" />
+        <span className="truncate">Trading</span>
+      </Link>
+      <Suspense fallback={<div className="h-8 w-24 shrink-0 rounded-lg bg-slate-100" />}>
+        <PortfolioSwitcher onNavigate={onNavigate} />
+      </Suspense>
+    </div>
+  );
+}
+
+function TradingUserMenu() {
+  return (
+    <div className="shrink-0 border-t border-slate-200/60 px-3 py-2">
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">
+            <UserRound className="h-4 w-4" aria-hidden="true" />
+            Mi cuenta
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" align="start" sideOffset={6} className="pointer-events-auto z-[60] min-w-48">
+          <DropdownMenuItem asChild>
+            <Link href="/settings"><Settings /> Configuración</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/dashboard"><ArrowLeft /> Volver a Crussader</Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void logout()} variant="destructive">
+            <LogOut /> Cerrar sesión
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 /** Menú de Trading: secciones, tu dinero y el mercado. `large`: dentro del menú de móvil/tablet (todo con scroll, botones grandes). */
-export function TradingNavigation({ large = false }: { large?: boolean } = {}) {
+export function TradingNavigation({ large = false, onNavigate }: { large?: boolean; onNavigate?: () => void } = {}) {
   const pathname = usePathname();
   const [status, setStatus] = useState<TradingStatus | null>(null);
   useWarmStart<TradingStatus>("status", setStatus);
@@ -156,7 +225,7 @@ export function TradingNavigation({ large = false }: { large?: boolean } = {}) {
           ))}
     </nav>
   );
-  const money = <MoneyPanel status={status} syncing={syncing} msg={msg} onSync={sync} />;
+  const money = <MoneyPanel status={status} syncing={syncing} msg={msg} onSync={sync} onNavigate={onNavigate} />;
 
   // Menú de móvil/tablet: todo seguido con un solo scroll.
   if (large)
@@ -164,18 +233,17 @@ export function TradingNavigation({ large = false }: { large?: boolean } = {}) {
       <div className="h-full overflow-y-auto pb-[env(safe-area-inset-bottom)]">
         {items}
         {money}
+        <TradingUserMenu />
       </div>
     );
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between border-b border-slate-200/60 px-5 py-4">
-        <h2 className="text-sm font-semibold">Trading</h2>
-        <Link href="/dashboard" className="text-xs font-medium text-slate-400 hover:text-slate-700">
-          Ir a Crussader
-        </Link>
+        <TradingNavigationHeader />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">{items}</div>
       <div className="max-h-[50%] shrink-0 overflow-y-auto">{money}</div>
+      <TradingUserMenu />
     </div>
   );
 }
@@ -196,7 +264,7 @@ function BrokerLogo({ src, muted }: { src: string | null; muted?: boolean }) {
 }
 
 /** Panel lateral: tu dinero real en cada exchange conectado y, discreta, la cartera virtual. */
-function MoneyPanel({ status, syncing, msg, onSync }: { status: TradingStatus | null; syncing: boolean; msg: string | null; onSync: () => void }) {
+function MoneyPanel({ status, syncing, msg, onSync, onNavigate }: { status: TradingStatus | null; syncing: boolean; msg: string | null; onSync: () => void; onNavigate?: () => void }) {
   const [wallets, setWallets] = useState<Wallets | null>(null);
   useWarmStart<Wallets>("wallets", setWallets);
   const load = useCallback(() => {
@@ -264,14 +332,14 @@ function MoneyPanel({ status, syncing, msg, onSync }: { status: TradingStatus | 
       {status && (
         <div className="mt-3 border-t border-slate-100 pt-3">
           {status.opened ? (
-            <Link href="/trading/cartera" className="flex items-center justify-between gap-2 text-xs text-slate-500 hover:text-slate-700">
+            <Link href={CARTERA_VIRTUAL_HREF} onClick={onNavigate} className="flex items-center justify-between gap-2 text-xs text-slate-500 hover:text-slate-700">
               <span>Cartera virtual</span>
               <span className="tabular-nums">
                 {eur0(status.equity)} <span className={tone(status.returnPct)}>{status.returnPct >= 0 ? "+" : ""}{status.returnPct.toFixed(1).replace(".", ",")} %</span>
               </span>
             </Link>
           ) : (
-            <Link href="/trading/inicio" className="text-xs text-slate-500 hover:text-slate-700">
+            <Link href={CARTERA_VIRTUAL_HREF} onClick={onNavigate} className="text-xs text-slate-500 hover:text-slate-700">
               Cartera virtual: ábrela →
             </Link>
           )}

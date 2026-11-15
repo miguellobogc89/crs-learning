@@ -10,7 +10,7 @@ import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, Menu, X } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { TradingNavigation } from "./navigation";
+import { TradingNavigation, TradingNavigationHeader } from "./navigation";
 import { prefetchTrading } from "./format";
 
 // Lo que leen Inicio (Operadores y Actividad), Oportunidades, Mi cartera y Agentes.
@@ -145,16 +145,14 @@ export function TradingShell({ children }: { children: ReactNode }) {
         >
           <SheetTitle className="sr-only">Menú de Trading</SheetTitle>
           <div className="flex h-full min-h-0 flex-col pt-[env(safe-area-inset-top)]">
-            <div className="flex h-14 shrink-0 items-center justify-between px-2">
+            <div className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200/70 px-2 pr-4">
               <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar el menú" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
                 <X className="h-5 w-5" />
               </button>
-              <Link href="/dashboard" className="px-3 text-sm font-medium text-slate-500 active:text-slate-900">
-                Ir a Crussader
-              </Link>
+              <TradingNavigationHeader onNavigate={() => setOpen(false)} />
             </div>
             <div className="min-h-0 flex-1">
-              <TradingNavigation large />
+              <TradingNavigation large onNavigate={() => setOpen(false)} />
             </div>
           </div>
         </SheetContent>
