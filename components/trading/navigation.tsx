@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowLeft, Link2, Loader2, LogOut, Settings, UserRound } from "lucide-react";
+import { ArrowLeft, ChevronRight, Link2, Loader2, LogOut, Settings, UserCircle } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { getWallets } from "@/lib/trading/wallets";
@@ -107,17 +107,42 @@ export function TradingNavigationHeader({ onNavigate }: { onNavigate?: () => voi
   );
 }
 
-function TradingUserMenu() {
+export type TradingProfile = {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+};
+
+function TradingUserMenu({ user, inDrawer = false }: { user: TradingProfile; inDrawer?: boolean }) {
+  const name = user.name ?? "Usuario";
   return (
     <div className="shrink-0 border-t border-slate-200/60 px-3 py-2">
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <button type="button" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">
-            <UserRound className="h-4 w-4" aria-hidden="true" />
-            Mi cuenta
+          <button
+            type="button"
+            className="group flex w-full min-w-0 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left hover:bg-slate-100 focus-visible:bg-slate-100 data-[state=open]:bg-slate-100"
+          >
+            <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+              {user.image ? (
+                <Image src={user.image} alt="" width={36} height={36} className="size-9 rounded-full object-cover" />
+              ) : (
+                <UserCircle className="size-6" aria-hidden="true" />
+              )}
+              <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full bg-emerald-500 ring-2 ring-white" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold text-slate-900" title={name}>{name}</span>
+              {user.email && <span className="block truncate text-xs text-slate-500" title={user.email}>{user.email}</span>}
+              <span className="sr-only">Conectado</span>
+            </span>
+            <ChevronRight
+              aria-hidden="true"
+              className="size-4 shrink-0 text-slate-500 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 group-data-[state=open]:opacity-100"
+            />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="start" sideOffset={6} className="pointer-events-auto z-[60] min-w-48">
+        <DropdownMenuContent side={inDrawer ? "top" : "right"} align={inDrawer ? "start" : "end"} sideOffset={8} className="pointer-events-auto z-[60] w-48">
           <DropdownMenuItem asChild>
             <Link href="/settings"><Settings /> Configuración</Link>
           </DropdownMenuItem>
@@ -135,7 +160,7 @@ function TradingUserMenu() {
 }
 
 /** Menú de Trading: secciones, tu dinero y el mercado. `large`: dentro del menú de móvil/tablet (todo con scroll, botones grandes). */
-export function TradingNavigation({ large = false, onNavigate }: { large?: boolean; onNavigate?: () => void } = {}) {
+export function TradingNavigation({ user, large = false, onNavigate }: { user: TradingProfile; large?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const [status, setStatus] = useState<TradingStatus | null>(null);
   useWarmStart<TradingStatus>("status", setStatus);
@@ -233,7 +258,7 @@ export function TradingNavigation({ large = false, onNavigate }: { large?: boole
       <div className="h-full overflow-y-auto pb-[env(safe-area-inset-bottom)]">
         {items}
         {money}
-        <TradingUserMenu />
+        <TradingUserMenu user={user} inDrawer />
       </div>
     );
   return (
@@ -243,7 +268,7 @@ export function TradingNavigation({ large = false, onNavigate }: { large?: boole
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">{items}</div>
       <div className="max-h-[50%] shrink-0 overflow-y-auto">{money}</div>
-      <TradingUserMenu />
+      <TradingUserMenu user={user} />
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, Menu, X } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { TradingNavigation, TradingNavigationHeader } from "./navigation";
+import { TradingNavigation, TradingNavigationHeader, type TradingProfile } from "./navigation";
 import { prefetchTrading } from "./format";
 
 // Lo que leen Inicio (Operadores y Actividad), Oportunidades, Mi cartera y Agentes.
@@ -39,7 +39,7 @@ const hrefOf = (key: string) => (key === "mercados" ? "/trading/mercados?tab=val
  * Va en el layout de /trading: se queda montada al cambiar de sección (el menú, Mi dinero y la barra no
  * se recargan) y solo cambia el contenido. El título y el icono salen de la ruta.
  */
-export function TradingShell({ children }: { children: ReactNode }) {
+export function TradingShell({ children, user }: { children: ReactNode; user: TradingProfile }) {
   const pathname = usePathname();
   const parts = pathname.split("/").filter(Boolean);
   const section = parts[1] && isTradingTab(parts[1]) ? parts[1] : "inicio";
@@ -60,7 +60,7 @@ export function TradingShell({ children }: { children: ReactNode }) {
     <div className="flex h-dvh min-h-0 w-full overflow-hidden bg-white text-foreground">
       {/* Ordenador y tablet en horizontal: barra lateral completa. */}
       <aside className="hidden w-72 shrink-0 border-r border-slate-200/70 bg-slate-50/40 lg:block">
-        <TradingNavigation />
+        <TradingNavigation user={user} />
       </aside>
 
       {/* Tablet en vertical: iconos. */}
@@ -152,7 +152,7 @@ export function TradingShell({ children }: { children: ReactNode }) {
               <TradingNavigationHeader onNavigate={() => setOpen(false)} />
             </div>
             <div className="min-h-0 flex-1">
-              <TradingNavigation large onNavigate={() => setOpen(false)} />
+              <TradingNavigation user={user} large onNavigate={() => setOpen(false)} />
             </div>
           </div>
         </SheetContent>
