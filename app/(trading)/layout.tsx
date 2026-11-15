@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   manifest: "/trading-app/manifest.webmanifest",
   appleWebApp: { capable: true, title: "Trading", statusBarStyle: "default" },
   icons: {
-    icon: [{ url: "/trading-app/icon-192.png", sizes: "192x192", type: "image/png" }],
+    icon: [{ url: "/trading-app/favicon.svg", sizes: "any", type: "image/svg+xml" }],
     apple: [{ url: "/trading-app/apple-touch-icon.png", sizes: "180x180" }],
   },
   formatDetection: { telephone: false },
