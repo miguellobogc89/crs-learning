@@ -4,11 +4,12 @@
 // gestionarlas: seguir si sube, cerrar) y, al lado, tus agentes en pequeño (clic → Gestionar).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Clock, Crosshair, Flame, Layers, Link2, Loader2, Minus, Pause, Play, Plus, RefreshCw, Shield, Trash2, TrendingUp, Users, Wallet } from "lucide-react";
+import { ArrowRight, ChevronRight, Clock, Crosshair, Flame, Layers, Link2, Loader2, Minus, Pause, Play, Plus, RefreshCw, Shield, Trash2, TrendingUp, Users, Wallet } from "lucide-react";
 import type { getWallets, myAgents } from "@/lib/trading/wallets";
 import type { mirrorView } from "@/lib/trading/mirror/service";
 import type { manualView } from "@/lib/trading/manual/service";
-import { api, errorText, eur, field, primary, tone } from "./format";
+import { api, errorText, eur, field, flat, primary, tone } from "./format";
+import { AssetIcon } from "./asset-icon";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { AgentAvatar, card, ErrorNote, LoadingCard, Modal, ReturnPill, StopTargetBar } from "./ui";
 import { EquityChart } from "./equity-chart";
@@ -147,7 +148,7 @@ export function CarteraPanel() {
       )}
 
       {/* Tu dinero: saldo, en qué está y evolución */}
-      <section className={`${card} px-6 pb-3 pt-5`}>
+      <section className={`${card} ${flat} px-4 pb-3 pt-4 sm:px-6 sm:pt-5`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 text-[15px] font-medium text-slate-800">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -193,16 +194,16 @@ export function CarteraPanel() {
           <>
             <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:items-center">
               <div className="flex flex-wrap items-center gap-3">
-                <span className="text-5xl font-bold tracking-tight tabular-nums text-slate-900">{eur(total, 2)}</span>
+                <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900 sm:text-5xl">{eur(total, 2)}</span>
                 {earnedBase > 0 && <ReturnPill value={(earned / earnedBase) * 100} big />}
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {kpis.map((x) => (
                   <div key={x.label} className="rounded-xl bg-slate-50 px-3 py-2.5" title={x.tip}>
-                    <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    <div className="flex items-center gap-1.5 whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
                       <x.icon className={`h-3.5 w-3.5 ${x.label === "Ganado" ? "text-emerald-600" : "text-blue-600"}`} /> {x.label}
                     </div>
-                    <div className={`mt-0.5 text-lg font-bold tabular-nums ${x.cls}`}>{x.value}</div>
+                    <div className={`mt-0.5 text-base font-bold tabular-nums sm:text-lg ${x.cls}`}>{x.value}</div>
                   </div>
                 ))}
               </div>
@@ -231,7 +232,7 @@ export function CarteraPanel() {
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
         <MyOpportunities data={manual} canManage={mirrors.canManage} onChange={load} />
 
-        <section className={`${card} px-4 py-4 lg:self-start`}>
+        <section className={`${card} ${flat} px-4 py-4 lg:self-start`}>
           <h2 className="flex items-center gap-2 px-1 pb-2 text-[15px] font-semibold text-slate-900">
             <Users className="h-4 w-4 text-slate-500" /> Tus agentes <span className="font-normal text-slate-400">· {mine.owned.length} de {mine.max}</span>
           </h2>
@@ -566,14 +567,14 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
   const trail = (id: string, on: boolean) => void run(`seguir:${id}`, () => api("manual/trail", { id, trail: on }));
 
   return (
-    <section className={`${card} flex min-w-0 flex-col px-4 py-4`}>
+    <section className={`${card} ${flat} flex min-w-0 flex-col px-4 py-4`}>
       <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+        <h2 className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-lg font-semibold text-slate-900">
           <Flame className="h-5 w-5 text-orange-500" /> Mis oportunidades
           {data && <span className={`text-sm font-semibold tabular-nums ${tone(data.result)}`}>{signed(data.result)}</span>}
           {closed.length > 0 && <span className="text-xs font-normal text-slate-400">· acierto {Math.round((wins / closed.length) * 100)} % ({wins}/{closed.length})</span>}
         </h2>
-        <div className="flex gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="Filtrar oportunidades">
+        <div className="flex w-full gap-1 rounded-lg bg-slate-100 p-1 sm:w-auto" role="group" aria-label="Filtrar oportunidades">
           {(
             [
               ["todas", `Todas · ${trades.length}`],
@@ -586,7 +587,7 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
               type="button"
               aria-pressed={filter === k}
               onClick={() => setFilter(k)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium ${filter === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+              className={`flex-1 rounded-md px-2.5 py-1.5 text-xs font-medium sm:flex-none sm:py-1 ${filter === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
             >
               {label}
             </button>
@@ -606,7 +607,9 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
           </Link>
         </div>
       ) : (
-        <div className="max-h-[32rem] overflow-auto">
+        <>
+        <MobileTrades list={list} canManage={canManage} busy={busy} onTrail={trail} onClose={close} />
+        <div className="hidden max-h-[32rem] overflow-auto md:block">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="sticky top-0 z-10 bg-white">
               <tr className="border-b border-slate-100 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -704,8 +707,128 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
             </tbody>
           </table>
         </div>
+        </>
       )}
       <p className="mt-2 px-1 text-[11px] text-slate-400">La app revisa cada ~5 min: vende al tocar el stop o el objetivo (o sube el stop si marcaste «Seguir si sube»). Resultados con comisiones.</p>
     </section>
+  );
+}
+
+type Trade = Manual["trades"][number];
+
+/**
+ * Móvil: tus oportunidades como lista (dos líneas por operación). Al tocar una, sube desde abajo su
+ * detalle con «Seguir si sube» y «Cerrar» en grande.
+ */
+function MobileTrades({
+  list,
+  canManage,
+  busy,
+  onTrail,
+  onClose,
+}: {
+  list: Trade[];
+  canManage: boolean;
+  busy: string | null;
+  onTrail: (id: string, on: boolean) => void;
+  onClose: (id: string, name: string) => void;
+}) {
+  const [selId, setSelId] = useState<string | null>(null);
+  const sel = list.find((t) => t.id === selId) ?? null;
+  return (
+    <>
+      <ul className="-mx-1 divide-y divide-slate-100 md:hidden">
+        {list.map((t) => {
+          const name = coin(t.symbol);
+          const open = t.status === "abierta";
+          const st = TRADE_STATUS[t.status] ?? { label: t.status, cls: "bg-slate-100 text-slate-600" };
+          const resultPct = t.result !== null && t.invested > 0 ? (t.result / t.invested) * 100 : null;
+          return (
+            <li key={t.id}>
+              <button type="button" onClick={() => setSelId(t.id)} className="flex w-full items-center gap-3 px-1 py-3 text-left active:bg-slate-50">
+                <AssetIcon symbol={t.symbol} name={name} size="sm" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <b className="truncate text-[15px] font-semibold text-slate-900">{name}</b>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${st.cls}`}>{st.label}</span>
+                    {open && t.trail && <span className="shrink-0 text-[11px] font-medium text-emerald-700">sigue si sube</span>}
+                  </span>
+                  <span className="block truncate text-xs text-slate-500">
+                    {eur(t.invested, 2)} ·{" "}
+                    {open && t.entry && t.price !== null ? `${eur(t.entry)} → ${eur(t.price)}` : t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : dateTime(t.openedAt)}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <b className={`block text-sm font-semibold tabular-nums ${tone(t.result ?? 0)}`}>{t.result === null ? "—" : signed(t.result)}</b>
+                  {resultPct !== null && <span className={`block text-[11px] tabular-nums ${tone(resultPct)}`}>{pctText(resultPct)}</span>}
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {sel && (
+        <Modal
+          open
+          onClose={() => setSelId(null)}
+          title={
+            <span className="flex items-center gap-2">
+              {coin(sel.symbol)}
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${(TRADE_STATUS[sel.status] ?? { cls: "bg-slate-100 text-slate-600" }).cls}`}>{TRADE_STATUS[sel.status]?.label ?? sel.status}</span>
+            </span>
+          }
+          subtitle={sel.status === "cerrada" && sel.closedAt ? `Cerrada el ${dateTime(sel.closedAt)}` : sel.openedAt ? `Desde el ${dateTime(sel.openedAt)}` : undefined}
+          footer={
+            sel.status === "abierta" && canManage ? (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => onClose(sel.id, coin(sel.symbol))}
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-rose-600 text-base font-semibold text-white active:bg-rose-700 disabled:opacity-60"
+              >
+                {busy === `cerrar:${sel.id}` ? <Loader2 className="h-5 w-5 animate-spin" /> : <Crosshair className="h-5 w-5" />} Cerrar (vender ya)
+              </button>
+            ) : undefined
+          }
+        >
+          <div className="space-y-4 text-sm">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              {(
+                [
+                  ["Invertido", eur(sel.invested, 2), "text-slate-900"],
+                  ["Resultado", sel.result === null ? "—" : `${signed(sel.result)}${sel.invested > 0 ? ` · ${pctText((sel.result / sel.invested) * 100)}` : ""}`, tone(sel.result ?? 0)],
+                  ["Entrada", sel.entry ? eur(sel.entry) : "—", "text-slate-900"],
+                  [sel.status === "abierta" ? "Precio ahora" : "Salida aprox.", sel.status === "abierta" ? (sel.price !== null ? eur(sel.price) : "—") : sel.entry && sel.result !== null && sel.invested > 0 ? eur(sel.entry * (1 + sel.result / sel.invested)) : "—", "text-slate-900"],
+                  ["Stop", eur(sel.stop), "text-rose-700"],
+                  ["Objetivo", eur(sel.target), "text-emerald-700"],
+                ] as const
+              ).map(([label, value, cls]) => (
+                <div key={label}>
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+                  <div className={`mt-0.5 text-base font-semibold tabular-nums ${cls}`}>{value}</div>
+                </div>
+              ))}
+            </div>
+            {sel.status === "abierta" && sel.entry && <StopTargetBar stop={sel.stop} target={sel.target} price={sel.price} entry={sel.entry} />}
+            {sel.status === "abierta" && (
+              <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 px-4 py-3">
+                <span>
+                  <b className="block text-[15px] font-semibold text-slate-900">Seguir si sube</b>
+                  <span className="block text-xs text-slate-500">Al llegar al objetivo, en vez de vender, el stop sube y acompaña al precio.</span>
+                </span>
+                {busy === `seguir:${sel.id}` ? (
+                  <Loader2 className="h-5 w-5 shrink-0 animate-spin text-slate-400" />
+                ) : (
+                  <input type="checkbox" className="h-6 w-6 shrink-0 accent-emerald-600" checked={sel.trail} disabled={!canManage || busy !== null} onChange={(e) => onTrail(sel.id, e.target.checked)} />
+                )}
+              </label>
+            )}
+            {sel.note && <p className="text-xs text-slate-500">{sel.note}</p>}
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }

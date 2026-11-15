@@ -114,7 +114,13 @@ export function TradingShell({ title, section, back, fitted = false, children }:
 
       {/* Menú completo (móvil y tablet en vertical). */}
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="left" className="w-full max-w-none gap-0 p-0 sm:max-w-sm lg:hidden [&>button]:hidden">
+        <SheetContent
+          side="left"
+          showCloseButton={false}
+          // A pantalla completa en móvil (el componente base deja 3/4) y empezando siempre arriba.
+          className="gap-0 p-0 data-[side=left]:w-full data-[side=left]:sm:max-w-sm lg:hidden"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <SheetTitle className="sr-only">Menú de Trading</SheetTitle>
           <div className="flex h-full min-h-0 flex-col pt-[env(safe-area-inset-top)]">
             <div className="flex h-14 shrink-0 items-center justify-between px-2">

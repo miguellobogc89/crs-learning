@@ -56,6 +56,11 @@ export const primary =
 export const card = "rounded-2xl border border-slate-100 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04),0_8px_24px_rgba(15,23,42,0.04)]";
 /** Tarjeta con contenido a sangre (tablas, listas con separadores). */
 export const panel = `${card} overflow-hidden`;
+/**
+ * En móvil, una sección «sin panel»: a todo el ancho (anula el margen lateral de la página), sin borde,
+ * sombra ni esquinas; solo una línea fina debajo. Se añade a la clase `card` de las secciones principales.
+ */
+export const flat = "max-md:-mx-3 max-md:rounded-none max-md:border-x-0 max-md:border-t-0 max-md:shadow-none";
 export const th = "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500";
 
 /** Cuándo se reúnen los agentes (por defecto; el servidor puede cambiarlo). */

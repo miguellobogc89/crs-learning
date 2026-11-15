@@ -129,7 +129,25 @@ export function EquityChart({
   const up = last >= ref;
   const col = balanceOnly ? "#2563eb" : up ? "#16a34a" : "#dc2626";
   const grad = `eq-${uid}`;
-  const xIdx = shown.length <= 4 ? shown.map((_, i) => i) : [0, Math.round((shown.length - 1) / 3), Math.round(((shown.length - 1) * 2) / 3), shown.length - 1];
+  // Etiquetas del eje X: repartidas por tiempo (no por número de puntos) y nunca más juntas de ~90 px,
+  // para que no se pisen en pantallas estrechas ni con lecturas irregulares.
+  const xIdx = (() => {
+    const last = shown.length - 1;
+    const n = w < 420 ? 3 : 4;
+    const nearest = (t: number) => {
+      let best = 0;
+      for (let i = 1; i <= last; i++) if (Math.abs(new Date(shown[i].day).getTime() - t) < Math.abs(new Date(shown[best].day).getTime() - t)) best = i;
+      return best;
+    };
+    const cand: number[] = shown.length <= n ? shown.map((_, i) => i) : Array.from({ length: n }, (_, k) => (intraday ? nearest(startAt + (duration * k) / (n - 1)) : Math.round((last * k) / (n - 1))));
+    const out: number[] = [];
+    for (const i of [...new Set(cand)].sort((a, b) => a - b)) {
+      if (!out.length || x(i) - x(out[out.length - 1]) >= 90) out.push(i);
+      else if (i === last) out[out.length - 1] = last;
+    }
+    if (out.length > 1 && x(out[out.length - 1]) - x(out[out.length - 2]) < 90) out.splice(out.length - 2, 1);
+    return out;
+  })();
   const hp = hover !== null ? shown[hover] : null;
   const change = ((last - ref) / (ref || 1)) * 100;
 
@@ -197,11 +215,12 @@ export function EquityChart({
           width={w}
           height={h}
           viewBox={`0 0 ${w} ${h}`}
-          className={fill ? "block h-full w-full touch-none select-none" : "block max-w-full touch-none select-none"}
+          className={fill ? "block h-full w-full touch-pan-y select-none" : "block max-w-full touch-pan-y select-none"}
           role="img"
           aria-label="Evolución del patrimonio"
-          onMouseMove={onMove}
-          onMouseLeave={() => setHover(null)}
+          onPointerMove={onMove}
+          onPointerDown={onMove}
+          onPointerLeave={() => setHover(null)}
         >
           <defs>
             <linearGradient id={grad} x1="0" x2="0" y1="0" y2="1">

@@ -5,9 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDownAZ, ArrowDownZA, Check, ChevronDown, Filter, Grid2X2, List, ListFilter, Play } from "lucide-react";
 import type { faroView } from "@/lib/trading/faro/engine";
 import { api, errorText, eur, pct } from "./format";
-import { DataTable, Money, type Col, type TableSort } from "./table";
+import { DataTable, Money, useIsMobile, type Col, type TableSort } from "./table";
 import { ago } from "./home-panel";
-import { AgentAvatar, AVATAR, ErrorNote, LoadingCard, Pill, Rich } from "./ui";
+import { AgentAvatar, AVATAR, ErrorNote, LoadingCard, Modal, Pill, Rich } from "./ui";
 import { useTradingRefresh } from "./navigation";
 import { ManualBuyModal, type BuyIdea } from "./manual-buy-modal";
 import { AssetIcon } from "./asset-icon";
@@ -114,6 +114,9 @@ function FaroIdeas() {
   const [sort, setSort] = useState<TableSort>({ key: "status", dir: 1 });
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const mobile = useIsMobile();
+  const [selected, setSelected] = useState<string | null>(null);
+  const [shown, setShown] = useState(30);
 
   const load = useCallback(async () => {
     try {
@@ -326,7 +329,17 @@ function FaroIdeas() {
         viewMode={viewMode}
         onViewModeChange={setViewMode}
       />
-      {viewMode === "list" ? (
+      {mobile ? (
+        <MobileIdeas
+          ideas={cardIdeas.slice(0, shown)}
+          total={cardIdeas.length}
+          onMore={() => setShown((n) => n + 30)}
+          onOpen={setSelected}
+          empty={all.length ? "No hay oportunidades que coincidan con la búsqueda o los filtros." : `Todavía no hay ideas. La primera tanda llega en el próximo análisis (cada ${data.everyMinutes} min).`}
+          downPct={downPct}
+          upPct={upPct}
+        />
+      ) : viewMode === "list" ? (
         <DataTable
           id="oportunidades"
           height="min-h-0 flex-1"
@@ -410,6 +423,70 @@ function FaroIdeas() {
           )}
         </div>
       )}
+      {mobile && selected && (() => {
+        const i = all.find((x) => x.id === selected);
+        if (!i) return null;
+        const mineIn = i.participants.some((p) => p.who === "tu");
+        return (
+          <Modal
+            open
+            onClose={() => setSelected(null)}
+            title={
+              <span className="flex flex-wrap items-center gap-2">
+                {i.symbol.replace(/-EUR$/, "")}
+                <Pill color={(KIND[i.kind] ?? { color: "slate" }).color}>{KIND[i.kind]?.label ?? i.kind}</Pill>
+                <Pill color={STATUS[i.status].color}>{STATUS[i.status].label}</Pill>
+              </span>
+            }
+            subtitle={`${ago(i.createdAt)} · convicción ${i.conviction}/5${i.status === "viva" ? ` · le quedan ${left(i.validUntil)}` : ""}`}
+            footer={
+              i.status === "viva" ? (
+                <button
+                  type="button"
+                  disabled={mineIn}
+                  onClick={() => {
+                    setSelected(null);
+                    execute(i);
+                  }}
+                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 text-base font-semibold text-white active:bg-blue-700 disabled:opacity-50"
+                >
+                  <Play className="h-5 w-5" /> {mineIn ? "Ya has entrado" : "Ejecutar"}
+                </button>
+              ) : undefined
+            }
+          >
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                {(
+                  [
+                    ["Detectada a", eur(i.price), "text-slate-900"],
+                    [i.status === "viva" ? "Precio ahora" : "Salida", i.lastPrice !== null ? eur(i.lastPrice) : "—", "text-slate-900"],
+                    ["Invalidación", eur(i.invalidation), "text-rose-700"],
+                    ["Objetivo", eur(i.target), "text-emerald-700"],
+                    ["Puedes perder", pct1(downPct(i)), "text-rose-700"],
+                    ["Puedes ganar", pct1(upPct(i)), "text-emerald-700"],
+                  ] as const
+                ).map(([label, value, cls]) => (
+                  <div key={label}>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+                    <div className={`mt-0.5 text-base font-semibold tabular-nums ${cls}`}>{value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
+                <span className="text-slate-600">Resultado por 100 €</span>
+                <b className={`text-base tabular-nums ${tone(i.resultPct)}`}>{i.resultPct === null ? "—" : `${i.resultPct > 0 ? "+" : ""}${eur(i.resultPct, 2)}`}</b>
+              </div>
+              {i.faro2 && (
+                <p className={`rounded-xl px-4 py-3 text-sm ${i.faro2.pass ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
+                  {i.faro2.pass ? "FARO-2 (en pruebas) la habría publicado." : `FARO-2 la descarta: ${i.faro2.reasons.join("; ")}.`}
+                </p>
+              )}
+              {detail(i)}
+            </div>
+          </Modal>
+        );
+      })()}
       {confirm && <ManualBuyModal idea={confirm} onClose={() => setConfirm(null)} />}
     </div>
   );
@@ -533,7 +610,7 @@ function FaroToolbar({
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
-          <div className="knowledge-view-toggle ml-1 flex h-control-lg items-center rounded-xl border-0 bg-white p-1 shadow-none">
+          <div className="knowledge-view-toggle ml-1 hidden h-control-lg items-center rounded-xl border-0 bg-white p-1 shadow-none md:flex">
             <button
               type="button"
               onClick={() => onViewModeChange("grid")}
@@ -557,6 +634,68 @@ function FaroToolbar({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Móvil: las ideas como lista compacta (dos líneas por idea) y «Ver más» en vez de páginas. Al tocar
+ * una, su detalle sube desde abajo con «Ejecutar».
+ */
+function MobileIdeas({
+  ideas,
+  total,
+  onMore,
+  onOpen,
+  empty,
+  downPct,
+  upPct,
+}: {
+  ideas: Idea[];
+  total: number;
+  onMore: () => void;
+  onOpen: (id: string) => void;
+  empty: string;
+  downPct: (i: Idea) => number;
+  upPct: (i: Idea) => number;
+}) {
+  const p1 = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
+  if (!ideas.length) return <p className="py-10 text-center text-sm text-slate-500">{empty}</p>;
+  return (
+    <div className="-mx-3">
+      <ul className="divide-y divide-slate-100 border-y border-slate-100">
+        {ideas.map((i) => (
+          <li key={i.id}>
+            <button type="button" onClick={() => onOpen(i.id)} className="flex w-full items-center gap-3 px-3 py-3 text-left active:bg-slate-50">
+              <AssetIcon symbol={i.symbol} name={i.symbol} size="sm" />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  <b className="truncate text-[15px] font-semibold text-slate-900">{i.symbol.replace(/-EUR$/, "")}</b>
+                  <Pill color={(KIND[i.kind] ?? { color: "slate" }).color} className="!px-2 !text-[11px]">
+                    {KIND[i.kind]?.label ?? i.kind}
+                  </Pill>
+                  {i.faro2 && (
+                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${i.faro2.pass ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400 line-through"}`}>F2</span>
+                  )}
+                </span>
+                <span className="block truncate text-xs text-slate-500">
+                  {STATUS[i.status].label}
+                  {i.status === "viva" ? ` · ${left(i.validUntil)}` : ` · ${ago(i.createdAt)}`} · {p1(upPct(i))} / {p1(downPct(i))}
+                </span>
+              </span>
+              <span className="shrink-0 text-right">
+                <b className={`block text-sm font-semibold tabular-nums ${tone(i.resultPct)}`}>{i.resultPct === null ? "—" : `${i.resultPct > 0 ? "+" : ""}${eur(i.resultPct, 2)}`}</b>
+                <span className="block text-[11px] text-slate-400">por 100 €</span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {ideas.length < total && (
+        <button type="button" onClick={onMore} className="mx-3 my-3 flex h-11 w-[calc(100%-1.5rem)] items-center justify-center rounded-xl border border-slate-200 text-sm font-medium text-slate-700 active:bg-slate-50">
+          Ver más ({total - ideas.length})
+        </button>
+      )}
     </div>
   );
 }

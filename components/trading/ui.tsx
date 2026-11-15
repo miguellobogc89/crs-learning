@@ -191,18 +191,24 @@ export function Modal({
       aria-modal="true"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className={`flex max-h-[92vh] w-full ${width} flex-col overflow-hidden rounded-t-2xl border border-slate-100 bg-white shadow-2xl sm:rounded-2xl`}>
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
+      <div className={`flex max-h-[92dvh] w-full ${width} flex-col overflow-hidden rounded-t-2xl border border-slate-100 bg-white shadow-2xl sm:rounded-2xl`}>
+        {/* En móvil sube desde abajo, como en las apps: asa para indicarlo. */}
+        <div className="flex justify-center pt-2 sm:hidden" aria-hidden>
+          <span className="h-1 w-10 rounded-full bg-slate-200" />
+        </div>
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
           <div className="min-w-0">
             <div className="text-lg font-semibold text-slate-900">{title}</div>
             {subtitle && <div className="mt-0.5 text-xs text-slate-500">{subtitle}</div>}
           </div>
-          <button type="button" onClick={onClose} className="-mr-2 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100" aria-label="Cerrar">
+          <button type="button" onClick={onClose} className="-mr-2 rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Cerrar">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
-        {footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-6 py-3">{footer}</div>}
+        <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 ${footer ? "" : "pb-[calc(1rem+env(safe-area-inset-bottom))]"}`}>{children}</div>
+        {footer && (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-6 sm:pb-3">{footer}</div>
+        )}
       </div>
     </div>
   );

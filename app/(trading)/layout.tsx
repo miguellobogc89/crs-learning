@@ -4,8 +4,17 @@ import type { Metadata, Viewport } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 
+// Instalable como app («Añadir a pantalla de inicio»): se abre a pantalla completa, sin la barra del navegador.
 export const metadata: Metadata = {
   title: "CRS Trading",
+  applicationName: "CRS Trading",
+  manifest: "/trading-app/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "Trading", statusBarStyle: "default" },
+  icons: {
+    icon: [{ url: "/trading-app/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/trading-app/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
