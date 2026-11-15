@@ -102,6 +102,8 @@ export const STATUS_LABEL: Record<string, string> = {
 /** Etiqueta de lo que hizo entrar una operación simulada: una figura o la estrategia de tendencia. */
 export const signalLabel = (p: string) => (p === "tendencia" ? "Tendencia" : PATTERN_SHORT[p as PatternKey] ?? p);
 
-/** Alto de una página del módulo sin scroll: la tabla ocupa el resto y desplaza por dentro. */
-/** Alto de las tablas a pantalla completa (en móvil, menos: arriba están las pestañas de secciones). */
-export const FULL_H = "h-[calc(100dvh-13rem)] lg:h-[calc(100dvh-10rem)]";
+/**
+ * Alto de las tablas «a pantalla»: la tabla ocupa el resto y desplaza por dentro. Calculado con la
+ * estructura propia de Trading (barra de 3,5 rem en móvil; cabecera grande en tablet y ordenador).
+ */
+export const FULL_H = "h-[calc(100dvh-6.5rem)] md:h-[calc(100dvh-7.5rem)] lg:h-[calc(100dvh-6.5rem)]";

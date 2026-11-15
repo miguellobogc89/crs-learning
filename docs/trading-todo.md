@@ -96,3 +96,11 @@ Apuntado el 10/11/2026. Sin empezar.
 - [ ] Memoria de FARO: resumen de su propio historial en cada análisis.
 - [ ] FARO-2 en paralelo y comparación en Análisis.
 - [ ] Filtro estadístico con ~300 ideas con contexto.
+
+## Móvil y tablet (15/11/2026)
+- [x] **Fase 0 — Trading separado de Crussader**: grupo de rutas propio `app/(trading)` (mismas URLs `/trading/...`, mismo login y base de datos) sin la barra superior, el menú, el chat ni las colas de la app general. «Ir a Crussader» en el menú.
+- [x] **Fase 1 — estructura propia** (`components/trading/shell.tsx`): móvil con barra fina (hamburguesa + título) y menú a pantalla completa (secciones, Mi dinero, mercado); tablet en vertical con barra de iconos; tablet en horizontal y ordenador con la barra lateral completa. Fuera las píldoras de secciones. En móvil y tablet, scroll normal de página; «sin scroll, solo las tablas» solo en ordenador.
+- [ ] Fase 2 — reglas de pantalla pequeña: tablas como tarjetas en todas partes, sub-pestañas fijas arriba, ventanas a pantalla completa o desde abajo, detalles al tocar (no al pasar el ratón), botones de 44 px.
+- [ ] Fase 3 — rediseño por pantalla: Mi cartera, Oportunidades, Análisis, Inicio, Agentes, Integraciones y Mercados.
+- [ ] Fase 4 — instalable (manifest, icono, pantalla completa) y avisos.
+- [ ] Script de capturas (iPhone, iPad vertical y horizontal) para revisar cada sección.

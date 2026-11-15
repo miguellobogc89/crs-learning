@@ -52,7 +52,8 @@ export function useTradingRefresh(fn: () => void) {
 }
 
 
-export function TradingNavigation() {
+/** Menú de Trading: secciones, tu dinero y el mercado. `large`: dentro del menú de móvil/tablet (todo con scroll, botones grandes). */
+export function TradingNavigation({ large = false }: { large?: boolean } = {}) {
   const pathname = usePathname();
   const [status, setStatus] = useState<TradingStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -113,24 +114,21 @@ export function TradingNavigation() {
   }, [status, sync]);
 
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <h2 className="border-b border-slate-200/60 px-5 py-4 text-sm font-semibold">Trading</h2>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <nav aria-label="Trading" className="space-y-4 p-3">
+  const items = (
+    <nav aria-label="Trading" className={large ? "space-y-4 px-3 pb-3" : "space-y-4 p-3"}>
           {TRADING_SECTIONS.map((section) => (
             <div key={section.title ?? "main"} className="space-y-1">
               {section.title && <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{section.title}</p>}
               {section.items.map((t) => {
-                const active = pathname === `/trading/${t.key}`;
+                const active = pathname === `/trading/${t.key}` || pathname.startsWith(`/trading/${t.key}/`);
                 return (
                   <Link
                     key={t.key}
                     href={t.key === "mercados" ? "/trading/mercados?tab=valores" : `/trading/${t.key}`}
                     aria-current={active ? "page" : undefined}
-                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${active ? "bg-blue-50 font-semibold text-blue-600" : "text-slate-600 hover:bg-slate-50"}`}
+                    className={`flex items-center rounded-xl ${large ? "gap-3 px-4 py-3.5 text-base" : "gap-2 px-3 py-2 text-sm"} ${active ? "bg-blue-50 font-semibold text-blue-600" : "text-slate-600 hover:bg-slate-50 active:bg-slate-100"}`}
                   >
-                    <t.icon className="h-4 w-4 shrink-0" />
+                    <t.icon className={`${large ? "h-5 w-5" : "h-4 w-4"} shrink-0`} />
                     <span className="truncate">{t.label}</span>
                     {t.key === "cartera" && status && status.openPositions + status.pendingOrders > 0 && (
                       <span className="ml-auto rounded-full bg-slate-100 px-2 text-[11px] font-semibold text-slate-600">
@@ -142,11 +140,28 @@ export function TradingNavigation() {
               })}
             </div>
           ))}
-        </nav>
+    </nav>
+  );
+  const money = <MoneyPanel status={status} syncing={syncing} msg={msg} onSync={sync} />;
+
+  // Menú de móvil/tablet: todo seguido con un solo scroll.
+  if (large)
+    return (
+      <div className="h-full overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+        {items}
+        {money}
       </div>
-      <div className="max-h-[50%] shrink-0 overflow-y-auto">
-        <MoneyPanel status={status} syncing={syncing} msg={msg} onSync={sync} />
+    );
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center justify-between border-b border-slate-200/60 px-5 py-4">
+        <h2 className="text-sm font-semibold">Trading</h2>
+        <Link href="/dashboard" className="text-xs font-medium text-slate-400 hover:text-slate-700">
+          Ir a Crussader
+        </Link>
       </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">{items}</div>
+      <div className="max-h-[50%] shrink-0 overflow-y-auto">{money}</div>
     </div>
   );
 }

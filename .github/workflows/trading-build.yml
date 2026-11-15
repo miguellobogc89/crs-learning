@@ -6,6 +6,7 @@ on:
     paths:
       - "components/trading/**"
       - "app/(app)/trading/**"
+      - "app/(trading)/**"
       - ".github/workflows/trading-build.yml"
   workflow_dispatch:
 
