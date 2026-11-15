@@ -28,7 +28,7 @@ import { normalizeView } from "@/lib/analytics/table-view";
 import { loadTableView } from "@/lib/analytics/table-view.service";
 import { templateOverview } from "@/lib/knowledge/intake/templates/service";
 import type { PendingGroup } from "@/lib/knowledge/intake/templates/pending";
-import { CATEGORY_COLOR, SINGLE_SERIES_COLOR, fmtDate, fmtMoney, fmtNumber } from "@/components/analytics/format";
+import { CATEGORY_COLOR, SINGLE_SERIES_COLOR, fmtDate, fmtMoney, fmtNumber, fmtPrice } from "@/components/analytics/format";
 
 export const dynamic = "force-dynamic";
 
@@ -262,7 +262,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           <Panel title="Cambios de precio" subtitle="Precio unitario: primera y última compra del periodo" href="/analytics?view=tablas&table=compras">
             {p.prices.length ? <ul className="divide-y divide-slate-100">{p.prices.slice(0, 5).map(x => <li key={x.name} className="flex items-center justify-between gap-3 py-2 text-[13px]">
               <div className="min-w-0"><p className="truncate text-slate-800" title={x.name}>{x.name}</p>
-                <p className="text-[11px] text-slate-500">{fmtMoney(x.first)} → {fmtMoney(x.last)} · {x.purchases} compras{x.suppliers > 1 ? ` · ${x.suppliers} proveedores` : ""}</p></div>
+                <p className="text-[11px] text-slate-500">{fmtPrice(x.first)} → {fmtPrice(x.last)} · {x.purchases} compras{x.suppliers > 1 ? ` · ${x.suppliers} proveedores` : ""}</p></div>
               <span className="shrink-0 tabular-nums text-xs font-semibold text-slate-900">{x.change > 0 ? "▲ +" : x.change < 0 ? "▼ " : ""}{fmtNumber(x.change)} %</span>
             </li>)}</ul> : <Empty>Hace falta comprar un producto al menos dos veces con precio unitario para ver su evolución.</Empty>}
           </Panel>

@@ -12,6 +12,13 @@ const moneyShort = new Intl.NumberFormat("es-ES", { style: "currency", currency:
 const plain = grouped({ maximumFractionDigits: 2 });
 
 export const fmtMoney = (n: number) => money.format(n);
+/** Prices: 2 decimals, up to 5 when they are not zero ("0,08765 €", "1,54 €"). Amounts keep 2. */
+const price = grouped({ style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 5 });
+const priceNumber = grouped({ maximumFractionDigits: 5 });
+export const fmtPrice = (n: number) => price.format(n);
+export const fmtPriceNumber = (n: number) => priceNumber.format(n);
+/** A column of prices (not amounts): «Precio…» in its name. */
+export const isPriceColumn = (c: { key: string; label: string }) => /precio/i.test(c.key) || /precio/i.test(c.label);
 const moneyRound = grouped({ style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 export const fmtMoneyShort = (n: number) => Math.abs(n) < 10_000 ? moneyRound.format(Math.round(n)) : moneyShort.format(n);
 export const fmtNumber = (n: number) => plain.format(n);

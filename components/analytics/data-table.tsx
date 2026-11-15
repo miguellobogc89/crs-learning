@@ -17,7 +17,7 @@ import { RecordHistory } from "./record-history";
 import { Combobox } from "@/components/ui/combobox";
 import { SearchInput } from "@/components/ui/search-input";
 import { cn } from "@/lib/utils";
-import { fmtDate, fmtMoney, fmtNumber } from "./format";
+import { fmtDate, fmtMoney, fmtNumber, fmtPrice, fmtPriceNumber, isPriceColumn } from "./format";
 
 type Row = Record<string, CellValue>;
 /** A correction typed in a cell, not saved yet: shown in yellow until «Guardar». */
@@ -28,10 +28,10 @@ const right = (c: Column) => c.kind === "money" || c.kind === "number";
 /** A value as the cell editor shows it: "12,5", "31/12/2026". */
 const editText = (v: CellValue, c: Column) => v === null || v === undefined ? "" : c.edit?.type === "date" && typeof v === "string" ? fmtDate(v)
   : typeof v === "number" ? String(v).replace(".", ",") : String(v);
-const show = (v: CellValue, kind?: Column["kind"]) => {
+const show = (v: CellValue, kind?: Column["kind"], price = false) => {
   if (v === null || v === "") return <span className="text-slate-300">—</span>;
-  if (kind === "money" && typeof v === "number") return fmtMoney(v);
-  if (kind === "number" && typeof v === "number") return fmtNumber(v);
+  if (kind === "money" && typeof v === "number") return price ? fmtPrice(v) : fmtMoney(v);
+  if (kind === "number" && typeof v === "number") return price ? fmtPriceNumber(v) : fmtNumber(v);
   if (kind === "date" && typeof v === "string") return fmtDate(v);
   return String(v);
 };
@@ -218,14 +218,14 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
                       {cellBusy && <Loader2 className="size-3 animate-spin text-slate-400" />}</span>
                 : editable && (c.edit!.type === "number" || c.edit!.type === "date")
                   ? <EditableText value={p ? p.text : editText(r[c.key] ?? null, c)}
-                      display={staged ?? (missing ? <span className="font-medium text-amber-700">Por completar</span> : show(r[c.key] ?? null, c.kind))} allowEmpty busy={false} onSave={v => save(r, c, v)} />
+                      display={staged ?? (missing ? <span className="font-medium text-amber-700">Por completar</span> : show(r[c.key] ?? null, c.kind, isPriceColumn(c)))} allowEmpty busy={false} onSave={v => save(r, c, v)} />
                 : canEdit && c.edit?.type === "party" && typeof r._id === "string"
                   ? <PartyCell current={(c.edit.field === "issuer" ? r._issuer : r._customer) as string | null} label={c.label} companies={companies} busy={cellBusy}
                       onSave={choice => saveParty(r, c, choice)} />
                 : editable && c.edit!.type === "text" ? <EditableText value={p ? p.text : String(r[c.key] ?? "")} allowEmpty={!!c.completar || table.key.startsWith("tabla:") || table.key.startsWith("plantilla:")}
                     display={staged ?? (missing ? <span className="font-medium text-amber-700">Por completar</span> : undefined)} busy={false} onSave={v => save(r, c, v)} />
                 : missing ? <span className="font-medium text-amber-700">Por completar</span>
-                : show(r[c.key] ?? null, c.kind)}
+                : show(r[c.key] ?? null, c.kind, isPriceColumn(c))}
             </td>;
           });
   // A row that needs the person (`_attention`: why) stands out in light yellow.
@@ -309,9 +309,10 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
             if (c.key === groupColumn!.key) return <span className={cn("font-semibold", g.key === "__empty" ? "text-slate-400" : "text-slate-900")}>{g.label}</span>;
             const cell = g.cells[c.key];
             if (!cell || cell.type === "empty") return null;
-            if (cell.type === "same") return show(cell.value, c.kind);
+            if (cell.type === "same") return show(cell.value, c.kind, isPriceColumn(c));
             if (cell.type === "sum") return <span className="font-semibold text-slate-900">{c.kind === "money" ? fmtMoney(cell.value) : fmtNumber(cell.value)}</span>;
-            if (cell.type === "range") return <span>{c.kind === "money" ? `${fmtMoney(cell.min)} – ${fmtMoney(cell.max)}` : `${fmtNumber(cell.min)} – ${fmtNumber(cell.max)}`}</span>;
+            if (cell.type === "range") { const f = c.kind === "money" ? (isPriceColumn(c) ? fmtPrice : fmtMoney) : isPriceColumn(c) ? fmtPriceNumber : fmtNumber;
+              return <span>{`${f(cell.min)} – ${f(cell.max)}`}</span>; }
             return <span className="text-xs italic text-slate-400">{cell.count} distintos</span>;
           };
           return [<tr key={`g:${g.key}`} className="border-t border-slate-200 bg-slate-50/70 hover:bg-slate-100/70">
@@ -419,7 +420,7 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
  * and with VAT, gifts, and its invoice. A purchase whose price per unit differs from the one before it is marked.
  */
 function PurchaseHistory({ rows }: { rows: PurchaseHistoryRow[] }) {
-  const prices = new Set(rows.filter(r => r.tipo === "Compra" && r.precio_ud !== null).map(r => r.precio_ud!.toFixed(4)));
+  const prices = new Set(rows.filter(r => r.tipo === "Compra" && r.precio_ud !== null).map(r => r.precio_ud!.toFixed(5)));
   return <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
     <p className="border-b border-slate-100 px-3 py-1.5 text-xs text-slate-500">
       {rows.length} {rows.length === 1 ? "compra" : "compras"} · {prices.size} {prices.size === 1 ? "precio" : "precios distintos"}
@@ -433,9 +434,9 @@ function PurchaseHistory({ rows }: { rows: PurchaseHistoryRow[] }) {
         <td className="whitespace-nowrap px-2.5 py-1">{h.fecha ? fmtDate(h.fecha) : "—"}</td>
         <td className="px-2.5 py-1 text-right tabular-nums">{h.cantidad !== null ? fmtNumber(h.cantidad) : "—"}</td>
         <td className="px-2.5 py-1">{h.unidad ?? "—"}</td>
-        <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums">{h.precio !== null ? fmtMoney(h.precio) : "—"}</td>
+        <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums">{h.precio !== null ? fmtPrice(h.precio) : "—"}</td>
         <td className="px-2.5 py-1 text-right tabular-nums">{h.dto_pct ? `${fmtNumber(h.dto_pct)} %` : "—"}</td>
-        <td className="whitespace-nowrap px-2.5 py-1 text-right font-medium tabular-nums text-slate-900">{h.precio_ud !== null ? fmtMoney(h.precio_ud) : "—"}
+        <td className="whitespace-nowrap px-2.5 py-1 text-right font-medium tabular-nums text-slate-900">{h.precio_ud !== null ? fmtPrice(h.precio_ud) : "—"}
           {h.cambio && <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-800" title="Precio distinto al de la compra anterior">cambio</span>}</td>
         <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums">{h.importe !== null ? fmtMoney(h.importe) : "—"}</td>
         <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums">{h.importe_iva !== null ? fmtMoney(h.importe_iva) : "—"}</td>

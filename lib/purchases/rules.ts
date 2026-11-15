@@ -195,7 +195,7 @@ function one(l: Line, hit: Hit | null, perMeasure: boolean, ref: number | null):
       : perMeasure && hit.kind !== "envases" && hit.kind !== "contenido" ? round(unidades) : round(unidades * content.e);
   }
   const descuento_pct = hit.pct ?? (hit.kind === "cuadra" && l.descuento && q && p ? round((1 - t / (q * p)) * 100, 2) : null);
-  const precio_final = cantidad_real ? round(t / cantidad_real) : unidades ? round(t / unidades) : null;
+  const precio_final = cantidad_real ? round(t / cantidad_real, 5) : unidades ? round(t / unidades, 5) : null;
   const unit = unidad_real && unidad_real !== "ud" ? `/${unidad_real}` : "/ud";
   // What the invoice says (a discount % or a content per pack read as such) is not a correction.
   const asRead = hit.kind === "cuadra" || (hit.kind === "pct" && !!l.descuentoPct) || (hit.kind === "envases" && !!l.envaseLeido);

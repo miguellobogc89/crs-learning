@@ -486,7 +486,7 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
           precio: num(l.values.unit_price) ?? num(l.values.unit_price_with_tax), importe: sinIva, importe_iva: conIva,
           unidad: str(l.values.unit), descuento: num(l.values.discount_amount), referencia: str(l.values.product_reference),
           // What was really paid per unit, without VAT (after discounts and offers): amount ÷ quantity.
-          precio_pagado: q && sinIva !== null ? Math.round((sinIva / q) * 10000) / 10000 : null,
+          precio_pagado: q && sinIva !== null ? Math.round((sinIva / q) * 1e5) / 1e5 : null,
           factura: inv ? str(inv.values.invoice_number) : null, documento: doc(inv?.id), ...purchaseCells(n),
           _skip: inv ? category(inv) === "suministros" || isIncome(inv, ix) : false };
       }).filter(r => !r._skip).map(({ _skip, ...r }) => r).sort((a, b) => String(b.fecha ?? "").localeCompare(String(a.fecha ?? ""))) }; }
