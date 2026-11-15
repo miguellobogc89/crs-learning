@@ -186,5 +186,5 @@ export async function rejectWorkspaceInviteAction(formData: FormData) {
   });
 
   revalidatePath("/notifications");
-  redirect("/my-space/workspaces");
+  redirect("/inicio");
 }

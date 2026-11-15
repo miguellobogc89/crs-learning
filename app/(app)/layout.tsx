@@ -3,6 +3,7 @@ import { IntakeQueue } from "@/components/knowledge/import/intake-queue";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
+import { TRADING_HOME, hasBusinessAccess } from "@/lib/auth/business-access";
 import { isUserAdmin } from "@/lib/auth/admin";
 
 import { AppSidebar } from "@/components/app/sidebar";
@@ -37,6 +38,10 @@ export default async function AppLayout({
 
   if (!session?.user?.id) {
     redirect("/");
+  }
+
+  if (!(await hasBusinessAccess(session.user.id))) {
+    redirect(TRADING_HOME);
   }
 
   const workspaceContext = await getActiveWorkspaceContext(

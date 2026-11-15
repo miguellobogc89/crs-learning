@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 
+import { hasBusinessAccess } from "@/lib/auth/business-access";
 import { prisma } from "@/lib/prisma";
 import {
   assertPlanAllows,
@@ -111,6 +112,10 @@ export async function inviteWorkspaceMember(data: {
   workspaceId: string;
   email: string;
 }) {
+  if (!(await hasBusinessAccess(data.userId))) {
+    throw new Error("No tienes acceso a Mi negocio");
+  }
+
   const membership = requireWorkspaceOwner(
     await getWorkspaceMembership({
       userId: data.userId,

@@ -26,7 +26,7 @@ const genericLoginError = "Email o contrasena incorrectos.";
 
 export async function loginWithGoogle() {
   await signIn("google", {
-    redirectTo: "/knowledge",
+    redirectTo: "/inicio",
   });
 }
 
@@ -91,7 +91,7 @@ export async function loginWithCredentials(
     throw error;
   }
 
-  redirect("/dashboard");
+  redirect("/inicio");
 }
 
 export async function registerWithCredentials(

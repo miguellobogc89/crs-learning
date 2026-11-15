@@ -107,6 +107,7 @@ export function TradingNavigationHeader({ onNavigate }: { onNavigate?: () => voi
 }
 
 export type TradingProfile = {
+  canAccessBusiness: boolean;
   name?: string | null;
   email?: string | null;
   image?: string | null;
@@ -143,11 +144,13 @@ function TradingUserMenu({ user, inDrawer = false }: { user: TradingProfile; inD
         </DropdownMenuTrigger>
         <DropdownMenuContent side={inDrawer ? "top" : "right"} align={inDrawer ? "start" : "end"} sideOffset={8} className="pointer-events-auto z-[60] w-48">
           <DropdownMenuItem asChild>
-            <Link href="/settings"><Settings /> Configuración</Link>
+            <Link href={user.canAccessBusiness ? "/settings" : "/trading/integraciones"}><Settings /> Configuración</Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/dashboard"><ArrowLeft /> Volver a Crussader</Link>
-          </DropdownMenuItem>
+          {user.canAccessBusiness && (
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard"><ArrowLeft /> Ir a Mi negocio</Link>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => void logout()} variant="destructive">
             <LogOut /> Cerrar sesión
