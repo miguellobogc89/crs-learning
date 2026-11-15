@@ -4,6 +4,7 @@
 import { createBinanceAdapter } from "./adapters/binance";
 import { createBitvavoAdapter } from "./adapters/bitvavo";
 import { createCoinbaseAdapter } from "./adapters/coinbase";
+import { createOkxAdapter } from "./adapters/okx";
 import { createTrading212Adapter } from "./adapters/trading212";
 import { createRegistry } from "./registry";
 import type { ProviderInfo } from "./types";
@@ -14,6 +15,7 @@ brokerRegistry.register(createTrading212Adapter());
 brokerRegistry.register(createBinanceAdapter());
 brokerRegistry.register(createBitvavoAdapter());
 brokerRegistry.register(createCoinbaseAdapter());
+brokerRegistry.register(createOkxAdapter());
 
 // Anunciados en la interfaz como «próximamente». Sin adaptador: no se pueden conectar.
 const soon = (id: string, name: string, domain: string, markets: ProviderInfo["markets"], description: string): ProviderInfo => ({
