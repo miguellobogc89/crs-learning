@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { connectorContext } from "@/lib/connectors/context";
 import { ShellMeta } from "@/components/trading/shell";
@@ -9,11 +10,19 @@ import { chipByKey } from "@/lib/trading/chip/roster";
 
 export const dynamic = "force-dynamic";
 
+const findAgent = (key: string) => agentByKey(key) ?? kamikazeByKey(key) ?? chipByKey(key);
+
+export async function generateMetadata({ params }: { params: Promise<{ tab: string; key: string }> }): Promise<Metadata> {
+  const { tab, key } = await params;
+  const agent = tab === "agentes" ? findAgent(key) : null;
+  return agent ? { title: agent.name } : {};
+}
+
 /** Página de un agente: /trading/agentes/<clave>. La miga indica de dónde vienes (?from=inicio). */
 export default async function Page({ params, searchParams }: { params: Promise<{ tab: string; key: string }>; searchParams: Promise<{ from?: string }> }) {
   const { tab, key } = await params;
   if (tab !== "agentes") notFound();
-  const def = agentByKey(key) ?? kamikazeByKey(key) ?? chipByKey(key);
+  const def = findAgent(key);
   if (!def) notFound();
   const ctx = await connectorContext();
   if (!ctx) redirect("/");

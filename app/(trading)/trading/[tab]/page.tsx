@@ -1,17 +1,26 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { connectorContext } from "@/lib/connectors/context";
 import { TradingWorkspace } from "@/components/trading/trading-workspace";
-import { isTradingTab } from "@/components/trading/tabs";
+import { TRADING_TABS, VIRTUAL_PORTFOLIO_TITLE, isTradingTab } from "@/components/trading/tabs";
 
 export const dynamic = "force-dynamic";
 
-export default async function Page({
-  params,
-  searchParams,
-}: {
+type PageProps = {
   params: Promise<{ tab: string }>;
   searchParams: Promise<{ symbol?: string | string[]; modo?: string | string[] }>;
-}) {
+};
+
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
+  const { tab } = await params;
+  if (tab === "cartera" && (await searchParams).modo === "virtual") {
+    return { title: VIRTUAL_PORTFOLIO_TITLE };
+  }
+  const section = TRADING_TABS.find((item) => item.key === tab);
+  return section ? { title: section.label } : {};
+}
+
+export default async function Page({ params, searchParams }: PageProps) {
   const { tab } = await params;
   // Mantener los enlaces existentes: todas las pantallas antiguas aterrizan en su nueva ubicación.
   if (tab === "hoy") redirect("/trading/oportunidades");

@@ -96,9 +96,8 @@ function PortfolioSwitcher({ onNavigate }: { onNavigate?: () => void }) {
 export function TradingNavigationHeader({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-      <Link href="/trading/inicio" onClick={onNavigate} aria-label="Inicio de Trading" className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+      <Link href="/trading/inicio" onClick={onNavigate} aria-label="Inicio de Trading" className="inline-flex shrink-0 items-center">
         <Image src="/logo/logo.png" alt="" width={28} height={28} className="size-7 shrink-0 object-contain" />
-        <span className="truncate">Trading</span>
       </Link>
       <Suspense fallback={<div className="h-8 w-24 shrink-0 rounded-lg bg-slate-100" />}>
         <PortfolioSwitcher onNavigate={onNavigate} />

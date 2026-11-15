@@ -3,6 +3,7 @@
 import type { ComponentType } from "react";
 import { Bot, Flame, Home, LineChart, Plug, Wallet } from "lucide-react";
 
+export const VIRTUAL_PORTFOLIO_TITLE = "Mi cartera virtual";
 export const CARTERA_REAL_HREF = "/trading/cartera";
 export const CARTERA_VIRTUAL_HREF = `${CARTERA_REAL_HREF}?modo=virtual`;
 
