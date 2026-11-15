@@ -254,11 +254,19 @@ type Wallets = Awaited<ReturnType<typeof getWallets>>;
 const isStale = (s: TradingStatus) =>
   s.instrumentsWithData < s.instruments || !s.asOf || Date.now() - new Date(s.asOf).getTime() > 4 * 86_400_000;
 
-function BrokerLogo({ src, muted }: { src: string | null; muted?: boolean }) {
+function BrokerLogo({ src, provider }: { src: string | null; provider: string }) {
   return (
-    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-white ${muted ? "opacity-60 grayscale" : ""}`}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- logotipos externos pequeños */}
-      {src ? <img src={src} alt="" className="h-5 w-5 object-contain" /> : <Link2 className="h-4 w-4 text-slate-400" />}
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-white">
+      {provider === "binance" ? (
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-[#F0B90B]">
+          <path d="M7.34 10.08 12 5.42l4.66 4.66 2.71-2.71L12 0 4.63 7.37zM0 12l2.71-2.71L5.42 12l-2.71 2.71zm7.34 1.92L12 18.58l4.66-4.66 2.71 2.71L12 24l-7.37-7.37zM18.58 12l2.71-2.71L24 12l-2.71 2.71zM9.25 12 12 9.25 14.75 12 12 14.75z" />
+        </svg>
+      ) : src ? (
+        // eslint-disable-next-line @next/next/no-img-element -- logotipos externos pequeños
+        <img src={src} alt="" className="h-5 w-5 object-contain" />
+      ) : (
+        <Link2 className="h-4 w-4 text-slate-400" />
+      )}
     </span>
   );
 }
@@ -278,54 +286,52 @@ function MoneyPanel({ status, syncing, msg, onSync, onNavigate }: { status: Trad
   }, [load]);
 
   const items = wallets?.items ?? [];
-  const reals = items.filter((i) => i.environment === "real");
+  const realEur = items.filter((i) => i.environment === "real" && i.currency === "EUR");
+  const hasTotal = realEur.length > 0 && realEur.every((i) => i.total !== null);
   return (
     <div className="mx-3 mb-3 rounded-2xl border border-slate-100 bg-white p-4 text-sm shadow-sm">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Mi dinero</div>
-      {!wallets ? (
-        <div className="mt-2 h-7 w-28 animate-pulse rounded-md bg-slate-100" />
-      ) : items.length === 0 ? (
-        <Link href="/trading/integraciones" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">
-          Conecta un exchange →
-        </Link>
-      ) : (
-        <>
-          {reals.length > 1 && <div className="mt-1 text-xl font-bold tracking-tight tabular-nums text-slate-900">{eur(wallets.total, 2)}</div>}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Mi dinero</span>
+        {wallets ? (
+          <span className="whitespace-nowrap text-lg font-bold tabular-nums text-slate-900">
+            {hasTotal ? eur(wallets.total, 2) : "—"}
+          </span>
+        ) : (
+          <span className="h-6 w-20 animate-pulse rounded-md bg-slate-100" />
+        )}
+      </div>
+      {wallets && (items.length === 0 ? (
+          <Link href="/trading/integraciones" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">
+            Conecta un exchange →
+          </Link>
+        ) : (
           <ul className="mt-2 space-y-2.5">
             {items.map((w) => {
-              const muted = !w.operating;
+              const state = w.error ? "No se pudo leer el saldo" : !w.operating ? "Solo consulta"
+                : w.hasOpenPositions === true ? "Con posiciones abiertas"
+                : w.hasOpenPositions === false ? "Sin posiciones abiertas" : "Posiciones no disponibles";
+              const positions = w.error || !w.operating ? null : w.hasOpenPositions;
+              const dot = positions === true ? "bg-emerald-500" : positions === false ? "bg-yellow-400" : "bg-slate-300";
               return (
                 <li key={w.id}>
-                  <Link href="/trading/integraciones" className="flex items-center gap-2.5 rounded-lg hover:bg-slate-50">
-                    <BrokerLogo src={w.logo} muted={muted} />
-                    <span className="min-w-0 flex-1">
-                      <span className={`block truncate text-xs font-semibold ${muted ? "text-slate-500" : "text-slate-900"}`}>
-                        {w.name}
-                        {w.environment !== "real" && <span className="ml-1 font-normal text-slate-400">demo</span>}
+                  <Link href="/trading/integraciones" className="flex items-center gap-2 rounded-lg hover:bg-slate-50">
+                    <BrokerLogo src={w.logo} provider={w.provider} />
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-semibold text-slate-900">
+                      <span className="truncate">{w.name}</span>
+                      <span title={state} className={`h-2 w-2 shrink-0 rounded-full ${dot}`}>
+                        <span className="sr-only">{state}</span>
                       </span>
-                      <span className="block truncate text-[11px] text-slate-400">
-                        {w.error ? "No se pudo leer el saldo" : w.operating ? (w.copies ? `Opera · ${w.copies.copies} ${w.copies.copies === 1 ? "copia" : "copias"}` : "Opera") : "Solo consulta"}
-                      </span>
+                      {w.environment !== "real" && <span className="font-normal text-slate-500">demo</span>}
                     </span>
-                    <span className="text-right">
-                      <span className={`block tabular-nums ${muted ? "text-xs text-slate-500" : "text-sm font-bold text-slate-900"}`}>
-                        {w.total === null ? "—" : w.currency === "EUR" ? eur(w.total, 2) : `${w.total.toFixed(2)} ${w.currency}`}
-                      </span>
-                      {w.operating && w.copies && (
-                        <span className={`block text-[11px] font-semibold tabular-nums ${tone(w.copies.result)}`}>
-                          {w.copies.result >= 0 ? "+" : ""}
-                          {eur(w.copies.result, 2)}
-                          {w.copies.pct !== null && ` · ${w.copies.pct >= 0 ? "+" : ""}${w.copies.pct.toFixed(1).replace(".", ",")} %`}
-                        </span>
-                      )}
+                    <span className="shrink-0 whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-900">
+                      {w.total === null ? "—" : w.currency === "EUR" ? eur(w.total, 2) : `${w.total.toFixed(2)} ${w.currency}`}
                     </span>
                   </Link>
                 </li>
               );
             })}
           </ul>
-        </>
-      )}
+        ))}
 
       <PhaseCard />
 
@@ -334,7 +340,7 @@ function MoneyPanel({ status, syncing, msg, onSync, onNavigate }: { status: Trad
           {status.opened ? (
             <Link href={CARTERA_VIRTUAL_HREF} onClick={onNavigate} className="flex items-center justify-between gap-2 text-xs text-slate-500 hover:text-slate-700">
               <span>Cartera virtual</span>
-              <span className="tabular-nums">
+              <span className="whitespace-nowrap text-right tabular-nums">
                 {eur0(status.equity)} <span className={tone(status.returnPct)}>{status.returnPct >= 0 ? "+" : ""}{status.returnPct.toFixed(1).replace(".", ",")} %</span>
               </span>
             </Link>
@@ -361,7 +367,6 @@ function MoneyPanel({ status, syncing, msg, onSync, onNavigate }: { status: Trad
 }
 
 const days = (n: number) => `${Math.round(n)} ${Math.round(n) === 1 ? "día" : "días"}`;
-const pct1 = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
 
 /** Indicador siempre visible: ¿el mercado está en ataque o en defensa (detector de CAMALEÓN)? */
 function PhaseCard() {
@@ -380,7 +385,6 @@ function PhaseCard() {
   const attack = phase.mode === "ataque";
   // Si ya cruzó el nivel, cambiará al cierre de hoy si se mantiene así.
   const crossed = attack ? phase.flipPct >= 0 : phase.flipPct <= 0;
-  const left = phase.remainingDays !== null && phase.samples >= 5 ? phase.remainingDays : null;
   return (
     <Link
       href="/trading/agentes/camaleon?from=cartera"
@@ -396,28 +400,16 @@ function PhaseCard() {
       </div>
       <div className="mt-1.5 text-xs text-slate-700">
         Lleva <b className="tabular-nums">{days(phase.days)}</b>
-        {left !== null ? (
-          <>
-            {" "}· suele quedarle <b className="tabular-nums">~{days(left)}</b>
-          </>
-        ) : phase.typicalDays !== null && phase.samples >= 5 ? (
-          <span className="text-slate-500"> · ya dura más de lo normal</span>
-        ) : null}
       </div>
       <div className="mt-1 text-[11px] leading-snug text-slate-500">
         {crossed ? (
           <>Si cierra hoy así, mañana pasa a {attack ? "defensa" : "ataque"}.</>
         ) : (
           <>
-            Para pasar a {attack ? "defensa" : "ataque"}: Bitcoin{" "}
-            <b className={`tabular-nums ${attack ? "text-rose-600" : "text-emerald-700"}`}>{pct1(phase.flipPct)}</b> ({eur0(phase.flipPrice)})
+            Para pasar a {attack ? "defensa" : "ataque"}, Bitcoin debe {attack ? "bajar" : "subir"} a{" "}
+            <b className="tabular-nums text-slate-700">{eur(phase.flipPrice, 2)}</b>.
           </>
         )}
-      </div>
-      <div className="mt-1.5 flex gap-1">
-        {phase.checks.map((c) => (
-          <span key={c.label} title={`${c.label}: ${eur0(c.level)}`} className={`h-1.5 flex-1 rounded-full ${c.ok ? "bg-emerald-400" : "bg-slate-200"}`} />
-        ))}
       </div>
     </Link>
   );

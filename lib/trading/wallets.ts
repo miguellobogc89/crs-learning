@@ -16,15 +16,20 @@ import { kamikazeByKey } from "./kamikaze/roster";
 
 /** Los saldos se piden como mucho una vez por minuto (el panel lateral se refresca solo). */
 const TTL_MS = 60_000;
-const cache = new Map<string, { at: number; value: { total: number; cash: number; currency: string } }>();
+const cache = new Map<string, { at: number; value: { total: number; cash: number; currency: string; hasOpenPositions: boolean | null } }>();
 
-async function balance(actor: BrokerActor, connectionId: string) {
-  const hit = cache.get(connectionId);
+async function balance(actor: BrokerActor, connectionId: string, operating: boolean) {
+  const key = `${connectionId}:${operating}`;
+  const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
   const accounts = await brokers.getAccounts(actor, connectionId);
   const a = accounts[0];
-  const value = { total: a?.totalValue ?? 0, cash: a?.cashAvailable ?? 0, currency: a?.currency ?? "EUR" };
-  cache.set(connectionId, { at: Date.now(), value });
+  const hasOpenPositions = operating
+    ? await brokers.getPositions(actor, connectionId)
+        .then((positions) => positions.some((position) => position.quantity !== 0), () => null)
+    : null;
+  const value = { total: a?.totalValue ?? 0, cash: a?.cashAvailable ?? 0, currency: a?.currency ?? "EUR", hasOpenPositions };
+  cache.set(key, { at: Date.now(), value });
   return value;
 }
 
@@ -66,7 +71,7 @@ export async function getWallets(actor: Extract<BrokerActor, { kind: "user" }>, 
         operating: c.usedByTrading && c.permissions.includes("auto"),
       };
       try {
-        const b = await balance(actor, c.id);
+        const b = await balance(actor, c.id, base.operating);
         // Foto del día para la gráfica de Mi cartera (la última del día se queda).
         if (c.environment === "real" && b.total > 0)
           await prisma.trading_wallet_snapshots
@@ -78,7 +83,7 @@ export async function getWallets(actor: Extract<BrokerActor, { kind: "user" }>, 
             .catch(() => undefined);
         return { ...base, ...b, error: null as string | null, copies: c.usedByTrading ? await copiesResult(actor.workspaceId) : null };
       } catch (e) {
-        return { ...base, total: null, cash: null, currency: c.currency ?? "EUR", error: e instanceof Error ? e.message : "No se pudo leer el saldo", copies: null };
+        return { ...base, total: null, cash: null, currency: c.currency ?? "EUR", error: e instanceof Error ? e.message : "No se pudo leer el saldo", hasOpenPositions: null, copies: null };
       }
     }),
   );
