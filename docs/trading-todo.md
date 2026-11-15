@@ -104,3 +104,5 @@ Apuntado el 10/11/2026. Sin empezar.
 - [ ] Fase 3 — rediseño por pantalla: Mi cartera, Oportunidades, Análisis, Inicio, Agentes, Integraciones y Mercados.
 - [ ] Fase 4 — instalable (manifest, icono, pantalla completa) y avisos.
 - [ ] Script de capturas (iPhone, iPad vertical y horizontal) para revisar cada sección.
+- [x] Fase 2/3 (primera tanda, 15/11): instalable como app (manifest e iconos en `public/trading-app`), menú a pantalla completa, secciones «sin panel» en móvil (`flat`), ventanas desde abajo; Mi cartera (lista de oportunidades con detalle y acciones), Oportunidades (lista compacta con «Ver más» y detalle con Ejecutar), Inicio (filas de dos líneas), Agentes (barra mínima, solo tarjetas), Análisis (secciones a todo el ancho). Tablas comunes en móvil: sin páginas ni scroll interno, orden en desplegable y fila compacta opcional (`mobileRow`).
+- [ ] Siguiente tanda móvil: Actividad, Mercados, Integraciones, página de agente, ventanas de comprar/gestionar.

@@ -48,7 +48,7 @@ export function ReturnPill({ value, big = false }: { value: number; big?: boolea
   const cls = up ? "bg-emerald-50 text-emerald-700" : down ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-600";
   const Icon = up ? ArrowUpRight : down ? ArrowDownRight : null;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full font-semibold tabular-nums ${cls} ${big ? "px-3 py-1 text-sm" : "px-2.5 py-0.5 text-xs"}`}>
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full font-semibold tabular-nums ${cls} ${big ? "px-3 py-1 text-sm" : "px-2.5 py-0.5 text-xs"}`}>
       {Icon && <Icon className={big ? "h-4 w-4" : "h-3.5 w-3.5"} />}
       {pct(value)}
     </span>

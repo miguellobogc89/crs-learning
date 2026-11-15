@@ -6,12 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Copy, CopyPlus, LayoutGrid, List, Loader2, MoreHorizontal, Pause, Play, Plus, RotateCcw, Search, Trash2, Wallet } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
-import { api, dayFmt, errorText, eur, eur0, field, ghost, int, pct, primary, th, tone } from "./format";
+import { api, dayFmt, errorText, eur, eur0, field, flat, ghost, int, pct, primary, th, tone } from "./format";
 import { refreshTrading, useTradingRefresh } from "./navigation";
 import { EquityCurve, withLivePoint } from "./equity-chart";
 import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
-import { DataTable, Money } from "./table";
+import { DataTable, Money, useIsMobile } from "./table";
 import { MirrorModal } from "./mirror-modal";
 import { AgentVenuePills } from "./agent-venues";
 
@@ -59,7 +59,10 @@ export function AgentsPanel() {
   const [query, setQuery] = useState("");
   const [profile, setProfile] = useState<(typeof PROFILES)[number]>("todos");
   const [sort, setSort] = useState<SortKey>("rentabilidad");
-  const [layout, setLayout] = useState<"cards" | "list">("cards");
+  const [layoutPick, setLayout] = useState<"cards" | "list">("cards");
+  // En móvil, siempre tarjetas (la lista es una tabla ancha pensada para el ordenador).
+  const isMobile = useIsMobile();
+  const layout = isMobile ? "cards" : layoutPick;
   const load = useCallback(async () => {
     try {
       setData(await api<Data>("agents"));
@@ -157,12 +160,12 @@ export function AgentsPanel() {
       {error && <ErrorNote>{error}</ErrorNote>}
 
       {/* Barra del catálogo: buscar, filtrar, ordenar y cambiar de vista */}
-      <div className="flex shrink-0 flex-wrap items-center gap-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 md:gap-3">
         <div className="relative w-full min-w-0 sm:w-auto sm:min-w-[220px] sm:max-w-xs sm:flex-1">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <input className={`${field} w-full pl-9`} placeholder="Buscar agente, perfil o creador" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Buscar agentes" />
         </div>
-        <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 [scrollbar-width:none]">
+        <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 [scrollbar-width:none] max-md:w-full">
           {PROFILES.map((p) => (
             <button
               key={p}
@@ -175,9 +178,9 @@ export function AgentsPanel() {
           ))}
         </div>
         {layout === "cards" && (
-        <label className="flex items-center gap-2 text-sm text-slate-500">
+        <label className="flex items-center gap-2 text-sm text-slate-500 max-md:w-full">
           Ordenar por
-          <select className={`${field} py-1.5`} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+          <select className={`${field} py-1.5 max-md:flex-1`} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
             {(Object.keys(SORTS) as SortKey[]).map((k) => (
               <option key={k} value={k}>
                 {SORTS[k].label}
@@ -186,7 +189,8 @@ export function AgentsPanel() {
           </select>
         </label>
         )}
-        <div className="ml-auto flex items-center gap-2">
+        {/* En móvil, solo tarjetas y sin «Crear agente» (aparcado; se crea desde el ordenador). */}
+        <div className="ml-auto hidden items-center gap-2 md:flex">
           <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label="Vista">
             {(
               [
@@ -219,7 +223,7 @@ export function AgentsPanel() {
       {list.length === 0 ? (
         <div className={`${card} px-6 py-10 text-center text-sm text-slate-500`}>Ningún agente coincide con la búsqueda.</div>
       ) : layout === "cards" ? (
-        <div className="grid min-h-0 flex-1 content-start gap-5 overflow-y-auto md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto md:grid-cols-2 md:gap-5 xl:grid-cols-3">
           {list.map((a) => (
             <AgentCard
               key={a.key}
@@ -499,7 +503,7 @@ function AgentCard({
       tabIndex={0}
       onClick={onDetail}
       onKeyDown={(e) => e.key === "Enter" && onDetail()}
-      className={`${card} group flex cursor-pointer flex-col transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}
+      className={`${card} ${flat} group flex cursor-pointer flex-col transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}
     >
       <div className="flex items-start justify-between gap-2 px-5 pt-5">
         <div className="flex min-w-0 items-start gap-3">

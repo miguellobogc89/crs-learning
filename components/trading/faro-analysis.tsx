@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { faroAnalysis } from "@/lib/trading/faro/engine";
-import { api, errorText, eur, int } from "./format";
+import { api, errorText, eur, flat, int } from "./format";
 import { card, ErrorNote, LoadingCard } from "./ui";
 import { useTradingRefresh } from "./navigation";
 
@@ -66,14 +66,14 @@ export function FaroAnalysis() {
     <div className="space-y-4 pb-4">
       {error && <ErrorNote>{error}</ErrorNote>}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="Qué ideas analizar">
+        <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none]" role="group" aria-label="Qué ideas analizar">
           {SEGMENTS.map(([k, label]) => (
             <button
               key={k}
               type="button"
               aria-pressed={segment === k}
               onClick={() => setSegment(k)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium ${segment === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+              className={`shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium sm:py-1 ${segment === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
             >
               {label}
             </button>
@@ -181,7 +181,7 @@ function Faro2Card({ f2, totalIdeas }: { f2: A["faro2"]; totalIdeas: number }) {
     ["Las que descarta", f2.rejected, "text-slate-500"],
   ];
   return (
-    <section className={`${card} px-5 py-4`}>
+    <section className={`${card} ${flat} px-4 py-4 sm:px-5`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-[15px] font-semibold text-slate-900">FARO-2 en pruebas</h3>
         <span className="text-xs text-slate-500">
@@ -294,7 +294,7 @@ function Tile({ label, value, hint, cls = "text-slate-900" }: { label: string; v
 
 function Panel({ title, sub, children }: { title: string; sub?: string; children: ReactNode }) {
   return (
-    <section className={`${card} px-5 py-4`}>
+    <section className={`${card} ${flat} px-4 py-4 sm:px-5`}>
       <h3 className="text-[15px] font-semibold text-slate-900">{title}</h3>
       {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
       <div className="mt-3">{children}</div>

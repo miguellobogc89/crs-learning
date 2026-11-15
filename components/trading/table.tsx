@@ -3,7 +3,7 @@
 // suaves, pie con paginación y «Ver N por página», e importes con los decimales más pequeños.
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { eur, FULL_H, ghost, panel, th } from "./format";
+import { eur, flat, FULL_H, ghost, panel, th } from "./format";
 
 export const TH = `${th} sticky top-0 z-10 bg-white whitespace-normal px-2 leading-tight shadow-[inset_0_-1px_0_rgb(241,245,249)]`;
 export const TD = "px-2 py-3";
@@ -37,7 +37,7 @@ export function TablePanel({ children, footer, header, height = FULL_H }: { chil
   }, [children, checkScroll]);
 
   return (
-    <section className={`${panel} flex ${height} ${height === FULL_H ? "min-h-[320px]" : "min-h-0"} flex-col`}>
+    <section className={`${panel} ${flat} flex ${height} ${height === FULL_H ? "min-h-[320px]" : "min-h-0"} flex-col`}>
       {header && <div className="shrink-0 border-b border-slate-100 px-4 py-3">{header}</div>}
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} onScroll={checkScroll} className="h-full overflow-auto overscroll-contain">
@@ -206,6 +206,7 @@ export function DataTable<T>({
   height,
   sortBy,
   onSortChange,
+  mobileRow,
 }: {
   id: string;
   columns: Col<T>[];
@@ -222,6 +223,11 @@ export function DataTable<T>({
   /** Orden externo opcional: permite sincronizar cabeceras y una toolbar. */
   sortBy?: TableSort;
   onSortChange?: (value: TableSort) => void;
+  /**
+   * En móvil, fila compacta de dos líneas en vez de ficha con todas las columnas: debajo del título,
+   * `sub`; a la derecha, `right`. Sin esto, la ficha de etiqueta y valor de siempre.
+   */
+  mobileRow?: { sub?: (r: T) => ReactNode; right?: (r: T) => ReactNode };
 }) {
   const [localSort, setLocalSort] = useState<TableSort>(null);
   const sort = sortBy === undefined ? localSort : sortBy;
@@ -231,6 +237,8 @@ export function DataTable<T>({
   const [widths, setWidths] = useState<Record<string, number>>({});
   const tableRef = useRef<HTMLTableElement>(null);
   const mobile = useIsMobile();
+  // En móvil no hay páginas: lista seguida con «Ver más».
+  const [more, setMore] = useState(20);
   useEffect(() => setWidths(readWidths(id)), [id]);
 
   const sorted = useMemo(() => {
@@ -248,7 +256,7 @@ export function DataTable<T>({
       return c * sort.dir;
     });
   }, [rows, sort, columns]);
-  const visible = paginate ? pageOf(sorted, page, perPage) : sorted;
+  const visible = mobile ? sorted.slice(0, more) : paginate ? pageOf(sorted, page, perPage) : sorted;
 
   const pick = (c: Col<T>) => {
     if (!c.sort) return;
@@ -294,24 +302,40 @@ export function DataTable<T>({
   const fields = columns.filter((c) => c !== titleCol && c.label);
   const actions = columns.filter((c) => c !== titleCol && !c.label);
   const sortable = columns.filter((c) => c.sort && c.label);
+  // En móvil, el orden va en un desplegable (no en una tira de píldoras que se sale de la pantalla).
   const sortChips =
     mobile && sortable.length > 1 ? (
-      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 [scrollbar-width:none]" role="group" aria-label="Ordenar">
-        {sortable.map((c) => {
-          const active = sort?.key === c.key;
-          return (
-            <button
-              key={c.key}
-              type="button"
-              onClick={() => pick(c)}
-              aria-pressed={active}
-              className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600"}`}
-            >
+      <div className="flex items-center gap-2 text-sm">
+        <span className="shrink-0 text-slate-500">Ordenar</span>
+        <select
+          className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-800"
+          value={sort?.key ?? ""}
+          onChange={(e) => {
+            const c = sortable.find((x) => x.key === e.target.value);
+            if (c) pick(c);
+          }}
+          aria-label="Ordenar por"
+        >
+          {!sort && <option value="">—</option>}
+          {sortable.map((c) => (
+            <option key={c.key} value={c.key}>
               {c.label}
-              {active && <span className="ml-1 text-[10px]">{sort!.dir === 1 ? "▲" : "▼"}</span>}
-            </button>
-          );
-        })}
+            </option>
+          ))}
+        </select>
+        {sort && (
+          <button
+            type="button"
+            onClick={() => {
+              const c = sortable.find((x) => x.key === sort.key);
+              if (c) pick(c);
+            }}
+            className="h-9 shrink-0 rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-600"
+            aria-label="Cambiar el sentido del orden"
+          >
+            {sort.dir === 1 ? "▲ Asc." : "▼ Desc."}
+          </button>
+        )}
       </div>
     ) : null;
   const panelHeader =
@@ -327,12 +351,52 @@ export function DataTable<T>({
 
   return (
     <TablePanel
-      height={height}
+      height={mobile ? "h-auto" : height}
       header={panelHeader}
-      footer={paginate ? <Pager total={rows.length} page={page} perPage={perPage} onPage={setPage} onPerPage={setPerPage} label={label} /> : undefined}
+      footer={
+        mobile ? (
+          sorted.length > more ? (
+            <button type="button" onClick={() => setMore((n) => n + 20)} className="m-3 flex h-11 items-center justify-center rounded-xl border border-slate-200 text-sm font-medium text-slate-700 active:bg-slate-50">
+              Ver más ({sorted.length - more})
+            </button>
+          ) : undefined
+        ) : paginate ? (
+          <Pager total={rows.length} page={page} perPage={perPage} onPage={setPage} onPerPage={setPerPage} label={label} />
+        ) : undefined
+      }
     >
       {rows.length === 0 ? (
         <div className="px-6 py-8 text-center text-sm text-slate-500">{empty ?? "Sin registros."}</div>
+      ) : mobile && mobileRow ? (
+        <ul className="divide-y divide-slate-100">
+          {visible.map((r) => {
+            const k = rowKey(r);
+            const extra = expand && open === k ? expand(r) : null;
+            const clickable = !!expand || !!onRowClick;
+            return (
+              <li key={k}>
+                <div
+                  className={`flex items-center gap-3 px-4 py-3 ${clickable ? "cursor-pointer active:bg-slate-50" : ""}`}
+                  onClick={clickable ? () => (expand ? setOpen(open === k ? null : k) : onRowClick?.(r)) : undefined}
+                >
+                  <div className="min-w-0 flex-1 text-sm">
+                    {titleCol.cell(r)}
+                    {mobileRow.sub && <div className="mt-0.5 truncate text-xs text-slate-500">{mobileRow.sub(r)}</div>}
+                  </div>
+                  {mobileRow.right && <div className="shrink-0 text-right text-sm">{mobileRow.right(r)}</div>}
+                  {actions.length > 0 && (
+                    <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      {actions.map((c) => (
+                        <span key={c.key}>{c.cell(r)}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {extra && <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3">{extra}</div>}
+              </li>
+            );
+          })}
+        </ul>
       ) : mobile ? (
         <ul className="divide-y divide-slate-100">
           {visible.map((r) => {

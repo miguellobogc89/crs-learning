@@ -104,7 +104,7 @@ export function HomePanel() {
           <ReturnPill value={s.returnPct} />
         </Kpi>
       )}
-      <Kpi label={`Agentes (${agents.agents.length}) en conjunto`}>
+      <Kpi label={`Agentes (${agents.agents.length})`}>
         <Money v={agentEq} digits={2} className="font-semibold text-slate-900" />
         <ReturnPill value={agentsRet} />
       </Kpi>
@@ -249,6 +249,15 @@ export function HomePanel() {
         onRowClick={(r) => router.push(r.key === "tu" ? "/trading/cartera" : `/trading/agentes/${r.key}?from=inicio`)}
         paginate
         label="operadores"
+        mobileRow={{
+          sub: (r) => `#${r.rank} · ${r.open + r.closed} operaciones · ${pct(r.investedPct, 0, false)} invertido${r.pending ? ` · ${r.pending} pend.` : ""}`,
+          right: (r) => (
+            <span className="flex flex-col items-end gap-1">
+              <Money v={r.equity} digits={2} className="font-semibold text-slate-900" />
+              <ReturnPill value={r.returnPct} />
+            </span>
+          ),
+        }}
       />
     </div>
   );
@@ -257,8 +266,8 @@ export function HomePanel() {
 function Kpi({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="mt-0.5 flex items-center gap-2 text-sm">{children}</div>
+      <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[11px]">{label}</div>
+      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">{children}</div>
     </div>
   );
 }
