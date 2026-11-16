@@ -2,7 +2,7 @@
 // Lo que consume la pantalla: panorama del mercado, recomendaciones, ficha de un valor
 // y el proceso diario completo (datos → backtest → carteras → modo automático).
 import "server-only";
-import { KAMIKAZES } from "./kamikaze/roster";
+import { ALL_KAMIKAZES } from "./kamikaze/roster";
 import { prisma } from "@/lib/prisma";
 import { accountState, costOf, ensureAccount, OPEN_STATUSES, placeOrder, processAccount } from "./accounts";
 import { getPortfolio } from "./agents/copy";
@@ -349,7 +349,7 @@ export async function runDaily(budgetMs = 45_000, workspaceId?: string): Promise
     if (bt) backtest = { asOf: bt.asOf, trades: bt.trades };
     // Los kamikazes llevan su propia vigilancia intradía (lib/trading/kamikaze): el cierre diario no los toca.
     const list = await prisma.trading_accounts.findMany({
-      where: { ...(workspaceId ? { workspace_id: workspaceId } : {}), agent: { notIn: KAMIKAZES.map((k) => k.key) } },
+      where: { ...(workspaceId ? { workspace_id: workspaceId } : {}), agent: { notIn: ALL_KAMIKAZES.map((k) => k.key) } },
       select: { id: true, workspace_id: true, agent: true },
     });
     for (const a of list) {

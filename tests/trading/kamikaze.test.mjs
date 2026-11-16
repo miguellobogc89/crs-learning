@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { load } from "./helpers.mjs";
 
 const L = load("lib/trading/kamikaze/logic.ts");
-const { KAMIKAZES } = load("lib/trading/kamikaze/roster.ts");
+const { ALL_KAMIKAZES: KAMIKAZES, KAMIKAZES: ACTIVE, ARCHIVED_KAMIKAZES, kamikazeByKey } = load("lib/trading/kamikaze/roster.ts");
 const DAY = 86_400_000;
 
 test("kamikazes: tres estilos con metas distintas y 20 € por ronda", () => {
@@ -95,4 +95,9 @@ test("kamikazes: la decisión de la IA se valida antes de ejecutarla", () => {
   assert.deepEqual(L.checkDecision({ ...buy(), action: "mantener", stop: 70, target: 160 }, holding), { action: "mantener", stop: null, target: 160 }, "el stop nunca baja");
   assert.equal(L.checkDecision({ ...buy(), action: "vender" }, ctx).action, "rechazada");
   assert.equal(L.allInQuantity(20, 100, { commissionPct: 0.1, slippageBps: 15 }), 0.198503, "todo el efectivo con margen para comisión y deslizamiento");
+});
+
+test("kamikazes: los archivados no están en activo, pero se siguen encontrando por su clave", () => {
+  assert.deepEqual(ACTIVE.map((k) => k.key), ["cohete-persigue", "mecha"]);
+  for (const key of ARCHIVED_KAMIKAZES) assert.ok(kamikazeByKey(key), `${key} se encuentra para su historial`);
 });

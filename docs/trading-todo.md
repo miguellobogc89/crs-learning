@@ -114,9 +114,9 @@ Apuntado el 10/11/2026. Sin empezar.
 
 ## Panorama e indicadores (16/11/2026)
 - [x] Inicio → nueva pestaña **Panorama** (la primera): resumen en frases, Bitcoin (precio, 24 h / 7 / 30 días), estado de FARO-2, miedo y codicia, tendencia (media de 200 días), RSI, liquidez y actividad (volumen frente a lo normal, valor del mercado, peso de Bitcoin), funding de futuros, índice del dólar y fase del detector de CAMALEÓN. Cada uno con «Cómo se lee» y su gráfica.
-- [x] Foto diaria en `trading_market_pulse` (migración 20261116100000, aplicar en Neon; sin ella todo funciona igual, solo no se guarda).
+- [x] Foto diaria en `trading_market_pulse` (migración 20261116100000, aplicada en Neon el 16/11).
 - [ ] Usar la foto diaria como contexto de las ideas de FARO y medir qué indicadores separan las que ganan de las que pierden.
-- [ ] Inventario de agentes con sus números para decidir cuáles archivar.
+- [x] Inventario de agentes (consultado en Neon) y archivados ARGO, NOVA, FÉNIX, FÉNIX AJUSTADO, COHETE, MECHA 2 BALAS y MECHA CORRE: no operan ni se ven; su historial se conserva (ARCHIVED_* en los rosters). Quedan CAMALEÓN, VÉRTIGO, COHETE PERSIGUE y MECHA.
 - [ ] Ficha y pastillas iguales para todos los agentes (estilo: Swing, DCA, Kamikaze…); resolver el comité.
 - [ ] Agente DCA de referencia (copiable).
 

@@ -52,7 +52,7 @@ const RULES: AgentRules = { maxBuys: 1, minConviction: 1, minRewardRisk: 1, buyI
 
 export const KAMIKAZE_CAPITAL = 20;
 
-export const KAMIKAZES: KamikazeDef[] = [
+const BASE: KamikazeDef[] = [
   {
     key: "cohete",
     name: "COHETE",
@@ -111,19 +111,27 @@ const variant = (base: string, o: Pick<KamikazeDef, "key" | "name" | "variant" |
   const b = ORIGINALS.find((k) => k.key === base)!;
   return { ...b, base, ...o };
 };
-const ORIGINALS = KAMIKAZES.slice();
-KAMIKAZES.splice(
-  0,
-  KAMIKAZES.length,
+const ORIGINALS = BASE;
+/** Todos los kamikazes, también los archivados (para su historial y sus enlaces). */
+export const ALL_KAMIKAZES: KamikazeDef[] = [
   ORIGINALS[0],
-  variant("cohete", { key: "cohete-persigue", name: "COHETE PERSIGUE", variant: "Persigue", maxChasePct: 8, tagline: "Como COHETE, pero entra aunque el precio ya haya subido hasta un 8 % desde la idea (COHETE: 3 %)." }),
+  variant("cohete", { key: "cohete-persigue", name: "COHETE PERSIGUE", variant: "Persigue", maxChasePct: 8, tagline: "Se sube a lo que ya vuela, aunque el precio ya haya subido hasta un 8 % desde la idea. Meta: ×10, sin plazo." }),
   ORIGINALS[1],
   variant("mecha", { key: "mecha-balas", name: "MECHA 2 BALAS", variant: "2 balas", sizePct: 50, tagline: "Como MECHA, pero cada operación usa la mitad del capital de la ronda: si falla una, le queda otra." }),
   variant("mecha", { key: "mecha-corre", name: "MECHA CORRE", variant: "Corre", exitMode: "trail", tagline: "Como MECHA, pero no vende en el objetivo: deja correr con un stop que sube con el precio." }),
   ORIGINALS[2],
   variant("fenix", { key: "fenix-ajustado", name: "FÉNIX AJUSTADO", variant: "Ajustado", stopMode: "idea", tagline: "Como FÉNIX, pero con el stop justo en la invalidación de la idea, sin el mínimo del 5 %." }),
-);
+];
+
+/**
+ * Archivados el 16/11/2026: dejan de operar y de verse, pero su historial se conserva.
+ * - FÉNIX y FÉNIX AJUSTADO: compran rebotes, y los rebotes de FARO dieron 0 aciertos de 58.
+ * - COHETE (queda COHETE PERSIGUE), MECHA 2 BALAS y MECHA CORRE (queda MECHA): variantes que no aportaban.
+ */
+export const ARCHIVED_KAMIKAZES: ReadonlySet<string> = new Set(["fenix", "fenix-ajustado", "cohete", "mecha-balas", "mecha-corre"]);
+/** Los que están en activo. */
+export const KAMIKAZES = ALL_KAMIKAZES.filter((k) => !ARCHIVED_KAMIKAZES.has(k.key));
 
 export type KamikazeKey = KamikazeDef["key"];
-export const kamikazeByKey = (key: string) => KAMIKAZES.find((k) => k.key === key) ?? null;
-export const isKamikaze = (key: unknown): key is KamikazeKey => typeof key === "string" && KAMIKAZES.some((k) => k.key === key);
+export const kamikazeByKey = (key: string) => ALL_KAMIKAZES.find((k) => k.key === key) ?? null;
+export const isKamikaze = (key: unknown): key is KamikazeKey => typeof key === "string" && ALL_KAMIKAZES.some((k) => k.key === key);
