@@ -88,8 +88,9 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
   // FARO primero: puntúa sus ideas y, si toca, publica nuevas (una sola llamada a la IA para todos).
   const faro = await faroTick(market, rules, { force: !!force });
   if (faro.ran) out.agents.forEach((a) => a.actions.push(`FARO: ${faro.ran}`));
-  // Solo lo que publica FARO (su filtro ya ha quitado las descartadas).
-  const board = await boardIdeas();
+  // Solo lo que publica FARO (su filtro ya ha quitado las descartadas), y solo crypto: estos agentes
+  // vigilan y operan con precios de Binance. Las ideas de acciones de EE. UU. aún no las toma ninguno.
+  const board = (await boardIdeas()).filter((i) => i.market === "crypto");
   const priceOf = (pair: string) => market.find((t) => t.pair === pair)?.price ?? null;
   await Promise.all(KAMIKAZES.map((def, i) => one(def, out.agents[i].actions)));
   // Copia al instante: si un agente ha comprado o vendido, sus copias en tu exchange lo repiten ya,

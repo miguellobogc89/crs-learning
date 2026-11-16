@@ -132,6 +132,7 @@ Apuntado el 10/11/2026. Sin empezar.
 - [ ] Kraken; valorar CCXT para el resto de exchanges.
 - [x] Bolsa de EE. UU. (16/11): 40 grandes (Nvidia, Apple, Microsoft, Amazon…) y los ETF QQQ y SPY, guardadas en euros al cambio de cada día; horario de Nueva York; fracciones; filtro España / EE. UU. / Crypto en Mercados.
 - [x] ATLAS: las reglas de CAMALEÓN sobre EE. UU. (detector sobre el Nasdaq 100, rupturas 20/10, hasta 3), 1.000 €.
-- [ ] FARO analizando acciones de EE. UU. (velas de 1 h de Yahoo, horario de mercado).
+- [x] FARO analiza también la bolsa de EE. UU. (lib/trading/faro/us.ts): con el mercado abierto, cada ~30 min, velas de 1 h de Yahoo en euros; mismo filtro (con el Nasdaq 100 como referencia) y mismo seguimiento. Columna `scope` en trading_faro_runs (migración 20261116130000, aplicada).
+- [ ] Un agente que tome las ideas de acciones de FARO (hoy solo se publican y se miden; los agentes de ideas operan crypto).
 - [ ] Copiar acciones con dinero real: completar Trading 212 (Trade Republic y Revolut acciones no tienen API).
 

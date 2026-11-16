@@ -16,6 +16,12 @@ import { kamikazeByKey, type KamikazeStyle } from "../kamikaze/roster";
 import { atrPct, checkIdeas, controlIdeas, ENABLED_KINDS, faro2Verdict, simulateLevels, ideaFeatures, KINDS, pastTicker, scoreIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
 import { getMarketPhase, marketPhaseAt } from "../chip/phase-service";
 import { analyze, type ResolvedIdea } from "./analysis";
+import { isUsPair, usBarsSince, usHourlyUntil, usMarket } from "./us";
+import { marketOpenNow } from "../live-logic";
+
+/** Velas horarias de una idea: Binance para las crypto; Yahoo (en euros) para las acciones de EE. UU. */
+const barsAny = (pair: string, since: number) => (isUsPair(pair) ? usBarsSince(pair, since) : barsSince(pair, since));
+const untilAny = (pair: string, t: number) => (isUsPair(pair) ? usHourlyUntil(pair, t) : hourlyUntil(pair, t));
 
 const env = (k: string, d: number) => {
   const n = Number(process.env[k]);
@@ -73,7 +79,12 @@ export async function faroTick(market: Ticker[], rules: Rules, opts: { force?: b
     console.error("[faro] análisis", e);
     return `error: ${e instanceof Error ? e.message.slice(0, 160) : "desconocido"}`;
   });
-  return { scored, ran };
+  // Bolsa de EE. UU.: su propio análisis, solo con el mercado abierto.
+  const ranUs = await maybeRunUs(!!opts.force).catch((e) => {
+    console.error("[faro] análisis EE. UU.", e);
+    return `EE. UU.: error: ${e instanceof Error ? e.message.slice(0, 160) : "desconocido"}`;
+  });
+  return { scored, ran: [ran, ranUs].filter(Boolean).join(" · ") || null };
 }
 
 async function scoreLive(market: Ticker[]) {
@@ -83,8 +94,9 @@ async function scoreLive(market: Ticker[]) {
   let n = 0;
   for (const i of live) {
     try {
-      const livePrice = market.find((t) => t.pair === i.pair)?.price ?? null;
-      const bars = await barsSince(i.pair, i.created_at.getTime());
+      const us = isUsPair(i.pair);
+      const bars = await barsAny(i.pair, i.created_at.getTime());
+      const livePrice = us ? (bars[bars.length - 1]?.c ?? null) : (market.find((t) => t.pair === i.pair)?.price ?? null);
       const s = scoreIdea(
         { price: i.price, invalidation: i.invalidation, target: i.target, createdAt: i.created_at.getTime(), validUntil: i.valid_until.getTime(), best: i.best_pct, worst: i.worst_pct },
         bars,
@@ -189,7 +201,7 @@ export async function backfillFeatures(limit = 10): Promise<number> {
     const t = r.created_at.getTime();
     const base = rules?.get(r.pair)?.base ?? r.pair.replace(/(EUR|USDC)$/, "");
     try {
-      const bars = await hourlyUntil(r.pair, t);
+      const bars = await untilAny(r.pair, t);
       if (bars.length < 6) {
         await saveFeatures(r.id, { backfilled: true, noData: true } as unknown as IdeaFeatures);
         continue;
@@ -313,7 +325,7 @@ export async function enrichFeatures(limit = 10): Promise<number> {
       WHERE features IS NOT NULL AND features->'atrPct' IS NULL AND features->'noData' IS NULL
       ORDER BY created_at DESC LIMIT ${limit}`);
     for (const r of noAtr) {
-      const bars = await hourlyUntil(r.pair, r.created_at.getTime()).catch(() => []);
+      const bars = await untilAny(r.pair, r.created_at.getTime()).catch(() => []);
       const atr = atrPct(bars, r.price);
       await prisma.$executeRaw(Prisma.sql`UPDATE public.trading_faro_ideas
         SET features = features || ${JSON.stringify(atr ? { atrPct: Math.round(atr * 100) / 100 } : { atrPct: 0 })}::jsonb WHERE id = ${r.id}::uuid`);
@@ -325,7 +337,7 @@ export async function enrichFeatures(limit = 10): Promise<number> {
       ORDER BY created_at DESC LIMIT ${limit}`);
     for (const r of toSim) {
       try {
-        const bars = await barsSince(r.pair, r.created_at.getTime());
+        const bars = await barsAny(r.pair, r.created_at.getTime());
         const sim = simulateLevels({ price: r.price, createdAt: r.created_at.getTime(), validUntil: r.valid_until.getTime() }, r.atr, bars, Date.now());
         await prisma.$executeRaw(Prisma.sql`UPDATE public.trading_faro_ideas
           SET features = features || jsonb_build_object('sim', ${JSON.stringify(sim)}::jsonb) WHERE id = ${r.id}::uuid`);
@@ -343,11 +355,11 @@ export async function enrichFeatures(limit = 10): Promise<number> {
 async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
   // Un solo análisis por intervalo aunque haya varias revisiones a la vez.
   const minutes = force ? 0 : RUN_MIN();
-  const claimed = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`INSERT INTO public.trading_faro_runs (status)
-    SELECT 'en_curso' WHERE NOT EXISTS (
+  const claimed = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`INSERT INTO public.trading_faro_runs (status, scope)
+    SELECT 'en_curso', 'crypto' WHERE NOT EXISTS (
       SELECT 1 FROM public.trading_faro_runs
-      WHERE (status = 'en_curso' AND created_at > now() - interval '5 minutes')
-         OR created_at > now() - make_interval(mins => ${minutes}::int))
+      WHERE scope = 'crypto' AND ((status = 'en_curso' AND created_at > now() - interval '5 minutes')
+         OR created_at > now() - make_interval(mins => ${minutes}::int)))
     RETURNING id`);
   const runId = claimed[0]?.id;
   if (!runId) return null;
@@ -479,9 +491,146 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
 }
 
 // ---------------------------------------------------------------------------
+// Bolsa de EE. UU. (16/11/2026): el mismo análisis sobre las grandes americanas, con velas de 1 hora de
+// Yahoo en euros, solo con el mercado abierto. Pasan por el mismo filtro antes de publicarse.
+// ---------------------------------------------------------------------------
+const US_STYLES: KamikazeStyle[] = ["impulso", "rupturas"];
+
+async function maybeRunUs(force: boolean) {
+  if (!force && !marketOpenNow("us")) return null;
+  const minutes = force ? 0 : RUN_MIN();
+  const claimed = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`INSERT INTO public.trading_faro_runs (status, scope)
+    SELECT 'en_curso', 'us' WHERE NOT EXISTS (
+      SELECT 1 FROM public.trading_faro_runs
+      WHERE scope = 'us' AND ((status = 'en_curso' AND created_at > now() - interval '5 minutes')
+         OR created_at > now() - make_interval(mins => ${minutes}::int)))
+    RETURNING id`);
+  const runId = claimed[0]?.id;
+  if (!runId) return null;
+  try {
+    const { tickers, bars, qqq24h } = await usMarket();
+    const pre = new Map<string, Ticker>();
+    for (const st of US_STYLES) for (const t of prefilter(st, tickers, 12)) pre.set(t.pair, t);
+    const detailed: Metrics[] = [];
+    const atrOf = new Map<string, number | null>();
+    for (const t of pre.values()) {
+      const hb = bars.get(t.pair) ?? [];
+      if (hb.length < 8) continue;
+      detailed.push(metricsOf(t, hb));
+      atrOf.set(t.pair, atrPct(hb, t.price));
+    }
+    const tagged = new Map<string, { m: Metrics; styles: KamikazeStyle[] }>();
+    for (const st of US_STYLES)
+      for (const m of rank(st, detailed, 7)) {
+        const e = tagged.get(m.pair) ?? { m, styles: [] };
+        e.styles.push(st);
+        tagged.set(m.pair, e);
+      }
+    const candidates = [...tagged.values()];
+    if (!candidates.length) {
+      await prisma.trading_faro_runs.update({ where: { id: runId }, data: { status: "ok", market_view: "Sin candidatos en EE. UU. ahora mismo.", ideas: 0 } });
+      return "EE. UU.: sin candidatos";
+    }
+    const live = await prisma.trading_faro_ideas.findMany({ where: { status: "viva" }, select: { pair: true, kind: true, target: true, invalidation: true } });
+    const bases = candidates.map((c) => c.m.base);
+    const news = await prisma.news_items.findMany({
+      where: { status: "clasificada", relevant: true, published_at: { gte: new Date(Date.now() - DAY) }, symbols: { hasSome: bases } },
+      orderBy: [{ impact: "desc" }, { published_at: "desc" }],
+      take: 15,
+      select: { title: true, summary: true, symbols: true, sentiment: true, impact: true, published_at: true },
+    });
+    const r = (x: number) => Math.round(x * 100) / 100;
+    const name = new Map((await prisma.market_instruments.findMany({ where: { symbol: { in: bases } }, select: { symbol: true, name: true } })).map((i) => [i.symbol, i.name]));
+    const input = {
+      ahora: new Date().toISOString(),
+      nasdaq100_cambio_sesion: qqq24h === null ? null : r(qqq24h),
+      candidatos: candidates.map(({ m, styles }) => ({
+        par: m.pair,
+        empresa: name.get(m.pair) ?? m.pair,
+        encaja_en: styles,
+        precio: m.price,
+        cambio_1h: r(m.ch1h),
+        cambio_4h: r(m.ch4h),
+        cambio_sesion: r(m.ch24h),
+        max_5d: m.high3d,
+        min_5d: m.low3d,
+        fromHigh: r(m.fromHigh3d),
+        volSurge: r(m.volSurge),
+        volumen_sesion_eur: Math.round(m.volume24h),
+      })),
+      ideas_ya_publicadas: live.map((i) => ({ par: i.pair, tipo: i.kind, invalidacion: i.invalidation, objetivo: i.target })),
+      noticias: news.map((n) => ({ hace_h: Math.round((Date.now() - n.published_at.getTime()) / 3_600_000), valores: n.symbols, resumen: n.summary || n.title, sentimiento: n.sentiment, impacto: n.impact })),
+    };
+    const instructions = [
+      "Eres un analista de acciones de EE. UU. (grandes del Nasdaq y del S&P 500) que publica ideas de compra a corto plazo (de horas a dos o tres sesiones) en un tablón común. Otros agentes deciden si entran, cuánto y dónde salen: tú solo señalas qué hay, por qué y entre qué niveles.",
+      `Tipos que puedes usar: ${ENABLED_KINDS.map((k) => KIND_TEXT[k]).join(", ")}. No propongas otros tipos.`,
+      "Para cada idea: invalidación = nivel real del gráfico por debajo del cual la idea deja de valer (no un % fijo); objetivo = nivel donde es razonable que se frene; valid_hours = cuánto sigue valiendo, contando que la bolsa solo abre 6,5 horas al día (15:30–22:00 en España).",
+      "Ten en cuenta al Nasdaq 100: si cae con fuerza, casi todo cae con él. Publica solo lo que de verdad veas (de 0 a 5 ideas, mejor pocas y buenas). No repitas valores de «ideas_ya_publicadas». Elige SOLO de la lista de candidatos y usa su ticker como «pair».",
+      "Precios y volúmenes en euros (convertidos desde dólares al cambio de ahora). Velas de 1 hora de las últimas ~5 sesiones: fromHigh = distancia al máximo de ese periodo en %, volSurge = volumen de las últimas 4 horas frente a la media (1 = normal).",
+      "Responde en español, claro y breve.",
+    ].join("\n");
+    const ai = await aiJson<{ market_view: string; ideas: AiIdea[] }>({
+      tier: "smart",
+      purpose: "faro",
+      instructions,
+      input: JSON.stringify(input),
+      schemaName: "faro_ideas",
+      schema: SCHEMA as unknown as Record<string, unknown>,
+      maxOutputTokens: 4000,
+      timeoutMs: 60_000,
+    });
+    const { ok, rejected } = checkIdeas(ai.ideas ?? [], { candidates: candidates.map((c) => ({ pair: c.m.pair, price: c.m.price })), livePairs: live.map((i) => i.pair) }, 5);
+    for (const i of ok) {
+      const inst = await prisma.market_instruments.findUnique({ where: { symbol: i.pair }, select: { id: true } });
+      if (!inst) continue;
+      await setLive(inst.id, i.price);
+      const cand = candidates.find((c) => c.m.pair === i.pair);
+      const features = cand
+        ? ideaFeatures(cand.m, cand.styles, i, {
+            now: Date.now(),
+            phase: null,
+            // El filtro mira la referencia del mercado: aquí, el Nasdaq 100 en la sesión.
+            btc24h: qqq24h,
+            news: news.filter((n) => n.symbols.includes(cand.m.base)).length,
+            atrPct: atrOf.get(i.pair) ?? null,
+          })
+        : null;
+      const created = await prisma.trading_faro_ideas.create({
+        data: {
+          run_id: runId,
+          pair: i.pair,
+          symbol: i.pair,
+          kind: i.kind,
+          conviction: i.conviction,
+          price: i.price,
+          invalidation: i.invalidation,
+          target: i.target,
+          valid_until: new Date(Date.now() + i.validHours * 3_600_000),
+          rationale: i.rationale,
+          risks: i.risks,
+          last_price: i.price,
+          best_pct: 0,
+          worst_pct: 0,
+        },
+      });
+      if (features) await saveFeatures(created.id, features);
+    }
+    await prisma.trading_faro_runs.update({
+      where: { id: runId },
+      data: { status: "ok", market_view: ai.market_view, ideas: ok.length, error: rejected.length ? `Descartadas: ${rejected.map((x) => `${x.pair} (${x.reason})`).join("; ").slice(0, 900)}` : null },
+    });
+    return `EE. UU.: ${ok.length} ideas`;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.slice(0, 300) : "error";
+    await prisma.trading_faro_runs.update({ where: { id: runId }, data: { status: "error", error: msg } });
+    throw e;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Para los agentes y la interfaz
 // ---------------------------------------------------------------------------
-export async function boardIdeas(): Promise<(BoardIdea & { symbol: string; rationale: string; runId: string | null; faro2: ReturnType<typeof faro2Verdict> })[]> {
+export async function boardIdeas(): Promise<(BoardIdea & { symbol: string; rationale: string; runId: string | null; faro2: ReturnType<typeof faro2Verdict>; market: "us" | "crypto" })[]> {
   const rows = await prisma.trading_faro_ideas.findMany({ where: { status: "viva", valid_until: { gt: new Date() } }, orderBy: { created_at: "desc" } });
   const features = await loadFeatures(rows.map((r) => r.id));
   // El filtro de FARO decide qué se publica: las descartadas no llegan a los agentes (ni se ven en el
@@ -501,11 +650,13 @@ export async function boardIdeas(): Promise<(BoardIdea & { symbol: string; ratio
     createdAt: i.created_at.getTime(),
     rationale: i.rationale,
     runId: i.run_id,
+    /** Crypto (par de Binance) o acción de EE. UU. (su ticker). */
+    market: (isUsPair(i.pair) ? "us" : "crypto") as "us" | "crypto",
   })).filter((i) => !i.faro2 || i.faro2.pass);
 }
 
 export async function lastMarketView() {
-  const run = await prisma.trading_faro_runs.findFirst({ where: { status: "ok" }, orderBy: { created_at: "desc" } });
+  const run = await prisma.trading_faro_runs.findFirst({ where: { status: "ok", scope: "crypto" }, orderBy: { created_at: "desc" } });
   return run ? { at: run.created_at.toISOString(), marketView: run.market_view } : null;
 }
 
@@ -525,7 +676,7 @@ export async function faroView(workspaceId: string) {
   const [live, past, last, state, features] = await Promise.all([
     prisma.trading_faro_ideas.findMany({ where: { status: "viva" }, orderBy: { created_at: "desc" } }),
     prisma.trading_faro_ideas.findMany({ where: { status: { not: "viva" } }, orderBy: { created_at: "desc" }, take: 600 }),
-    prisma.trading_faro_runs.findFirst({ where: { status: "ok" }, orderBy: { created_at: "desc" } }),
+    prisma.trading_faro_runs.findFirst({ where: { status: "ok", scope: "crypto" }, orderBy: { created_at: "desc" } }),
     accountState(workspaceId),
     loadFeatures(),
   ]);
@@ -605,6 +756,8 @@ export async function faroView(workspaceId: string) {
     resultPct: i.result_pct,
     resolvedAt: i.resolved_at?.toISOString() ?? null,
     participants: byIdea.get(i.id) ?? [],
+    /** Crypto o acción de EE. UU. (las de EE. UU. no se pueden comprar desde la app todavía). */
+    market: (isUsPair(i.pair) ? "us" : "crypto") as "us" | "crypto",
     /** FARO-2 (en pruebas): si la habría dejado pasar y por qué no. null = sin contexto guardado. */
     faro2: faro2Verdict(i.kind, features.get(i.id) ?? null),
   });
@@ -621,8 +774,11 @@ export async function faroView(workspaceId: string) {
     const avg = n ? rows.reduce((s, i) => s + (i.result_pct ?? 0), 0) / n : null;
     return { kind, n, hits, avgPct: avg };
   }).filter((s) => s.n > 0);
+  const lastUs = await prisma.trading_faro_runs.findFirst({ where: { status: "ok", scope: "us" }, orderBy: { created_at: "desc" } });
   return {
     lastRun: last ? { at: last.created_at.toISOString(), marketView: last.market_view } : null,
+    /** Última lectura de la bolsa de EE. UU. (solo con su mercado abierto). */
+    lastRunUs: lastUs ? { at: lastUs.created_at.toISOString(), marketView: lastUs.market_view } : null,
     everyMinutes: RUN_MIN(),
     live: live.filter(published).map(view),
     past: pastShown.map(view),

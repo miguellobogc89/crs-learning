@@ -172,7 +172,7 @@ function FaroIdeas() {
           <AssetIcon symbol={i.symbol} name={i.symbol} size="sm" />
           <span className="min-w-0">
             <b className="block truncate font-semibold text-slate-900">{i.symbol.replace(/-EUR$/, "")}</b>
-            <span className="block text-xs text-slate-400">{ago(i.createdAt)}</span>
+            <span className="block text-xs text-slate-400">{i.market === "us" ? "EE. UU. · " : ""}{ago(i.createdAt)}</span>
           </span>
         </span>
       ),
@@ -230,7 +230,7 @@ function FaroIdeas() {
         const mineIn = i.participants.some((p) => p.who === "tu");
         return (
           <span className="inline-flex items-center gap-2">
-            {i.status === "viva" && (
+            {i.status === "viva" && i.market !== "us" && (
               <button
                 type="button"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
@@ -398,7 +398,7 @@ function FaroIdeas() {
                       >
                         Detalles <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
                       </button>
-                      {idea.status === "viva" && (
+                      {idea.status === "viva" && idea.market !== "us" && (
                         <button
                           type="button"
                           disabled={mineIn}
@@ -434,7 +434,7 @@ function FaroIdeas() {
             }
             subtitle={`${ago(i.createdAt)} · convicción ${i.conviction}/5${i.status === "viva" ? ` · le quedan ${left(i.validUntil)}` : ""}`}
             footer={
-              i.status === "viva" ? (
+              i.status === "viva" && i.market !== "us" ? (
                 <button
                   type="button"
                   disabled={mineIn}
