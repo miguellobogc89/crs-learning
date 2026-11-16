@@ -7,7 +7,7 @@ const L = load("lib/trading/kamikaze/logic.ts");
 const { ALL_KAMIKAZES: KAMIKAZES, KAMIKAZES: ACTIVE, ARCHIVED_KAMIKAZES, kamikazeByKey } = load("lib/trading/kamikaze/roster.ts");
 const DAY = 86_400_000;
 
-test("kamikazes: estilos con metas distintas y 20 € por ronda", () => {
+test("agentes de FARO: estilos, variantes y reglas de dinero", () => {
   const originals = KAMIKAZES.filter((k) => !k.base);
   assert.deepEqual(originals.map((k) => [k.key, k.style, k.multiple, k.days]), [
     ["cohete", "impulso", 10, 7],
@@ -23,7 +23,11 @@ test("kamikazes: estilos con metas distintas y 20 € por ronda", () => {
     assert.equal(params.filter((p) => v[p] !== b[p]).length, 1, `${v.key} cambia una sola cosa`);
   }
   assert.equal(new Set(KAMIKAZES.map((k) => k.key)).size, KAMIKAZES.length);
-  assert.ok(KAMIKAZES.every((k) => k.capital === 20 && k.settings.max_open_positions === 1));
+  // Los que siguen en activo: 1.000 € y tantas posiciones como operaciones a la vez; los archivados, como eran.
+  for (const k of KAMIKAZES) {
+    if (ACTIVE.includes(k)) assert.ok(k.capital === 1000 && k.settings.max_open_positions === (k.slots ?? 1), k.key);
+    else assert.ok(k.capital === 20 && k.settings.max_open_positions === 1, k.key);
+  }
 });
 
 test("kamikazes: ritmo diario necesario", () => {

@@ -12,17 +12,17 @@ import { AGENTS, AGENTS_WORKSPACE, agentByKey, copyKey, type AgentDef } from "./
 import { isKamikaze, kamikazeByKey, KAMIKAZES, type KamikazeDef } from "../kamikaze/roster";
 import { kamikazeView, resetKamikaze, runKamikazeNow } from "../kamikaze/engine";
 import { CHIP_AGENTS, chipByKey, isChip, type ChipDef } from "../chip/roster";
-import { DCA_AGENTS, dcaByKey, isDca, type DcaDef } from "../dca/roster";
-import { dcaTick } from "../dca/engine";
-import { chipSpec, dcaSpec, kamikazeSpec } from "./spec";
+import { chipSpec, kamikazeSpec } from "./spec";
+import { ensureFresh } from "./restart";
+import { btcReferences } from "./references";
 import { chipModeOf, resetChip, runChipNow } from "../chip/engine";
 import { agentVenues } from "./venues";
 
 const WS = AGENTS_WORKSPACE;
 
-type AnyDef = AgentDef | KamikazeDef | ChipDef | DcaDef;
-/** Todos los agentes en activo: los de reglas propias, los que toman ideas de FARO y los de referencia. */
-const CATALOG: AnyDef[] = [...AGENTS, ...CHIP_AGENTS, ...KAMIKAZES, ...DCA_AGENTS];
+type AnyDef = AgentDef | KamikazeDef | ChipDef;
+/** Todos los agentes en activo. Todos toman de la misma carta (ideas de FARO y escáner, más el contexto). */
+const CATALOG: AnyDef[] = [...AGENTS, ...CHIP_AGENTS, ...KAMIKAZES];
 
 /** Ficha estándar (null solo para los antiguos del comité, que ya no están en activo). */
 function specOf(key: string) {
@@ -30,13 +30,13 @@ function specOf(key: string) {
   if (k) return kamikazeSpec(k);
   const c = chipByKey(key);
   if (c) return chipSpec(c);
-  const d = dcaByKey(key);
-  if (d) return dcaSpec(d);
   return null;
 }
 
+/** Los agentes en activo empiezan de cero si cambió su capital (agents/restart); los demás, tal cual. */
 async function ensureAgent(a: AnyDef) {
-  return ensureAccount(WS, a.key, { name: a.name, capital: a.capital, settings: a.settings });
+  const d = { name: a.name, capital: a.capital, settings: a.settings };
+  return isKamikaze(a.key) || isChip(a.key) ? ensureFresh(a.key, d) : ensureAccount(WS, a.key, d);
 }
 
 /** Rentabilidad de un índice desde un día (para comparar). */
@@ -86,10 +86,8 @@ export async function getAgents(workspaceId?: string) {
       ]);
       const last = runs[0] ?? null;
       const since = account.created_at.getTime();
-      // Kamikazes: la curva y la rentabilidad son las de la ronda en curso.
-      const roundStart = kamikaze?.current ? new Date(kamikaze.current.startedAt.slice(0, 10)).getTime() : null;
       return {
-        kind: (kamikaze ? "kamikaze" : isChip(def.key) ? "chip" : isDca(def.key) ? "dca" : "agente") as "kamikaze" | "agente" | "chip" | "dca",
+        kind: (kamikaze ? "kamikaze" : isChip(def.key) ? "chip" : "agente") as "kamikaze" | "agente" | "chip",
         /** Ficha estándar: de dónde saca las ideas, cuáles coge, cuánto pone y cuándo sale. */
         spec: specOf(def.key),
         /** Agentes de dos modos: si están en ataque o en defensa, y por qué. */
@@ -124,7 +122,7 @@ export async function getAgents(workspaceId?: string) {
         summary: state.summary,
         positions: state.positions.filter((p) => p.status === "abierta" || p.status === "pendiente"),
         closed: state.positions.filter((p) => p.status === "cerrada").slice(0, 20),
-        equity: equity.filter((e) => roundStart === null || e.day.getTime() >= roundStart).map((e) => ({ day: dayKey(e.day), equity: e.equity })),
+        equity: equity.map((e) => ({ day: dayKey(e.day), equity: e.equity })),
         lastRun: last
           ? { id: last.id, at: last.created_at.toISOString(), status: last.status, error: last.error, marketView: last.market_view }
           : null,
@@ -133,7 +131,14 @@ export async function getAgents(workspaceId?: string) {
       };
     }),
   );
-  return { agents, moves: movesOf(agents) };
+  // Referencias desde el día en que empezaron los agentes en activo (no son agentes: solo para comparar).
+  const activeSince = Math.min(...accounts.filter((_, k) => isKamikaze(CATALOG[k].key) || isChip(CATALOG[k].key)).map((a) => a.created_at.getTime()));
+  const btcLive = await prisma.market_instruments
+    .findFirst({ where: { symbol: CRYPTO_BENCHMARK }, select: { live_price: true } })
+    .then((i) => i?.live_price ?? null)
+    .catch(() => null);
+  const references = Number.isFinite(activeSince) ? btcReferences(bench(CRYPTO_BENCHMARK), activeSince, btcLive) : [];
+  return { agents, moves: movesOf(agents), references, referencesSince: Number.isFinite(activeSince) ? new Date(activeSince).toISOString() : null };
 }
 
 export type AgentMove = {
@@ -242,11 +247,6 @@ function movesOf(
 export async function runAgent(key: string, userId: string | null) {
   if (isKamikaze(key)) return runKamikazeNow(key);
   if (isChip(key)) return runChipNow(key);
-  if (isDca(key)) {
-    const r = await dcaTick(true);
-    const a = r.find((x) => x.agent === key);
-    return { id: key, auto: (a?.actions ?? []).map((detail) => ({ symbol: key, ok: !detail.startsWith("error"), detail })) };
-  }
   const def = agentByKey(key);
   if (!def) throw new Error("Agente desconocido");
   const account = await ensureAgent(def);
@@ -265,12 +265,6 @@ export function canDirectAgents(workspaceId: string) {
 export async function resetAgent(key: string) {
   if (isKamikaze(key)) return resetKamikaze(key);
   if (isChip(key)) return resetChip(key);
-  if (isDca(key)) {
-    const d = dcaByKey(key)!;
-    await ensureAgent(d);
-    await resetAccount(WS, d.capital, d.key);
-    return;
-  }
   const def = agentByKey(key);
   if (!def) throw new Error("Agente desconocido");
   const account = await ensureAgent(def);

@@ -8,9 +8,10 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { accountState, closePosition, ensureAccount, OPEN_STATUSES, placeOrder, processAccount, resetAccount } from "../accounts";
+import { accountState, closePosition, OPEN_STATUSES, placeOrder, processAccount, resetAccount } from "../accounts";
 import { replicate } from "../agents/copy";
 import { AGENTS_WORKSPACE } from "../agents/roster";
+import { ensureFresh } from "../agents/restart";
 import { CHIP, contextAt, explainDetectorB, type Coin } from "../lab/strategies";
 import { CRYPTO_MARKET, CRYPTO_BENCHMARK } from "../market-data";
 import { dayDate, dayKey, loadSeries } from "../sync";
@@ -44,8 +45,9 @@ type ProposalRow = {
 
 export type ChipRunSummary = { agent: string; skipped?: string; mode?: "ataque" | "defensa"; actions: string[] };
 
+/** Cuenta del agente; si cambió su capital, lo anterior se archiva y empieza de cero (agents/restart). */
 async function ensureChip(def: ChipDef) {
-  return ensureAccount(WS, def.key, { name: def.name, capital: def.capital, settings: def.settings });
+  return ensureFresh(def.key, { name: def.name, capital: def.capital, settings: def.settings });
 }
 
 /** Velas diarias cerradas de las crypto (sin la de hoy, que aún se está formando). */

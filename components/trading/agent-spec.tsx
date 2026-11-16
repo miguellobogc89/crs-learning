@@ -1,34 +1,21 @@
 "use client";
-// Ficha estándar de un agente en la interfaz: dos pastillas (estilo y de dónde saca las compras) y la ficha
-// completa con las mismas cinco líneas para todos.
-import { BookOpen, Flag, LogOut, Radar, Wallet } from "lucide-react";
+// Ficha estándar de un agente en la interfaz: una pastilla con su estilo y la ficha completa con las
+// mismas cuatro líneas para todos (qué ideas coge, cuándo, cuánto pone y cuándo sale).
+import { BookOpen, Clock, LogOut, Wallet } from "lucide-react";
 import type { AgentSpec } from "@/lib/trading/agents/spec";
-import { FAMILY_LABEL } from "@/lib/trading/agents/spec";
-
-const FAMILY_CLS: Record<AgentSpec["family"], string> = {
-  faro: "bg-blue-50 text-blue-700",
-  propio: "bg-amber-50 text-amber-800",
-  referencia: "bg-slate-100 text-slate-600",
-};
 
 export function SpecPills({ spec, className = "" }: { spec: AgentSpec | null; className?: string }) {
   if (!spec) return null;
-  return (
-    <span className={`inline-flex flex-wrap items-center gap-1.5 ${className}`}>
-      <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">{spec.style}</span>
-      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${FAMILY_CLS[spec.family]}`}>{FAMILY_LABEL[spec.family]}</span>
-    </span>
-  );
+  return <span className={`inline-flex rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white ${className}`}>{spec.style}</span>;
 }
 
 export function SpecSheet({ spec }: { spec: AgentSpec | null }) {
   if (!spec) return <p className="px-4 py-6 text-sm text-slate-500">Este agente no tiene ficha.</p>;
-  const rows: [typeof Radar, string, string][] = [
-    [Radar, "De dónde saca las compras", spec.source],
-    [BookOpen, "Qué coge", spec.takes],
+  const rows: [typeof BookOpen, string, string][] = [
+    [BookOpen, "Qué ideas coge", spec.ideas],
+    [Clock, "Cuándo", spec.when],
     [Wallet, "Cuánto pone", spec.size],
     [LogOut, "Cuándo sale", spec.exit],
-    ...(spec.goal ? ([[Flag, "Su meta", spec.goal]] as [typeof Radar, string, string][]) : []),
   ];
   return (
     <div className="px-4 py-4">
@@ -45,8 +32,8 @@ export function SpecSheet({ spec }: { spec: AgentSpec | null }) {
         ))}
       </dl>
       <p className="mt-2 text-xs leading-relaxed text-slate-400">
-        Ningún agente decide con IA: la IA (FARO) solo publica ideas, y cada agente aplica siempre las mismas reglas. Así cada operación se puede explicar y
-        comparar.
+        Todos los agentes toman de la misma carta: las ideas que publica FARO, el escáner de rupturas de 20 días y el contexto del mercado (la fase). Ninguno decide con
+        IA: cada uno aplica siempre sus reglas, así que cada operación se puede explicar y comparar. Todos empezaron con 1.000 €.
       </p>
     </div>
   );

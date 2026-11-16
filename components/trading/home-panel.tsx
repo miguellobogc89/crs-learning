@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Bot, User } from "lucide-react";
+import { Bitcoin, Bot, User } from "lucide-react";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import type { TradingStatus } from "./navigation";
 import type { getAgents } from "@/lib/trading/agents/service";
@@ -161,6 +161,7 @@ export function HomePanel() {
             pending,
             closed: s.closed,
             startedAt: account.openedAt,
+            ref: false,
           },
         ]
       : []),
@@ -176,28 +177,47 @@ export function HomePanel() {
       pending: a.positions.filter((p) => p.status === "pendiente").length,
       closed: a.summary.stats.closed,
       startedAt: a.startedAt as string | null,
+      ref: false,
     })),
-  ]
-    .sort((x, y) => y.returnPct - x.returnPct)
-    .map((r, i) => ({ ...r, rank: i + 1 }));
+    // Referencias (no son agentes): lo que habrían hecho 1.000 € con Bitcoin desde el mismo día.
+    ...agents.references
+      .filter((r) => r.returnPct !== null)
+      .map((r) => ({
+        key: `ref:${r.key}`,
+        name: r.name,
+        profile: r.description,
+        color: "slate",
+        equity: 1000 * (1 + (r.returnPct ?? 0) / 100),
+        returnPct: r.returnPct ?? 0,
+        investedPct: 100,
+        open: 0,
+        pending: 0,
+        closed: 0,
+        startedAt: agents.referencesSince,
+        ref: true,
+      })),
+  ].sort((x, y) => y.returnPct - x.returnPct);
 
   type Row = (typeof rows)[number];
   const columns: Col<Row>[] = [
     {
-      key: "rank",
-      label: "#",
-      width: 5,
-      sort: (r) => r.rank,
-      cell: (r) => <span className="mx-auto flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-xs font-semibold text-slate-600">{r.rank}</span>,
-    },
-    {
       key: "name",
       label: "Operador",
-      width: 21,
+      width: 26,
       align: "left",
       sort: (r) => r.name,
       cell: (r) =>
-        r.key === "tu" ? (
+        r.ref ? (
+          <span className="flex min-w-0 items-center gap-2" title={r.profile}>
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-400">
+              <Bitcoin className="h-4 w-4" />
+            </span>
+            <span className="min-w-0">
+              <b className="block truncate font-medium text-slate-600">{r.name}</b>
+              <span className="text-[11px] text-slate-400">Referencia · con 1.000 €</span>
+            </span>
+          </span>
+        ) : r.key === "tu" ? (
           <span className="flex items-center gap-2">
             <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR.slate} text-white`}>
               <User className="h-4 w-4" />
@@ -219,13 +239,13 @@ export function HomePanel() {
     { key: "since", label: "Inicio", width: 12, sort: (r) => (r.startedAt ? new Date(r.startedAt).getTime() : null), cell: (r) => <span className="text-slate-600">{sinceText(r.startedAt)}</span> },
     { key: "equity", label: "Patrimonio", width: 13, sort: (r) => r.equity, cell: (r) => <Money v={r.equity} digits={2} className="font-semibold text-slate-900" /> },
     { key: "ret", label: "Rentabilidad", width: 12, sort: (r) => r.returnPct, cell: (r) => <span className="inline-flex justify-center"><ReturnPill value={r.returnPct} /></span> },
-    { key: "ops", label: "Operaciones", width: 10, sort: (r) => r.open + r.closed, cell: (r) => <span className="tabular-nums text-slate-700">{r.open + r.closed}</span> },
+    { key: "ops", label: "Operaciones", width: 10, sort: (r) => r.open + r.closed, cell: (r) => (r.ref ? <span className="text-slate-300">—</span> : <span className="tabular-nums text-slate-700">{r.open + r.closed}</span>) },
     {
       key: "inv",
       label: "Invertido",
       width: 15,
       sort: (r) => r.investedPct,
-      cell: (r) => (
+      cell: (r) => r.ref ? <span className="text-slate-300">—</span> : (
         <div className="flex items-center justify-center gap-2">
           <span className="shrink-0 tabular-nums text-slate-700">{pct(r.investedPct, 0, false)}</span>
           <span className="h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-slate-100">
@@ -240,7 +260,9 @@ export function HomePanel() {
       width: 12,
       sort: (r) => r.open + r.pending,
       cell: (r) =>
-        r.pending > 0 ? (
+        r.ref ? (
+          <span className="text-slate-300">—</span>
+        ) : r.pending > 0 ? (
           <span className="rounded-lg bg-orange-50 px-2.5 py-1 text-xs font-semibold tabular-nums text-orange-700">
             {r.open} + {r.pending} pend.
           </span>
@@ -260,11 +282,11 @@ export function HomePanel() {
         columns={columns}
         rows={rows}
         rowKey={(r) => r.key}
-        onRowClick={(r) => router.push(r.key === "tu" ? "/trading/cartera" : `/trading/agentes/${r.key}?from=inicio`)}
+        onRowClick={(r) => (r.ref ? undefined : router.push(r.key === "tu" ? "/trading/cartera" : `/trading/agentes/${r.key}?from=inicio`))}
         paginate
         label="operadores"
         mobileRow={{
-          sub: (r) => `#${r.rank} · ${r.open + r.closed} operaciones · ${pct(r.investedPct, 0, false)} invertido${r.pending ? ` · ${r.pending} pend.` : ""}`,
+          sub: (r) => (r.ref ? "Referencia · con 1.000 €" : `${r.open + r.closed} operaciones · ${pct(r.investedPct, 0, false)} invertido${r.pending ? ` · ${r.pending} pend.` : ""}`),
           right: (r) => (
             <span className="flex flex-col items-end gap-1">
               <Money v={r.equity} digits={2} className="font-semibold text-slate-900" />

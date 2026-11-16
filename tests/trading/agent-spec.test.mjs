@@ -3,17 +3,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { load } from "./helpers.mjs";
 
-const { kamikazeSpec, chipSpec, dcaSpec } = load("lib/trading/agents/spec.ts");
+const { kamikazeSpec, chipSpec } = load("lib/trading/agents/spec.ts");
 const { KAMIKAZES, kamikazeByKey } = load("lib/trading/kamikaze/roster.ts");
 const { CHIP_AGENTS } = load("lib/trading/chip/roster.ts");
-const { DCA_AGENTS, dcaDue, weekOf } = load("lib/trading/dca/roster.ts");
 const { chooseIdea } = load("lib/trading/faro/logic.ts");
 
-test("ficha: todos los agentes en activo tienen las mismas cinco líneas y ninguno decide con IA", () => {
-  const specs = [...KAMIKAZES.map(kamikazeSpec), ...CHIP_AGENTS.map(chipSpec), ...DCA_AGENTS.map(dcaSpec)];
-  assert.deepEqual(specs.map((s) => s.style), ["Impulso", "Rupturas", "Selectivo", "Fase", "DCA"]);
-  assert.deepEqual(specs.map((s) => s.family), ["faro", "faro", "faro", "propio", "referencia"]);
-  for (const s of specs) for (const k of ["source", "takes", "size", "exit"]) assert.ok(s[k].length > 10, `${s.style}: ${k}`);
+test("ficha: todos los agentes en activo tienen las mismas cuatro líneas, 1.000 € y ninguno decide con IA", () => {
+  const specs = [...KAMIKAZES.map(kamikazeSpec), ...CHIP_AGENTS.map(chipSpec)];
+  assert.deepEqual(specs.map((s) => s.style), ["Impulso", "Rupturas", "Selectivo", "Fase"]);
+  for (const s of specs) for (const k of ["ideas", "when", "size", "exit"]) assert.ok(s[k].length > 10, `${s.style}: ${k}`);
+  assert.ok([...KAMIKAZES, ...CHIP_AGENTS].every((a) => a.capital === 1000));
+  assert.deepEqual(KAMIKAZES.map((k) => k.name), ["COHETE", "MECHA", "VÉRTIGO"]);
 });
 
 test("VÉRTIGO: sin número, sin IA y solo ideas de convicción 4 o más", () => {
@@ -27,14 +27,14 @@ test("VÉRTIGO: sin número, sin IA y solo ideas de convicción 4 o más", () =>
   assert.match(none.reason, /convicción alta/);
 });
 
-test("DCA: una compra por semana; la primera semana enseguida, después desde el lunes", () => {
-  const monday = Date.parse("2026-11-16T10:00:00Z");
-  const sunday = Date.parse("2026-11-22T10:00:00Z");
-  assert.equal(weekOf(monday), "2026-11-16");
-  assert.equal(weekOf(sunday), "2026-11-16");
-  const base = { weekday: 1, cash: 1000, amount: 50 };
-  assert.equal(dcaDue({ ...base, now: Date.parse("2026-11-18T10:00:00Z"), boughtWeeks: new Set(), firstWeek: null }), "2026-11-16", "empieza un miércoles: compra ya");
-  assert.equal(dcaDue({ ...base, now: sunday, boughtWeeks: new Set(["2026-11-16"]), firstWeek: "2026-11-16" }), null, "ya compró esa semana");
-  assert.equal(dcaDue({ ...base, now: Date.parse("2026-11-23T08:00:00Z"), boughtWeeks: new Set(["2026-11-16"]), firstWeek: "2026-11-16" }), "2026-11-23");
-  assert.equal(dcaDue({ ...base, cash: 20, now: Date.parse("2026-11-23T08:00:00Z"), boughtWeeks: new Set(["2026-11-16"]), firstWeek: "2026-11-16" }), null, "sin dinero para una compra");
+
+const { btcReferences } = load("lib/trading/agents/references.ts");
+test("referencias: Bitcoin guardado y Bitcoin cada día desde que empezaron los agentes", () => {
+  const D = 86_400_000;
+  const candles = [100, 50, 100].map((c, i) => ({ t: i * D, c }));
+  const [hold, dca] = btcReferences(candles, 0);
+  assert.equal(hold.returnPct, 0, "de 100 a 100");
+  // Comprar 1 € a 100, 50 y 100 → 0,01 + 0,02 + 0,01 = 0,04 BTC × 100 = 4 € por 3 € invertidos → +33,3 %.
+  assert.ok(Math.abs(dca.returnPct - 33.333) < 0.01);
+  assert.equal(btcReferences(candles, 5 * D)[0].returnPct, null, "sin días desde el inicio, sin dato");
 });

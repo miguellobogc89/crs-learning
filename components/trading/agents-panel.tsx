@@ -6,15 +6,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Copy, CopyPlus, LayoutGrid, List, Loader2, MoreHorizontal, Pause, Play, Plus, RotateCcw, Search, Trash2, Wallet } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
-import { api, dayFmt, errorText, eur, eur0, field, flat, ghost, int, pct, primary, th, tone } from "./format";
+import { api, errorText, eur, eur0, field, flat, ghost, int, pct, primary, tone } from "./format";
 import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
 import { EquityCurve, withLivePoint } from "./equity-chart";
-import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill, Rich } from "./ui";
+import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { DataTable, Money, useIsMobile } from "./table";
 import { MirrorModal } from "./mirror-modal";
 import { SpecPills } from "./agent-spec";
-import { AgentVenuePills } from "./agent-venues";
 
 export type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean; canCopy: boolean };
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
@@ -33,8 +32,6 @@ export const when = (iso: string | null | undefined) =>
     ? new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(iso))
     : "Nunca";
 
-const PROFILES = ["todos", "faro", "propio", "referencia"] as const;
-const PROFILE_LABEL: Record<(typeof PROFILES)[number], string> = { todos: "Todos", faro: "Ideas de FARO", propio: "Reglas propias", referencia: "Referencia" };
 type SortKey = "rentabilidad" | "patrimonio" | "antiguedad" | "nombre";
 const SORTS: Record<SortKey, { label: string; fn: (a: Agent, b: Agent) => number }> = {
   rentabilidad: { label: "Rentabilidad", fn: (a, b) => b.summary.returnPct - a.summary.returnPct },
@@ -60,7 +57,6 @@ export function AgentsPanel() {
     if (legacy) router.replace(`/trading/agentes/${legacy}`);
   }, [legacy, router]);
   const [query, setQuery] = useState("");
-  const [profile, setProfile] = useState<(typeof PROFILES)[number]>("todos");
   const [sort, setSort] = useState<SortKey>("rentabilidad");
   const [layoutPick, setLayout] = useState<"cards" | "list">("cards");
   // En móvil, siempre tarjetas (la lista es una tabla ancha pensada para el ordenador).
@@ -83,10 +79,9 @@ export function AgentsPanel() {
     if (!data) return [];
     const q = query.trim().toLowerCase();
     return data.agents
-      .filter((a) => profile === "todos" || a.spec?.family === profile)
       .filter((a) => !q || [a.name, a.spec?.style ?? "", a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
       .sort(SORTS[sort].fn);
-  }, [data, profile, query, sort]);
+  }, [data, query, sort]);
 
   // Animación FLIP: las tarjetas que permanecen se deslizan hacia su nueva posición.
   // Sin dependencias adicionales y respetando la preferencia de movimiento reducido.
@@ -154,7 +149,6 @@ export function AgentsPanel() {
 
   if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard />;
 
-  const rank = new Map([...data.agents].sort((x, y) => y.summary.returnPct - x.summary.returnPct).map((a, k) => [a.key, k + 1]));
   const openDetail = (key: string) => router.push(`/trading/agentes/${key}`);
 
   return (
@@ -167,18 +161,6 @@ export function AgentsPanel() {
         <div className="relative w-full min-w-0 sm:w-auto sm:min-w-[220px] sm:max-w-xs sm:flex-1">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <input className={`${field} w-full pl-9`} placeholder="Buscar agente o estilo" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Buscar agentes" />
-        </div>
-        <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 [scrollbar-width:none] max-md:w-full">
-          {PROFILES.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setProfile(p)}
-              className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium ${profile === p ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
-            >
-              {PROFILE_LABEL[p]}
-            </button>
-          ))}
         </div>
         {layout === "cards" && (
         <label className="flex items-center gap-2 text-sm text-slate-500 max-md:w-full">
@@ -235,7 +217,6 @@ export function AgentsPanel() {
                 else cardNodes.current.delete(a.key);
               }}
               a={a}
-              rank={rank.get(a.key) ?? 0}
               canManage={data.canManage}
               canCopy={data.canCopy}
               busy={busy === a.key}
@@ -272,7 +253,6 @@ export function AgentsPanel() {
                       <SpecPills spec={a.spec} />
                     </span>
                     <span className="block truncate text-xs text-slate-500">{a.tagline}</span>
-                    <AgentVenuePills v={a.venues} className="mt-1" />
                   </span>
                 </span>
               ),
@@ -306,7 +286,7 @@ export function AgentsPanel() {
       )}
 
       {copyFor && <CopyModal agent={copyFor} onClose={() => setCopyFor(null)} />}
-      {mirrorFor && <MirrorModal agent={mirrorFor.key} name={mirrorFor.name} onClose={() => setMirrorFor(null)} />}
+      {mirrorFor && <MirrorModal agent={mirrorFor.key} name={mirrorFor.name} venues={mirrorFor.venues} onClose={() => setMirrorFor(null)} />}
       {creating && <CreateAgentModal onClose={() => setCreating(false)} />}
     </div>
   );
@@ -457,7 +437,7 @@ export function agentMenu(
 ): MenuItem[] {
   const items: MenuItem[] = [];
   if (o.onDetail) items.push({ label: "Ver su página", icon: ArrowRight, onClick: o.onDetail });
-  if (!a.kamikaze && a.kind !== "dca")
+  if (!a.kamikaze)
     items.push({ label: a.copyWeightPct !== null ? "Cambiar la copia" : "Copiar", icon: Copy, onClick: o.canCopy ? o.onCopy : undefined, disabledReason: o.canCopy ? undefined : "Solo el propietario o un administrador" });
   items.push({ label: a.mirror ? "Copia con dinero real…" : "Copiar con dinero real", icon: Wallet, onClick: o.canCopy ? o.onMirror : undefined, disabledReason: o.canCopy ? undefined : "Solo el propietario o un administrador" });
   items.push({ label: "Pausar", icon: Pause, soon: true });
@@ -472,7 +452,6 @@ export function agentMenu(
 
 function AgentCard({
   a,
-  rank,
   cardRef,
   canManage,
   canCopy,
@@ -484,7 +463,6 @@ function AgentCard({
   onReset,
 }: {
   a: Agent;
-  rank: number;
   cardRef: (node: HTMLElement | null) => void;
   canManage: boolean;
   canCopy: boolean;
@@ -497,7 +475,7 @@ function AgentCard({
 }) {
   const open = a.positions.filter((p) => p.status === "abierta").length;
   const pending = a.positions.filter((p) => p.status === "pendiente").length;
-  const k = a.kamikaze;
+  const note = a.kamikaze?.note ?? null;
   const chartPoints = withLivePoint(a.equity, a.summary.equity);
   return (
     <article
@@ -515,12 +493,8 @@ function AgentCard({
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[15px] font-semibold text-slate-900 group-hover:underline">{a.name}</span>
               <SpecPills spec={a.spec} />
-              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500" title="Puesto por rentabilidad">
-                #{rank}
-              </span>
             </div>
             <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500">{a.tagline}</p>
-            <AgentVenuePills v={a.venues} className="mt-2" />
           </div>
         </div>
         <div className="-mr-2 -mt-1 shrink-0">
@@ -549,9 +523,9 @@ function AgentCard({
           </div>
         )}
       </div>
-      {(k || a.copyWeightPct !== null || a.mirror) && (
+      {(note || a.copyWeightPct !== null || a.mirror) && (
         <div className="mx-5 mb-3 space-y-2">
-          {k && <RoundProgress k={k} equity={a.summary.equity} />}
+          {note && <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">{note}</p>}
           <CopyBadges a={a} />
         </div>
       )}
@@ -580,7 +554,7 @@ function CreateAgentModal({ onClose }: { onClose: () => void }) {
       open
       onClose={onClose}
       title="Crear agente"
-      subtitle="Tu propio gestor de IA, con tu carácter y tus reglas"
+      subtitle="Combina la carta (ideas y contexto del mercado) con tus propias reglas"
       footer={
         <>
           <span className="mr-auto text-xs text-slate-500">Muy pronto: estamos preparando los agentes de usuarios.</span>
@@ -799,95 +773,3 @@ export function CopyModal({ agent: a, onClose }: { agent: Agent; onClose: () => 
   );
 }
 
-type Kamikaze = NonNullable<Agent["kamikaze"]>;
-const ROUND_END: Record<string, { label: string; color: string }> = {
-  en_curso: { label: "En curso", color: "blue" },
-  meta: { label: "Meta", color: "emerald" },
-  plazo: { label: "Fin de plazo", color: "slate" },
-  arruinado: { label: "Sin capital", color: "rose" },
-};
-
-/** Avance hacia el objetivo de la ronda, sin fecha límite. */
-function RoundProgress({ k, equity }: { k: Kamikaze; equity: number }) {
-  const r = k.current;
-  if (!r) return <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">La primera ronda empieza en la próxima revisión.</p>;
-  const progress = equity > 0 ? Math.max(0, Math.min(1, Math.log(equity / r.startCapital) / Math.log(r.goal / r.startCapital))) : 0;
-  return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
-      <div className="flex items-baseline justify-between gap-2">
-        <span><b className="font-semibold text-slate-900">Ronda {r.number}</b> · {eur0(equity)} de {eur0(r.goal)}</span>
-        <span>Sin plazo</span>
-      </div>
-      <div className="relative mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200" title="Camino a la meta (escala de multiplicador)">
-        <span className="absolute inset-y-0 left-0 rounded-full bg-rose-500" style={{ width: `${progress * 100}%` }} />
-      </div>
-      <div className="mt-1.5 flex justify-between gap-2">
-        <span>{equity >= r.goal ? "¡Meta alcanzada!" : "Objetivo sin fecha límite"}</span>
-        <span>{k.stats.rounds} rondas · {k.stats.goals} metas</span>
-      </div>
-      {r.note && (
-        <p className="mt-1.5 border-t border-slate-200/70 pt-1.5 text-slate-500" title={r.noteAt ? `Revisado ${new Date(r.noteAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}` : undefined}>
-          {r.note}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/** Ficha de un kamikaze: la ronda en curso y el historial de rondas. */
-export function Rounds({ k, equity }: { k: Kamikaze; equity: number }) {
-  return (
-    <div className="border-b border-slate-100 px-5 py-4">
-      <h3 className="text-[15px] font-semibold text-slate-900">Rondas</h3>
-      <div className="mt-2 max-w-md">
-        <RoundProgress k={k} equity={equity} />
-      </div>
-      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-        <span>
-          <b className="font-semibold text-slate-900">{k.stats.rounds}</b> <span className="text-slate-500">terminadas</span>
-        </span>
-        <span>
-          <b className="font-semibold text-emerald-700">{k.stats.goals}</b> <span className="text-slate-500">metas</span>
-        </span>
-        <span>
-          <b className="font-semibold text-rose-700">{k.stats.busted}</b> <span className="text-slate-500">sin capital</span>
-        </span>
-        <span>
-          <b className={`font-semibold ${tone(k.stats.net)}`}>{eur0(k.stats.net)}</b> <span className="text-slate-500">neto acumulado</span>
-        </span>
-      </div>
-      {k.history.length > 0 && (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
-            <thead>
-              <tr>
-                <th className={th}>Ronda</th>
-                <th className={th}>Resultado</th>
-                <th className={`${th} text-right`}>Empezó con</th>
-                <th className={`${th} text-right`}>Acabó con</th>
-                <th className={`${th} text-right`}>Máximo</th>
-                <th className={`${th} text-right`}>Operaciones</th>
-                <th className={th}>Fin</th>
-              </tr>
-            </thead>
-            <tbody>
-              {k.history.map((r) => (
-                <tr key={r.number} className="border-t border-slate-100">
-                  <td className="px-3 py-2 font-medium text-slate-900">{r.number}</td>
-                  <td className="px-3 py-2">
-                    <Pill color={ROUND_END[r.status]?.color}>{ROUND_END[r.status]?.label ?? r.status}</Pill>
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{eur0(r.startCapital)}</td>
-                  <td className={`px-3 py-2 text-right font-medium tabular-nums ${tone((r.endEquity ?? 0) - r.startCapital)}`}>{eur(r.endEquity, 2)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">{eur(r.bestEquity, 2)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.trades}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.endedAt ? dayFmt(r.endedAt) : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}

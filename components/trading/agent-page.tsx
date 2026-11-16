@@ -1,6 +1,6 @@
 "use client";
 // Página de un agente: su gráfica arriba, sus datos y, en pestañas, lo que tiene abierto, su historial,
-// sus decisiones y (kamikazes) sus rondas. Para cualquier público: todo explicado sin jerga.
+// sus decisiones y cómo opera (su ficha). Para cualquier público: todo explicado sin jerga.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, Info, Wallet } from "lucide-react";
 import { api, dayFmt, errorText, eur, eur0, flat, ghost, int, pct, primary, tone } from "./format";
@@ -11,10 +11,9 @@ import { SpecPills, SpecSheet } from "./agent-spec";
 import { AgentAvatar, card, ErrorNote, LoadingCard, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { MirrorModal } from "./mirror-modal";
-import { AgentVenuePills } from "./agent-venues";
-import { agentMenu, ChipMode, CopyBadges, CopyModal, Creator, Decision, DotsMenu, Rounds, runningFor, when, type Agent, type Data } from "./agents-panel";
+import { agentMenu, ChipMode, CopyBadges, CopyModal, Creator, Decision, DotsMenu, runningFor, when, type Agent, type Data } from "./agents-panel";
 
-type Tab = "abiertas" | "historial" | "decisiones" | "rondas" | "ficha";
+type Tab = "abiertas" | "historial" | "decisiones" | "ficha";
 
 /** Mayor caída desde un máximo, en % (sobre la curva de patrimonio). */
 function maxDrawdown(points: { equity: number }[]) {
@@ -56,11 +55,10 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
   if (!a) return <ErrorNote>Este agente no existe o ya no está disponible.</ErrorNote>;
 
   const s = a.summary;
-  const rank = [...data.agents].sort((x, y) => y.summary.returnPct - x.summary.returnPct).findIndex((x) => x.key === a.key) + 1;
   const open = a.positions.filter((p) => p.status === "abierta").length;
   const pending = a.positions.filter((p) => p.status === "pendiente").length;
   const dd = maxDrawdown(points);
-  const hasInsights = !!(a.chip || a.lastRun?.marketView || a.kamikaze?.current?.note || a.lastRun?.status === "error");
+  const hasInsights = !!(a.chip || a.lastRun?.marketView || a.kamikaze?.note || a.lastRun?.status === "error");
 
   const meet = async () => {
     setBusy(true);
@@ -87,7 +85,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
     { key: "ficha", label: "Cómo opera" },
     { key: "abiertas", label: "Abiertas", count: a.positions.length },
     { key: "historial", label: "Historial", count: a.closed.length },
-    ...(a.kamikaze ? [{ key: "rondas" as const, label: "Rondas", count: a.kamikaze.stats.rounds }] : [{ key: "decisiones" as const, label: "Decisiones", count: a.proposals.length }]),
+    { key: "decisiones", label: "Decisiones", count: a.proposals.length },
   ];
   const lastRunId = a.lastRun?.id;
   const pendingIds = new Set(a.positions.filter((p) => p.status === "pendiente").map((p) => p.id));
@@ -106,9 +104,6 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-bold tracking-tight text-slate-900">{a.name}</h2>
                   <SpecPills spec={a.spec} />
-                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
-                    #{rank} de {data.agents.length}
-                  </span>
                   {hasInsights && (
                     <TooltipProvider delayDuration={150}>
                       <Tooltip>
@@ -149,10 +144,10 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                                 </p>
                               </div>
                             )}
-                            {(a.lastRun?.marketView || a.kamikaze?.current?.note) && (
+                            {(a.lastRun?.marketView || a.kamikaze?.note) && (
                               <div className={a.chip ? "mt-4 border-t border-slate-100 pt-4" : ""}>
                                 <h3 className="mb-2 font-semibold text-slate-900">Cómo ve el mercado</h3>
-                                <Rich text={a.lastRun?.marketView ?? a.kamikaze?.current?.note ?? ""} />
+                                <Rich text={a.lastRun?.marketView ?? a.kamikaze?.note ?? ""} />
                               </div>
                             )}
                             {a.lastRun?.status === "error" && (
@@ -167,7 +162,6 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                   )}
                 </div>
                 <p className="mt-1 max-w-xl text-sm text-slate-600">{a.tagline}</p>
-                <AgentVenuePills v={a.venues} className="mt-2" />
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   <Creator mine={a.mine} /> · {runningFor(a.startedAt)}
                   {a.lastRun && <> · última decisión {when(a.lastRun.at)}</>}
@@ -175,7 +169,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {data.canCopy && !a.kamikaze && a.kind !== "dca" && (
+              {data.canCopy && !a.kamikaze && (
                 <button type="button" className={primary} onClick={() => setCopying(true)}>
                   <Copy className="h-4 w-4" /> {a.copyWeightPct !== null ? "Cambiar copia" : "Copiar"}
                 </button>
@@ -205,6 +199,19 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
             <ChipMode a={a} big />
             <span className="pb-1 text-sm text-slate-500">desde {eur0(s.initialCapital)}</span>
           </div>
+          {data.references.some((r) => r.returnPct !== null) && (
+            <p className="mt-1 shrink-0 text-xs text-slate-500">
+              En el mismo tiempo:{" "}
+              {data.references
+                .filter((r) => r.returnPct !== null)
+                .map((r, i) => (
+                  <span key={r.key} title={r.description}>
+                    {i > 0 && " · "}
+                    {r.name.toLowerCase()} <b className={`font-semibold tabular-nums ${tone(r.returnPct)}`}>{pct(r.returnPct!, 1)}</b>
+                  </span>
+                ))}
+            </p>
+          )}
           {(a.copyWeightPct !== null || a.mirror) && (
             <div className="mt-2 shrink-0">
               <CopyBadges a={a} />
@@ -335,13 +342,12 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
               </ul>
             ))}
 
-          {tab === "rondas" && a.kamikaze && <Rounds k={a.kamikaze} equity={s.equity} />}
           {tab === "ficha" && <SpecSheet spec={a.spec} />}
         </div>
       </section>
 
       {copying && <CopyModal agent={a as Agent} onClose={() => setCopying(false)} />}
-      {mirroring && <MirrorModal agent={a.key} name={a.name} onClose={() => setMirroring(false)} />}
+      {mirroring && <MirrorModal agent={a.key} name={a.name} venues={a.venues} onClose={() => setMirroring(false)} />}
     </div>
   );
 }

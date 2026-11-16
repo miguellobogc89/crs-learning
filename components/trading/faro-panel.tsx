@@ -180,14 +180,6 @@ function FaroIdeas() {
     { key: "kind", label: "Tipo", width: 7, sort: (i) => KIND[i.kind]?.label ?? i.kind, cell: (i) => (
         <span className="inline-flex flex-wrap items-center gap-1">
           <Pill color={(KIND[i.kind] ?? { color: "slate" }).color}>{KIND[i.kind]?.label ?? i.kind}</Pill>
-          {i.faro2 && (
-            <span
-              title={i.faro2.pass ? "FARO-2 (en pruebas) la habría publicado" : `FARO-2 (en pruebas) la habría descartado: ${i.faro2.reasons.join("; ")}`}
-              className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${i.faro2.pass ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400 line-through"}`}
-            >
-              F2
-            </span>
-          )}
         </span>
       ) },
     { key: "conv", label: "Convicción", width: 6, sort: (i) => i.conviction, cell: (i) => <span className="tabular-nums text-slate-700">{i.conviction}/5</span> },
@@ -479,11 +471,6 @@ function FaroIdeas() {
                 <span className="text-slate-600">Resultado por 100 €</span>
                 <b className={`text-base tabular-nums ${tone(i.resultPct)}`}>{i.resultPct === null ? "—" : `${i.resultPct > 0 ? "+" : ""}${eur(i.resultPct, 2)}`}</b>
               </div>
-              {i.faro2 && (
-                <p className={`rounded-xl px-4 py-3 text-sm ${i.faro2.pass ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
-                  {i.faro2.pass ? "FARO-2 (en pruebas) la habría publicado." : `FARO-2 la descarta: ${i.faro2.reasons.join("; ")}.`}
-                </p>
-              )}
               {detail(i)}
             </div>
           </Modal>
@@ -676,9 +663,6 @@ function MobileIdeas({
                   <Pill color={(KIND[i.kind] ?? { color: "slate" }).color} className="!px-2 !text-[11px]">
                     {KIND[i.kind]?.label ?? i.kind}
                   </Pill>
-                  {i.faro2 && (
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${i.faro2.pass ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400 line-through"}`}>F2</span>
-                  )}
                 </span>
                 <span className="block truncate text-xs text-slate-500">
                   {STATUS[i.status].label}

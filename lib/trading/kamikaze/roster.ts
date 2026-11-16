@@ -1,7 +1,8 @@
 // lib/trading/kamikaze/roster.ts
-// Agentes kamikaze: poco dinero, todo a una carta y una meta muy ambiciosa sin plazo fijo. Es una
-// lotería con método, no una estrategia de inversión. Cada uno caza de una forma distinta para ver
-// qué funciona mejor a lo largo de muchas rondas. Puro: lo usan el servidor, los tests y la interfaz.
+// Agentes que toman las ideas que publica FARO (antes «kamikazes»: de ahí el nombre interno). Ninguno
+// decide con IA: cada uno aplica siempre sus reglas (qué ideas coge, cuánto pone, cuándo sale).
+// Desde el 16/11/2026 todos empiezan con 1.000 €, sin rondas ni metas. Las definiciones antiguas siguen
+// aquí (archivadas) para su historial. Puro: lo usan el servidor, los tests y la interfaz.
 import type { AgentRules } from "../agents/roster";
 
 /** «selectivo»: cualquier tipo de idea, pero solo las de convicción alta. */
@@ -46,7 +47,13 @@ export type KamikazeDef = {
   exitMode?: "target" | "trail";
   /** Convicción mínima de la idea de FARO (de 1 a 5) para tomarla. */
   minConviction?: number;
+  /** Operaciones a la vez: el capital se reparte en tantas partes (1 = todo a una carta). */
+  slots?: number;
 };
+
+/** Capital igual para todos los agentes desde el 16/11/2026: así su rentabilidad se compara limpia. */
+export const AGENT_START_CAPITAL = 1000;
+const standard = (slots: number) => ({ capital: AGENT_START_CAPITAL, slots, settings: { ...SETTINGS, max_open_positions: slots } });
 
 /** Costes de un exchange de crypto al contado: ~0,1 % por operación y algo de deslizamiento. */
 const COSTS = { commission_pct: 0.1, commission_min: 0, slippage_bps: 15 };
@@ -148,6 +155,27 @@ export const ALL_KAMIKAZES: KamikazeDef[] = [
  * - FÉNIX y FÉNIX AJUSTADO: compran rebotes, y los rebotes de FARO dieron 0 aciertos de 58.
  * - COHETE (queda COHETE PERSIGUE), MECHA 2 BALAS y MECHA CORRE (queda MECHA): variantes que no aportaban.
  */
+/**
+ * Reglas de dinero de los que siguen en activo (16/11/2026): sin rondas ni metas, 1.000 € cada uno y el
+ * capital repartido en sus operaciones a la vez. Nombres sin variantes ni números.
+ */
+const ACTIVE_RULES: Record<string, Partial<KamikazeDef>> = {
+  "cohete-persigue": {
+    name: "COHETE",
+    ...standard(4),
+    tagline: "Impulso: se sube a las monedas que ya suben con fuerza y volumen. Hasta 4 operaciones a la vez.",
+  },
+  mecha: { ...standard(4), tagline: "Rupturas: monedas que rompen su máximo reciente o tienen una noticia que las puede disparar. Hasta 4 operaciones a la vez." },
+  "vertigo-faro": {
+    ...standard(1),
+    tagline: "Selectivo: solo las ideas de convicción alta (4 o 5 de 5), de cualquier tipo. Pocas veces, pero todo a una carta.",
+  },
+};
+for (let k = 0; k < ALL_KAMIKAZES.length; k++) {
+  const o = ACTIVE_RULES[ALL_KAMIKAZES[k].key];
+  if (o) ALL_KAMIKAZES[k] = { ...ALL_KAMIKAZES[k], ...o };
+}
+
 export const ARCHIVED_KAMIKAZES: ReadonlySet<string> = new Set(["fenix", "fenix-ajustado", "cohete", "mecha-balas", "mecha-corre"]);
 /** Los que están en activo. */
 export const KAMIKAZES = ALL_KAMIKAZES.filter((k) => !ARCHIVED_KAMIKAZES.has(k.key));

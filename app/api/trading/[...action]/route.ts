@@ -33,7 +33,6 @@ import { brokerLinks, brokerStatus, linkInstruments, listBrackets, runBrokerGuar
 import { isBrokerError, type BrokerActor } from "@/lib/brokers/types";
 import { refreshLive } from "@/lib/trading/live";
 import { kamikazeTick } from "@/lib/trading/kamikaze/engine";
-import { dcaTick } from "@/lib/trading/dca/engine";
 import { faroAnalysis, faroView } from "@/lib/trading/faro/engine";
 import { closeMirrorPositions, mirrorView, pauseMirror, setMirror, stopMirror } from "@/lib/trading/mirror/service";
 
@@ -83,7 +82,6 @@ export async function GET(req: Request, route: RouteContext) {
       after(() => maybeRunAgents().catch((e) => console.error("[trading] reunión de agentes", e)));
       // Los kamikazes: vigilancia cada pocos minutos y su decisión con IA cuando les toca.
       after(() => kamikazeTick().catch((e) => console.error("[trading] kamikazes", e)));
-      after(() => dcaTick().catch((e) => console.error("[trading] dca", e)));
       return NextResponse.json({ ...(await getStatus(ctx.workspaceId)), canManage: ctx.canManage, live });
     }
     if (action === "news") return NextResponse.json({ ...(await listNews(normalizeNewsFilters(url.searchParams))), canManage: ctx.canManage });

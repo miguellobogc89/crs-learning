@@ -10,7 +10,6 @@ import { CRYPTO_MARKET } from "../market-data";
 import { eurPairs } from "../kamikaze/market";
 import { isKamikaze } from "../kamikaze/roster";
 import { isChip } from "../chip/roster";
-import { dcaByKey } from "../dca/roster";
 import { marketsOf, venuesFor, type AgentMarket, type AgentUniverse, type Venue, type VenueFit } from "./venues-logic";
 
 const TTL = 6 * 60 * 60_000;
@@ -91,8 +90,6 @@ export type AgentVenues = { markets: AgentMarket[]; venues: VenueFit[] };
 function universeOf(key: string, s: Snapshot): AgentUniverse {
   if (isKamikaze(key)) return { crypto: s.kamikaze, bolsa: [] };
   if (isChip(key)) return { crypto: s.crypto, bolsa: [] };
-  const dca = dcaByKey(key);
-  if (dca) return { crypto: [dca.symbol.replace(/-EUR$/, "")], bolsa: [] };
   return { crypto: s.crypto, bolsa: s.bolsa };
 }
 

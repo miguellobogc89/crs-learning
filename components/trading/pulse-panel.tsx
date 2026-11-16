@@ -308,16 +308,16 @@ function Body({ p }: { p: Pulse }) {
         )}
       </section>
 
-      {/* Estado de FARO-2: lo que hacemos nosotros con todo esto. */}
+      {/* Estado del filtro de FARO: lo que hacemos nosotros con todo esto. */}
       <section
         className={`flex items-start gap-3 rounded-2xl px-4 py-3 text-sm ${p.faro2.paused ? "bg-amber-50 text-amber-900" : "bg-emerald-50 text-emerald-900"}`}
       >
         <Activity className="mt-0.5 h-4 w-4 shrink-0" />
         <span>
-          <b>FARO-2 {p.faro2.paused ? "en pausa" : "activo"}.</b>{" "}
+          <b>FARO {p.faro2.paused ? "en pausa" : "publicando"}.</b>{" "}
           {p.faro2.paused
-            ? `Con Bitcoin cayendo más de un ${Math.abs(p.faro2.btc24hLimit)} % en 24 h no da por buena ninguna compra nueva: con el mercado así, casi todo cae a la vez.`
-            : `Publica ideas mientras Bitcoin no caiga más de un ${Math.abs(p.faro2.btc24hLimit)} % en 24 h (es una de sus reglas). Los kamikazes solo operan las que pasa.`}
+            ? `Con Bitcoin cayendo más de un ${Math.abs(p.faro2.btc24hLimit)} % en 24 h, su filtro no publica ninguna compra nueva: con el mercado así, casi todo cae a la vez.`
+            : `Publica ideas mientras Bitcoin no caiga más de un ${Math.abs(p.faro2.btc24hLimit)} % en 24 h (es una de las reglas de su filtro). Los agentes solo ven lo que publica.`}
         </span>
       </section>
 

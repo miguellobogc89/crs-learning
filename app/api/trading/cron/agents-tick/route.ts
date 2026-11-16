@@ -5,7 +5,6 @@ import { kamikazeTick } from "@/lib/trading/kamikaze/engine";
 import { runMirrors } from "@/lib/trading/mirror/service";
 import { runManual } from "@/lib/trading/manual/service";
 import { chipTick } from "@/lib/trading/chip/engine";
-import { dcaTick } from "@/lib/trading/dca/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,10 +28,8 @@ export async function GET(req: Request) {
     const manual = await runManual().catch((e) => ({ open: 0, actions: [`error: ${e instanceof Error ? e.message : e}`] }));
     // Agentes de dos modos: una decisión al día, con la vela de ayer cerrada (antes de las copias del exchange).
     const chips = await chipTick().catch((e) => [{ agent: "chip", skipped: e instanceof Error ? e.message : "error", actions: [] }]);
-    // Agentes de referencia (DCA): la compra semanal, si toca.
-    const dca = await dcaTick().catch((e) => [{ agent: "dca", actions: [`error: ${e instanceof Error ? e.message : e}`] }]);
     const agents = await maybeRunAgents();
-    return NextResponse.json({ live, kamikazes, chips, dca, mirrors, manual, agents });
+    return NextResponse.json({ live, kamikazes, chips, mirrors, manual, agents });
   } catch (e) {
     console.error("[trading] cron agents-tick", e);
     return NextResponse.json({ error: "Falló la revisión" }, { status: 500 });

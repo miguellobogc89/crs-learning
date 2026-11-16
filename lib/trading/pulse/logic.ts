@@ -122,7 +122,7 @@ export function pulseReads(p: { btc: BtcPulse | null; fearGreed: FearGreed | nul
   const out: Read[] = [];
   const b = p.btc;
   if (b && b.ch24h !== null && b.ch24h <= p.btc24hLimit)
-    out.push({ key: "faro2", tone: "warn", text: `Bitcoin cae ${pctText(b.ch24h)} en 24 h: FARO-2 deja en pausa las compras nuevas hasta que se calme.` });
+    out.push({ key: "faro2", tone: "warn", text: `Bitcoin cae ${pctText(b.ch24h)} en 24 h: el filtro de FARO deja en pausa las compras nuevas hasta que se calme.` });
   if (b && b.vsMa200Pct !== null)
     out.push(
       b.vsMa200Pct >= 0

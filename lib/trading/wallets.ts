@@ -12,7 +12,6 @@ import { madridDay } from "./accounts";
 import { dayDate, dayKey } from "./sync";
 import { agentByKey, ARCHIVED_AGENTS } from "./agents/roster";
 import { chipByKey } from "./chip/roster";
-import { dcaByKey } from "./dca/roster";
 import { ARCHIVED_KAMIKAZES, kamikazeByKey } from "./kamikaze/roster";
 
 /** Los saldos se piden como mucho una vez por minuto (el panel lateral se refresca solo). */
@@ -161,7 +160,7 @@ export async function myAgents(workspaceId: string) {
 /** Añade un agente del catálogo a «Tus agentes» (como mucho MAX_OWN). */
 export async function addMyAgent(workspaceId: string, key: unknown) {
   const agent = String(key ?? "");
-  if (!(agentByKey(agent) || kamikazeByKey(agent) || chipByKey(agent) || dcaByKey(agent))) throw new Error("Ese agente no existe");
+  if (!(agentByKey(agent) || kamikazeByKey(agent) || chipByKey(agent))) throw new Error("Ese agente no existe");
   if (!isActiveAgent(agent)) throw new Error("Ese agente está archivado");
   const owned = (await prisma.trading_user_agents.findMany({ where: { workspace_id: workspaceId }, select: { agent: true } })).filter((o) => isActiveAgent(o.agent));
   if (owned.some((o) => o.agent === agent)) return { ok: true };

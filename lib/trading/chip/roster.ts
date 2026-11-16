@@ -29,9 +29,10 @@ export const CHIP_AGENTS: ChipDef[] = [
     key: "camaleon",
     name: "CAMALEÓN",
     profile: "arriesgado",
-    tagline: "Cambia el chip según el mercado: ataca con las crypto que rompen máximos cuando Bitcoin acompaña, y se pone a salvo en efectivo en cuanto se tuerce.",
+    tagline: "Fase: con el mercado en ataque, compra las criptomonedas que rompen su máximo de 20 días; en defensa, se queda en efectivo.",
     strategy: "chip-b-rupt",
-    capital: 5000,
+    // 1.000 €, como todos los agentes desde el 16/11/2026 (antes 5.000 €).
+    capital: 1000,
     color: "amber",
     // Como un exchange de crypto (Bitvavo): ~0,25 % por orden y algo de deslizamiento.
     settings: { commission_pct: 0.25, commission_min: 0, slippage_bps: 5, risk_per_trade_pct: 100, max_position_pct: 100, max_open_positions: 3, breakeven: false },

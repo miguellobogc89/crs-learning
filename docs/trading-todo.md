@@ -118,7 +118,10 @@ Apuntado el 10/11/2026. Sin empezar.
 - [ ] Usar la foto diaria como contexto de las ideas de FARO y medir qué indicadores separan las que ganan de las que pierden.
 - [x] Inventario de agentes (consultado en Neon) y archivados ARGO, NOVA, FÉNIX, FÉNIX AJUSTADO, COHETE, MECHA 2 BALAS y MECHA CORRE: no operan ni se ven; su historial se conserva (ARCHIVED_* en los rosters). Quedan CAMALEÓN, VÉRTIGO, COHETE PERSIGUE y MECHA.
 - [x] La IA no invierte, solo informa (FARO). Comité entero archivado; VÉRTIGO vuelve sin número y sin IA como agente «Selectivo» (ideas de FARO-2 con convicción ≥ 4), clave `vertigo-faro`. CAMALEÓN pierde el «-4».
-- [x] Ficha estándar para todos (lib/trading/agents/spec.ts): pastillas de estilo y familia (Ideas de FARO / Reglas propias / Referencia) y pestaña «Cómo opera» con de dónde saca las compras, qué coge, cuánto pone, cuándo sale y su meta. Filtros de Agentes por familia.
-- [x] Agente de referencia HORMIGA (DCA): 50 € de Bitcoin cada lunes hasta 1.000 €, no vende nunca; se puede copiar en el exchange (lib/trading/dca).
-- [ ] Publicar FARO-2 como el oficial.
+- [x] FARO con su filtro (antes «FARO-2»): solo se publica lo que pasa; las descartadas no se ven ni las coge ningún agente, y siguen en Análisis para comparar.
+- [x] La carta: ideas que publica FARO + escáner de rupturas de 20 días + contexto (fase). Agentes = combinación de la carta y su gestión del dinero.
+- [x] Todos con 1.000 €, sin rondas ni metas, empezando de cero (lo anterior se archiva con la clave «agente~fecha», lib/trading/agents/restart.ts). COHETE y MECHA hasta 4 operaciones a la vez; VÉRTIGO una (todo a una carta); CAMALEÓN hasta 3.
+- [x] Ficha «Cómo opera» igual para todos (qué ideas coge, cuándo, cuánto pone, cuándo sale) y una sola pastilla de estilo. Fuera rondas, número de ranking y pastillas de exchanges (solo en «Copiar con dinero real»).
+- [x] Referencias (no agentes): «Bitcoin guardado» y «Bitcoin cada día» desde que empezaron los agentes, en Operadores (con 1.000 €) y en la página de cada agente. HORMIGA retirado.
+- [ ] Referencias como línea discontinua en las gráficas.
 

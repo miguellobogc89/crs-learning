@@ -484,8 +484,10 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
 export async function boardIdeas(): Promise<(BoardIdea & { symbol: string; rationale: string; runId: string | null; faro2: ReturnType<typeof faro2Verdict> })[]> {
   const rows = await prisma.trading_faro_ideas.findMany({ where: { status: "viva", valid_until: { gt: new Date() } }, orderBy: { created_at: "desc" } });
   const features = await loadFeatures(rows.map((r) => r.id));
+  // El filtro de FARO decide qué se publica: las descartadas no llegan a los agentes (ni se ven en el
+  // tablón); solo cuentan en Análisis para comprobar que el filtro acierta.
   return rows.map((i) => ({
-    /** FARO-2: si la deja pasar (null = sin contexto guardado). */
+    /** Veredicto del filtro (null = sin contexto guardado: se publica). */
     faro2: faro2Verdict(i.kind, features.get(i.id) ?? null),
     id: i.id,
     pair: i.pair,
@@ -499,7 +501,7 @@ export async function boardIdeas(): Promise<(BoardIdea & { symbol: string; ratio
     createdAt: i.created_at.getTime(),
     rationale: i.rationale,
     runId: i.run_id,
-  }));
+  })).filter((i) => !i.faro2 || i.faro2.pass);
 }
 
 export async function lastMarketView() {
@@ -520,12 +522,11 @@ export type FaroParticipant = {
 
 /** Tablón para la interfaz: ideas vivas, historial con resultado, quién entró en cada una y aciertos por tipo. */
 export async function faroView(workspaceId: string) {
-  const [live, past, last, state, groups, features] = await Promise.all([
+  const [live, past, last, state, features] = await Promise.all([
     prisma.trading_faro_ideas.findMany({ where: { status: "viva" }, orderBy: { created_at: "desc" } }),
-    prisma.trading_faro_ideas.findMany({ where: { status: { not: "viva" } }, orderBy: { created_at: "desc" }, take: 300 }),
+    prisma.trading_faro_ideas.findMany({ where: { status: { not: "viva" } }, orderBy: { created_at: "desc" }, take: 600 }),
     prisma.trading_faro_runs.findFirst({ where: { status: "ok" }, orderBy: { created_at: "desc" } }),
     accountState(workspaceId),
-    prisma.trading_faro_ideas.groupBy({ by: ["kind", "status"], where: { status: { not: "viva" } }, _count: { _all: true }, _avg: { result_pct: true } }),
     loadFeatures(),
   ]);
   const all = [...live, ...past];
@@ -607,18 +608,24 @@ export async function faroView(workspaceId: string) {
     /** FARO-2 (en pruebas): si la habría dejado pasar y por qué no. null = sin contexto guardado. */
     faro2: faro2Verdict(i.kind, features.get(i.id) ?? null),
   });
+  // Solo lo publicado: lo que el filtro descarta no se enseña (queda para Análisis).
+  const published = (i: (typeof all)[number]) => {
+    const v = faro2Verdict(i.kind, features.get(i.id) ?? null);
+    return !v || v.pass;
+  };
+  const pastShown = past.filter(published);
   const stats = KINDS.map((kind) => {
-    const rows = groups.filter((g) => g.kind === kind);
-    const n = rows.reduce((s, g) => s + g._count._all, 0);
-    const hits = rows.find((g) => g.status === "acierto")?._count._all ?? 0;
-    const avg = n ? rows.reduce((s, g) => s + (g._avg.result_pct ?? 0) * g._count._all, 0) / n : null;
+    const rows = pastShown.filter((i) => i.kind === kind && i.result_pct !== null);
+    const n = rows.length;
+    const hits = rows.filter((i) => i.status === "acierto").length;
+    const avg = n ? rows.reduce((s, i) => s + (i.result_pct ?? 0), 0) / n : null;
     return { kind, n, hits, avgPct: avg };
   }).filter((s) => s.n > 0);
   return {
     lastRun: last ? { at: last.created_at.toISOString(), marketView: last.market_view } : null,
     everyMinutes: RUN_MIN(),
-    live: live.map(view),
-    past: past.map(view),
+    live: live.filter(published).map(view),
+    past: pastShown.map(view),
     stats,
     account: { opened: state.summary.opened, equity: state.summary.equity, cash: state.summary.available, riskPct: state.account.risk_per_trade_pct },
   };

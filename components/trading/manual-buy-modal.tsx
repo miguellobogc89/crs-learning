@@ -21,7 +21,7 @@ export type BuyIdea = {
   invalidation: number;
   target: number;
   rationale: string;
-  /** FARO-2 (en pruebas): si la habría publicado y, si no, por qué. null = sin contexto. */
+  /** Veredicto del filtro de FARO (las descartadas ya no se publican; se deja por si acaso). */
   faro2?: { pass: boolean; reasons: string[] } | null;
 };
 
@@ -118,7 +118,7 @@ export function ManualBuyModal({ idea, onClose }: { idea: BuyIdea; onClose: () =
       <div className="space-y-4 text-sm text-slate-700">
         {idea.faro2 && !idea.faro2.pass && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-900">
-            <b>FARO-2 la descarta</b> (filtros en pruebas): {idea.faro2.reasons.join("; ")}. Si la compras, mejor con poco dinero.
+            <b>El filtro de FARO la descarta</b>: {idea.faro2.reasons.join("; ")}. Si la compras, mejor con poco dinero.
           </div>
         )}
         <div className="line-clamp-3 text-[13px] text-slate-600">
