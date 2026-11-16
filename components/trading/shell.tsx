@@ -14,7 +14,7 @@ import { TradingNavigation, TradingNavigationHeader, type TradingProfile } from 
 import { prefetchTrading } from "./format";
 
 // Lo que leen Inicio (Operadores y Actividad), Oportunidades, Mi cartera y Agentes.
-const PREFETCH = ["portfolio", "agents", "faro", "mine", "mirror", "wallets?history=1", "manual"];
+const PREFETCH = ["pulse", "portfolio", "agents", "faro", "mine", "mirror", "wallets?history=1", "manual"];
 import { isFittedTab, isTradingTab, TRADING_TABS } from "./tabs";
 
 /** Lo que una pantalla «hija» (la página de un agente) le dice a la estructura: su título y a dónde volver. */

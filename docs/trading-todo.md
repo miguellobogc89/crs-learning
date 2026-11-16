@@ -111,3 +111,12 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] Esqueleto a pantalla completa y sin marco (forma de tabla); cambiar Operadores/Actividad y las pestañas de Oportunidades ya no va al servidor; precarga en segundo plano de Inicio, Oportunidades, Cartera y Agentes.
 - [x] Actividad rediseñada: Operador (abre su página) · Operación (pastilla con icono) · Activo · Precio entrada → salida/ahora · Resultado (€ y %) · Cuándo; al pulsar un movimiento, panel lateral con el detalle. Tablas y Análisis sin recuadros.
 - [x] Búfer: las lecturas se guardan en memoria y en sessionStorage; al volver a una pantalla se ve al instante lo último conocido y se actualiza por detrás.
+
+## Panorama e indicadores (16/11/2026)
+- [x] Inicio → nueva pestaña **Panorama** (la primera): resumen en frases, Bitcoin (precio, 24 h / 7 / 30 días), estado de FARO-2, miedo y codicia, tendencia (media de 200 días), RSI, liquidez y actividad (volumen frente a lo normal, valor del mercado, peso de Bitcoin), funding de futuros, índice del dólar y fase del detector de CAMALEÓN. Cada uno con «Cómo se lee» y su gráfica.
+- [x] Foto diaria en `trading_market_pulse` (migración 20261116100000, aplicar en Neon; sin ella todo funciona igual, solo no se guarda).
+- [ ] Usar la foto diaria como contexto de las ideas de FARO y medir qué indicadores separan las que ganan de las que pierden.
+- [ ] Inventario de agentes con sus números para decidir cuáles archivar.
+- [ ] Ficha y pastillas iguales para todos los agentes (estilo: Swing, DCA, Kamikaze…); resolver el comité.
+- [ ] Agente DCA de referencia (copiable).
+

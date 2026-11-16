@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { addMyAgent, getWallets, myAgents, removeMyAgent } from "@/lib/trading/wallets";
 import { getMarketPhase } from "@/lib/trading/chip/phase-service";
+import { getPulse } from "@/lib/trading/pulse/service";
 import { buyManual, manualView, sellManual, setManualTrail } from "@/lib/trading/manual/service";
 import { connectorContext } from "@/lib/connectors/context";
 import {
@@ -66,6 +67,7 @@ export async function GET(req: Request, route: RouteContext) {
     }
     if (action === "manual") return NextResponse.json(await manualView(ctx.workspaceId));
     if (action === "phase") return NextResponse.json(await getMarketPhase());
+    if (action === "pulse") return NextResponse.json(await getPulse());
     if (action === "mine") return NextResponse.json(await myAgents(ctx.workspaceId));
     if (action === "wallets") {
       return NextResponse.json(await getWallets({ kind: "user", userId: ctx.userId, workspaceId: ctx.workspaceId, canManage: ctx.canManage }, url.searchParams.get("history") === "1"));
