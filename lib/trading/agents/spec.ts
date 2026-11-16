@@ -10,7 +10,9 @@ import { MAX_CHASE_PCT } from "../faro/logic";
 import type { KamikazeDef } from "../kamikaze/roster";
 
 export type AgentSpec = {
-  /** Etiqueta corta del estilo (pastilla): Impulso, Rupturas, Selectivo, Fase… */
+  /** Familia: cripto (se copia en un exchange) o stock (acciones de cualquier bolsa; se copia en un bróker). */
+  market: "Cripto" | "Stock";
+  /** Etiqueta corta del estilo (pastilla): Prudente, Equilibrado, Agresivo, Diversificado, Fase… */
   style: string;
   /** Las líneas de la ficha. */
   ideas: string;
@@ -31,20 +33,28 @@ export function kamikazeSpec(k: KamikazeDef): AgentSpec {
       ? "Las de impulso que publica FARO: monedas que ya suben con fuerza y volumen."
       : k.style === "rupturas"
         ? "Las de ruptura o noticia que publica FARO: monedas que rompen su máximo reciente o tienen una noticia que las puede disparar."
-        : k.style === "selectivo"
+        : k.style === "selectivo" && (k.minConviction ?? 4) <= 1
+          ? "Todas las que publica FARO en cripto, sea cual sea su tipo."
+          : k.style === "selectivo"
           ? `Cualquiera de las que publica FARO, pero solo con convicción alta (${k.minConviction ?? 4} o más de 5).`
           : "Las de rebote que publica FARO.";
   const stop = k.stopMode === "idea" ? "su stop (justo donde la idea deja de valer)" : "su stop (donde la idea deja de valer, entre un 5 % y un 40 % por debajo)";
   return {
-    style: STYLE_LABEL[k.style],
+    market: "Cripto",
+    style: k.label ?? STYLE_LABEL[k.style],
     ideas: `${what} La de más convicción primero.`,
     when: `Siempre que haya una publicada y el precio no se haya escapado más de un ${nf(chase)} % desde la idea. Tras una pérdida, media hora de pausa.`,
-    size:
-      slots === 1
-        ? `Todo su capital (${nf(k.capital)} €) en una sola operación: una a la vez.`
-        : `Su capital (${nf(k.capital)} €) repartido en hasta ${slots} operaciones a la vez (${nf(k.capital / slots)} € cada una), nunca dos en la misma moneda.`,
+    size: k.sizeOfEquityPct
+      ? `Un ${nf(k.sizeOfEquityPct)} % de su dinero en cada moneda, hasta ${slots} a la vez (empezó con ${nf(k.capital)} €). Nunca dos veces la misma.`
+      : k.riskPct
+        ? `Arriesga el ${nf(k.riskPct)} % de su dinero en cada operación: compra lo justo para perder eso si salta el stop (con 1.000 € y el stop a −5 %, ${nf(Math.min(1000, (1000 * k.riskPct) / 100 / 0.05))} €). Hasta ${slots} a la vez, sin pasar de lo que tiene.`
+        : slots === 1
+          ? `Todo su capital (${nf(k.capital)} €) en una sola operación: una a la vez.`
+          : `Su capital (${nf(k.capital)} €) repartido en hasta ${slots} operaciones a la vez (${nf(k.capital / slots)} € cada una), nunca dos en la misma moneda.`,
     exit:
-      k.exitMode === "trail"
+      k.exitMode === "noise"
+        ? "Recoge las subidas pequeñas: vende a +3 %, con el stop como mucho a −3 %. En cuanto gana +1,5 %, el stop pasa por encima de la entrada (ya no puede perder) y sigue al precio a un 1,5 %."
+        : k.exitMode === "trail"
         ? `Sin objetivo fijo: deja correr con un stop que sube con el precio. Sale por ${stop}.`
         : `En el objetivo de la idea (al menos +10 %) o en ${stop}. Desde +30 %, el stop sube a la entrada: ya no puede acabar en pérdida.`,
   };
@@ -56,6 +66,7 @@ export function chipSpec(c: ChipDef): AgentSpec {
   const what = u ? `acciones de ${u.where} (en euros)` : "criptomonedas";
   const phase = u ? `${u.label} en fase de ataque` : "el mercado en fase de ataque";
   return {
+    market: u ? "Stock" : "Cripto",
     style: "Fase",
     ideas: `Las del escáner de rupturas de 20 días (sin IA): ${what} que cierran el día por encima de su máximo de 20 días, las más fuertes primero.`,
     when: `Solo con ${phase} (por encima de sus medias de 200 y 50 días y subiendo en 10 días). En defensa no compra nada.${u ? " Decide tras cada sesión; compra en la apertura siguiente si la bolsa está cerrada." : ""}`,

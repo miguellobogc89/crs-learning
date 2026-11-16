@@ -8,7 +8,8 @@ const { ALL_KAMIKAZES: KAMIKAZES, KAMIKAZES: ACTIVE, ARCHIVED_KAMIKAZES, kamikaz
 const DAY = 86_400_000;
 
 test("agentes de FARO: estilos, variantes y reglas de dinero", () => {
-  const originals = KAMIKAZES.filter((k) => !k.base);
+  // Los originales con rondas (hoy archivados) y VÉRTIGO selectivo; los de riesgo, aparte.
+  const originals = KAMIKAZES.filter((k) => !k.base && !k.riskPct && !k.sizeOfEquityPct);
   assert.deepEqual(originals.map((k) => [k.key, k.style, k.multiple, k.days]), [
     ["cohete", "impulso", 10, 7],
     ["mecha", "rupturas", 10, 5],
@@ -26,7 +27,6 @@ test("agentes de FARO: estilos, variantes y reglas de dinero", () => {
   // Los que siguen en activo: 1.000 € y tantas posiciones como operaciones a la vez; los archivados, como eran.
   for (const k of KAMIKAZES) {
     if (ACTIVE.includes(k)) assert.ok(k.capital === 1000 && k.settings.max_open_positions === (k.slots ?? 1), k.key);
-    else assert.ok(k.capital === 20 && k.settings.max_open_positions === 1, k.key);
   }
 });
 
@@ -103,6 +103,6 @@ test("kamikazes: la decisión de la IA se valida antes de ejecutarla", () => {
 });
 
 test("kamikazes: los archivados no están en activo, pero se siguen encontrando por su clave", () => {
-  assert.deepEqual(ACTIVE.map((k) => k.key), ["cohete-persigue", "mecha", "vertigo-faro"]);
+  assert.deepEqual(ACTIVE.map((k) => k.key), ["roca", "brujula", "vertigo-10", "enjambre"]);
   for (const key of ARCHIVED_KAMIKAZES) assert.ok(kamikazeByKey(key), `${key} se encuentra para su historial`);
 });

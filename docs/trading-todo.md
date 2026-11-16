@@ -136,3 +136,9 @@ Apuntado el 10/11/2026. Sin empezar.
 - [ ] Un agente que tome las ideas de acciones de FARO (hoy solo se publican y se miden; los agentes de ideas operan crypto).
 - [ ] Copiar acciones con dinero real: completar Trading 212 (Trade Republic y Revolut acciones no tienen API).
 
+## Agentes por riesgo (16/11/2026, tarde)
+- [x] Cripto: ROCA (Prudente, 1 % de riesgo por operación, hasta 8), BRÚJULA (Equilibrado, 3 %, hasta 4), VÉRTIGO (Agresivo, 10 %, hasta 2): todos toman las mismas ideas de FARO; el tamaño sale de lo que se pierde si salta el stop. Sustituyen a COHETE, MECHA y VÉRTIGO selectivo (archivados).
+- [x] ENJAMBRE (Diversificado): 10 % del patrimonio por moneda, hasta 10; vende a +3 %, stop como mucho −3 % y, desde +1,5 %, stop por encima de la entrada que sigue al precio a 1,5 %.
+- [x] Pastilla de familia: Cripto / Stock (acciones de cualquier bolsa).
+- [ ] Stock: FARO también en el IBEX; vigilancia de acciones con su horario en los agentes de ideas; los 3 niveles de riesgo en Stock; ATLAS global (detector con el índice de la bolsa de cada acción).
+

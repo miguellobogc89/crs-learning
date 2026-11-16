@@ -1,12 +1,17 @@
 "use client";
-// Ficha estándar de un agente en la interfaz: una pastilla con su estilo y la ficha completa con las
+// Ficha estándar de un agente en la interfaz: pastillas de familia (Cripto / Stock) y estilo, y la ficha completa con las
 // mismas cuatro líneas para todos (qué ideas coge, cuándo, cuánto pone y cuándo sale).
 import { BookOpen, Clock, LogOut, Wallet } from "lucide-react";
 import type { AgentSpec } from "@/lib/trading/agents/spec";
 
 export function SpecPills({ spec, className = "" }: { spec: AgentSpec | null; className?: string }) {
   if (!spec) return null;
-  return <span className={`inline-flex rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white ${className}`}>{spec.style}</span>;
+  return (
+    <span className={`inline-flex items-center gap-1 ${className}`}>
+      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${spec.market === "Stock" ? "bg-sky-50 text-sky-700" : "bg-amber-50 text-amber-800"}`}>{spec.market}</span>
+      <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">{spec.style}</span>
+    </span>
+  );
 }
 
 export function SpecSheet({ spec }: { spec: AgentSpec | null }) {

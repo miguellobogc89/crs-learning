@@ -10,22 +10,25 @@ const { chooseIdea } = load("lib/trading/faro/logic.ts");
 
 test("ficha: todos los agentes en activo tienen las mismas cuatro líneas, 1.000 € y ninguno decide con IA", () => {
   const specs = [...KAMIKAZES.map(kamikazeSpec), ...CHIP_AGENTS.map(chipSpec)];
-  assert.deepEqual(specs.map((s) => s.style), ["Impulso", "Rupturas", "Selectivo", "Fase", "Fase"]);
+  assert.deepEqual(specs.map((s) => s.style), ["Prudente", "Equilibrado", "Agresivo", "Diversificado", "Fase", "Fase"]);
   assert.match(chipSpec(CHIP_AGENTS[1]).ideas, /EE\. UU\./);
   for (const s of specs) for (const k of ["ideas", "when", "size", "exit"]) assert.ok(s[k].length > 10, `${s.style}: ${k}`);
   assert.ok([...KAMIKAZES, ...CHIP_AGENTS].every((a) => a.capital === 1000));
-  assert.deepEqual(KAMIKAZES.map((k) => k.name), ["COHETE", "MECHA", "VÉRTIGO"]);
+  assert.deepEqual(KAMIKAZES.map((k) => k.name), ["ROCA", "BRÚJULA", "VÉRTIGO", "ENJAMBRE"]);
 });
 
-test("VÉRTIGO: sin número, sin IA y solo ideas de convicción 4 o más", () => {
-  const v = kamikazeByKey("vertigo-faro");
-  assert.equal(v.name, "VÉRTIGO");
-  const idea = (id, kind, conviction) => ({ id, kind, conviction, pair: "AEUR", price: 1, invalidation: 0.9, target: 1.3, validUntil: 2e12, createdAt: 1 });
-  const ideas = [idea("a", "impulso", 5), idea("b", "ruptura", 3)];
-  const r = chooseIdea("selectivo", ideas, () => 1, 1e12, new Set(), { minConviction: 4 });
-  assert.equal(r.pick.idea.id, "a");
-  const none = chooseIdea("selectivo", [idea("b", "ruptura", 3)], () => 1, 1e12, new Set(), { minConviction: 4 });
-  assert.match(none.reason, /convicción alta/);
+test("riesgo por operación: el tamaño sale de lo que se pierde si salta el stop; ENJAMBRE, un 10 % fijo", () => {
+  const { positionBudget, noiseLevels, noiseStop } = load("lib/trading/kamikaze/logic.ts");
+  const base = { equity: 1000, available: 1000, capital: 1000, slots: 4, price: 100, stop: 95 };
+  assert.ok(Math.abs(positionBudget({ ...base, riskPct: 1 }) - 200) < 1e-9, "1 % con stop a −5 % → 200 €");
+  assert.ok(Math.abs(positionBudget({ ...base, riskPct: 3 }) - 600) < 1e-9);
+  assert.equal(positionBudget({ ...base, riskPct: 10 }), 1000, "no pasa del efectivo");
+  assert.equal(positionBudget({ ...base, sizeOfEquityPct: 10 }), 100);
+  const lv = noiseLevels(100, 90);
+  assert.ok(Math.abs(lv.stop - 97) < 1e-9 && Math.abs(lv.target - 103) < 1e-9);
+  assert.equal(noiseStop({ entry: 100, stop: 97 }, 101), 97, "aún no protege");
+  assert.ok(Math.abs(noiseStop({ entry: 100, stop: 97 }, 102) - 100.5) < 1e-9, "desde +1,5 %: por encima de la entrada");
+  assert.ok(Math.abs(noiseStop({ entry: 100, stop: 97 }, 102.9) - 102.9 * 0.985) < 1e-9, "y sigue al precio");
 });
 
 

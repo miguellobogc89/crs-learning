@@ -18,7 +18,7 @@ import { runMirrors } from "../mirror/service";
 import { dayDate } from "../sync";
 import { boardIdeas, faroTick, lastMarketView, setLive } from "../faro/engine";
 import { chooseIdea, trailingStop, type BoardIdea } from "../faro/logic";
-import { allInQuantity, exitNow, protectedStop, type Ticker } from "./logic";
+import { allInQuantity, exitNow, noiseLevels, noiseStop, positionBudget, protectedStop, type Ticker } from "./logic";
 import { eurPairs, priceEur, tickers } from "./market";
 import { KAMIKAZES, kamikazeByKey, type KamikazeDef } from "./roster";
 
@@ -136,6 +136,7 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
         const entry = pos.entryPrice ?? price;
         let stop = protectedStop({ entry, stop: pos.stop }, price);
         if (def.exitMode === "trail") stop = Math.max(stop, trailingStop({ entry, initialStop: pos.initialStop, stop: pos.stop }, price));
+        if (def.exitMode === "noise") stop = Math.max(stop, noiseStop({ entry, stop: pos.stop }, price));
         if (stop > pos.stop) {
           await prisma.trading_positions.update({ where: { id: pos.id }, data: { stop, updated_at: new Date() } });
           actions.push(`${pos.symbol}: stop sube a ${stop.toFixed(4)}`);
@@ -203,8 +204,20 @@ async function takeIdea(def: KamikazeDef, round: trading_kamikaze_rounds, pick: 
   const px = (await priceEur(idea.pair)) ?? pick.price;
   const inst = await prisma.market_instruments.findUnique({ where: { symbol: idea.symbol }, select: { id: true } });
   if (inst) await setLive(inst.id, px);
-  // Por operación: su capital repartido entre sus operaciones a la vez (sin pasar del efectivo).
-  const budget = Math.min(state.summary.available, def.capital / slots);
+  // Salida «de ruido»: objetivo +3 % y stop cercano, en vez de los niveles de la idea.
+  if (def.exitMode === "noise") Object.assign(pick, noiseLevels(px, pick.idea.invalidation));
+  // Por operación: según su riesgo (lo que pierde si salta el stop), un % fijo o su capital ÷ operaciones.
+  const budget = positionBudget({
+    equity: state.summary.equity,
+    available: state.summary.available,
+    capital: def.capital,
+    slots,
+    price: px,
+    stop: pick.stop,
+    riskPct: def.riskPct,
+    sizeOfEquityPct: def.sizeOfEquityPct,
+  });
+  if (budget < 10) return `No entra en ${idea.symbol.replace(/-EUR$/, "")}: le quedan menos de 10 € para esta operación`;
   const quantity = allInQuantity(budget, px, costOf(state.account));
   // «Corre»: sin objetivo de venta real y con stop que sube con el precio.
   const target = def.exitMode === "trail" ? Math.max(pick.target, px * 10) : pick.target;

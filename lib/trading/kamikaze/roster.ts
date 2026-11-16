@@ -43,12 +43,25 @@ export type KamikazeDef = {
   maxChasePct?: number;
   /** «clamp»: stop en la invalidación, pero entre un 5 % y un 40 % por debajo; «idea»: justo en la invalidación. */
   stopMode?: "clamp" | "idea";
-  /** «target»: vende en el objetivo; «trail»: deja correr con un stop que sube con el precio. */
-  exitMode?: "target" | "trail";
+  /**
+   * «target»: vende en el objetivo; «trail»: deja correr con un stop que sube con el precio;
+   * «noise»: recoge ganancias pequeñas (objetivo +3 %, stop como mucho a −3 % y, desde +1,5 %, el stop
+   * sube por encima de la entrada y sigue al precio a un 1,5 %).
+   */
+  exitMode?: "target" | "trail" | "noise";
   /** Convicción mínima de la idea de FARO (de 1 a 5) para tomarla. */
   minConviction?: number;
   /** Operaciones a la vez: el capital se reparte en tantas partes (1 = todo a una carta). */
   slots?: number;
+  /**
+   * Riesgo por operación: % del patrimonio que pierde si salta el stop. El tamaño sale de ahí
+   * (patrimonio × riesgo ÷ distancia al stop), sin pasar del efectivo. Sin esto, capital ÷ slots.
+   */
+  riskPct?: number;
+  /** Tamaño fijo por operación en % del patrimonio (diversificación). Manda sobre riskPct. */
+  sizeOfEquityPct?: number;
+  /** Etiqueta del estilo en la ficha (pastilla): Prudente, Equilibrado, Agresivo, Diversificado… */
+  label?: string;
 };
 
 /** Capital igual para todos los agentes desde el 16/11/2026: así su rentabilidad se compara limpia. */
@@ -160,23 +173,83 @@ export const ALL_KAMIKAZES: KamikazeDef[] = [
  * capital repartido en sus operaciones a la vez. Nombres sin variantes ni números.
  */
 const ACTIVE_RULES: Record<string, Partial<KamikazeDef>> = {
-  "cohete-persigue": {
-    name: "COHETE",
-    ...standard(4),
-    tagline: "Impulso: se sube a las monedas que ya suben con fuerza y volumen. Hasta 4 operaciones a la vez.",
-  },
-  mecha: { ...standard(4), tagline: "Rupturas: monedas que rompen su máximo reciente o tienen una noticia que las puede disparar. Hasta 4 operaciones a la vez." },
-  "vertigo-faro": {
-    ...standard(1),
-    tagline: "Selectivo: solo las ideas de convicción alta (4 o 5 de 5), de cualquier tipo. Pocas veces, pero todo a una carta.",
-  },
+  "cohete-persigue": { name: "COHETE", ...standard(4) },
+  mecha: { ...standard(4) },
+  "vertigo-faro": { ...standard(1) },
 };
 for (let k = 0; k < ALL_KAMIKAZES.length; k++) {
   const o = ACTIVE_RULES[ALL_KAMIKAZES[k].key];
   if (o) ALL_KAMIKAZES[k] = { ...ALL_KAMIKAZES[k], ...o };
 }
 
-export const ARCHIVED_KAMIKAZES: ReadonlySet<string> = new Set(["fenix", "fenix-ajustado", "cohete", "mecha-balas", "mecha-corre"]);
+/**
+ * Agentes de cripto desde el 16/11/2026 (tarde): todos toman las mismas ideas que publica FARO (la de más
+ * convicción primero) y solo cambia cuánto arriesgan; así su rentabilidad dice qué nivel de riesgo funciona.
+ * Y ENJAMBRE, que diversifica: un 10 % en cada moneda (hasta 10) y recoge las ganancias pequeñas.
+ */
+const crypto = (o: Pick<KamikazeDef, "key" | "name" | "tagline" | "color" | "label"> & Partial<KamikazeDef>): KamikazeDef => ({
+  profile: "kamikaze",
+  style: "selectivo",
+  minConviction: 1,
+  persona: "",
+  multiple: 1,
+  days: 0,
+  rules: RULES,
+  ...standard(o.slots ?? 1),
+  ...o,
+  settings: { ...SETTINGS, max_open_positions: o.slots ?? 1 },
+});
+ALL_KAMIKAZES.push(
+  crypto({
+    key: "roca",
+    name: "ROCA",
+    label: "Prudente",
+    color: "emerald",
+    riskPct: 1,
+    slots: 8,
+    tagline: "Prudente: arriesga el 1 % de su dinero en cada operación (lo que pierde si salta el stop). Muchas posiciones pequeñas.",
+  }),
+  crypto({
+    key: "brujula",
+    name: "BRÚJULA",
+    label: "Equilibrado",
+    color: "violet",
+    riskPct: 3,
+    slots: 4,
+    tagline: "Equilibrado: arriesga el 3 % de su dinero en cada operación (lo que pierde si salta el stop).",
+  }),
+  crypto({
+    key: "vertigo-10",
+    name: "VÉRTIGO",
+    label: "Agresivo",
+    color: "orange",
+    riskPct: 10,
+    slots: 2,
+    tagline: "Agresivo: arriesga el 10 % de su dinero en cada operación (lo que pierde si salta el stop). Casi siempre va con todo.",
+  }),
+  crypto({
+    key: "enjambre",
+    name: "ENJAMBRE",
+    label: "Diversificado",
+    color: "amber",
+    sizeOfEquityPct: 10,
+    slots: 10,
+    exitMode: "noise",
+    tagline: "Diversificado: un 10 % de su dinero en cada moneda, hasta 10 a la vez. Recoge las subidas pequeñas: vende a +3 % y, en cuanto gana, protege la ganancia.",
+  }),
+);
+
+export const ARCHIVED_KAMIKAZES: ReadonlySet<string> = new Set([
+  "fenix",
+  "fenix-ajustado",
+  "cohete",
+  "mecha-balas",
+  "mecha-corre",
+  // Sustituidos por los tres niveles de riesgo (16/11/2026, tarde).
+  "cohete-persigue",
+  "mecha",
+  "vertigo-faro",
+]);
 /** Los que están en activo. */
 export const KAMIKAZES = ALL_KAMIKAZES.filter((k) => !ARCHIVED_KAMIKAZES.has(k.key));
 
