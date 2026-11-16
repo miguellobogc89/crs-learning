@@ -13,7 +13,7 @@ import { simulatePortfolio, type SimSeries, type SimSettings } from "./simulate"
 import { chooseTrendParams, prepareTrend, PROFILES, simulateTrend, trendGrid, trendPicks, type RiskProfile } from "./strategy";
 import { indicatorBundle, trendAt } from "./indicators";
 import { PATTERN_LIBRARY } from "./library";
-import { CRYPTO_BENCHMARK, fetchDailyCandles, INDEX_SYMBOL, isCryptoMarket, lotStepOf, newsSymbolOf } from "./market-data";
+import { CRYPTO_BENCHMARK, fetchDailyCandles, INDEX_SYMBOL, isCryptoMarket, isUsMarket, lotStepOf, newsSymbolOf } from "./market-data";
 import { rankRecommendations, recommendForInstrument, regimeFrom, type AccountView, type Recommendation, type Regime } from "./recommend";
 import { dayKey, ensureUniverse, latestBacktest, loadRecent, loadSeries, runBacktest, syncMarket } from "./sync";
 import type { Candle, Detection, Direction, PatternKey } from "./types";
@@ -24,6 +24,8 @@ const LIVE_WINDOW = 420;
 const LIVE_LOOKBACK = 160;
 
 export type MarketRow = {
+  /** Dónde cotiza: España (IBEX), EE. UU. (en euros al cambio del día) o crypto. */
+  exchange: "es" | "us" | "crypto";
   symbol: string;
   name: string;
   sector: string | null;
@@ -105,8 +107,8 @@ export async function computeRecommendations(workspaceId: string, agent = "") {
               detections,
               lotStep: lotStepOf(inst.market),
               unit: crypto ? newsSymbolOf(inst.symbol, inst.market) : "acciones",
-              where: crypto ? "las crypto" : "el IBEX",
-              benchmark: crypto ? "Bitcoin" : "IBEX 35",
+              where: crypto ? "las crypto" : isUsMarket(inst.market) ? "la bolsa de EE. UU." : "el IBEX",
+              benchmark: crypto ? "Bitcoin" : isUsMarket(inst.market) ? "Nasdaq 100" : "IBEX 35",
             },
             crypto ? cryptoStats : stats,
             crypto ? cryptoRegime : regime,
@@ -121,6 +123,7 @@ export async function computeRecommendations(workspaceId: string, agent = "") {
       name: inst.name,
       sector: inst.sector,
       market: isCryptoMarket(inst.market) ? "crypto" : "bolsa",
+      exchange: isCryptoMarket(inst.market) ? "crypto" : isUsMarket(inst.market) ? "us" : "es",
       isIndex: inst.is_index,
       lastDay: last >= 0 ? dayKey(new Date(c[last].t)) : null,
       close: last >= 0 ? c[last].c : null,

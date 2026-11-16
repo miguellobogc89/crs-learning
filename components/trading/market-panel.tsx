@@ -66,12 +66,12 @@ export function MarketPanel({
     };
   }, [current, reload]);
 
-  const currentMarket = data.market.find((m) => m.symbol === current)?.market ?? "bolsa";
-  const [listMarket, setListMarket] = useState<"bolsa" | "crypto">(currentMarket);
+  const currentMarket = data.market.find((m) => m.symbol === current)?.exchange ?? "es";
+  const [listMarket, setListMarket] = useState<"es" | "us" | "crypto">(currentMarket);
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
     return data.market.filter(
-      (m) => (s ? true : m.market === listMarket) && (!s || m.name.toLowerCase().includes(s) || m.symbol.toLowerCase().includes(s)),
+      (m) => (s ? true : m.exchange === listMarket) && (!s || m.name.toLowerCase().includes(s) || m.symbol.toLowerCase().includes(s)),
     );
   }, [data.market, q, listMarket]);
 
@@ -98,15 +98,15 @@ export function MarketPanel({
     <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
       <aside className={`${panel} flex max-h-[860px] flex-col`}>
         <div className="space-y-2 border-b border-slate-100 p-3">
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
-            {(["bolsa", "crypto"] as const).map((m) => (
+          <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1">
+            {(["es", "us", "crypto"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
                 onClick={() => setListMarket(m)}
                 className={`rounded-lg py-1.5 text-sm font-medium ${listMarket === m ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
               >
-                {m === "bolsa" ? "Bolsa" : "Crypto"}
+                {m === "es" ? "España" : m === "us" ? "EE. UU." : "Crypto"}
               </button>
             ))}
           </div>

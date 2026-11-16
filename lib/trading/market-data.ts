@@ -66,12 +66,90 @@ export const CRYPTO: { symbol: string; name: string; sector: string }[] = [
   { symbol: "TRX-EUR", name: "Tron", sector: "Crypto" },
 ];
 
+/**
+ * Bolsa de EE. UU.: las grandes del Nasdaq y del S&P 500 (tickers de Yahoo) y dos ETF de referencia.
+ * Cotizan en dólares; se guardan convertidas a euros (al cambio de cada día) para que todo el módulo
+ * —carteras, agentes y gráficas— siga en una sola moneda. `domain` sirve para su logotipo.
+ */
+export const US_MARKET = "US";
+/** Referencia del mercado americano (como Bitcoin para las crypto): el ETF del Nasdaq 100. */
+export const US_BENCHMARK = "QQQ";
+export const US_STOCKS: { symbol: string; name: string; sector: string; domain: string }[] = [
+  { symbol: "QQQ", name: "Nasdaq 100 (ETF QQQ)", sector: "Índice", domain: "invesco.com" },
+  { symbol: "SPY", name: "S&P 500 (ETF SPY)", sector: "Índice", domain: "ssga.com" },
+  { symbol: "NVDA", name: "Nvidia", sector: "Tecnología", domain: "nvidia.com" },
+  { symbol: "AAPL", name: "Apple", sector: "Tecnología", domain: "apple.com" },
+  { symbol: "MSFT", name: "Microsoft", sector: "Tecnología", domain: "microsoft.com" },
+  { symbol: "AMZN", name: "Amazon", sector: "Consumo", domain: "amazon.com" },
+  { symbol: "GOOGL", name: "Alphabet (Google)", sector: "Tecnología", domain: "google.com" },
+  { symbol: "META", name: "Meta", sector: "Tecnología", domain: "meta.com" },
+  { symbol: "AVGO", name: "Broadcom", sector: "Tecnología", domain: "broadcom.com" },
+  { symbol: "TSLA", name: "Tesla", sector: "Automoción", domain: "tesla.com" },
+  { symbol: "NFLX", name: "Netflix", sector: "Comunicación", domain: "netflix.com" },
+  { symbol: "AMD", name: "AMD", sector: "Tecnología", domain: "amd.com" },
+  { symbol: "PLTR", name: "Palantir", sector: "Tecnología", domain: "palantir.com" },
+  { symbol: "ORCL", name: "Oracle", sector: "Tecnología", domain: "oracle.com" },
+  { symbol: "CRM", name: "Salesforce", sector: "Tecnología", domain: "salesforce.com" },
+  { symbol: "ADBE", name: "Adobe", sector: "Tecnología", domain: "adobe.com" },
+  { symbol: "INTC", name: "Intel", sector: "Tecnología", domain: "intel.com" },
+  { symbol: "QCOM", name: "Qualcomm", sector: "Tecnología", domain: "qualcomm.com" },
+  { symbol: "MU", name: "Micron", sector: "Tecnología", domain: "micron.com" },
+  { symbol: "CSCO", name: "Cisco", sector: "Tecnología", domain: "cisco.com" },
+  { symbol: "INTU", name: "Intuit", sector: "Tecnología", domain: "intuit.com" },
+  { symbol: "ASML", name: "ASML", sector: "Tecnología", domain: "asml.com" },
+  { symbol: "SHOP", name: "Shopify", sector: "Tecnología", domain: "shopify.com" },
+  { symbol: "UBER", name: "Uber", sector: "Transporte", domain: "uber.com" },
+  { symbol: "COST", name: "Costco", sector: "Consumo", domain: "costco.com" },
+  { symbol: "WMT", name: "Walmart", sector: "Consumo", domain: "walmart.com" },
+  { symbol: "PEP", name: "PepsiCo", sector: "Consumo", domain: "pepsico.com" },
+  { symbol: "KO", name: "Coca-Cola", sector: "Consumo", domain: "coca-cola.com" },
+  { symbol: "PG", name: "Procter & Gamble", sector: "Consumo", domain: "pg.com" },
+  { symbol: "NKE", name: "Nike", sector: "Consumo", domain: "nike.com" },
+  { symbol: "HD", name: "Home Depot", sector: "Consumo", domain: "homedepot.com" },
+  { symbol: "DIS", name: "Disney", sector: "Comunicación", domain: "disney.com" },
+  { symbol: "BKNG", name: "Booking", sector: "Consumo", domain: "booking.com" },
+  { symbol: "JPM", name: "JPMorgan", sector: "Banca", domain: "jpmorganchase.com" },
+  { symbol: "V", name: "Visa", sector: "Pagos", domain: "visa.com" },
+  { symbol: "MA", name: "Mastercard", sector: "Pagos", domain: "mastercard.com" },
+  { symbol: "PYPL", name: "PayPal", sector: "Pagos", domain: "paypal.com" },
+  { symbol: "BRK-B", name: "Berkshire Hathaway", sector: "Finanzas", domain: "berkshirehathaway.com" },
+  { symbol: "LLY", name: "Eli Lilly", sector: "Salud", domain: "lilly.com" },
+  { symbol: "UNH", name: "UnitedHealth", sector: "Salud", domain: "unitedhealthgroup.com" },
+  { symbol: "JNJ", name: "Johnson & Johnson", sector: "Salud", domain: "jnj.com" },
+  { symbol: "XOM", name: "ExxonMobil", sector: "Energía", domain: "exxonmobil.com" },
+];
+
 export const isCryptoMarket = (market: string | null | undefined) => market === CRYPTO_MARKET;
+export const isUsMarket = (market: string | null | undefined) => market === US_MARKET;
+
+/**
+ * Pasa velas en dólares a euros con el cambio de cada día (EURUSD = dólares por euro). Si un día no
+ * tiene cambio, usa el último anterior; sin ninguno anterior, el primero que haya.
+ */
+export function toEur(candles: Candle[], fx: Candle[]): Candle[] {
+  const rates = [...fx].filter((r) => r.c > 0).sort((a, b) => a.t - b.t);
+  if (!rates.length) throw new Error("Sin cambio euro/dólar");
+  let k = 0;
+  return candles.map((c) => {
+    while (k + 1 < rates.length && rates[k + 1].t <= c.t) k++;
+    const r = rates[k].t <= c.t ? rates[k].c : rates[0].c;
+    return { ...c, o: c.o / r, h: c.h / r, l: c.l / r, c: c.c / r };
+  });
+}
+
+let fxCache: { candles: Candle[]; until: number } | null = null;
+/** Cambio euro/dólar diario (Yahoo «EURUSD=X»), en memoria una hora. */
+export async function eurUsd(years = 6): Promise<Candle[]> {
+  if (fxCache && fxCache.until > Date.now() && fxCache.candles.length) return fxCache.candles;
+  const r = await fetchDailyCandles("EURUSD=X", { years });
+  fxCache = { candles: r.candles, until: Date.now() + 60 * 60_000 };
+  return r.candles;
+}
 /** Símbolo con el que las noticias etiquetan un instrumento (BTC-EUR → BTC). */
 export const newsSymbolOf = (symbol: string, market?: string | null) =>
   isCryptoMarket(market) || /-EUR$/.test(symbol) ? symbol.replace(/-EUR$/, "") : symbol;
-/** Paso mínimo de cantidad: acciones enteras; crypto en fracciones. */
-export const lotStepOf = (market: string | null | undefined) => (isCryptoMarket(market) ? 0.000001 : 1);
+/** Paso mínimo de cantidad: acciones enteras en el IBEX; fracciones en crypto y en EE. UU. (como los brókeres). */
+export const lotStepOf = (market: string | null | undefined) => (isCryptoMarket(market) ? 0.000001 : isUsMarket(market) ? 0.0001 : 1);
 
 export type ChartResponse = {
   symbol: string;

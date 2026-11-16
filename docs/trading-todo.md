@@ -130,5 +130,8 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] Comisiones de la tarifa pública de cada exchange en Conexiones (Revolut X 0 / 0,09 %, OKX 0,08 / 0,10 %, Binance 0,10 %, Bitvavo 0,15 / 0,25 %, Coinbase 0,40 / 0,60 %).
 - [ ] Leer la comisión real de cada cuenta por API (Revolut X: niveles; Coinbase, Binance, Bitvavo, OKX: sus endpoints de comisiones).
 - [ ] Kraken; valorar CCXT para el resto de exchanges.
-- [ ] Mercado internacional (concretar mercados y bróker).
+- [x] Bolsa de EE. UU. (16/11): 40 grandes (Nvidia, Apple, Microsoft, Amazon…) y los ETF QQQ y SPY, guardadas en euros al cambio de cada día; horario de Nueva York; fracciones; filtro España / EE. UU. / Crypto en Mercados.
+- [x] ATLAS: las reglas de CAMALEÓN sobre EE. UU. (detector sobre el Nasdaq 100, rupturas 20/10, hasta 3), 1.000 €.
+- [ ] FARO analizando acciones de EE. UU. (velas de 1 h de Yahoo, horario de mercado).
+- [ ] Copiar acciones con dinero real: completar Trading 212 (Trade Republic y Revolut acciones no tienen API).
 

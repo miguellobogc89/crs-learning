@@ -18,6 +18,37 @@ const madrid = (now: Date) => {
   return { day: `${get("year")}-${get("month")}-${get("day")}`, minutes: Number(get("hour")) * 60 + Number(get("minute")), weekday: get("weekday") };
 };
 
+/** Hora de Nueva York (la bolsa americana abre de 9:30 a 16:00 allí, con su propio cambio de hora). */
+const newYork = (now: Date) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    weekday: "short",
+  }).formatToParts(now);
+  const get = (k: string) => parts.find((p) => p.type === k)?.value ?? "";
+  return { day: `${get("year")}-${get("month")}-${get("day")}`, minutes: Number(get("hour")) * 60 + Number(get("minute")), weekday: get("weekday") };
+};
+
+/** ¿La vela del día `t` de EE. UU. es de una sesión que aún no ha cerrado (Nueva York, cierre 16:00 + margen)? */
+export function usSessionInProgress(t: number, now = new Date()) {
+  const ny = newYork(now);
+  return new Date(t).toISOString().slice(0, 10) >= ny.day && ny.minutes < 16 * 60 + 30;
+}
+
+/** Vela de la sesión de hoy en EE. UU., si ya ha empezado (laborables, desde las 9:45 de Nueva York). */
+export function todayUsBar(candles: Candle[], now = new Date()): Candle | null {
+  const ny = newYork(now);
+  if (ny.weekday === "Sat" || ny.weekday === "Sun" || ny.minutes < 9 * 60 + 45) return null;
+  const t = Date.parse(`${ny.day}T00:00:00Z`);
+  const bar = candles.find((c) => c.t === t);
+  return bar && bar.o > 0 && bar.c > 0 ? bar : null;
+}
+
 /** La Bolsa de Madrid abre a las 9:00; se deja un margen para que el proveedor tenga la apertura. */
 export const BOLSA_OPEN_MINUTES = 9 * 60 + 5;
 
@@ -57,8 +88,13 @@ export function canFillLive(createdDay: number, liveDay: number | null, firstSto
  * ¿Se puede operar ya a precio de mercado? Crypto siempre; bolsa en días laborables de 9:30 a 17:30
  * (desde las 9:30 para que el proveedor ya tenga la apertura, que llega con ~15 min de retraso).
  */
-export function marketOpenNow(market: "bolsa" | "crypto", now = new Date()) {
+export function marketOpenNow(market: "bolsa" | "crypto" | "us", now = new Date()) {
   if (market === "crypto") return true;
+  if (market === "us") {
+    const ny = newYork(now);
+    if (ny.weekday === "Sat" || ny.weekday === "Sun") return false;
+    return ny.minutes >= 9 * 60 + 45 && ny.minutes < 16 * 60;
+  }
   const m = madrid(now);
   if (m.weekday === "Sat" || m.weekday === "Sun") return false;
   return m.minutes >= 9 * 60 + 30 && m.minutes < 17 * 60 + 30;

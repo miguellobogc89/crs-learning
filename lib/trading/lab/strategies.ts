@@ -508,6 +508,41 @@ export const CHIP: Strategy[] = [
   gated("chip-b-rupt", "Chip B · rupturas", "Detector B; en ataque, rupturas 20/10 (hasta 3).", DETECTOR_B, attackBreakout),
 ];
 
+// ---------------------------------------------------------------------------
+// Las mismas reglas de CAMALEÓN sobre otro mercado (16/11/2026): el detector mira a `bench` (p. ej. el
+// ETF del Nasdaq 100) en vez de a Bitcoin, y las rupturas se buscan en el resto del universo.
+// ---------------------------------------------------------------------------
+export const detectorOn =
+  (bench: string): Gate =>
+  (c) => {
+    const p = c.close(bench);
+    const m200 = c.ma(bench, 200);
+    const m50 = c.ma(bench, 50);
+    const p10 = c.close(bench, 10);
+    return p !== null && m200 !== null && m50 !== null && p10 !== null && p > m200 && p > m50 && p > p10;
+  };
+
+export function explainDetectorOn(c: Ctx, bench: string, label: string) {
+  const p = c.close(bench);
+  const m200 = c.ma(bench, 200);
+  const m50 = c.ma(bench, 50);
+  const p10 = c.close(bench, 10);
+  const checks = [
+    { ok: p !== null && m200 !== null && p > m200, text: `${label} está por encima de su media de 200 días (tendencia de fondo)` },
+    { ok: p !== null && m50 !== null && p > m50, text: `${label} está por encima de su media de 50 días (tendencia de las últimas semanas)` },
+    { ok: p !== null && p10 !== null && p > p10, text: `${label} vale más que hace 10 días (impulso reciente)` },
+  ];
+  return { attack: checks.every((x) => x.ok), checks, btc: p, ma200: m200, ma50: m50 };
+}
+
+/** Rupturas 20/10 (hasta 3) con el detector sobre `bench`; nunca compra las referencias (`exclude`). */
+export function breakoutOn(bench: string, exclude: string[] = [bench]): Strategy {
+  const skip = new Set(exclude);
+  return gated(`rupt-${bench}`, `Rupturas con detector en ${bench}`, `Detector sobre ${bench}; en ataque, rupturas 20/10 (hasta 3).`, detectorOn(bench), (c) =>
+    attackBreakout({ ...c, coins: c.coins.filter((s) => !skip.has(s)) }),
+  );
+}
+
 /**
  * Como `gated`, pero en defensa apuesta a la baja contra Bitcoin con `shortWeight` del patrimonio
  * (1 = todo; 0,5 = la mitad corta y la mitad en efectivo). Sin apalancamiento.

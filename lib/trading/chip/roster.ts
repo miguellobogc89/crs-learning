@@ -22,6 +22,11 @@ export type ChipDef = {
     breakeven: boolean;
   };
   rules: AgentRules;
+  /**
+   * Otro mercado con las mismas reglas: instrumentos de `market` y detector sobre `benchmark` (que, como
+   * las de `exclude`, nunca se compra). Sin esto: las crypto y Bitcoin, como CAMALEÓN.
+   */
+  universe?: { market: string; benchmark: string; label: string; exclude: string[]; where: string };
 };
 
 export const CHIP_AGENTS: ChipDef[] = [
@@ -37,6 +42,20 @@ export const CHIP_AGENTS: ChipDef[] = [
     // Como un exchange de crypto (Bitvavo): ~0,25 % por orden y algo de deslizamiento.
     settings: { commission_pct: 0.25, commission_min: 0, slippage_bps: 5, risk_per_trade_pct: 100, max_position_pct: 100, max_open_positions: 3, breakeven: false },
     rules: { maxBuys: 3, minConviction: 1, minRewardRisk: 1, buyInBearMarket: false },
+  },
+  {
+    // Las reglas de CAMALEÓN sobre las grandes de EE. UU. (16/11/2026): detector sobre el Nasdaq 100.
+    key: "atlas",
+    name: "ATLAS",
+    profile: "arriesgado",
+    tagline: "Fase en EE. UU.: con el Nasdaq en ataque, compra las grandes americanas que rompen su máximo de 20 días; en defensa, se queda en efectivo.",
+    strategy: "rupt-QQQ",
+    capital: 1000,
+    color: "blue",
+    // Como un bróker de acciones con fracciones (Trading 212): sin comisión, algo de deslizamiento y cambio de divisa.
+    settings: { commission_pct: 0.15, commission_min: 0, slippage_bps: 5, risk_per_trade_pct: 100, max_position_pct: 100, max_open_positions: 3, breakeven: false },
+    rules: { maxBuys: 3, minConviction: 1, minRewardRisk: 1, buyInBearMarket: false },
+    universe: { market: "US", benchmark: "QQQ", label: "El Nasdaq 100", exclude: ["QQQ", "SPY"], where: "las grandes de EE. UU." },
   },
 ];
 

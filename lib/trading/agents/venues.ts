@@ -6,16 +6,16 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { brokerRegistry } from "@/lib/brokers/providers";
 import { parseProducts } from "@/lib/brokers/adapters/coinbase/mapping";
-import { CRYPTO_MARKET } from "../market-data";
+import { CRYPTO_MARKET, US_MARKET } from "../market-data";
 import { eurPairs } from "../kamikaze/market";
 import { isKamikaze } from "../kamikaze/roster";
-import { isChip } from "../chip/roster";
+import { chipByKey, isChip } from "../chip/roster";
 import { marketsOf, venuesFor, type AgentMarket, type AgentUniverse, type Venue, type VenueFit } from "./venues-logic";
 
 const TTL = 6 * 60 * 60_000;
 let cache: { at: number; value: Promise<Snapshot> } | null = null;
 
-type Snapshot = { venues: Venue[]; crypto: string[]; bolsa: string[]; kamikaze: string[] };
+type Snapshot = { venues: Venue[]; crypto: string[]; bolsa: string[]; us: string[]; kamikaze: string[] };
 
 const baseOf = (symbol: string) => symbol.toUpperCase().replace(/-EUR$/, "");
 
@@ -79,7 +79,8 @@ async function load(): Promise<Snapshot> {
   return {
     venues,
     crypto: instruments.filter((i) => i.market === CRYPTO_MARKET).map((i) => baseOf(i.symbol)),
-    bolsa: instruments.filter((i) => i.market !== CRYPTO_MARKET).map((i) => i.symbol),
+    bolsa: instruments.filter((i) => i.market !== CRYPTO_MARKET && i.market !== US_MARKET).map((i) => i.symbol),
+    us: instruments.filter((i) => i.market === US_MARKET).map((i) => i.symbol),
     kamikaze,
   };
 }
@@ -98,6 +99,8 @@ export type AgentVenues = { markets: AgentMarket[]; venues: VenueFit[] };
 /** Universo de un agente según su tipo: clásicos (bolsa y crypto), CAMALEÓN (crypto fijo) y kamikazes (crypto dinámico). */
 function universeOf(key: string, s: Snapshot): AgentUniverse {
   if (isKamikaze(key)) return { crypto: s.kamikaze, bolsa: [] };
+  const chip = chipByKey(key);
+  if (chip?.universe) return { crypto: [], bolsa: s.us.filter((x) => !chip.universe!.exclude.includes(x)) };
   if (isChip(key)) return { crypto: s.crypto, bolsa: [] };
   return { crypto: s.crypto, bolsa: s.bolsa };
 }

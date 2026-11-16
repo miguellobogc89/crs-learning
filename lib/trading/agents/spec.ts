@@ -50,13 +50,16 @@ export function kamikazeSpec(k: KamikazeDef): AgentSpec {
   };
 }
 
-/** CAMALEÓN: escáner de rupturas de 20 días + fase del mercado (las reglas probadas en el laboratorio). */
+/** CAMALEÓN y ATLAS: escáner de rupturas de 20 días + fase del mercado (las reglas probadas en el laboratorio). */
 export function chipSpec(c: ChipDef): AgentSpec {
+  const u = c.universe;
+  const what = u ? `acciones de ${u.where} (en euros)` : "criptomonedas";
+  const phase = u ? `${u.label} en fase de ataque` : "el mercado en fase de ataque";
   return {
     style: "Fase",
-    ideas: "Las del escáner de rupturas de 20 días (sin IA): criptomonedas que cierran el día por encima de su máximo de 20 días, las más fuertes primero.",
-    when: "Solo con el mercado en fase de ataque. En defensa no compra nada.",
-    size: `Su capital (${nf(c.capital)} €) repartido a partes iguales en hasta ${c.settings.max_open_positions} monedas.`,
-    exit: "Vende una moneda si cierra por debajo de su mínimo de 10 días, y todo si el mercado pasa a defensa (se queda en efectivo).",
+    ideas: `Las del escáner de rupturas de 20 días (sin IA): ${what} que cierran el día por encima de su máximo de 20 días, las más fuertes primero.`,
+    when: `Solo con ${phase} (por encima de sus medias de 200 y 50 días y subiendo en 10 días). En defensa no compra nada.${u ? " Decide tras cada sesión; compra en la apertura siguiente si la bolsa está cerrada." : ""}`,
+    size: `Su capital (${nf(c.capital)} €) repartido a partes iguales en hasta ${c.settings.max_open_positions} ${u ? "valores" : "monedas"}.`,
+    exit: `Vende ${u ? "un valor" : "una moneda"} si cierra por debajo de su mínimo de 10 días, y todo si pasa a defensa (se queda en efectivo).`,
   };
 }

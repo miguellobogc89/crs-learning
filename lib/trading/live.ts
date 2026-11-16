@@ -6,8 +6,8 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { fillPendingLive, OPEN_STATUSES } from "./accounts";
-import { fetchDailyCandles, isCryptoMarket } from "./market-data";
-import { todayBar } from "./live-logic";
+import { eurUsd, fetchDailyCandles, isCryptoMarket, isUsMarket, toEur } from "./market-data";
+import { todayBar, todayUsBar } from "./live-logic";
 
 /** Cada valor se consulta como mucho cada 10 minutos (el proveedor no es una API oficial). */
 const STALE_MS = 10 * 60_000;
@@ -75,7 +75,10 @@ async function run(budgetMs: number): Promise<LiveSummary> {
 async function fetchLive(inst: { id: string; symbol: string; market: string }) {
   try {
     const r = await fetchDailyCandles(inst.symbol, { since: new Date(Date.now() - 6 * 86_400_000), timeoutMs: 5_000 });
-    const bar = todayBar(r.candles, isCryptoMarket(inst.market));
+    // EE. UU.: su sesión (hora de Nueva York) y en euros, como sus velas guardadas.
+    const us = isUsMarket(inst.market);
+    const raw = us ? todayUsBar(r.candles) : todayBar(r.candles, isCryptoMarket(inst.market));
+    const bar = raw && us ? toEur([raw], await eurUsd())[0] : raw;
     await prisma.market_instruments.update({
       where: { id: inst.id },
       data: bar
