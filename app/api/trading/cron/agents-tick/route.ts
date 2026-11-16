@@ -8,12 +8,11 @@ import { chipTick } from "@/lib/trading/chip/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
- * Precio en directo y, si le toca a algún agente, su reunión. Pensado para un cron cada 10-15 min
- * (p. ej. «*\/10 * * * *»); Vercel Hobby solo permite crons diarios, por eso no está en vercel.json.
- * Sin cron, lo mismo se hace cuando alguien abre el módulo de Trading.
+ * Revisión 24/7 (cron de Vercel cada 5 minutos, en vercel.json): precio en directo, FARO y sus
+ * escáneres, los agentes, las copias y tus operaciones. Abrir el módulo de Trading también la lanza.
  */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;

@@ -150,8 +150,8 @@ export function refuerzoStop(o: { q1: number; entry: number; stop: number; q2: n
 
 /**
  * Escáner de «ruido» (sin IA): en las últimas 24 velas de 1 h, un rango estrecho (1,5-6 %) sin tendencia
- * y el precio en su parte baja. Compra limitada cerca del suelo, venta en la parte alta y stop algo por
- * debajo del rango. null si no encaja o si el recorrido no compensa la comisión.
+ * y el precio dentro. Compra limitada cerca del suelo (o al precio de ahora si ya está ahí), venta en la
+ * parte alta y stop algo por debajo del rango. null si no encaja o si el recorrido no compensa la comisión.
  */
 export function noiseIdea(bars: { h: number; l: number; c: number }[], price: number, minTarget = 0.8) {
   const w = bars.slice(-24);
@@ -163,7 +163,8 @@ export function noiseIdea(bars: { h: number; l: number; c: number }[], price: nu
   if (!(width >= 1.5 && width <= 6)) return null;
   // Sin tendencia: de punta a punta del día se ha movido menos de un tercio del rango.
   if (Math.abs(w[w.length - 1].c - w[0].c) > (hi - lo) / 3) return null;
-  if ((price - lo) / (hi - lo) > 0.4) return null;
+  // Si está arriba, la compra espera abajo (orden limitada); solo descarta si ya rompió el rango.
+  if (price > hi || price < lo) return null;
   // Si ya está más abajo que el nivel de compra, la orden va a su precio de ahora.
   const entry = Math.min(price, lo + 0.2 * (hi - lo));
   const target = hi - 0.2 * (hi - lo);

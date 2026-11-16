@@ -153,3 +153,5 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] Oportunidades: columna «Orden · dónde» con el exchange de menos comisión para ese tipo de orden.
 - [ ] Salida parcial (mitad en el primer objetivo) en tendencia y ruptura: necesita cierres parciales en las cuentas.
 - [ ] Límite de concentración en defensa.
+- [x] Revisión 24/7: cron de Vercel cada 5 minutos a `/api/trading/cron/agents-tick` (FARO, escáneres, agentes, copias y tus operaciones), sin depender de que la app esté abierta.
+- [x] Escáner de ruido en cada revisión (no en la de FARO): todas las monedas líquidas de Revolut X, hasta 15 ideas vivas; si el precio está arriba del rango, la compra limitada espera abajo. Solo se frena si Bitcoin cae más de un 3 % en 24 h.

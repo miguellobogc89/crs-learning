@@ -37,7 +37,8 @@ test("carta: escáner de ruido — rango estrecho, sin tendencia y en su parte b
   const flat = Array.from({ length: 24 }, (_, i) => ({ h: 102, l: 98, c: i % 2 ? 100.5 : 99.5 }));
   const r = C.noiseIdea(flat, 98.5);
   assert.ok(r && r.entry <= 98.5 && r.target > r.entry && r.invalidation < 98);
-  assert.equal(C.noiseIdea(flat, 101.5), null, "en la parte alta, no");
+  assert.ok(C.noiseIdea(flat, 101.5).entry < 101.5, "en la parte alta, la compra espera abajo");
+  assert.equal(C.noiseIdea(flat, 103), null, "fuera del rango, no");
   const trend = Array.from({ length: 24 }, (_, i) => ({ h: 98 + i * 0.2 + 0.5, l: 98 + i * 0.2 - 0.5, c: 98 + i * 0.2 }));
   assert.equal(C.noiseIdea(trend, 98), null, "con tendencia, no es ruido");
 });

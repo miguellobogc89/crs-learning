@@ -505,7 +505,7 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
 // ---------------------------------------------------------------------------
 const MAX_SCANNED = 5;
 
-async function publishScanned(runId: string, rules: Rules, o: { pair: string; kind: "ruido" | "tendencia"; price: number; invalidation: number; target: number; validHours: number; rationale: string; risks: string; conviction: number }) {
+async function publishScanned(runId: string | null, rules: Rules, o: { pair: string; kind: "ruido" | "tendencia"; price: number; invalidation: number; target: number; validHours: number; rationale: string; risks: string; conviction: number }) {
   const symbol = symbolOf(o.pair, rules) ?? `${o.pair.replace(/(EUR|USDC)$/, "")}-EUR`;
   const inst = await ensureInstrument(symbol, rules.get(o.pair)?.base ?? symbol.replace(/-EUR$/, ""));
   await setLive(inst.id, o.price);
@@ -533,37 +533,7 @@ async function runScanners(runId: string, market: Ticker[], rules: Rules, btc24h
   const live = new Set((await prisma.trading_faro_ideas.findMany({ where: { status: "viva" }, select: { pair: true } })).map((i) => i.pair));
   let n = 0;
   const f = (v: number) => v.toPrecision(5);
-
-  // Ruido: solo con el mercado tranquilo y en monedas de Revolut X (0 % en las órdenes que esperan).
-  if (btc24h !== null && Math.abs(btc24h) < 2) {
-    const cov = await venueCoverage();
-    const revx = cov?.find((v) => v.id === "revolutx")?.has ?? null;
-    if (revx) {
-      const pool = market
-        .filter((t) => revx.has(t.base) && !live.has(t.pair) && t.volume24h >= 200_000 && t.price > 0)
-        .sort((a, b) => b.volume24h - a.volume24h)
-        .slice(0, 25);
-      for (const t of pool) {
-        if (n >= MAX_SCANNED) break;
-        const bars = await hourly(t.pair).catch(() => []);
-        const r = noiseIdea(bars, t.price);
-        if (!r) continue;
-        await publishScanned(runId, rules, {
-          pair: t.pair,
-          kind: "ruido",
-          price: r.entry,
-          invalidation: r.invalidation,
-          target: r.target,
-          validHours: ideaValidHours("ruido", CARTA.ruido.maxHoldHours ?? 8),
-          conviction: 2,
-          rationale: `Se mueve en un rango del **${r.width.toFixed(1).replace(".", ",")} %** en las últimas 24 h sin tendencia, y ahora está en su parte baja. **Compra limitada a ${f(r.entry)} €** cerca del suelo y **venta a ${f(r.target)} €** en la parte alta. Pensada para Revolut X: 0 % en las órdenes que esperan.`,
-          risks: `Si rompe el rango hacia abajo, stop a ${f(r.invalidation)} €.`,
-        });
-        live.add(t.pair);
-        n++;
-      }
-    }
-  }
+  void btc24h;
 
   // Tendencia larga: una vez al día, con el mercado en ataque; ruptura del máximo de 20 días (cierres).
   const phase = await getMarketPhase().catch(() => null);
@@ -600,6 +570,59 @@ async function runScanners(runId: string, market: Ticker[], rules: Rules, btc24h
       m++;
       n++;
     }
+  }
+  return n;
+}
+
+/** Ideas de ruido vivas a la vez como mucho (ENJAMBRE llena hasta 10 huecos y necesita dónde rotar). */
+const MAX_NOISE_LIVE = 15;
+const NOISE_GAP_MS = 4 * 60_000;
+let lastNoise = 0;
+
+/**
+ * Escáner de ruido (sin IA), en cada revisión de los agentes (cada 5 minutos, día y noche): monedas
+ * líquidas de Revolut X que se mueven de lado en un rango estrecho. Deja una compra limitada en la parte
+ * baja del rango (en Revolut X esperar no cuesta comisión) y la venta en la alta. Se frena solo si
+ * Bitcoin cae con fuerza (más de un 3 % en 24 h).
+ */
+export async function noiseScan(market: Ticker[], rules: Rules): Promise<number> {
+  if (Date.now() - lastNoise < NOISE_GAP_MS) return 0;
+  lastNoise = Date.now();
+  const btc = market.find((t) => t.base === "BTC" && t.pair.endsWith("EUR")) ?? market.find((t) => t.base === "BTC");
+  if (btc && btc.ch24h < -3) return 0;
+  const cov = await venueCoverage();
+  const revx = cov?.find((v) => v.id === "revolutx")?.has ?? null;
+  if (!revx) return 0;
+  const liveRows = await prisma.trading_faro_ideas.findMany({ where: { status: "viva", valid_until: { gt: new Date() } }, select: { pair: true, kind: true } });
+  const live = new Set(liveRows.map((i) => i.pair));
+  let room = MAX_NOISE_LIVE - liveRows.filter((i) => i.kind === "ruido").length;
+  if (room <= 0) return 0;
+  const f = (v: number) => v.toPrecision(5);
+  const pool = market
+    .filter((t) => revx.has(t.base) && !live.has(t.pair) && t.volume24h >= 200_000 && t.price > 0)
+    .sort((a, b) => b.volume24h - a.volume24h)
+    .slice(0, 40);
+  let n = 0;
+  for (const t of pool) {
+    if (room <= 0) break;
+    const bars = await hourly(t.pair).catch(() => []);
+    const r = noiseIdea(bars, t.price);
+    if (!r) continue;
+    const now = r.entry >= t.price;
+    await publishScanned(null, rules, {
+      pair: t.pair,
+      kind: "ruido",
+      price: r.entry,
+      invalidation: r.invalidation,
+      target: r.target,
+      validHours: ideaValidHours("ruido", CARTA.ruido.maxHoldHours ?? 8),
+      conviction: 2,
+      rationale: `Se mueve de lado en un rango del **${r.width.toFixed(1).replace(".", ",")} %** en las últimas 24 h. **Compra limitada a ${f(r.entry)} €**${now ? " (ya está en la parte baja)" : " (espera en la parte baja del rango)"} y **venta a ${f(r.target)} €** en la alta. Pensada para Revolut X: 0 % en las órdenes que esperan.`,
+      risks: `Si rompe el rango hacia abajo, stop a ${f(r.invalidation)} €.`,
+    });
+    live.add(t.pair);
+    room--;
+    n++;
   }
   return n;
 }

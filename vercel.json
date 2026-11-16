@@ -11,6 +11,10 @@
     {
       "path": "/api/trading/cron/agents",
       "schedule": "15 18 * * 1-5"
+    },
+    {
+      "path": "/api/trading/cron/agents-tick",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

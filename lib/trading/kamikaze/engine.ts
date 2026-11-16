@@ -16,7 +16,7 @@ import { AGENTS_WORKSPACE } from "../agents/roster";
 import { ensureFresh } from "../agents/restart";
 import { runMirrors } from "../mirror/service";
 import { dayDate } from "../sync";
-import { boardIdeas, faroTick, lastMarketView, setLive } from "../faro/engine";
+import { boardIdeas, faroTick, lastMarketView, noiseScan, setLive } from "../faro/engine";
 import { chooseIdea, trailingStop, type BoardIdea } from "../faro/logic";
 import { allInQuantity, exitNow, noiseLevels, noiseStop, positionBudget, protectedStop, type Ticker } from "./logic";
 import { eurPairs, priceEur, tickers } from "./market";
@@ -97,6 +97,12 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
   // FARO primero: puntúa sus ideas y, si toca, publica nuevas (una sola llamada a la IA para todos).
   const faro = await faroTick(market, rules, { force: !!force });
   if (faro.ran) out.agents.forEach((a) => a.actions.push(`FARO: ${faro.ran}`));
+  // Escáner de ruido en cada revisión (no espera al análisis de FARO): es de poco recorrido y rota rápido.
+  const noise = await noiseScan(market, rules).catch((e) => {
+    console.error("[agentes] escáner de ruido", e instanceof Error ? e.message.slice(0, 200) : e);
+    return 0;
+  });
+  if (noise) out.agents.forEach((a) => a.actions.push(`Escáner de ruido: ${noise} nuevas`));
   // Solo lo que publica FARO (su filtro ya ha quitado las descartadas), y solo crypto: estos agentes
   // vigilan y operan con precios de Binance. Las ideas de acciones de EE. UU. aún no las toma ninguno.
   const off = await kindsOff();
