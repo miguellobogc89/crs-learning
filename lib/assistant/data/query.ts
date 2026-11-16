@@ -29,7 +29,7 @@ export function parseMeasure(text: unknown): { cantidad: number; unidad: "L" | "
   const unit = (u: string): ["L" | "Kg", number] | null =>
     /^(l|lt|lts|litro|litros)$/.test(u) ? ["L", 1] : u === "ml" || u === "cc" ? ["L", 0.001] : u === "cl" ? ["L", 0.01]
       : /^(kg|kgs|kilo|kilos)$/.test(u) ? ["Kg", 1] : /^(g|gr|grs|gramos)$/.test(u) ? ["Kg", 0.001] : null;
-  const round = (v: number) => Math.round(v * 10000) / 10000;
+  const round = (v: number) => Math.round(v * 1e5) / 1e5;
   const multi = /(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(l|lt|lts|litros?|ml|cl|cc|kg|kgs|g|gr|grs)\b/.exec(t);
   if (multi) { const u = unit(multi[3]); if (u) return { cantidad: round(n(multi[1]) * n(multi[2]) * u[1]), unidad: u[0] }; }
   const box = /\b(?:cj|caja|c|bl|bolsa|paq|pack)\s*\/?\s*(\d+(?:[.,]\d+)?)\s*(?:u|ud|uds|unid|unidades)\b/.exec(t) ?? /\b(\d+)\s*(?:u|ud|uds|unidades)\b\.?\s*$/.exec(t);
@@ -188,7 +188,7 @@ export function runQuery(tables: Table[], q: Query, opts: { maxLimit?: number; k
       // «o»: the first value that exists (a preferred source with a fallback, e.g. litres from a fixed price, else from the invoice).
       const v = f.op === "o" ? (typeof x === "number" ? x : typeof y === "number" ? y : null)
         : typeof x === "number" && typeof y === "number" ? calc(x, y) : null;
-      return { ...r, [`=${name}`]: v === null ? null : Math.round(v * 10000) / 10000 };
+      return { ...r, [`=${name}`]: v === null ? null : Math.round(v * 1e5) / 1e5 };
     });
     base.set(name, { key: name, label: name, kind: money ? "money" : "number", get: r => r[`=${name}`] ?? null });
   }
@@ -297,7 +297,7 @@ function aggregate(rows: Record<string, CellValue>[], fn: AggregateFn, c?: Resol
     const nums = values.filter((v): v is number => typeof v === "number").sort((x, y) => x - y);
     if (!nums.length) return null;
     const mid = Math.floor(nums.length / 2);
-    return Math.round((nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2) * 10000) / 10000;
+    return Math.round((nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2) * 1e5) / 1e5;
   }
   if (fn === "suma" || fn === "media") {
     const nums = values.filter((v): v is number => typeof v === "number");

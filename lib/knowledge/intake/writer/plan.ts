@@ -3,6 +3,7 @@ import { expenseCategory, FIELD_SET_MAPPING, STANDARD_TYPES } from "@/lib/engine
 import type { TargetedFile, TargetedResult } from "../targeted/contract";
 import type { ReconciliationResult, ReconciledEntity } from "../reconciliation/contract";
 import { toDate, toDecimal, toInteger, usesCommaDecimals, type Conversion } from "./convert";
+import { lineTaxRates } from "./line-tax";
 
 /**
  * Write plan (pure): which records will be created or reused, with typed values, the printed evidence of every
@@ -159,6 +160,9 @@ export function buildWritePlan(extraction: TargetedResult, reconciliation: Recon
     }
   }
 
+  // The VAT rate of each article line, from the invoice's tax summary when the line prints none or only a code.
+  resolveLineTaxes([...records.values()]);
+
   // Actions from the reconciliation, then the person's decisions.
   for (const e of reconciliation.entidades) {
     const r = records.get(e.ref);
@@ -213,4 +217,38 @@ export function buildWritePlan(extraction: TargetedResult, reconciliation: Recon
   return { module: "record_writer_plan", version: WRITER_REVISION, loteId: reconciliation.loteId, registros, relaciones, avisos,
     resumen: { crear: count("crear"), reutilizar: count("reutilizar"), bloqueados: count("bloqueado"), omitidos: count("omitir"), unidos: count("unir"),
       relaciones: relaciones.length, noConvertidos: registros.reduce((n, r) => n + r.noConvertidos.length, 0) } };
+}
+
+/** Fills (or corrects) `tax_rate` of the article lines of each invoice: see `lineTaxRates`. */
+function resolveLineTaxes(all: PlannedRecord[]) {
+  const num = (v: unknown) => typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : typeof v === "number" ? v : null;
+  const byInvoice = new Map<string, { lines: PlannedRecord[]; taxes: PlannedRecord[] }>();
+  for (const r of all) {
+    if (!r.padre) continue;
+    const g = byInvoice.get(r.padre) ?? { lines: [], taxes: [] };
+    if (r.tipo === "invoice_line" && /\.lines\[\d+\]$/.test(r.ref)) g.lines.push(r);
+    else if (r.tipo === "invoice_tax_line") g.taxes.push(r);
+    byInvoice.set(r.padre, g);
+  }
+  for (const { lines, taxes } of byInvoice.values()) {
+    if (!lines.length) continue;
+    const summary = taxes.filter(t => !/irpf|retenc/i.test(String(t.valores.tax_type ?? ""))).map(t => ({ rate: num(t.valores.tax_rate), base: num(t.valores.taxable_base), cuota: num(t.valores.tax_amount) }))
+      .filter((s): s is { rate: number; base: number | null; cuota: number | null } => s.rate !== null);
+    const printed = (r: PlannedRecord) => r.evidencias.find(e => e.campo === "tax_rate")?.impreso ?? r.noConvertidos.find(n => n.campo === "tax_rate")?.impreso ?? null;
+    const rates = lineTaxRates(lines.map(r => ({ rate: num(r.valores.tax_rate), code: printed(r)?.trim() || null,
+      total: num(r.valores.line_total), totalWithTax: num(r.valores.line_total_with_tax) })), summary);
+    lines.forEach((r, i) => {
+      const found = rates[i];
+      if (!found || found.how === "impreso" || num(r.valores.tax_rate) === found.rate) return;
+      const code = printed(r);
+      r.valores.tax_rate = String(found.rate);
+      r.noConvertidos = r.noConvertidos.filter(n => n.campo !== "tax_rate");
+      const why = found.how === "importes" ? "deducido de los importes sin y con IVA de la línea"
+        : found.how === "unico" ? "el único tipo del desglose de impuestos de la factura"
+        : found.how === "codigo" ? `el código «${code}» de la línea corresponde a este tipo según el desglose de impuestos`
+        : "repartiendo las líneas entre los tipos del desglose de impuestos (única forma de que cuadren)";
+      r.evidencias = [...r.evidencias.filter(e => e.campo !== "tax_rate"), { campo: "tax_rate", impreso: code ?? "", archivo: r.evidencias[0]?.archivo ?? "", archivoId: r.evidencias[0]?.archivoId ?? "",
+        pagina: null, origen: "desglose de impuestos", inferido: `${found.rate} %: ${why}` }];
+    });
+  }
 }

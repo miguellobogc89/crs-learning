@@ -33,7 +33,7 @@ test('limpieza: precio leído con IVA e importe de una sola unidad', () => {
       row('b',{description:'CIERRE DE LEVA',quantity:'2',unit_price:'4.95',line_total:'4.95',line_total_with_tax:'11.98',tax_rate:'21.00'})],
     supplies:[],consumption:[],telecom:[],relations:{invoice_lines:[['f1','a'],['f2','b']],invoice_issuer:[['s','f1'],['s','f2']]}};
   const by=Object.fromEntries(c.cleanupPlan(d).map(f=>[f.lineId,f]));
-  assert.deepEqual(by.a.valores,{unit_price:0.4132,unit_price_with_tax:0.5,unit_price_basis:'sin_impuestos',tax_rate:21}); assert.equal(by.a.motivo,'iva');
+  assert.deepEqual(by.a.valores,{unit_price:0.41322,unit_price_with_tax:0.5,unit_price_basis:'sin_impuestos',tax_rate:21}); assert.equal(by.a.motivo,'iva');
   assert.deepEqual(by.b.valores,{line_total:9.9}); assert.equal(by.b.motivo,'importe');
 });
 

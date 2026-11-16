@@ -6,7 +6,7 @@ function load(file,deps={}){const m={exports:{}};new Function('require','module'
 const conv=load('lib/knowledge/intake/writer/convert.ts');
 const cat=load('lib/engine/catalog/standard-catalog.ts');
 const rc=load('lib/knowledge/intake/reconciliation/contract.ts');
-const planner=load('lib/knowledge/intake/writer/plan.ts',{'./duplicates':load('lib/knowledge/intake/writer/duplicates.ts'),'@/lib/engine/catalog/standard-catalog':cat,'./convert':conv,'../reconciliation/contract':rc});
+const planner=load('lib/knowledge/intake/writer/plan.ts',{'./duplicates':load('lib/knowledge/intake/writer/duplicates.ts'),'@/lib/engine/catalog/standard-catalog':cat,'./convert':conv,'../reconciliation/contract':rc,'./line-tax':load('lib/knowledge/intake/writer/line-tax.ts')});
 const commit=load('lib/knowledge/intake/writer/commit.ts',{'@prisma/client':{Prisma:{sql:(s,...v)=>({s,v})}}});
 
 test('printed amounts become exact decimal strings; ambiguous ones are not guessed',()=>{

@@ -106,7 +106,7 @@ export function coerce(value: unknown, type: EngineType): { ok: true; value: Cel
       }
       if (n === null || !Number.isFinite(n)) return { ok: false };
       if (type === "integer") return Number.isSafeInteger(n) ? { ok: true, value: n } : { ok: false };
-      return { ok: true, value: Math.round(n * 10000) / 10000 };
+      return { ok: true, value: Math.round(n * 1e5) / 1e5 };
     }
     case "date": {
       const s = String(value).trim();
