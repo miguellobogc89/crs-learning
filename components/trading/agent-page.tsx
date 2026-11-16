@@ -2,8 +2,8 @@
 // Página de un agente: su gráfica arriba, sus datos y, en pestañas, lo que tiene abierto, su historial,
 // sus decisiones y cómo opera (su ficha). Para cualquier público: todo explicado sin jerga.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, Info, Wallet } from "lucide-react";
-import { api, dayFmt, errorText, eur, eur0, flat, ghost, int, pct, primary, tone } from "./format";
+import { Info, Wallet } from "lucide-react";
+import { api, dayFmt, errorText, eur, eur0, flat, int, pct, primary, tone } from "./format";
 import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
 import { EquityChart, withLivePoint } from "./equity-chart";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -169,14 +169,9 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {data.canCopy && !a.kamikaze && (
-                <button type="button" className={primary} onClick={() => setCopying(true)}>
-                  <Copy className="h-4 w-4" /> {a.copyWeightPct !== null ? "Cambiar copia" : "Copiar"}
-                </button>
-              )}
               {data.canCopy && (
-                <button type="button" className={a.kamikaze ? primary : ghost} onClick={() => setMirroring(true)}>
-                  <Wallet className="h-4 w-4" /> Dinero real
+                <button type="button" className={primary} onClick={() => setMirroring(true)}>
+                  <Wallet className="h-4 w-4" /> Copiar con dinero real
                 </button>
               )}
               <DotsMenu
@@ -212,7 +207,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                 ))}
             </p>
           )}
-          {(a.copyWeightPct !== null || a.mirror) && (
+          {a.mirror && (
             <div className="mt-2 shrink-0">
               <CopyBadges a={a} />
             </div>

@@ -3,7 +3,7 @@
 // y su propia cartera virtual. Cada tarjeta lleva a la página del agente (/trading/agentes/<clave>).
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Copy, CopyPlus, LayoutGrid, List, Loader2, MoreHorizontal, Pause, Play, Plus, RotateCcw, Search, Trash2, Wallet } from "lucide-react";
+import { ArrowRight, Copy, LayoutGrid, List, Loader2, MoreHorizontal, Plus, Search, Trash2, Wallet } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import { api, errorText, eur, eur0, field, flat, ghost, int, pct, primary, tone } from "./format";
@@ -339,26 +339,16 @@ export function ChipMode({ a, big = false }: { a: Agent; big?: boolean }) {
 }
 
 /** Lo que tienes con este agente: copia virtual y/o copia en tu exchange. */
+/** Si le copias en tu exchange: con cuánto, si es con dinero real o en ensayo, y cómo te va. */
 export function CopyBadges({ a }: { a: Agent }) {
-  if (a.copyWeightPct === null && !a.mirror) return null;
+  if (!a.mirror) return null;
   return (
     <div className="space-y-1">
-      {a.copyWeightPct !== null && (
-        <div className="flex items-center justify-between gap-2 rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-800">
-          <span className="flex items-center gap-1.5 font-medium">
-            <Copy className="h-3.5 w-3.5" /> Lo copias al {a.copyWeightPct} %
-          </span>
-          {a.copyReturnPct !== null && (
-            <span className={`font-semibold tabular-nums ${tone(a.copyReturnPct)}`} title="Rentabilidad de tu copia desde que la empezaste">
-              {pct(a.copyReturnPct)} desde que lo copias
-            </span>
-          )}
-        </div>
-      )}
       {a.mirror && (
         <div className="flex items-center justify-between gap-2 rounded-xl bg-violet-50 px-3 py-2 text-xs text-violet-800">
-          <span className="flex items-center gap-1.5 font-medium">
-            <Wallet className="h-3.5 w-3.5" /> {a.mirror.mode === "real" ? "Copia real" : "Copia en ensayo"} · {eur(a.mirror.budget, 2)}
+          <span className="flex items-center gap-1.5 font-medium" title={a.mirror.mode === "real" ? "Sus compras y ventas se repiten en tu exchange con tu dinero" : "Se calculan las órdenes en tu exchange, pero no se envían"}>
+            <Wallet className="h-3.5 w-3.5" />
+            {a.mirror.mode === "real" ? `Le copias con ${eur(a.mirror.budget, 0)} de tu exchange` : `Copia de prueba con ${eur(a.mirror.budget, 0)} (no se envía nada)`}
           </span>
           <span className={`font-semibold tabular-nums ${tone(a.mirror.result)}`}>
             {a.mirror.result >= 0 ? "+" : ""}
@@ -436,16 +426,8 @@ export function agentMenu(
   o: { canManage: boolean; canCopy: boolean; onDetail?: () => void; onCopy: () => void; onMirror: () => void; onMeet: () => void; onReset: () => void },
 ): MenuItem[] {
   const items: MenuItem[] = [];
-  if (o.onDetail) items.push({ label: "Ver su página", icon: ArrowRight, onClick: o.onDetail });
-  if (!a.kamikaze)
-    items.push({ label: a.copyWeightPct !== null ? "Cambiar la copia" : "Copiar", icon: Copy, onClick: o.canCopy ? o.onCopy : undefined, disabledReason: o.canCopy ? undefined : "Solo el propietario o un administrador" });
+  if (o.onDetail) items.push({ label: "Ver su ficha", icon: ArrowRight, onClick: o.onDetail });
   items.push({ label: a.mirror ? "Copia con dinero real…" : "Copiar con dinero real", icon: Wallet, onClick: o.canCopy ? o.onMirror : undefined, disabledReason: o.canCopy ? undefined : "Solo el propietario o un administrador" });
-  items.push({ label: "Pausar", icon: Pause, soon: true });
-  items.push({ label: "Duplicar", icon: CopyPlus, soon: true });
-  if (o.canManage) {
-    items.push({ label: "Reunir ahora", icon: Play, onClick: o.onMeet });
-    items.push({ label: "Reiniciar", icon: RotateCcw, onClick: o.onReset, danger: true });
-  }
   items.push({ label: "Eliminar", icon: Trash2, danger: true, disabledReason: "Los agentes de Crussader no se pueden eliminar; los tuyos sí" });
   return items;
 }
@@ -523,7 +505,7 @@ function AgentCard({
           </div>
         )}
       </div>
-      {(note || a.copyWeightPct !== null || a.mirror) && (
+      {(note || a.mirror) && (
         <div className="mx-5 mb-3 space-y-2">
           {note && <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">{note}</p>}
           <CopyBadges a={a} />
