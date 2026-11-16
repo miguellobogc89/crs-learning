@@ -16,6 +16,7 @@ export const OKX_INFO: ProviderInfo = {
   availability: "available",
   environments: ["real", "demo"],
   markets: ["crypto"],
+  fees: { maker: 0.08, taker: 0.1, source: "tarifa general de OKX (usuario normal)", note: "Puede variar en OKX Europe y con más volumen." },
   capabilities: ["accounts", "positions", "orders", "executions", "instruments", "place_order", "order_status", "cancel_order"],
   orderTypes: ["market", "limit"],
   credentialFields: [

@@ -275,4 +275,9 @@ export type ProviderInfo = {
    * se ofrece cambiar los euros a USDC para poder operar las monedas que solo cotizan en USDC.
    */
   cashCurrencies?: CashCurrency[];
+  /**
+   * Comisiones de compraventa de su tarifa pública más básica, en % (maker: orden que espera; taker: se
+   * ejecuta al momento, como las copias). Para enseñarlas en Conexiones; el nivel de cada cuenta puede variar.
+   */
+  fees?: { maker: number; taker: number; source: string; note?: string };
 };

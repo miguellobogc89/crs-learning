@@ -150,6 +150,7 @@ export function IntegrationsPanel() {
                   {!conns.length && <Pill>Desconectada</Pill>}
                   <ConnectionInfo provider={p} connections={conns} realEnabled={data.realEnabled} />
                 </div>
+                {p.fees && <Fees fees={p.fees} />}
                 {conns.map((c) => (
                   <ConnectionRow
                     key={c.id}
@@ -605,3 +606,17 @@ function ConnectModal({
     </Modal>
   );
 }
+
+const feePct = (v: number) => `${v.toLocaleString("es-ES", { maximumFractionDigits: 2 })} %`;
+
+/** Comisión por compra o venta: la que pagan las copias (al momento) y la de las órdenes que esperan. */
+function Fees({ fees }: { fees: NonNullable<ProviderView["fees"]> }) {
+  return (
+    <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600" title={`Fuente: ${fees.source}${fees.note ? `. ${fees.note}` : ""}`}>
+      <b className="font-semibold text-slate-900">Comisión {feePct(fees.taker)}</b> por compra o venta al momento (como las copias)
+      {fees.maker !== fees.taker && <> · {feePct(fees.maker)} con órdenes que esperan</>}
+      {fees.note && <span className="block text-[11px] text-slate-400">{fees.note}</span>}
+    </p>
+  );
+}
+

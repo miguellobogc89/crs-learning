@@ -126,7 +126,9 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] Menú de agentes: ver su ficha, copiar con dinero real, eliminar (desactivado). Fuera la copia virtual.
 - [x] Panel lateral al pulsar un agente (Agentes y Operadores), con enlace a la ficha completa.
 - [x] Copia al instante: en cuanto un agente compra o vende, sus copias en el exchange lo repiten (el cron queda de red de seguridad).
-- [ ] Revolut X y comisiones de cada exchange en Conexiones.
+- [x] Revolut X conectado (lib/brokers/adapters/revolutx): firma Ed25519, saldos, pares en euros, órdenes a mercado y limitadas, estado y cancelación. Sin retiradas en su API.
+- [x] Comisiones de la tarifa pública de cada exchange en Conexiones (Revolut X 0 / 0,09 %, OKX 0,08 / 0,10 %, Binance 0,10 %, Bitvavo 0,15 / 0,25 %, Coinbase 0,40 / 0,60 %).
+- [ ] Leer la comisión real de cada cuenta por API (Revolut X: niveles; Coinbase, Binance, Bitvavo, OKX: sus endpoints de comisiones).
 - [ ] Kraken; valorar CCXT para el resto de exchanges.
 - [ ] Mercado internacional (concretar mercados y bróker).
 

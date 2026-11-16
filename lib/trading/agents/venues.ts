@@ -35,6 +35,13 @@ async function coinbaseCoins(): Promise<Set<string>> {
   return new Set([...products.values()].filter((p) => p.trading && (p.quote === "EUR" || p.quote === "USDC") && p.base !== "USDC").map((p) => p.base.toUpperCase()));
 }
 
+/** Revolut X: pares activos contra euros (configuración pública). */
+async function revolutxCoins(): Promise<Set<string>> {
+  const raw = (await getJson("https://revx.revolut.com/api/1.0/public/configuration/pairs?region=EEA")) as Record<string, unknown> & { data?: Record<string, unknown> };
+  const data = (raw?.data ?? raw) as Record<string, { base?: string; quote?: string; status?: string }>;
+  return new Set(Object.values(data).filter((p) => p && p.quote === "EUR" && p.status === "active" && p.base).map((p) => String(p.base).toUpperCase()));
+}
+
 async function binanceCoins(): Promise<Set<string>> {
   // Pares contra euros y contra USDC (en la UE no hay USDT al contado).
   return new Set([...(await eurPairs()).values()].filter((r) => r.base !== "EUR" && r.base !== "USDC").map((r) => r.base.toUpperCase()));
@@ -53,16 +60,18 @@ async function load(): Promise<Snapshot> {
       return null;
     }
   }
-  const [bitvavo, coinbase, binance, instruments] = await Promise.all([
+  const [bitvavo, coinbase, binance, revolutx, instruments] = await Promise.all([
     settled(bitvavoCoins()),
     settled(coinbaseCoins()),
     settled(binanceCoins()),
+    settled(revolutxCoins()),
     prisma.market_instruments.findMany({ where: { active: true }, select: { symbol: true, market: true } }),
   ]);
   const venues: Venue[] = [];
   if (bitvavo) venues.push({ id: "bitvavo", name: nameOf("bitvavo", "Bitvavo"), market: "crypto", ready: readyOf("bitvavo"), has: bitvavo });
   if (coinbase) venues.push({ id: "coinbase", name: nameOf("coinbase", "Coinbase"), market: "crypto", ready: readyOf("coinbase"), has: coinbase });
   if (binance) venues.push({ id: "binance", name: nameOf("binance", "Binance"), market: "crypto", ready: readyOf("binance"), has: binance });
+  if (revolutx) venues.push({ id: "revolutx", name: nameOf("revolutx", "Revolut X"), market: "crypto", ready: readyOf("revolutx"), has: revolutx });
   // Trading 212 tiene las acciones del IBEX; su lista de valores pide clave, así que se da por hecho.
   if (brokerRegistry.list().some((p) => p.id === "trading212")) venues.push({ id: "trading212", name: nameOf("trading212", "Trading 212"), market: "bolsa", ready: readyOf("trading212"), has: null });
   // Universo de los kamikazes y FARO: monedas de Binance (euros/USDC) que también están en Bitvavo.

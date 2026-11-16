@@ -33,6 +33,7 @@ export const COINBASE_INFO: ProviderInfo = {
   availability: "available",
   environments: [...ENABLED_ENVIRONMENTS],
   markets: ["crypto"],
+  fees: { maker: 0.4, taker: 0.6, source: "Coinbase Advanced, nivel inicial (menos de 10.000 $ al mes)", note: "Puede variar por región y bajar con más volumen." },
   capabilities: ["accounts", "positions", "orders", "executions", "instruments", "place_order", "order_status", "cancel_order"],
   orderTypes: ["market", "limit", "stop_limit"],
   cashCurrencies: ["EUR", "USDC"],

@@ -36,6 +36,7 @@ export const BINANCE_INFO: ProviderInfo = {
   availability: "available",
   environments: [...ENABLED_ENVIRONMENTS],
   markets: ["crypto"],
+  fees: { maker: 0.1, taker: 0.1, source: "tarifa general de Binance (sin descuento BNB)" },
   capabilities: ["accounts", "positions", "orders", "executions", "instruments", "place_order", "order_status", "cancel_order"],
   orderTypes: ["market", "limit", "stop_limit"],
   cashCurrencies: ["EUR", "USDC"],

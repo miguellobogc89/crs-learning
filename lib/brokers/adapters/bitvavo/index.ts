@@ -31,6 +31,7 @@ export const BITVAVO_INFO: ProviderInfo = {
   availability: "available",
   environments: [...ENABLED_ENVIRONMENTS],
   markets: ["crypto"],
+  fees: { maker: 0.15, taker: 0.25, source: "bitvavo.com/en/fees", note: "Menos con más volumen; los pares en USDC, 0,05 %." },
   capabilities: ["accounts", "positions", "orders", "executions", "instruments", "place_order", "order_status", "cancel_order"],
   orderTypes: ["market", "limit", "stop", "stop_limit"],
   credentialFields: [
