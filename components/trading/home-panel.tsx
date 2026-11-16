@@ -3,7 +3,6 @@
 // agentes vive en su propia sección («Actividad»).
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { Bitcoin, Bot, User } from "lucide-react";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import type { TradingStatus } from "./navigation";
@@ -15,9 +14,11 @@ import { AVATAR, cap, ErrorNote, LoadingCard, PILL, ReturnPill } from "./ui";
 import { DataTable, Money, Segmented, sinceText, type Col } from "./table";
 import { ActivityPanel } from "./activity-panel";
 import { PulsePanel } from "./pulse-panel";
+import { AgentSheet } from "./agent-sheet";
+import { MirrorModal } from "./mirror-modal";
 
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
-type Agents = Awaited<ReturnType<typeof getAgents>>;
+type Agents = Awaited<ReturnType<typeof getAgents>> & { canCopy?: boolean };
 
 export { AGENT_DOT } from "./ui";
 
@@ -79,6 +80,9 @@ export function HomePanel() {
   const [agents, setAgents] = useState<Agents | null>(null);
   useWarmStart<Agents>("agents", setAgents);
   const [error, setError] = useState<string | null>(null);
+  // Panel lateral del agente pulsado (y la copia con dinero real desde él).
+  const [peekKey, setPeekKey] = useState<string | null>(null);
+  const [mirrorFor, setMirrorFor] = useState<Agents["agents"][number] | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -225,7 +229,7 @@ export function HomePanel() {
             <b className="font-semibold text-slate-900">Tú</b>
           </span>
         ) : (
-          <Link href={`/trading/agentes/${r.key}?from=inicio`} className="group flex min-w-0 items-center gap-2">
+          <span className="group flex min-w-0 items-center gap-2">
             <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${AVATAR[r.color] ?? AVATAR.slate} text-white`}>
               <Bot className="h-4 w-4" />
             </span>
@@ -233,7 +237,7 @@ export function HomePanel() {
               <b className="block truncate font-semibold text-slate-900 group-hover:underline">{r.name}</b>
               <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${PILL[r.color] ?? PILL.slate}`}>{cap(r.profile)}</span>
             </span>
-          </Link>
+          </span>
         ),
     },
     { key: "since", label: "Inicio", width: 12, sort: (r) => (r.startedAt ? new Date(r.startedAt).getTime() : null), cell: (r) => <span className="text-slate-600">{sinceText(r.startedAt)}</span> },
@@ -282,7 +286,7 @@ export function HomePanel() {
         columns={columns}
         rows={rows}
         rowKey={(r) => r.key}
-        onRowClick={(r) => (r.ref ? undefined : router.push(r.key === "tu" ? "/trading/cartera" : `/trading/agentes/${r.key}?from=inicio`))}
+        onRowClick={(r) => (r.ref ? undefined : r.key === "tu" ? router.push("/trading/cartera") : setPeekKey(r.key))}
         paginate
         label="operadores"
         mobileRow={{
@@ -295,6 +299,17 @@ export function HomePanel() {
           ),
         }}
       />
+      <AgentSheet
+        a={agents.agents.find((x) => x.key === peekKey) ?? null}
+        from="inicio"
+        canCopy={!!agents.canCopy}
+        onMirror={(a) => {
+          setPeekKey(null);
+          setMirrorFor(a);
+        }}
+        onClose={() => setPeekKey(null)}
+      />
+      {mirrorFor && <MirrorModal agent={mirrorFor.key} name={mirrorFor.name} venues={mirrorFor.venues} onClose={() => setMirrorFor(null)} />}
     </div>
   );
 }

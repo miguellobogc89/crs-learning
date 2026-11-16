@@ -14,6 +14,7 @@ import { prisma } from "@/lib/prisma";
 import { accountState, closePosition, costOf, ensureAccount, madridDay, placeOrder } from "../accounts";
 import { AGENTS_WORKSPACE } from "../agents/roster";
 import { ensureFresh } from "../agents/restart";
+import { runMirrors } from "../mirror/service";
 import { dayDate } from "../sync";
 import { boardIdeas, faroTick, lastMarketView, setLive } from "../faro/engine";
 import { chooseIdea, trailingStop, type BoardIdea } from "../faro/logic";
@@ -91,6 +92,13 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
   const board = await boardIdeas();
   const priceOf = (pair: string) => market.find((t) => t.pair === pair)?.price ?? null;
   await Promise.all(KAMIKAZES.map((def, i) => one(def, out.agents[i].actions)));
+  // Copia al instante: si un agente ha comprado o vendido, sus copias en tu exchange lo repiten ya,
+  // sin esperar a la siguiente pasada del cron.
+  const moved = out.agents.filter((a) => a.actions.some((x) => x.startsWith("Entró") || / (stop|objetivo)$/.test(x))).map((a) => a.key);
+  if (moved.length) {
+    const r = await runMirrors({ agents: moved }).catch((e) => ({ mirrors: 0, actions: [`copias: error (${e instanceof Error ? e.message.slice(0, 120) : e})`] }));
+    for (const a of out.agents) if (moved.includes(a.key)) a.actions.push(...r.actions.filter((x) => x.startsWith(`${a.key} `) || x.startsWith("copias")));
+  }
   return out;
 
   async function one(def: KamikazeDef, actions: string[]) {

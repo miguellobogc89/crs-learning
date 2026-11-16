@@ -123,5 +123,10 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] Todos con 1.000 €, sin rondas ni metas, empezando de cero (lo anterior se archiva con la clave «agente~fecha», lib/trading/agents/restart.ts). COHETE y MECHA hasta 4 operaciones a la vez; VÉRTIGO una (todo a una carta); CAMALEÓN hasta 3.
 - [x] Ficha «Cómo opera» igual para todos (qué ideas coge, cuándo, cuánto pone, cuándo sale) y una sola pastilla de estilo. Fuera rondas, número de ranking y pastillas de exchanges (solo en «Copiar con dinero real»).
 - [x] Referencias (no agentes): «Bitcoin guardado» y «Bitcoin cada día» desde que empezaron los agentes, en Operadores (con 1.000 €) y en la página de cada agente. HORMIGA retirado.
-- [ ] Referencias como línea discontinua en las gráficas.
+- [x] Menú de agentes: ver su ficha, copiar con dinero real, eliminar (desactivado). Fuera la copia virtual.
+- [x] Panel lateral al pulsar un agente (Agentes y Operadores), con enlace a la ficha completa.
+- [x] Copia al instante: en cuanto un agente compra o vende, sus copias en el exchange lo repiten (el cron queda de red de seguridad).
+- [ ] Revolut X y comisiones de cada exchange en Conexiones.
+- [ ] Kraken; valorar CCXT para el resto de exchanges.
+- [ ] Mercado internacional (concretar mercados y bróker).
 

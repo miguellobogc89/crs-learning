@@ -14,6 +14,7 @@ import { AssetIcon } from "./asset-icon";
 import { DataTable, Money, useIsMobile } from "./table";
 import { MirrorModal } from "./mirror-modal";
 import { SpecPills } from "./agent-spec";
+import { AgentSheet } from "./agent-sheet";
 
 export type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean; canCopy: boolean };
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
@@ -49,6 +50,8 @@ export function AgentsPanel() {
   const router = useRouter();
   const [copyFor, setCopyFor] = useState<Agent | null>(null);
   const [mirrorFor, setMirrorFor] = useState<Agent | null>(null);
+  // Panel lateral (paso intermedio antes de la ficha completa).
+  const [peekKey, setPeekKey] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   // Enlaces antiguos (?agent=…): ahora cada agente tiene su página.
@@ -220,7 +223,8 @@ export function AgentsPanel() {
               canManage={data.canManage}
               canCopy={data.canCopy}
               busy={busy === a.key}
-              onDetail={() => openDetail(a.key)}
+              onDetail={() => setPeekKey(a.key)}
+              onFicha={() => openDetail(a.key)}
               onCopy={() => setCopyFor(a)}
               onMirror={() => setMirrorFor(a)}
               onMeet={() => void meet(a)}
@@ -236,7 +240,7 @@ export function AgentsPanel() {
           label="agentes"
           rows={list}
           rowKey={(a) => a.key}
-          onRowClick={(a) => openDetail(a.key)}
+          onRowClick={(a) => setPeekKey(a.key)}
           columns={[
             {
               key: "name",
@@ -277,7 +281,7 @@ export function AgentsPanel() {
                     openDetail(a.key);
                   }}
                 >
-                  Detalles
+                  Ficha
                 </button>
               ),
             },
@@ -285,6 +289,15 @@ export function AgentsPanel() {
         />
       )}
 
+      <AgentSheet
+        a={data.agents.find((x) => x.key === peekKey) ?? null}
+        canCopy={data.canCopy}
+        onMirror={(a) => {
+          setPeekKey(null);
+          setMirrorFor(a);
+        }}
+        onClose={() => setPeekKey(null)}
+      />
       {copyFor && <CopyModal agent={copyFor} onClose={() => setCopyFor(null)} />}
       {mirrorFor && <MirrorModal agent={mirrorFor.key} name={mirrorFor.name} venues={mirrorFor.venues} onClose={() => setMirrorFor(null)} />}
       {creating && <CreateAgentModal onClose={() => setCreating(false)} />}
@@ -439,6 +452,7 @@ function AgentCard({
   canCopy,
   busy,
   onDetail,
+  onFicha,
   onCopy,
   onMirror,
   onMeet,
@@ -450,6 +464,7 @@ function AgentCard({
   canCopy: boolean;
   busy: boolean;
   onDetail: () => void;
+  onFicha: () => void;
   onCopy: () => void;
   onMirror: () => void;
   onMeet: () => void;
@@ -483,7 +498,7 @@ function AgentCard({
           {busy ? (
             <Loader2 className="m-2 h-4 w-4 animate-spin text-slate-400" />
           ) : (
-            <DotsMenu label={`Acciones de ${a.name}`} items={agentMenu(a, { canManage, canCopy, onDetail, onCopy, onMirror, onMeet, onReset })} />
+            <DotsMenu label={`Acciones de ${a.name}`} items={agentMenu(a, { canManage, canCopy, onDetail: onFicha, onCopy, onMirror, onMeet, onReset })} />
           )}
         </div>
       </div>

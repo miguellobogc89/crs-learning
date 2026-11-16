@@ -12,6 +12,7 @@ import { accountState, closePosition, OPEN_STATUSES, placeOrder, processAccount,
 import { replicate } from "../agents/copy";
 import { AGENTS_WORKSPACE } from "../agents/roster";
 import { ensureFresh } from "../agents/restart";
+import { runMirrors } from "../mirror/service";
 import { CHIP, contextAt, explainDetectorB, type Coin } from "../lab/strategies";
 import { CRYPTO_MARKET, CRYPTO_BENCHMARK } from "../market-data";
 import { dayDate, dayKey, loadSeries } from "../sync";
@@ -64,6 +65,9 @@ async function closedCoins(): Promise<{ coins: Coin[]; lastDay: number | null }>
 export async function chipTick(force = false): Promise<ChipRunSummary[]> {
   const out: ChipRunSummary[] = [];
   for (const def of CHIP_AGENTS) out.push(await runChip(def, force).catch((e) => ({ agent: def.key, skipped: e instanceof Error ? e.message : "error", actions: [] })));
+  // Copia al instante de lo que haya comprado o vendido.
+  const moved = out.filter((r) => !r.skipped && r.actions.length).map((r) => r.agent);
+  if (moved.length) await runMirrors({ agents: moved }).catch((e) => console.error("[trading] copias de CAMALEÓN", e));
   return out;
 }
 

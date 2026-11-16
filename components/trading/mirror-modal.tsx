@@ -131,8 +131,8 @@ export function MirrorModal({
             </div>
           )}
           <p>
-            Cada 5 minutos se mira qué tiene abierto {name}. Si acaba de entrar en una cripto con par en euros, se compra lo mismo con tu presupuesto (en
-            proporción a lo que él metió); cuando sale, se vende. Solo se copian entradas de menos de 30 minutos, para no comprar más caro que él.
+            En cuanto {name} compra o vende, se repite en tu exchange al momento con tu presupuesto (en proporción a lo que él metió). Si por lo que sea se
+            retrasa, una revisión periódica lo recoge; pero nunca se copia una entrada de hace más de 30 minutos, para no comprar más caro que él.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">

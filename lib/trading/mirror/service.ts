@@ -313,9 +313,14 @@ async function sellLeg(m: trading_mirrors, l: trading_mirror_legs, reason: strin
   }
 }
 
-/** Una pasada de todas las copias activas (desde el cron, después de los agentes). */
-export async function runMirrors() {
-  const mirrors = await prisma.trading_mirrors.findMany({ where: { active: true } });
+/**
+ * Una pasada de las copias activas. Sin `agents`, todas (el cron, como red de seguridad); con `agents`,
+ * solo las de esos agentes, justo después de que compren o vendan (copia al instante). Es seguro
+ * llamarla a la vez desde varios sitios: cada compra tiene su tramo único y cada venta se reclama antes.
+ */
+export async function runMirrors(opts: { agents?: string[] } = {}) {
+  if (opts.agents && !opts.agents.length) return { mirrors: 0, actions: [] as string[] };
+  const mirrors = await prisma.trading_mirrors.findMany({ where: { active: true, ...(opts.agents ? { agent: { in: opts.agents } } : {}) } });
   const actions: string[] = [];
   for (const m of mirrors) {
     try {
