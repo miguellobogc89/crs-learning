@@ -30,17 +30,21 @@ type Idea = Data["live"][number];
 const KIND: Record<string, { label: string; color: string }> = {
   impulso: { label: "Impulso", color: "orange" },
   ruptura: { label: "Ruptura", color: "violet" },
-  rebote: { label: "Rebote", color: "blue" },
+  rebote: { label: "Rebote", color: "slate" },
   noticia: { label: "Noticia", color: "amber" },
+  retroceso: { label: "Retroceso", color: "blue" },
+  ruido: { label: "Ruido", color: "slate" },
+  tendencia: { label: "Tendencia larga", color: "fuchsia" },
 };
 const STATUS: Record<string, { label: string; color: string }> = {
   viva: { label: "Viva", color: "blue" },
   acierto: { label: "Acierto", color: "emerald" },
   fallo: { label: "Fallo", color: "rose" },
   caducada: { label: "Caducada", color: "slate" },
+  sin_entrar: { label: "Sin entrar", color: "slate" },
 };
-type IdeaStatus = "all" | "viva" | "acierto" | "fallo" | "caducada";
-type IdeaKind = "all" | "impulso" | "ruptura" | "rebote" | "noticia";
+type IdeaStatus = "all" | "viva" | "acierto" | "fallo" | "caducada" | "sin_entrar";
+type IdeaKind = "all" | "impulso" | "ruptura" | "noticia" | "retroceso" | "ruido" | "tendencia";
 type ViewMode = "list" | "grid";
 
 const SORT_OPTIONS: { label: string; value: TableSort }[] = [
@@ -182,6 +186,23 @@ function FaroIdeas() {
           <Pill color={(KIND[i.kind] ?? { color: "slate" }).color}>{KIND[i.kind]?.label ?? i.kind}</Pill>
         </span>
       ) },
+    {
+      key: "order",
+      label: "Orden · dónde",
+      width: 9,
+      sort: (i) => i.howTo?.venue?.roundTripPct ?? 99,
+      cell: (i) =>
+        i.howTo ? (
+          <span className="block text-xs leading-tight">
+            <b className="block font-semibold text-slate-700">{i.howTo.order === "limitada" ? "Limitada" : "A mercado"}</b>
+            <span className="text-slate-400" title="Exchange con menos comisión para este tipo de orden (comprar y vender)">
+              {i.howTo.venue ? `${i.howTo.venue.name} · ${i.howTo.venue.roundTripPct.toFixed(2).replace(".", ",")} %` : "—"}
+            </span>
+          </span>
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        ),
+    },
     { key: "conv", label: "Convicción", width: 6, sort: (i) => i.conviction, cell: (i) => <span className="tabular-nums text-slate-700">{i.conviction}/5</span> },
     { key: "price", label: "Detectada a", width: 8, sort: (i) => i.price, cell: (i) => <Money v={i.price} className="text-slate-700" /> },
     { key: "inv", label: "Invalidación", width: 8, sort: (i) => i.invalidation, cell: (i) => <Money v={i.invalidation} className="text-rose-600" /> },
@@ -197,7 +218,7 @@ function FaroIdeas() {
       sort: (i) => (i.status === "viva" ? 0 : 1),
       cell: (i) => (
         <span className="flex flex-wrap items-center justify-center gap-1.5">
-          <Pill color={STATUS[i.status].color}>{STATUS[i.status].label}</Pill>
+          <Pill color={(STATUS[i.status] ?? STATUS.caducada).color}>{(STATUS[i.status] ?? STATUS.caducada).label}</Pill>
           {i.status === "viva" && <span className="text-xs text-slate-400">{left(i.validUntil)}</span>}
         </span>
       ),
@@ -429,7 +450,7 @@ function FaroIdeas() {
               <span className="flex flex-wrap items-center gap-2">
                 {i.symbol.replace(/-EUR$/, "")}
                 <Pill color={(KIND[i.kind] ?? { color: "slate" }).color}>{KIND[i.kind]?.label ?? i.kind}</Pill>
-                <Pill color={STATUS[i.status].color}>{STATUS[i.status].label}</Pill>
+                <Pill color={(STATUS[i.status] ?? STATUS.caducada).color}>{(STATUS[i.status] ?? STATUS.caducada).label}</Pill>
               </span>
             }
             subtitle={`${ago(i.createdAt)} · convicción ${i.conviction}/5${i.status === "viva" ? ` · le quedan ${left(i.validUntil)}` : ""}`}
@@ -562,7 +583,7 @@ function FaroToolbar({
               <DropdownMenuLabel className="text-caption text-muted-foreground">Tipo de oportunidad</DropdownMenuLabel>
               <DropdownMenuRadioGroup value={kindFilter} onValueChange={(value) => onKindFilterChange(value as IdeaKind)}>
                 <DropdownMenuRadioItem value="all"><ListFilter className="mr-2 size-icon-md" />Todos los tipos</DropdownMenuRadioItem>
-                {(["impulso", "ruptura", "rebote", "noticia"] as const).map((kind) => (
+                {(["impulso", "ruptura", "noticia", "retroceso", "ruido", "tendencia"] as const).map((kind) => (
                   <DropdownMenuRadioItem key={kind} value={kind}>{KIND[kind].label}</DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
@@ -665,7 +686,7 @@ function MobileIdeas({
                   </Pill>
                 </span>
                 <span className="block truncate text-xs text-slate-500">
-                  {STATUS[i.status].label}
+                  {(STATUS[i.status] ?? STATUS.caducada).label}
                   {i.status === "viva" ? ` · ${left(i.validUntil)}` : ` · ${ago(i.createdAt)}`} · {p1(upPct(i))} / {p1(downPct(i))}
                 </span>
               </span>

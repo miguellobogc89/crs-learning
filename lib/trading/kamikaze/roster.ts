@@ -1,4 +1,5 @@
 // lib/trading/kamikaze/roster.ts
+import type { CartaKind } from "../carta";
 // Agentes que toman las ideas que publica FARO (antes «kamikazes»: de ahí el nombre interno). Ninguno
 // decide con IA: cada uno aplica siempre sus reglas (qué ideas coge, cuánto pone, cuándo sale).
 // Desde el 16/11/2026 todos empiezan con 1.000 €, sin rondas ni metas. Las definiciones antiguas siguen
@@ -62,6 +63,10 @@ export type KamikazeDef = {
   sizeOfEquityPct?: number;
   /** Etiqueta del estilo en la ficha (pastilla): Prudente, Equilibrado, Agresivo, Diversificado… */
   label?: string;
+  /** Tipos de oportunidad de la carta que toma (lib/trading/carta.ts). Sin esto, los de su estilo. */
+  kinds?: CartaKind[];
+  /** Si refuerza (compra otra vez lo mismo, como mucho el doble) cuando una idea se confirma pronto. */
+  refuerzo?: boolean;
 };
 
 /** Capital igual para todos los agentes desde el 16/11/2026: así su rentabilidad se compara limpia. */
@@ -207,7 +212,9 @@ ALL_KAMIKAZES.push(
     color: "emerald",
     riskPct: 1,
     slots: 8,
-    tagline: "Prudente: arriesga el 1 % de su dinero en cada operación (lo que pierde si salta el stop). Muchas posiciones pequeñas.",
+    kinds: ["tendencia", "retroceso"],
+    refuerzo: true,
+    tagline: "Prudente: tendencias largas y compras en retrocesos, arriesgando el 1 % de su dinero en cada operación (lo que pierde si salta el stop).",
   }),
   crypto({
     key: "brujula",
@@ -216,7 +223,9 @@ ALL_KAMIKAZES.push(
     color: "violet",
     riskPct: 3,
     slots: 4,
-    tagline: "Equilibrado: arriesga el 3 % de su dinero en cada operación (lo que pierde si salta el stop).",
+    kinds: ["ruptura", "retroceso", "tendencia"],
+    refuerzo: true,
+    tagline: "Equilibrado: rupturas, retrocesos y tendencias largas, arriesgando el 3 % de su dinero en cada operación (lo que pierde si salta el stop).",
   }),
   crypto({
     key: "vertigo-10",
@@ -225,7 +234,9 @@ ALL_KAMIKAZES.push(
     color: "orange",
     riskPct: 10,
     slots: 2,
-    tagline: "Agresivo: arriesga el 10 % de su dinero en cada operación (lo que pierde si salta el stop). Casi siempre va con todo.",
+    kinds: ["impulso", "ruptura", "noticia"],
+    refuerzo: true,
+    tagline: "Agresivo: impulsos, rupturas y noticias de horas, arriesgando el 10 % de su dinero en cada operación (lo que pierde si salta el stop).",
   }),
   crypto({
     key: "enjambre",
@@ -234,8 +245,8 @@ ALL_KAMIKAZES.push(
     color: "amber",
     sizeOfEquityPct: 10,
     slots: 10,
-    exitMode: "noise",
-    tagline: "Diversificado: un 10 % de su dinero en cada moneda, hasta 10 a la vez. Recoge las subidas pequeñas: vende a +3 % y, en cuanto gana, protege la ganancia.",
+    kinds: ["ruido"],
+    tagline: "Diversificado: un 10 % de su dinero en cada moneda, hasta 10 a la vez. Vive del ruido: compra con órdenes limitadas en la parte baja de un rango tranquilo y vende en la alta (en Revolut X, sin comisión).",
   }),
 );
 

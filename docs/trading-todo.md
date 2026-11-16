@@ -142,3 +142,14 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] Pastilla de familia: Cripto / Stock (acciones de cualquier bolsa).
 - [ ] Stock: FARO también en el IBEX; vigilancia de acciones con su horario en los agentes de ideas; los 3 niveles de riesgo en Stock; ATLAS global (detector con el índice de la bolsa de cada acción).
 
+
+## La carta de oportunidades (16/11/2026, noche)
+- [x] `lib/trading/carta.ts`: seis tipos con su orden (mercado o limitada), plazo máximo, momento del mercado, origen (FARO o escáner) y si admiten refuerzo.
+- [x] FARO propone impulso, noticia, ruptura y **retroceso** (orden limitada con precio de entrada; si no baja a tiempo queda «Sin entrar» y no cuenta).
+- [x] Escáneres sin IA en cada pasada de FARO: **ruido** (rango estrecho y tranquilo, monedas de Revolut X) y **tendencia larga** (máximo de 20 días con el mercado en ataque, una vez al día).
+- [x] Agentes por tipo: ROCA tendencia + retroceso; BRÚJULA ruptura + retroceso + tendencia; VÉRTIGO impulso + ruptura + noticia; ENJAMBRE ruido.
+- [x] Salida por tiempo máximo de cada tipo; refuerzo pronto y ganando (máximo el doble, stop que no deja perder más que al principio); 12 h sin volver a una moneda tras un stop; apagado automático de un tipo que pierde de media en sus últimas 50 ideas.
+- [x] Noticias válidas aunque el mercado esté en defensa; el filtro de FARO no se aplica a los escáneres.
+- [x] Oportunidades: columna «Orden · dónde» con el exchange de menos comisión para ese tipo de orden.
+- [ ] Salida parcial (mitad en el primer objetivo) en tendencia y ruptura: necesita cierres parciales en las cuentas.
+- [ ] Límite de concentración en defensa.

@@ -120,3 +120,13 @@ export async function agentVenues(keys: string[]): Promise<Map<string, AgentVenu
     return null;
   }
 }
+
+/** Exchanges de cripto con las monedas que tiene cada uno (para elegir dónde sale más barata una oportunidad). */
+export async function venueCoverage(): Promise<{ id: string; name: string; has: Set<string> | null }[] | null> {
+  try {
+    const s = await snapshot();
+    return s.venues.filter((v) => v.market === "crypto").map((v) => ({ id: v.id, name: v.name, has: v.has }));
+  } catch {
+    return null;
+  }
+}

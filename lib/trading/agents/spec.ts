@@ -5,6 +5,7 @@
 //   - contexto del mercado: la fase (ataque o defensa) y lo que se ve en Panorama.
 // Un agente es una combinación de esa carta y su forma de gestionar el dinero. Ninguno decide con IA.
 // Puro: lo usan el servidor, la interfaz y los tests.
+import { CARTA } from "../carta";
 import type { ChipDef } from "../chip/roster";
 import { MAX_CHASE_PCT } from "../faro/logic";
 import type { KamikazeDef } from "../kamikaze/roster";
@@ -39,6 +40,7 @@ export function kamikazeSpec(k: KamikazeDef): AgentSpec {
           ? `Cualquiera de las que publica FARO, pero solo con convicción alta (${k.minConviction ?? 4} o más de 5).`
           : "Las de rebote que publica FARO.";
   const stop = k.stopMode === "idea" ? "su stop (justo donde la idea deja de valer)" : "su stop (donde la idea deja de valer, entre un 5 % y un 40 % por debajo)";
+  if (k.kinds) return cartaSpec(k, slots);
   return {
     market: "Cripto",
     style: k.label ?? STYLE_LABEL[k.style],
@@ -72,5 +74,29 @@ export function chipSpec(c: ChipDef): AgentSpec {
     when: `Solo con ${phase} (por encima de sus medias de 200 y 50 días y subiendo en 10 días). En defensa no compra nada.${u ? " Decide tras cada sesión; compra en la apertura siguiente si la bolsa está cerrada." : ""}`,
     size: `Su capital (${nf(c.capital)} €) repartido a partes iguales en hasta ${c.settings.max_open_positions} ${u ? "valores" : "monedas"}.`,
     exit: `Vende ${u ? "un valor" : "una moneda"} si cierra por debajo de su mínimo de 10 días, y todo si pasa a defensa (se queda en efectivo).`,
+  };
+}
+
+const hoursText = (h: number) => (h % 24 === 0 ? `${h / 24} ${h === 24 ? "día" : "días"}` : `${h} h`);
+
+/** Agentes de la carta: qué tipos de oportunidad toma y las reglas de cada tipo. */
+function cartaSpec(k: KamikazeDef, slots: number): AgentSpec {
+  const kinds = k.kinds ?? [];
+  const names = kinds.map((x) => CARTA[x].label.toLowerCase());
+  const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}` : names[0];
+  const limits = kinds
+    .map((x) => (CARTA[x].maxHoldHours ? `${CARTA[x].label.toLowerCase()}, ${hoursText(CARTA[x].maxHoldHours!)}` : `${CARTA[x].label.toLowerCase()}, sin límite`))
+    .join("; ");
+  const limit = kinds.some((x) => CARTA[x].order === "limitada");
+  const reinf = k.refuerzo ? kinds.filter((x) => CARTA[x].refuerzo).map((x) => CARTA[x].label.toLowerCase()) : [];
+  return {
+    market: "Cripto",
+    style: k.label ?? STYLE_LABEL[k.style],
+    ideas: `Oportunidades de ${list}${kinds.some((x) => CARTA[x].source === "Escáner") ? " (las de escáner salen de reglas, sin IA)" : ""}. La de más convicción primero.`,
+    when: `${limit ? "Las de orden limitada, solo cuando el precio baja a su nivel. " : ""}Las de a mercado, si el precio no se ha escapado más de un ${nf(k.maxChasePct ?? MAX_CHASE_PCT)} %. Tras un stop, esa moneda descansa 12 h.`,
+    size: k.sizeOfEquityPct
+      ? `Un ${nf(k.sizeOfEquityPct)} % de su dinero en cada moneda, hasta ${slots} a la vez (empezó con ${nf(k.capital)} €). Nunca dos veces la misma.`
+      : `Arriesga el ${nf(k.riskPct ?? 1)} % de su dinero en cada operación: compra lo justo para perder eso si salta el stop. Hasta ${slots} a la vez.${reinf.length ? ` Si una de ${reinf.join(" o ")} sube pronto, refuerza (como mucho el doble) y sube el stop para no arriesgar más que al principio.` : ""}`,
+    exit: `En el objetivo o en el stop de la oportunidad. Tiempo máximo por tipo: ${limits}.${kinds.includes("tendencia") ? " En las tendencias, el stop sube con el precio." : ""}`,
   };
 }

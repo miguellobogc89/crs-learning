@@ -21,6 +21,7 @@ import { chooseIdea, trailingStop, type BoardIdea } from "../faro/logic";
 import { allInQuantity, exitNow, noiseLevels, noiseStop, positionBudget, protectedStop, type Ticker } from "./logic";
 import { eurPairs, priceEur, tickers } from "./market";
 import { KAMIKAZES, kamikazeByKey, type KamikazeDef } from "./roster";
+import { CARTA, isCartaKind, refuerzoStop } from "../carta";
 
 const WS = AGENTS_WORKSPACE;
 const DAY = 86_400_000;
@@ -30,6 +31,14 @@ const env = (k: string, d: number) => {
 };
 const COOLDOWN_MIN = () => env("TRADING_KAMIKAZE_COOLDOWN_MINUTES", 30);
 const TICK_GAP_MS = 2 * 60_000;
+const HOUR = 3_600_000;
+/** Tras un stop, no vuelve a la misma moneda en estas horas. */
+const NO_REENTRY_HOURS = () => env("TRADING_NO_REENTRY_HOURS", 12);
+/** Un tipo se apaga solo si, con al menos estas ideas cerradas, pierde de media. */
+const SHUTOFF_MIN_IDEAS = 50;
+const REFUERZO_TAG = ":refuerzo";
+/** Id de la idea de FARO de una posición (signal_key «faro:<idea>:<agente>:<fila>[:refuerzo]»). */
+const ideaIdOf = (key: string | null) => (key?.startsWith("faro:") ? key.split(":")[1] : null);
 
 const ensureKamikaze = (def: KamikazeDef) => ensureAccount(WS, def.key, { name: def.name, capital: def.capital, settings: def.settings });
 /** Par de Binance de un valor de CRS: el de euros si existe; si no, el de USDC. */
@@ -90,12 +99,14 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
   if (faro.ran) out.agents.forEach((a) => a.actions.push(`FARO: ${faro.ran}`));
   // Solo lo que publica FARO (su filtro ya ha quitado las descartadas), y solo crypto: estos agentes
   // vigilan y operan con precios de Binance. Las ideas de acciones de EE. UU. aún no las toma ninguno.
-  const board = (await boardIdeas()).filter((i) => i.market === "crypto");
+  const off = await kindsOff();
+  if (off.length) out.agents.forEach((a) => a.actions.push(`Tipos apagados por perder de media: ${off.join(", ")}`));
+  const board = (await boardIdeas()).filter((i) => i.market === "crypto" && !off.includes(i.kind));
   const priceOf = (pair: string) => market.find((t) => t.pair === pair)?.price ?? null;
   await Promise.all(KAMIKAZES.map((def, i) => one(def, out.agents[i].actions)));
   // Copia al instante: si un agente ha comprado o vendido, sus copias en tu exchange lo repiten ya,
   // sin esperar a la siguiente pasada del cron.
-  const moved = out.agents.filter((a) => a.actions.some((x) => x.startsWith("Entró") || / (stop|objetivo)$/.test(x))).map((a) => a.key);
+  const moved = out.agents.filter((a) => a.actions.some((x) => x.startsWith("Entró") || x.startsWith("Refuerza") || / (stop|objetivo)$/.test(x) || /: tiempo/.test(x))).map((a) => a.key);
   if (moved.length) {
     const r = await runMirrors({ agents: moved }).catch((e) => ({ mirrors: 0, actions: [`copias: error (${e instanceof Error ? e.message.slice(0, 120) : e})`] }));
     for (const a of out.agents) if (moved.includes(a.key)) a.actions.push(...r.actions.filter((x) => x.startsWith(`${a.key} `) || x.startsWith("copias")));
@@ -117,6 +128,9 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
 
       // 1) Vigilancia sin IA de cada posición abierta.
       let state = await accountState(WS, def.key);
+      const keys = await signalKeys(account.id);
+      const kinds = await ideaKinds([...keys.values()].map(ideaIdOf).filter((x): x is string => !!x));
+      const kindOf = (posId: string) => kinds.get(ideaIdOf(keys.get(posId) ?? null) ?? "") ?? null;
       for (const pos of state.positions.filter((p) => p.status === "abierta")) {
         const price = await priceEur(pairFor(pos.symbol, rules));
         if (!price) continue;
@@ -134,8 +148,28 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
           continue;
         }
         const entry = pos.entryPrice ?? price;
+        const kind = kindOf(pos.id);
+        const card = kind && isCartaKind(kind) ? CARTA[kind] : null;
+        const ageH = (Date.now() - new Date(pos.createdAt).getTime()) / HOUR;
+        // Plazo máximo de su tipo (carta): el dinero parado también cuesta.
+        if (card?.maxHoldHours && ageH >= card.maxHoldHours) {
+          await closePosition(WS, pos.id, def.key, "tiempo");
+          row = await prisma.trading_kamikaze_rounds.update({ where: { id: row.id }, data: { trades: { increment: 1 } } });
+          actions.push(`${pos.symbol}: tiempo (${card.maxHoldHours} h)`);
+          continue;
+        }
+        // Refuerzo: pronto y ganando, compra otra vez lo mismo y sube el stop para no arriesgar más que al principio.
+        const isExtra = (keys.get(pos.id) ?? "").endsWith(REFUERZO_TAG);
+        if (def.refuerzo && card?.refuerzo && !isExtra && ageH <= (card.refuerzoHours ?? 0) && ((price - entry) / entry) * 100 >= (card.refuerzoGainPct ?? Infinity)) {
+          const done = await reinforce(def, account.id, pos, price, keys.get(pos.id) ?? null);
+          if (done) {
+            actions.push(done);
+            continue;
+          }
+        }
         let stop = protectedStop({ entry, stop: pos.stop }, price);
-        if (def.exitMode === "trail") stop = Math.max(stop, trailingStop({ entry, initialStop: pos.initialStop, stop: pos.stop }, price));
+        // Tendencia larga: deja correr con un stop que sube con el precio.
+        if (def.exitMode === "trail" || kind === "tendencia") stop = Math.max(stop, trailingStop({ entry, initialStop: pos.initialStop, stop: pos.stop }, price));
         if (def.exitMode === "noise") stop = Math.max(stop, noiseStop({ entry, stop: pos.stop }, price));
         if (stop > pos.stop) {
           await prisma.trading_positions.update({ where: { id: pos.id }, data: { stop, updated_at: new Date() } });
@@ -149,7 +183,8 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
 
       // 2) Huecos libres: la mejor idea publicada de su estilo. Si no entra, deja dicho por qué.
       const note = (text: string | null) => prisma.trading_kamikaze_rounds.update({ where: { id: row.id }, data: { last_note: text, last_note_at: new Date() } });
-      const open = state.positions.filter((p) => p.status === "abierta" || p.status === "pendiente");
+      const keysNow = await signalKeys(account.id);
+      const open = state.positions.filter((p) => (p.status === "abierta" || p.status === "pendiente") && !(keysNow.get(p.id) ?? "").endsWith(REFUERZO_TAG));
       if (open.length >= slots) {
         if (row.last_note) await note(null);
         return;
@@ -163,6 +198,12 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       const mine = await prisma.trading_positions.findMany({ where: { account_id: account.id, signal_key: { startsWith: "faro:" } }, select: { signal_key: true } });
       const taken = new Set<string>(mine.map((p) => p.signal_key?.split(":")[1] ?? ""));
       const held = new Set(open.map((p) => p.symbol));
+      // Tras un stop, esa moneda descansa unas horas.
+      const stopped = await prisma.trading_positions.findMany({
+        where: { account_id: account.id, exit_reason: "stop", updated_at: { gte: new Date(Date.now() - NO_REENTRY_HOURS() * HOUR) } },
+        select: { symbol: true },
+      });
+      for (const p of stopped) held.add(p.symbol);
       let free = slots - open.length;
       let last: string | null = null;
       while (free > 0) {
@@ -170,6 +211,8 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
           maxChasePct: def.maxChasePct,
           stopMode: def.stopMode,
           minConviction: def.minConviction,
+          kinds: def.kinds,
+          ideaLevels: !!def.kinds,
         });
         if ("reason" in choice) {
           // Si ya entró en algo en esta revisión, la nota es esa entrada; si no, por qué no entra.
@@ -191,6 +234,53 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       await prisma.trading_accounts.update({ where: { id: account.id }, data: { meeting_lease_until: null } }).catch(() => undefined);
     }
   }
+}
+
+/** signal_key de las posiciones del agente, por id. */
+async function signalKeys(accountId: string) {
+  const rows = await prisma.trading_positions.findMany({ where: { account_id: accountId, status: { in: ["abierta", "pendiente"] } }, select: { id: true, signal_key: true } });
+  return new Map<string, string>(rows.map((r: { id: string; signal_key: string | null }) => [r.id, r.signal_key ?? ""]));
+}
+
+/** Tipo de cada idea de FARO, por id. */
+async function ideaKinds(ids: string[]) {
+  if (!ids.length) return new Map<string, string>();
+  const rows = await prisma.trading_faro_ideas.findMany({ where: { id: { in: [...new Set(ids)] } }, select: { id: true, kind: true } });
+  return new Map<string, string>(rows.map((r: { id: string; kind: string }) => [r.id, r.kind]));
+}
+
+/** Tipos que se apagan solos: con al menos 50 ideas cerradas, sus últimas 50 pierden de media. */
+async function kindsOff(): Promise<string[]> {
+  const rows = await prisma.$queryRaw<{ kind: string; n: bigint; avg: number | null }[]>(Prisma.sql`
+    SELECT kind, count(*) AS n, avg(result_pct) AS avg FROM (
+      SELECT kind, result_pct, row_number() OVER (PARTITION BY kind ORDER BY resolved_at DESC) AS rn
+      FROM public.trading_faro_ideas WHERE status IN ('acierto','fallo','caducada') AND result_pct IS NOT NULL
+    ) t WHERE rn <= ${SHUTOFF_MIN_IDEAS} GROUP BY kind`).catch(() => []);
+  return rows.filter((r) => Number(r.n) >= SHUTOFF_MIN_IDEAS && (r.avg ?? 0) < 0).map((r) => r.kind);
+}
+
+/**
+ * Refuerzo: compra lo mismo otra vez (como mucho lo de la primera compra) y sube el stop de las dos para
+ * que, si salta, no pierda más de lo que arriesgaba al principio. Nunca para promediar a la baja.
+ */
+async function reinforce(def: KamikazeDef, accountId: string, pos: { id: string; symbol: string; quantity: number; entryPrice: number | null; stop: number; initialStop: number; target: number }, price: number, key: string | null) {
+  if (!key) return null;
+  const extraKey = `${key}${REFUERZO_TAG}`;
+  if (await prisma.trading_positions.findFirst({ where: { account_id: accountId, signal_key: extraKey } })) return null;
+  const state = await accountState(WS, def.key);
+  const entry = pos.entryPrice ?? price;
+  const q2 = Math.min(pos.quantity, (state.summary.available * 0.98) / price);
+  if (!(q2 * price >= 10)) return null;
+  const stop = refuerzoStop({ q1: pos.quantity, entry, stop: pos.initialStop, q2, price });
+  if (stop === null) return null;
+  await placeOrder(
+    WS,
+    null,
+    { symbol: pos.symbol, direction: "long", quantity: q2, stop, target: pos.target, execution: "now", maxHoldDays: null, notes: `${def.name} refuerza: la idea se ha confirmado pronto`, source: "agente", signalKey: extraKey },
+    def.key,
+  );
+  await prisma.trading_positions.update({ where: { id: pos.id }, data: { stop: Math.max(stop, pos.stop), updated_at: new Date() } });
+  return `Refuerza ${pos.symbol.replace(/-EUR$/, "")} (stop a ${stop.toPrecision(5)})`;
 }
 
 // ---------------------------------------------------------------------------

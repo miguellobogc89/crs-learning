@@ -13,7 +13,11 @@ import { CRYPTO, CRYPTO_MARKET } from "../market-data";
 import { metricsOf, prefilter, rank, type Metrics, type Ticker } from "../kamikaze/logic";
 import { barsSince, eurPairs, hourly, hourlyUntil, symbolOf } from "../kamikaze/market";
 import { kamikazeByKey, type KamikazeStyle } from "../kamikaze/roster";
-import { atrPct, checkIdeas, controlIdeas, ENABLED_KINDS, faro2Verdict, simulateLevels, ideaFeatures, KINDS, pastTicker, scoreIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
+import { AI_KINDS, atrPct, checkIdeas, controlIdeas, faro2Verdict, simulateLevels, ideaFeatures, KINDS, pastTicker, scoreIdea, scoreLimitIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
+import { bestVenue, CARTA, ideaValidHours, isCartaKind, isLimitKind, noiseIdea, type Venue } from "../carta";
+import { brokerRegistry } from "@/lib/brokers/providers";
+import { venueCoverage } from "../agents/venues";
+import { loadSeries } from "../sync";
 import { getMarketPhase, marketPhaseAt } from "../chip/phase-service";
 import { analyze, type ResolvedIdea } from "./analysis";
 import { isUsPair, usBarsSince, usHourlyUntil, usMarket } from "./us";
@@ -37,6 +41,7 @@ const KIND_TEXT: Record<string, string> = {
   ruptura: "«ruptura» (rompe máximos recientes con volumen)",
   rebote: "«rebote» (ha caído fuerte y empieza a girarse)",
   noticia: "«noticia» (una noticia concreta puede moverla)",
+  retroceso: "«retroceso» (sube de fondo y conviene comprarla si baja a un soporte cercano: indica en «entry» el precio de esa orden limitada, por debajo del de ahora)",
 };
 
 // ---------------------------------------------------------------------------
@@ -97,12 +102,11 @@ async function scoreLive(market: Ticker[]) {
       const us = isUsPair(i.pair);
       const bars = await barsAny(i.pair, i.created_at.getTime());
       const livePrice = us ? (bars[bars.length - 1]?.c ?? null) : (market.find((t) => t.pair === i.pair)?.price ?? null);
-      const s = scoreIdea(
-        { price: i.price, invalidation: i.invalidation, target: i.target, createdAt: i.created_at.getTime(), validUntil: i.valid_until.getTime(), best: i.best_pct, worst: i.worst_pct },
-        bars,
-        Date.now(),
-        livePrice,
-      );
+      const track = { price: i.price, invalidation: i.invalidation, target: i.target, createdAt: i.created_at.getTime(), validUntil: i.valid_until.getTime(), best: i.best_pct, worst: i.worst_pct };
+      // Órdenes limitadas (retroceso, ruido): no cuentan hasta que el precio baja a su nivel.
+      const s = isLimitKind(i.kind)
+        ? scoreLimitIdea(track, i.created_at.getTime() + (CARTA[i.kind as keyof typeof CARTA].entryHours ?? 0) * 3_600_000, bars, Date.now(), livePrice)
+        : scoreIdea(track, bars, Date.now(), livePrice);
       await prisma.trading_faro_ideas.update({
         where: { id: i.id },
         data: {
@@ -140,16 +144,17 @@ const SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["pair", "kind", "conviction", "invalidation", "target", "valid_hours", "rationale", "risks"],
+        required: ["pair", "kind", "conviction", "invalidation", "target", "valid_hours", "rationale", "risks", "entry"],
         properties: {
           pair: { type: "string", description: "Par de la lista de candidatos (p. ej. SOLEUR)." },
-          kind: { type: "string", enum: ENABLED_KINDS },
+          kind: { type: "string", enum: AI_KINDS },
           conviction: { type: "integer", minimum: 1, maximum: 5 },
           invalidation: { type: "number", description: "Precio en euros por debajo del cual la idea deja de valer (mínimo reciente, soporte…)." },
           target: { type: "number", description: "Precio en euros hasta donde tiene recorrido razonable (máximo anterior, resistencia…)." },
           valid_hours: { type: "integer", minimum: 1, maximum: 24, description: "Horas que sigue valiendo la idea." },
           rationale: { type: "string", description: "Por qué, en 2-3 frases. Puedes marcar lo clave con **negritas**." },
           risks: { type: "string" },
+          entry: { type: ["number", "null"], description: "Solo «retroceso»: precio en euros de la orden limitada de compra (por debajo del de ahora). null en el resto." },
         },
       },
     },
@@ -416,7 +421,7 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
     };
     const instructions = [
       "Eres un analista de criptomonedas que publica ideas de compra a corto plazo (horas) en un tablón común. Otros agentes deciden si entran, cuánto y dónde salen: tú solo señalas qué hay, por qué y entre qué niveles.",
-      `Tipos que puedes usar: ${ENABLED_KINDS.map((k) => KIND_TEXT[k]).join(", ")}. No propongas otros tipos.`,
+      `Tipos que puedes usar: ${AI_KINDS.map((k) => KIND_TEXT[k]).join(", ")}. No propongas otros tipos.`,
       "Para cada idea: invalidación = nivel real del gráfico por debajo del cual la idea deja de valer (no un % fijo); objetivo = nivel donde es razonable que se frene; valid_hours = cuánto sigue valiendo.",
       "Publica solo lo que de verdad veas (de 0 a 8 ideas, mejor pocas y buenas). No repitas pares de «ideas_ya_publicadas». Elige SOLO pares de la lista de candidatos.",
       "Precios y volúmenes en euros (los pares en USDC ya vienen convertidos). fromHigh3d = distancia al máximo de 3 días en %, volSurge = volumen de las últimas 4 h frente a la media (1 = normal).",
@@ -478,16 +483,125 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
       newsOf: (base) => news.filter((n) => n.symbols.includes(base)).length,
       atrOf: (pair) => atrOf.get(pair) ?? null,
     }).catch((e) => console.error("[faro] control", e instanceof Error ? e.message.slice(0, 200) : e));
+    // Escáneres de reglas (sin IA) de la carta: ruido y tendencia larga.
+    const scanned = await runScanners(runId, market, rules, btc ? btc.ch24h : null).catch((e) => {
+      console.error("[faro] escáneres", e instanceof Error ? e.message.slice(0, 200) : e);
+      return 0;
+    });
     await prisma.trading_faro_runs.update({
       where: { id: runId },
-      data: { status: "ok", market_view: ai.market_view, ideas: ok.length, error: rejected.length ? `Descartadas: ${rejected.map((x) => `${x.pair} (${x.reason})`).join("; ").slice(0, 900)}` : null },
+      data: { status: "ok", market_view: ai.market_view, ideas: ok.length + scanned, error: rejected.length ? `Descartadas: ${rejected.map((x) => `${x.pair} (${x.reason})`).join("; ").slice(0, 900)}` : null },
     });
-    return `${ok.length} ideas`;
+    return `${ok.length} ideas${scanned ? ` + ${scanned} de escáner` : ""}`;
   } catch (e) {
     const msg = e instanceof Error ? e.message.slice(0, 300) : "error";
     await prisma.trading_faro_runs.update({ where: { id: runId }, data: { status: "error", error: msg } });
     throw e;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Escáneres de la carta (16/11/2026): ideas por reglas, sin IA, que se publican en el mismo tablón.
+// ---------------------------------------------------------------------------
+const MAX_SCANNED = 5;
+
+async function publishScanned(runId: string, rules: Rules, o: { pair: string; kind: "ruido" | "tendencia"; price: number; invalidation: number; target: number; validHours: number; rationale: string; risks: string; conviction: number }) {
+  const symbol = symbolOf(o.pair, rules) ?? `${o.pair.replace(/(EUR|USDC)$/, "")}-EUR`;
+  const inst = await ensureInstrument(symbol, rules.get(o.pair)?.base ?? symbol.replace(/-EUR$/, ""));
+  await setLive(inst.id, o.price);
+  await prisma.trading_faro_ideas.create({
+    data: {
+      run_id: runId,
+      pair: o.pair,
+      symbol,
+      kind: o.kind,
+      conviction: o.conviction,
+      price: o.price,
+      invalidation: o.invalidation,
+      target: o.target,
+      valid_until: new Date(Date.now() + o.validHours * 3_600_000),
+      rationale: o.rationale,
+      risks: o.risks,
+      last_price: o.price,
+      best_pct: 0,
+      worst_pct: 0,
+    },
+  });
+}
+
+async function runScanners(runId: string, market: Ticker[], rules: Rules, btc24h: number | null): Promise<number> {
+  const live = new Set((await prisma.trading_faro_ideas.findMany({ where: { status: "viva" }, select: { pair: true } })).map((i) => i.pair));
+  let n = 0;
+  const f = (v: number) => v.toPrecision(5);
+
+  // Ruido: solo con el mercado tranquilo y en monedas de Revolut X (0 % en las órdenes que esperan).
+  if (btc24h !== null && Math.abs(btc24h) < 2) {
+    const cov = await venueCoverage();
+    const revx = cov?.find((v) => v.id === "revolutx")?.has ?? null;
+    if (revx) {
+      const pool = market
+        .filter((t) => revx.has(t.base) && !live.has(t.pair) && t.volume24h >= 200_000 && t.price > 0)
+        .sort((a, b) => b.volume24h - a.volume24h)
+        .slice(0, 25);
+      for (const t of pool) {
+        if (n >= MAX_SCANNED) break;
+        const bars = await hourly(t.pair).catch(() => []);
+        const r = noiseIdea(bars, t.price);
+        if (!r) continue;
+        await publishScanned(runId, rules, {
+          pair: t.pair,
+          kind: "ruido",
+          price: r.entry,
+          invalidation: r.invalidation,
+          target: r.target,
+          validHours: ideaValidHours("ruido", CARTA.ruido.maxHoldHours ?? 8),
+          conviction: 2,
+          rationale: `Se mueve en un rango del **${r.width.toFixed(1).replace(".", ",")} %** en las últimas 24 h sin tendencia, y ahora está en su parte baja. **Compra limitada a ${f(r.entry)} €** cerca del suelo y **venta a ${f(r.target)} €** en la parte alta. Pensada para Revolut X: 0 % en las órdenes que esperan.`,
+          risks: `Si rompe el rango hacia abajo, stop a ${f(r.invalidation)} €.`,
+        });
+        live.add(t.pair);
+        n++;
+      }
+    }
+  }
+
+  // Tendencia larga: una vez al día, con el mercado en ataque; ruptura del máximo de 20 días (cierres).
+  const phase = await getMarketPhase().catch(() => null);
+  const today = new Date(new Date().toISOString().slice(0, 10));
+  const already = await prisma.trading_faro_ideas.count({ where: { kind: "tendencia", created_at: { gte: today } } });
+  if (phase?.mode === "ataque" && already === 0) {
+    const inst = await prisma.market_instruments.findMany({ where: { market: CRYPTO_MARKET, active: true }, select: { id: true, symbol: true } });
+    const series = await loadSeries(inst.map((i) => i.id), new Date(Date.now() - 45 * DAY));
+    let m = 0;
+    for (const i of inst) {
+      if (m >= MAX_SCANNED) break;
+      const closed = (series.get(i.id) ?? []).filter((c) => c.t < today.getTime());
+      if (closed.length < 22) continue;
+      const last = closed[closed.length - 1];
+      const prev20 = closed.slice(-21, -1);
+      if (!(last.c > Math.max(...prev20.map((c) => c.c)))) continue;
+      const base = i.symbol.replace(/-EUR$/, "");
+      const t = market.find((x) => x.base === base && (x.pair.endsWith("EUR") || x.pair.endsWith("USDC")));
+      if (!t || live.has(t.pair)) continue;
+      const low10 = Math.min(...closed.slice(-10).map((c) => c.l));
+      if (!(low10 < t.price * 0.99)) continue;
+      await publishScanned(runId, rules, {
+        pair: t.pair,
+        kind: "tendencia",
+        price: t.price,
+        invalidation: low10,
+        target: t.price * 1.3,
+        validHours: 24 * 30,
+        conviction: 3,
+        rationale: `**Tendencia larga**: el mercado está en **modo ataque** y ${base} ha cerrado por encima de su máximo de los últimos 20 días. Se aguanta mientras no pierda su mínimo de 10 días (${f(low10)} €).`,
+        risks: "Las rupturas a veces fallan y el precio vuelve atrás: entonces salta el stop.",
+      });
+      live.add(t.pair);
+      m++;
+      n++;
+    }
+  }
+  return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -563,7 +677,7 @@ async function maybeRunUs(force: boolean) {
     };
     const instructions = [
       "Eres un analista de acciones de EE. UU. (grandes del Nasdaq y del S&P 500) que publica ideas de compra a corto plazo (de horas a dos o tres sesiones) en un tablón común. Otros agentes deciden si entran, cuánto y dónde salen: tú solo señalas qué hay, por qué y entre qué niveles.",
-      `Tipos que puedes usar: ${ENABLED_KINDS.map((k) => KIND_TEXT[k]).join(", ")}. No propongas otros tipos.`,
+      `Tipos que puedes usar: ${AI_KINDS.map((k) => KIND_TEXT[k]).join(", ")}. No propongas otros tipos.`,
       "Para cada idea: invalidación = nivel real del gráfico por debajo del cual la idea deja de valer (no un % fijo); objetivo = nivel donde es razonable que se frene; valid_hours = cuánto sigue valiendo, contando que la bolsa solo abre 6,5 horas al día (15:30–22:00 en España).",
       "Ten en cuenta al Nasdaq 100: si cae con fuerza, casi todo cae con él. Publica solo lo que de verdad veas (de 0 a 5 ideas, mejor pocas y buenas). No repitas valores de «ideas_ya_publicadas». Elige SOLO de la lista de candidatos y usa su ticker como «pair».",
       "Precios y volúmenes en euros (convertidos desde dólares al cambio de ahora). Velas de 1 hora de las últimas ~5 sesiones: fromHigh = distancia al máximo de ese periodo en %, volSurge = volumen de las últimas 4 horas frente a la media (1 = normal).",
@@ -736,8 +850,26 @@ export async function faroView(workspaceId: string) {
     });
     byIdea.set(t.idea_id, list);
   }
+  // Dónde sale más barata cada oportunidad según su tipo de orden (comisiones de cada exchange y si tiene la moneda).
+  const coverage = (await venueCoverage()) ?? [];
+  const venuesFor = (base: string): Venue[] =>
+    brokerRegistry
+      .list()
+      .filter((p) => p.fees && coverage.some((c) => c.id === p.id && (!c.has || c.has.has(base))))
+      .map((p) => ({ id: p.id, name: p.name, fees: { maker: p.fees!.maker, taker: p.fees!.taker } }));
+  const howTo = (i: { kind: string; symbol: string; pair: string }) => {
+    if (!isCartaKind(i.kind) || isUsPair(i.pair)) return null;
+    const best = bestVenue(i.kind, venuesFor(i.symbol.replace(/-EUR$/, "")));
+    return {
+      order: CARTA[i.kind].order,
+      source: CARTA[i.kind].source,
+      venue: best ? { id: best.venue.id, name: best.venue.name, roundTripPct: best.roundTripPct } : null,
+    };
+  };
   const view = (i: (typeof all)[number]) => ({
     id: i.id,
+    /** Tipo de orden, de dónde sale la idea (FARO o escáner) y el exchange más barato para ella. */
+    howTo: howTo(i),
     pair: i.pair,
     symbol: i.symbol,
     kind: i.kind,
@@ -749,7 +881,7 @@ export async function faroView(workspaceId: string) {
     validUntil: i.valid_until.toISOString(),
     rationale: i.rationale,
     risks: i.risks,
-    status: i.status as "viva" | "acierto" | "fallo" | "caducada",
+    status: i.status as "viva" | "acierto" | "fallo" | "caducada" | "sin_entrar",
     lastPrice: i.last_price,
     bestPct: i.best_pct,
     worstPct: i.worst_pct,
