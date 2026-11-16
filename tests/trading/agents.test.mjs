@@ -52,7 +52,7 @@ test("agentes: sin reglas de agente, el comité normal no cambia", () => {
   assert.ok(v.proposals.every((p) => p.status === "propuesta"));
 });
 
-test("agentes: del comité solo queda VÉRTIGO en activo; ARGO y NOVA archivados pero localizables", () => {
-  assert.deepEqual(ACTIVE.map((a) => a.key), ["vertigo"]);
-  assert.ok(agentByKey("argo") && agentByKey("nova"));
+test("agentes: el comité entero queda archivado (la IA ya no invierte) pero localizable", () => {
+  assert.deepEqual(ACTIVE.map((a) => a.key), []);
+  assert.ok(agentByKey("argo") && agentByKey("nova") && agentByKey("vertigo"));
 });

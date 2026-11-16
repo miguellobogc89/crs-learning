@@ -13,6 +13,7 @@ import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill
 import { AssetIcon } from "./asset-icon";
 import { DataTable, Money, useIsMobile } from "./table";
 import { MirrorModal } from "./mirror-modal";
+import { SpecPills } from "./agent-spec";
 import { AgentVenuePills } from "./agent-venues";
 
 export type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean; canCopy: boolean };
@@ -32,7 +33,8 @@ export const when = (iso: string | null | undefined) =>
     ? new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(iso))
     : "Nunca";
 
-const PROFILES = ["todos", "precavido", "equilibrado", "arriesgado", "kamikaze"] as const;
+const PROFILES = ["todos", "faro", "propio", "referencia"] as const;
+const PROFILE_LABEL: Record<(typeof PROFILES)[number], string> = { todos: "Todos", faro: "Ideas de FARO", propio: "Reglas propias", referencia: "Referencia" };
 type SortKey = "rentabilidad" | "patrimonio" | "antiguedad" | "nombre";
 const SORTS: Record<SortKey, { label: string; fn: (a: Agent, b: Agent) => number }> = {
   rentabilidad: { label: "Rentabilidad", fn: (a, b) => b.summary.returnPct - a.summary.returnPct },
@@ -81,8 +83,8 @@ export function AgentsPanel() {
     if (!data) return [];
     const q = query.trim().toLowerCase();
     return data.agents
-      .filter((a) => profile === "todos" || a.profile === profile)
-      .filter((a) => !q || [a.name, a.profile, a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
+      .filter((a) => profile === "todos" || a.spec?.family === profile)
+      .filter((a) => !q || [a.name, a.spec?.style ?? "", a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
       .sort(SORTS[sort].fn);
   }, [data, profile, query, sort]);
 
@@ -164,7 +166,7 @@ export function AgentsPanel() {
       <div className="flex shrink-0 flex-wrap items-center gap-2 md:gap-3">
         <div className="relative w-full min-w-0 sm:w-auto sm:min-w-[220px] sm:max-w-xs sm:flex-1">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-          <input className={`${field} w-full pl-9`} placeholder="Buscar agente, perfil o creador" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Buscar agentes" />
+          <input className={`${field} w-full pl-9`} placeholder="Buscar agente o estilo" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Buscar agentes" />
         </div>
         <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 [scrollbar-width:none] max-md:w-full">
           {PROFILES.map((p) => (
@@ -174,7 +176,7 @@ export function AgentsPanel() {
               onClick={() => setProfile(p)}
               className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium ${profile === p ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
             >
-              {p === "todos" ? "Todos" : cap(p)}
+              {PROFILE_LABEL[p]}
             </button>
           ))}
         </div>
@@ -267,7 +269,7 @@ export function AgentsPanel() {
                   <span className="min-w-0">
                     <span className="flex items-center gap-2">
                       <b className="truncate font-semibold text-slate-900">{a.name}</b>
-                      <Pill color={a.color}>{cap(a.profile)}</Pill>
+                      <SpecPills spec={a.spec} />
                     </span>
                     <span className="block truncate text-xs text-slate-500">{a.tagline}</span>
                     <AgentVenuePills v={a.venues} className="mt-1" />
@@ -455,7 +457,7 @@ export function agentMenu(
 ): MenuItem[] {
   const items: MenuItem[] = [];
   if (o.onDetail) items.push({ label: "Ver su página", icon: ArrowRight, onClick: o.onDetail });
-  if (!a.kamikaze)
+  if (!a.kamikaze && a.kind !== "dca")
     items.push({ label: a.copyWeightPct !== null ? "Cambiar la copia" : "Copiar", icon: Copy, onClick: o.canCopy ? o.onCopy : undefined, disabledReason: o.canCopy ? undefined : "Solo el propietario o un administrador" });
   items.push({ label: a.mirror ? "Copia con dinero real…" : "Copiar con dinero real", icon: Wallet, onClick: o.canCopy ? o.onMirror : undefined, disabledReason: o.canCopy ? undefined : "Solo el propietario o un administrador" });
   items.push({ label: "Pausar", icon: Pause, soon: true });
@@ -512,7 +514,7 @@ function AgentCard({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[15px] font-semibold text-slate-900 group-hover:underline">{a.name}</span>
-              <Pill color={a.color}>{cap(a.profile)}</Pill>
+              <SpecPills spec={a.spec} />
               <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500" title="Puesto por rentabilidad">
                 #{rank}
               </span>
@@ -723,7 +725,7 @@ export function CopyModal({ agent: a, onClose }: { agent: Agent; onClose: () => 
       open
       onClose={onClose}
       title={active ? `Copia de ${a.name}` : `Copiar a ${a.name}`}
-      subtitle={`Perfil ${a.profile}`}
+      subtitle={a.spec ? `Estilo ${a.spec.style.toLowerCase()}` : undefined}
       footer={
         done ? (
           <button type="button" className={primary} onClick={onClose}>

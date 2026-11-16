@@ -27,7 +27,7 @@ export type ChipDef = {
 export const CHIP_AGENTS: ChipDef[] = [
   {
     key: "camaleon",
-    name: "CAMALEÓN-4",
+    name: "CAMALEÓN",
     profile: "arriesgado",
     tagline: "Cambia el chip según el mercado: ataca con las crypto que rompen máximos cuando Bitcoin acompaña, y se pone a salvo en efectivo en cuanto se tuerce.",
     strategy: "chip-b-rupt",

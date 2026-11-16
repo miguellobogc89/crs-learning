@@ -4,7 +4,8 @@
 // qué funciona mejor a lo largo de muchas rondas. Puro: lo usan el servidor, los tests y la interfaz.
 import type { AgentRules } from "../agents/roster";
 
-export type KamikazeStyle = "impulso" | "rupturas" | "rebotes";
+/** «selectivo»: cualquier tipo de idea, pero solo las de convicción alta. */
+export type KamikazeStyle = "impulso" | "rupturas" | "rebotes" | "selectivo";
 
 export type KamikazeDef = {
   key: string;
@@ -43,6 +44,8 @@ export type KamikazeDef = {
   stopMode?: "clamp" | "idea";
   /** «target»: vende en el objetivo; «trail»: deja correr con un stop que sube con el precio. */
   exitMode?: "target" | "trail";
+  /** Convicción mínima de la idea de FARO (de 1 a 5) para tomarla. */
+  minConviction?: number;
 };
 
 /** Costes de un exchange de crypto al contado: ~0,1 % por operación y algo de deslizamiento. */
@@ -120,6 +123,23 @@ export const ALL_KAMIKAZES: KamikazeDef[] = [
   variant("mecha", { key: "mecha-balas", name: "MECHA 2 BALAS", variant: "2 balas", sizePct: 50, tagline: "Como MECHA, pero cada operación usa la mitad del capital de la ronda: si falla una, le queda otra." }),
   variant("mecha", { key: "mecha-corre", name: "MECHA CORRE", variant: "Corre", exitMode: "trail", tagline: "Como MECHA, pero no vende en el objetivo: deja correr con un stop que sube con el precio." }),
   ORIGINALS[2],
+  // VÉRTIGO (16/11/2026): antes era un agente del comité que decidía con IA; ahora, como el resto, solo
+  // sigue reglas sobre las ideas de FARO. Clave nueva para no mezclarse con el historial del comité.
+  {
+    key: "vertigo-faro",
+    name: "VÉRTIGO",
+    profile: "kamikaze",
+    style: "selectivo",
+    tagline: "Selectivo: solo las ideas de FARO de convicción alta (4 o 5 de 5), de cualquier tipo. Pocas veces, pero todo a una carta. Meta: ×3, sin plazo.",
+    persona: "VÉRTIGO no decide con IA: toma la idea de FARO de más convicción si llega a 4 de 5.",
+    capital: KAMIKAZE_CAPITAL,
+    multiple: 3,
+    days: 10,
+    color: "orange",
+    settings: SETTINGS,
+    rules: RULES,
+    minConviction: 4,
+  },
   variant("fenix", { key: "fenix-ajustado", name: "FÉNIX AJUSTADO", variant: "Ajustado", stopMode: "idea", tagline: "Como FÉNIX, pero con el stop justo en la invalidación de la idea, sin el mínimo del 5 %." }),
 ];
 

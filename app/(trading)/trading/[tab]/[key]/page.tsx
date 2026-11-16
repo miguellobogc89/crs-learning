@@ -7,12 +7,13 @@ import { TRADING_TABS } from "@/components/trading/tabs";
 import { agentByKey, ARCHIVED_AGENTS } from "@/lib/trading/agents/roster";
 import { ARCHIVED_KAMIKAZES, kamikazeByKey } from "@/lib/trading/kamikaze/roster";
 import { chipByKey } from "@/lib/trading/chip/roster";
+import { dcaByKey } from "@/lib/trading/dca/roster";
 
 export const dynamic = "force-dynamic";
 
 // Los archivados ya no tienen página (los enlaces viejos dan «no encontrado»).
 const findAgent = (key: string) =>
-  ARCHIVED_AGENTS.has(key) || ARCHIVED_KAMIKAZES.has(key) ? null : agentByKey(key) ?? kamikazeByKey(key) ?? chipByKey(key);
+  ARCHIVED_AGENTS.has(key) || ARCHIVED_KAMIKAZES.has(key) ? null : agentByKey(key) ?? kamikazeByKey(key) ?? chipByKey(key) ?? dcaByKey(key);
 
 export async function generateMetadata({ params }: { params: Promise<{ tab: string; key: string }> }): Promise<Metadata> {
   const { tab, key } = await params;

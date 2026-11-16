@@ -9,18 +9,33 @@ import { CRYPTO_BENCHMARK, INDEX_SYMBOL } from "../market-data";
 import { dayKey, loadSeries } from "../sync";
 import { meetingDue, meetingIntervalMinutes } from "../live-logic";
 import { AGENTS, AGENTS_WORKSPACE, agentByKey, copyKey, type AgentDef } from "./roster";
-import { isKamikaze, KAMIKAZES, type KamikazeDef } from "../kamikaze/roster";
+import { isKamikaze, kamikazeByKey, KAMIKAZES, type KamikazeDef } from "../kamikaze/roster";
 import { kamikazeView, resetKamikaze, runKamikazeNow } from "../kamikaze/engine";
-import { CHIP_AGENTS, isChip, type ChipDef } from "../chip/roster";
+import { CHIP_AGENTS, chipByKey, isChip, type ChipDef } from "../chip/roster";
+import { DCA_AGENTS, dcaByKey, isDca, type DcaDef } from "../dca/roster";
+import { dcaTick } from "../dca/engine";
+import { chipSpec, dcaSpec, kamikazeSpec } from "./spec";
 import { chipModeOf, resetChip, runChipNow } from "../chip/engine";
 import { agentVenues } from "./venues";
 
 const WS = AGENTS_WORKSPACE;
 
-/** Todos los agentes del catálogo: los clásicos y los kamikazes. */
-const CATALOG: (AgentDef | KamikazeDef | ChipDef)[] = [...AGENTS, ...CHIP_AGENTS, ...KAMIKAZES];
+type AnyDef = AgentDef | KamikazeDef | ChipDef | DcaDef;
+/** Todos los agentes en activo: los de reglas propias, los que toman ideas de FARO y los de referencia. */
+const CATALOG: AnyDef[] = [...AGENTS, ...CHIP_AGENTS, ...KAMIKAZES, ...DCA_AGENTS];
 
-async function ensureAgent(a: AgentDef | KamikazeDef | ChipDef) {
+/** Ficha estándar (null solo para los antiguos del comité, que ya no están en activo). */
+function specOf(key: string) {
+  const k = kamikazeByKey(key);
+  if (k) return kamikazeSpec(k);
+  const c = chipByKey(key);
+  if (c) return chipSpec(c);
+  const d = dcaByKey(key);
+  if (d) return dcaSpec(d);
+  return null;
+}
+
+async function ensureAgent(a: AnyDef) {
   return ensureAccount(WS, a.key, { name: a.name, capital: a.capital, settings: a.settings });
 }
 
@@ -74,13 +89,15 @@ export async function getAgents(workspaceId?: string) {
       // Kamikazes: la curva y la rentabilidad son las de la ronda en curso.
       const roundStart = kamikaze?.current ? new Date(kamikaze.current.startedAt.slice(0, 10)).getTime() : null;
       return {
-        kind: (kamikaze ? "kamikaze" : isChip(def.key) ? "chip" : "agente") as "kamikaze" | "agente" | "chip",
+        kind: (kamikaze ? "kamikaze" : isChip(def.key) ? "chip" : isDca(def.key) ? "dca" : "agente") as "kamikaze" | "agente" | "chip" | "dca",
+        /** Ficha estándar: de dónde saca las ideas, cuáles coge, cuánto pone y cuándo sale. */
+        spec: specOf(def.key),
         /** Agentes de dos modos: si están en ataque o en defensa, y por qué. */
         chip: isChip(def.key) && last ? chipModeOf(last.context) : null,
         kamikaze,
         key: def.key,
         name: def.name,
-        profile: def.profile as AgentDef["profile"] | KamikazeDef["profile"] | ChipDef["profile"],
+        profile: def.profile as AnyDef["profile"],
         tagline: def.tagline,
         color: def.color,
         /** Crypto, valores o los dos, y los exchanges donde se le puede copiar (null si no se pudo saber). */
@@ -225,6 +242,11 @@ function movesOf(
 export async function runAgent(key: string, userId: string | null) {
   if (isKamikaze(key)) return runKamikazeNow(key);
   if (isChip(key)) return runChipNow(key);
+  if (isDca(key)) {
+    const r = await dcaTick(true);
+    const a = r.find((x) => x.agent === key);
+    return { id: key, auto: (a?.actions ?? []).map((detail) => ({ symbol: key, ok: !detail.startsWith("error"), detail })) };
+  }
   const def = agentByKey(key);
   if (!def) throw new Error("Agente desconocido");
   const account = await ensureAgent(def);
@@ -243,6 +265,12 @@ export function canDirectAgents(workspaceId: string) {
 export async function resetAgent(key: string) {
   if (isKamikaze(key)) return resetKamikaze(key);
   if (isChip(key)) return resetChip(key);
+  if (isDca(key)) {
+    const d = dcaByKey(key)!;
+    await ensureAgent(d);
+    await resetAccount(WS, d.capital, d.key);
+    return;
+  }
   const def = agentByKey(key);
   if (!def) throw new Error("Agente desconocido");
   const account = await ensureAgent(def);

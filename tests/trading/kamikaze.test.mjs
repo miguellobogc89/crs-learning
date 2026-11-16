@@ -7,12 +7,13 @@ const L = load("lib/trading/kamikaze/logic.ts");
 const { ALL_KAMIKAZES: KAMIKAZES, KAMIKAZES: ACTIVE, ARCHIVED_KAMIKAZES, kamikazeByKey } = load("lib/trading/kamikaze/roster.ts");
 const DAY = 86_400_000;
 
-test("kamikazes: tres estilos con metas distintas y 20 € por ronda", () => {
+test("kamikazes: estilos con metas distintas y 20 € por ronda", () => {
   const originals = KAMIKAZES.filter((k) => !k.base);
   assert.deepEqual(originals.map((k) => [k.key, k.style, k.multiple, k.days]), [
     ["cohete", "impulso", 10, 7],
     ["mecha", "rupturas", 10, 5],
     ["fenix", "rebotes", 8, 10],
+    ["vertigo-faro", "selectivo", 3, 10],
   ]);
   // Cada variante copia a su original y cambia un solo parámetro.
   const params = ["sizePct", "maxChasePct", "stopMode", "exitMode"];
@@ -98,6 +99,6 @@ test("kamikazes: la decisión de la IA se valida antes de ejecutarla", () => {
 });
 
 test("kamikazes: los archivados no están en activo, pero se siguen encontrando por su clave", () => {
-  assert.deepEqual(ACTIVE.map((k) => k.key), ["cohete-persigue", "mecha"]);
+  assert.deepEqual(ACTIVE.map((k) => k.key), ["cohete-persigue", "mecha", "vertigo-faro"]);
   for (const key of ARCHIVED_KAMIKAZES) assert.ok(kamikazeByKey(key), `${key} se encuentra para su historial`);
 });

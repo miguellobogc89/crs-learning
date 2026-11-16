@@ -95,10 +95,11 @@ export const ALL_AGENTS: AgentDef[] = [
 ];
 
 /**
- * Archivados el 16/11/2026: dejan de reunirse y de verse en la app, pero su historial se conserva. Del
- * comité queda uno solo (VÉRTIGO), etiquetado como IA: tres agentes opacos parecidos eran ruido.
+ * Archivados el 16/11/2026: dejan de reunirse y de verse en la app, pero su historial se conserva. La IA
+ * ya no invierte, solo informa (FARO): todo el comité queda archivado y VÉRTIGO vuelve como agente de
+ * reglas sobre las ideas de FARO (lib/trading/kamikaze/roster.ts, clave «vertigo-faro»).
  */
-export const ARCHIVED_AGENTS: ReadonlySet<string> = new Set(["argo", "nova"]);
+export const ARCHIVED_AGENTS: ReadonlySet<string> = new Set(["argo", "nova", "vertigo"]);
 /** Los que están en activo. */
 export const AGENTS = ALL_AGENTS.filter((a) => !ARCHIVED_AGENTS.has(a.key));
 

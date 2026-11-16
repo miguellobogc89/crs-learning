@@ -7,13 +7,14 @@ import { api, dayFmt, errorText, eur, eur0, flat, ghost, int, pct, primary, tone
 import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
 import { EquityChart, withLivePoint } from "./equity-chart";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Pill, ReturnPill, Rich } from "./ui";
+import { SpecPills, SpecSheet } from "./agent-spec";
+import { AgentAvatar, card, ErrorNote, LoadingCard, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { MirrorModal } from "./mirror-modal";
 import { AgentVenuePills } from "./agent-venues";
 import { agentMenu, ChipMode, CopyBadges, CopyModal, Creator, Decision, DotsMenu, Rounds, runningFor, when, type Agent, type Data } from "./agents-panel";
 
-type Tab = "abiertas" | "historial" | "decisiones" | "rondas";
+type Tab = "abiertas" | "historial" | "decisiones" | "rondas" | "ficha";
 
 /** Mayor caída desde un máximo, en % (sobre la curva de patrimonio). */
 function maxDrawdown(points: { equity: number }[]) {
@@ -83,6 +84,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
   };
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: "ficha", label: "Cómo opera" },
     { key: "abiertas", label: "Abiertas", count: a.positions.length },
     { key: "historial", label: "Historial", count: a.closed.length },
     ...(a.kamikaze ? [{ key: "rondas" as const, label: "Rondas", count: a.kamikaze.stats.rounds }] : [{ key: "decisiones" as const, label: "Decisiones", count: a.proposals.length }]),
@@ -103,7 +105,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-bold tracking-tight text-slate-900">{a.name}</h2>
-                  <Pill color={a.color}>{cap(a.profile)}</Pill>
+                  <SpecPills spec={a.spec} />
                   <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
                     #{rank} de {data.agents.length}
                   </span>
@@ -173,7 +175,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {data.canCopy && !a.kamikaze && (
+              {data.canCopy && !a.kamikaze && a.kind !== "dca" && (
                 <button type="button" className={primary} onClick={() => setCopying(true)}>
                   <Copy className="h-4 w-4" /> {a.copyWeightPct !== null ? "Cambiar copia" : "Copiar"}
                 </button>
@@ -334,6 +336,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
             ))}
 
           {tab === "rondas" && a.kamikaze && <Rounds k={a.kamikaze} equity={s.equity} />}
+          {tab === "ficha" && <SpecSheet spec={a.spec} />}
         </div>
       </section>
 

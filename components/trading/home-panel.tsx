@@ -167,7 +167,7 @@ export function HomePanel() {
     ...agents.agents.map((a) => ({
       key: a.key,
       name: a.name,
-      profile: a.profile,
+      profile: a.spec?.style ?? a.profile,
       color: a.color,
       equity: a.summary.equity,
       returnPct: a.summary.returnPct,

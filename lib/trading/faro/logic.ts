@@ -23,6 +23,7 @@ export const STYLE_KINDS: Record<KamikazeStyle, IdeaKind[]> = {
   impulso: ["impulso"],
   rupturas: ["ruptura", "noticia"],
   rebotes: ["rebote"],
+  selectivo: ["impulso", "ruptura", "noticia"],
 };
 
 /** Coste de ida y vuelta que se descuenta al puntuar una idea (comisiones + deslizamiento). */
@@ -191,8 +192,8 @@ export type BoardIdea = { id: string; pair: string; kind: string; conviction: nu
 /** Margen máximo que puede haber subido el precio desde la idea para que aún valga entrar. */
 export const MAX_CHASE_PCT = 3;
 
-export type PickOptions = { maxChasePct?: number; stopMode?: "clamp" | "idea" };
-const TYPE_TEXT: Record<KamikazeStyle, string> = { impulso: "impulso", rupturas: "ruptura o noticia", rebotes: "rebote" };
+export type PickOptions = { maxChasePct?: number; stopMode?: "clamp" | "idea"; minConviction?: number };
+const TYPE_TEXT: Record<KamikazeStyle, string> = { impulso: "impulso", rupturas: "ruptura o noticia", rebotes: "rebote", selectivo: "convicción alta" };
 const pct1 = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
 
 /**
@@ -210,7 +211,7 @@ export function chooseIdea<T extends BoardIdea>(
 ): { pick: { idea: T; price: number; stop: number; target: number } } | { reason: string } {
   const chase = opts.maxChasePct ?? MAX_CHASE_PCT;
   const kinds = STYLE_KINDS[style] as string[];
-  const mine = ideas.filter((i) => kinds.includes(i.kind) && i.validUntil > now);
+  const mine = ideas.filter((i) => kinds.includes(i.kind) && i.validUntil > now && i.conviction >= (opts.minConviction ?? 0));
   if (!mine.length) return { reason: `No hay ideas de ${TYPE_TEXT[style]} en el tablón` };
   const free = mine.filter((i) => !taken.has(i.id));
   if (!free.length) return { reason: `Ya entró en las ideas de ${TYPE_TEXT[style]} que hay` };

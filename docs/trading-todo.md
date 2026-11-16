@@ -117,6 +117,8 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] Foto diaria en `trading_market_pulse` (migración 20261116100000, aplicada en Neon el 16/11).
 - [ ] Usar la foto diaria como contexto de las ideas de FARO y medir qué indicadores separan las que ganan de las que pierden.
 - [x] Inventario de agentes (consultado en Neon) y archivados ARGO, NOVA, FÉNIX, FÉNIX AJUSTADO, COHETE, MECHA 2 BALAS y MECHA CORRE: no operan ni se ven; su historial se conserva (ARCHIVED_* en los rosters). Quedan CAMALEÓN, VÉRTIGO, COHETE PERSIGUE y MECHA.
-- [ ] Ficha y pastillas iguales para todos los agentes (estilo: Swing, DCA, Kamikaze…); resolver el comité.
-- [ ] Agente DCA de referencia (copiable).
+- [x] La IA no invierte, solo informa (FARO). Comité entero archivado; VÉRTIGO vuelve sin número y sin IA como agente «Selectivo» (ideas de FARO-2 con convicción ≥ 4), clave `vertigo-faro`. CAMALEÓN pierde el «-4».
+- [x] Ficha estándar para todos (lib/trading/agents/spec.ts): pastillas de estilo y familia (Ideas de FARO / Reglas propias / Referencia) y pestaña «Cómo opera» con de dónde saca las compras, qué coge, cuánto pone, cuándo sale y su meta. Filtros de Agentes por familia.
+- [x] Agente de referencia HORMIGA (DCA): 50 € de Bitcoin cada lunes hasta 1.000 €, no vende nunca; se puede copiar en el exchange (lib/trading/dca).
+- [ ] Publicar FARO-2 como el oficial.
 

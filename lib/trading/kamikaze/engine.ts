@@ -192,7 +192,7 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       // Una idea solo se toma una vez por ronda.
       const mine = await prisma.trading_positions.findMany({ where: { account_id: account.id, signal_key: { startsWith: "faro:", endsWith: `:${round.id}` } }, select: { signal_key: true } });
       const taken = new Set<string>(mine.map((p) => p.signal_key?.split(":")[1] ?? ""));
-      const choice = chooseIdea(def.style, board, priceOf, Date.now(), taken, { maxChasePct: def.maxChasePct, stopMode: def.stopMode });
+      const choice = chooseIdea(def.style, board, priceOf, Date.now(), taken, { maxChasePct: def.maxChasePct, stopMode: def.stopMode, minConviction: def.minConviction });
       if ("reason" in choice) {
         const off = dropped(STYLE_KINDS[def.style]);
         await note(off ? `${choice.reason} (FARO-2 descartó ${off === 1 ? "1 idea" : `${off} ideas`} de su estilo)` : choice.reason);
