@@ -15,7 +15,7 @@
  * Whatever cannot be told stays empty (the product's VAT in the catalog fills it later).
  */
 export type TaxLine = { rate: number | null; code: string | null; total: number | null; totalWithTax: number | null };
-export type TaxSummary = { rate: number; base: number | null; cuota: number | null };
+export type TaxSummary = { rate: number | null; base: number | null; cuota: number | null };
 export type LineRate = { rate: number; how: "impreso" | "importes" | "unico" | "codigo" | "reparto" };
 
 /** Rates that exist in Spain: IVA (general, reduced, super-reduced, 5 % and 0 %), IGIC, surcharge of equivalence. */
@@ -24,8 +24,27 @@ const isValid = (r: number) => VALID.some(v => Math.abs(v - r) < 1e-9);
 const cents = (n: number) => Math.round(n * 100);
 const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.05, Math.abs(b) * 0.005);
 
+/**
+ * The summary as usable rates: a rate not printed comes from cuota ÷ base (tickets that print «base 8,34 · cuota 0,36»);
+ * rows with nothing in them (suppliers that print every rate with 0,00) are left out.
+ */
+function rateRows(summary: TaxSummary[], lines: TaxLine[]): { rate: number; base: number | null; cuota: number | null }[] {
+  const rows = summary.filter(s => !(s.base === 0 && (s.cuota ?? 0) === 0));
+  const linesTotal = lines.every(l => l.total !== null) ? lines.reduce((a, l) => a + l.total!, 0) : null;
+  return rows.map(s => {
+    if (s.rate !== null) return { ...s, rate: s.rate };
+    const base = s.base ?? (rows.length === 1 ? linesTotal : null);
+    if (base === null || s.cuota === null || base <= 0) return null;
+    const ratio = s.cuota / base * 100;
+    // Tolerance: the cuota is rounded to the cent, which on a small base moves the ratio a lot.
+    const tolerance = Math.max(0.6, 0.6 / base);
+    const r = VALID.filter(v => v >= 3 && Math.abs(v - ratio) <= tolerance).sort((x, y) => Math.abs(x - ratio) - Math.abs(y - ratio))[0];
+    return r === undefined ? null : { rate: r, base: s.base, cuota: s.cuota };
+  }).filter((s): s is { rate: number; base: number | null; cuota: number | null } => s !== null && isValid(s.rate));
+}
+
 export function lineTaxRates(lines: TaxLine[], summary: TaxSummary[]): (LineRate | null)[] {
-  const rates = [...new Map(summary.filter(s => isValid(s.rate)).map(s => [s.rate, s])).values()];
+  const rates = [...new Map(rateRows(summary, lines).map(s => [s.rate, s])).values()];
   const known = (r: number) => rates.length ? rates.some(s => s.rate === r) : isValid(r);
   const out: (LineRate | null)[] = lines.map(l => l.rate !== null && known(l.rate) ? { rate: l.rate, how: "impreso" } : null);
   // 2. Both amounts printed.
@@ -39,7 +58,7 @@ export function lineTaxRates(lines: TaxLine[], summary: TaxSummary[]): (LineRate
   // 3. A single rate.
   if (rates.length === 1) return out.map(o => o ?? { rate: rates[0].rate, how: "unico" });
   // Whether line amounts are without tax (they add up to the bases) or with it (to base + cuota).
-  const amounts = (s: TaxSummary) => [s.base, s.base !== null && s.cuota !== null ? s.base + s.cuota : null].filter((v): v is number => v !== null);
+  const amounts = (s: { base: number | null; cuota: number | null }) => [s.base, s.base !== null && s.cuota !== null ? s.base + s.cuota : null].filter((v): v is number => v !== null);
   // 4. Codes (printed on the line but not a rate of the summary).
   const codeOf = (l: TaxLine) => l.code ?? (l.rate !== null ? String(l.rate) : null);
   const groups = new Map<string, number[]>();
@@ -54,14 +73,22 @@ export function lineTaxRates(lines: TaxLine[], summary: TaxSummary[]): (LineRate
     for (const i of idx) out[i] = { rate: fits[0].rate, how: "codigo" };
   }
   // 5. Lines with nothing: split them among the rates still unexplained, only if there is exactly one way.
-  const free = lines.map((l, i) => i).filter(i => !out[i]);
+  // Lines of 0,00 € (a gift) fit any rate: they are left out of the split (and keep no rate).
+  const free = lines.map((l, i) => i).filter(i => !out[i] && lines[i].total !== 0);
   if (!free.length || free.some(i => lines[i].total === null) || free.length > 40) return out;
-  const used = new Map<number, number>();
-  lines.forEach((l, i) => { const o = out[i]; if (o && l.total !== null) used.set(o.rate, (used.get(o.rate) ?? 0) + l.total); });
   for (const asWithTax of [false, true]) {
+    // What the lines that already have a rate take of each one, in the same terms (with or without tax).
+    const used = new Map<number, number>();
+    lines.forEach((l, i) => {
+      const o = out[i]; if (!o || l.total === null) return;
+      const v = asWithTax ? l.totalWithTax ?? l.total : l.total;
+      used.set(o.rate, (used.get(o.rate) ?? 0) + v);
+    });
     const target = rates.map(s => {
       const v = asWithTax ? (s.base !== null && s.cuota !== null ? s.base + s.cuota : null) : s.base;
-      return v === null ? null : cents(v - (used.get(s.rate) ?? 0));
+      if (v === null) return null;
+      const t = cents(v - (used.get(s.rate) ?? 0));
+      return Math.abs(t) <= 2 ? 0 : t;
     });
     if (target.some(t => t === null || t < 0)) continue;
     const values = free.map(i => cents(lines[i].total!));

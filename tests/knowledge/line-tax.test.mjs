@@ -32,3 +32,12 @@ test('one rate in the summary → every line; both amounts printed → their rat
  assert.deepEqual(rates(lineTaxRates([L(10,null,null,11)],[])),[10]);
  assert.deepEqual(rates(lineTaxRates([L(10,2)],[])),[null],'a «2» with no summary is not a rate');
 });
+
+test('tickets that print base and cuota but not the rate; rates printed with 0,00 are ignored',()=>{
+ // El Jamón: «8,34 · 0,36» is 4 %, «0,12 · 0,03» is 21 %; lines with VAT.
+ assert.deepEqual(rates(lineTaxRates([L(0.15),L(8.70)],[{rate:null,base:8.34,cuota:0.36},{rate:null,base:0.12,cuota:0.03}])),[21,4]);
+ // Supplier printing every rate: only 10 % has a base.
+ assert.deepEqual(rates(lineTaxRates([L(123.2)],[{rate:0,base:0,cuota:0},{rate:21,base:0,cuota:0},{rate:10,base:112,cuota:11.2}])),[10]);
+ // Only the cuota: from the lines' total.
+ assert.deepEqual(rates(lineTaxRates([L(789.26)],[{rate:null,base:null,cuota:165.74}])),[21]);
+});

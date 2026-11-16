@@ -232,8 +232,7 @@ function resolveLineTaxes(all: PlannedRecord[]) {
   }
   for (const { lines, taxes } of byInvoice.values()) {
     if (!lines.length) continue;
-    const summary = taxes.filter(t => !/irpf|retenc/i.test(String(t.valores.tax_type ?? ""))).map(t => ({ rate: num(t.valores.tax_rate), base: num(t.valores.taxable_base), cuota: num(t.valores.tax_amount) }))
-      .filter((s): s is { rate: number; base: number | null; cuota: number | null } => s.rate !== null);
+    const summary = taxes.filter(t => !/irpf|retenc/i.test(String(t.valores.tax_type ?? ""))).map(t => ({ rate: num(t.valores.tax_rate), base: num(t.valores.taxable_base), cuota: num(t.valores.tax_amount) }));
     const printed = (r: PlannedRecord) => r.evidencias.find(e => e.campo === "tax_rate")?.impreso ?? r.noConvertidos.find(n => n.campo === "tax_rate")?.impreso ?? null;
     const rates = lineTaxRates(lines.map(r => ({ rate: num(r.valores.tax_rate), code: printed(r)?.trim() || null,
       total: num(r.valores.line_total), totalWithTax: num(r.valores.line_total_with_tax) })), summary);
