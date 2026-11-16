@@ -128,7 +128,6 @@ export function CarteraPanel() {
   const earned = earnedAgents + (manual?.result ?? 0);
   const free = Math.max(0, total - working);
   const earnedBase = realRows.reduce((s, r) => s + (r.mirror?.budget ?? 0), 0) + (manual?.trades.filter((t) => t.status === "abierta" || t.status === "cerrada").reduce((s, t) => s + t.invested, 0) ?? 0);
-  const operating = wallets.items.find((w) => w.operating) ?? wallets.items[0] ?? null;
   const cutoff = Date.now() - (chartPeriod === "24h" ? 1 : 7) * 86_400_000;
   const recent = wallets.history.filter((p) => new Date(p.day).getTime() >= cutoff);
   const hasIntraday = recent.length >= 2;
@@ -147,7 +146,7 @@ export function CarteraPanel() {
       )}
 
       <PortfolioBalance
-        title={`Tu dinero real${operating ? ` · ${operating.name}` : ""}`}
+        title={real.length > 1 ? `Saldo total · ${real.length} exchanges` : "Saldo total"}
         total={total}
         available={free}
         working={working}
@@ -166,6 +165,7 @@ export function CarteraPanel() {
           ? "Saldo valorado en EUR cada 5 min; las aportaciones y retiradas también cambian la curva."
           : "De momento se muestra el histórico diario. Las lecturas de cinco minutos se irán añadiendo mientras Trading esté abierto."}
         empty="La gráfica se completará tras la segunda lectura de saldo (aprox. 5 minutos)."
+        venues={wallets.items.length ? <VenuesBreakdown items={wallets.items} total={total} /> : undefined}
         setup={wallets.items.length === 0 ? (
           <div className="py-6">
             <p className="text-sm text-slate-600">Conecta tu exchange para ejecutar oportunidades y copiar agentes con tu dinero.</p>
@@ -228,6 +228,62 @@ export function CarteraPanel() {
           onClose={() => setManaging(null)}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Dónde está tu dinero: un renglón por exchange conectado con su saldo, cuánto tiene libre y qué parte
+ * del total es. El que ejecuta las copias y oportunidades lleva «Opera». Clic → Conexiones.
+ */
+function VenuesBreakdown({ items, total }: { items: Wallets["items"]; total: number }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between px-1 pb-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Por exchange</span>
+        <Link href="/trading/integraciones" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800">
+          <Plus className="h-3.5 w-3.5" /> Conectar
+        </Link>
+      </div>
+      <ul className="divide-y divide-slate-100">
+        {items.map((w) => {
+          const share = w.environment === "real" && w.currency === "EUR" && total > 0 && w.total !== null ? (w.total / total) * 100 : null;
+          return (
+            <li key={w.id}>
+              <Link href="/trading/integraciones" className="flex items-center gap-3 rounded-lg px-1 py-2.5 hover:bg-slate-50">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50">
+                  {w.logo ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- logotipos externos pequeños
+                    <img src={w.logo} alt="" className="h-5 w-5 object-contain" />
+                  ) : (
+                    <Link2 className="h-4 w-4 text-slate-400" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    <b className="truncate text-sm font-semibold text-slate-900">{w.name}</b>
+                    {w.operating && <span className="rounded-full bg-blue-50 px-1.5 py-px text-[10px] font-semibold text-blue-700">Opera</span>}
+                    {w.environment !== "real" && <span className="rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-semibold text-slate-500">Demo</span>}
+                  </span>
+                  <span className="block truncate text-xs text-slate-400">
+                    {w.error ? <span className="text-orange-600">No se pudo leer el saldo</span> : w.cash !== null ? `${eur(w.cash, 2)} libres` : ""}
+                  </span>
+                  {share !== null && items.length > 1 && (
+                    <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-slate-100">
+                      <span className="block h-full rounded-full bg-blue-500" style={{ width: `${Math.max(2, share)}%` }} />
+                    </span>
+                  )}
+                </span>
+                <span className="text-right">
+                  <b className="block text-sm font-semibold tabular-nums text-slate-900">{w.total !== null ? eur(w.total, 2) : "—"}</b>
+                  {share !== null && items.length > 1 && <span className="text-xs tabular-nums text-slate-400">{share.toFixed(0)} %</span>}
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

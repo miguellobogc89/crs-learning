@@ -59,6 +59,7 @@ export function EquityChart({
   fill = false,
   intraday = false,
   balanceOnly = false,
+  flush = false,
   empty = "El gráfico se dibuja con el cierre de cada sesión a partir de que la cartera tenga actividad.",
 }: {
   points: Point[];
@@ -73,6 +74,11 @@ export function EquityChart({
   intraday?: boolean;
   /** Gráfico de saldo real: no presentar ingresos y retiradas como rentabilidad. */
   balanceOnly?: boolean;
+  /**
+   * A todo el ancho: sin márgenes laterales, valores del eje dentro de la gráfica y el detalle al
+   * pasar el dedo o el ratón en un globo junto al punto (sin texto encima).
+   */
+  flush?: boolean;
   empty?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -103,7 +109,7 @@ export function EquityChart({
 
   if (points.length < 2) return <p className="px-6 py-8 text-sm text-slate-500">{empty}</p>;
 
-  const pad = bare ? { l: 4, r: 6, t: 6, b: 4 } : { l: balanceOnly ? 88 : 56, r: 16, t: 14, b: 26 };
+  const pad = bare ? { l: 4, r: 6, t: 6, b: 4 } : flush ? { l: 2, r: 2, t: 18, b: 24 } : { l: balanceOnly ? 88 : 56, r: 16, t: 14, b: 26 };
   const w = width;
   const h = fill ? measuredHeight : height;
   const base = shown[0].equity;
@@ -172,8 +178,8 @@ export function EquityChart({
   };
 
   return (
-    <div className={bare ? "" : fill ? "flex h-full min-h-0 flex-col px-2 pb-2 pt-2" : "px-4 pb-4 pt-2"}>
-      {!bare && (
+    <div className={bare || flush ? "relative" : fill ? "flex h-full min-h-0 flex-col px-2 pb-2 pt-2" : "px-4 pb-4 pt-2"}>
+      {!bare && !flush && (
       <div className="flex flex-wrap items-center justify-between gap-3 px-2 pb-2">
         <div className="text-sm text-slate-500">
           {hp ? (
@@ -228,12 +234,18 @@ export function EquityChart({
               <stop offset="100%" stopColor={col} stopOpacity="0" />
             </linearGradient>
           </defs>
-          {!bare && yt.map((v) => (
+          {!bare && yt.filter((v) => !flush || (v >= lo && v <= hi)).map((v) => (
             <g key={v}>
               <line x1={pad.l} x2={w - pad.r} y1={y(v)} y2={y(v)} stroke="#f1f5f9" />
-              <text x={pad.l - 8} y={y(v) + 3.5} fontSize="11" fill="#94a3b8" textAnchor="end">
-                {balanceOnly ? eur(v, 2) : eur0(v)}
-              </text>
+              {flush ? (
+                <text x={pad.l + 2} y={y(v) - 4} fontSize="10" fill="#94a3b8">
+                  {balanceOnly ? eur(v, 2) : eur0(v)}
+                </text>
+              ) : (
+                <text x={pad.l - 8} y={y(v) + 3.5} fontSize="11" fill="#94a3b8" textAnchor="end">
+                  {balanceOnly ? eur(v, 2) : eur0(v)}
+                </text>
+              )}
             </g>
           ))}
           {!bare && !balanceOnly && range === "all" && initial >= lo && initial <= hi && (
@@ -261,6 +273,16 @@ export function EquityChart({
           )}
         </svg>
       </div>
+      {flush && hover !== null && hp && (
+        <div
+          className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs text-white shadow-lg"
+          style={{ left: `${Math.min(Math.max((x(hover) / w) * 100, 14), 86)}%` }}
+        >
+          <b className="tabular-nums">{balanceOnly ? eur(hp.equity, 2) : eur0(hp.equity)}</b>
+          {!balanceOnly && <span className={hp.equity >= ref ? "text-emerald-300" : "text-red-300"}> {pct(((hp.equity - ref) / (ref || 1)) * 100)}</span>}
+          <span className="text-slate-300"> · {dayLabel(hp.day, !intraday, intraday)}</span>
+        </div>
+      )}
     </div>
   );
 }
