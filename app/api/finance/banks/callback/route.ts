@@ -23,15 +23,19 @@ export async function GET(request: NextRequest) {
   if (!state) return finish("error=autorizacion_invalida");
   const code = request.nextUrl.searchParams.get("code");
   if (!code || request.nextUrl.searchParams.has("error")) return finish("error=autorizacion_cancelada");
+  let phase = "exchange-code";
   try {
     const linked = await bankingRequest<BankSession>("/sessions", { method: "POST", body: { code } });
+    phase = "validate-session";
     if (!linked.session_id || !Array.isArray(linked.accounts) || !linked.accounts.every((id) => typeof id === "string")) {
       throw new Error("Respuesta bancaria incompleta");
     }
     const expiry = new Date(linked.access?.valid_until);
     if (Number.isNaN(expiry.getTime())) throw new Error("Caducidad bancaria no válida");
 
+    phase = "lookup-connection";
     const old = await prisma.personal_bank_connections.findUnique({ where: { user_id_bank: { user_id: currentUser.user.id, bank: state.bank } } });
+    phase = "save-connection";
     await prisma.personal_bank_connections.upsert({
       where: { user_id_bank: { user_id: currentUser.user.id, bank: state.bank } },
       create: {
@@ -53,7 +57,16 @@ export async function GET(request: NextRequest) {
       }
     }
     return finish("banco=conectado");
-  } catch {
+  } catch (error) {
+    const reason = error instanceof Error
+      ? /^(Enable Banking rechazó la consulta \(\d+\)|Respuesta bancaria incompleta|Caducidad bancaria no válida)$/.test(error.message)
+        ? error.message
+        : error.message.includes("CONNECTORS_ENCRYPTION_KEY") ? "Clave de cifrado no válida" : error.name
+      : "Error desconocido";
+    const prismaCode = error !== null && typeof error === "object" && "code" in error && typeof error.code === "string"
+      ? error.code : undefined;
+    // Never log the authorization code, session/account IDs, raw provider response or encrypted values.
+    console.error("[finance] bank callback failed", { bank: state.bank, phase, reason, prismaCode });
     return finish("error=no_se_pudo_guardar_la_conexion");
   }
 }
