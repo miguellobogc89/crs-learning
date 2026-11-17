@@ -574,8 +574,8 @@ async function runScanners(runId: string, market: Ticker[], rules: Rules, btc24h
   return n;
 }
 
-/** Ideas de ruido vivas a la vez como mucho (ENJAMBRE llena hasta 10 huecos y necesita dónde rotar). */
-const MAX_NOISE_LIVE = 15;
+/** Ideas de ruido vivas a la vez como mucho (tres ENJAMBRES de hasta 10 huecos necesitan dónde rotar). */
+const MAX_NOISE_LIVE = 25;
 const NOISE_GAP_MS = 4 * 60_000;
 let lastNoise = 0;
 

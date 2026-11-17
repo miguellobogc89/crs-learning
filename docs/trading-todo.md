@@ -157,3 +157,8 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] Escáner de ruido en cada revisión (no en la de FARO): todas las monedas líquidas de Revolut X, hasta 15 ideas vivas; si el precio está arriba del rango, la compra limitada espera abajo. Solo se frena si Bitcoin cae más de un 3 % en 24 h.
 - [x] Funciones de Vercel en Frankfurt (`fra1`), junto a la base de datos (Neon, eu-central-1): menos latencia y Binance deja de rechazar las llamadas a la cuenta (bloquea las que salen de EE. UU.).
 - [x] Mi cartera: solo los exchanges con saldo; los que no se pueden leer, en un aviso. «Disponible» es el efectivo que dice cada exchange.
+
+## Variantes del ruido y app del móvil (17/11/2026)
+- [x] ENJAMBRE GRANDES (solo monedas grandes) y ENJAMBRE RÁPIDO (vende a mitad del rango), junto a ENJAMBRE; hasta 25 ideas de ruido vivas.
+- [x] Móvil: barra inferior con cuatro iconos (Inicio, Oportunidades, Agentes, Mi cartera); menú de cuenta con Conexiones y lo que vendrá en gris (configuración de la cuenta, invitar a amigos, ayuda); arrastrar hacia abajo para actualizar.
+- [ ] Cartera virtual, Mercados y Análisis de FARO no están en la navegación del móvil (pendiente de decidir).

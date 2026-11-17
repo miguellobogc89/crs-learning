@@ -67,6 +67,10 @@ export type KamikazeDef = {
   kinds?: CartaKind[];
   /** Si refuerza (compra otra vez lo mismo, como mucho el doble) cuando una idea se confirma pronto. */
   refuerzo?: boolean;
+  /** Solo estas monedas (símbolo base: BTC, ETH…). Sin esto, cualquiera. */
+  coins?: string[];
+  /** Vende antes del objetivo de la idea: a esta fracción del recorrido (0,5 = a mitad de camino). */
+  targetFraction?: number;
 };
 
 /** Capital igual para todos los agentes desde el 16/11/2026: así su rentabilidad se compara limpia. */
@@ -192,6 +196,9 @@ for (let k = 0; k < ALL_KAMIKAZES.length; k++) {
  * convicción primero) y solo cambia cuánto arriesgan; así su rentabilidad dice qué nivel de riesgo funciona.
  * Y ENJAMBRE, que diversifica: un 10 % en cada moneda (hasta 10) y recoge las ganancias pequeñas.
  */
+/** Las monedas grandes (las de más capitalización que tiene Revolut X). */
+export const BIG_COINS = ["BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "AVAX", "LINK", "DOT", "LTC", "TRX"];
+
 const crypto = (o: Pick<KamikazeDef, "key" | "name" | "tagline" | "color" | "label"> & Partial<KamikazeDef>): KamikazeDef => ({
   profile: "kamikaze",
   style: "selectivo",
@@ -247,6 +254,29 @@ ALL_KAMIKAZES.push(
     slots: 10,
     kinds: ["ruido"],
     tagline: "Diversificado: un 10 % de su dinero en cada moneda, hasta 10 a la vez. Vive del ruido: compra con órdenes limitadas en la parte baja de un rango tranquilo y vende en la alta (en Revolut X, sin comisión).",
+  }),
+  // Variantes del ruido (17/11/2026): misma idea, otra forma de operarla, para saber cuál compensa.
+  crypto({
+    key: "enjambre-grandes",
+    name: "ENJAMBRE GRANDES",
+    label: "Diversificado",
+    color: "teal",
+    sizeOfEquityPct: 10,
+    slots: 10,
+    kinds: ["ruido"],
+    coins: BIG_COINS,
+    tagline: "Como ENJAMBRE, pero solo con las monedas grandes (Bitcoin, Ethereum, Solana, XRP…): rangos más estrechos y, en principio, más fiables.",
+  }),
+  crypto({
+    key: "enjambre-rapido",
+    name: "ENJAMBRE RÁPIDO",
+    label: "Diversificado",
+    color: "lime",
+    sizeOfEquityPct: 10,
+    slots: 10,
+    kinds: ["ruido"],
+    targetFraction: 0.5,
+    tagline: "Como ENJAMBRE, pero vende a mitad del rango: gana menos en cada operación y debería acertar más veces.",
   }),
 );
 

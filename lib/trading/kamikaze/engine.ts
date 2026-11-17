@@ -213,7 +213,8 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       let free = slots - open.length;
       let last: string | null = null;
       while (free > 0) {
-        const choice = chooseIdea(def.style, board.filter((i) => !held.has(i.symbol)), priceOf, Date.now(), taken, {
+        const mineBoard = board.filter((i) => !held.has(i.symbol) && (!def.coins || def.coins.includes(i.symbol.replace(/-EUR$/, ""))));
+        const choice = chooseIdea(def.style, mineBoard, priceOf, Date.now(), taken, {
           maxChasePct: def.maxChasePct,
           stopMode: def.stopMode,
           minConviction: def.minConviction,
@@ -315,8 +316,13 @@ async function takeIdea(def: KamikazeDef, round: trading_kamikaze_rounds, pick: 
   });
   if (budget < 10) return `No entra en ${idea.symbol.replace(/-EUR$/, "")}: le quedan menos de 10 € para esta operación`;
   const quantity = allInQuantity(budget, px, costOf(state.account));
-  // «Corre»: sin objetivo de venta real y con stop que sube con el precio.
-  const target = def.exitMode === "trail" ? Math.max(pick.target, px * 10) : pick.target;
+  // «Corre»: sin objetivo de venta real y con stop que sube con el precio. Con `targetFraction`, vende antes.
+  const target =
+    def.exitMode === "trail"
+      ? Math.max(pick.target, px * 10)
+      : def.targetFraction
+        ? px + Math.max(0, pick.target - px) * def.targetFraction
+        : pick.target;
   const view = await lastMarketView();
   const run = await prisma.trading_committee_runs.create({
     data: { workspace_id: WS, agent: def.key, as_of: dayDate(madridDay()), status: "ok", market_view: view?.marketView ?? null, context: { faro: idea.id } as Prisma.InputJsonValue },

@@ -92,11 +92,11 @@ function cartaSpec(k: KamikazeDef, slots: number): AgentSpec {
   return {
     market: "Cripto",
     style: k.label ?? STYLE_LABEL[k.style],
-    ideas: `Oportunidades de ${list}${kinds.some((x) => CARTA[x].source === "Escáner") ? " (las de escáner salen de reglas, sin IA)" : ""}. La de más convicción primero.`,
+    ideas: `Oportunidades de ${list}${k.coins ? ` solo en monedas grandes (${k.coins.slice(0, 6).join(", ")}…)` : ""}${kinds.some((x) => CARTA[x].source === "Escáner") ? " (las de escáner salen de reglas, sin IA)" : ""}. La de más convicción primero.`,
     when: `${limit ? "Las de orden limitada, solo cuando el precio baja a su nivel. " : ""}Las de a mercado, si el precio no se ha escapado más de un ${nf(k.maxChasePct ?? MAX_CHASE_PCT)} %. Tras un stop, esa moneda descansa 12 h.`,
     size: k.sizeOfEquityPct
       ? `Un ${nf(k.sizeOfEquityPct)} % de su dinero en cada moneda, hasta ${slots} a la vez (empezó con ${nf(k.capital)} €). Nunca dos veces la misma.`
       : `Arriesga el ${nf(k.riskPct ?? 1)} % de su dinero en cada operación: compra lo justo para perder eso si salta el stop. Hasta ${slots} a la vez.${reinf.length ? ` Si una de ${reinf.join(" o ")} sube pronto, refuerza (como mucho el doble) y sube el stop para no arriesgar más que al principio.` : ""}`,
-    exit: `En el objetivo o en el stop de la oportunidad. Tiempo máximo por tipo: ${limits}.${kinds.includes("tendencia") ? " En las tendencias, el stop sube con el precio." : ""}`,
+    exit: `${k.targetFraction ? `A mitad de camino hacia el objetivo de la oportunidad (${nf(k.targetFraction * 100)} % del recorrido) o en el stop.` : "En el objetivo o en el stop de la oportunidad."} Tiempo máximo por tipo: ${limits}.${kinds.includes("tendencia") ? " En las tendencias, el stop sube con el precio." : ""}`,
   };
 }

@@ -17,6 +17,8 @@ export const AGENT_DOT: Record<string, string> = {
   rose: "bg-rose-500",
   amber: "bg-amber-500",
   fuchsia: "bg-fuchsia-500",
+  teal: "bg-teal-500",
+  lime: "bg-lime-500",
   slate: "bg-slate-800",
 };
 /** Avatar y etiqueta de perfil de cada agente. */
@@ -28,6 +30,8 @@ export const AVATAR: Record<string, string> = {
   rose: "bg-rose-500",
   amber: "bg-amber-500",
   fuchsia: "bg-fuchsia-500",
+  teal: "bg-teal-500",
+  lime: "bg-lime-500",
   slate: "bg-slate-300",
 };
 export const PILL: Record<string, string> = {
@@ -38,6 +42,8 @@ export const PILL: Record<string, string> = {
   rose: "bg-rose-50 text-rose-700",
   amber: "bg-amber-50 text-amber-800",
   fuchsia: "bg-fuchsia-50 text-fuchsia-700",
+  teal: "bg-teal-50 text-teal-700",
+  lime: "bg-lime-50 text-lime-800",
   slate: "bg-slate-100 text-slate-600",
 };
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

@@ -1,17 +1,19 @@
 "use client";
 // Estructura propia de Trading, separada de la app general (sin su barra superior, su menú ni el chat):
-// - móvil (< 768 px): barra fina arriba con el menú (hamburguesa) y el título; todo a pantalla completa.
-//   El menú se abre a pantalla completa con las secciones, tu dinero y el mercado.
+// - móvil (< 768 px): barra fina arriba con el menú (hamburguesa) y el título, y abajo las cuatro secciones
+//   principales solo con iconos. El menú es el de la cuenta (Conexiones y lo que vendrá). Arrastrar hacia
+//   abajo desde arriba actualiza la pantalla.
 // - tablet en vertical (768-1023 px): barra lateral estrecha solo con iconos; el menú completo se abre
 //   con la hamburguesa de la barra.
 // - tablet en horizontal y ordenador (≥ 1024 px): barra lateral completa, como antes.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Menu, X } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { TradingNavigation, TradingNavigationHeader, type TradingProfile } from "./navigation";
 import { prefetchTrading } from "./format";
+import { BottomTabs, MobileMenu, PullToRefresh } from "./mobile-nav";
 
 // Lo que leen Inicio (Operadores y Actividad), Oportunidades, Mi cartera y Agentes.
 const PREFETCH = ["pulse", "portfolio", "agents", "faro", "mine", "mirror", "wallets?history=1", "manual"];
@@ -51,6 +53,7 @@ export function TradingShell({ children, user }: { children: ReactNode; user: Tr
   const fitted = child || isFittedTab(section);
   const Icon = tabDef.icon;
   const [open, setOpen] = useState(false);
+  const scroller = useRef<HTMLElement>(null);
   // Tras la primera carga, el resto de pantallas se va leyendo en segundo plano.
   useEffect(() => prefetchTrading(PREFETCH), []);
   // Al navegar, el menú se cierra solo.
@@ -126,13 +129,19 @@ export function TradingShell({ children, user }: { children: ReactNode; user: Tr
         </div>
 
         <main
-          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3 md:px-6 md:pt-0 lg:px-8 ${
+          ref={scroller}
+          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-3 md:px-6 md:pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pt-0 lg:px-8 ${
             fitted ? "lg:flex lg:flex-col lg:overflow-hidden lg:pb-6" : ""
           }`}
         >
-          <MetaContext.Provider value={setMeta}>{children}</MetaContext.Provider>
+          <MetaContext.Provider value={setMeta}>
+            <PullToRefresh scroller={scroller}>{children}</PullToRefresh>
+          </MetaContext.Provider>
         </main>
       </div>
+
+      {/* Móvil: las cuatro secciones principales abajo, solo con iconos. */}
+      <BottomTabs />
 
       {/* Menú completo (móvil y tablet en vertical). */}
       <Sheet open={open} onOpenChange={setOpen}>
@@ -144,7 +153,12 @@ export function TradingShell({ children, user }: { children: ReactNode; user: Tr
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <SheetTitle className="sr-only">Menú de Trading</SheetTitle>
-          <div className="flex h-full min-h-0 flex-col pt-[env(safe-area-inset-top)]">
+          {/* Móvil: menú de cuenta (las secciones están abajo). */}
+          <div className="h-full md:hidden">
+            <MobileMenu user={user} onClose={() => setOpen(false)} />
+          </div>
+          {/* Tablet en vertical: el menú completo de siempre. */}
+          <div className="hidden h-full min-h-0 flex-col pt-[env(safe-area-inset-top)] md:flex">
             <div className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200/70 px-2 pr-4">
               <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar el menú" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
                 <X className="h-5 w-5" />
