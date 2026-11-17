@@ -62,7 +62,7 @@ export async function syncHealth(): Promise<{ problems: Problem[]; opened: numbe
   for (const o of open.filter((x) => !now.has(x.key))) {
     await prisma.$executeRaw(Prisma.sql`UPDATE public.trading_notifications SET resolved_at = now() WHERE id = ${o.id}::uuid`);
     await prisma.$executeRaw(Prisma.sql`INSERT INTO public.trading_notifications (key, level, title, body, resolved_at)
-      VALUES (${o.key}, 'ok', ${`Resuelto: ${o.title.charAt(0).toLowerCase()}${o.title.slice(1)}`}, 'Vuelve a funcionar con normalidad.', now())`);
+      VALUES (${o.key}, 'ok', ${`Resuelto · ${o.title}`}, 'Vuelve a funcionar con normalidad.', now())`);
     resolved++;
   }
   return { problems, opened, resolved };
