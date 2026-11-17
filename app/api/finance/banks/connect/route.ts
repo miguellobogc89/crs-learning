@@ -17,12 +17,12 @@ export async function GET(request: NextRequest) {
   try {
     const state = issueConsentState(session.user.id, bank);
     phase = "find-bank";
-    const aspsp = await resolveAspsp(bank);
+    const { consentValidUntil, ...aspsp } = await resolveAspsp(bank);
     phase = "start-authorization";
     const response = await bankingRequest<{ url: string }>("/auth", {
       method: "POST",
       body: {
-        access: { valid_until: new Date(Date.now() + 30 * 86400000).toISOString() },
+        access: { valid_until: consentValidUntil },
         aspsp,
         state: state.nonce,
         redirect_url: bankingRedirectUrl(),

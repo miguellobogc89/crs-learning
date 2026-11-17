@@ -56,9 +56,15 @@ export async function bankingRequest<T>(path: string, init: { method?: "GET" | "
 }
 
 type Aspsp = { name: string; country: string };
+type AspspListItem = Aspsp & { maximum_consent_validity?: number };
 
-export async function resolveAspsp(bank: PersonalBank): Promise<Aspsp> {
-  const list = await bankingRequest<{ aspsps: Aspsp[] }>("/aspsps?country=ES&psu_type=personal");
+const DAY_MS = 86400000;
+/** PSD2 permite hasta 180 días si el banco lo admite; por defecto se asume el mínimo clásico de 90. */
+const DEFAULT_CONSENT_DAYS = 90;
+const MAX_CONSENT_DAYS = 180;
+
+export async function resolveAspsp(bank: PersonalBank): Promise<Aspsp & { consentValidUntil: string }> {
+  const list = await bankingRequest<{ aspsps: AspspListItem[] }>("/aspsps?country=ES&psu_type=personal");
   const aliases: Record<PersonalBank, string[]> = {
     santander: ["Banco Santander", "Santander"],
     bbva: ["BBVA", "Banco Bilbao Vizcaya Argentaria"],
@@ -68,7 +74,14 @@ export async function resolveAspsp(bank: PersonalBank): Promise<Aspsp> {
   const match = list.aspsps.find((item) => item.country === "ES" && exact.includes(item.name.toLowerCase()))
     ?? list.aspsps.find((item) => item.country === "ES" && item.name.toLowerCase().includes(bank));
   if (!match) throw new Error(`No se encontró ${BANK_LABELS[bank]} en Enable Banking`);
-  return { name: match.name, country: match.country };
+  // Pedir el consentimiento más largo que acepte el banco para no tener que reconectar a menudo.
+  const maxSeconds = Number(match.maximum_consent_validity);
+  const maxMs = Number.isFinite(maxSeconds) && maxSeconds > 0
+    ? Math.min(maxSeconds * 1000, MAX_CONSENT_DAYS * DAY_MS)
+    : DEFAULT_CONSENT_DAYS * DAY_MS;
+  // Margen de una hora para que el banco no lo rechace por superar su máximo.
+  const consentValidUntil = new Date(Date.now() + maxMs - 3600000).toISOString();
+  return { name: match.name, country: match.country, consentValidUntil };
 }
 
 /** Respuesta de POST /sessions: aquí `accounts` son objetos (AccountResource) con `uid`. */
