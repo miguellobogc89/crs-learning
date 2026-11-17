@@ -98,6 +98,24 @@ function KpiCard({ icon: Icon, tint, label, mobileLabel, value, valueTone, sub, 
   );
 }
 
+function BankLogo({ bank }: { bank: string | null }) {
+  switch (bank?.toLowerCase()) {
+    case "santander":
+      return <svg viewBox="0 0 32 32" className="h-7 w-7 text-[#EC0000]" fill="currentColor" role="img" aria-label="Santander">
+        <path d="M16.6 3.2c1.7 5.1-3.6 7.9-1.5 12.2 1.2 2.5 4.7 3.1 4.7 6.8 3.6-2.1 5-5.5 3.2-9.6-.8-1.8-2.1-3.1-2.4-5.5-1.4 2.2-2.5 3.4-4 4.2 1.3-2.4 1.5-4.8 0-8.1Z" />
+        <path d="M10.8 10.9c-.6 3.4-4.1 5.3-4.1 9.4 0 5.6 4 9.4 9.3 9.4 5.2 0 9.3-3.9 9.3-9.5 0-1.4-.4-2.7-1-3.8-.3 5.5-3.1 8.3-8.2 8.3-4.4 0-7.7-2.8-7.7-7.5 0-3.3 2.2-5.8 2.5-9.1Z" />
+      </svg>;
+    case "bbva":
+      return <span className="text-[12px] font-black tracking-[-0.8px] text-[#004481]" aria-label="BBVA">BBVA</span>;
+    case "revolut":
+      return <svg viewBox="0 0 24 24" className="h-6 w-6 text-[#191C1F]" fill="currentColor" role="img" aria-label="Revolut">
+        <path d="M20.9133 6.9566C20.9133 3.1208 17.7898 0 13.9503 0H2.424v3.8605h10.9782c1.7376 0 3.177 1.3651 3.2087 3.043.016.84-.2994 1.633-.8878 2.2324-.5886.5998-1.375.9303-2.2144.9303H9.2322a.2756.2756 0 0 0-.2755.2752v3.431c0 .0585.018.1142.052.1612L16.2646 24h5.3114l-7.2727-10.094c3.6625-.1838 6.61-3.2612 6.61-6.9494zM6.8943 5.9229H2.424V24h4.4704z" />
+      </svg>;
+    default:
+      return <span className="text-[10px] font-bold uppercase text-slate-600">{(bank ?? "imp").slice(0, 3)}</span>;
+  }
+}
+
 export function HomePanel() {
   const params = useSearchParams();
   const [offset, setOffset] = useState(() => Math.min(0, Number(params.get("ciclo")) || 0));
@@ -212,7 +230,8 @@ export function HomePanel() {
           <ul className="mt-3 divide-y divide-slate-100">
             {v.accounts.map((a) => (
               <li key={a.id} className="flex items-center gap-3 py-2.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-[10px] font-bold uppercase text-slate-600">{(a.bank ?? "imp").slice(0, 3)}</span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-slate-100 sm:hidden"><BankLogo bank={a.bank} /></span>
+                <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-[10px] font-bold uppercase text-slate-600 sm:flex">{(a.bank ?? "imp").slice(0, 3)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-slate-900">{a.name}</span>
                   {a.last4 && <span className="block text-xs text-slate-400">···· {a.last4}</span>}
