@@ -13,7 +13,7 @@ import { OpenAccount } from "./open-account";
 import { AVATAR, cap, ErrorNote, LoadingCard, PILL, ReturnPill } from "./ui";
 import { DataTable, Money, Segmented, sinceText, type Col } from "./table";
 import { ActivityPanel } from "./activity-panel";
-import { PulsePanel } from "./pulse-panel";
+import { SummaryPanel } from "./summary-panel";
 import { AgentSheet } from "./agent-sheet";
 import { MirrorModal } from "./mirror-modal";
 
@@ -49,9 +49,9 @@ export const ago = (iso: string) => {
   return new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", timeZone: "Europe/Madrid" }).format(new Date(iso));
 };
 
-type View = "panorama" | "operadores" | "actividad";
+type View = "resumen" | "operadores" | "actividad";
 const VIEW_URL: Record<View, string> = {
-  panorama: "/trading/inicio",
+  resumen: "/trading/inicio",
   operadores: "/trading/inicio?vista=operadores",
   actividad: "/trading/inicio?vista=actividad",
 };
@@ -60,8 +60,8 @@ export function HomePanel() {
   const router = useRouter();
   const params = useSearchParams();
   const v = params.get("vista");
-  // Panorama (cómo está el mercado) es lo primero que se ve al entrar.
-  const view: View = v === "actividad" || v === "operadores" ? v : "panorama";
+  // El Resumen (tu dinero, el mercado, los agentes, la IA y si todo funciona) es lo primero que se ve.
+  const view: View = v === "actividad" || v === "operadores" ? v : "resumen";
   // Solo cambia la URL en el navegador (sin ir al servidor): el cambio es instantáneo.
   const setView = (next: View) => window.history.replaceState(null, "", VIEW_URL[next]);
   const tabs = (
@@ -69,7 +69,7 @@ export function HomePanel() {
       value={view}
       onChange={setView}
       options={[
-        { key: "panorama", label: "Panorama" },
+        { key: "resumen", label: "Resumen" },
         { key: "operadores", label: "Operadores" },
         { key: "actividad", label: "Actividad" },
       ]}
@@ -98,8 +98,8 @@ export function HomePanel() {
   }, [load]);
   useTradingRefresh(load);
 
-  // Panorama no necesita tu cartera ni la de los agentes: sale enseguida (y eso se sigue cargando detrás).
-  if (view === "panorama") return <PulsePanel tabs={tabs} />;
+  // El Resumen tiene sus propios datos: sale enseguida (lo demás se sigue cargando detrás).
+  if (view === "resumen") return <SummaryPanel tabs={tabs} />;
   if (!account || !agents)
     return error ? (
       <ErrorNote>{error}</ErrorNote>

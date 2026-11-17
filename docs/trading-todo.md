@@ -168,3 +168,10 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] Foto completa del mercado en cada idea, idea de control y candidato: RSI de 1 h, spread, miedo y codicia, dominancia de Bitcoin, cambio del mercado total en 24 h, euro/dólar (además de lo que ya había: fase, Bitcoin, volumen, noticias, ATR, hora).
 - [x] Todos los candidatos de cada análisis (`trading_faro_candidates`, los propuestos y los no), con lo que pasó a 6 y 24 h (máximo, mínimo y cierre). Se guardan 90 días.
 - [ ] Siguiente: convicción calibrada, simulador de salidas y el analista de FARO con prueba estadística.
+
+## Resumen y avisos (17/11/2026)
+- [x] Inicio → «Resumen» (sustituye a Panorama, cuyos indicadores van en «Más indicadores»): si todo funciona, tu dinero real, el mercado en cuatro datos, las familias de agentes que han operado y el consumo de IA. Coste en euros si se configuran `TRADING_AI_PRICE_IN_EUR` y `TRADING_AI_PRICE_OUT_EUR` (euros por millón de tokens).
+- [x] Avisos (`trading_notifications`, `lib/trading/health.ts` y `notifications.ts`): FARO parado, revisión parada, exchange con error, límite de IA y copias con dinero real que fallan; se abren una vez y se cierran con un «Resuelto».
+- [x] Campana en la cabecera (móvil: pantalla que entra desde la derecha; ordenador: panel a la derecha).
+- [x] Vigilante externo: `.github/workflows/trading-watchdog.yml` llama a `/api/trading/health` cada 15 min; si hay problemas, el trabajo falla y GitHub manda un correo.
+- [ ] Un exchange que falla al leer el saldo pero sigue «activo» en Conexiones (Binance) aún no genera aviso.

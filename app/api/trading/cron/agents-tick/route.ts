@@ -5,6 +5,7 @@ import { kamikazeTick } from "@/lib/trading/kamikaze/engine";
 import { runMirrors } from "@/lib/trading/mirror/service";
 import { runManual } from "@/lib/trading/manual/service";
 import { chipTick } from "@/lib/trading/chip/engine";
+import { pruneNotifications, syncHealth } from "@/lib/trading/notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,10 @@ export async function GET(req: Request) {
     // Agentes de dos modos: una decisión al día, con la vela de ayer cerrada (antes de las copias del exchange).
     const chips = await chipTick().catch((e) => [{ agent: "chip", skipped: e instanceof Error ? e.message : "error", actions: [] }]);
     const agents = await maybeRunAgents();
-    return NextResponse.json({ live, kamikazes, chips, mirrors, manual, agents });
+    // Avisos: qué se ha roto (o arreglado) desde la última revisión.
+    const health = await syncHealth().catch((e) => ({ error: e instanceof Error ? e.message.slice(0, 200) : "error" }));
+    if (new Date().getUTCHours() === 3 && new Date().getUTCMinutes() < 5) await pruneNotifications().catch(() => undefined);
+    return NextResponse.json({ live, kamikazes, chips, mirrors, manual, agents, health });
   } catch (e) {
     console.error("[trading] cron agents-tick", e);
     return NextResponse.json({ error: "Falló la revisión" }, { status: 500 });

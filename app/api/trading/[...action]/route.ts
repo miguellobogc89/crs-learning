@@ -2,6 +2,8 @@ import { after, NextResponse } from "next/server";
 import { addMyAgent, getWallets, myAgents, removeMyAgent } from "@/lib/trading/wallets";
 import { getMarketPhase } from "@/lib/trading/chip/phase-service";
 import { getPulse } from "@/lib/trading/pulse/service";
+import { getSummary } from "@/lib/trading/summary";
+import { listNotifications, markAllRead } from "@/lib/trading/notifications";
 import { buyManual, manualView, sellManual, setManualTrail } from "@/lib/trading/manual/service";
 import { connectorContext } from "@/lib/connectors/context";
 import {
@@ -68,6 +70,8 @@ export async function GET(req: Request, route: RouteContext) {
     if (action === "manual") return NextResponse.json(await manualView(ctx.workspaceId));
     if (action === "phase") return NextResponse.json(await getMarketPhase());
     if (action === "pulse") return NextResponse.json(await getPulse());
+    if (action === "summary") return NextResponse.json(await getSummary({ userId: ctx.userId, workspaceId: ctx.workspaceId }));
+    if (action === "notifications") return NextResponse.json(await listNotifications());
     if (action === "mine") return NextResponse.json(await myAgents(ctx.workspaceId));
     if (action === "wallets") {
       return NextResponse.json(await getWallets({ kind: "user", userId: ctx.userId, workspaceId: ctx.workspaceId, canManage: ctx.canManage }, url.searchParams.get("history") === "1"));
@@ -140,6 +144,10 @@ export async function POST(req: Request, route: RouteContext) {
     if (raw.length > 16_384) return fail("Petición demasiado grande", 413);
     const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>;
 
+    if (action === "notifications/read") {
+      await markAllRead();
+      return NextResponse.json({ ok: true });
+    }
     if (action === "sync") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede actualizar las cotizaciones", 403);
       return NextResponse.json(await runDaily(45_000, ctx.workspaceId));
