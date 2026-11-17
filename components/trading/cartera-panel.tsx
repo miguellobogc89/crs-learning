@@ -121,12 +121,15 @@ export function CarteraPanel() {
 
   const real = wallets.items.filter((w) => w.environment === "real" && w.total !== null && w.currency === "EUR");
   const total = real.reduce((s, w) => s + (w.total ?? 0), 0);
+  const funded = real.filter((w) => (w.total ?? 0) >= 0.01);
   const realRows = rows.filter((r) => r.mirror && r.mirror.mode === "real");
   const inTrades = manual?.working ?? 0;
   const working = Math.min(total, realRows.reduce((s, r) => s + (money(r.mirror)?.now ?? 0), 0) + inTrades);
   const earnedAgents = realRows.reduce((s, r) => s + (money(r.mirror)?.result ?? 0), 0);
   const earned = earnedAgents + (manual?.result ?? 0);
-  const free = Math.max(0, total - working);
+  // Disponible: el efectivo que dice cada exchange (si todos lo dan); si no, el total menos lo que trabaja.
+  const knownCash = real.length > 0 && real.every((w) => w.cash !== null && Number.isFinite(w.cash));
+  const free = knownCash ? Math.min(total, real.reduce((s, w) => s + (w.cash ?? 0), 0)) : Math.max(0, total - working);
   const earnedBase = realRows.reduce((s, r) => s + (r.mirror?.budget ?? 0), 0) + (manual?.trades.filter((t) => t.status === "abierta" || t.status === "cerrada").reduce((s, t) => s + t.invested, 0) ?? 0);
   const cutoff = Date.now() - (chartPeriod === "24h" ? 1 : 7) * 86_400_000;
   const recent = wallets.history.filter((p) => new Date(p.day).getTime() >= cutoff);
@@ -146,10 +149,10 @@ export function CarteraPanel() {
       )}
 
       <PortfolioBalance
-        title={real.length > 1 ? `Saldo total · ${real.length} exchanges` : "Saldo total"}
+        title={funded.length > 1 ? `Saldo total · ${funded.length} exchanges` : "Saldo total"}
         total={total}
         available={free}
-        working={working}
+        working={knownCash ? Math.max(0, total - free) : working}
         opportunities={inTrades}
         earned={earned}
         returnPct={earnedBase > 0 ? (earned / earnedBase) * 100 : null}
@@ -236,7 +239,11 @@ export function CarteraPanel() {
  * Dónde está tu dinero: un renglón por exchange conectado con su saldo, cuánto tiene libre y qué parte
  * del total es. El que ejecuta las copias y oportunidades lleva «Opera». Clic → Conexiones.
  */
-function VenuesBreakdown({ items, total }: { items: Wallets["items"]; total: number }) {
+function VenuesBreakdown({ items: all, total }: { items: Wallets["items"]; total: number }) {
+  // Solo los que aportan a la cartera; los que no se pueden leer, en un aviso (pueden tener dinero).
+  const items = all.filter((w) => !w.error && (w.total ?? 0) >= 0.01);
+  const failing = all.filter((w) => w.error);
+  if (!items.length && !failing.length) return null;
   return (
     <div>
       <div className="flex items-center justify-between px-1 pb-1.5">
@@ -284,6 +291,14 @@ function VenuesBreakdown({ items, total }: { items: Wallets["items"]; total: num
           );
         })}
       </ul>
+      {failing.length > 0 && (
+        <Link href="/trading/integraciones" className="mt-1 flex items-center gap-2 rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-800 hover:bg-orange-100">
+          <span className="min-w-0 flex-1">
+            No se pudo leer el saldo de <b className="font-semibold">{failing.map((w) => w.name).join(" y ")}</b>: puede que tengan dinero que no se cuenta.
+          </span>
+          <span className="shrink-0 font-semibold">Revisar</span>
+        </Link>
+      )}
     </div>
   );
 }

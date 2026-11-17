@@ -155,3 +155,5 @@ Apuntado el 10/11/2026. Sin empezar.
 - [ ] Límite de concentración en defensa.
 - [x] Revisión 24/7: cron de Vercel cada 5 minutos a `/api/trading/cron/agents-tick` (FARO, escáneres, agentes, copias y tus operaciones), sin depender de que la app esté abierta.
 - [x] Escáner de ruido en cada revisión (no en la de FARO): todas las monedas líquidas de Revolut X, hasta 15 ideas vivas; si el precio está arriba del rango, la compra limitada espera abajo. Solo se frena si Bitcoin cae más de un 3 % en 24 h.
+- [x] Funciones de Vercel en Frankfurt (`fra1`), junto a la base de datos (Neon, eu-central-1): menos latencia y Binance deja de rechazar las llamadas a la cuenta (bloquea las que salen de EE. UU.).
+- [x] Mi cartera: solo los exchanges con saldo; los que no se pueden leer, en un aviso. «Disponible» es el efectivo que dice cada exchange.
