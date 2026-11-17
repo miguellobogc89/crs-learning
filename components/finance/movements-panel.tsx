@@ -4,7 +4,7 @@
 // vez, y al corregir se puede aplicar a los parecidos: la app crea una regla y aprende.
 import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, ChevronDown, ListFilter, Loader2, Sparkles, Star, X } from "lucide-react";
+import { ArrowDownUp, ArrowLeftRight, CheckSquare2, ChevronDown, Filter, ListFilter, Loader2, Search, Sparkles, Star, X } from "lucide-react";
 import type { listTransactions } from "@/lib/finance/service";
 import { CATEGORIES, KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur, field, ghost, panel, primary, th } from "@/components/trading/format";
@@ -12,7 +12,7 @@ import { ErrorNote, Modal, Pill } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { errorText, fapi, longDay, refreshFinance, shortDay, useFinance } from "./api";
 import { requestClassify } from "./shell";
-import { AccountChips, PeriodPicker } from "./period";
+import { AccountChips, AccountDropdown, PeriodPicker } from "./period";
 import { TableToolbar, type ToolbarSort } from "@/components/ui/table-toolbar";
 import {
   DropdownMenu,
@@ -325,6 +325,8 @@ export function MovementsPanel() {
   const [group, setGroup] = useState<Group>("none");
   const [sort, setSort] = useState<Sort>(SORTS[0].value);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [shown, setShown] = useState(PAGE);
   const [editing, setEditing] = useState<Item | null>(null);
@@ -457,7 +459,7 @@ export function MovementsPanel() {
     });
     const body = (
       <div className="flex items-center gap-3">
-        <Check checked={all} partial={some} onChange={() => toggle(ids, !all)} label={`Seleccionar ${g.title}`} />
+        {(!mobile || selectionMode) && <Check checked={all} partial={some} onChange={() => toggle(ids, !all)} label={`Seleccionar ${g.title}`} />}
         <button type="button" onClick={flip} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${g.open ? "" : "-rotate-90"}`} />
           <span className="truncate font-semibold text-slate-900">{g.title}</span>
@@ -481,7 +483,69 @@ export function MovementsPanel() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <TableToolbar
+      <div className="mb-3 flex h-11 shrink-0 items-center gap-1.5 md:hidden" role="toolbar" aria-label="Buscar y filtrar movimientos">
+        {mobileSearchOpen ? (
+          <>
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-slate-50 px-3">
+              <Search className="h-4 w-4 shrink-0 text-slate-500" />
+              <input autoFocus type="search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setMobileSearchOpen(false); }} placeholder="Buscar movimientos" aria-label="Buscar movimientos" className="h-10 min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400" />
+            </div>
+            <button type="button" onClick={() => setMobileSearchOpen(false)} aria-label="Cerrar búsqueda" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-600"><X className="h-5 w-5" /></button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={() => setMobileSearchOpen(true)} aria-label="Buscar movimientos" title="Buscar" className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
+              <Search className="h-5 w-5" />
+              {q && <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-blue-600" />}
+            </button>
+            {data && <AccountDropdown accounts={data.accounts.filter((a) => a.included)} view={data.view} />}
+            {data && <PeriodPicker view={data.view} label={data.label} iconOnly className="h-10 px-2.5" />}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label="Filtrar movimientos" title="Filtrar" className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
+                  <Filter className="h-5 w-5" />
+                  {filters > 0 && <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] text-white">{filters}</span>}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="max-h-[70vh] w-64 overflow-y-auto">
+                <div className="flex items-center justify-between px-2 py-1.5">
+                  <DropdownMenuLabel className="p-0">Filtros</DropdownMenuLabel>
+                  {filters > 0 && <button type="button" onClick={(e) => { e.preventDefault(); setStatus("all"); setKind("all"); setCategory("all"); }} className="text-xs font-medium text-blue-700">Limpiar</button>}
+                </div>
+                {[
+                  { title: "Estado", value: status, options: [{ value: "all", label: "Todos" }, { value: "revisar", label: "Por revisar" }, { value: "usuario", label: "Corregidos por mí" }, { value: "extra", label: "Extraordinarios" }], change: (v: string) => setStatus(v as Status) },
+                  { title: "Tipo", value: kind, options: [{ value: "all", label: "Todos los tipos" }, ...KINDS.map((k) => ({ value: k, label: KIND_LABEL[k] }))], change: setKind },
+                  { title: "Categoría", value: category, options: [{ value: "all", label: "Todas las categorías" }, ...CATEGORIES.filter((c) => c.key !== "sin_clasificar").map((c) => ({ value: c.key, label: c.label }))], change: setCategory },
+                ].map((f) => (
+                  <div key={f.title}>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-slate-500">{f.title}</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup value={f.value} onValueChange={f.change}>
+                      {f.options.map((o) => <DropdownMenuRadioItem key={o.value} value={o.value}>{o.label}</DropdownMenuRadioItem>)}
+                    </DropdownMenuRadioGroup>
+                  </div>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label="Ordenar movimientos y opciones de selección" title="Ordenar" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100"><ArrowDownUp className="h-5 w-5" /></button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Ordenar por</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={`${sort.key}:${sort.dir}`} onValueChange={(v) => { const option = SORTS.find((s) => `${s.value.key}:${s.value.dir}` === v); if (option) setSort(option.value); }}>
+                  {SORTS.map((s) => <DropdownMenuRadioItem key={s.label} value={`${s.value.key}:${s.value.dir}`}>{s.label}</DropdownMenuRadioItem>)}
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => { setSelectionMode((v) => !v); setSelected(new Set()); }}>
+                  <CheckSquare2 className="h-4 w-4" /> {selectionMode ? "Terminar selección" : "Seleccionar movimientos"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        )}
+      </div>
+      <div className="hidden md:block"><TableToolbar
         search={q}
         onSearchChange={setQ}
         searchPlaceholder="Buscar concepto, comercio, nota o importe..."
@@ -501,11 +565,11 @@ export function MovementsPanel() {
         }}
         group={{ value: group, options: GROUPS, onChange: (v) => setGroup(v as Group) }}
         sort={{ value: sort, options: SORTS, onChange: (v) => v && setSort(v), textKeys: ["text"] }}
-      />
-      {data && <div className="pb-3"><AccountChips accounts={data.accounts.filter((a) => a.included)} view={data.view} /></div>}
+      /></div>
+      {data && <div className="hidden pb-3 md:block"><AccountChips accounts={data.accounts.filter((a) => a.included)} view={data.view} /></div>}
 
       {data && (
-        <div className="amount-block flex flex-wrap items-center gap-x-5 gap-y-1 pb-3 text-sm text-slate-600">
+        <div className="amount-block hidden flex-wrap items-center gap-x-5 gap-y-1 pb-3 text-sm text-slate-600 md:flex">
           <span>{rows.length === data.items.length ? `${rows.length} movimientos` : `${rows.length} de ${data.items.length} movimientos`}</span>
           <span>Ingresos <b className="tabular-nums text-emerald-700">{eur(total.income, 2)}</b></span>
           <span>Gastos <b className="tabular-nums text-slate-900">{eur(total.expenses, 2)}</b></span>
@@ -558,7 +622,7 @@ export function MovementsPanel() {
                   {group !== "none" && groupHeader(g, true)}
                   {g.visible.map((t) => (
                     <li key={t.id} className={`flex items-center gap-3 px-4 py-3 ${selected.has(t.id) ? "bg-blue-50/60" : ""}`}>
-                      <Check checked={selected.has(t.id)} onChange={() => toggle([t.id], !selected.has(t.id))} label="Seleccionar" />
+                      {selectionMode && <Check checked={selected.has(t.id)} onChange={() => toggle([t.id], !selected.has(t.id))} label="Seleccionar" />}
                       <button type="button" onClick={() => setEditing(t)} className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-70">
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-1.5">
@@ -586,7 +650,7 @@ export function MovementsPanel() {
             )}
           </div>
         )}
-        {selected.size > 0 && <BulkBar ids={[...selected]} onClear={() => setSelected(new Set())} onDone={setToast} />}
+        {selected.size > 0 && <BulkBar ids={[...selected]} onClear={() => { setSelected(new Set()); setSelectionMode(false); }} onDone={setToast} />}
       </div>
       {toast && (
         <div role="status" className="pointer-events-none fixed inset-x-0 bottom-24 z-50 mx-auto w-fit rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white shadow-lg md:bottom-8">{toast}</div>

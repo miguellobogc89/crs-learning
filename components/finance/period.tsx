@@ -26,7 +26,7 @@ export async function saveView(view: ViewPref) {
   refreshFinance();
 }
 
-export function PeriodPicker({ view, label, className = "" }: { view: ViewPref; label: string; className?: string }) {
+export function PeriodPicker({ view, label, className = "", iconOnly = false }: { view: ViewPref; label: string; className?: string; iconOnly?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [custom, setCustom] = useState(false);
   const unitWord = view.unit === "mes" ? "mes" : "ciclo";
@@ -54,9 +54,9 @@ export function PeriodPicker({ view, label, className = "" }: { view: ViewPref; 
           <button type="button" className={`${toolbarButton} max-w-full justify-between ${className}`} title={`Periodo: ${label}`} aria-label={`Periodo: ${label}`}>
             <span className="flex min-w-0 items-center gap-2">
               {busy ? <Loader2 className="size-icon-md animate-spin" /> : <CalendarRange className="size-icon-md" />}
-              <span className="truncate">{label}</span>
+              {!iconOnly && <span className="truncate">{label}</span>}
             </span>
-            <ChevronDown className="size-icon-md shrink-0 text-slate-400" />
+            {!iconOnly && <ChevronDown className="size-icon-md shrink-0 text-slate-400" />}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
@@ -171,5 +171,48 @@ export function AccountChips({ accounts, view }: { accounts: AccountChip[]; view
         );
       })}
     </div>
+  );
+}
+
+/** Selector compacto de cuentas para la barra móvil de Movimientos. */
+export function AccountDropdown({ accounts, view }: { accounts: AccountChip[]; view: ViewPref }) {
+  const [pending, setPending] = useState<string | null>(null);
+  const toggle = async (id: string) => {
+    const hidden = new Set(view.hiddenAccounts);
+    if (hidden.has(id)) hidden.delete(id);
+    else {
+      if (accounts.filter((a) => !hidden.has(a.id)).length <= 1) return;
+      hidden.add(id);
+    }
+    setPending(id);
+    try {
+      await saveView({ ...view, hiddenAccounts: [...hidden] });
+    } finally {
+      setPending(null);
+    }
+  };
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" className={`${toolbarButton} h-10 min-w-0 gap-1.5 px-2.5 text-sm`} aria-label="Seleccionar cuentas">
+          Cuentas <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-[65vh] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto">
+        <DropdownMenuLabel>Cuentas visibles</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {accounts.map((a) => {
+          const on = !a.hidden;
+          return (
+            <DropdownMenuItem key={a.id} disabled={pending !== null} onSelect={(event) => { event.preventDefault(); void toggle(a.id); }} className="gap-2.5">
+              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300"}`}>
+                {pending === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : on ? <Check className="h-3 w-3" /> : null}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{a.name}{a.last4 ? ` ···· ${a.last4}` : ""}</span>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
