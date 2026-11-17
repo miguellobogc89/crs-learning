@@ -70,9 +70,10 @@ export async function POST(req: Request, route: RouteContext) {
   const str = (k: string) => (typeof body[k] === "string" ? (body[k] as string) : "");
   try {
     if (action === "sync") return ok(await syncUser(uid, { force: body.force === true }));
+    if (action === "classify") return ok(await classifyPending(uid, { maxBatches: 2 }));
     if (action === "reclassify") {
       await prisma.finance_transactions.updateMany({ where: { user_id: uid, category_source: "auto" }, data: { category_source: "pendiente" } });
-      return ok(await classifyPending(uid));
+      return ok(await classifyPending(uid, { maxBatches: 2 }));
     }
     if (action === "transaction") {
       return ok(await correctTransaction(uid, str("id"), {

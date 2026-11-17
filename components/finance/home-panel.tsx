@@ -101,7 +101,7 @@ export function HomePanel() {
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label="Ingresos" value={eur(current.income + current.gifts, 2)} sub={current.gifts ? `incluye ${eur(current.gifts, 2)} de regalos` : previous ? `anterior: ${eur(previous.income, 2)}` : undefined} />
           <Stat label="Gastos" value={eur(current.expenses, 2)} sub={previous ? `anterior: ${eur(previous.expenses, 2)}` : undefined} />
-          <Stat label="Ahorro" value={eur(current.net, 2)} tone={current.net >= 0 ? "text-emerald-700" : "text-red-700"} sub={goal !== null ? `objetivo: ${eur(goal, 2)}` : current.savingsRate !== null ? `${current.savingsRate.toFixed(0)} % de lo ingresado` : undefined} />
+          <Stat label="Ahorro" value={eur(current.net, 2)} tone={current.net >= 0 ? "text-emerald-700" : "text-red-700"} sub={goal !== null ? `objetivo: ${eur(goal, 2)}` : current.savingsRate !== null && Math.abs(current.savingsRate) <= 100 ? `${current.savingsRate.toFixed(0)} % de lo ingresado` : undefined} />
           <Stat label="Liquidez" value={eur(data.liquidity, 2)} sub={`${data.accounts.filter((a) => a.included).length} cuentas`} />
         </div>
       </section>

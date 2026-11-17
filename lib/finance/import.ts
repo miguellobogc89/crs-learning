@@ -133,6 +133,6 @@ export async function importStatement(userId: string, file: { name: string; byte
   let inserted = 0;
   for (let i = 0; i < data.length; i += 500) inserted += (await prisma.finance_transactions.createMany({ data: data.slice(i, i + 500), skipDuplicates: true })).count;
   skipped += data.length - inserted;
-  const classified = await classifyPending(userId);
+  const classified = await classifyPending(userId, { useAi: false });
   return { accountId, method, found: rows.length, inserted, skipped, from: dates[0], to: dates[dates.length - 1], classified };
 }

@@ -10,6 +10,7 @@ import { eur, field, ghost, panel, primary, th } from "@/components/trading/form
 import { ErrorNote, Modal, Pill } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { errorText, fapi, longDay, refreshFinance, shortDay, useFinance } from "./api";
+import { requestClassify } from "./shell";
 
 type List = Awaited<ReturnType<typeof listTransactions>>;
 type Item = List["items"][number];
@@ -161,6 +162,7 @@ export function MovementsPanel() {
     try {
       await fapi("reclassify", {});
       refreshFinance();
+      requestClassify();
     } finally {
       setReclassifying(false);
     }

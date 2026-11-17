@@ -8,7 +8,7 @@ import { card, eur, field, flat, ghost, primary } from "@/components/trading/for
 import { CardHeader, ErrorNote, Pill, SectionTitle } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { errorText, fapi, longDay, refreshFinance, useFinance } from "./api";
-import { requestSync } from "./shell";
+import { requestClassify, requestSync } from "./shell";
 
 type View = Awaited<ReturnType<typeof accountsView>>;
 
@@ -37,6 +37,7 @@ function ImportCard({ accounts }: { accounts: View["accounts"] }) {
       setFile(null);
       if (input.current) input.current.value = "";
       refreshFinance();
+      requestClassify();
     } catch (e) {
       setErr(errorText(e));
     } finally {

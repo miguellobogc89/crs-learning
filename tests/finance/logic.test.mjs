@@ -41,6 +41,22 @@ test("palabras clave: súper, nómina, comida a domicilio e inversión", () => {
   assert.equal(L.keywordClass({ description: "NOMINA", counterparty: null, amount: -5 }), null, "una «nómina» que sale no es un ingreso");
 });
 
+test("la nómina de Endesa no es «suministros» y una entrada con nombre de comercio se deja a la IA", () => {
+  const n = L.keywordClass({ description: "TRANSFERENCIA DE ENDESA X WAY S.L., CONCEPTO Sueldo/Salar.", counterparty: null, amount: 2894.77 });
+  assert.deepEqual([n.category, n.kind], ["nomina", "ingreso"]);
+  assert.equal(L.keywordClass({ description: "TRANSFERENCIA RECIBIDA // Hipoteca periodica", counterparty: null, amount: 850 }), null);
+  assert.equal(L.keywordClass({ description: "Refund from Zalando Payments", counterparty: null, amount: 139.9 }).kind, "devolucion");
+  assert.equal(L.keywordClass({ description: "COMPRA Revolut, Dublin, TARJETA , COMISION 0,00", counterparty: null, amount: -400 })?.category ?? null, null);
+});
+
+test("traspasos a uno mismo: el titular sí, un familiar con apellidos parecidos no", () => {
+  const holder = L.holderTokens(["MIGUEL LOBO GOMEZ CALERO", "Miguel Lobo Gómez-Calero"]);
+  assert.equal(L.isOwnName("LOBO GOMEZ-CALERO MIGUEL", holder), true);
+  assert.equal(L.isOwnName("TRANSFERENCIA REALIZADA // Miguel Lobo Gomez-Calero", holder), true);
+  assert.equal(L.isOwnName("JOSE MIGUEL LOBO CANTOS", holder), false);
+  assert.equal(L.isOwnName("MIGUEL SANTANDER", holder), false);
+});
+
 test("las reglas del usuario ganan y la más concreta manda", () => {
   const rules = [
     { id: "1", pattern: "bizum", category: "regalos", kind: "gasto", extraordinary: false },

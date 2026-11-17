@@ -94,7 +94,8 @@ export async function syncUser(userId: string, opts: { force?: boolean } = {}): 
       }
     }
   }
-  result.classified = await classifyPending(userId);
+  // Solo lo rápido aquí; la IA la va pidiendo la pantalla por tandas (classify) para no pasar del tiempo límite.
+  result.classified = await classifyPending(userId, { useAi: false });
   return result;
 }
 

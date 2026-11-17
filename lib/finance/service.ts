@@ -59,6 +59,7 @@ export async function overview(userId: string) {
   const prev = history[0] ?? null;
   const cycleDates = [...history].reverse().map((h) => h.cycle.end).concat(today);
   const pendingReview = txs.filter((t) => t.source === "auto" || t.source === "pendiente").length;
+  const pendingClassify = txs.filter((t) => t.source === "pendiente").length;
   const syncDue = !settings.lastSyncAt || Date.now() - new Date(settings.lastSyncAt).getTime() > AUTO_SYNC_HOURS * 3_600_000;
   return {
     today,
@@ -75,6 +76,7 @@ export async function overview(userId: string) {
     budgets: budgetsNow,
     alerts: alerts.slice(0, 12),
     pendingReview,
+    pendingClassify,
     upcoming: projection.pending.slice(0, 8),
   };
 }

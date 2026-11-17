@@ -6,13 +6,16 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES, KINDS, categoryOf, isCategory, isKind } from "./categories";
-import { addDays, fallbackClass, findTransferPairs, keywordClass, matchRule, rulePattern, todayIso, type Rule, type Tx } from "./logic";
+import { addDays, fallbackClass, findTransferPairs, holderTokens, isOwnName, keywordClass, matchRule, normalize, rulePattern, todayIso, type Rule, type Tx } from "./logic";
 import { aiAvailable, financeJson } from "./ai";
 import { getAccounts, getMemory, getRules, loadTxs } from "./store";
 
 const LOCKED = new Set(["usuario"]);
 const AI_BATCH = 60;
-const AI_MAX_BATCHES = 4;
+const AI_MAX_BATCHES = 2;
+/** Un gasto suelto de este tamaño se marca como extraordinario (no se proyecta); el usuario puede cambiarlo. */
+const EXTRAORDINARY_FROM = 2000;
+const isBig = (amount: number) => amount <= -EXTRAORDINARY_FROM;
 
 async function setClass(ids: string[], data: { category: string; kind: string; category_source: string; extraordinary?: boolean; transfer_pair_id?: string | null }) {
   if (!ids.length) return;
@@ -20,12 +23,19 @@ async function setClass(ids: string[], data: { category: string; kind: string; c
 }
 
 /** Clasifica lo pendiente (y revisa transferencias recientes). Devuelve cuántos movimientos ha tocado cada paso. */
-export async function classifyPending(userId: string, opts: { useAi?: boolean } = {}) {
+/**
+ * `useAi: false` hace solo lo rápido (reglas, palabras, transferencias) y deja el resto pendiente para la IA.
+ * Con IA, cada llamada procesa como mucho `maxBatches` tandas: la pantalla repite hasta que no quede nada.
+ */
+export async function classifyPending(userId: string, opts: { useAi?: boolean; maxBatches?: number } = {}) {
   const useAi = opts.useAi ?? true;
+  const maxBatches = opts.maxBatches ?? AI_MAX_BATCHES;
   const [accounts, rules] = await Promise.all([getAccounts(userId), getRules(userId)]);
   const since = addDays(todayIso(), -400);
   const txs = await loadTxs(userId, { since, includeExcluded: true });
-  const stats = { reglas: 0, internas: 0, palabras: 0, ia: 0, auto: 0 };
+  const stats = { reglas: 0, internas: 0, palabras: 0, ia: 0, auto: 0, remaining: 0 };
+  const holder = holderTokens(accounts.filter((a) => a.source === "bank").map((a) => a.name));
+  const bankOfAccount = new Map(accounts.map((a) => [a.id, a.bank]));
 
   // 1) Reglas del usuario y palabras clave sobre lo pendiente.
   const ownHashes = new Set(accounts.map((a) => a.ibanHash).filter((h): h is string => !!h));
@@ -39,8 +49,19 @@ export async function classifyPending(userId: string, opts: { useAi?: boolean } 
       continue;
     }
     const k = keywordClass(t);
+    // Nómina, devoluciones, inversión y traspasos explícitos mandan sobre todo lo demás.
+    const strong = k && k.kind !== "gasto";
+    // Traspaso a uno mismo (otro banco) o recarga de Revolut desde Santander/BBVA: entre cuentas propias.
+    const own = !strong && (isOwnName(t.counterparty, holder) || isOwnName(t.description, holder));
+    const revolutTopUp = !strong && bankOfAccount.get(t.accountId) !== "revolut" && /\brevolut\b/.test(normalize(t.description));
+    if (own || revolutTopUp) {
+      await setClass([t.id], { category: "transferencia_interna", kind: "interna", category_source: "interna" });
+      Object.assign(t, { source: "interna", kind: "interna", category: "transferencia_interna" });
+      stats.internas++;
+      continue;
+    }
     if (k) {
-      await setClass([t.id], { category: k.category, kind: k.kind, category_source: "palabra" });
+      await setClass([t.id], { category: k.category, kind: k.kind, category_source: "palabra", extraordinary: k.kind === "gasto" && isBig(t.amount) });
       Object.assign(t, { source: "palabra", kind: k.kind, category: k.category });
       stats.palabras++;
       continue;
@@ -76,27 +97,36 @@ export async function classifyPending(userId: string, opts: { useAi?: boolean } 
     const memory = (await getMemory(userId)).map((m) => `- ${m.content}`).join("\n");
     const bankOf = new Map(accounts.map((a) => [a.id, `${a.bank ?? "importada"} · ${a.name}`]));
     const done = new Set<string>();
-    for (let b = 0; b < AI_MAX_BATCHES && b * AI_BATCH < toAi.length; b++) {
+    let aiFailed = false;
+    for (let b = 0; b < maxBatches && b * AI_BATCH < toAi.length; b++) {
       const batch = toAi.slice(b * AI_BATCH, (b + 1) * AI_BATCH);
       try {
         const result = await aiClassify(batch, bankOf, memory, accounts.map((a) => `${a.bank ?? "importada"} · ${a.name}`));
         for (const r of result) {
           const t = batch[r.i];
           if (!t || done.has(t.id) || !isCategory(r.category) || !isKind(r.kind)) continue;
-          await setClass([t.id], { category: r.category, kind: r.kind, category_source: "ia", extraordinary: r.extraordinary });
+          await setClass([t.id], { category: r.category, kind: r.kind, category_source: "ia", extraordinary: r.extraordinary || (r.kind === "gasto" && isBig(t.amount)) });
           done.add(t.id);
           stats.ia++;
         }
       } catch (e) {
         console.error("[finance] clasificación con IA", e instanceof Error ? e.message.slice(0, 200) : e);
+        aiFailed = true;
         break;
       }
     }
-    rest = toAi.filter((t) => !done.has(t.id));
+    // Lo que no ha cabido en esta llamada queda pendiente para la siguiente.
+    const processed = new Set(toAi.slice(0, maxBatches * AI_BATCH).map((t) => t.id));
+    rest = toAi.filter((t) => !done.has(t.id) && (aiFailed || processed.has(t.id)));
+    stats.remaining = toAi.filter((t) => !done.has(t.id) && !processed.has(t.id) && !aiFailed).length;
+  } else if (!useAi) {
+    // Sin IA en esta pasada: lo que queda sigue pendiente (no se da por «sin entender» todavía).
+    stats.remaining = toAi.length;
+    rest = [];
   }
   for (const t of rest) {
     const f = fallbackClass(t.amount);
-    await setClass([t.id], { category: f.category, kind: f.kind, category_source: "auto" });
+    await setClass([t.id], { category: f.category, kind: f.kind, category_source: "auto", extraordinary: f.kind === "gasto" && isBig(t.amount) });
     stats.auto++;
   }
   return stats;
@@ -121,7 +151,8 @@ async function aiClassify(batch: Tx[], bankOf: Map<string, string>, memory: stri
       "Importe negativo = sale de la cuenta; positivo = entra. Un Bizum o transferencia saliente a otra persona suele ser gasto (categoría según el concepto, o regalos si lo indica). Uno entrante de otra persona: devolucion si parece pagar su parte de algo, regalo si lo indica el concepto, si no otros_ingresos.",
       "extraordinary=true solo si es claramente puntual y no debe proyectarse (una compra grande excepcional, una multa, un viaje concreto).",
       `Categorías válidas: ${categories.map((c) => `${c.key} (${c.label}, ${c.kind})`).join(", ")}.`,
-      `Cuentas propias de la persona: ${ownAccounts.join("; ") || "—"}.`,
+      `Cuentas propias de la persona (el nombre es el del titular): ${ownAccounts.join("; ") || "—"}. Una transferencia a o desde el propio titular es interna; a o desde familiares con apellidos parecidos, no.`,
+      `Gastos sueltos muy grandes (más de ${EXTRAORDINARY_FROM} €: una obra, una compra de vivienda, una donación) son extraordinary=true.`,
       memory ? `Contexto que la persona ha contado:\n${memory}` : "",
       "Responde con un elemento por cada línea de entrada (campo i = índice).",
     ].filter(Boolean).join("\n"),

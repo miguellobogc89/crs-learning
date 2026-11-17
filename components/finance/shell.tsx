@@ -28,35 +28,67 @@ type Overview = {
 
 const BANK_LABEL: Record<string, string> = { santander: "Santander", bbva: "BBVA", revolut: "Revolut" };
 
-/** Sincroniza los bancos si hace más de 6 h (los bancos limitan las consultas) y avisa a todas las pantallas. */
+/**
+ * Sincroniza los bancos si hace más de 6 h (los bancos limitan las consultas) y después pide a la IA que
+ * entienda lo pendiente, por tandas, hasta terminar. Avisa a todas las pantallas al acabar cada paso.
+ */
 function useAutoSync() {
   const [syncing, setSyncing] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const run = useCallback(async (force = false) => {
+  const busy = useRef(false);
+  const classify = useCallback(async () => {
+    for (let round = 0; round < 20; round++) {
+      setMsg(round === 0 ? "Entendiendo tus movimientos…" : "Entendiendo tus movimientos… (sigue)");
+      const r = await fapi<{ remaining: number; ia: number; auto: number }>("classify", {});
+      refreshFinance();
+      if (!r.remaining) break;
+    }
+  }, []);
+  const run = useCallback(async (force = false, sync = true) => {
+    if (busy.current) return;
+    busy.current = true;
     setSyncing(true);
     setMsg(force ? "Consultando los bancos…" : null);
+    let note: string | null = null;
     try {
-      const r = await fapi<{ inserted: number; errors: string[]; accounts: number }>("sync", { force });
-      if (force || r.inserted) setMsg(r.errors.length ? r.errors[0] : r.inserted ? `${r.inserted} movimientos nuevos` : "Todo al día");
-      refreshFinance();
+      if (sync) {
+        const r = await fapi<{ inserted: number; errors: string[]; accounts: number }>("sync", { force });
+        note = r.errors.length ? r.errors[0] : force || r.inserted ? (r.inserted ? `${r.inserted} movimientos nuevos` : "Todo al día") : null;
+        refreshFinance();
+      }
+      await classify();
+      setMsg(note);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "No se pudo sincronizar");
     } finally {
+      busy.current = false;
       setSyncing(false);
     }
-  }, []);
+  }, [classify]);
   const checked = useRef(false);
   useEffect(() => {
     if (checked.current) return;
     checked.current = true;
-    fapi<Overview>("overview").then((o) => (o.syncDue ? run(false) : undefined)).catch(() => undefined);
+    fapi<Overview & { pendingClassify: number }>("overview")
+      .then((o) => (o.syncDue ? run(false) : o.pendingClassify > 0 ? run(false, false) : undefined))
+      .catch(() => undefined);
   }, [run]);
   useEffect(() => {
     const h = () => void run(true);
+    const c = () => void run(false, false);
     window.addEventListener("finance:sync", h);
-    return () => window.removeEventListener("finance:sync", h);
+    window.addEventListener("finance:classify", c);
+    return () => {
+      window.removeEventListener("finance:sync", h);
+      window.removeEventListener("finance:classify", c);
+    };
   }, [run]);
   return { syncing, msg, run };
+}
+
+/** Tras importar o corregir: que la IA entienda lo que haya quedado pendiente. */
+export function requestClassify() {
+  window.dispatchEvent(new Event("finance:classify"));
 }
 
 export function requestSync() {

@@ -101,10 +101,10 @@ type Keyword = { re: RegExp; category: string; kind?: Kind; sign?: "in" | "out" 
 const KEYWORDS: Keyword[] = [
   // Ahorro e inversión: brókeres, exchanges y fondos (salida = aportación).
   { re: /\b(bitvavo|trading ?212|binance|coinbase|bitget|kraken|myinvestor|indexa|finizens|degiro|interactive brokers|scalable|trade republic|inbestme|renta 4)\b/, category: "ahorro_inversion", kind: "ahorro" },
-  { re: /\b(nomina|salario|payroll|haberes)\b/, category: "nomina", kind: "ingreso", sign: "in" },
+  { re: /\b(nomina|salario|sueldo|suel|salar|payroll|haberes)\b/, category: "nomina", kind: "ingreso", sign: "in" },
   { re: /\b(intereses|interes|remuneracion cuenta|dividendo)\b/, category: "intereses", kind: "ingreso", sign: "in" },
-  { re: /\b(devolucion|reembolso|refund|abono compra|anulacion)\b/, category: "otros_gastos", kind: "devolucion", sign: "in" },
-  { re: /\b(traspaso|transferencia entre cuentas|recarga revolut|top ?up|topup|money added|added via)\b/, category: "transferencia_interna", kind: "interna" },
+  { re: /\b(devolucion|reembolso|refund|return|abono compra|anulacion)\b/, category: "otros_gastos", kind: "devolucion", sign: "in" },
+  { re: /\b(traspaso|transferencia entre cuentas|recarga revolut|top ?up|topup|money added|added via|investment account|savings account|vault|pocket|hucha)\b/, category: "transferencia_interna", kind: "interna" },
   { re: /\b(hipoteca|prestamo hipotecario|alquiler|comunidad de propietarios|comunidad prop)\b/, category: "vivienda" },
   { re: /\b(iberdrola|endesa|naturgy|holaluz|totalenergies|repsol luz|canal de isabel|aguas|emasesa|aqualia|movistar|vodafone|orange|digi|jazztel|pepephone|masmovil|yoigo|lowi|simyo|o2|finetwork)\b/, category: "suministros" },
   { re: /\b(mercadona|carrefour|lidl|dia|alcampo|eroski|consum|aldi|hipercor|supercor|caprabo|bonpreu|ahorramas|gadis|froiz|el arbol|supermercado|fruteria|carniceria|panaderia|bm supermercados|masymas|spar|coviran)\b/, category: "alimentacion" },
@@ -143,7 +143,12 @@ export function keywordClass(t: { description: string; counterparty: string | nu
     if (!k.re.test(text)) continue;
     if (k.sign === "in" && t.amount <= 0) continue;
     if (k.sign === "out" && t.amount >= 0) continue;
-    const kind = k.kind ?? (t.amount > 0 ? "devolucion" : "gasto");
+    // Una entrada con nombre de comercio o de empresa no es necesariamente una devolución (la nómina de
+    // Endesa no es «suministros»): se deja a la IA, salvo que el propio concepto diga que es un reembolso.
+    if (!k.kind && t.amount > 0) return null;
+    // «COMISION 0,00» aparece en muchas compras con tarjeta: solo es comisión si no es una compra.
+    if (k.category === "comisiones" && /\bcompra\b/.test(text)) continue;
+    const kind = k.kind ?? "gasto";
     return { category: k.category, kind, source: "palabra" };
   }
   return null;
@@ -152,6 +157,26 @@ export function keywordClass(t: { description: string; counterparty: string | nu
 /** Lo que queda sin entender: gasto u otros ingresos según el signo (lo afina la IA o el usuario). */
 export const fallbackClass = (amount: number): Classification =>
   amount >= 0 ? { category: "otros_ingresos", kind: "ingreso", source: "auto" } : { category: "otros_gastos", kind: "gasto", source: "auto" };
+
+/** Palabras del nombre del titular (de los nombres de sus cuentas bancarias), sin partículas. */
+export function holderTokens(names: string[]) {
+  const stop = new Set(["de", "del", "la", "las", "los", "y", "i", "da", "do", "dos", "das", "van", "von"]);
+  const out = new Set<string>();
+  for (const n of names) for (const w of normalize(n).replace(/[^a-zñ\s]/g, " ").split(/\s+/)) if (w.length > 2 && !stop.has(w)) out.add(w);
+  return out;
+}
+
+/**
+ * ¿La contraparte es el propio titular? (traspasos a sí mismo entre bancos aunque la otra cuenta no esté
+ * conectada). Exige al menos tres palabras de su nombre: «José Miguel Lobo Cantos» no es «Miguel Lobo Gómez-Calero».
+ */
+export function isOwnName(text: string | null | undefined, tokens: Set<string>) {
+  if (!text || tokens.size < 2) return false;
+  const words = new Set(normalize(text).replace(/[^a-zñ\s]/g, " ").split(/\s+/));
+  let hits = 0;
+  for (const t of tokens) if (words.has(t)) hits++;
+  return hits >= Math.min(3, tokens.size);
+}
 
 /** Patrón para una regla nueva a partir de una corrección: la clave del comercio, si es lo bastante concreta. */
 export function rulePattern(t: { description: string; counterparty: string | null }) {
