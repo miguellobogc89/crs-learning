@@ -38,6 +38,7 @@ test("palabras clave: súper, nómina, comida a domicilio e inversión", () => {
   assert.equal(L.keywordClass({ description: "NOMINA ACME SL", counterparty: null, amount: 2000 }).kind, "ingreso");
   assert.equal(L.keywordClass({ description: "Uber Eats pedido", counterparty: null, amount: -20 }).category, "restaurantes");
   assert.equal(L.keywordClass({ description: "Transferencia a Bitvavo", counterparty: null, amount: -100 }).kind, "ahorro");
+  assert.equal(L.keywordClass({ description: "A cuenta de inversión", counterparty: null, amount: -1000 }).kind, "ahorro");
   assert.equal(L.keywordClass({ description: "NOMINA", counterparty: null, amount: -5 }), null, "una «nómina» que sale no es un ingreso");
 });
 

@@ -100,7 +100,7 @@ export const searchText = (t: { description: string; counterparty: string | null
 type Keyword = { re: RegExp; category: string; kind?: Kind; sign?: "in" | "out" };
 const KEYWORDS: Keyword[] = [
   // Ahorro e inversión: brókeres, exchanges y fondos (salida = aportación).
-  { re: /\b(bitvavo|trading ?212|binance|coinbase|bitget|kraken|myinvestor|indexa|finizens|degiro|interactive brokers|scalable|trade republic|inbestme|renta 4)\b/, category: "ahorro_inversion", kind: "ahorro" },
+  { re: /\b(bitvavo|trading ?212|binance|coinbase|bitget|kraken|myinvestor|indexa|finizens|degiro|interactive brokers|scalable|trade republic|inbestme|renta 4|cuenta de inversion|to investment account)\b/, category: "ahorro_inversion", kind: "ahorro" },
   { re: /\b(nomina|salario|sueldo|suel|salar|payroll|haberes)\b/, category: "nomina", kind: "ingreso", sign: "in" },
   { re: /\b(intereses|interes|remuneracion cuenta|dividendo)\b/, category: "intereses", kind: "ingreso", sign: "in" },
   { re: /\b(devolucion|reembolso|refund|return|abono compra|anulacion)\b/, category: "otros_gastos", kind: "devolucion", sign: "in" },
