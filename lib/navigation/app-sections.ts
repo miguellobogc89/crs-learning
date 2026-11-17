@@ -38,7 +38,7 @@ export const APP_SECTIONS = {
   },
   personalFinance: {
     label: "Mis finanzas",
-    href: "/mis-finanzas",
+    href: "/finanzas",
     icon: Wallet,
   },
   connectors: {

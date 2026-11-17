@@ -50,7 +50,7 @@ const navItems = [
     label: "Analítica",
   },
   {
-    href: "/mis-finanzas",
+    href: "/finanzas",
     icon: Wallet,
     label: "Mis finanzas",
   },

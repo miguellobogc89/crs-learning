@@ -114,5 +114,10 @@ export type BankTransaction = {
   remittance_information?: string[];
   creditor?: { name?: string };
   debtor?: { name?: string };
+  creditor_account?: { iban?: string };
+  debtor_account?: { iban?: string };
+  status?: string;
   note?: string;
 };
+
+export type BankTransactionsPage = { transactions?: BankTransaction[]; continuation_key?: string | null };

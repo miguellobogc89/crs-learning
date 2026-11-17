@@ -1,0 +1,17 @@
+{
+  "name": "CRS Finance",
+  "short_name": "Finanzas",
+  "description": "Tus cuentas, tus gastos, tu ahorro y tu copiloto financiero.",
+  "start_url": "/finanzas/inicio",
+  "scope": "/finanzas/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "lang": "es",
+  "icons": [
+    { "src": "/finance-app/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/finance-app/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/finance-app/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

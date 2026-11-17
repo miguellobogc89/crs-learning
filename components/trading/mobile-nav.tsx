@@ -8,7 +8,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ArrowLeft, Bot, ChevronRight, Flame, Gift, Home, LifeBuoy, LogOut, Plug, RefreshCw, UserCircle, UserCog, Wallet, X } from "lucide-react";
+import { ArrowLeft, Bot, ChevronRight, Flame, Gift, Home, LifeBuoy, LogOut, PiggyBank, Plug, RefreshCw, UserCircle, UserCog, Wallet, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { refreshTrading } from "./navigation";
 import type { TradingProfile } from "./navigation";
@@ -82,6 +82,7 @@ export function MobileMenu({ user, onClose }: { user: TradingProfile; onClose: (
       title: "Ayuda y asistencia",
       items: [
         { label: "Ayuda", icon: LifeBuoy, soon: true },
+        { label: "Ir a Mis finanzas", icon: PiggyBank, href: "/finanzas/inicio" },
         ...(user.canAccessBusiness ? [{ label: "Ir a Mi negocio", icon: ArrowLeft, href: "/dashboard" }] : []),
       ],
     },
@@ -140,7 +141,7 @@ function innerScrolled(target: EventTarget | null, root: HTMLElement) {
  * tirar hacia abajo estira el contenido con resistencia; al soltar pasado el umbral, avisa a todas las
  * pantallas de Trading de que recarguen (las mismas que escuchan el botón de actualizar).
  */
-export function PullToRefresh({ scroller, children }: { scroller: RefObject<HTMLElement | null>; children: ReactNode }) {
+export function PullToRefresh({ scroller, children, onRefresh = refreshTrading }: { scroller: RefObject<HTMLElement | null>; children: ReactNode; onRefresh?: () => void }) {
   const [pull, setPull] = useState(0);
   const [busy, setBusy] = useState(false);
   const state = useRef<{ y: number; active: boolean; pull: number }>({ y: 0, active: false, pull: 0 });
@@ -175,7 +176,7 @@ export function PullToRefresh({ scroller, children }: { scroller: RefObject<HTML
       if (s.pull >= THRESHOLD) {
         setBusy(true);
         setPull(THRESHOLD * 0.75);
-        refreshTrading();
+        onRefresh();
         window.setTimeout(() => {
           setBusy(false);
           setPull(0);
@@ -195,7 +196,7 @@ export function PullToRefresh({ scroller, children }: { scroller: RefObject<HTML
       root.removeEventListener("touchend", end);
       root.removeEventListener("touchcancel", end);
     };
-  }, [scroller, busy]);
+  }, [scroller, busy, onRefresh]);
 
   const dragging = state.current.active;
   const ready = pull >= THRESHOLD || busy;

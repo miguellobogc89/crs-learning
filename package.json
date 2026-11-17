@@ -28,7 +28,8 @@
     "test:whatsapp": "node --test tests/whatsapp/*.test.mjs",
     "test:tenders": "node --test tests/tenders/*.test.mjs",
     "test:trading": "node --test tests/trading/*.test.mjs",
-    "test:brokers": "node --test tests/brokers/*.test.mjs"
+    "test:brokers": "node --test tests/brokers/*.test.mjs",
+    "test:finance": "node --test tests/finance/*.test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

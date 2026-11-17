@@ -1,30 +1,31 @@
+// CRS Finance con su propia estructura, como Trading: sin la barra superior, el menú ni el chat de la app
+// general. Mismo login y misma base de datos; los datos son de la persona, nunca de un espacio de trabajo.
+import type { Metadata, Viewport } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { AppSidebar } from "@/components/app/sidebar";
-import { AppTopbar } from "@/components/app/topbar";
-import { AppWorkspaceLayout } from "@/components/app/app-workspace-layout";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
-/** Personal finance reuses the application shell, without fetching or requiring a business workspace. */
-export default async function PersonalFinanceLayout({ children }: { children: React.ReactNode }) {
+// Instalable como app («Añadir a pantalla de inicio»): se abre a pantalla completa.
+export const metadata: Metadata = {
+  title: "CRS Finance",
+  applicationName: "CRS Finance",
+  manifest: "/finance-app/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "Finanzas", statusBarStyle: "default" },
+  icons: {
+    icon: [{ url: "/finance-app/favicon.svg", sizes: "any", type: "image/svg+xml" }],
+    apple: [{ url: "/finance-app/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#ffffff",
+};
+
+export default async function FinanceLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
-  return (
-    <Sheet>
-      <div className="flex h-screen min-h-0 overflow-hidden bg-white text-foreground">
-        <AppWorkspaceLayout
-          isAdmin={false}
-          notificationCount={0}
-          sidebarHeader={<span className="text-sm font-semibold text-slate-700">Finanzas personales</span>}
-          topbar={<AppTopbar user={session.user} notifications={[]} unreadNotificationCount={0} />}
-        >
-          {children}
-        </AppWorkspaceLayout>
-        <SheetContent side="left" className="w-[min(20rem,86vw)] gap-0 p-0 lg:hidden">
-          <SheetTitle className="sr-only">Navegación principal</SheetTitle>
-          <AppSidebar mobile notificationCount={0} />
-        </SheetContent>
-      </div>
-    </Sheet>
-  );
+  return children;
 }

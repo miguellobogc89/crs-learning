@@ -86,7 +86,7 @@ lg:z-10 lg:w-[min(470px,calc(100vw-760px))]
 lg:-translate-x-1/2
           "
         >
-          {!pathname.startsWith("/mis-finanzas") && <GlobalSearch />}
+          {!pathname.startsWith("/finanzas") && <GlobalSearch />}
         </div>
       </div>
 
