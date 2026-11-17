@@ -10,6 +10,7 @@ import { SheetClose } from "@/components/ui/sheet";
 
 import {
   BarChart3,
+  Wallet,
   Plug,
   MessageCircle,
   GraduationCap,
@@ -47,6 +48,11 @@ const navItems = [
     href: "/analytics",
     icon: BarChart3,
     label: "Analítica",
+  },
+  {
+    href: "/mis-finanzas",
+    icon: Wallet,
+    label: "Mis finanzas",
   },
   {
     href: "/connectors",

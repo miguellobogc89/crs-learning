@@ -1,6 +1,7 @@
 // lib/navigation/app-sections.ts
 import {
   BarChart3,
+  Wallet,
   Plug,
   MessageCircle,
   GraduationCap,
@@ -34,6 +35,11 @@ export const APP_SECTIONS = {
     label: "Analítica",
     href: "/analytics",
     icon: BarChart3,
+  },
+  personalFinance: {
+    label: "Mis finanzas",
+    href: "/mis-finanzas",
+    icon: Wallet,
   },
   connectors: {
     label: "Conectores",

@@ -41,8 +41,8 @@ type Props = {
   breadcrumb?: ReactNode;
   notifications: NotificationItem[];
   unreadNotificationCount: number;
-  activeWorkspace: AccessibleWorkspace;
-  workspaces: AccessibleWorkspace[];
+  activeWorkspace?: AccessibleWorkspace;
+  workspaces?: AccessibleWorkspace[];
 };
 
 type UploadType = "files" | "folder" | "zip";
@@ -86,7 +86,7 @@ lg:z-10 lg:w-[min(470px,calc(100vw-760px))]
 lg:-translate-x-1/2
           "
         >
-          <GlobalSearch />
+          {!pathname.startsWith("/mis-finanzas") && <GlobalSearch />}
         </div>
       </div>
 
