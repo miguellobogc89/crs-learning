@@ -47,7 +47,7 @@ function CategoryPill({ t }: { t: Pick<Item, "category" | "kind"> }) {
 
 function Amount({ t }: { t: Item }) {
   const muted = t.kind === "interna";
-  return <span className={`whitespace-nowrap font-semibold tabular-nums ${muted ? "text-slate-400" : t.amount > 0 ? "text-emerald-700" : "text-slate-900"}`}>{t.amount > 0 ? "+" : ""}{eur(t.amount, 2)}</span>;
+  return <span className={`amount whitespace-nowrap font-semibold tabular-nums ${muted ? "text-slate-400" : t.amount > 0 ? "text-emerald-700" : "text-slate-900"}`}>{t.amount > 0 ? "+" : ""}{eur(t.amount, 2)}</span>;
 }
 
 function EditModal({ item, onClose }: { item: Item | null; onClose: () => void }) {
@@ -505,7 +505,7 @@ export function MovementsPanel() {
       {data && <div className="pb-3"><AccountChips accounts={data.accounts.filter((a) => a.included)} view={data.view} /></div>}
 
       {data && (
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pb-3 text-sm text-slate-600">
+        <div className="amount-block flex flex-wrap items-center gap-x-5 gap-y-1 pb-3 text-sm text-slate-600">
           <span>{rows.length === data.items.length ? `${rows.length} movimientos` : `${rows.length} de ${data.items.length} movimientos`}</span>
           <span>Ingresos <b className="tabular-nums text-emerald-700">{eur(total.income, 2)}</b></span>
           <span>Gastos <b className="tabular-nums text-slate-900">{eur(total.expenses, 2)}</b></span>

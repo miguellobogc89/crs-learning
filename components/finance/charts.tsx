@@ -184,3 +184,102 @@ export function BudgetBar({ pct, expectedPct, status }: { pct: number; expectedP
     </div>
   );
 }
+
+/**
+ * Saldo día a día de un ciclo (una serie: el título la nombra). El eje X es el ciclo entero; en el ciclo en curso,
+ * un tramo discontinuo lleva del saldo de hoy al previsto el último día. Etiqueta fija con el último saldo.
+ */
+export function BalanceLine({ data, start, end, projected, height = 190 }: { data: { date: string; balance: number }[]; start: string; end: string; projected?: number | null; height?: number }) {
+  const [hover, setHover] = useState<number | null>(null);
+  if (data.length < 2) return <p className="py-8 text-center text-sm text-slate-400">Aún no hay historial suficiente.</p>;
+  const W = 640;
+  const H = height;
+  const pad = { l: 46, r: 14, t: 26, b: 22 };
+  const day = (s: string) => Math.round((Date.parse(`${s}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000);
+  const span = Math.max(1, day(end));
+  const vals = data.map((d) => d.balance).concat(projected ?? []);
+  const rawLo = Math.min(...vals);
+  const rawHi = Math.max(...vals);
+  const pad10 = Math.max(50, (rawHi - rawLo) * 0.12);
+  const step = niceMax((rawHi - rawLo + 2 * pad10) / 2) / 2 || 1;
+  const lo = Math.floor((rawLo - pad10) / step) * step;
+  const hi = Math.ceil((rawHi + pad10) / step) * step;
+  const iw = W - pad.l - pad.r;
+  const ih = H - pad.t - pad.b;
+  const x = (s: string) => pad.l + (day(s) / span) * iw;
+  const y = (v: number) => pad.t + ih - ((v - lo) / (hi - lo || 1)) * ih;
+  const line = data.map((d, i) => `${i ? "L" : "M"}${x(d.date).toFixed(1)},${y(d.balance).toFixed(1)}`).join(" ");
+  const last = data[data.length - 1];
+  const area = `${line} L${x(last.date)},${pad.t + ih} L${x(data[0].date)},${pad.t + ih} Z`;
+  const showProj = projected !== null && projected !== undefined && last.date < end;
+  const h = hover === null ? null : data[hover];
+  const fmtDay = (s: string) => new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${s}T00:00:00Z`)).replace(".", "");
+  const ticks = [lo, (lo + hi) / 2, hi];
+  // Fechas del eje: inicio, mitad y fin del ciclo.
+  const mid = new Date(Date.parse(`${start}T00:00:00Z`) + Math.round(span / 2) * 86_400_000).toISOString().slice(0, 10);
+  const tag = `${eur(last.balance, 0)}`;
+  const tagW = Math.max(56, tag.length * 7 + 16);
+  const tagX = Math.min(W - pad.r - tagW, Math.max(pad.l, x(last.date) - tagW / 2));
+  return (
+    <div className="relative">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="h-auto w-full touch-pan-y"
+        role="img"
+        aria-label="Evolución del saldo en el ciclo"
+        onMouseLeave={() => setHover(null)}
+        onMouseMove={(e) => {
+          const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+          const px = ((e.clientX - r.left) / r.width) * W;
+          const d = Math.round(((px - pad.l) / iw) * span);
+          let best = 0;
+          data.forEach((p, i) => { if (Math.abs(day(p.date) - d) < Math.abs(day(data[best].date) - d)) best = i; });
+          setHover(best);
+        }}
+      >
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="#e2e8f0" strokeDasharray="3 3" />
+            <text x={pad.l - 6} y={y(t) + 3} textAnchor="end" className={`fill-slate-400 text-[10px] amount`}>{compact(t)}</text>
+          </g>
+        ))}
+        <path d={area} fill={INCOME} opacity={0.08} />
+        <path d={line} fill="none" stroke={INCOME} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {showProj && (
+          <g>
+            <path d={`M${x(last.date)},${y(last.balance)} L${x(end)},${y(projected!)}`} fill="none" stroke={INCOME} strokeWidth={2} strokeDasharray="4 4" opacity={0.6} />
+            <circle cx={x(end)} cy={y(projected!)} r={3.5} fill="#fff" stroke={INCOME} strokeWidth={2} />
+          </g>
+        )}
+        {[start, mid, end].map((d, i) => (
+          <text key={d} x={x(d)} y={H - 6} textAnchor={i === 0 ? "start" : i === 2 ? "end" : "middle"} className="fill-slate-500 text-[10px]">{fmtDay(d)}</text>
+        ))}
+        {!h && (
+          <g>
+            <circle cx={x(last.date)} cy={y(last.balance)} r={4.5} fill={INCOME} stroke="#fff" strokeWidth={2} />
+            <rect x={tagX} y={Math.max(2, y(last.balance) - 28)} width={tagW} height={20} rx={6} fill={INCOME} />
+            <text x={tagX + tagW / 2} y={Math.max(2, y(last.balance) - 28) + 14} textAnchor="middle" className={`fill-white text-[11px] font-semibold amount`}>{tag}</text>
+          </g>
+        )}
+        {h && hover !== null && (
+          <g>
+            <line x1={x(h.date)} x2={x(h.date)} y1={pad.t} y2={pad.t + ih} stroke="#94a3b8" strokeWidth={1} />
+            <circle cx={x(h.date)} cy={y(h.balance)} r={4.5} fill={INCOME} stroke="#fff" strokeWidth={2} />
+          </g>
+        )}
+      </svg>
+      {h && (
+        <div className="pointer-events-none absolute right-0 top-0 rounded-xl border border-slate-100 bg-white px-3 py-2 text-xs shadow-lg">
+          <p className="text-slate-500">{fmtDay(h.date)}</p>
+          <p className={`font-semibold tabular-nums text-slate-900 amount`}>{eur(h.balance, 2)}</p>
+        </div>
+      )}
+      {showProj && (
+        <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+          <span className="inline-block w-5 border-t-2 border-dashed" style={{ borderColor: INCOME }} />
+          Previsto el {fmtDay(end)}: <b className={`tabular-nums text-slate-700 amount`}>{eur(projected!, 0)}</b>
+        </p>
+      )}
+    </div>
+  );
+}

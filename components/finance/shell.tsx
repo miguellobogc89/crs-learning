@@ -16,6 +16,7 @@ import { PullToRefresh } from "@/components/trading/mobile-nav";
 import { eur } from "@/components/trading/format";
 import { BOTTOM_TABS, FINANCE_SECTIONS, FINANCE_TABS, isFinanceTab, isFittedTab } from "./tabs";
 import { fapi, peek, refreshFinance, useFinanceRefresh } from "./api";
+import { useHideAmounts } from "./privacy";
 
 export type FinanceProfile = { name?: string | null; email?: string | null; image?: string | null; canAccessBusiness: boolean };
 
@@ -97,6 +98,7 @@ export function requestSync() {
 
 function MoneyPanel({ syncing, msg, onSync }: { syncing: boolean; msg: string | null; onSync: () => void }) {
   const [data, setData] = useState<Overview | null>(null);
+  useHideAmounts();
   const load = useCallback(() => {
     fapi<Overview>("overview").then(setData, () => undefined);
   }, []);
@@ -110,7 +112,7 @@ function MoneyPanel({ syncing, msg, onSync }: { syncing: boolean; msg: string | 
     <div className="mx-3 mb-3 rounded-2xl border border-slate-100 bg-white p-4 text-sm shadow-sm">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Mi dinero</span>
-        {data ? <span className="whitespace-nowrap text-lg font-bold tabular-nums text-slate-900">{eur(data.liquidity, 2)}</span> : <span className="h-6 w-20 animate-pulse rounded-md bg-slate-100" />}
+        {data ? <span className="amount whitespace-nowrap text-lg font-bold tabular-nums text-slate-900">{eur(data.liquidity, 2)}</span> : <span className="h-6 w-20 animate-pulse rounded-md bg-slate-100" />}
       </div>
       {data && (accounts.length === 0 ? (
         <Link href="/finanzas/conexiones" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">Conecta tus bancos →</Link>
@@ -123,7 +125,7 @@ function MoneyPanel({ syncing, msg, onSync }: { syncing: boolean; msg: string | 
                   {(a.bank ? BANK_LABEL[a.bank] ?? a.bank : "Imp").slice(0, 3).toUpperCase()}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-900">{a.name}</span>
-                <span className="shrink-0 whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-900">
+                <span className="amount shrink-0 whitespace-nowrap text-right text-xs font-semibold tabular-nums text-slate-900">
                   {a.balance === null ? "—" : a.currency === "EUR" ? eur(a.balance, 2) : `${a.balance.toFixed(2)} ${a.currency}`}
                 </span>
               </Link>

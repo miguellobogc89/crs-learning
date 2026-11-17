@@ -32,7 +32,7 @@ export async function GET(req: Request, route: RouteContext) {
   const url = new URL(req.url);
   const p = url.searchParams;
   try {
-    if (action === "overview") return ok(await overview(uid));
+    if (action === "overview") return ok(await overview(uid, Number(p.get("cycle")) || 0));
     if (action === "transactions") return ok(await listTransactions(uid, { all: p.get("all") === "1" }));
     if (action === "forecast") {
       const amount = Number(p.get("amount"));

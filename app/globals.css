@@ -1065,3 +1065,10 @@ body {
     margin-left: 0;
   }
 }
+
+/* CRS Finance: «Ocultar importes» difumina las cifras marcadas con .amount (Inicio y «Mi dinero»). */
+.finance-hide .amount,
+.finance-hide .amount-block .tabular-nums {
+  filter: blur(7px);
+  user-select: none;
+}

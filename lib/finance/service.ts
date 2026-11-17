@@ -4,9 +4,9 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal-finance/enable-banking";
 import {
-  affordability, budgetStatus, cycleFor, daysBetween, detectAlerts, detectRecurring, liquiditySeries, merchantKey,
+  addDays, affordability, budgetStatus, cycleFor, daysBetween, detectAlerts, detectRecurring, liquiditySeries, merchantKey,
   normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
-  type Alert, type CycleRule, type CycleSummary, type Tx, type ViewPref,
+  type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getSettings, loadTxs } from "./store";
 import { AUTO_SYNC_HOURS } from "./sync";
@@ -52,8 +52,8 @@ async function connectionAlerts(userId: string): Promise<Alert[]> {
   return out;
 }
 
-/** Inicio: el ciclo, la previsión, categorías, evolución, presupuestos y avisos. */
-export async function overview(userId: string) {
+/** Inicio: el ciclo, la previsión, categorías, evolución, presupuestos y avisos. `offset` -1 = ciclo anterior. */
+export async function overview(userId: string, offset = 0) {
   const ctx = await financeContext(userId);
   const { txs, today, recurring, history, current, projection, budgetsNow, accounts, settings } = ctx;
   const alerts = [...(await connectionAlerts(userId)), ...detectAlerts({ txs, today, recurring, history, current, budgets: budgetsNow })]
@@ -80,65 +80,58 @@ export async function overview(userId: string) {
     pendingReview,
     pendingClassify,
     upcoming: projection.pending.slice(0, 8),
-    period: periodSnapshot(ctx),
+    cycleView: cycleSnapshot(ctx, Math.min(0, Math.max(-36, Math.trunc(offset) || 0))),
   };
 }
 
-/** Cuentas en EUR que se pueden mostrar u ocultar en pantalla (las excluidas de los totales no salen). */
-function visibleAccounts(ctx: FinanceContext, view: ViewPref) {
-  const hidden = new Set(view.hiddenAccounts);
-  return ctx.accounts.filter((a) => a.included).map((a) => ({
-    id: a.id, name: a.name, bank: a.bank, last4: a.ibanLast4, currency: a.currency, balance: a.balance, hidden: hidden.has(a.id),
-  }));
-}
-
-/** La foto del periodo elegido: totales, comparación con el periodo anterior, evolución y categorías. */
-export function periodSnapshot(ctx: FinanceContext) {
-  const view = ctx.settings.view;
-  const accounts = visibleAccounts(ctx, view);
-  const shown = new Set(accounts.filter((a) => !a.hidden).map((a) => a.id));
-  const txs = ctx.txs.filter((t) => shown.has(t.accountId));
-  const oldest = ctx.txs.length ? ctx.txs[ctx.txs.length - 1].date : null;
-  const period = resolvePeriod(view, ctx.today, ctx.startDay, oldest);
-  const rule: CycleRule = view.unit === "mes" ? 1 : ctx.startDay;
+/**
+ * Inicio: un ciclo (el actual por defecto) con sus cifras, la comparación con el ciclo anterior a la misma altura
+ * (a mitad de ciclo, comparar con un ciclo entero engaña), la evolución diaria del saldo y, en el actual, lo que
+ * queda disponible y el saldo previsto al final.
+ */
+export function cycleSnapshot(ctx: FinanceContext, offset: number) {
+  const { txs, today, startDay } = ctx;
+  const cycle = cycleFor(today, startDay, offset);
+  const prevCycle = cycleFor(cycle.start, startDay, -1);
+  const isCurrent = offset === 0;
   const recurringKeys = new Set(ctx.recurring.filter((r) => r.active).map((r) => r.key));
-  const totals = summarize(txs, { start: period.from, end: period.to, label: period.label }, recurringKeys);
-  // Periodo anterior del mismo tamaño (mismo número de ciclos o meses), si hay datos.
-  const n = period.buckets.length;
-  const prevFirst = cycleFor(period.buckets[0].start, rule, -n);
-  const prevLast = cycleFor(period.buckets[0].start, rule, -1);
-  const previous = oldest && prevLast.end >= oldest && view.range !== "todo"
-    ? summarize(txs, { start: prevFirst.start, end: prevLast.end, label: "" }, recurringKeys)
-    : null;
-  // Evolución: los tramos del periodo; si son pocos, los 6 últimos hasta el final del periodo.
-  const last = period.buckets[n - 1];
-  const trendBuckets = n >= 3 ? period.buckets : Array.from({ length: 6 }, (_, i) => cycleFor(last.start, rule, i - 5));
-  const trend = trendBuckets
-    .filter((c) => !oldest || c.end >= oldest)
-    .map((c) => {
-      const x = summarize(txs, c, recurringKeys);
-      return { start: c.start, end: c.end, label: c.label, income: x.income + x.gifts, expenses: x.expenses, net: x.net, saved: x.savedToInvestments, current: c.start === last.start };
-    });
-  const prevCats = new Map((previous?.byCategory ?? []).map((c) => [c.category, c.amount]));
-  const balance = accounts.filter((a) => !a.hidden && a.currency === "EUR" && a.balance !== null).reduce((s, a) => s + (a.balance ?? 0), 0);
+  const totalDays = daysBetween(cycle.start, cycle.end) + 1;
+  const elapsed = isCurrent ? Math.min(totalDays, daysBetween(cycle.start, today) + 1) : totalDays;
+  const cur = summarize(txs, cycle, recurringKeys);
+  const prevEnd = isCurrent ? addDays(prevCycle.start, elapsed - 1) : prevCycle.end;
+  const oldest = txs.length ? txs[txs.length - 1].date : null;
+  const hasPrev = !!oldest && oldest <= prevCycle.start;
+  const prev = hasPrev ? summarize(txs, { start: prevCycle.start, end: prevEnd < prevCycle.end ? prevEnd : prevCycle.end, label: prevCycle.label }, recurringKeys) : null;
+  // Saldo de cada día del ciclo (hacia atrás desde el saldo de hoy de las cuentas incluidas).
+  const lastDay = isCurrent ? today : cycle.end;
+  const dates: string[] = [];
+  for (let d = cycle.start; d <= lastDay && dates.length < 40; d = addDays(d, 1)) dates.push(d);
+  const included = ctx.accounts.filter((a) => a.included);
+  const series = liquiditySeries(included, txs, dates);
+  const p = ctx.projection;
+  const banks = [...new Set(included.filter((a) => a.balance !== null).map((a) => a.bank).filter((b): b is string => !!b))];
   return {
-    view,
-    label: period.label,
-    unit: period.unit,
-    from: period.from,
-    to: period.to,
-    buckets: n,
-    currentCycle: cycleFor(ctx.today, ctx.startDay),
-    accounts,
-    balance: Math.round(balance * 100) / 100,
-    totals: {
-      income: totals.income, gifts: totals.gifts, expenses: totals.expenses, net: totals.net, savingsRate: totals.savingsRate,
-      saved: totals.savedToInvestments, fixed: totals.fixedExpenses, variable: totals.variableExpenses, extraordinary: totals.extraordinaryExpenses,
-      count: totals.count, perBucketExpenses: Math.round((totals.expenses / n) * 100) / 100,
-    },
-    previous: previous ? { income: previous.income + previous.gifts, expenses: previous.expenses, net: previous.net } : null,
-    trend,
-    categories: totals.byCategory.map((c) => ({ ...c, previous: prevCats.get(c.category) ?? null })),
+    offset,
+    isCurrent,
+    cycle,
+    previousLabel: prevCycle.label,
+    day: elapsed,
+    totalDays,
+    daysLeft: isCurrent ? p.daysLeft : 0,
+    canGoBack: !!oldest && oldest < cycle.start,
+    balance: isCurrent ? ctx.liquidity : series.length ? series[series.length - 1].balance : null,
+    banks: banks.map((b) => BANK_LABELS[b as keyof typeof BANK_LABELS] ?? b),
+    // Lo que queda para gastar hasta fin de ciclo: saldo + cobros previstos − recibos pendientes.
+    available: isCurrent && ctx.liquidity !== null ? Math.round((ctx.liquidity + p.pendingIncome - p.pendingFixed) * 100) / 100 : null,
+    pendingFixed: isCurrent ? p.pendingFixed : 0,
+    pendingIncome: isCurrent ? p.pendingIncome : 0,
+    projectedEnd: isCurrent ? p.projectedEndBalance : null,
+    totals: { income: cur.income + cur.gifts, gifts: cur.gifts, expenses: cur.expenses, net: cur.net, saved: cur.savedToInvestments, fixed: cur.fixedExpenses, variable: cur.variableExpenses, extraordinary: cur.extraordinaryExpenses, count: cur.count },
+    previous: prev ? { income: prev.income + prev.gifts, expenses: prev.expenses, net: prev.net, partial: isCurrent } : null,
+    categories: cur.byCategory,
+    previousCategories: prev?.byCategory ?? [],
+    series,
+    accounts: included.map((a) => ({ id: a.id, name: a.name, bank: a.bank, last4: a.ibanLast4, balance: a.balance, currency: a.currency })),
   };
 }
 
