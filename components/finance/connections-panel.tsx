@@ -12,6 +12,14 @@ import { requestClassify, requestSync } from "./shell";
 
 type View = Awaited<ReturnType<typeof accountsView>>;
 
+/** Texto de cada cuenta en el desplegable: banco, últimos dígitos y desde cuándo hay movimientos (hay cuentas con el mismo nombre). */
+function accountOption(a: { bank: string | null; ibanLast4: string | null; count: number; since: string | null }): string {
+  const bank = a.bank ? a.bank.charAt(0).toUpperCase() + a.bank.slice(1) : "Importada";
+  const last4 = a.ibanLast4 ? ` ···· ${a.ibanLast4}` : "";
+  const since = a.since ? ` desde ${longDay(a.since)}` : "";
+  return `${bank}${last4} · ${a.count} mov.${since}`;
+}
+
 function ImportCard({ accounts }: { accounts: View["accounts"] }) {
   const [file, setFile] = useState<File | null>(null);
   const [target, setTarget] = useState<string>("new");
@@ -53,11 +61,7 @@ function ImportCard({ accounts }: { accounts: View["accounts"] }) {
         <div className="flex flex-wrap gap-2">
           <select value={target} onChange={(e) => setTarget(e.target.value)} className={`${field} min-w-0 flex-1`}>
             <option value="new">Nueva cuenta importada…</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {`${a.bank ? a.bank.charAt(0).toUpperCase() + a.bank.slice(1) : "Importada"}${a.ibanLast4 ? ` •••• ${a.ibanLast4}` : ""} · ${a.count} mov.${a.since ? ` desde ${longDay(a.since)}` : ""}`}
-              </option>
-            ))}
+            {accounts.map((a) => <option key={a.id} value={a.id}>{accountOption(a)}</option>)}
           </select>
           {target === "new" && <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre de la cuenta" className={`${field} min-w-0 flex-1`} />}
         </div>
