@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { FinanceWorkspace } from "@/components/finance/workspace";
-import { FINANCE_TABS, isFinanceTab } from "@/components/finance/tabs";
+import { FINANCE_TABS, LEGACY_TABS, isFinanceTab } from "@/components/finance/tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function Page({ params }: PageProps) {
   const { tab } = await params;
+  if (LEGACY_TABS[tab]) redirect(`/finanzas/${LEGACY_TABS[tab]}`);
   if (!isFinanceTab(tab)) notFound();
   return <FinanceWorkspace tab={tab} />;
 }

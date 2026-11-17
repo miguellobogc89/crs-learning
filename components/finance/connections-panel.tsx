@@ -1,5 +1,5 @@
 "use client";
-// Cuentas: bancos conectados (solo lectura), cuentas guardadas y extractos importados.
+// Conexiones: bancos conectados (solo lectura), cuentas guardadas y extractos importados.
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, FileUp, Landmark, Link2, Loader2, LockKeyhole, RefreshCw, Trash2, Unlink } from "lucide-react";
@@ -64,7 +64,7 @@ function ImportCard({ accounts }: { accounts: View["accounts"] }) {
   );
 }
 
-export function AccountsPanel() {
+export function ConnectionsPanel() {
   const params = useSearchParams();
   const { data, error } = useFinance<View>("accounts");
   const [busy, setBusy] = useState<string | null>(null);

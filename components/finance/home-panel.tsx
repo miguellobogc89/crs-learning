@@ -2,14 +2,13 @@
 // Inicio: cómo va el ciclo, cómo acabará, en qué se va el dinero, la evolución y lo que conviene mirar.
 import Link from "next/link";
 import { useState } from "react";
-import { AlertTriangle, ArrowRight, BellRing, CalendarClock, Info, PiggyBank, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, BellRing, Info, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
 import type { overview } from "@/lib/finance/service";
-import { categoryLabel } from "@/lib/finance/categories";
-import { card, eur, field, flat, ghost, primary } from "@/components/trading/format";
+import { card, eur, flat, primary } from "@/components/trading/format";
 import { CardHeader, ErrorNote, SectionTitle } from "@/components/trading/ui";
 import { SkeletonStats, SkeletonList } from "@/components/trading/skeletons";
 import { fapi, refreshFinance, shortDay, useFinance } from "./api";
-import { BudgetBar, CategoryBars, CycleBars, LiquidityLine } from "./charts";
+import { CategoryBars } from "./charts";
 import { requestSync } from "./shell";
 
 type Overview = Awaited<ReturnType<typeof overview>>;
@@ -32,49 +31,16 @@ export function Empty() {
       <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
         Con acceso de solo lectura a Santander, BBVA y Revolut, CRS Finance guarda tus movimientos, entiende cada uno y te dice cómo vas. También puedes importar extractos en CSV, Excel o PDF.
       </p>
-      <Link href="/finanzas/cuentas" className={`${primary} mt-5`}>Ir a Cuentas <ArrowRight className="h-4 w-4" /></Link>
-    </div>
-  );
-}
-
-function Afford({ safe }: { safe: number | null }) {
-  const [amount, setAmount] = useState("");
-  const [res, setRes] = useState<{ verdict: string; projectedNetAfter: number; projectedEndBalanceAfter: number | null; shortfallVsGoal: number | null } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const check = async () => {
-    const v = Number(amount.replace(",", "."));
-    if (!Number.isFinite(v) || v <= 0) return;
-    setBusy(true);
-    try {
-      const r = await fapi<{ afford: typeof res }>(`forecast?amount=${v}`);
-      setRes(r.afford);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const verdict = res?.verdict === "si" ? { t: "Sí, sin romper tu objetivo", c: "bg-emerald-50 text-emerald-800" } : res?.verdict === "con_ajustes" ? { t: "Solo recortando en otra parte", c: "bg-amber-50 text-amber-800" } : res ? { t: "No: te quedarías en negativo", c: "bg-red-50 text-red-700" } : null;
-  return (
-    <div className="mt-4 rounded-xl border border-slate-100 p-3">
-      <p className="text-sm font-medium text-slate-800">¿Me lo puedo permitir?</p>
-      <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); void check(); }}>
-        <input inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); setRes(null); }} placeholder="Importe, p. ej. 300" className={`${field} min-w-0 flex-1`} />
-        <button type="submit" disabled={busy || !amount} className={ghost}>Calcular</button>
-      </form>
-      {verdict && res && (
-        <div className={`mt-2 rounded-lg px-3 py-2 text-sm ${verdict.c}`}>
-          <b>{verdict.t}.</b> Ahorro previsto del ciclo: {eur(res.projectedNetAfter, 2)}
-          {res.projectedEndBalanceAfter !== null && <> · saldo al acabar: {eur(res.projectedEndBalanceAfter, 2)}</>}
-          {res.shortfallVsGoal ? <> · te faltarían {eur(res.shortfallVsGoal, 2)} para el objetivo</> : null}
-        </div>
-      )}
-      {!res && safe !== null && <p className="mt-2 text-xs text-slate-500">Margen hoy: {eur(Math.max(0, safe), 2)}</p>}
+      <Link href="/finanzas/conexiones" className={`${primary} mt-5`}>Ir a Cuentas <ArrowRight className="h-4 w-4" /></Link>
     </div>
   );
 }
 
 function Alerts({ alerts }: { alerts: Overview["alerts"] }) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const list = alerts.filter((a) => !hidden.has(a.key));
+  const [all, setAll] = useState(false);
+  const pending = alerts.filter((a) => !hidden.has(a.key));
+  const list = all ? pending : pending.slice(0, 3);
   if (!list.length) return null;
   const dismiss = async (key: string) => {
     setHidden((h) => new Set(h).add(key));
@@ -99,6 +65,9 @@ function Alerts({ alerts }: { alerts: Overview["alerts"] }) {
           );
         })}
       </ul>
+      {pending.length > 3 && !all && (
+        <button type="button" onClick={() => setAll(true)} className="w-full border-t border-slate-100 py-2.5 text-sm font-medium text-blue-700 hover:bg-slate-50">Ver {pending.length - 3} más</button>
+      )}
     </section>
   );
 }
@@ -137,6 +106,8 @@ export function HomePanel() {
         </div>
       </section>
 
+      <Alerts alerts={data.alerts} />
+
       <div className="grid gap-4 lg:grid-cols-5">
         {/* Previsión */}
         <section className={`${card} ${flat} p-4 sm:p-6 lg:col-span-2`}>
@@ -149,8 +120,7 @@ export function HomePanel() {
           <p className="mt-3 text-xs text-slate-400">
             Incluye {eur(p.pendingFixed, 2)} en recibos pendientes, {eur(p.pendingIncome, 2)} en cobros previstos y {eur(p.expectedVariable, 2)} de gasto variable esperado.
           </p>
-          <Afford safe={p.safeToSpend} />
-          <Link href="/finanzas/prevision" className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline">Ver la previsión completa <ArrowRight className="h-3.5 w-3.5" /></Link>
+          <Link href="/finanzas/plan" className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline">¿Me lo puedo permitir? <ArrowRight className="h-3.5 w-3.5" /></Link>
         </section>
 
         {/* Categorías */}
@@ -163,64 +133,7 @@ export function HomePanel() {
         </section>
       </div>
 
-      <Alerts alerts={data.alerts} />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className={`${card} ${flat} p-4 sm:p-6`}>
-          <SectionTitle icon={PiggyBank} tint="emerald" size="base">Ingresos y gastos por ciclo</SectionTitle>
-          <div className="mt-3">
-            <CycleBars data={[
-              ...data.history.slice(-5).map((h) => ({ label: h.cycle.label.split(" – ")[0], income: h.income + h.gifts, expenses: h.expenses, net: h.net })),
-              { label: "Actual", income: current.income + current.gifts, expenses: current.expenses, net: current.net },
-            ]} />
-          </div>
-        </section>
-        <section className={`${card} ${flat} p-4 sm:p-6`}>
-          <SectionTitle icon={Wallet} tint="blue" size="base">Evolución de la liquidez</SectionTitle>
-          <div className="mt-3"><LiquidityLine data={data.liquiditySeries} /></div>
-          <p className="mt-2 text-xs text-slate-400">Reconstruida hacia atrás desde el saldo de hoy de tus cuentas conectadas.</p>
-        </section>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className={`${card} ${flat} p-4 sm:p-6`}>
-          <SectionTitle icon={PiggyBank} tint="amber" size="base">Límites de gasto</SectionTitle>
-          {data.budgets.length ? (
-            <ul className="mt-4 space-y-4">
-              {data.budgets.map((b) => (
-                <li key={b.id}>
-                  <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
-                    <span className="truncate font-medium text-slate-800">{b.name}</span>
-                    <span className="shrink-0 tabular-nums text-slate-600"><b className="text-slate-900">{eur(b.spent, 2)}</b> de {eur(b.amount, 2)}</span>
-                  </div>
-                  <BudgetBar pct={b.pct} expectedPct={b.expectedPct} status={b.status} />
-                  <p className="mt-1 text-xs text-slate-500">{b.remaining >= 0 ? `Quedan ${eur(b.remaining, 2)}` : `Te has pasado ${eur(-b.remaining, 2)}`}</p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-sm text-slate-500">Aún no tienes límites. <Link href="/finanzas/presupuesto" className="font-medium text-blue-700 hover:underline">Crear uno</Link></p>
-          )}
-        </section>
-        <section className={`${card} ${flat} p-4 sm:p-6`}>
-          <SectionTitle icon={CalendarClock} tint="violet" size="base">Lo que queda por pasar este ciclo</SectionTitle>
-          {data.upcoming.length ? (
-            <ul className="mt-3 divide-y divide-slate-100">
-              {data.upcoming.map((u, i) => (
-                <li key={`${u.label}-${u.date}-${i}`} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium text-slate-800">{u.label}</span>
-                    <span className="text-xs text-slate-500">{shortDay(u.date)} · {categoryLabel(u.category)}</span>
-                  </span>
-                  <span className={`shrink-0 font-semibold tabular-nums ${u.amount > 0 ? "text-emerald-700" : "text-slate-900"}`}>{eur(u.amount, 2)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-sm text-slate-500">No hay recibos ni cobros recurrentes previstos hasta el {shortDay(current.cycle.end)}.</p>
-          )}
-        </section>
-      </div>
+      
 
       {data.syncDue && (
         <p className="text-center text-xs text-slate-400">

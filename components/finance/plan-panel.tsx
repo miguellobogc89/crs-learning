@@ -1,5 +1,5 @@
 "use client";
-// Presupuesto: objetivo de ahorro, límites de gasto por categorías y gastos fijos / suscripciones.
+// Plan: objetivo de ahorro, límites de gasto, «¿me lo puedo permitir?», ahorro previsto y gastos fijos.
 import { useEffect, useState } from "react";
 import { Loader2, Pencil, PiggyBank, Plus, Repeat, Target, Trash2 } from "lucide-react";
 import type { budgetView } from "@/lib/finance/service";
@@ -9,6 +9,7 @@ import { CardHeader, ErrorNote, Modal, Pill, SectionTitle } from "@/components/t
 import { SkeletonList } from "@/components/trading/skeletons";
 import { errorText, fapi, refreshFinance, shortDay, useFinance } from "./api";
 import { BudgetBar } from "./charts";
+import { WhatIfCard } from "./whatif-card";
 
 type View = Awaited<ReturnType<typeof budgetView>>;
 type Budget = View["budgets"][number];
@@ -115,7 +116,7 @@ function BudgetModal({ budget, open, onClose, averages }: { budget: Budget | nul
   );
 }
 
-export function BudgetPanel() {
+export function PlanPanel() {
   const { data, error } = useFinance<View>("budget");
   const [editing, setEditing] = useState<Budget | null>(null);
   const [open, setOpen] = useState(false);
@@ -174,6 +175,8 @@ export function BudgetPanel() {
           )}
         </section>
       </div>
+
+      <WhatIfCard />
 
       <section className={`${card} ${flat}`}>
         <CardHeader divider>

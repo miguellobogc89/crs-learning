@@ -8,7 +8,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ChartCandlestick, ChevronRight, Landmark, Loader2, LogOut, Menu, RefreshCw, Settings, TrendingUp, UserCircle, X } from "lucide-react";
+import { ArrowLeft, ChartCandlestick, ChevronRight, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -81,12 +81,12 @@ function MoneyPanel({ syncing, msg, onSync }: { syncing: boolean; msg: string | 
         {data ? <span className="whitespace-nowrap text-lg font-bold tabular-nums text-slate-900">{eur(data.liquidity, 2)}</span> : <span className="h-6 w-20 animate-pulse rounded-md bg-slate-100" />}
       </div>
       {data && (accounts.length === 0 ? (
-        <Link href="/finanzas/cuentas" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">Conecta tus bancos →</Link>
+        <Link href="/finanzas/conexiones" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">Conecta tus bancos →</Link>
       ) : (
         <ul className="mt-2 space-y-2">
           {accounts.map((a) => (
             <li key={a.id}>
-              <Link href="/finanzas/cuentas" className="flex items-center gap-2 rounded-lg hover:bg-slate-50">
+              <Link href="/finanzas/conexiones" className="flex items-center gap-2 rounded-lg hover:bg-slate-50">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-white text-[10px] font-bold text-slate-500">
                   {(a.bank ? BANK_LABEL[a.bank] ?? a.bank : "Imp").slice(0, 3).toUpperCase()}
                 </span>
@@ -211,12 +211,22 @@ function BottomTabs() {
 
 /** Menú completo del móvil, como el de Trading: tu nombre arriba y, por grupos, el resto de pantallas. */
 function MobileMenu({ user, onClose, sync }: { user: FinanceProfile; onClose: () => void; sync: ReturnType<typeof useAutoSync> }) {
-  const rows: { label: string; href: string; icon: typeof Landmark }[] = [
-    { label: "Previsión", href: "/finanzas/prevision", icon: TrendingUp },
-    { label: "Cuentas y bancos", href: "/finanzas/cuentas", icon: Landmark },
-    { label: "Preferencias", href: "/finanzas/ajustes", icon: Settings },
-    { label: "Ir a Trading", href: "/trading/inicio", icon: ChartCandlestick },
-    ...(user.canAccessBusiness ? [{ label: "Ir a Mi negocio", href: "/dashboard", icon: ArrowLeft }] : []),
+  // Como el menú de Trading: por grupos, con Conexiones arriba.
+  const groups: { title: string; rows: { label: string; href: string; icon: typeof Plug }[] }[] = [
+    {
+      title: "Cuenta",
+      rows: [
+        { label: "Conexiones", href: "/finanzas/conexiones", icon: Plug },
+        { label: "Preferencias", href: "/finanzas/ajustes", icon: Settings },
+      ],
+    },
+    {
+      title: "Mis apps",
+      rows: [
+        { label: "Ir a Trading", href: "/trading/inicio", icon: ChartCandlestick },
+        ...(user.canAccessBusiness ? [{ label: "Ir a Mi negocio", href: "/dashboard", icon: ArrowLeft }] : []),
+      ],
+    },
   ];
   return (
     <div className="flex h-full min-h-0 flex-col bg-white pt-[env(safe-area-inset-top)]">
@@ -232,17 +242,22 @@ function MobileMenu({ user, onClose, sync }: { user: FinanceProfile; onClose: ()
           {user.email && <span className="text-sm text-slate-400">{user.email}</span>}
         </div>
         <div className="pt-4"><MoneyPanel syncing={sync.syncing} msg={sync.msg} onSync={() => void sync.run(true)} /></div>
-        <ul className="pt-2">
-          {rows.map((r) => (
-            <li key={r.href}>
-              <Link href={r.href} onClick={onClose} className="flex items-center gap-4 px-5 py-3.5 active:bg-slate-50">
-                <r.icon className="h-6 w-6 shrink-0 text-blue-600" />
-                <span className="flex-1 text-[17px] text-slate-900">{r.label}</span>
-                <ChevronRight className="h-5 w-5 text-slate-400" />
-              </Link>
-            </li>
-          ))}
-        </ul>
+        {groups.map((g) => (
+          <section key={g.title} className="pt-6">
+            <h2 className="px-5 pb-1 text-[15px] font-medium text-slate-400">{g.title}</h2>
+            <ul>
+              {g.rows.map((r) => (
+                <li key={r.href}>
+                  <Link href={r.href} onClick={onClose} className="flex items-center gap-4 px-5 py-3.5 active:bg-slate-50">
+                    <r.icon className="h-6 w-6 shrink-0 text-blue-600" />
+                    <span className="flex-1 text-[17px] text-slate-900">{r.label}</span>
+                    <ChevronRight className="h-5 w-5 text-slate-400" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
         <button type="button" onClick={() => void logout()} className="mt-8 flex w-full items-center gap-4 px-5 py-3.5 text-left active:bg-slate-50">
           <LogOut className="h-6 w-6 text-red-500" />
           <span className="text-[17px] text-slate-900">Cerrar sesión</span>

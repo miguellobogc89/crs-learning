@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const bank = request.nextUrl.searchParams.get("bank");
   if (!isPersonalBank(bank)) return NextResponse.json({ error: "Banco no válido" }, { status: 400 });
 
-  const back = (message: string) => NextResponse.redirect(new URL(`/finanzas/cuentas?error=${encodeURIComponent(message)}`, request.url));
+  const back = (message: string) => NextResponse.redirect(new URL(`/finanzas/conexiones?error=${encodeURIComponent(message)}`, request.url));
   let phase = "prepare-state";
   try {
     const state = issueConsentState(session.user.id, bank);
