@@ -162,3 +162,9 @@ Apuntado el 10/11/2026. Sin empezar.
 - [x] ENJAMBRE GRANDES (solo monedas grandes) y ENJAMBRE RÁPIDO (vende a mitad del rango), junto a ENJAMBRE; hasta 25 ideas de ruido vivas.
 - [x] Móvil: barra inferior con cuatro iconos (Inicio, Oportunidades, Agentes, Mi cartera); menú de cuenta con Conexiones y lo que vendrá en gris (configuración de la cuenta, invitar a amigos, ayuda); arrastrar hacia abajo para actualizar.
 - [ ] Cartera virtual, Mercados y Análisis de FARO no están en la navegación del móvil (pendiente de decidir).
+
+## FARO aprende: primero, guardar datos (17/11/2026)
+- [x] Versión de FARO (`FARO_VERSION` en faro/logic.ts) en cada análisis (`trading_faro_runs.version`) y en el contexto de cada idea. Subirla cada vez que cambien sus reglas, su prompt o su filtro.
+- [x] Foto completa del mercado en cada idea, idea de control y candidato: RSI de 1 h, spread, miedo y codicia, dominancia de Bitcoin, cambio del mercado total en 24 h, euro/dólar (además de lo que ya había: fase, Bitcoin, volumen, noticias, ATR, hora).
+- [x] Todos los candidatos de cada análisis (`trading_faro_candidates`, los propuestos y los no), con lo que pasó a 6 y 24 h (máximo, mínimo y cierre). Se guardan 90 días.
+- [ ] Siguiente: convicción calibrada, simulador de salidas y el analista de FARO con prueba estadística.

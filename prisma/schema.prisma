@@ -2547,6 +2547,8 @@ model trading_faro_runs {
   status      String   @default("en_curso")
   /// 'crypto' o 'us' (bolsa de EE. UU.): cada ámbito tiene sus propios análisis.
   scope       String   @default("crypto")
+  /// Versión de FARO (reglas y prompt) que hizo este análisis: para comparar versiones.
+  version     String?
   market_view String?
   ideas       Int      @default(0)
   error       String?

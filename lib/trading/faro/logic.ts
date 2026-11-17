@@ -494,3 +494,50 @@ export function simulateLevels(
     }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Base para aprender (17/11/2026)
+// ---------------------------------------------------------------------------
+/**
+ * Versión de FARO: sube cada vez que cambian sus reglas, su prompt o su filtro, para poder comparar
+ * versiones en las mismas condiciones. Formato AAAA-MM-DD.n. Historial:
+ *  - 2026-11-17.1: carta de oportunidades (retroceso, ruido, tendencia), plazos por tipo, filtro por
+ *    momento del mercado, foto completa del mercado y candidatos guardados.
+ */
+export const FARO_VERSION = "2026-11-17.1";
+
+/** RSI de 14 periodos (Wilder) sobre cierres; null si no hay velas suficientes. */
+export function rsi(closes: number[], period = 14): number | null {
+  if (closes.length < period + 1) return null;
+  let gain = 0;
+  let loss = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) gain += d;
+    else loss -= d;
+  }
+  gain /= period;
+  loss /= period;
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    gain = (gain * (period - 1) + Math.max(0, d)) / period;
+    loss = (loss * (period - 1) + Math.max(0, -d)) / period;
+  }
+  if (loss === 0) return gain === 0 ? 50 : 100;
+  return Math.round((100 - 100 / (1 + gain / loss)) * 10) / 10;
+}
+
+/** Lo que pasó con un candidato tras el análisis: a 6 y 24 h, lo máximo que subió, lo máximo que bajó y dónde acabó (en %). */
+export type CandidateOutcome = Record<"h6" | "h24", { up: number; down: number; close: number } | null>;
+
+export function candidateOutcome(bars: Bar[], t0: number, price: number): CandidateOutcome {
+  const win = (hours: number) => {
+    const end = t0 + hours * HOUR;
+    // Desde la primera vela completa tras el análisis (la que estaba en curso tiene precios de antes).
+    const w = bars.filter((b) => b.t >= t0 && b.t < end);
+    if (!w.length || !(price > 0)) return null;
+    const p = (v: number) => Math.round(((v - price) / price) * 10000) / 100;
+    return { up: p(Math.max(...w.map((b) => b.h))), down: p(Math.min(...w.map((b) => b.l))), close: p(w[w.length - 1].c) };
+  };
+  return { h6: win(6), h24: win(24) };
+}

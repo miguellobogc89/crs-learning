@@ -13,7 +13,8 @@ import { CRYPTO, CRYPTO_MARKET } from "../market-data";
 import { metricsOf, prefilter, rank, type Metrics, type Ticker } from "../kamikaze/logic";
 import { barsSince, eurPairs, hourly, hourlyUntil, symbolOf } from "../kamikaze/market";
 import { kamikazeByKey, type KamikazeStyle } from "../kamikaze/roster";
-import { AI_KINDS, atrPct, checkIdeas, controlIdeas, faro2Verdict, simulateLevels, ideaFeatures, KINDS, pastTicker, scoreIdea, scoreLimitIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
+import { marketContext, spreads } from "./context";
+import { AI_KINDS, atrPct, candidateOutcome, FARO_VERSION, rsi, checkIdeas, controlIdeas, faro2Verdict, simulateLevels, ideaFeatures, KINDS, pastTicker, scoreIdea, scoreLimitIdea, type AiIdea, type BoardIdea, type IdeaFeatures } from "./logic";
 import { bestVenue, CARTA, ideaValidHours, isCartaKind, isLimitKind, noiseIdea, type Venue } from "../carta";
 import { brokerRegistry } from "@/lib/brokers/providers";
 import { venueCoverage } from "../agents/venues";
@@ -80,6 +81,10 @@ export async function faroTick(market: Ticker[], rules: Rules, opts: { force?: b
   await backfillFeatures(10).catch(() => 0);
   await scoreControls(market).catch(() => 0);
   await enrichFeatures(10).catch(() => 0);
+  await scoreCandidates(30).catch((e) => {
+    console.error("[faro] resultado de candidatos", e instanceof Error ? e.message.slice(0, 200) : e);
+    return 0;
+  });
   const ran = await maybeRun(market, rules, !!opts.force).catch((e) => {
     console.error("[faro] análisis", e);
     return `error: ${e instanceof Error ? e.message.slice(0, 160) : "desconocido"}`;
@@ -245,13 +250,13 @@ async function createControls(
   candidates: Candidate[],
   ideas: { price: number; invalidation: number; target: number; validHours: number }[],
   rules: Rules,
-  ctx: { phase: { mode: string; days: number } | null; btc24h: number | null; newsOf: (base: string) => number; atrOf: (pair: string) => number | null },
+  ctx: { phase: { mode: string; days: number } | null; btc24h: number | null; newsOf: (base: string) => number; atrOf: (pair: string) => number | null; extraOf?: (pair: string) => Record<string, unknown> },
 ) {
   const now = Date.now();
   for (const c of controlIdeas(candidates.map((x) => ({ pair: x.m.pair, price: x.m.price })), ideas)) {
     const cand = candidates.find((x) => x.m.pair === c.pair)!;
     const symbol = symbolOf(c.pair, rules) ?? `${c.pair.replace(/(EUR|USDC)$/, "")}-EUR`;
-    const f = ideaFeatures(cand.m, cand.styles, c, { now, phase: ctx.phase, btc24h: ctx.btc24h, news: ctx.newsOf(cand.m.base), atrPct: ctx.atrOf(c.pair) });
+    const f = { ...ideaFeatures(cand.m, cand.styles, c, { now, phase: ctx.phase, btc24h: ctx.btc24h, news: ctx.newsOf(cand.m.base), atrPct: ctx.atrOf(c.pair) }), ...(ctx.extraOf?.(c.pair) ?? {}) };
     await prisma.$executeRaw(Prisma.sql`INSERT INTO public.trading_faro_controls
       (run_id, pair, symbol, price, invalidation, target, valid_until, last_price, best_pct, worst_pct, features)
       VALUES (${runId}::uuid, ${c.pair}, ${symbol}, ${c.price}, ${c.invalidation}, ${c.target}, ${new Date(now + c.validHours * 3_600_000)}, ${c.price}, 0, 0, ${JSON.stringify(f)}::jsonb)`);
@@ -360,8 +365,8 @@ export async function enrichFeatures(limit = 10): Promise<number> {
 async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
   // Un solo análisis por intervalo aunque haya varias revisiones a la vez.
   const minutes = force ? 0 : RUN_MIN();
-  const claimed = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`INSERT INTO public.trading_faro_runs (status, scope)
-    SELECT 'en_curso', 'crypto' WHERE NOT EXISTS (
+  const claimed = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`INSERT INTO public.trading_faro_runs (status, scope, version)
+    SELECT 'en_curso', 'crypto', ${FARO_VERSION} WHERE NOT EXISTS (
       SELECT 1 FROM public.trading_faro_runs
       WHERE scope = 'crypto' AND ((status = 'en_curso' AND created_at > now() - interval '5 minutes')
          OR created_at > now() - make_interval(mins => ${minutes}::int)))
@@ -375,11 +380,13 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
     for (const st of STYLES) for (const t of prefilter(st, market, 12)) pre.set(t.pair, t);
     const detailed: Metrics[] = [];
     const atrOf = new Map<string, number | null>();
+    const rsiOf = new Map<string, number | null>();
     for (const t of pre.values()) {
       try {
         const hb = await hourly(t.pair);
         detailed.push(metricsOf(t, hb));
         atrOf.set(t.pair, atrPct(hb, t.price));
+        rsiOf.set(t.pair, rsi(hb.map((b) => b.c)));
       } catch {
         // Sin velas de este par: se queda fuera.
       }
@@ -442,6 +449,13 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
     // Contexto para guardar con cada idea (fase del mercado y Bitcoin): si falla, se guarda sin él.
     const phase = await getMarketPhase().catch(() => null);
     const btc = market.find((t) => t.base === "BTC");
+    // Foto completa del mercado (para cruzar después qué situaciones le salen bien y cuáles mal).
+    const [mctx, spreadOf] = await Promise.all([
+      marketContext().catch(() => ({ fearGreed: null, btcDominance: null, marketCap24h: null, eurUsd: null })),
+      spreads(),
+    ]);
+    const extraOf = (pair: string) => ({ version: FARO_VERSION, rsi1h: rsiOf.get(pair) ?? null, spreadPct: spreadOf.get(pair) ?? null, ...mctx });
+    const createdIds = new Map<string, string>();
     for (const i of ok) {
       const symbol = symbolOf(i.pair, rules) ?? `${i.pair.replace(/(EUR|USDC)$/, "")}-EUR`;
       const inst = await ensureInstrument(symbol, rules.get(i.pair)?.base ?? symbol.replace(/-EUR$/, ""));
@@ -474,14 +488,27 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
           worst_pct: 0,
         },
       });
-      if (features) await saveFeatures(created.id, features);
+      if (features) await saveFeatures(created.id, { ...features, ...extraOf(i.pair) } as IdeaFeatures);
+      createdIds.set(i.pair, created.id);
     }
+    // Todos los candidatos que vio (los que propuso y los que no), para saber también qué se le escapa.
+    await saveCandidates(runId, detailed, tagged, createdIds, (m) => ({
+      ...ideaFeatures(m, tagged.get(m.pair)?.styles ?? [], { price: m.price, invalidation: m.price, target: m.price, validHours: 0 }, {
+        now: Date.now(),
+        phase: phase ? { mode: phase.mode, days: phase.days } : null,
+        btc24h: btc ? btc.ch24h : null,
+        news: news.filter((n) => n.symbols.includes(m.base)).length,
+        atrPct: atrOf.get(m.pair) ?? null,
+      }),
+      ...extraOf(m.pair),
+    })).catch((e) => console.error("[faro] candidatos", e instanceof Error ? e.message.slice(0, 200) : e));
     // Control: las mismas veces, monedas al azar entre las candidatas, mismo riesgo y recorrido.
     await createControls(runId, candidates, ok, rules, {
       phase: phase ? { mode: phase.mode, days: phase.days } : null,
       btc24h: btc ? btc.ch24h : null,
       newsOf: (base) => news.filter((n) => n.symbols.includes(base)).length,
       atrOf: (pair) => atrOf.get(pair) ?? null,
+      extraOf,
     }).catch((e) => console.error("[faro] control", e instanceof Error ? e.message.slice(0, 200) : e));
     // Escáneres de reglas (sin IA) de la carta: ruido y tendencia larga.
     const scanned = await runScanners(runId, market, rules, btc ? btc.ch24h : null).catch((e) => {
@@ -501,6 +528,44 @@ async function maybeRun(market: Ticker[], rules: Rules, force: boolean) {
 }
 
 // ---------------------------------------------------------------------------
+// Candidatos (17/11/2026): todo lo que vio cada análisis y lo que pasó después
+// ---------------------------------------------------------------------------
+const CANDIDATE_DAYS = 90;
+
+async function saveCandidates(
+  runId: string,
+  detailed: Metrics[],
+  tagged: Map<string, { styles: KamikazeStyle[] }>,
+  chosen: Map<string, string>,
+  featuresOf: (m: Metrics) => Record<string, unknown>,
+) {
+  for (const m of detailed) {
+    const idea = chosen.get(m.pair) ?? null;
+    await prisma.$executeRaw(Prisma.sql`INSERT INTO public.trading_faro_candidates (run_id, pair, base, price, styles, chosen, idea_id, features)
+      VALUES (${runId}::uuid, ${m.pair}, ${m.base}, ${m.price}, ${tagged.get(m.pair)?.styles ?? []}::text[], ${!!idea}, ${idea}::uuid, ${JSON.stringify(featuresOf(m))}::jsonb)`);
+  }
+}
+
+/** Resultado de los candidatos de hace más de 24 h (unos pocos por revisión) y limpieza de los muy viejos. */
+async function scoreCandidates(batch: number): Promise<number> {
+  const rows = await prisma.$queryRaw<{ id: string; pair: string; price: number; created_at: Date }[]>(Prisma.sql`
+    SELECT id::text AS id, pair, price, created_at FROM public.trading_faro_candidates
+    WHERE outcome IS NULL AND created_at < now() - interval '25 hours'
+    ORDER BY created_at ASC LIMIT ${batch}`);
+  let n = 0;
+  for (const r of rows) {
+    const t0 = r.created_at.getTime();
+    const bars = await hourlyUntil(r.pair, t0 + 25 * 3_600_000).catch(() => null);
+    const outcome = bars?.length ? candidateOutcome(bars, t0, r.price) : { h6: null, h24: null };
+    await prisma.$executeRaw(Prisma.sql`UPDATE public.trading_faro_candidates SET outcome = ${JSON.stringify(outcome)}::jsonb, checked_at = now() WHERE id = ${r.id}::uuid`);
+    n++;
+  }
+  if (new Date().getUTCMinutes() < 5)
+    await prisma.$executeRaw(Prisma.sql`DELETE FROM public.trading_faro_candidates WHERE created_at < now() - make_interval(days => ${CANDIDATE_DAYS}::int)`).catch(() => 0);
+  return n;
+}
+
+// ---------------------------------------------------------------------------
 // Escáneres de la carta (16/11/2026): ideas por reglas, sin IA, que se publican en el mismo tablón.
 // ---------------------------------------------------------------------------
 const MAX_SCANNED = 5;
@@ -509,7 +574,7 @@ async function publishScanned(runId: string | null, rules: Rules, o: { pair: str
   const symbol = symbolOf(o.pair, rules) ?? `${o.pair.replace(/(EUR|USDC)$/, "")}-EUR`;
   const inst = await ensureInstrument(symbol, rules.get(o.pair)?.base ?? symbol.replace(/-EUR$/, ""));
   await setLive(inst.id, o.price);
-  await prisma.trading_faro_ideas.create({
+  const created = await prisma.trading_faro_ideas.create({
     data: {
       run_id: runId,
       pair: o.pair,
@@ -527,6 +592,11 @@ async function publishScanned(runId: string | null, rules: Rules, o: { pair: str
       worst_pct: 0,
     },
   });
+  // Escáneres: también con su foto del mercado y la versión.
+  const mctx = await marketContext().catch(() => null);
+  await prisma
+    .$executeRaw(Prisma.sql`UPDATE public.trading_faro_ideas SET features = ${JSON.stringify({ version: FARO_VERSION, source: "escaner", ...(mctx ?? {}) })}::jsonb WHERE id = ${created.id}::uuid`)
+    .catch(() => undefined);
 }
 
 async function runScanners(runId: string, market: Ticker[], rules: Rules, btc24h: number | null): Promise<number> {
@@ -636,8 +706,8 @@ const US_STYLES: KamikazeStyle[] = ["impulso", "rupturas"];
 async function maybeRunUs(force: boolean) {
   if (!force && !marketOpenNow("us")) return null;
   const minutes = force ? 0 : RUN_MIN();
-  const claimed = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`INSERT INTO public.trading_faro_runs (status, scope)
-    SELECT 'en_curso', 'us' WHERE NOT EXISTS (
+  const claimed = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`INSERT INTO public.trading_faro_runs (status, scope, version)
+    SELECT 'en_curso', 'us', ${FARO_VERSION} WHERE NOT EXISTS (
       SELECT 1 FROM public.trading_faro_runs
       WHERE scope = 'us' AND ((status = 'en_curso' AND created_at > now() - interval '5 minutes')
          OR created_at > now() - make_interval(mins => ${minutes}::int)))
