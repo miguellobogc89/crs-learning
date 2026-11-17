@@ -53,7 +53,11 @@ function ImportCard({ accounts }: { accounts: View["accounts"] }) {
         <div className="flex flex-wrap gap-2">
           <select value={target} onChange={(e) => setTarget(e.target.value)} className={`${field} min-w-0 flex-1`}>
             <option value="new">Nueva cuenta importada…</option>
-            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.bank ? ` (${a.bank})` : ""}</option>)}
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.bank ? a.bank.charAt(0).toUpperCase() + a.bank.slice(1) : "Importada"}{a.ibanLast4 ? ` •••• ${a.ibanLast4}` : ""} · {a.count} mov.{a.since ? ` desde ${longDay(a.since)}` : ""}
+              </option>
+            ))}
           </select>
           {target === "new" && <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre de la cuenta" className={`${field} min-w-0 flex-1`} />}
         </div>

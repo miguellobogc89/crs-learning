@@ -151,3 +151,13 @@ test("extractos: columnas de Santander (importe) y de cargo/abono", () => {
   const debe = [["Fecha", "Descripción", "Cargo", "Abono"], ["01/11/2026", "Nómina", "", "2.000,00"], ["02/11/2026", "Luz", "45,10", ""]];
   assert.deepEqual(P.rowsFromTable(debe, P.detectColumns(debe)).map((r) => r.amount), [2000, -45.1]);
 });
+
+test("extractos de Revolut: se saltan revertidos y movimientos de huchas", () => {
+  const rows = [
+    ["Type", "Product", "Started Date", "Completed Date", "Description", "Amount", "Fee", "Currency", "State", "Balance"],
+    ["CARD_PAYMENT", "Current", "2026-03-02 10:00:00", "2026-03-03 09:00:00", "Mercadona", "-23.40", "0.00", "EUR", "COMPLETED", "100"],
+    ["CARD_PAYMENT", "Current", "2026-03-04 10:00:00", "", "Amazon", "-50.00", "0.00", "EUR", "REVERTED", ""],
+    ["TRANSFER", "Savings", "2026-03-05 10:00:00", "2026-03-05 10:00:00", "To pocket", "-200.00", "0.00", "EUR", "COMPLETED", "300"],
+  ];
+  assert.deepEqual(P.rowsFromTable(rows, P.detectColumns(rows)), [{ date: "2026-03-02", description: "Mercadona", amount: -23.4 }]);
+});

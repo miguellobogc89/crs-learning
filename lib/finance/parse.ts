@@ -47,7 +47,12 @@ export function parseDate(raw: unknown): string | null {
 
 const has = (h: string, words: string[]) => words.some((w) => h.includes(w));
 
-type Columns = { date: number; desc: number[]; amount: number | null; debit: number | null; credit: number | null };
+type Columns = { date: number; desc: number[]; amount: number | null; debit: number | null; credit: number | null; state: number | null; product: number | null };
+
+/** Revolut y otros exportan también operaciones revertidas, rechazadas o pendientes: no son movimientos. */
+const SKIP_STATE = /^(reverted|revertid|declined|rechazad|failed|fallid|pending|pendiente|cancel)/;
+/** Movimientos de huchas/espacios de ahorro dentro del mismo extracto: no son de la cuenta principal. */
+const SKIP_PRODUCT = /^(savings|ahorro|deposit|deposito|investment|inversion|vault|hucha)/;
 
 /** Reconoce la fila de cabecera y las columnas por su nombre (español o inglés). */
 export function detectColumns(rows: unknown[][]): { header: number; cols: Columns } | null {
@@ -62,7 +67,9 @@ export function detectColumns(rows: unknown[][]): { header: number; cols: Column
     const debit = h.findIndex((x) => has(x, ["cargo", "debe", "debit", "salida", "gasto"]));
     const credit = h.findIndex((x) => has(x, ["abono", "haber", "credit", "entrada", "ingreso"]));
     if (!desc.length || (amount < 0 && (debit < 0 || credit < 0))) continue;
-    return { header: r, cols: { date, desc, amount: amount >= 0 ? amount : null, debit: debit >= 0 ? debit : null, credit: credit >= 0 ? credit : null } };
+    const state = h.findIndex((x) => x === "state" || x === "estado" || x === "status");
+    const product = h.findIndex((x) => x === "product" || x === "producto");
+    return { header: r, cols: { date, desc, amount: amount >= 0 ? amount : null, debit: debit >= 0 ? debit : null, credit: credit >= 0 ? credit : null, state: state >= 0 ? state : null, product: product >= 0 ? product : null } };
   }
   return null;
 }
@@ -73,6 +80,8 @@ export function rowsFromTable(rows: unknown[][], found: { header: number; cols: 
   for (const row of rows.slice(found.header + 1)) {
     const date = parseDate(row[cols.date]);
     if (!date) continue;
+    if (cols.state !== null && SKIP_STATE.test(normalize(String(row[cols.state] ?? "")))) continue;
+    if (cols.product !== null && SKIP_PRODUCT.test(normalize(String(row[cols.product] ?? "")))) continue;
     let amount: number | null = null;
     if (cols.amount !== null) amount = parseAmount(row[cols.amount]);
     else {
