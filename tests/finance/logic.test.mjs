@@ -56,6 +56,11 @@ test("traspasos a uno mismo: el titular sí, un familiar con apellidos parecidos
   assert.equal(L.isOwnName("TRANSFERENCIA REALIZADA // Miguel Lobo Gomez-Calero", holder), true);
   assert.equal(L.isOwnName("JOSE MIGUEL LOBO CANTOS", holder), false);
   assert.equal(L.isOwnName("MIGUEL SANTANDER", holder), false);
+  const banks = new Set(["bbva", "santander", "revolut"]);
+  assert.equal(L.isOwnBankTransfer("Transferencia A Favor De Miguel Bbva Concepto: Hipoteca Periódica", holder, banks), true);
+  assert.equal(L.isOwnBankTransfer("TRANSFERENCIA INMEDIATA A FAVOR DE MIGUEL BBVA CONCEPTO IBi", holder, banks), true);
+  assert.equal(L.isOwnBankTransfer("Transferencia A Favor De Juzgado Penal 10", holder, banks), false);
+  assert.equal(L.isOwnBankTransfer("Bizum A Favor De Jose Miguel Lobo Cantos", holder, banks), false);
 });
 
 test("las reglas del usuario ganan y la más concreta manda", () => {

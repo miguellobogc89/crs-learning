@@ -100,10 +100,12 @@ export const searchText = (t: { description: string; counterparty: string | null
 type Keyword = { re: RegExp; category: string; kind?: Kind; sign?: "in" | "out" };
 const KEYWORDS: Keyword[] = [
   // Ahorro e inversión: brókeres, exchanges y fondos (salida = aportación).
-  { re: /\b(bitvavo|trading ?212|binance|coinbase|bitget|kraken|myinvestor|indexa|finizens|degiro|interactive brokers|scalable|trade republic|inbestme|renta 4|cuenta de inversion|to investment account)\b/, category: "ahorro_inversion", kind: "ahorro" },
+  { re: /\b(bitvavo|trading ?212|binance|coinbase|bitget|kraken|myinvestor|indexa|finizens|degiro|interactive brokers|scalable|trade republic|inbestme|renta 4|cuenta de inversion|to investment account|from investment account)\b/, category: "ahorro_inversion", kind: "ahorro" },
   { re: /\b(nomina|salario|sueldo|suel|salar|payroll|haberes)\b/, category: "nomina", kind: "ingreso", sign: "in" },
   { re: /\b(intereses|interes|remuneracion cuenta|dividendo)\b/, category: "intereses", kind: "ingreso", sign: "in" },
   { re: /\b(devolucion|reembolso|refund|return|abono compra|anulacion)\b/, category: "otros_gastos", kind: "devolucion", sign: "in" },
+  // Bizum recibido en Revolut: lo mandan amigos (su parte de una cena, un regalo…); no es una recarga propia.
+  { re: /\bdinero anadido a traves de bizum\b/, category: "otros_gastos", kind: "devolucion", sign: "in" },
   { re: /\b(traspaso|transferencia entre cuentas|recarga revolut|top ?up|topup|money added|added via|investment account|savings account|vault|pocket|hucha)\b/, category: "transferencia_interna", kind: "interna" },
   { re: /\b(hipoteca|prestamo hipotecario|alquiler|comunidad de propietarios|comunidad prop)\b/, category: "vivienda" },
   { re: /\b(iberdrola|endesa|naturgy|holaluz|totalenergies|repsol luz|canal de isabel|aguas|emasesa|aqualia|movistar|vodafone|orange|digi|jazztel|pepephone|masmovil|yoigo|lowi|simyo|o2|finetwork)\b/, category: "suministros" },
@@ -176,6 +178,21 @@ export function isOwnName(text: string | null | undefined, tokens: Set<string>) 
   let hits = 0;
   for (const t of tokens) if (words.has(t)) hits++;
   return hits >= Math.min(3, tokens.size);
+}
+
+/**
+ * «Transferencia a favor de Miguel BBVA»: el titular se pone a sí mismo con el nombre del banco de destino.
+ * Es suya si tras «a favor de» aparece una palabra de su nombre y uno de los bancos donde tiene cuenta.
+ */
+export function isOwnBankTransfer(text: string | null | undefined, tokens: Set<string>, banks: Set<string>) {
+  if (!text || !tokens.size || !banks.size) return false;
+  const words = normalize(text).replace(/[^a-zñ\s]/g, " ").split(/\s+/).filter(Boolean);
+  for (let i = 0; i < words.length - 2; i++) {
+    if (words[i] !== "favor" || words[i + 1] !== "de") continue;
+    const next = words.slice(i + 2, i + 6);
+    if (next.some((w) => tokens.has(w)) && next.some((w) => banks.has(w))) return true;
+  }
+  return false;
 }
 
 /** Patrón para una regla nueva a partir de una corrección: la clave del comercio, si es lo bastante concreta. */

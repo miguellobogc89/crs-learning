@@ -6,7 +6,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES, KINDS, categoryOf, isCategory, isKind } from "./categories";
-import { addDays, fallbackClass, findTransferPairs, holderTokens, isOwnName, keywordClass, matchRule, normalize, rulePattern, todayIso, type Rule, type Tx } from "./logic";
+import { addDays, fallbackClass, findTransferPairs, holderTokens, isOwnBankTransfer, isOwnName, keywordClass, matchRule, normalize, rulePattern, todayIso, type Rule, type Tx } from "./logic";
 import { aiAvailable, financeJson } from "./ai";
 import { getAccounts, getMemory, getRules, loadTxs } from "./store";
 
@@ -36,6 +36,7 @@ export async function classifyPending(userId: string, opts: { useAi?: boolean; m
   const stats = { reglas: 0, internas: 0, palabras: 0, ia: 0, auto: 0, remaining: 0 };
   const holder = holderTokens(accounts.filter((a) => a.source === "bank").map((a) => a.name));
   const bankOfAccount = new Map(accounts.map((a) => [a.id, a.bank]));
+  const ownBanks = new Set(accounts.map((a) => normalize(a.bank ?? "")).filter((b) => b.length > 2));
 
   // 1) Reglas del usuario y palabras clave sobre lo pendiente.
   const ownHashes = new Set(accounts.map((a) => a.ibanHash).filter((h): h is string => !!h));
@@ -52,7 +53,9 @@ export async function classifyPending(userId: string, opts: { useAi?: boolean; m
     // Nómina, devoluciones, inversión y traspasos explícitos mandan sobre todo lo demás.
     const strong = k && k.kind !== "gasto";
     // Traspaso a uno mismo (otro banco) o recarga de Revolut desde Santander/BBVA: entre cuentas propias.
-    const own = !strong && (isOwnName(t.counterparty, holder) || isOwnName(t.description, holder));
+    // «Hipoteca» u «IBI» en el concepto no lo convierten en gasto si va a otra cuenta suya: el gasto real
+    // es el cargo que luego hace el otro banco (si no, la hipoteca contaría dos veces).
+    const own = !strong && (isOwnName(t.counterparty, holder) || isOwnName(t.description, holder) || isOwnBankTransfer(t.description, holder, ownBanks));
     const revolutTopUp = !strong && bankOfAccount.get(t.accountId) !== "revolut" && /\brevolut\b/.test(normalize(t.description));
     if (own || revolutTopUp) {
       await setClass([t.id], { category: "transferencia_interna", kind: "interna", category_source: "interna" });
