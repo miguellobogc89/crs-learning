@@ -2,7 +2,7 @@
 // Oportunidades: una sola tabla con las ideas cripto del analista común (vivas primero), qué habría
 // pasado siguiéndolas al pie de la letra y quién entró en cada una. Paginada.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDownAZ, ArrowDownZA, Check, ChevronDown, Filter, Grid2X2, List, ListFilter, Play } from "lucide-react";
+import { ChevronDown, ListFilter, Play } from "lucide-react";
 import type { faroView } from "@/lib/trading/faro/engine";
 import { api, errorText, eur, pct } from "./format";
 import { DataTable, Money, useIsMobile, type Col, type TableSort } from "./table";
@@ -13,16 +13,7 @@ import { ManualBuyModal, type BuyIdea } from "./manual-buy-modal";
 import { AssetIcon } from "./asset-icon";
 import { FaroAnalysis } from "./faro-analysis";
 import { useSearchParams } from "next/navigation";
-import { SearchInput } from "@/components/ui/search-input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { TableToolbar } from "@/components/ui/table-toolbar";
 
 type Data = Awaited<ReturnType<typeof faroView>>;
 type Idea = Data["live"][number];
@@ -526,125 +517,25 @@ function FaroToolbar({
   viewMode: ViewMode;
   onViewModeChange: (value: ViewMode) => void;
 }) {
-  const count = Number(statusFilter !== "all") + Number(kindFilter !== "all");
-  const current = SORT_OPTIONS.find((item) => item.value?.key === sort?.key && item.value?.dir === sort?.dir);
-  const sortLabel = current?.label ?? (sort ? (COLUMN_LABELS[sort.key] ?? sort.key) + (sort.dir === 1 ? " ↑" : " ↓") : "Ordenar");
-  const SortIcon = sort?.key === "asset" ? (sort.dir === 1 ? ArrowDownAZ : ArrowDownZA) : ListFilter;
-  const buttonStyle = "inline-flex h-control-lg items-center gap-2 rounded-xl border-0 bg-white px-3.5 text-body font-medium text-slate-700 shadow-none outline-none transition-colors duration-150 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
-  const viewStyle = "inline-flex size-control-md items-center justify-center rounded-lg border-0 shadow-none outline-none transition-colors duration-150 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
-
   return (
-    <div className="knowledge-toolbar-container shrink-0">
-      <div className="knowledge-explorer-controls">
-        <SearchInput
-          className="knowledge-explorer-controls__search min-w-0"
-          placeholder="Buscar en Oportunidades..."
-          value={search}
-          onChange={onSearchChange}
-        />
-        <div className="knowledge-explorer-controls__actions">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={buttonStyle + " knowledge-filter-trigger"} title="Filtrar" aria-label="Filtrar">
-                <Filter className="size-icon-md" strokeWidth={2.25} />
-                <span className="knowledge-toolbar-label">Filtrar</span>
-                {count > 0 && (
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 text-[11px] font-semibold text-white">{count}</span>
-                )}
-                <ChevronDown className="knowledge-toolbar-chevron size-icon-md text-slate-400" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <div className="flex items-center justify-between px-2 py-1.5">
-                <DropdownMenuLabel className="p-0">Filtros</DropdownMenuLabel>
-                {count > 0 && (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      onStatusFilterChange("all");
-                      onKindFilterChange("all");
-                    }}
-                    className="text-caption font-medium text-slate-700 transition-colors hover:text-slate-950 hover:underline"
-                  >
-                    Limpiar
-                  </button>
-                )}
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-caption text-muted-foreground">Estado</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={statusFilter} onValueChange={(value) => onStatusFilterChange(value as IdeaStatus)}>
-                <DropdownMenuRadioItem value="all"><Check className="mr-2 size-icon-md" />Todos los estados</DropdownMenuRadioItem>
-                {(["viva", "acierto", "fallo", "caducada"] as const).map((status) => (
-                  <DropdownMenuRadioItem key={status} value={status}>{STATUS[status].label}</DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-caption text-muted-foreground">Tipo de oportunidad</DropdownMenuLabel>
-              <DropdownMenuRadioGroup value={kindFilter} onValueChange={(value) => onKindFilterChange(value as IdeaKind)}>
-                <DropdownMenuRadioItem value="all"><ListFilter className="mr-2 size-icon-md" />Todos los tipos</DropdownMenuRadioItem>
-                {(["impulso", "ruptura", "noticia", "retroceso", "ruido", "tendencia"] as const).map((kind) => (
-                  <DropdownMenuRadioItem key={kind} value={kind}>{KIND[kind].label}</DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className={buttonStyle + " knowledge-sort-trigger min-w-40 max-w-full justify-between"}
-                title={"Ordenar por " + sortLabel}
-                aria-label={"Ordenar por " + sortLabel}
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <SortIcon className="size-icon-md" />
-                  <span className="knowledge-toolbar-label truncate">{sortLabel}</span>
-                </span>
-                <ChevronDown className="knowledge-toolbar-chevron size-icon-md text-slate-400" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Ordenar por</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup
-                value={sort ? sort.key + ":" + sort.dir : ""}
-                onValueChange={(value) => {
-                  const option = SORT_OPTIONS.find((item) => item.value && item.value.key + ":" + item.value.dir === value);
-                  if (option) onSortChange(option.value);
-                }}
-              >
-                {SORT_OPTIONS.map(({ label, value }) => (
-                  <DropdownMenuRadioItem key={label} value={value!.key + ":" + value!.dir}>{label}</DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <div className="knowledge-view-toggle ml-1 hidden h-control-lg items-center rounded-xl border-0 bg-white p-1 shadow-none md:flex">
-            <button
-              type="button"
-              onClick={() => onViewModeChange("grid")}
-              className={viewStyle + (viewMode === "grid" ? " bg-slate-100 text-slate-950" : " bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-700")}
-              title="Vista de tarjetas"
-              aria-label="Vista de tarjetas"
-              aria-pressed={viewMode === "grid"}
-            >
-              <Grid2X2 className="size-icon-md" strokeWidth={2.25} />
-            </button>
-            <button
-              type="button"
-              onClick={() => onViewModeChange("list")}
-              className={viewStyle + (viewMode === "list" ? " bg-slate-100 text-slate-950" : " bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-700")}
-              title="Vista de lista"
-              aria-label="Vista de lista"
-              aria-pressed={viewMode === "list"}
-            >
-              <List className="size-icon-md" strokeWidth={2.25} />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <TableToolbar
+      search={search}
+      onSearchChange={onSearchChange}
+      searchPlaceholder="Buscar en Oportunidades..."
+      filters={{
+        groups: [
+          { key: "status", label: "Estado", value: statusFilter, allLabel: "Todos los estados", options: (["viva", "acierto", "fallo", "caducada"] as const).map((s) => ({ value: s, label: STATUS[s].label })) },
+          { key: "kind", label: "Tipo de oportunidad", value: kindFilter, allLabel: "Todos los tipos", allIcon: ListFilter, options: (["impulso", "ruptura", "noticia", "retroceso", "ruido", "tendencia"] as const).map((k) => ({ value: k, label: KIND[k].label })) },
+        ],
+        onChange: (key, value) => (key === "status" ? onStatusFilterChange(value as IdeaStatus) : onKindFilterChange(value as IdeaKind)),
+        onClear: () => {
+          onStatusFilterChange("all");
+          onKindFilterChange("all");
+        },
+      }}
+      sort={{ value: sort, options: SORT_OPTIONS.map((o) => ({ label: o.label, value: o.value! })), onChange: onSortChange, columnLabels: COLUMN_LABELS, textKeys: ["asset"] }}
+      view={{ value: viewMode, onChange: onViewModeChange }}
+    />
   );
 }
 

@@ -167,3 +167,37 @@ test("extractos de Revolut: se saltan revertidos y movimientos de huchas", () =>
   ];
   assert.deepEqual(P.rowsFromTable(rows, P.detectColumns(rows)), [{ date: "2026-03-02", description: "Mercadona", amount: -23.4 }]);
 });
+
+test("ciclo según el día real de cobro", () => {
+  const rule = { day: 25, adjust: true };
+  // 25 oct 2026 es domingo → se cobra el viernes 23; 25 nov es miércoles.
+  assert.deepEqual(L.cycleFor("2026-11-17", rule), { start: "2026-10-23", end: "2026-11-24", label: "23 oct – 24 nov" });
+  assert.equal(L.cycleFor("2026-10-23", rule).start, "2026-10-23");
+  assert.equal(L.cycleFor("2026-10-22", rule).start, "2026-09-25");
+  // 25 dic es festivo (viernes) → jueves 24.
+  assert.equal(L.cycleFor("2026-12-24", rule).start, "2026-12-24");
+  assert.equal(L.cycleFor("2026-11-30", rule, 1).start, "2026-12-24");
+  // La nómina real manda sobre la regla.
+  const paydays = L.paydaysFrom([{ date: "2026-08-24", kind: "ingreso", category: "nomina", amount: 2500 }, { date: "2026-08-03", kind: "ingreso", category: "nomina", amount: 50 }], 25);
+  assert.deepEqual(paydays, { "2026-08": "2026-08-24" });
+  assert.equal(L.cycleFor("2026-08-24", { ...rule, paydays }).start, "2026-08-24");
+  assert.equal(L.cycleFor("2026-08-24", { ...rule, paydays }, -1).end, "2026-08-23");
+  // Un número sigue funcionando como antes.
+  assert.deepEqual(L.cycleFor("2026-11-17", 1), { start: "2026-11-01", end: "2026-11-30", label: "nov 2026" });
+});
+
+test("periodo elegido", () => {
+  const rule = { day: 25, adjust: true };
+  const six = L.resolvePeriod(L.cleanView({ unit: "mes", range: "6" }), "2026-11-17", rule, "2025-01-01");
+  assert.equal(six.buckets.length, 6);
+  assert.equal(six.from, "2026-06-01");
+  assert.equal(six.to, "2026-11-30");
+  const year = L.resolvePeriod(L.cleanView({ unit: "mes", range: "anio" }), "2026-11-17", rule, null);
+  assert.equal(year.buckets.length, 11);
+  const custom = L.resolvePeriod(L.cleanView({ unit: "ciclo", range: "custom", from: "2026-11-10", to: "2026-09-01" }), "2026-11-17", rule, null);
+  assert.equal(custom.from, "2026-09-01");
+  assert.equal(custom.to, "2026-11-10");
+  assert.equal(custom.buckets.length, 3);
+  assert.equal(custom.buckets[0].start, "2026-09-01");
+  assert.equal(L.cleanView({ range: "custom" }).range, "actual");
+});

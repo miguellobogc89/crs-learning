@@ -36,21 +36,140 @@ export type Cycle = { start: string; end: string; label: string };
 
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
-/** Ciclo que contiene `date`, empezando el día `startDay` de cada mes. `offset` -1 = el anterior. */
-export function cycleFor(date: string, startDay: number, offset = 0): Cycle {
+/**
+ * Cómo empieza cada ciclo. Un número es un día fijo del mes (1 = mes natural). Con `adjust`, si ese día cae en
+ * fin de semana o festivo nacional se adelanta al laborable anterior (así se cobra la nómina en España), y
+ * `paydays` («AAAA-MM» → fecha) fija el inicio real cuando ya se sabe el día en que entró la nómina.
+ */
+export type CycleRule = number | { day: number; adjust?: boolean; paydays?: Record<string, string> };
+
+const easterSunday = (y: number) => {
+  // Algoritmo de Meeus/Jones/Butcher (calendario gregoriano).
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4;
+  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31), day = ((h + l - 7 * m + 114) % 31) + 1;
+  return Date.UTC(y, month - 1, day);
+};
+
+/** Festivos nacionales de España (los fijos y el Viernes Santo). */
+export function isSpanishHoliday(date: string) {
+  const md = date.slice(5);
+  if (["01-01", "01-06", "05-01", "08-15", "10-12", "11-01", "12-06", "12-08", "12-25"].includes(md)) return true;
+  return iso(new Date(easterSunday(Number(date.slice(0, 4))) - 2 * DAY)) === date;
+}
+
+export const isBusinessDay = (date: string) => {
+  const wd = toDate(date).getUTCDay();
+  return wd !== 0 && wd !== 6 && !isSpanishHoliday(date);
+};
+
+const ruleOf = (r: CycleRule) => (typeof r === "number" ? { day: r, adjust: false, paydays: {} as Record<string, string> } : { day: r.day, adjust: r.adjust ?? false, paydays: r.paydays ?? {} });
+
+/** Primer día del ciclo que corresponde al mes `m` (0-11, puede salirse de rango) del año `y`. */
+function cycleStart(y: number, m: number, r: ReturnType<typeof ruleOf>) {
+  const base = new Date(Date.UTC(y, m, 1));
+  const key = iso(base).slice(0, 7);
+  if (r.paydays[key]) return r.paydays[key];
+  const last = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0)).getUTCDate();
+  let d = iso(new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), Math.min(r.day, last))));
+  if (r.adjust && r.day > 1) while (!isBusinessDay(d)) d = addDays(d, -1);
+  return d;
+}
+
+/** Ciclo que contiene `date` según la regla de inicio. `offset` -1 = el anterior. */
+export function cycleFor(date: string, rule: CycleRule, offset = 0): Cycle {
+  const r = ruleOf(rule);
   const d = toDate(date);
-  let y = d.getUTCFullYear();
+  const y = d.getUTCFullYear();
   let m = d.getUTCMonth();
-  if (d.getUTCDate() < startDay) m -= 1;
+  if (date < cycleStart(y, m, r)) m -= 1;
   m += offset;
-  const start = new Date(Date.UTC(y, m, startDay));
-  const next = new Date(Date.UTC(y, m + 1, startDay));
-  const end = new Date(next.getTime() - DAY);
-  y = start.getUTCFullYear();
-  const label = startDay === 1
-    ? `${MONTHS[start.getUTCMonth()]} ${y}`
-    : `${start.getUTCDate()} ${MONTHS[start.getUTCMonth()]} – ${end.getUTCDate()} ${MONTHS[end.getUTCMonth()]}`;
-  return { start: iso(start), end: iso(end), label };
+  const start = cycleStart(y, m, r);
+  const end = addDays(cycleStart(y, m + 1, r), -1);
+  const s = toDate(start), e = toDate(end);
+  const label = r.day === 1 && !r.adjust
+    ? `${MONTHS[s.getUTCMonth()]} ${s.getUTCFullYear()}`
+    : `${s.getUTCDate()} ${MONTHS[s.getUTCMonth()]} – ${e.getUTCDate()} ${MONTHS[e.getUTCMonth()]}`;
+  return { start, end, label };
+}
+
+/** Día real de cobro de cada mes: la nómina que entra cerca del día de inicio (como mucho una semana antes). */
+export function paydaysFrom(txs: { date: string; kind: string; category: string; amount: number }[], day: number) {
+  const out: Record<string, string> = {};
+  if (day <= 1) return out;
+  for (const t of txs) {
+    if (t.kind !== "ingreso" || t.category !== "nomina" || t.amount <= 0) continue;
+    const dom = Number(t.date.slice(8, 10));
+    if (dom < day - 7 || dom > day + 1) continue;
+    const key = t.date.slice(0, 7);
+    if (!out[key] || t.date < out[key]) out[key] = t.date;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Periodo elegido en pantalla (se guarda por persona): unidad, rango y cuentas ocultas
+// ---------------------------------------------------------------------------------------------------------
+export const PERIOD_UNITS = ["ciclo", "mes"] as const;
+export const PERIOD_RANGES = ["actual", "anterior", "3", "6", "12", "anio", "todo", "custom"] as const;
+export type PeriodUnit = (typeof PERIOD_UNITS)[number];
+export type PeriodRange = (typeof PERIOD_RANGES)[number];
+export type ViewPref = { unit: PeriodUnit; range: PeriodRange; from: string | null; to: string | null; hiddenAccounts: string[] };
+export const DEFAULT_VIEW: ViewPref = { unit: "ciclo", range: "actual", from: null, to: null, hiddenAccounts: [] };
+
+const isIsoDate = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+/** Normaliza lo guardado (o lo que llega del navegador) a un periodo válido. */
+export function cleanView(v: unknown): ViewPref {
+  const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  const unit = PERIOD_UNITS.includes(o.unit as PeriodUnit) ? (o.unit as PeriodUnit) : DEFAULT_VIEW.unit;
+  let range = PERIOD_RANGES.includes(o.range as PeriodRange) ? (o.range as PeriodRange) : DEFAULT_VIEW.range;
+  let from = isIsoDate(o.from) ? o.from : null;
+  let to = isIsoDate(o.to) ? o.to : null;
+  if (range === "custom" && (!from || !to)) range = DEFAULT_VIEW.range;
+  if (from && to && from > to) [from, to] = [to, from];
+  const hiddenAccounts = Array.isArray(o.hiddenAccounts) ? o.hiddenAccounts.filter((x): x is string => typeof x === "string").slice(0, 50) : [];
+  return { unit, range, from: range === "custom" ? from : null, to: range === "custom" ? to : null, hiddenAccounts };
+}
+
+export type ResolvedPeriod = { from: string; to: string; label: string; unit: PeriodUnit; buckets: Cycle[] };
+
+/** Fechas y tramos (ciclos o meses) del periodo elegido. Los tramos del extremo se recortan al rango. */
+export function resolvePeriod(v: ViewPref, today: string, rule: CycleRule, oldest: string | null): ResolvedPeriod {
+  const r: CycleRule = v.unit === "mes" ? 1 : rule;
+  const noun = v.unit === "mes" ? ["mes", "meses"] : ["ciclo", "ciclos"];
+  const between = (a: string, b: string) => {
+    const out: Cycle[] = [];
+    let c = cycleFor(a, r);
+    while (c.start <= b && out.length < 400) {
+      out.push(c);
+      c = cycleFor(c.end, r, 1);
+    }
+    return out;
+  };
+  let buckets: Cycle[];
+  let label: string;
+  if (v.range === "actual" || v.range === "anterior") {
+    const c = cycleFor(today, r, v.range === "actual" ? 0 : -1);
+    buckets = [c];
+    label = `${v.range === "actual" ? `Este ${noun[0]}` : `${noun[0][0].toUpperCase()}${noun[0].slice(1)} anterior`} · ${c.label}`;
+  } else if (v.range === "3" || v.range === "6" || v.range === "12") {
+    const n = Number(v.range);
+    buckets = Array.from({ length: n }, (_, i) => cycleFor(today, r, i - n + 1));
+    label = `Últimos ${n} ${noun[1]}`;
+  } else if (v.range === "anio") {
+    buckets = between(`${today.slice(0, 4)}-01-01`, today);
+    label = `Año ${today.slice(0, 4)}`;
+  } else if (v.range === "todo") {
+    buckets = between(oldest && oldest < today ? oldest : today, today);
+    label = "Todo el historial";
+  } else {
+    const from = v.from!, to = v.to!;
+    buckets = between(from, to).map((c) => ({ ...c, start: c.start < from ? from : c.start, end: c.end > to ? to : c.end }));
+    label = `${from.split("-").reverse().join("/")} – ${to.split("-").reverse().join("/")}`;
+  }
+  return { from: buckets[0].start, to: buckets[buckets.length - 1].end, label, unit: v.unit, buckets };
 }
 
 export const inCycle = (t: { date: string }, c: Cycle) => t.date >= c.start && t.date <= c.end;
@@ -438,7 +557,7 @@ export type Projection = {
 export function projectCycle(opts: {
   txs: Tx[];
   today: string;
-  startDay: number;
+  startDay: CycleRule;
   liquidity: number | null;
   recurring: Recurring[];
   savingsGoal: number | null;
@@ -508,7 +627,7 @@ export function affordability(p: Projection, amount: number) {
 }
 
 /** Ahorro previsto hasta una fecha si sigues como en los últimos ciclos (sin extraordinarios ni regalos). */
-export function projectSavings(history: CycleSummary[], current: Projection, until: string, startDay: number) {
+export function projectSavings(history: CycleSummary[], current: Projection, until: string, startDay: CycleRule) {
   const complete = history.filter((h) => h.cycle.end < current.cycle.start).slice(0, 3);
   const monthly = complete.length
     ? round2(complete.reduce((s, h) => s + h.income - (h.expenses - h.extraordinaryExpenses), 0) / complete.length)

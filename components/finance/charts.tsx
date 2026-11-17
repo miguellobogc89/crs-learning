@@ -17,7 +17,7 @@ function niceMax(v: number) {
 }
 const compact = (v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toLocaleString("es-ES", { maximumFractionDigits: 1 })} k` : v.toLocaleString("es-ES", { maximumFractionDigits: 0 }));
 
-export type CyclePoint = { label: string; income: number; expenses: number; net: number };
+export type CyclePoint = { label: string; income: number; expenses: number; net: number; /** Texto del detalle (si no, la etiqueta). */ title?: string; current?: boolean };
 
 /** Ingresos frente a gastos por ciclo (barras agrupadas, una escala). */
 export function CycleBars({ data, height = 200 }: { data: CyclePoint[]; height?: number }) {
@@ -55,18 +55,18 @@ export function CycleBars({ data, height = 200 }: { data: CyclePoint[]; height?:
             return <path d={`M${x},${pad.t + ih} V${top + r} Q${x},${top} ${x + r},${top} H${x + bw - r} Q${x + bw},${top} ${x + bw},${top + r} V${pad.t + ih} Z`} fill={color} opacity={hover === null || hover === i ? 1 : 0.45} />;
           };
           return (
-            <g key={d.label} onMouseEnter={() => setHover(i)} onTouchStart={() => setHover(i)}>
+            <g key={`${i}:${d.label}`} onMouseEnter={() => setHover(i)} onTouchStart={() => setHover(i)}>
               <rect x={cx - slot / 2} y={pad.t} width={slot} height={ih} fill="transparent" />
               {bar(d.income, cx - bw - 1, INCOME)}
               {bar(d.expenses, cx + 1, EXPENSE)}
-              <text x={cx} y={H - 8} textAnchor="middle" className="fill-slate-500 text-[10px]">{d.label}</text>
+              <text x={cx} y={H - 8} textAnchor="middle" className={d.current ? "fill-slate-900 text-[10px] font-semibold" : "fill-slate-500 text-[10px]"}>{d.label}</text>
             </g>
           );
         })}
       </svg>
       {h && (
         <div className="pointer-events-none absolute right-0 top-0 rounded-xl border border-slate-100 bg-white px-3 py-2 text-xs shadow-lg">
-          <p className="font-semibold text-slate-900">{h.label}</p>
+          <p className="font-semibold text-slate-900">{h.title ?? h.label}</p>
           <p className="mt-1 flex justify-between gap-4 text-slate-600"><span>Ingresos</span><b className="tabular-nums text-slate-900">{eur(h.income, 2)}</b></p>
           <p className="flex justify-between gap-4 text-slate-600"><span>Gastos</span><b className="tabular-nums text-slate-900">{eur(h.expenses, 2)}</b></p>
           <p className="flex justify-between gap-4 text-slate-600"><span>Ahorro</span><b className={`tabular-nums ${h.net >= 0 ? "text-emerald-700" : "text-red-700"}`}>{eur(h.net, 2)}</b></p>
@@ -139,7 +139,7 @@ export function LiquidityLine({ data, height = 160 }: { data: { date: string; ba
 /** Gasto por categoría: barras horizontales de un solo tono, con la comparación con el ciclo anterior. */
 export function CategoryBars({ items, previous, limit = 8, onSelect }: { items: { category: string; amount: number }[]; previous?: { category: string; amount: number }[]; limit?: number; onSelect?: (category: string) => void }) {
   const shown = items.filter((i) => i.amount > 0).slice(0, limit);
-  if (!shown.length) return <p className="py-6 text-center text-sm text-slate-400">Sin gastos en este ciclo.</p>;
+  if (!shown.length) return <p className="py-6 text-center text-sm text-slate-400">Sin gastos en este periodo.</p>;
   const max = Math.max(...shown.map((i) => i.amount));
   const total = items.filter((i) => i.amount > 0).reduce((s, i) => s + i.amount, 0);
   return (

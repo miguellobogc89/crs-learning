@@ -34,7 +34,7 @@ export async function classifyPending(userId: string, opts: { useAi?: boolean; m
   const since = addDays(todayIso(), -400);
   const txs = await loadTxs(userId, { since, includeExcluded: true });
   const stats = { reglas: 0, internas: 0, palabras: 0, ia: 0, auto: 0, remaining: 0 };
-  const holder = holderTokens(accounts.filter((a) => a.source === "bank").map((a) => a.name));
+  const holder = holderTokens(accounts.filter((a) => a.source === "bank").map((a) => a.holderName ?? a.name));
   const bankOfAccount = new Map(accounts.map((a) => [a.id, a.bank]));
   const ownBanks = new Set(accounts.map((a) => normalize(a.bank ?? "")).filter((b) => b.length > 2));
 
@@ -104,7 +104,7 @@ export async function classifyPending(userId: string, opts: { useAi?: boolean; m
     for (let b = 0; b < maxBatches && b * AI_BATCH < toAi.length; b++) {
       const batch = toAi.slice(b * AI_BATCH, (b + 1) * AI_BATCH);
       try {
-        const result = await aiClassify(batch, bankOf, memory, accounts.map((a) => `${a.bank ?? "importada"} · ${a.name}`));
+        const result = await aiClassify(batch, bankOf, memory, accounts.map((a) => `${a.bank ?? "importada"} · ${a.name}${a.holderName ? ` (titular: ${a.holderName})` : ""}`));
         for (const r of result) {
           const t = batch[r.i];
           if (!t || done.has(t.id) || !isCategory(r.category) || !isKind(r.kind)) continue;
@@ -236,4 +236,63 @@ export async function correctTransaction(userId: string, id: string, input: { ca
   }
   await classifyPending(userId, { useAi: false });
   return { ok: true, similar, pattern };
+}
+
+/**
+ * Cambia varios movimientos a la vez (tipo, categoría o extraordinario). Con `applyToSimilar`, cada comercio
+ * distinto de la selección se guarda como regla y se aplica a sus parecidos, igual que una corrección suelta.
+ */
+export async function bulkCorrect(userId: string, ids: string[], input: { kind?: string; category?: string; extraordinary?: boolean; applyToSimilar: boolean }) {
+  if (input.kind !== undefined && !isKind(input.kind)) throw new Error("Tipo no válido");
+  if (input.category !== undefined && !isCategory(input.category)) throw new Error("Categoría no válida");
+  if (input.kind === undefined && input.category === undefined && input.extraordinary === undefined) throw new Error("No hay nada que cambiar");
+  const rows = await prisma.finance_transactions.findMany({ where: { user_id: userId, id: { in: ids } } });
+  let changed = 0;
+  const patterns = new Map<string, { category: string; kind: string; extraordinary: boolean; label: string }>();
+  for (const row of rows) {
+    // Solo categoría: el tipo la sigue (una devolución sigue siendo devolución si la categoría es de gasto).
+    const catKind = input.category ? categoryOf(input.category).kind : null;
+    const kind = input.kind ?? (catKind && !(catKind === "gasto" && row.kind === "devolucion") ? catKind : row.kind);
+    // El tipo manda sobre la categoría cuando no casan (una transferencia interna no tiene categoría de gasto).
+    let category = input.category ?? row.category;
+    if (kind === "interna") category = "transferencia_interna";
+    else if (kind === "ahorro" && categoryOf(category).kind !== "ahorro") category = "ahorro_inversion";
+    else if (input.kind && input.category === undefined && categoryOf(category).kind !== kind && (category === "transferencia_interna" || category === "ahorro_inversion")) {
+      category = kind === "ingreso" || kind === "regalo" ? "otros_ingresos" : "otros_gastos";
+    }
+    const extraordinary = input.extraordinary ?? row.extraordinary;
+    let pair = row.transfer_pair_id;
+    if (pair && kind !== "interna") {
+      await prisma.finance_transactions.updateMany({ where: { user_id: userId, transfer_pair_id: pair, id: { notIn: ids }, category_source: { not: "usuario" } }, data: { transfer_pair_id: null, category_source: "pendiente", updated_at: new Date() } });
+      await prisma.finance_transactions.updateMany({ where: { user_id: userId, transfer_pair_id: pair, id: { notIn: ids } }, data: { transfer_pair_id: null } });
+      pair = null;
+    }
+    await prisma.finance_transactions.update({
+      where: { id: row.id },
+      data: { kind, category, extraordinary, category_source: "usuario", transfer_pair_id: pair, updated_at: new Date() },
+    });
+    changed++;
+    if (input.applyToSimilar) {
+      const pattern = rulePattern({ description: row.description, counterparty: row.counterparty });
+      if (pattern) patterns.set(pattern, { category, kind, extraordinary, label: row.counterparty || row.description.slice(0, 80) });
+    }
+  }
+  let similar = 0;
+  if (patterns.size) {
+    const all = await loadTxs(userId, { includeExcluded: true });
+    const selected = new Set(ids);
+    for (const [pattern, r] of patterns) {
+      const rule = await prisma.finance_rules.upsert({
+        where: { user_id_pattern: { user_id: userId, pattern } },
+        create: { user_id: userId, pattern, category: r.category, kind: r.kind, extraordinary: r.extraordinary, label: r.label },
+        update: { category: r.category, kind: r.kind, extraordinary: r.extraordinary },
+      });
+      const asRule: Rule = { id: rule.id, pattern, category: r.category, kind: r.kind as Rule["kind"], extraordinary: r.extraordinary };
+      const targets = all.filter((t) => !selected.has(t.id) && t.source !== "usuario" && !t.transferPairId && matchRule(t, [asRule])).map((t) => t.id);
+      if (targets.length) await applyRuleTo(targets, asRule);
+      similar += targets.length;
+    }
+  }
+  await classifyPending(userId, { useAi: false });
+  return { ok: true, changed, similar, rules: patterns.size };
 }

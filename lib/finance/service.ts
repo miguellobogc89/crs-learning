@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal-finance/enable-banking";
 import {
   affordability, budgetStatus, cycleFor, daysBetween, detectAlerts, detectRecurring, liquiditySeries, merchantKey,
-  normalize, projectCycle, projectSavings, summarize, todayIso, type Alert, type CycleSummary, type Tx,
+  normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
+  type Alert, type CycleRule, type CycleSummary, type Tx, type ViewPref,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getSettings, loadTxs } from "./store";
 import { AUTO_SYNC_HOURS } from "./sync";
@@ -22,7 +23,8 @@ export async function financeContext(userId: string) {
     getDismissed(userId),
   ]);
   const today = todayIso();
-  const startDay = settings.cycleStartDay;
+  // El ciclo empieza el día real en que entra la nómina (o el día fijado, adelantado si es festivo).
+  const startDay: CycleRule = { day: settings.cycleStartDay, adjust: true, paydays: paydaysFrom(txs, settings.cycleStartDay) };
   const recurring = detectRecurring(txs, today, cancelled);
   const recurringKeys = new Set(recurring.filter((r) => r.active).map((r) => r.key));
   const history: CycleSummary[] = [];
@@ -78,48 +80,110 @@ export async function overview(userId: string) {
     pendingReview,
     pendingClassify,
     upcoming: projection.pending.slice(0, 8),
+    period: periodSnapshot(ctx),
   };
 }
 
-export type TxFilters = { cycle?: number; q?: string; category?: string; kind?: string; account?: string; review?: boolean; limit?: number };
+/** Cuentas en EUR que se pueden mostrar u ocultar en pantalla (las excluidas de los totales no salen). */
+function visibleAccounts(ctx: FinanceContext, view: ViewPref) {
+  const hidden = new Set(view.hiddenAccounts);
+  return ctx.accounts.filter((a) => a.included).map((a) => ({
+    id: a.id, name: a.name, bank: a.bank, last4: a.ibanLast4, currency: a.currency, balance: a.balance, hidden: hidden.has(a.id),
+  }));
+}
 
-/** Movimientos de un ciclo (o buscando en todo), con sus totales. */
-export async function listTransactions(userId: string, f: TxFilters) {
-  const settings = await getSettings(userId);
-  const today = todayIso();
-  const all = await loadTxs(userId, { includeExcluded: true });
-  const accounts = await getAccounts(userId);
-  const accName = new Map(accounts.map((a) => [a.id, { name: a.name, bank: a.bank, included: a.included }]));
-  const notes = new Map((await prisma.finance_transactions.findMany({ where: { user_id: userId, note: { not: null } }, select: { id: true, note: true } })).map((n) => [n.id, n.note]));
-  const searching = !!(f.q && f.q.trim());
-  const cycle = cycleFor(today, settings.cycleStartDay, f.cycle ?? 0);
-  const q = searching ? normalize(f.q!) : "";
-  const rows = all.filter((t) =>
-    (searching ? normalize(`${t.description} ${t.counterparty ?? ""}`).includes(q) : t.date >= cycle.start && t.date <= cycle.end) &&
-    (!f.category || t.category === f.category) &&
-    (!f.kind || t.kind === f.kind) &&
-    (!f.account || t.accountId === f.account) &&
-    (!f.review || t.source === "auto" || t.source === "pendiente"));
-  const totals = { income: 0, expenses: 0, internal: 0, saved: 0 };
-  for (const t of rows) {
-    if (accName.get(t.accountId)?.included === false) continue;
-    if (t.kind === "ingreso" || t.kind === "regalo") totals.income += t.amount;
-    else if (t.kind === "gasto" || t.kind === "devolucion") totals.expenses -= t.amount;
-    else if (t.kind === "interna") totals.internal += Math.abs(t.amount) / 2;
-    else if (t.kind === "ahorro") totals.saved -= t.amount;
-  }
-  const limit = Math.min(f.limit ?? 400, 1000);
+/** La foto del periodo elegido: totales, comparación con el periodo anterior, evolución y categorías. */
+export function periodSnapshot(ctx: FinanceContext) {
+  const view = ctx.settings.view;
+  const accounts = visibleAccounts(ctx, view);
+  const shown = new Set(accounts.filter((a) => !a.hidden).map((a) => a.id));
+  const txs = ctx.txs.filter((t) => shown.has(t.accountId));
+  const oldest = ctx.txs.length ? ctx.txs[ctx.txs.length - 1].date : null;
+  const period = resolvePeriod(view, ctx.today, ctx.startDay, oldest);
+  const rule: CycleRule = view.unit === "mes" ? 1 : ctx.startDay;
+  const recurringKeys = new Set(ctx.recurring.filter((r) => r.active).map((r) => r.key));
+  const totals = summarize(txs, { start: period.from, end: period.to, label: period.label }, recurringKeys);
+  // Periodo anterior del mismo tamaño (mismo número de ciclos o meses), si hay datos.
+  const n = period.buckets.length;
+  const prevFirst = cycleFor(period.buckets[0].start, rule, -n);
+  const prevLast = cycleFor(period.buckets[0].start, rule, -1);
+  const previous = oldest && prevLast.end >= oldest && view.range !== "todo"
+    ? summarize(txs, { start: prevFirst.start, end: prevLast.end, label: "" }, recurringKeys)
+    : null;
+  // Evolución: los tramos del periodo; si son pocos, los 6 últimos hasta el final del periodo.
+  const last = period.buckets[n - 1];
+  const trendBuckets = n >= 3 ? period.buckets : Array.from({ length: 6 }, (_, i) => cycleFor(last.start, rule, i - 5));
+  const trend = trendBuckets
+    .filter((c) => !oldest || c.end >= oldest)
+    .map((c) => {
+      const x = summarize(txs, c, recurringKeys);
+      return { start: c.start, end: c.end, label: c.label, income: x.income + x.gifts, expenses: x.expenses, net: x.net, saved: x.savedToInvestments, current: c.start === last.start };
+    });
+  const prevCats = new Map((previous?.byCategory ?? []).map((c) => [c.category, c.amount]));
+  const balance = accounts.filter((a) => !a.hidden && a.currency === "EUR" && a.balance !== null).reduce((s, a) => s + (a.balance ?? 0), 0);
   return {
-    cycle: searching ? null : cycle,
-    cycleOffset: f.cycle ?? 0,
+    view,
+    label: period.label,
+    unit: period.unit,
+    from: period.from,
+    to: period.to,
+    buckets: n,
+    currentCycle: cycleFor(ctx.today, ctx.startDay),
+    accounts,
+    balance: Math.round(balance * 100) / 100,
+    totals: {
+      income: totals.income, gifts: totals.gifts, expenses: totals.expenses, net: totals.net, savingsRate: totals.savingsRate,
+      saved: totals.savedToInvestments, fixed: totals.fixedExpenses, variable: totals.variableExpenses, extraordinary: totals.extraordinaryExpenses,
+      count: totals.count, perBucketExpenses: Math.round((totals.expenses / n) * 100) / 100,
+    },
+    previous: previous ? { income: previous.income + previous.gifts, expenses: previous.expenses, net: previous.net } : null,
+    trend,
+    categories: totals.byCategory.map((c) => ({ ...c, previous: prevCats.get(c.category) ?? null })),
+  };
+}
+
+/** Movimientos del periodo guardado (o de todo, si se pide), de las cuentas visibles. Filtra y agrupa la pantalla. */
+export async function listTransactions(userId: string, opts: { all?: boolean } = {}) {
+  const ctx = await financeContext(userId);
+  const all = await loadTxs(userId, { includeExcluded: true });
+  const view = ctx.settings.view;
+  const accounts = ctx.accounts.map((a) => ({ id: a.id, name: a.name, bank: a.bank, last4: a.ibanLast4, included: a.included, hidden: view.hiddenAccounts.includes(a.id) }));
+  const accById = new Map(accounts.map((a) => [a.id, a]));
+  const notes = new Map((await prisma.finance_transactions.findMany({ where: { user_id: userId, note: { not: null } }, select: { id: true, note: true } })).map((n) => [n.id, n.note]));
+  const oldest = all.length ? all[all.length - 1].date : null;
+  const period = resolvePeriod(view, ctx.today, ctx.startDay, oldest);
+  const rule: CycleRule = view.unit === "mes" ? 1 : ctx.startDay;
+  const rows = all.filter((t) => !accById.get(t.accountId)?.hidden && (opts.all || (t.date >= period.from && t.date <= period.to)));
+  // Tramo (ciclo o mes) de cada fecha, calculado una vez por fecha distinta.
+  const bucketOf = new Map<string, string>();
+  const bucketLabels: Record<string, string> = {};
+  for (const t of rows) {
+    if (bucketOf.has(t.date)) continue;
+    const c = cycleFor(t.date, rule);
+    bucketOf.set(t.date, c.start);
+    bucketLabels[c.start] = c.label;
+  }
+  return {
+    label: opts.all ? "Todo el historial" : period.label,
+    from: period.from,
+    to: period.to,
+    unit: view.unit,
+    view,
+    accounts,
     count: rows.length,
-    totals: Object.fromEntries(Object.entries(totals).map(([k, v]) => [k, Math.round(v * 100) / 100])),
-    items: rows.slice(0, limit).map((t) => ({
-      ...t,
-      account: accName.get(t.accountId)?.name ?? "—",
-      bank: accName.get(t.accountId)?.bank ?? null,
-      note: notes.get(t.id) ?? null,
-    })),
+    bucketLabels,
+    items: rows.slice(0, 5000).map((t) => {
+      const acc = accById.get(t.accountId);
+      return {
+        ...t,
+        account: acc?.name ?? "—",
+        bank: acc?.bank ?? null,
+        excluded: acc?.included === false,
+        note: notes.get(t.id) ?? null,
+        // Tramo (ciclo o mes) al que pertenece, para agrupar en pantalla.
+        bucket: bucketOf.get(t.date) ?? t.date,
+      };
+    }),
   };
 }
 

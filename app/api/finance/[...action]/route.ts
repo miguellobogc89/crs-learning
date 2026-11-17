@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { categoryLabel, isCategory } from "@/lib/finance/categories";
 import { accountsView, budgetView, forecast, listTransactions, overview } from "@/lib/finance/service";
 import { syncUser } from "@/lib/finance/sync";
-import { classifyPending, correctTransaction } from "@/lib/finance/classify";
+import { bulkCorrect, classifyPending, correctTransaction } from "@/lib/finance/classify";
+import { cleanView } from "@/lib/finance/logic";
 import { ask, chatHistory, clearChat } from "@/lib/finance/copilot";
 import { getMemory, getRules, getSettings } from "@/lib/finance/store";
 
@@ -32,16 +33,7 @@ export async function GET(req: Request, route: RouteContext) {
   const p = url.searchParams;
   try {
     if (action === "overview") return ok(await overview(uid));
-    if (action === "transactions") {
-      return ok(await listTransactions(uid, {
-        cycle: Math.max(-36, Math.min(0, Number(p.get("cycle")) || 0)),
-        q: p.get("q") || undefined,
-        category: p.get("category") || undefined,
-        kind: p.get("kind") || undefined,
-        account: p.get("account") || undefined,
-        review: p.get("review") === "1",
-      }));
-    }
+    if (action === "transactions") return ok(await listTransactions(uid, { all: p.get("all") === "1" }));
     if (action === "forecast") {
       const amount = Number(p.get("amount"));
       return ok(await forecast(uid, { amount: Number.isFinite(amount) ? amount : null, until: p.get("until") }));
@@ -111,6 +103,22 @@ export async function POST(req: Request, route: RouteContext) {
       }
       await prisma.finance_settings.upsert({ where: { user_id: uid }, create: { user_id: uid, ...data }, update: data });
       return ok({ ok: true });
+    }
+    if (action === "view") {
+      // Periodo y cuentas visibles: se guardan para la próxima visita (en cualquier dispositivo).
+      const view = cleanView(body);
+      await prisma.finance_settings.upsert({ where: { user_id: uid }, create: { user_id: uid, view }, update: { view, updated_at: new Date() } });
+      return ok({ ok: true, view });
+    }
+    if (action === "transactions/bulk") {
+      const ids = Array.isArray(body.ids) ? (body.ids as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 2000) : [];
+      if (!ids.length) return fail("Selecciona algún movimiento");
+      return ok(await bulkCorrect(uid, ids, {
+        kind: str("kind") || undefined,
+        category: str("category") || undefined,
+        extraordinary: typeof body.extraordinary === "boolean" ? body.extraordinary : undefined,
+        applyToSimilar: body.applyToSimilar === true,
+      }));
     }
     if (action === "rule/delete") {
       await prisma.finance_rules.deleteMany({ where: { id: str("id"), user_id: uid } });

@@ -6,7 +6,7 @@ import type { finance_transactions } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { connectorKey } from "@/lib/connectors/crypto";
 import { isKind, type Kind } from "./categories";
-import type { Budget, Rule, Tx } from "./logic";
+import { cleanView, type Budget, type Rule, type Tx } from "./logic";
 
 /** Huella de un IBAN (no se guarda el IBAN): sirve para reconocer transferencias a cuentas propias. */
 export function ibanHash(iban: string | null | undefined) {
@@ -51,6 +51,7 @@ export async function getSettings(userId: string) {
     cycleStartDay: s.cycle_start_day,
     savingsGoal: s.savings_goal === null ? null : Number(s.savings_goal),
     lastSyncAt: s.last_sync_at?.toISOString() ?? null,
+    view: cleanView(s.view),
   };
 }
 
@@ -71,6 +72,7 @@ export async function getAccounts(userId: string) {
     source: a.source,
     bank: a.bank,
     name: a.name,
+    holderName: a.holder_name,
     ibanLast4: a.iban_last4,
     ibanHash: a.iban_hash,
     currency: a.currency,

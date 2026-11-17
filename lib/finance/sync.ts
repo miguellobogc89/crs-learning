@@ -117,12 +117,14 @@ async function syncAccount(userId: string, bank: string, institution: string, ui
     create: {
       user_id: userId, source: "bank", bank, external_uid: uid,
       name: info?.name?.trim() || `${institution} ${iban ? `•••• ${iban.slice(-4)}` : ""}`.trim(),
+      holder_name: info?.name?.trim() || null,
       iban_last4: iban ? iban.slice(-4) : null, iban_hash: ibanHash(iban),
       currency: bal?.balance_amount.currency ?? info?.currency ?? "EUR",
       balance, balance_at: balance === null ? null : new Date(),
     },
     update: {
       ...(iban ? { iban_last4: iban.slice(-4), iban_hash: ibanHash(iban) } : {}),
+      ...(info?.name?.trim() ? { holder_name: info.name.trim() } : {}),
       ...(balance === null ? {} : { balance, balance_at: new Date() }),
     },
   });
