@@ -27,7 +27,11 @@ export async function GET(request: NextRequest) {
   try {
     const linked = await bankingRequest<BankSession>("/sessions", { method: "POST", body: { code } });
     phase = "validate-session";
-    if (!linked.session_id || !Array.isArray(linked.accounts) || !linked.accounts.every((id) => typeof id === "string")) {
+    // POST /sessions returns account objects; only their opaque `uid` is needed for later queries.
+    const accountIds = Array.isArray(linked.accounts)
+      ? linked.accounts.map((account) => account?.uid).filter((uid): uid is string => typeof uid === "string" && uid.length > 0)
+      : [];
+    if (!linked.session_id || accountIds.length === 0) {
       throw new Error("Respuesta bancaria incompleta");
     }
     const expiry = new Date(linked.access?.valid_until);
@@ -40,11 +44,11 @@ export async function GET(request: NextRequest) {
       where: { user_id_bank: { user_id: currentUser.user.id, bank: state.bank } },
       create: {
         user_id: currentUser.user.id, bank: state.bank, institution_name: linked.aspsp?.name ?? state.bank,
-        session_id_enc: encrypt(linked.session_id), account_ids_enc: encrypt(JSON.stringify(linked.accounts)), consent_expires_at: expiry,
+        session_id_enc: encrypt(linked.session_id), account_ids_enc: encrypt(JSON.stringify(accountIds)), consent_expires_at: expiry,
       },
       update: {
         institution_name: linked.aspsp?.name ?? state.bank,
-        session_id_enc: encrypt(linked.session_id), account_ids_enc: encrypt(JSON.stringify(linked.accounts)),
+        session_id_enc: encrypt(linked.session_id), account_ids_enc: encrypt(JSON.stringify(accountIds)),
         consent_expires_at: expiry, updated_at: new Date(),
       },
     });

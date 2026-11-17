@@ -71,9 +71,10 @@ export async function resolveAspsp(bank: PersonalBank): Promise<Aspsp> {
   return { name: match.name, country: match.country };
 }
 
+/** Respuesta de POST /sessions: aquí `accounts` son objetos (AccountResource) con `uid`. */
 export type BankSession = {
   session_id: string;
-  accounts: string[];
+  accounts: Array<{ uid?: unknown }>;
   aspsp: Aspsp;
   access: { valid_until: string };
 };
