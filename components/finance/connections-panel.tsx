@@ -55,7 +55,7 @@ function ImportCard({ accounts }: { accounts: View["accounts"] }) {
             <option value="new">Nueva cuenta importada…</option>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.bank ? a.bank.charAt(0).toUpperCase() + a.bank.slice(1) : "Importada"}{a.ibanLast4 ? ` •••• ${a.ibanLast4}` : ""} · {a.count} mov.{a.since ? ` desde ${longDay(a.since)}` : ""}
+                {`${a.bank ? a.bank.charAt(0).toUpperCase() + a.bank.slice(1) : "Importada"}${a.ibanLast4 ? ` •••• ${a.ibanLast4}` : ""} · ${a.count} mov.${a.since ? ` desde ${longDay(a.since)}` : ""}`}
               </option>
             ))}
           </select>
