@@ -1,0 +1,24 @@
+# Vigilante de Trading: cada 15 minutos comprueba que la app sigue viva (FARO analiza, los agentes se
+# revisan, los exchanges responden). Si algo falla, este trabajo falla y GitHub manda un correo. Va fuera
+# de Vercel a propósito: así avisa también si lo que se cae es la propia app.
+name: Trading watchdog
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Estado de Trading
+        run: |
+          code=$(curl -sS -o body.json -w '%{http_code}' --max-time 45 https://crs-learning.vercel.app/api/trading/health || echo 000)
+          cat body.json 2>/dev/null || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Trading tiene problemas (HTTP $code). Mira las notificaciones de la app."
+            exit 1
+          fi
