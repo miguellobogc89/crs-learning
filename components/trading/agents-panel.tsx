@@ -3,7 +3,7 @@
 // y su propia cartera virtual. Cada tarjeta lleva a la página del agente (/trading/agentes/<clave>).
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Copy, LayoutGrid, List, Loader2, MoreHorizontal, Plus, Search, Trash2, Wallet } from "lucide-react";
+import { ArrowRight, ChevronDown, Copy, LayoutGrid, List, Loader2, MoreHorizontal, Plus, Search, Trash2, Wallet } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import { api, errorText, eur, eur0, field, flat, ghost, int, pct, primary, tone } from "./format";
@@ -220,15 +220,12 @@ export function AgentsPanel() {
                 else cardNodes.current.delete(a.key);
               }}
               a={a}
-              canManage={data.canManage}
               canCopy={data.canCopy}
               busy={busy === a.key}
-              onDetail={() => setPeekKey(a.key)}
+              // En el móvil, directo a la ficha (el panel lateral es para el ordenador).
+              onDetail={() => (isMobile ? openDetail(a.key) : setPeekKey(a.key))}
               onFicha={() => openDetail(a.key)}
-              onCopy={() => setCopyFor(a)}
               onMirror={() => setMirrorFor(a)}
-              onMeet={() => void meet(a)}
-              onReset={() => void reset(a)}
             />
           ))}
         </div>
@@ -448,27 +445,19 @@ export function agentMenu(
 function AgentCard({
   a,
   cardRef,
-  canManage,
   canCopy,
   busy,
   onDetail,
   onFicha,
-  onCopy,
   onMirror,
-  onMeet,
-  onReset,
 }: {
   a: Agent;
   cardRef: (node: HTMLElement | null) => void;
-  canManage: boolean;
   canCopy: boolean;
   busy: boolean;
   onDetail: () => void;
   onFicha: () => void;
-  onCopy: () => void;
   onMirror: () => void;
-  onMeet: () => void;
-  onReset: () => void;
 }) {
   const open = a.positions.filter((p) => p.status === "abierta").length;
   const pending = a.positions.filter((p) => p.status === "pendiente").length;
@@ -494,13 +483,7 @@ function AgentCard({
             <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500">{a.tagline}</p>
           </div>
         </div>
-        <div className="-mr-2 -mt-1 shrink-0">
-          {busy ? (
-            <Loader2 className="m-2 h-4 w-4 animate-spin text-slate-400" />
-          ) : (
-            <DotsMenu label={`Acciones de ${a.name}`} items={agentMenu(a, { canManage, canCopy, onDetail: onFicha, onCopy, onMirror, onMeet, onReset })} />
-          )}
-        </div>
+        {busy && <Loader2 className="m-1 h-4 w-4 shrink-0 animate-spin text-slate-400" />}
       </div>
       <div className="mt-4 flex min-w-0 items-center gap-3 px-5 pb-3">
         <div className="min-w-0 flex-1">
@@ -522,7 +505,7 @@ function AgentCard({
       </div>
       {(note || a.mirror) && (
         <div className="mx-5 mb-3 space-y-2">
-          {note && <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">{note}</p>}
+          {note && <NoteToggle text={note} />}
           <CopyBadges a={a} />
         </div>
       )}
@@ -531,11 +514,53 @@ function AgentCard({
           <Creator mine={a.mine} />
           <span className="text-[11px] text-slate-400">· {runningFor(a.startedAt)}</span>
         </span>
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700">
-          Ver <ArrowRight className="h-3.5 w-3.5" />
+        <span className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFicha();
+            }}
+            className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            Ver
+          </button>
+          <button
+            type="button"
+            disabled={!canCopy}
+            title={canCopy ? `Copiar a ${a.name} con dinero real` : "Solo el propietario o un administrador"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMirror();
+            }}
+            className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            <Wallet className="h-3.5 w-3.5" /> {a.mirror ? "Tu copia" : "Copiar"}
+          </button>
         </span>
       </footer>
     </article>
+  );
+}
+
+/** Lo que está haciendo el agente: una línea en gris; el chevron la despliega (y la recoge) con animación. */
+function NoteToggle({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      onClick={(e) => {
+        e.stopPropagation();
+        setOpen(!open);
+      }}
+      className="flex w-full items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-left text-xs text-slate-500 hover:bg-slate-100"
+    >
+      <span className="grid min-w-0 flex-1 transition-[grid-template-rows] duration-300 ease-out" style={{ gridTemplateRows: open ? "1fr" : "0fr" }}>
+        <span className={`min-h-[1.25rem] overflow-hidden leading-5 ${open ? "" : "line-clamp-1"}`}>{text}</span>
+      </span>
+      <ChevronDown className={`mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
+    </button>
   );
 }
 

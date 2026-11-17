@@ -99,10 +99,11 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
         <section className={`${card} ${flat} flex flex-col px-4 py-4 sm:px-5 lg:min-h-0 lg:flex-1 lg:overflow-hidden`}>
           <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-4">
-              <AgentAvatar color={a.color} size="lg" />
+              {/* En el móvil, el nombre y el icono ya están en la barra de arriba. */}
+              <span className="hidden md:block"><AgentAvatar color={a.color} size="lg" /></span>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-bold tracking-tight text-slate-900">{a.name}</h2>
+                  <h2 className="hidden text-xl font-bold tracking-tight text-slate-900 md:block">{a.name}</h2>
                   <SpecPills spec={a.spec} />
                   {hasInsights && (
                     <TooltipProvider delayDuration={150}>

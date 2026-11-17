@@ -32,7 +32,7 @@ export default async function Page({ params, searchParams }: { params: Promise<{
   const parent = TRADING_TABS.find((t) => t.key === (from === "inicio" ? "inicio" : from === "cartera" ? "cartera" : "agentes"))!;
   return (
     <>
-      <ShellMeta title={def.name} back={{ href: parent.key === "inicio" ? "/trading/inicio?vista=operadores" : `/trading/${parent.key}`, label: parent.label }} />
+      <ShellMeta title={def.name} color={def.color} back={{ href: parent.key === "inicio" ? "/trading/inicio?vista=operadores" : `/trading/${parent.key}`, label: parent.label }} />
       <AgentPage key={key} agentKey={key} />
     </>
   );

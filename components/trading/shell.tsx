@@ -10,6 +10,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Menu, X } from "lucide-react";
+import { AgentAvatar } from "./ui";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { TradingNavigation, TradingNavigationHeader, type TradingProfile } from "./navigation";
 import { prefetchTrading } from "./format";
@@ -20,18 +21,18 @@ const PREFETCH = ["pulse", "portfolio", "agents", "faro", "mine", "mirror", "wal
 import { isFittedTab, isTradingTab, TRADING_TABS } from "./tabs";
 
 /** Lo que una pantalla «hija» (la página de un agente) le dice a la estructura: su título y a dónde volver. */
-type Meta = { title?: string; back?: { href: string; label: string } };
+type Meta = { title?: string; back?: { href: string; label: string }; color?: string };
 const MetaContext = createContext<(m: Meta | null) => void>(() => undefined);
 
 /** Desde una página: fija el título y el «volver» de la barra mientras esté abierta. */
-export function ShellMeta({ title, back }: Meta) {
+export function ShellMeta({ title, back, color }: Meta) {
   const set = useContext(MetaContext);
   const backHref = back?.href;
   const backLabel = back?.label;
   useEffect(() => {
-    set({ title, back: backHref && backLabel ? { href: backHref, label: backLabel } : undefined });
+    set({ title, color, back: backHref && backLabel ? { href: backHref, label: backLabel } : undefined });
     return () => set(null);
-  }, [set, title, backHref, backLabel]);
+  }, [set, title, color, backHref, backLabel]);
   return null;
 }
 
@@ -95,10 +96,16 @@ export function TradingShell({ children, user }: { children: ReactNode; user: Tr
             <Menu className="h-5 w-5" />
           </button>
           {back ? (
-            <Link href={back.href} className="flex min-w-0 items-center gap-1.5 text-[17px] font-semibold text-slate-900">
-              <ArrowLeft className="h-4 w-4 shrink-0 text-slate-400" />
-              <span className="truncate">{title}</span>
-            </Link>
+            // Pantalla de detalle: menú a la izquierda, su nombre en el centro y cerrar a la derecha.
+            <>
+              <h1 className="flex min-w-0 flex-1 items-center justify-center gap-2 text-[17px] font-semibold text-slate-900">
+                {meta?.color && <AgentAvatar color={meta.color} size="sm" />}
+                <span className="truncate">{title}</span>
+              </h1>
+              <Link href={back.href} aria-label={`Cerrar y volver a ${back.label}`} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
+                <X className="h-5 w-5" />
+              </Link>
+            </>
           ) : (
             <h1 className="flex min-w-0 items-center gap-2 text-[17px] font-semibold text-slate-900">
               <Icon className="h-4 w-4 shrink-0 text-blue-600" />
