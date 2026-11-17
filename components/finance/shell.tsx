@@ -338,11 +338,11 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
           <button type="button" onClick={() => setOpen(true)} aria-label="Abrir el menú" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
             <Menu className="h-5 w-5" />
           </button>
-          <h1 className="flex min-w-0 flex-1 items-center gap-2 text-[17px] font-semibold text-slate-900">
+          <h1 className="absolute left-1/2 flex max-w-[calc(100%-7rem)] -translate-x-1/2 items-center justify-center gap-2 text-[17px] font-bold text-slate-900">
             <Icon className="h-4 w-4 shrink-0 text-blue-600" />
             <span className="truncate">{tabDef.label}</span>
           </h1>
-          {sync.syncing && <Loader2 className="mr-3 h-4 w-4 animate-spin text-slate-400" aria-label="Sincronizando" />}
+          {sync.syncing && <Loader2 className="ml-auto mr-3 h-4 w-4 animate-spin text-slate-400" aria-label="Sincronizando" />}
         </header>
 
         <div className="hidden shrink-0 items-start gap-3 px-6 pb-3 pt-5 md:flex lg:px-8">

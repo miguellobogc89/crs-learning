@@ -83,16 +83,16 @@ const TINT = {
   violet: "bg-violet-50 text-violet-600",
 } as const;
 
-function KpiCard({ icon: Icon, tint, label, value, valueTone, sub, subTone, className = "" }: {
-  icon: typeof Wallet; tint: keyof typeof TINT; label: string; value: string; valueTone?: string; sub?: string | null; subTone?: string; className?: string;
+function KpiCard({ icon: Icon, tint, label, mobileLabel, value, valueTone, sub, mobileSub, subTone, hideMobileIcon = false, className = "" }: {
+  icon: typeof Wallet; tint: keyof typeof TINT; label: string; mobileLabel?: string; value: string; valueTone?: string; sub?: string | null; mobileSub?: string | null; subTone?: string; hideMobileIcon?: boolean; className?: string;
 }) {
   return (
-    <div className={`${card} flex items-start gap-3 p-4 sm:gap-4 sm:p-5 ${className}`}>
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-12 sm:w-12 ${TINT[tint]}`}><Icon className="h-5 w-5 sm:h-6 sm:w-6" /></span>
+    <div className={`${card} flex min-w-0 items-start gap-3 p-3 sm:gap-4 sm:p-5 ${className}`}>
+      <span className={`${hideMobileIcon ? "hidden sm:flex" : "flex"} h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-12 sm:w-12 ${TINT[tint]}`}><Icon className="h-5 w-5 sm:h-6 sm:w-6" /></span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-slate-600">{label}</p>
+        <p className="text-sm font-medium text-slate-600">{mobileLabel ? <><span className="sm:hidden">{mobileLabel}</span><span className="hidden sm:inline">{label}</span></> : label}</p>
         <p className={`amount mt-0.5 whitespace-nowrap text-xl font-bold tabular-nums tracking-tight sm:text-[28px] ${valueTone ?? "text-slate-950"}`}>{value}</p>
-        {sub && <p className={`mt-0.5 text-xs leading-snug sm:text-sm ${subTone ?? "text-slate-500"}`}>{sub}</p>}
+        {(sub || mobileSub) && <p className={`mt-0.5 text-xs leading-snug sm:text-sm ${subTone ?? "text-slate-500"}`}>{mobileSub !== undefined ? <><span className="sm:hidden">{mobileSub}</span><span className="hidden sm:inline">{sub}</span></> : sub}</p>}
       </div>
     </div>
   );
@@ -117,7 +117,7 @@ export function HomePanel() {
   return (
     <div className={`space-y-4 pb-6 ${loading ? "opacity-80" : ""}`}>
       {/* Ciclo: flechas para mirar atrás; «Ocultar importes» */}
-      <div className="flex items-center gap-2">
+      <div className="hidden items-center gap-2 sm:flex">
         <div className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white">
           <button type="button" onClick={() => setOffset((o) => o - 1)} disabled={!v.canGoBack} aria-label="Ciclo anterior" className="rounded-l-xl p-2.5 text-slate-600 hover:bg-slate-50 disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
           <span className="min-w-0 px-1 text-center text-sm">
@@ -135,7 +135,7 @@ export function HomePanel() {
 
       {/* Lo pendiente, arriba y con acción directa */}
       {v.isCurrent && review > 0 && (
-        <Link href="/finanzas/movimientos?revisar=1" className="flex items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-900 hover:bg-blue-50">
+        <Link href="/finanzas/movimientos?revisar=1" className="hidden items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-900 hover:bg-blue-50 sm:flex">
           <Sparkles className="h-4 w-4 shrink-0 text-blue-600" />
           <span className="flex-1"><b>{review}</b> {review === 1 ? "movimiento" : "movimientos"} sin entender del todo: revísalos y la app aprende.</span>
           <ArrowRight className="h-4 w-4 shrink-0" />
@@ -160,6 +160,8 @@ export function HomePanel() {
             value={eur(v.available, 0)}
             valueTone={v.available !== null && v.available < 0 ? "text-red-700" : "text-emerald-700"}
             sub={v.pendingFixed > 0 ? `tras ${eur(v.pendingFixed, 0)} en recibos hasta el ${shortDay(v.cycle.end)}` : `hasta el ${shortDay(v.cycle.end)}`}
+            mobileSub={v.pendingFixed > 0 ? "Tras recibos pendientes" : `Hasta el ${shortDay(v.cycle.end)}`}
+            hideMobileIcon
           />
         ) : (
           <KpiCard
@@ -169,15 +171,20 @@ export function HomePanel() {
             value={eur(t.net, 0)}
             valueTone={t.net >= 0 ? "text-emerald-700" : "text-red-700"}
             sub={`ingresos ${eur(t.income, 0)}`}
+            mobileSub={`Ingresos: ${eur(t.income, 0)}`}
+            hideMobileIcon
           />
         )}
         <KpiCard
           icon={BarChart3}
           tint="amber"
           label={v.isCurrent ? "Gastos del ciclo" : "Gastos"}
+          mobileLabel={v.isCurrent ? "Gastado" : "Gastos"}
           value={eur(t.expenses, 0)}
           sub={expDelta?.text ?? null}
+          mobileSub={expDelta ? `${expDelta.text.split(" ")[0]} vs. anterior` : "En este ciclo"}
           subTone={expDelta?.tone}
+          hideMobileIcon
         />
       </div>
 
