@@ -3,7 +3,6 @@
 // disponible hasta fin de ciclo, gasto comparado con el ciclo anterior a la misma altura, evolución del saldo,
 // en qué se va el dinero, cuentas y lo pendiente. El análisis por periodos vive en Movimientos.
 import Link from "next/link";
-import Image from "next/image";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowRight, BarChart3, BellRing, ChevronLeft, ChevronRight, Eye, EyeOff, Info, Landmark, PiggyBank, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
@@ -15,6 +14,7 @@ import { fapi, refreshFinance, shortDay, useFinance } from "./api";
 import { BalanceLine, CategoryBars } from "./charts";
 import { useHideAmounts } from "./privacy";
 import { requestSync } from "./shell";
+import { BankLogo } from "./bank-logo";
 
 type Overview = Awaited<ReturnType<typeof overview>>;
 
@@ -98,12 +98,6 @@ function KpiCard({ icon: Icon, tint, label, mobileLabel, value, valueTone, sub, 
     </div>
   );
 }
-
-const BANK_LOGOS: Record<string, string> = {
-  santander: "/finance-app/banks/santander.png",
-  bbva: "/finance-app/banks/bbva.jpg",
-  revolut: "/finance-app/banks/revolut.png",
-};
 
 export function HomePanel() {
   const params = useSearchParams();
@@ -219,9 +213,7 @@ export function HomePanel() {
           <ul className="mt-3 divide-y divide-slate-100">
             {v.accounts.map((a) => (
               <li key={a.id} className="flex items-center gap-3 py-2.5">
-                <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-slate-100 sm:hidden">
-                  {a.bank && BANK_LOGOS[a.bank.toLowerCase()] ? <Image src={BANK_LOGOS[a.bank.toLowerCase()]} alt={`Logo de ${a.bank}`} fill sizes="36px" className="object-cover" /> : <span className="text-[10px] font-bold uppercase text-slate-600">{(a.bank ?? "imp").slice(0, 3)}</span>}
-                </span>
+                <span className="sm:hidden"><BankLogo bank={a.bank} /></span>
                 <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-[10px] font-bold uppercase text-slate-600 sm:flex">{(a.bank ?? "imp").slice(0, 3)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-slate-900">{a.name}</span>
