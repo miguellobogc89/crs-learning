@@ -23,7 +23,7 @@ import { dailyCloses, eurPairs, hourly, priceEur, tickers } from "./market";
 import { KAMIKAZES, kamikazeByKey, type KamikazeDef } from "./roster";
 import { CARTA, isCartaKind, noiseIdea, refuerzoStop } from "../carta";
 import { attackDays } from "../lab/swarm";
-import { KRAKEN_COPY_AGENT, krakenCopyTurn } from "../kraken-copy";
+import { krakenCopyTurn } from "../kraken-copy";
 
 const WS = AGENTS_WORKSPACE;
 const DAY = 86_400_000;
@@ -113,8 +113,11 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
   const priceOf = (pair: string) => market.find((t) => t.pair === pair)?.price ?? null;
   await Promise.all(KAMIKAZES.map((def, i) => one(def, out.agents[i].actions)));
   // Copia con dinero real en Kraken Futures del agente de cortos elegido (si está habilitado el dinero real).
-  const copied = await krakenCopyTurn().catch((e) => [`Kraken: error (${e instanceof Error ? e.message.slice(0, 160) : e})`]);
-  if (copied.length) out.agents.find((a) => a.key === KRAKEN_COPY_AGENT)?.actions.push(...copied);
+  const copied = await krakenCopyTurn().catch((e) => {
+    console.error("[agentes] copia en Kraken", e instanceof Error ? e.message.slice(0, 200) : e);
+    return [];
+  });
+  for (const c of copied) out.agents.find((a) => a.key === c.agent)?.actions.push(c.text);
   // Copia al instante: si un agente ha comprado o vendido, sus copias en tu exchange lo repiten ya,
   // sin esperar a la siguiente pasada del cron.
   const moved = out.agents.filter((a) => a.actions.some((x) => x.startsWith("Entró") || x.startsWith("Refuerza") || / (stop|objetivo)$/.test(x) || /: tiempo/.test(x))).map((a) => a.key);

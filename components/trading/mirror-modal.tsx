@@ -58,6 +58,10 @@ export function MirrorModal({
 
   const m = view?.mirrors.find((x) => x.agent === agent) ?? null;
   const active = !!m?.active;
+  // Agentes de cortos (ENJAMBRE): el dinero real va a Kraken Futures.
+  const short = agent.startsWith("enjambre-corto") || /^enjambre-x\d+$/.test(agent);
+  const realReady = view ? (short ? view.kraken.ready : view.real.ready) : false;
+  const realProblemText = view ? (short ? view.kraken.problem : view.real.problem) : null;
   const b = Number(budget.replace(",", "."));
   const valid = b >= 5 && b <= (view?.maxBudget ?? 100);
 
@@ -148,18 +152,18 @@ export function MirrorModal({
                 </button>
                 <button
                   type="button"
-                  disabled={!view.real.ready}
-                  title={view.real.problem ?? undefined}
+                  disabled={!realReady}
+                  title={realProblemText ?? undefined}
                   onClick={() => setMode("real")}
                   className={`rounded-xl border px-3 py-2 text-left disabled:opacity-50 ${mode === "real" ? "border-red-500 bg-red-50" : "border-slate-200"}`}
                 >
                   <b className="block text-slate-900">Dinero real</b>
-                  <span className="text-xs text-slate-500">Envía las órdenes a tu exchange</span>
+                  <span className="text-xs text-slate-500">{short ? "Abre los mismos cortos en tu Kraken" : "Envía las órdenes a tu exchange"}</span>
                 </button>
               </div>
             </div>
           </div>
-          {!view.real.ready && <p className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs">Para el modo real: {view.real.problem}.</p>}
+          {!realReady && <p className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs">Para el modo real: {realProblemText}.</p>}
           {!valid && <p className="text-xs text-amber-700">Elige entre 5 € y {view.maxBudget} €.</p>}
           {done && <p className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-800">{done}</p>}
           {error && <p className="text-red-700">{error}</p>}
