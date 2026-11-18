@@ -557,9 +557,10 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
   const [filter, setFilter] = useState<Filter>("todas");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Solo operaciones ejecutadas en real, nunca simulaciones ni compras omitidas.
+  // Mostrar las posiciones propias de cada copia, tanto en ensayo como en real.
+  // Nunca confundirlas con las órdenes del agente ni con operaciones manuales.
   const copied: Trade[] = mirrors.flatMap((m) => m.legs
-    .filter((l) => l.mode === "real" && !!l.openedAt && ["abierta", "vendiendo", "cerrada"].includes(l.status))
+    .filter((l) => ["abriendo", "abierta", "vendiendo", "cerrada"].includes(l.status))
     .map((l) => ({
       id: "copia:" + l.id, ideaId: "", symbol: l.symbol, pair: l.pair,
       status: l.status, amount: l.amount,
@@ -567,7 +568,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
       entry: l.entryPrice, stop: 0, target: 0, trail: false, trailing: false,
       price: null, result: l.status === "cerrada" ? l.result : null,
       note: "Copia automática de " + m.name, openedAt: l.openedAt, closedAt: l.closedAt,
-      origin: m.name,
+      origin: m.name + (l.mode === "ensayo" ? " · Simulación" : " · Real"),
     })));
   const trades: Trade[] = [...(data?.trades ?? []).map((t) => ({ ...t, origin: null })), ...copied]
     .sort((a, b) => (b.closedAt ?? b.openedAt ?? "").localeCompare(a.closedAt ?? a.openedAt ?? ""));
@@ -626,7 +627,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
       {error && <ErrorNote>{error}</ErrorNote>}
       {data?.problem && <p className="mb-2 px-1 text-xs text-amber-700">{data.problem}.</p>}
 
-      {!data ? (
+      {!data && copied.length === 0 ? (
         <p className="px-1 py-6 text-sm text-slate-500">No se pudieron cargar tus oportunidades.</p>
       ) : list.length === 0 ? (
         <div className="px-1 py-8 text-center text-sm text-slate-500">
