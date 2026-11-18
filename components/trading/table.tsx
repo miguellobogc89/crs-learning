@@ -3,6 +3,7 @@
 // suaves, pie con paginación y «Ver N por página», e importes con los decimales más pequeños.
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Combobox } from "@/components/ui/combobox";
 import { eur, FULL_H, ghost, th } from "./format";
 
 export const TH = `${th} sticky top-0 z-10 bg-white whitespace-normal px-2 leading-tight shadow-[inset_0_-1px_0_rgb(241,245,249)]`;
@@ -64,20 +65,16 @@ export function Pager({ total, page, perPage, onPage, onPerPage, label = "regist
       <span className="flex items-center gap-4">
         <label className="flex items-center gap-2">
           Ver
-          <select
-            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-800"
-            value={perPage}
-            onChange={(e) => {
-              onPerPage(Number(e.target.value));
+          <Combobox
+            className="w-18"
+            ariaLabel="Registros por página"
+            value={String(perPage)}
+            options={PAGE_SIZES.map((n) => ({ value: String(n), label: String(n) }))}
+            onChange={(v) => {
+              onPerPage(Number(v));
               onPage(0);
             }}
-          >
-            {PAGE_SIZES.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
+          />
           por página
         </label>
         <span className="flex items-center gap-1">
@@ -307,22 +304,19 @@ export function DataTable<T>({
     mobile && sortable.length > 1 ? (
       <div className="flex items-center gap-2 text-sm">
         <span className="shrink-0 text-slate-500">Ordenar</span>
-        <select
-          className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-800"
+        <Combobox
+          className="h-9 min-w-0 flex-1"
           value={sort?.key ?? ""}
-          onChange={(e) => {
-            const c = sortable.find((x) => x.key === e.target.value);
+          onChange={(v) => {
+            const c = sortable.find((x) => x.key === v);
             if (c) pick(c);
           }}
-          aria-label="Ordenar por"
-        >
-          {!sort && <option value="">—</option>}
-          {sortable.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
-            </option>
-          ))}
-        </select>
+          ariaLabel="Ordenar por"
+          options={[
+            ...(!sort ? [{ value: "", label: "—" }] : []),
+            ...sortable.map((c) => ({ value: c.key, label: typeof c.label === "string" ? c.label : c.key })),
+          ]}
+        />
         {sort && (
           <button
             type="button"

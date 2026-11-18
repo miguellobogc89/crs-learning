@@ -7,7 +7,9 @@ import { CalendarRange, Check, ChevronDown, Loader2 } from "lucide-react";
 import type { ViewPref } from "@/lib/finance/logic";
 import { field, ghost, primary } from "@/components/trading/format";
 import { ErrorNote, Modal } from "@/components/trading/ui";
+import { useIsMobile } from "@/components/trading/table";
 import { toolbarButton } from "@/components/ui/table-toolbar";
+import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +31,8 @@ export async function saveView(view: ViewPref) {
 export function PeriodPicker({ view, label, className = "", iconOnly = false }: { view: ViewPref; label: string; className?: string; iconOnly?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [custom, setCustom] = useState(false);
+  const [open, setOpen] = useState(false);
+  const mobile = useIsMobile();
   const unitWord = view.unit === "mes" ? "mes" : "ciclo";
   const set = async (patch: Partial<ViewPref>) => {
     setBusy(true);
@@ -47,18 +51,49 @@ export function PeriodPicker({ view, label, className = "", iconOnly = false }: 
     { value: "anio", label: "Este año" },
     { value: "todo", label: "Todo el historial" },
   ];
+  const trigger = <button type="button" className={`${toolbarButton} max-w-full justify-between ${className}`} title={`Periodo: ${label}`} aria-label={`Periodo: ${label}`}>
+    <span className="flex min-w-0 items-center gap-2">
+      {busy ? <Loader2 className="size-icon-md animate-spin" /> : <CalendarRange className="size-icon-md" />}
+      {!iconOnly && <span className="truncate">{label}</span>}
+    </span>
+    {!iconOnly && <ChevronDown className="size-icon-md shrink-0 text-slate-400" />}
+  </button>;
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button" className={`${toolbarButton} max-w-full justify-between ${className}`} title={`Periodo: ${label}`} aria-label={`Periodo: ${label}`}>
-            <span className="flex min-w-0 items-center gap-2">
-              {busy ? <Loader2 className="size-icon-md animate-spin" /> : <CalendarRange className="size-icon-md" />}
-              {!iconOnly && <span className="truncate">{label}</span>}
-            </span>
-            {!iconOnly && <ChevronDown className="size-icon-md shrink-0 text-slate-400" />}
-          </button>
-        </DropdownMenuTrigger>
+      {mobile ? <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>{trigger}</SheetTrigger>
+        <SheetContent side="bottom" showCloseButton={false} className="max-h-[min(78dvh,680px)] min-h-0 gap-0 overflow-hidden rounded-t-3xl border-slate-200 pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-slate-300" aria-hidden="true" />
+          <div className="flex min-h-14 shrink-0 items-center justify-between px-5">
+            <SheetTitle className="text-base font-semibold">Seleccionar periodo</SheetTitle>
+            <SheetClose asChild><button type="button" className="text-sm font-medium text-blue-600">Hecho</button></SheetClose>
+          </div>
+          <div className="min-h-0 space-y-4 overflow-y-auto px-4 pb-4">
+            <div>
+              <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Contar por</p>
+              {([{ value: "ciclo", label: "Ciclo de nómina" }, { value: "mes", label: "Mes natural" }] as const).map((u) =>
+                <button key={u.value} type="button" disabled={busy} aria-pressed={view.unit === u.value}
+                  onClick={() => void set({ unit: u.value })}
+                  className="flex min-h-12 w-full items-center justify-between rounded-xl px-3 text-left text-base text-slate-800 hover:bg-slate-50">
+                  {u.label}{view.unit === u.value && <Check className="h-5 w-5 text-blue-600" />}
+                </button>)}
+            </div>
+            <div>
+              <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Periodo</p>
+              {ranges.map((r) => <button key={r.value} type="button" disabled={busy} aria-pressed={view.range === r.value}
+                onClick={() => void set({ range: r.value }).then(() => setOpen(false))}
+                className="flex min-h-12 w-full items-center justify-between rounded-xl px-3 text-left text-base text-slate-800 hover:bg-slate-50">
+                {r.label}{view.range === r.value && <Check className="h-5 w-5 text-blue-600" />}
+              </button>)}
+              <button type="button" disabled={busy} onClick={() => { setOpen(false); setCustom(true); }}
+                className="flex min-h-12 w-full items-center justify-between rounded-xl px-3 text-left text-base text-slate-800 hover:bg-slate-50">
+                Elegir fechas…{view.range === "custom" && <Check className="h-5 w-5 text-blue-600" />}
+              </button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet> : <DropdownMenu>
+        <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
           <DropdownMenuLabel className="text-caption text-muted-foreground">Contar por</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={view.unit} onValueChange={(v) => void set({ unit: v as ViewPref["unit"] })}>
@@ -78,7 +113,7 @@ export function PeriodPicker({ view, label, className = "", iconOnly = false }: 
             Elegir fechas…
           </DropdownMenuItem>
         </DropdownMenuContent>
-      </DropdownMenu>
+      </DropdownMenu>}
       <CustomRange open={custom} view={view} onClose={() => setCustom(false)} />
     </>
   );
@@ -177,6 +212,8 @@ export function AccountChips({ accounts, view }: { accounts: AccountChip[]; view
 /** Selector compacto de cuentas para la barra móvil de Movimientos. */
 export function AccountDropdown({ accounts, view }: { accounts: AccountChip[]; view: ViewPref }) {
   const [pending, setPending] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const mobile = useIsMobile();
   const toggle = async (id: string) => {
     const hidden = new Set(view.hiddenAccounts);
     if (hidden.has(id)) hidden.delete(id);
@@ -191,13 +228,36 @@ export function AccountDropdown({ accounts, view }: { accounts: AccountChip[]; v
       setPending(null);
     }
   };
+  const trigger = <button type="button" className={`${toolbarButton} h-10 min-w-0 gap-1.5 px-2.5 text-sm`} aria-label="Seleccionar cuentas">
+    Cuentas <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+  </button>;
+  if (mobile) return <Sheet open={open} onOpenChange={setOpen}>
+    <SheetTrigger asChild>{trigger}</SheetTrigger>
+    <SheetContent side="bottom" showCloseButton={false} className="max-h-[min(75dvh,640px)] min-h-0 gap-0 overflow-hidden rounded-t-3xl border-slate-200 pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-slate-300" aria-hidden="true" />
+      <div className="flex min-h-14 shrink-0 items-center justify-between px-5">
+        <SheetTitle className="text-base font-semibold">Cuentas visibles</SheetTitle>
+        <SheetClose asChild><button type="button" className="text-sm font-medium text-blue-600">Hecho</button></SheetClose>
+      </div>
+      <div className="min-h-0 overflow-y-auto px-3 pb-4">
+        {accounts.map((a) => {
+          const on = !a.hidden;
+          const lastVisible = on && accounts.filter((account) => !account.hidden).length <= 1;
+          return <button key={a.id} type="button" aria-pressed={on} disabled={pending !== null || lastVisible}
+            onClick={() => void toggle(a.id)}
+            className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-base text-slate-800 hover:bg-slate-50 disabled:opacity-50">
+            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${on ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300"}`}>
+              {pending === a.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : on ? <Check className="h-3.5 w-3.5" /> : null}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{a.name}{a.last4 ? ` ···· ${a.last4}` : ""}</span>
+          </button>;
+        })}
+      </div>
+    </SheetContent>
+  </Sheet>;
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button type="button" className={`${toolbarButton} h-10 min-w-0 gap-1.5 px-2.5 text-sm`} aria-label="Seleccionar cuentas">
-          Cuentas <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-        </button>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-[65vh] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto">
         <DropdownMenuLabel>Cuentas visibles</DropdownMenuLabel>
         <DropdownMenuSeparator />

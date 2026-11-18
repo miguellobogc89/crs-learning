@@ -2,6 +2,7 @@
 // Preferencias: ciclo económico, reglas que la app ha aprendido de tus correcciones y lo que recuerda el copiloto.
 import { useEffect, useState } from "react";
 import { Brain, CalendarDays, Loader2, Trash2, Wand2 } from "lucide-react";
+import { Combobox } from "@/components/ui/combobox";
 import { KIND_LABEL, type Kind } from "@/lib/finance/categories";
 import { card, field, flat, ghost } from "@/components/trading/format";
 import { CardHeader, ErrorNote, Pill, SectionTitle } from "@/components/trading/ui";
@@ -47,9 +48,8 @@ export function SettingsPanel() {
         <p className="mt-2 text-sm text-slate-500">El día en que empieza tu mes económico (normalmente cuando cobras). Todos los resúmenes, límites y previsiones van de ese día al anterior del mes siguiente.</p>
         <form className="mt-4 flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void run("day", () => fapi("settings", { cycleStartDay: Number(day) })); }}>
           <span className="text-sm text-slate-700">Empieza el día</span>
-          <select value={day} onChange={(e) => setDay(e.target.value)} className={field}>
-            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
+          <Combobox value={day} onChange={setDay} ariaLabel="Día de inicio del ciclo" className="h-9 w-18"
+            options={Array.from({ length: 28 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
           <span className="text-sm text-slate-500">de cada mes</span>
           <button type="submit" disabled={busy === "day"} className={ghost}>{busy === "day" && <Loader2 className="h-4 w-4 animate-spin" />} Guardar</button>
         </form>

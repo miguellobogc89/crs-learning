@@ -14,6 +14,7 @@ import { errorText, fapi, longDay, refreshFinance, shortDay, useFinance } from "
 import { requestClassify } from "./shell";
 import { AccountChips, AccountDropdown, PeriodPicker } from "./period";
 import { TableToolbar, type ToolbarSort } from "@/components/ui/table-toolbar";
+import { Combobox } from "@/components/ui/combobox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -119,9 +120,9 @@ function EditModal({ item, onClose }: { item: Item | null; onClose: () => void }
           {options.length > 1 && (
             <label className="block">
               <span className="mb-1.5 block font-medium text-slate-800">Categoría</span>
-              <select value={options.some((o) => o.key === category) ? category : options[0].key} onChange={(e) => setCategory(e.target.value)} className={`${field} w-full`}>
-                {options.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-              </select>
+              <Combobox value={options.some((o) => o.key === category) ? category : options[0].key}
+                onChange={setCategory} ariaLabel="Categoría del movimiento" className="h-9 w-full"
+                options={options.map((c) => ({ value: c.key, label: c.label }))} searchable />
             </label>
           )}
           {(kind === "gasto" || kind === "devolucion") && (

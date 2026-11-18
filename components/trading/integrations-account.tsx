@@ -4,6 +4,7 @@
 // Sin lógica de ningún proveedor: lo que se puede hacer sale de sus capacidades y permisos.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Loader2, RefreshCw, Send, X } from "lucide-react";
+import { Combobox } from "@/components/ui/combobox";
 import type { ConnectionView, ProviderView } from "@/lib/brokers/gateway";
 import type { BrokerAccount, BrokerExecution, BrokerOrder, BrokerPosition, OrderSide, OrderType, PlaceOrderResult } from "@/lib/brokers/types";
 import { errorText, eur, field, ghost, int, primary, th } from "./format";
@@ -350,20 +351,14 @@ function TestOrder({ c, provider, canTrade, onSent }: { c: ConnectionView; provi
             </label>
             <label>
               <span className="text-xs font-medium text-slate-600">Sentido</span>
-              <select className={`${field} mt-1 w-full`} value={side} onChange={(e) => setSide(e.target.value as OrderSide)}>
-                <option value="buy">Compra</option>
-                <option value="sell">Venta</option>
-              </select>
+              <Combobox className="mt-1 h-9 w-full" ariaLabel="Sentido de la orden" value={side}
+                onChange={(v) => setSide(v as OrderSide)} options={[{ value: "buy", label: "Compra" }, { value: "sell", label: "Venta" }]} />
             </label>
             <label>
               <span className="text-xs font-medium text-slate-600">Tipo</span>
-              <select className={`${field} mt-1 w-full`} value={type} onChange={(e) => setType(e.target.value as OrderType)}>
-                {provider.orderTypes.map((t) => (
-                  <option key={t} value={t}>
-                    {ORDER_TYPE[t] ?? t}
-                  </option>
-                ))}
-              </select>
+              <Combobox className="mt-1 h-9 w-full" ariaLabel="Tipo de orden" value={type}
+                onChange={(v) => setType(v as OrderType)}
+                options={provider.orderTypes.map((t) => ({ value: t, label: ORDER_TYPE[t] ?? t }))} />
             </label>
             <label>
               <span className="text-xs font-medium text-slate-600">Cantidad</span>

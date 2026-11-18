@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, ChevronDown, Copy, LayoutGrid, List, Loader2, MoreHorizontal, Plus, Search, Trash2, Wallet } from "lucide-react";
+import { Combobox } from "@/components/ui/combobox";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import { api, errorText, eur, eur0, field, flat, ghost, int, pct, primary, tone } from "./format";
@@ -168,13 +169,9 @@ export function AgentsPanel() {
         {layout === "cards" && (
         <label className="flex items-center gap-2 text-sm text-slate-500 max-md:w-full">
           Ordenar por
-          <select className={`${field} py-1.5 max-md:flex-1`} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-            {(Object.keys(SORTS) as SortKey[]).map((k) => (
-              <option key={k} value={k}>
-                {SORTS[k].label}
-              </option>
-            ))}
-          </select>
+          <Combobox className="h-9 max-md:flex-1" ariaLabel="Ordenar agentes por" value={sort}
+            onChange={(v) => setSort(v as SortKey)}
+            options={(Object.keys(SORTS) as SortKey[]).map((k) => ({ value: k, label: SORTS[k].label }))} />
         </label>
         )}
         {/* En móvil, solo tarjetas y sin «Crear agente» (aparcado; se crea desde el ordenador). */}
