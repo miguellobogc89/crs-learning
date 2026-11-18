@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal-finance/enable-banking";
 import {
   addDays, affordability, budgetStatus, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, liquiditySeries, merchantKey,
-  normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
+  expenseTransactionsForCycle, normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getSettings, loadTxs } from "./store";
@@ -136,6 +136,7 @@ export function cycleSnapshot(ctx: FinanceContext, offset: number) {
     totals: { income: cur.income + cur.gifts, gifts: cur.gifts, expenses: cur.expenses, net: cur.net, saved: cur.savedToInvestments, fixed: cur.fixedExpenses, variable: cur.variableExpenses, extraordinary: cur.extraordinaryExpenses, count: cur.count },
     previous: prev ? { income: prev.income + prev.gifts, expenses: prev.expenses, net: prev.net, partial: isCurrent } : null,
     categories: cur.byCategory,
+    categoryExpenses: expenseTransactionsForCycle(txs, cycle),
     previousCategories: prev?.byCategory ?? [],
     series,
     accounts: included.map((a) => ({ id: a.id, name: a.name, bank: a.bank, last4: a.ibanLast4, balance: a.balance, currency: a.currency })),
