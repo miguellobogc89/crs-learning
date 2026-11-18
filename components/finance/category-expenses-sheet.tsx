@@ -38,7 +38,7 @@ export function CategoryExpensesSheet({ category, history, onClose }: {
   const updateVisibleCycle = (element: HTMLDivElement) => {
     if (!category) return;
     const top = element.getBoundingClientRect().top + 16;
-    let current = groups[0]?.start;
+    let current: string | undefined = groups[0]?.start;
     for (const section of element.querySelectorAll<HTMLElement>("[data-cycle-start]")) {
       if (section.getBoundingClientRect().top > top) break;
       current = section.dataset.cycleStart;
