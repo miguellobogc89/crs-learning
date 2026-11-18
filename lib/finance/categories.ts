@@ -31,6 +31,7 @@ export const CATEGORIES: CategoryDef[] = [
   { key: "alimentacion", label: "Alimentación", kind: "gasto", color: "emerald" },
   { key: "restaurantes", label: "Restaurantes", kind: "gasto", color: "orange" },
   { key: "ocio", label: "Ocio", kind: "gasto", color: "violet" },
+  { key: "videojuegos", label: "Videojuegos", kind: "gasto", color: "purple" },
   { key: "transporte", label: "Transporte", kind: "gasto", color: "amber" },
   { key: "compras", label: "Compras", kind: "gasto", color: "rose" },
   { key: "suscripciones", label: "Suscripciones", kind: "gasto", color: "fuchsia" },

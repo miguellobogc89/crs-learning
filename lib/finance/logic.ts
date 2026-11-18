@@ -230,11 +230,12 @@ const KEYWORDS: Keyword[] = [
   { re: /\b(iberdrola|endesa|naturgy|holaluz|totalenergies|repsol luz|canal de isabel|aguas|emasesa|aqualia|movistar|vodafone|orange|digi|jazztel|pepephone|masmovil|yoigo|lowi|simyo|o2|finetwork)\b/, category: "suministros" },
   { re: /\b(mercadona|carrefour|lidl|dia|alcampo|eroski|consum|aldi|hipercor|supercor|caprabo|bonpreu|ahorramas|gadis|froiz|el arbol|supermercado|fruteria|carniceria|panaderia|bm supermercados|masymas|spar|coviran)\b/, category: "alimentacion" },
   { re: /\b(glovo|just eat|uber ?eats|deliveroo|restaurante|rest\.?|bar|cafeteria|cafe|mcdonald|burger king|telepizza|domino|starbucks|kfc|vips|goiko|100 montaditos|tgb|taberna|cerveceria|pizzeria|sushi)\b/, category: "restaurantes" },
+  { re: /\b(steam|steamgames(?:\.com)?|steampowered|epic games|gog\.com|humble bundle|playstation store|nintendo eshop|xbox store)\b/, category: "videojuegos" },
   { re: /\b(netflix|spotify|hbo|max\.com|disney|prime video|amazon prime|apple\.com|itunes|icloud|youtube|google one|google storage|chatgpt|openai|anthropic|claude|dazn|filmin|movistar plus|audible|patreon|github|notion|adobe|microsoft 365|xbox|playstation|nintendo)\b/, category: "suscripciones" },
   { re: /\b(renfe|cabify|uber|bolt|freenow|metro|emt|tmb|alsa|blablacar|repsol|cepsa|bp|galp|shell|ballenoil|petroprix|plenoil|gasolinera|parking|aparcamiento|autopista|peaje|via t|itv|taller)\b/, category: "transporte" },
   { re: /\b(ryanair|vueling|iberia|easyjet|air europa|booking|airbnb|expedia|hotel|edreams|skyscanner)\b/, category: "viajes" },
   { re: /\b(amazon|amzn|aliexpress|zara|el corte ingles|decathlon|ikea|mediamarkt|media markt|pccomponentes|shein|primark|leroy merlin|fnac|temu|vinted|wallapop|pull bear|bershka|mango)\b/, category: "compras" },
-  { re: /\b(cine|cinesa|yelmo|teatro|ticketmaster|entradas|steam|concierto|gimnasio|basic fit|dreamfit|mcfit|padel)\b/, category: "ocio" },
+  { re: /\b(cine|cinesa|yelmo|teatro|ticketmaster|entradas|concierto|gimnasio|basic fit|dreamfit|mcfit|padel)\b/, category: "ocio" },
   { re: /\b(farmacia|clinica|dentista|hospital|sanitas|adeslas|asisa|dkv|optica|fisioterapia|medico)\b/, category: "salud" },
   { re: /\b(seguro|mapfre|mutua madrilena|axa|allianz|linea directa|generali|reale|zurich|verti)\b/, category: "seguros" },
   { re: /\b(prestamo|cuota prestamo|financiacion|cofidis|cetelem|klarna|aplazame|sequra)\b/, category: "prestamos" },
@@ -382,7 +383,7 @@ const median = (xs: number[]) => {
 export { median };
 
 /** Categorías de compra suelta: solo cuentan como recurrentes si el importe es prácticamente fijo. */
-const VARIABLE_CATEGORIES = new Set(["alimentacion", "restaurantes", "transporte", "compras", "efectivo", "ocio", "otros_gastos"]);
+const VARIABLE_CATEGORIES = new Set(["alimentacion", "restaurantes", "transporte", "compras", "efectivo", "ocio", "videojuegos", "otros_gastos"]);
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 export { round2 };
