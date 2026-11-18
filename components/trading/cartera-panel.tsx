@@ -557,10 +557,9 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
   const [filter, setFilter] = useState<Filter>("todas");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Mostrar las posiciones propias de cada copia, tanto en ensayo como en real.
-  // Nunca confundirlas con las órdenes del agente ni con operaciones manuales.
+  // Mi cartera real: operaciones manuales y ejecuciones de copias reales, sin mezclar ensayos.
   const copied: Trade[] = mirrors.flatMap((m) => m.legs
-    .filter((l) => ["abriendo", "abierta", "vendiendo", "cerrada"].includes(l.status))
+    .filter((l) => l.mode === "real" && ["abriendo", "abierta", "vendiendo", "cerrada"].includes(l.status))
     .map((l) => ({
       id: "copia:" + l.id, ideaId: "", symbol: l.symbol, pair: l.pair,
       status: l.status, amount: l.amount,
@@ -568,7 +567,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
       entry: l.entryPrice, stop: 0, target: 0, trail: false, trailing: false,
       price: null, result: l.status === "cerrada" ? l.result : null,
       note: "Copia automática de " + m.name, openedAt: l.openedAt, closedAt: l.closedAt,
-      origin: m.name + (l.mode === "ensayo" ? " · Simulación" : " · Real"),
+      origin: m.name,
     })));
   const trades: Trade[] = [...(data?.trades ?? []).map((t) => ({ ...t, origin: null })), ...copied]
     .sort((a, b) => (b.closedAt ?? b.openedAt ?? "").localeCompare(a.closedAt ?? a.openedAt ?? ""));
@@ -600,8 +599,8 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
     <PortfolioOpportunities>
       <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-3">
         <h2 className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-lg font-semibold text-slate-900">
-          <Flame className="h-5 w-5 text-orange-500" /> Mis oportunidades
-          {data && <span className={`text-sm font-semibold tabular-nums ${tone(data.result)}`}>{signed(data.result)}</span>}
+          <Flame className="h-5 w-5 text-orange-500" /> Actividad de mi cartera
+
           {closed.length > 0 && <span className="text-xs font-normal text-slate-400">· acierto {Math.round((wins / closed.length) * 100)} % ({wins}/{closed.length})</span>}
         </h2>
         <div className="flex w-full gap-1 rounded-lg bg-slate-100 p-1 sm:w-auto" role="group" aria-label="Filtrar oportunidades">
@@ -628,10 +627,10 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
       {data?.problem && <p className="mb-2 px-1 text-xs text-amber-700">{data.problem}.</p>}
 
       {!data && copied.length === 0 ? (
-        <p className="px-1 py-6 text-sm text-slate-500">No se pudieron cargar tus oportunidades.</p>
+        <p className="px-1 py-6 text-sm text-slate-500">No se pudieron cargar las operaciones de tu cartera.</p>
       ) : list.length === 0 ? (
         <div className="px-1 py-8 text-center text-sm text-slate-500">
-          {filter === "historial" ? "Todavía no has cerrado ninguna oportunidad." : "No tienes oportunidades abiertas."}{" "}
+          {filter === "historial" ? "Todavía no hay operaciones cerradas." : "No hay posiciones abiertas registradas."}{" "}
           <Link href="/trading/oportunidades" className="font-semibold text-blue-700 hover:underline">
             Ver oportunidades
           </Link>
@@ -667,7 +666,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
                     <td className="px-2 py-2.5">
                       <b className="font-semibold text-slate-900">{name}</b>
                       <span className="block text-[11px] text-slate-400">
-                        {t.origin ? `Copia de ${t.origin} · ` : ""}{t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : t.openedAt ? `desde ${dateTime(t.openedAt)}` : dateTime(t.closedAt)}
+                        {t.origin ? `Agente: ${t.origin} · ` : "Manual · "}{t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : t.openedAt ? `desde ${dateTime(t.openedAt)}` : dateTime(t.closedAt)}
                       </span>
                     </td>
                     <td className="px-2 py-2.5">
@@ -739,7 +738,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
         </div>
         </>
       )}
-      <p className="mt-2 px-1 text-[11px] text-slate-400">La app revisa cada ~5 min: vende al tocar el stop o el objetivo (o sube el stop si marcaste «Seguir si sube»). Resultados con comisiones.</p>
+      <p className="mt-2 px-1 text-[11px] text-slate-400">Operaciones registradas en tu cartera: compras manuales y copias ejecutadas en real. Las operaciones del agente que no llegaron a ejecutarse en tu exchange no aparecen.</p>
     </PortfolioOpportunities>
   );
 }
@@ -784,7 +783,7 @@ function MobileTrades({
                     {open && !t.origin && t.trail && <span className="shrink-0 text-[11px] font-medium text-emerald-700">sigue si sube</span>}
                   </span>
                   <span className="block truncate text-xs text-slate-500">
-                    {t.origin ? `Copia de ${t.origin} · ` : ""}{eur(t.invested, 2)} ·{" "}
+                    {t.origin ? `Agente: ${t.origin} · ` : "Manual · "}{eur(t.invested, 2)} ·{" "}
                     {open && t.entry && t.price !== null ? `${eur(t.entry)} → ${eur(t.price)}` : t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : dateTime(t.openedAt)}
                   </span>
                 </span>
@@ -809,7 +808,7 @@ function MobileTrades({
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${(TRADE_STATUS[sel.status] ?? { cls: "bg-slate-100 text-slate-600" }).cls}`}>{TRADE_STATUS[sel.status]?.label ?? sel.status}</span>
             </span>
           }
-          subtitle={sel.origin ? `Copia de ${sel.origin} · ${dateTime(sel.openedAt)}` : sel.status === "cerrada" && sel.closedAt ? `Cerrada el ${dateTime(sel.closedAt)}` : sel.openedAt ? `Desde el ${dateTime(sel.openedAt)}` : undefined}
+          subtitle={sel.origin ? `Agente: ${sel.origin} · ${dateTime(sel.openedAt)}` : sel.status === "cerrada" && sel.closedAt ? `Cerrada el ${dateTime(sel.closedAt)}` : sel.openedAt ? `Desde el ${dateTime(sel.openedAt)}` : undefined}
           footer={
             sel.status === "abierta" && !sel.origin && canManage ? (
               <button
@@ -831,8 +830,8 @@ function MobileTrades({
                   ["Resultado", sel.result === null ? "—" : `${signed(sel.result)}${sel.invested > 0 ? ` · ${pctText((sel.result / sel.invested) * 100)}` : ""}`, tone(sel.result ?? 0)],
                   ["Entrada", sel.entry ? eur(sel.entry) : "—", "text-slate-900"],
                   [sel.status === "abierta" ? "Precio ahora" : "Salida aprox.", sel.status === "abierta" ? (sel.price !== null ? eur(sel.price) : "—") : sel.entry && sel.result !== null && sel.invested > 0 ? eur(sel.entry * (1 + sel.result / sel.invested)) : "—", "text-slate-900"],
-                  ["Stop", eur(sel.stop), "text-rose-700"],
-                  ["Objetivo", eur(sel.target), "text-emerald-700"],
+                  ["Stop", sel.origin ? "—" : eur(sel.stop), "text-rose-700"],
+                  ["Objetivo", sel.origin ? "—" : eur(sel.target), "text-emerald-700"],
                 ] as const
               ).map(([label, value, cls]) => (
                 <div key={label}>
