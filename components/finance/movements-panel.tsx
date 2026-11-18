@@ -168,6 +168,8 @@ const GROUPS: { value: Group; label: string }[] = [
   { value: "kind", label: "Tipo" },
   { value: "account", label: "Cuenta" },
 ];
+const FILTER_CATEGORIES = CATEGORIES.filter((c) => c.key !== "sin_clasificar")
+  .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
 const PAGE = 150;
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const isReview = (t: Item) => t.source === "auto" || t.source === "pendiente";
@@ -515,7 +517,7 @@ export function MovementsPanel() {
                 {[
                   { title: "Estado", value: status, options: [{ value: "all", label: "Todos" }, { value: "revisar", label: "Por revisar" }, { value: "usuario", label: "Corregidos por mí" }, { value: "extra", label: "Extraordinarios" }], change: (v: string) => setStatus(v as Status) },
                   { title: "Tipo", value: kind, options: [{ value: "all", label: "Todos los tipos" }, ...KINDS.map((k) => ({ value: k, label: KIND_LABEL[k] }))], change: setKind },
-                  { title: "Categoría", value: category, options: [{ value: "all", label: "Todas las categorías" }, ...CATEGORIES.filter((c) => c.key !== "sin_clasificar").map((c) => ({ value: c.key, label: c.label }))], change: setCategory },
+                  { title: "Categoría", value: category, options: [{ value: "all", label: "Todas las categorías" }, ...FILTER_CATEGORIES.map((c) => ({ value: c.key, label: c.label }))], change: setCategory },
                 ].map((f) => (
                   <div key={f.title}>
                     <DropdownMenuSeparator />
@@ -529,12 +531,17 @@ export function MovementsPanel() {
             </DropdownMenu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button type="button" aria-label="Ordenar movimientos y opciones de selección" title="Ordenar" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100"><ArrowDownUp className="h-5 w-5" /></button>
+                <button type="button" aria-label="Ordenar y agrupar movimientos" title="Ordenar y agrupar" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100"><ArrowDownUp className="h-5 w-5" /></button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className="max-h-[70dvh] w-56 overflow-y-auto">
                 <DropdownMenuLabel>Ordenar por</DropdownMenuLabel>
                 <DropdownMenuRadioGroup value={`${sort.key}:${sort.dir}`} onValueChange={(v) => { const option = SORTS.find((s) => `${s.value.key}:${s.value.dir}` === v); if (option) setSort(option.value); }}>
                   {SORTS.map((s) => <DropdownMenuRadioItem key={s.label} value={`${s.value.key}:${s.value.dir}`}>{s.label}</DropdownMenuRadioItem>)}
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Agrupar por</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={group} onValueChange={(v) => setGroup(v as Group)}>
+                  {GROUPS.map((option) => <DropdownMenuRadioItem key={option.value} value={option.value}>{option.label}</DropdownMenuRadioItem>)}
                 </DropdownMenuRadioGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => { setSelectionMode((v) => !v); setSelected(new Set()); }}>
@@ -554,7 +561,7 @@ export function MovementsPanel() {
           groups: [
             { key: "status", label: "Estado", value: status, allLabel: "Todos", options: [{ value: "revisar", label: "Por revisar" }, { value: "usuario", label: "Corregidos por mí" }, { value: "extra", label: "Extraordinarios" }] },
             { key: "kind", label: "Tipo", value: kind, allLabel: "Todos los tipos", allIcon: ListFilter, options: KINDS.map((k) => ({ value: k, label: KIND_LABEL[k] })) },
-            { key: "category", label: "Categoría", value: category, allLabel: "Todas las categorías", allIcon: ListFilter, options: CATEGORIES.filter((c) => c.key !== "sin_clasificar").map((c) => ({ value: c.key, label: c.label })) },
+            { key: "category", label: "Categoría", value: category, allLabel: "Todas las categorías", allIcon: ListFilter, options: FILTER_CATEGORIES.map((c) => ({ value: c.key, label: c.label })) },
           ],
           onChange: (key, value) => (key === "status" ? setStatus(value as Status) : key === "kind" ? setKind(value) : setCategory(value)),
           onClear: () => {

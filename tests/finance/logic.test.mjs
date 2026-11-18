@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { load } from "../trading/helpers.mjs";
 
 const L = load("lib/finance/logic.ts");
+const C = load("lib/finance/categories.ts");
 const P = load("lib/finance/parse.ts");
 
 const tx = (id, account, date, amount, description, kind = "gasto", category = "otros_gastos", extra = {}) => ({
@@ -62,6 +63,14 @@ test("palabras clave: súper, nómina, comida a domicilio e inversión", () => {
   assert.equal(L.keywordClass({ description: "Transferencia a Bitvavo", counterparty: null, amount: -100 }).kind, "ahorro");
   assert.equal(L.keywordClass({ description: "A cuenta de inversión", counterparty: null, amount: -1000 }).kind, "ahorro");
   assert.equal(L.keywordClass({ description: "NOMINA", counterparty: null, amount: -5 }), null, "una «nómina» que sale no es un ingreso");
+});
+
+test("videojuegos: categoría de gasto y tiendas de juegos, sin confundir Netflix", () => {
+  assert.equal(C.isCategory("videojuegos"), true);
+  assert.equal(C.categoryLabel("videojuegos"), "Videojuegos");
+  assert.equal(L.keywordClass({ description: "STEAMGAMES.COM", counterparty: null, amount: -29.99 })?.category, "videojuegos");
+  assert.equal(L.keywordClass({ description: "PLAYSTATION STORE", counterparty: null, amount: -49.99 })?.category, "videojuegos");
+  assert.equal(L.keywordClass({ description: "NETFLIX.COM", counterparty: null, amount: -12.99 })?.category, "suscripciones");
 });
 
 test("la nómina de Endesa no es «suministros» y una entrada con nombre de comercio se deja a la IA", () => {
