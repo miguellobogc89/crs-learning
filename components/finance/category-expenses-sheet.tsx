@@ -41,7 +41,7 @@ export function CategoryExpensesSheet({ category, history, onClose }: {
     let current = groups[0]?.start;
     for (const section of element.querySelectorAll<HTMLElement>("[data-cycle-start]")) {
       if (section.getBoundingClientRect().top > top) break;
-      current = section.dataset.cycleStart;
+      current = section.dataset.cycleStart ?? current;
     }
     if (!current) return;
     setViewed((previous) => previous?.category === category && previous.start === current ? previous : { category, start: current });
