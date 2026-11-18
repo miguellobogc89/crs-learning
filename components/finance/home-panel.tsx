@@ -225,9 +225,7 @@ export function HomePanel() {
 
       <CategoryExpensesSheet
         category={selectedCategory}
-        cycleLabel={v.cycle.label}
-        total={v.categories.find((c) => c.category === selectedCategory)?.amount ?? 0}
-        items={(v.categoryExpenses ?? []).filter((tx) => tx.category === selectedCategory)}
+        history={data.categoryHistory ?? []}
         onClose={() => setSelectedCategory(null)}
       />
 
