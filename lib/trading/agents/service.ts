@@ -119,6 +119,12 @@ export async function getAgents(workspaceId?: string) {
           const result = m.legs.reduce((s, l) => s + (l.status === "cerrada" ? l.result ?? 0 : 0), 0);
           return { mode: m.mode as "ensayo" | "real", budget: m.budget, result, resultPct: m.budget > 0 ? (result / m.budget) * 100 : 0, since: m.started_at.toISOString() };
         })(),
+        /** Fecha de la última operación ejecutada, no de la última reunión del agente. */
+        lastMovementAt: [
+          ...proposals.filter((p) => p.status === "ejecutada").map((p) => p.created_at.toISOString()),
+          ...state.positions.filter((p) => p.status === "cerrada" && p.exitDay).map((p) => `${p.exitDay}T00:00:00.000Z`),
+          ...state.positions.filter((p) => p.entryDay && p.status !== "pendiente").map((p) => `${p.entryDay}T00:00:00.000Z`),
+        ].sort().at(-1) ?? null,
         summary: state.summary,
         positions: state.positions.filter((p) => p.status === "abierta" || p.status === "pendiente"),
         closed: state.positions.filter((p) => p.status === "cerrada").slice(0, 20),
