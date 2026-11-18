@@ -13,6 +13,8 @@ import { logout } from "@/app/actions/auth";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PullToRefresh } from "@/components/trading/mobile-nav";
+import { BellButton, NotificationsScreen, useNotifications } from "@/components/trading/notifications";
+import { MobileAppHeader } from "@/components/platform/mobile-app-header";
 import { eur } from "@/components/trading/format";
 import { BOTTOM_TABS, FINANCE_SECTIONS, FINANCE_TABS, isFinanceTab, isFittedTab } from "./tabs";
 import { fapi, peek, refreshFinance, useFinanceRefresh } from "./api";
@@ -309,11 +311,15 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
   const section = parts[1] && isFinanceTab(parts[1]) ? parts[1] : "inicio";
   const tabDef = FINANCE_TABS.find((t) => t.key === section) ?? FINANCE_TABS[0];
   const fitted = isFittedTab(section);
+  const primary = parts.length === 2 && BOTTOM_TABS.includes(section);
   const Icon = tabDef.icon;
   const [open, setOpen] = useState(false);
   const scroller = useRef<HTMLElement>(null);
   const sync = useAutoSync();
+  const notes = useNotifications();
+  const [notesOpen, setNotesOpen] = useState(false);
   useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => setNotesOpen(false), [pathname]);
 
   return (
     <div className="flex h-dvh min-h-0 w-full overflow-hidden bg-white text-foreground">
@@ -336,16 +342,23 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-slate-200/70 bg-white/95 px-2 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
-          <button type="button" onClick={() => setOpen(true)} aria-label="Abrir el menú" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
-            <Menu className="h-5 w-5" />
-          </button>
-          <h1 className="absolute left-1/2 flex max-w-[calc(100%-7rem)] -translate-x-1/2 items-center justify-center gap-2 text-[17px] font-bold text-slate-900">
-            <Icon className="h-4 w-4 shrink-0 text-blue-600" />
-            <span className="truncate">{tabDef.label}</span>
-          </h1>
-          {sync.syncing && <Loader2 className="ml-auto mr-3 h-4 w-4 animate-spin text-slate-400" aria-label="Sincronizando" />}
-        </header>
+        <MobileAppHeader
+          primary={primary}
+          onMenuClick={() => setOpen(true)}
+          backHref="/finanzas/inicio"
+          title={
+            <>
+              <Icon className="h-4 w-4 shrink-0 text-blue-600" />
+              <span className="truncate">{tabDef.label}</span>
+            </>
+          }
+          right={
+            <div className="relative">
+              <BellButton unread={notes.data?.unread ?? 0} onClick={() => setNotesOpen(true)} />
+              {sync.syncing && <Loader2 className="pointer-events-none absolute bottom-0 left-0 size-3 animate-spin text-slate-400" aria-label="Sincronizando" />}
+            </div>
+          }
+        />
 
         <div className="hidden shrink-0 items-start gap-3 px-6 pb-3 pt-5 md:flex lg:px-8">
           <h1 className="flex min-w-0 flex-1 items-center gap-3 text-[26px] font-semibold leading-[1.2] tracking-tight text-slate-950">
@@ -364,6 +377,8 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
       </div>
 
       <BottomTabs />
+
+      <NotificationsScreen open={notesOpen} onClose={() => setNotesOpen(false)} data={notes.data} markRead={notes.markRead} />
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left" showCloseButton={false} className="gap-0 p-0 data-[side=left]:w-full data-[side=left]:sm:max-w-sm lg:hidden" onOpenAutoFocus={(e) => e.preventDefault()}>
