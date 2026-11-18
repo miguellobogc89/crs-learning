@@ -500,6 +500,8 @@ export async function kamikazeView(key: string) {
     style: def.style,
     capital: def.capital,
     slots: def.slots ?? 1,
+    /** No vende en un objetivo: el stop va siguiendo al precio (el «objetivo» guardado es solo un tope técnico). */
+    noTarget: def.engine === "enjambre-corto",
     /** Qué está haciendo ahora (o por qué no entra) y si está en pausa tras una pérdida. */
     note: row?.last_note ?? null,
     noteAt: row?.last_note_at?.toISOString() ?? null,
