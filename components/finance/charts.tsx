@@ -6,7 +6,7 @@ import { eur } from "@/components/trading/format";
 import { categoryLabel } from "@/lib/finance/categories";
 
 const INCOME = "#2563eb";
-const EXPENSE = "#f59e0b";
+const EXPENSE = "#fe2c55";
 
 /** Escala «bonita» para el eje: 0, 500, 1.000… */
 function niceMax(v: number) {
@@ -31,7 +31,7 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
   const iw = W - pad.l - pad.r;
   const ih = H - pad.t - pad.b;
   const slot = iw / Math.max(1, data.length);
-  const bw = Math.min(18, (slot - 10) / 2);
+  const bw = Math.min(46, Math.max(3, (slot - 12) / 2));
   const y = (v: number) => pad.t + ih - (Math.max(0, v) / max) * ih;
   const ticks = [0, max / 2, max];
   const h = hover === null ? null : data[hover];

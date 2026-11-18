@@ -164,7 +164,7 @@ export function HomePanel() {
         {cashflow ? (
           <>
             <div className="mt-4">
-              <CycleBars key={cashflowRange} data={cashflow.points} incomeColor="#16a34a" expenseColor="#2563eb" height={210} />
+              <CycleBars key={cashflowRange} data={cashflow.points} height={210} />
             </div>
             <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
               <span className="text-sm text-slate-600">Ahorro neto del periodo</span>
