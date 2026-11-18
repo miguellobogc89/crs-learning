@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowRight, BarChart3, BellRing, ChevronLeft, ChevronRight, Eye, EyeOff, Info, Landmark, PiggyBank, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
 import type { overview } from "@/lib/finance/service";
+import { categoryLabel } from "@/lib/finance/categories";
 import { card, eur, flat, primary } from "@/components/trading/format";
 import { CardHeader, ErrorNote, SectionTitle } from "@/components/trading/ui";
 import { SkeletonStats, SkeletonList } from "@/components/trading/skeletons";
@@ -105,6 +106,7 @@ export function HomePanel() {
   const params = useSearchParams();
   const [offset, setOffset] = useState(() => Math.min(0, Number(params.get("ciclo")) || 0));
   const [cashflowRange, setCashflowRange] = useState<CashflowRange>("1M");
+  const [expensesView, setExpensesView] = useState<"categories" | "recent">("categories");
   const { data, error, loading } = useFinance<Overview>(offset ? `overview?cycle=${offset}` : "overview");
   const { hidden, toggle } = useHideAmounts();
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
@@ -164,7 +166,7 @@ export function HomePanel() {
         {cashflow ? (
           <>
             <div className="mt-4">
-              <CycleBars key={cashflowRange} data={cashflow.points} incomeColor="#16a34a" expenseColor="#2563eb" height={210} />
+              <CycleBars key={cashflowRange} data={cashflow.points} height={210} />
             </div>
             <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
               <span className="text-sm text-slate-600">Ahorro neto del periodo</span>
@@ -177,6 +179,45 @@ export function HomePanel() {
           <p className="py-8 text-center text-sm text-slate-500">
             {loading ? "Actualizando evolución…" : "La evolución todavía no está disponible. Actualiza la página."}
           </p>
+        )}
+      </section>
+
+      {/* Móvil: análisis del gasto primero; los movimientos se consultan sin abandonar Inicio. */}
+      <section className={`${card} ${flat} space-y-3 p-4 sm:hidden`}>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-slate-900">Tus gastos</h2>
+          <Link href="/finanzas/movimientos" className="text-xs font-medium text-blue-700">Ver todos</Link>
+        </div>
+        <div className="grid grid-cols-2 rounded-xl bg-slate-100 p-1" role="group" aria-label="Vista de gastos">
+          {([
+            ["categories", "Por categorías"],
+            ["recent", "Últimos movimientos"],
+          ] as const).map(([view, label]) => (
+            <button key={view} type="button" onClick={() => setExpensesView(view)} aria-pressed={expensesView === view}
+              className={`min-w-0 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${expensesView === view ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {expensesView === "categories" ? (
+          <div>
+            <p className="mb-3 text-xs text-slate-500">Gastos del ciclo actual</p>
+            <CategoryBars items={v.categories} previous={v.previousCategories} limit={5}
+              onSelect={(category) => { window.location.href = `/finanzas/movimientos?categoria=${encodeURIComponent(category)}`; }} />
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {(data.recentExpenses ?? []).map((tx) => (
+              <li key={tx.id} className="flex items-center gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-900">{tx.counterparty || tx.description}</p>
+                  <p className="mt-0.5 truncate text-xs text-slate-500">{shortDay(tx.date)} · {categoryLabel(tx.category)}</p>
+                </div>
+                <b className="amount shrink-0 text-sm tabular-nums text-slate-900">{eur(tx.amount, 2)}</b>
+              </li>
+            ))}
+            {!data.recentExpenses?.length && <li className="py-6 text-center text-sm text-slate-500">Todavía no hay gastos recientes.</li>}
+          </ul>
         )}
       </section>
 
@@ -242,7 +283,7 @@ export function HomePanel() {
         </section>
 
         {/* Cuentas */}
-        <section className={`${card} ${flat} p-4 sm:p-5`}>
+        <section className={`${card} ${flat} hidden p-4 sm:block sm:p-5`}>
           <div className="flex items-center justify-between gap-2">
             <SectionTitle icon={Landmark} tint="slate" size="base">Tus cuentas</SectionTitle>
             <Link href="/finanzas/conexiones" className="text-sm font-medium text-blue-700 hover:underline">Gestionar</Link>
@@ -263,7 +304,7 @@ export function HomePanel() {
         </section>
 
         {/* En qué se va el dinero */}
-        <section className={`${card} ${flat} p-4 sm:p-5 lg:col-span-2`}>
+        <section className={`${card} ${flat} hidden p-4 sm:block sm:p-5 lg:col-span-2`}>
           <div className="flex items-center justify-between gap-2">
             <SectionTitle icon={Wallet} tint="indigo" size="base">En qué se va el dinero</SectionTitle>
             <Link href="/finanzas/movimientos" className="text-sm font-medium text-blue-700 hover:underline">Movimientos</Link>
@@ -289,6 +330,13 @@ export function HomePanel() {
           {v.isCurrent && <Alerts alerts={data.alerts} />}
         </div>
       </div>
+
+      <Link href="/finanzas/conexiones" className={`${card} ${flat} flex items-center gap-3 p-4 sm:hidden`}>
+        <Landmark className="h-5 w-5 shrink-0 text-slate-500" />
+        <span className="min-w-0 flex-1 text-sm font-semibold text-slate-900">Tus cuentas <span className="font-normal text-slate-500">({v.accounts.length})</span></span>
+        <span className="amount text-sm font-semibold tabular-nums text-slate-900">{v.balance === null ? "—" : eur(v.balance, 2)}</span>
+        <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
+      </Link>
 
       {data.syncDue && (
         <p className="text-center text-xs text-slate-400">
