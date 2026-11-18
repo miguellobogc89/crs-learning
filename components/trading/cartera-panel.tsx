@@ -561,10 +561,10 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
   const copied: Trade[] = mirrors.flatMap((m) => m.legs
     .filter((l) => l.mode === "real" && !!l.openedAt && ["abierta", "vendiendo", "cerrada"].includes(l.status))
     .map((l) => ({
-      id: "copia:" + l.id, ideaId: null, symbol: l.symbol, pair: l.pair,
+      id: "copia:" + l.id, ideaId: "", symbol: l.symbol, pair: l.pair,
       status: l.status, amount: l.amount,
       invested: l.quantity && l.entryPrice ? l.quantity * l.entryPrice : l.amount,
-      entry: l.entryPrice, stop: null, target: null, trail: false, trailing: false,
+      entry: l.entryPrice, stop: 0, target: 0, trail: false, trailing: false,
       price: null, result: l.status === "cerrada" ? l.result : null,
       note: "Copia automática de " + m.name, openedAt: l.openedAt, closedAt: l.closedAt,
       origin: m.name,
@@ -689,7 +689,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
                       )}
                     </td>
                     <td className="px-2 py-2.5">
-                      {t.entry && t.status !== "omitida" ? (
+                      {!t.origin && t.entry && t.status !== "omitida" ? (
                         <>
                           {open && <StopTargetBar stop={t.stop} target={t.target} price={t.price} entry={t.entry} />}
                           <span className="mt-1 flex justify-between text-[11px] tabular-nums text-slate-500">
@@ -840,7 +840,7 @@ function MobileTrades({
                 </div>
               ))}
             </div>
-            {sel.status === "abierta" && sel.entry && <StopTargetBar stop={sel.stop} target={sel.target} price={sel.price} entry={sel.entry} />}
+            {sel.status === "abierta" && !sel.origin && sel.entry && <StopTargetBar stop={sel.stop} target={sel.target} price={sel.price} entry={sel.entry} />}
             {sel.status === "abierta" && !sel.origin && (
               <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 px-4 py-3">
                 <span>
