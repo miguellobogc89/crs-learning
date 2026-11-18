@@ -180,7 +180,7 @@ export function CarteraPanel() {
       />
 
       <PortfolioColumns
-        opportunities={<MyOpportunities data={manual} canManage={mirrors.canManage} onChange={load} />}
+        opportunities={<MyOpportunities data={manual} mirrors={mirrors.mirrors} canManage={mirrors.canManage} onChange={load} />}
         agents={(
           <PortfolioAgents count={`${mine.owned.length} de ${mine.max}`}>
             <ul className="space-y-1">
@@ -553,11 +553,24 @@ type Filter = "todas" | "activas" | "historial";
  * Tus oportunidades ejecutadas con dinero real: abiertas e historial en una sola lista. En las abiertas,
  * «Seguir si sube» (al llegar al objetivo, el stop sube y acompaña al precio) y «Cerrar» (vende ya).
  */
-function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; canManage: boolean; onChange: () => Promise<void> }) {
+function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual | null; mirrors: Mirror[]; canManage: boolean; onChange: () => Promise<void> }) {
   const [filter, setFilter] = useState<Filter>("todas");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const trades = data?.trades ?? [];
+  // Solo operaciones ejecutadas en real, nunca simulaciones ni compras omitidas.
+  const copied: Trade[] = mirrors.flatMap((m) => m.legs
+    .filter((l) => l.mode === "real" && !!l.openedAt && ["abierta", "vendiendo", "cerrada"].includes(l.status))
+    .map((l) => ({
+      id: "copia:" + l.id, ideaId: null, symbol: l.symbol, pair: l.pair,
+      status: l.status, amount: l.amount,
+      invested: l.quantity && l.entryPrice ? l.quantity * l.entryPrice : l.amount,
+      entry: l.entryPrice, stop: null, target: null, trail: false, trailing: false,
+      price: null, result: l.status === "cerrada" ? l.result : null,
+      note: "Copia automática de " + m.name, openedAt: l.openedAt, closedAt: l.closedAt,
+      origin: m.name,
+    })));
+  const trades: Trade[] = [...(data?.trades ?? []).map((t) => ({ ...t, origin: null })), ...copied]
+    .sort((a, b) => (b.closedAt ?? b.openedAt ?? "").localeCompare(a.closedAt ?? a.openedAt ?? ""));
   const active = trades.filter((t) => ACTIVE.includes(t.status));
   const history = trades.filter((t) => !ACTIVE.includes(t.status));
   const list = filter === "activas" ? active : filter === "historial" ? history : [...active, ...history];
@@ -653,12 +666,12 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
                     <td className="px-2 py-2.5">
                       <b className="font-semibold text-slate-900">{name}</b>
                       <span className="block text-[11px] text-slate-400">
-                        {t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : t.openedAt ? `desde ${dateTime(t.openedAt)}` : dateTime(t.closedAt)}
+                        {t.origin ? `Copia de ${t.origin} · ` : ""}{t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : t.openedAt ? `desde ${dateTime(t.openedAt)}` : dateTime(t.closedAt)}
                       </span>
                     </td>
                     <td className="px-2 py-2.5">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${st.cls}`}>{st.label}</span>
-                      {open && t.trailing && <span className="ml-1 text-[11px] text-emerald-700">stop subiendo</span>}
+                      {open && !t.origin && t.trailing && <span className="ml-1 text-[11px] text-emerald-700">stop subiendo</span>}
                     </td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-slate-700">{eur(t.invested, 2)}</td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">
@@ -693,7 +706,7 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
                       {resultPct !== null && <span className="block text-[11px] font-normal">{pctText(resultPct)}</span>}
                     </td>
                     <td className="px-2 py-2.5 text-center">
-                      {open ? (
+                      {open && !t.origin ? (
                         <label className="inline-flex cursor-pointer items-center justify-center" title={t.trail ? "Quitar: venderá al llegar al objetivo" : "Al llegar al objetivo, seguir mientras suba"}>
                           {busy === `seguir:${t.id}` ? (
                             <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
@@ -706,7 +719,7 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
                       ) : null}
                     </td>
                     <td className="px-2 py-2.5 text-right">
-                      {open && canManage && (
+                      {open && !t.origin && canManage && (
                         <button
                           type="button"
                           disabled={busy !== null}
@@ -730,7 +743,7 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
   );
 }
 
-type Trade = Manual["trades"][number];
+type Trade = Manual["trades"][number] & { origin?: string | null };
 
 /**
  * Móvil: tus oportunidades como lista (dos líneas por operación). Al tocar una, sube desde abajo su
@@ -767,10 +780,10 @@ function MobileTrades({
                   <span className="flex items-center gap-2">
                     <b className="truncate text-[15px] font-semibold text-slate-900">{name}</b>
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${st.cls}`}>{st.label}</span>
-                    {open && t.trail && <span className="shrink-0 text-[11px] font-medium text-emerald-700">sigue si sube</span>}
+                    {open && !t.origin && t.trail && <span className="shrink-0 text-[11px] font-medium text-emerald-700">sigue si sube</span>}
                   </span>
                   <span className="block truncate text-xs text-slate-500">
-                    {eur(t.invested, 2)} ·{" "}
+                    {t.origin ? `Copia de ${t.origin} · ` : ""}{eur(t.invested, 2)} ·{" "}
                     {open && t.entry && t.price !== null ? `${eur(t.entry)} → ${eur(t.price)}` : t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : dateTime(t.openedAt)}
                   </span>
                 </span>
@@ -795,9 +808,9 @@ function MobileTrades({
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${(TRADE_STATUS[sel.status] ?? { cls: "bg-slate-100 text-slate-600" }).cls}`}>{TRADE_STATUS[sel.status]?.label ?? sel.status}</span>
             </span>
           }
-          subtitle={sel.status === "cerrada" && sel.closedAt ? `Cerrada el ${dateTime(sel.closedAt)}` : sel.openedAt ? `Desde el ${dateTime(sel.openedAt)}` : undefined}
+          subtitle={sel.origin ? `Copia de ${sel.origin} · ${dateTime(sel.openedAt)}` : sel.status === "cerrada" && sel.closedAt ? `Cerrada el ${dateTime(sel.closedAt)}` : sel.openedAt ? `Desde el ${dateTime(sel.openedAt)}` : undefined}
           footer={
-            sel.status === "abierta" && canManage ? (
+            sel.status === "abierta" && !sel.origin && canManage ? (
               <button
                 type="button"
                 disabled={busy !== null}
@@ -828,7 +841,7 @@ function MobileTrades({
               ))}
             </div>
             {sel.status === "abierta" && sel.entry && <StopTargetBar stop={sel.stop} target={sel.target} price={sel.price} entry={sel.entry} />}
-            {sel.status === "abierta" && (
+            {sel.status === "abierta" && !sel.origin && (
               <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 px-4 py-3">
                 <span>
                   <b className="block text-[15px] font-semibold text-slate-900">Seguir si sube</b>
