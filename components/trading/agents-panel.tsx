@@ -33,8 +33,9 @@ export const when = (iso: string | null | undefined) =>
     ? new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(iso))
     : "Nunca";
 
-type SortKey = "rentabilidad" | "patrimonio" | "antiguedad" | "nombre";
+type SortKey = "actividad" | "rentabilidad" | "patrimonio" | "antiguedad" | "nombre";
 const SORTS: Record<SortKey, { label: string; fn: (a: Agent, b: Agent) => number }> = {
+  actividad: { label: "Última operación", fn: (a, b) => (b.lastMovementAt ?? "").localeCompare(a.lastMovementAt ?? "") || a.name.localeCompare(b.name, "es") },
   rentabilidad: { label: "Rentabilidad", fn: (a, b) => b.summary.returnPct - a.summary.returnPct },
   patrimonio: { label: "Patrimonio", fn: (a, b) => b.summary.equity - a.summary.equity },
   antiguedad: { label: "Más veteranos", fn: (a, b) => a.startedAt.localeCompare(b.startedAt) },
@@ -60,7 +61,7 @@ export function AgentsPanel() {
     if (legacy) router.replace(`/trading/agentes/${legacy}`);
   }, [legacy, router]);
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortKey>("rentabilidad");
+  const [sort, setSort] = useState<SortKey>("actividad");
   const [layoutPick, setLayout] = useState<"cards" | "list">("cards");
   // En móvil, siempre tarjetas (la lista es una tabla ancha pensada para el ordenador).
   const isMobile = useIsMobile();
