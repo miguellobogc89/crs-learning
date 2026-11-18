@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { BUSINESS_HOME, TRADING_HOME, hasBusinessAccess } from "@/lib/auth/business-access";
 
+// Una sola entrada para todos los módulos tras iniciar sesión.
 export default async function AppEntryPage() {
   const userId = (await auth())?.user?.id;
   if (!userId) redirect("/");
 
-  redirect(await hasBusinessAccess(userId) ? BUSINESS_HOME : TRADING_HOME);
+  redirect("/apps");
 }
