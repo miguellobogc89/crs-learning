@@ -12,13 +12,12 @@ import { ArrowLeft, Bot, ChevronRight, Flame, Gift, Home, LayoutGrid, LifeBuoy, 
 import { logout } from "@/app/actions/auth";
 import { refreshTrading } from "./navigation";
 import type { TradingProfile } from "./navigation";
+import { TRADING_PRIMARY_TABS, TRADING_TABS } from "./tabs";
 
-const TABS = [
-  { href: "/trading/inicio", label: "Inicio", icon: Home },
-  { href: "/trading/oportunidades", label: "Oportunidades", icon: Flame },
-  { href: "/trading/agentes", label: "Agentes", icon: Bot },
-  { href: "/trading/cartera", label: "Mi cartera", icon: Wallet },
-] as const;
+const TABS = TRADING_PRIMARY_TABS.map((key) => {
+  const tab = TRADING_TABS.find((item) => item.key === key)!;
+  return { href: `/trading/${key}`, label: tab.label, icon: tab.icon };
+});
 
 /** Barra inferior: cuatro iconos, sin texto. Respeta la zona de la rayita del iPhone. */
 export function BottomTabs() {
