@@ -80,12 +80,15 @@ export async function GET(req: Request) {
       noFunding.push(base);
     }
   }
-  const variants: SwarmVariant[] = [
-    { key: "inverso-defensa", name: "INVERSO en defensa (sin costes de Kraken)", side: "short", regime: "defensa" },
-    { key: "inverso-defensa-kraken", name: "INVERSO en defensa · Kraken real", side: "short", regime: "defensa", kraken: true },
-    { key: "inverso-grandes-defensa", name: "INVERSO GRANDES en defensa (sin costes de Kraken)", side: "short", regime: "defensa", coins: BIG_COINS },
-    { key: "inverso-grandes-defensa-kraken", name: "INVERSO GRANDES en defensa · Kraken real", side: "short", regime: "defensa", coins: BIG_COINS, kraken: true },
-  ];
+  const variants: SwarmVariant[] = [1, 2, 3, 5, 10].map((leverage) => ({
+    key: `enjambre-x${leverage}`,
+    name: `ENJAMBRE ${leverage}x (grandes, defensa, Kraken)`,
+    side: "short" as const,
+    regime: "defensa" as const,
+    coins: BIG_COINS,
+    kraken: true,
+    leverage,
+  }));
   const results = variants.map((v) => simulateSwarm(series, btc, v, from, 1000, attack, funding));
   const window = [...attack.entries()].filter(([d]) => d >= new Date(from).toISOString().slice(0, 10));
   const btcFrom = btc.find((b) => b.t >= from)?.o ?? null;
