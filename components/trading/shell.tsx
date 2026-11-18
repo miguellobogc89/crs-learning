@@ -19,7 +19,8 @@ import { BellButton, NotificationsScreen, useNotifications } from "./notificatio
 
 // Lo que leen Inicio (Operadores y Actividad), Oportunidades, Mi cartera y Agentes.
 const PREFETCH = ["summary", "notifications", "pulse", "portfolio", "agents", "faro", "mine", "mirror", "wallets?history=1", "manual"];
-import { isFittedTab, isTradingTab, TRADING_TABS } from "./tabs";
+import { isFittedTab, isTradingTab, TRADING_PRIMARY_TABS, TRADING_TABS } from "./tabs";
+import { MobileAppHeader } from "@/components/platform/mobile-app-header";
 
 /** Lo que una pantalla «hija» (la página de un agente) le dice a la estructura: su título y a dónde volver. */
 type Meta = { title?: string; back?: { href: string; label: string }; color?: string };
@@ -48,10 +49,13 @@ export function TradingShell({ children, user }: { children: ReactNode; user: Tr
   const parts = pathname.split("/").filter(Boolean);
   const section = parts[1] && isTradingTab(parts[1]) ? parts[1] : "inicio";
   const child = parts.length > 2;
+  const primary = !child && TRADING_PRIMARY_TABS.includes(section);
   const tabDef = TRADING_TABS.find((t) => t.key === section) ?? TRADING_TABS[0];
   const [meta, setMeta] = useState<Meta | null>(null);
-  const title = meta?.title ?? (child ? "" : tabDef.label);
-  const back = child ? meta?.back ?? { href: `/trading/${section}`, label: tabDef.label } : undefined;
+  const title = meta?.title ?? tabDef.label;
+  const back = primary ? undefined : child
+    ? meta?.back ?? { href: `/trading/${section}`, label: tabDef.label }
+    : { href: "/trading/inicio", label: "Inicio" };
   const fitted = child || isFittedTab(section);
   const Icon = tabDef.icon;
   const [open, setOpen] = useState(false);
@@ -103,32 +107,22 @@ export function TradingShell({ children, user }: { children: ReactNode; user: Tr
       <div
         className={`flex min-h-0 min-w-0 flex-1 flex-col transition-transform duration-300 ease-out ${notesOpen ? "-translate-x-1/4 md:translate-x-0" : ""}`}
       >
-        {/* Móvil: barra fina con el menú y el título. */}
-        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-slate-200/70 bg-white/95 px-2 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
-          <button type="button" onClick={() => setOpen(true)} aria-label="Abrir el menú" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
-            <Menu className="h-5 w-5" />
-          </button>
-          {back ? (
-            // Pantalla de detalle: menú a la izquierda, su nombre en el centro y cerrar a la derecha.
+        <MobileAppHeader
+          primary={primary}
+          onMenuClick={() => setOpen(true)}
+          backHref={back?.href}
+          title={
             <>
-              <h1 className="flex min-w-0 flex-1 items-center justify-center gap-2 text-[17px] font-semibold text-slate-900">
-                {meta?.color && <AgentAvatar color={meta.color} size="sm" />}
-                <span className="truncate">{title}</span>
-              </h1>
-              <Link href={back.href} aria-label={`Cerrar y volver a ${back.label}`} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
-                <X className="h-5 w-5" />
-              </Link>
-            </>
-          ) : (
-            <>
-              <h1 className="flex min-w-0 flex-1 items-center gap-2 text-[17px] font-semibold text-slate-900">
+              {back && meta?.color ? (
+                <AgentAvatar color={meta.color} size="sm" />
+              ) : !back ? (
                 <Icon className="h-4 w-4 shrink-0 text-blue-600" />
-                <span className="truncate">{title}</span>
-              </h1>
-              <BellButton unread={unread} onClick={() => setNotesOpen(true)} />
+              ) : null}
+              <span className="truncate">{title}</span>
             </>
-          )}
-        </header>
+          }
+          right={<BellButton unread={unread} onClick={() => setNotesOpen(true)} />}
+        />
 
         {/* Tablet y ordenador: cabecera grande. */}
         <div className="hidden shrink-0 items-start gap-3 px-6 pb-3 pt-5 md:flex lg:px-8">
