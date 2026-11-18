@@ -181,7 +181,7 @@ export function simulateStocks(markets: Market[], from: number, opts: { top?: nu
 
 /**
  * Rotación por países: todo el dinero repartido a partes iguales entre los `top` países más fuertes que están en
- * ataque (el índice como si fuera un ETF). Se decide al cierre y se ejecuta a la apertura siguiente, solo cuando
+ * ataque (el índice como si fuera un ETF). Se revisa a fin de mes y se ejecuta a la apertura siguiente, solo cuando
  * cambia el grupo. Sin países en ataque, efectivo. `gate: false` = los más fuertes aunque estén en defensa.
  */
 export function simulateRotation(markets: Market[], from: number, opts: { top?: number; fee?: number; gate?: boolean } = {}) {
@@ -233,12 +233,17 @@ export function simulateRotation(markets: Market[], from: number, opts: { top?: 
     const yy = yearly.get(y);
     if (!yy) yearly.set(y, { start: equity, end: equity });
     else yy.end = equity;
-    const pick = markets
+    // Solo el último día de cada mes (se ejecuta a la apertura del mes siguiente). Margen: un país que ya tienes
+    // se queda mientras siga en ataque y entre los `top + 2` más fuertes; solo se sustituyen los que salen.
+    const di = days.indexOf(d);
+    if (di < days.length - 1 && days[di + 1].slice(0, 7) === d.slice(0, 7)) continue;
+    const ranked = markets
       .map((m) => ({ k: m.key, r: rad.get(m.key)?.get(d) }))
       .filter((x) => x.r && (!gate || x.r.attack))
       .sort((a, b) => b.r!.strength - a.r!.strength)
-      .slice(0, top)
       .map((x) => x.k);
+    const keepHeld = [...units.keys()].filter((k) => ranked.indexOf(k) !== -1 && ranked.indexOf(k) < top + 2);
+    const pick = [...keepHeld, ...ranked.filter((k) => !keepHeld.includes(k))].slice(0, top);
     const now = [...units.keys()];
     if (pick.length !== now.length || pick.some((k) => !units.has(k))) want = pick;
   }
