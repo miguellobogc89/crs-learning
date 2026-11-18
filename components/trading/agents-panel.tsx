@@ -3,7 +3,7 @@
 // y su propia cartera virtual. Cada tarjeta lleva a la página del agente (/trading/agentes/<clave>).
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, ChevronDown, Copy, LayoutGrid, List, Loader2, MoreHorizontal, Plus, Search, Trash2, Wallet } from "lucide-react";
+import { ArrowRight, ChevronDown, Copy, LayoutGrid, List, Loader2, MoreHorizontal, Plus, Search, SlidersHorizontal, X, Trash2, Wallet } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import { api, errorText, eur, eur0, field, flat, ghost, int, pct, primary, tone } from "./format";
@@ -61,6 +61,8 @@ export function AgentsPanel() {
     if (legacy) router.replace(`/trading/agentes/${legacy}`);
   }, [legacy, router]);
   const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState<"todos" | "agente" | "chip" | "kamikaze">("todos");
+  const [activityFilter, setActivityFilter] = useState<"todos" | "operaron" | "copiados">("todos");
   const [sort, setSort] = useState<SortKey>("actividad");
   const [layoutPick, setLayout] = useState<"cards" | "list">("cards");
   // En móvil, siempre tarjetas (la lista es una tabla ancha pensada para el ordenador).
@@ -83,9 +85,11 @@ export function AgentsPanel() {
     if (!data) return [];
     const q = query.trim().toLowerCase();
     return data.agents
-      .filter((a) => !q || [a.name, a.spec?.style ?? "", a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
+      .filter((a) => (!q || [a.name, a.spec?.style ?? "", a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
+        && (kindFilter === "todos" || a.kind === kindFilter)
+        && (activityFilter === "todos" || (activityFilter === "operaron" ? !!a.lastMovementAt : !!a.mirror || a.copyWeightPct !== null)))
       .sort(SORTS[sort].fn);
-  }, [data, query, sort]);
+  }, [data, query, sort, kindFilter, activityFilter]);
 
   // Animación FLIP: las tarjetas que permanecen se deslizan hacia su nueva posición.
   // Sin dependencias adicionales y respetando la preferencia de movimiento reducido.
@@ -160,48 +164,37 @@ export function AgentsPanel() {
 
       {error && <ErrorNote>{error}</ErrorNote>}
 
-      {/* Barra del catálogo: buscar, filtrar, ordenar y cambiar de vista */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 md:gap-3">
-        <div className="relative w-full min-w-0 sm:w-auto sm:min-w-[220px] sm:max-w-xs sm:flex-1">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-          <input className={`${field} w-full pl-9`} placeholder="Buscar agente o estilo" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Buscar agentes" />
+      {/* Toolbar de catálogo: búsqueda y filtros compactos, sin ocupar una fila entera por control. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="relative min-w-[180px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input className={`${field} w-full border-0 bg-transparent pl-9 shadow-none focus:ring-0`} placeholder="Buscar agentes..." value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Buscar agentes" />
         </div>
-        {layout === "cards" && (
-        <label className="flex items-center gap-2 text-sm text-slate-500 max-md:w-full">
-          Ordenar por
-          <select className={`${field} py-1.5 max-md:flex-1`} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-            {(Object.keys(SORTS) as SortKey[]).map((k) => (
-              <option key={k} value={k}>
-                {SORTS[k].label}
-              </option>
-            ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <SlidersHorizontal className="hidden h-4 w-4 text-slate-400 sm:block" />
+          <select className={`${field} max-w-[145px] py-1.5 text-sm`} value={kindFilter} onChange={(e) => setKindFilter(e.target.value as typeof kindFilter)} aria-label="Tipo de agente">
+            <option value="todos">Todos los tipos</option>
+            <option value="agente">Agentes</option>
+            <option value="chip">Chip</option>
+            <option value="kamikaze">Kamikaze</option>
           </select>
-        </label>
-        )}
-        {/* En móvil, solo tarjetas y sin «Crear agente» (aparcado; se crea desde el ordenador). */}
-        <div className="ml-auto hidden items-center gap-2 md:flex">
-          <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label="Vista">
-            {(
-              [
-                ["cards", LayoutGrid, "Tarjetas"],
-                ["list", List, "Lista"],
-              ] as const
-            ).map(([k, Icon, label]) => (
-              <button
-                key={k}
-                type="button"
-                title={label}
-                aria-pressed={layout === k}
-                onClick={() => setLayout(k)}
-                className={`rounded-lg p-1.5 ${layout === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
-              >
-                <Icon className="h-4 w-4" />
-              </button>
+          <select className={`${field} max-w-[150px] py-1.5 text-sm`} value={activityFilter} onChange={(e) => setActivityFilter(e.target.value as typeof activityFilter)} aria-label="Actividad">
+            <option value="todos">Toda la actividad</option>
+            <option value="operaron">Con operaciones</option>
+            <option value="copiados">Mis copias</option>
+          </select>
+          <select className={`${field} max-w-[160px] py-1.5 text-sm`} value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Ordenar agentes">
+            {(Object.keys(SORTS) as SortKey[]).map((k) => <option key={k} value={k}>{SORTS[k].label}</option>)}
+          </select>
+          {(query || kindFilter !== "todos" || activityFilter !== "todos") && (
+            <button type="button" onClick={() => { setQuery(""); setKindFilter("todos"); setActivityFilter("todos"); }} className="inline-flex items-center gap-1 rounded-lg px-2 py-2 text-xs text-slate-500 hover:bg-slate-100" aria-label="Limpiar filtros"><X className="h-4 w-4" /> Limpiar</button>
+          )}
+          <div className="hidden items-center gap-1 rounded-xl bg-slate-100 p-1 md:flex" role="group" aria-label="Vista">
+            {([["cards", LayoutGrid, "Tarjetas"], ["list", List, "Lista"]] as const).map(([k, Icon, label]) => (
+              <button key={k} type="button" title={label} aria-pressed={layout === k} onClick={() => setLayout(k)} className={`rounded-lg p-1.5 ${layout === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}><Icon className="h-4 w-4" /></button>
             ))}
           </div>
-          <button type="button" onClick={() => setCreating(true)} className={`${primary} whitespace-nowrap`}>
-            <Plus className="h-4 w-4" /> Crear agente
-          </button>
+          <button type="button" onClick={() => setCreating(true)} className={`${primary} hidden whitespace-nowrap md:inline-flex`}><Plus className="h-4 w-4" /> Crear agente</button>
         </div>
       </div>
 
