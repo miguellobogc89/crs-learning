@@ -131,7 +131,7 @@ test("resumen: las internas y el ahorro no son gasto; las devoluciones restan; l
   assert.deepEqual(s.byCategory, [{ category: "compras", amount: 550 }]);
 });
 
-test("detalle de Inicio: precarga gastos y devoluciones del ciclo, ordenados y sin internas", () => {
+test("detalle de Inicio: precarga todo el historial por ciclos, sin internas y con devoluciones", () => {
   const cycle = L.cycleFor("2026-11-18", 25);
   const movements = [
     tx("a", "S", "2026-11-02", -80, "Alquiler", "gasto", "vivienda"),
@@ -139,10 +139,14 @@ test("detalle de Inicio: precarga gastos y devoluciones del ciclo, ordenados y s
     tx("c", "R", "2026-11-17", -50, "Traspaso", "interna", "vivienda"),
     tx("d", "S", "2026-10-23", -100, "Ciclo anterior", "gasto", "vivienda"),
     tx("e", "S", "2026-11-18", -12, "Cena", "gasto", "restaurantes"),
+    tx("f", "S", "2026-09-20", -45, "Agua", "gasto", "vivienda"),
   ];
-  const detailed = L.expenseTransactionsForCycle(movements, cycle);
-  assert.deepEqual(detailed.map((t) => t.id), ["e", "b", "a"]);
-  assert.deepEqual(detailed.filter((t) => t.category === "vivienda").map((t) => t.amount), [20, -80]);
+  const grouped = L.expenseHistoryByCycle(movements, 25);
+  assert.deepEqual(grouped.map((c) => c.start), ["2026-10-25", "2026-09-25", "2026-08-25"]);
+  assert.deepEqual(grouped[0].items.map((t) => t.id), ["e", "b", "a"]);
+  assert.deepEqual(grouped[0].items.filter((t) => t.category === "vivienda").map((t) => t.amount), [20, -80]);
+  assert.deepEqual(grouped[1].items.map((t) => t.id), ["d"]);
+  assert.deepEqual(grouped[2].items.map((t) => t.id), ["f"]);
   assert.equal(L.summarize(movements, cycle).byCategory.find((c) => c.category === "vivienda").amount, 60);
 });
 
