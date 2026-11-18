@@ -17,12 +17,12 @@ export type SwarmVariant = {
   /** «short»: enjambre inverso. Al tocar la parte baja del rango, venta en corto (orden limitada al precio de
    * cierre: 0 % si se llena en la hora siguiente), stop a mitad del rango que luego baja detrás del precio a
    * medio rango de distancia, sin objetivo ni límite de tiempo. */
-  side?: "long" | "short";
+  side?: "long" | "short" | "breakout";
   /** Solo abre en esa fase del mercado (Detector B sobre Bitcoin diario). */
   regime?: "ataque" | "defensa";
 };
-type Pos = { base: string; qty: number; entry: number; stop: number; target: number; openedAt: number; cost: number; short?: boolean; trail?: number; low?: number };
-type Order = { base: string; entry: number; stop: number; target: number; until: number; budget: number };
+type Pos = { base: string; qty: number; entry: number; stop: number; target: number; openedAt: number; cost: number; short?: boolean; trail?: number; low?: number; high?: number };
+type Order = { base: string; entry: number; stop: number; target: number; until: number; budget: number; trail?: number };
 
 const HOUR = 3_600_000;
 const TAKER = 0.0009;
@@ -45,6 +45,7 @@ export function attackDays(daily: { t: number; c: number }[]) {
 
 export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant: SwarmVariant, from: number, startCash = 1000, attack?: Map<string, boolean>) {
   const short = variant.side === "short";
+  const breakout = variant.side === "breakout";
   // Índice por hora de cada moneda.
   const idx = new Map<string, Map<number, number>>();
   for (const [b, bars] of series) idx.set(b, new Map(bars.map((x, i) => [x.t, i])));
@@ -84,6 +85,16 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
         }
         continue;
       }
+      if (p.trail) {
+        // Rupturas: stop que sube detrás del máximo alcanzado; sin objetivo ni límite de tiempo.
+        if (bar.l <= p.stop) close(p, Math.min(p.stop, bar.o), TAKER, "stop", t);
+        else {
+          p.high = Math.max(p.high ?? p.entry, bar.h);
+          p.stop = Math.max(p.stop, p.high - p.trail);
+          keep.push(p);
+        }
+        continue;
+      }
       if (bar.l <= p.stop) close(p, Math.min(p.stop, bar.o), TAKER, "stop", t);
       else if (bar.h >= p.target) close(p, Math.max(p.target, bar.o), 0, "objetivo", t);
       else if ((t + HOUR - p.openedAt) / HOUR >= MAX_HOLD) close(p, bar.c, TAKER, "tiempo", t);
@@ -104,7 +115,7 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
       }
       if (bar && bar.l <= o.entry) {
         const qty = o.budget / o.entry;
-        const p: Pos = { base: o.base, qty, entry: o.entry, stop: o.stop, target: o.target, openedAt: t, cost: o.budget };
+        const p: Pos = { base: o.base, qty, entry: o.entry, stop: o.stop, target: o.trail ? Infinity : o.target, openedAt: t, cost: o.budget, trail: o.trail, high: o.entry };
         if (bar.l <= o.stop) close(p, o.stop, TAKER, "stop", t);
         else pos.push(p);
       } else if (t + HOUR < o.until) waiting.push(o);
@@ -137,6 +148,21 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
       if (busy.has(b)) continue;
       const i = idx.get(b)?.get(t);
       if (i === undefined || i < 24) continue;
+      if (breakout) {
+        // Rango de las 24 h anteriores (sin la vela de ahora) y cierre por encima de su techo.
+        if (i < 25) continue;
+        const prev = series.get(b)!.slice(i - 24, i);
+        const rp = noiseIdea(prev, prev[prev.length - 1].c, 0);
+        if (!rp) continue;
+        const w = (rp.target - rp.invalidation) / 1.1;
+        const hi = rp.invalidation + 0.3 * w + w;
+        if (!(series.get(b)![i].c > hi)) continue;
+        const budget = Math.min(cash, equity * SIZE);
+        if (budget < 10) break;
+        cash -= budget;
+        orders.push({ base: b, entry: hi, stop: hi - 0.25 * w, target: Infinity, until: t + HOUR + ENTRY_WAIT * HOUR, budget, trail: 0.5 * w });
+        continue;
+      }
       const bars = series.get(b)!.slice(i - 23, i + 1);
       const price = bars[bars.length - 1].c;
       const r = noiseIdea(bars, price);

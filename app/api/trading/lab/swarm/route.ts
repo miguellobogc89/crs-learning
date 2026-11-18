@@ -65,6 +65,9 @@ export async function GET(req: Request) {
     { key: "inverso-defensa", name: "INVERSO solo en defensa", side: "short", regime: "defensa" },
     { key: "inverso", name: "INVERSO siempre", side: "short" },
     { key: "inverso-grandes-defensa", name: "INVERSO GRANDES en defensa", side: "short", regime: "defensa", coins: BIG_COINS },
+    { key: "rupturas-ataque", name: "RUPTURAS en ataque", side: "breakout", regime: "ataque" },
+    { key: "rupturas", name: "RUPTURAS siempre", side: "breakout" },
+    { key: "rupturas-grandes-ataque", name: "RUPTURAS GRANDES en ataque", side: "breakout", regime: "ataque", coins: BIG_COINS },
   ];
   const results = variants.map((v) => simulateSwarm(series, btc, v, from, 1000, attack));
   const window = [...attack.entries()].filter(([d]) => d >= new Date(from).toISOString().slice(0, 10));
