@@ -4,6 +4,7 @@
 // (para clasificar e importar; por defecto TRADING_AI_FAST_MODEL, OPENAI_DOCUMENT_CLASSIFIER_MODEL u OPENAI_MODEL).
 import "server-only";
 import { getOpenAIClient } from "@/lib/ai/openai";
+import { recordAiUsage } from "@/lib/ai/usage";
 
 export type FinanceAiTier = "fast" | "smart";
 
@@ -20,6 +21,8 @@ export function financeModel(tier: FinanceAiTier) {
 export const isReasoningModel = (model: string) => /^gpt-5(?:[.-]|$)|^o[134](?:[.-]|$)/.test(model) && !/-pro|-chat|-codex/.test(model);
 
 export function aiAvailable() {
+  // Se puede apagar desde el panel «Consumo de IA» (FINANCE_AI_ENABLED=false).
+  if (process.env.FINANCE_AI_ENABLED === "false") return false;
   return Boolean(process.env.OPENAI_API_KEY && (process.env.FINANCE_AI_MODEL || process.env.OPENAI_MODEL));
 }
 
@@ -45,6 +48,7 @@ export async function financeJson<T>(opts: {
     },
     { timeout: opts.timeoutMs ?? 60_000, maxRetries: 1 },
   );
+  await recordAiUsage("finance", opts.tier === "fast" ? "clasificar" : "analizar", model, response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0);
   if (response.status !== "completed" || !response.output_text?.trim()) throw new Error("La IA no completó la respuesta");
   return JSON.parse(response.output_text) as T;
 }

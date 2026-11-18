@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applyAiSettings } from "@/lib/ai/usage";
 import { maybeRunAgents } from "@/lib/trading/agents/service";
 import { refreshLive } from "@/lib/trading/live";
 import { kamikazeTick } from "@/lib/trading/kamikaze/engine";
@@ -16,6 +17,7 @@ export const maxDuration = 300;
  * escáneres, los agentes, las copias y tus operaciones. Abrir el módulo de Trading también la lanza.
  */
 export async function GET(req: Request) {
+  await applyAiSettings();
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {

@@ -4,6 +4,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getOpenAIClient } from "@/lib/ai/openai";
+import { recordAiUsage } from "@/lib/ai/usage";
 import { CATEGORIES, KINDS, categoryLabel } from "./categories";
 import { affordability, cycleFor, detectAlerts, projectSavings, summarize } from "./logic";
 import { financeModel, isReasoningModel } from "./ai";
@@ -189,6 +190,7 @@ export async function ask(userId: string, question: string) {
     max_output_tokens: 4000,
   };
   let response = await client.responses.create({ ...base, input: [...history, { role: "user" as const, content: text }] }, { timeout: 60_000, maxRetries: 1 });
+  await recordAiUsage("finance", "copiloto", model, response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0);
   const used: string[] = [];
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const calls = (response.output ?? []).filter((o): o is typeof o & FunctionCall => o.type === "function_call");
@@ -203,6 +205,7 @@ export async function ask(userId: string, question: string) {
       outputs.push({ type: "function_call_output" as const, call_id: call.call_id, output: JSON.stringify(result) });
     }
     response = await client.responses.create({ ...base, previous_response_id: response.id, input: outputs }, { timeout: 60_000, maxRetries: 1 });
+    await recordAiUsage("finance", "copiloto", model, response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0);
   }
   const answer = response.output_text?.trim() || "No he podido completar la respuesta. Inténtalo de nuevo.";
   const saved = await prisma.finance_chat_messages.create({ data: { user_id: userId, role: "assistant", content: answer } });

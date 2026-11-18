@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applyAiSettings } from "@/lib/ai/usage";
 import { auth } from "@/auth";
 import { importStatement } from "@/lib/finance/import";
 
@@ -8,6 +9,7 @@ export const maxDuration = 300;
 
 /** Sube un extracto (CSV, Excel o PDF) a una cuenta existente o a una nueva «importada». */
 export async function POST(req: Request) {
+  await applyAiSettings();
   const uid = (await auth())?.user?.id;
   if (!uid) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   try {

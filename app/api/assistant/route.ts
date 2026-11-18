@@ -21,6 +21,7 @@ import { recordResourceAccess } from "@/lib/services/resource-access.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { resolveRetrievalQuery } from "@/lib/ai/assistant/resolve-retrieval-query";
 import { getOpenAIModel } from "@/lib/ai/openai";
+import { applyAiSettings, recordAiUsage } from "@/lib/ai/usage";
 import {
   CHANGES_TOOL_NAME,
   changesTool,
@@ -47,6 +48,8 @@ const openai = new OpenAI({
 });
 
 export async function POST(request: Request) {
+  // Modelo del asistente elegido en «Consumo de IA» (manda sobre OPENAI_ASSISTANT_MODEL de Vercel).
+  await applyAiSettings();
   const session = await auth();
 
   if (!session?.user?.id) {
@@ -267,6 +270,7 @@ console.log("AI INPUT DEBUG", {
     });
     tokensInput += response.usage?.input_tokens ?? 0;
     tokensOutput += response.usage?.output_tokens ?? 0;
+    await recordAiUsage("business", "asistente", assistantModel(), response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0);
     const calls = response.output.filter(
       (item): item is ResponseFunctionToolCall => item.type === "function_call",
     );

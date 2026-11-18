@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applyAiSettings } from "@/lib/ai/usage";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { categoryLabel, isCategory } from "@/lib/finance/categories";
@@ -27,6 +28,7 @@ async function userId() {
 }
 
 export async function GET(req: Request, route: RouteContext) {
+  await applyAiSettings();
   const uid = await userId();
   if (!uid) return fail("No autenticado", 401);
   const action = (await route.params).action.join("/");
@@ -57,6 +59,7 @@ export async function GET(req: Request, route: RouteContext) {
 }
 
 export async function POST(req: Request, route: RouteContext) {
+  await applyAiSettings();
   const uid = await userId();
   if (!uid) return fail("No autenticado", 401);
   const action = (await route.params).action.join("/");

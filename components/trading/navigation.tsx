@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Link2, Loader2, LogOut, PiggyBank, Settings, UserCircle } from "lucide-react";
+import { ArrowLeft, ChevronRight, Gauge, Link2, Loader2, LogOut, PiggyBank, Settings, UserCircle } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { getWallets } from "@/lib/trading/wallets";
@@ -145,6 +145,9 @@ function TradingUserMenu({ user, inDrawer = false }: { user: TradingProfile; inD
         <DropdownMenuContent side={inDrawer ? "top" : "right"} align={inDrawer ? "start" : "end"} sideOffset={8} className="pointer-events-auto z-[60] w-48">
           <DropdownMenuItem asChild>
             <Link href={user.canAccessBusiness ? "/settings" : "/trading/integraciones"}><Settings /> Configuración</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/consumo-ia"><Gauge /> Consumo de IA</Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href="/finanzas/inicio"><PiggyBank /> Ir a Mis finanzas</Link>

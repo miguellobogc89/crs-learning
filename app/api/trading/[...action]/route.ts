@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { applyAiSettings } from "@/lib/ai/usage";
 import { addMyAgent, getWallets, myAgents, removeMyAgent } from "@/lib/trading/wallets";
 import { getMarketPhase } from "@/lib/trading/chip/phase-service";
 import { getPulse } from "@/lib/trading/pulse/service";
@@ -56,6 +57,7 @@ const MIGRATION_HINT =
 const message = (e: unknown) => (e instanceof Error ? e.message.slice(0, 400) : "No se pudo completar la operación");
 
 export async function GET(req: Request, route: RouteContext) {
+  await applyAiSettings();
   const ctx = await connectorContext();
   if (!ctx) return fail("No autenticado", 401);
   const action = (await route.params).action.join("/");
@@ -135,6 +137,7 @@ export async function GET(req: Request, route: RouteContext) {
 }
 
 export async function POST(req: Request, route: RouteContext) {
+  await applyAiSettings();
   const ctx = await connectorContext();
   if (!ctx) return fail("No autenticado", 401);
   if (req.headers.get("origin") !== new URL(req.url).origin) return fail("Origen no permitido", 403);

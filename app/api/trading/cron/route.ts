@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applyAiSettings } from "@/lib/ai/usage";
 import { runDaily } from "@/lib/trading/service";
 
 export const runtime = "nodejs";
@@ -7,6 +8,7 @@ export const maxDuration = 60;
 
 /** Cierre diario: cotizaciones, backtest y carteras virtuales. Vercel Cron envía `Authorization: Bearer $CRON_SECRET`. */
 export async function GET(req: Request) {
+  await applyAiSettings();
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`)
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });

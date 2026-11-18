@@ -10,6 +10,7 @@
 import "server-only";
 import { getOpenAIClient } from "@/lib/ai/openai";
 import { prisma } from "@/lib/prisma";
+import { recordAiUsage } from "@/lib/ai/usage";
 
 export type AiTier = "fast" | "smart";
 
@@ -92,6 +93,7 @@ export async function aiJson<T>(opts: {
     { timeout: opts.timeoutMs ?? 60_000, maxRetries: 1 },
   );
   await record(opts.purpose, response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0);
+  await recordAiUsage("trade", opts.purpose, model, response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0);
   if (response.status !== "completed" || !response.output_text?.trim()) throw new Error("La IA no completó la respuesta");
   return JSON.parse(response.output_text) as T;
 }
