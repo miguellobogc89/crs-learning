@@ -103,6 +103,6 @@ test("kamikazes: la decisión de la IA se valida antes de ejecutarla", () => {
 });
 
 test("kamikazes: los archivados no están en activo, pero se siguen encontrando por su clave", () => {
-  assert.deepEqual(ACTIVE.map((k) => k.key), ["roca", "brujula", "vertigo-10", "enjambre", "enjambre-grandes", "enjambre-rapido"]);
+  assert.deepEqual(ACTIVE.map((k) => k.key), ["roca", "brujula", "vertigo-10", "enjambre", "enjambre-grandes", "enjambre-rapido", "enjambre-corto"]);
   for (const key of ARCHIVED_KAMIKAZES) assert.ok(kamikazeByKey(key), `${key} se encuentra para su historial`);
 });

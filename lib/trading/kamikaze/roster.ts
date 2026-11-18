@@ -71,6 +71,8 @@ export type KamikazeDef = {
   coins?: string[];
   /** Vende antes del objetivo de la idea: a esta fracción del recorrido (0,5 = a mitad de camino). */
   targetFraction?: number;
+  /** Motor propio en vez de tomar ideas de FARO: «enjambre-corto» = cortos de ruido roto, solo en defensa. */
+  engine?: "enjambre-corto";
 };
 
 /** Capital igual para todos los agentes desde el 16/11/2026: así su rentabilidad se compara limpia. */
@@ -209,7 +211,7 @@ const crypto = (o: Pick<KamikazeDef, "key" | "name" | "tagline" | "color" | "lab
   rules: RULES,
   ...standard(o.slots ?? 1),
   ...o,
-  settings: { ...SETTINGS, max_open_positions: o.slots ?? 1 },
+  settings: { ...SETTINGS, ...(o.settings ?? {}), max_open_positions: o.slots ?? 1 },
 });
 ALL_KAMIKAZES.push(
   crypto({
@@ -247,7 +249,7 @@ ALL_KAMIKAZES.push(
   }),
   crypto({
     key: "enjambre",
-    name: "ENJAMBRE",
+    name: "ENJAMBRE RUIDO",
     label: "Diversificado",
     color: "amber",
     sizeOfEquityPct: 10,
@@ -258,25 +260,39 @@ ALL_KAMIKAZES.push(
   // Variantes del ruido (17/11/2026): misma idea, otra forma de operarla, para saber cuál compensa.
   crypto({
     key: "enjambre-grandes",
-    name: "ENJAMBRE GRANDES",
+    name: "ENJAMBRE RUIDO GRANDES",
     label: "Diversificado",
     color: "teal",
     sizeOfEquityPct: 10,
     slots: 10,
     kinds: ["ruido"],
     coins: BIG_COINS,
-    tagline: "Como ENJAMBRE, pero solo con las monedas grandes (Bitcoin, Ethereum, Solana, XRP…): rangos más estrechos y, en principio, más fiables.",
+    tagline: "Como ENJAMBRE RUIDO, pero solo con las monedas grandes (Bitcoin, Ethereum, Solana, XRP…): rangos más estrechos y, en principio, más fiables.",
   }),
   crypto({
     key: "enjambre-rapido",
-    name: "ENJAMBRE RÁPIDO",
+    name: "ENJAMBRE RUIDO RÁPIDO",
     label: "Diversificado",
     color: "lime",
     sizeOfEquityPct: 10,
     slots: 10,
     kinds: ["ruido"],
     targetFraction: 0.5,
-    tagline: "Como ENJAMBRE, pero vende a mitad del rango: gana menos en cada operación y debería acertar más veces.",
+    tagline: "Como ENJAMBRE RUIDO, pero vende a mitad del rango: gana menos en cada operación y debería acertar más veces.",
+  }),
+  // ENJAMBRE (18/11/2026): el ruido al revés. Simulado: +16 % en un año bajista con costes de Kraken.
+  crypto({
+    key: "enjambre-corto",
+    name: "ENJAMBRE",
+    label: "Defensa",
+    color: "rose",
+    sizeOfEquityPct: 10,
+    slots: 10,
+    coins: BIG_COINS,
+    engine: "enjambre-corto",
+    // Como Kraken Futures: 0,02 % al entrar y 0,05 % al salir (se cuenta 0,05 % en las dos, por prudencia).
+    settings: { ...SETTINGS, commission_pct: 0.05, commission_min: 0, slippage_bps: 2, max_open_positions: 10 },
+    tagline: "Gana cuando el mercado cae: con el mercado en defensa, vende en corto las monedas grandes que pierden el suelo de su rango, con un 10 % de su dinero en cada una (hasta 10), y deja correr la caída con un stop que baja detrás del precio.",
   }),
 );
 

@@ -19,9 +19,10 @@ import { dayDate } from "../sync";
 import { boardIdeas, faroTick, lastMarketView, noiseScan, setLive } from "../faro/engine";
 import { chooseIdea, trailingStop, type BoardIdea } from "../faro/logic";
 import { allInQuantity, exitNow, noiseLevels, noiseStop, positionBudget, protectedStop, type Ticker } from "./logic";
-import { eurPairs, priceEur, tickers } from "./market";
+import { dailyCloses, eurPairs, hourly, priceEur, tickers } from "./market";
 import { KAMIKAZES, kamikazeByKey, type KamikazeDef } from "./roster";
-import { CARTA, isCartaKind, refuerzoStop } from "../carta";
+import { CARTA, isCartaKind, noiseIdea, refuerzoStop } from "../carta";
+import { attackDays } from "../lab/swarm";
 
 const WS = AGENTS_WORKSPACE;
 const DAY = 86_400_000;
@@ -129,6 +130,10 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       return;
     }
     try {
+      if (def.engine === "enjambre-corto") {
+        await shortSwarmTurn(def, account.id, market, rules, actions);
+        return;
+      }
       let row = await stateRow(def);
       const slots = def.slots ?? 1;
 
@@ -241,6 +246,102 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       await prisma.trading_accounts.update({ where: { id: account.id }, data: { meeting_lease_until: null } }).catch(() => undefined);
     }
   }
+}
+
+/**
+ * ENJAMBRE (cortos): la regla probada en el laboratorio (lib/trading/lab/swarm.ts, side «short»).
+ *  - Cada revisión (5 min): stop de cada corto; si no salta, baja detrás del precio a medio rango.
+ *  - Una vez por hora y solo en defensa (Detector B con Bitcoin diario): en las monedas grandes que llevan 24 h
+ *    de lado en un rango estrecho y ya están en su parte baja, abre un corto con un 10 % del dinero (hasta 10).
+ *    Stop inicial a mitad del rango; sin objetivo ni límite de tiempo.
+ */
+async function shortSwarmTurn(def: KamikazeDef, accountId: string, market: Ticker[], rules: Map<string, unknown>, actions: string[]) {
+  await prisma.trading_accounts.updateMany({ where: { id: accountId, allow_short: false }, data: { allow_short: true } });
+  let row = await stateRow(def);
+  const note = (text: string | null) => prisma.trading_kamikaze_rounds.update({ where: { id: row.id }, data: { last_note: text, last_note_at: new Date() } });
+  // 1) Vigilancia.
+  let state = await accountState(WS, def.key);
+  for (const pos of state.positions.filter((p) => p.status === "abierta" && p.direction === "short")) {
+    const price = await priceEur(pairFor(pos.symbol, rules));
+    if (!price) continue;
+    const inst = await prisma.market_instruments.findUnique({ where: { symbol: pos.symbol }, select: { id: true } });
+    if (inst) await setLive(inst.id, price);
+    if (price >= pos.stop) {
+      await closePosition(WS, pos.id, def.key, "stop");
+      actions.push(`${pos.symbol}: stop`);
+      continue;
+    }
+    const trail = Number((await prisma.trading_positions.findUnique({ where: { id: pos.id }, select: { signal_key: true } }))?.signal_key?.split(":")[2]);
+    if (trail > 0 && price + trail < pos.stop) {
+      await prisma.trading_positions.update({ where: { id: pos.id }, data: { stop: price + trail, updated_at: new Date() } });
+      actions.push(`${pos.symbol}: stop baja a ${(price + trail).toFixed(4)}`);
+    }
+  }
+  state = await accountState(WS, def.key);
+  await snapshotEquity(accountId, state.summary.equity, state.summary.cash, state.summary.invested);
+  // 2) Escaneo, una vez por hora.
+  if (row.last_decision_at && Math.floor(row.last_decision_at.getTime() / HOUR) === Math.floor(Date.now() / HOUR)) return;
+  row = await prisma.trading_kamikaze_rounds.update({ where: { id: row.id }, data: { last_decision_at: new Date() } });
+  const btcPair = market.find((t) => t.base === "BTC" && t.pair.endsWith("EUR"))?.pair ?? "BTCEUR";
+  const phase = attackDays(await dailyCloses(btcPair, 240)).get(new Date().toISOString().slice(0, 10));
+  if (phase !== false) {
+    await note(phase ? "Mercado en ataque: no abre cortos (espera a que el mercado pase a defensa)" : "Sin datos de la fase del mercado");
+    return;
+  }
+  const open = state.positions.filter((p) => p.status === "abierta" || p.status === "pendiente");
+  let free = (def.slots ?? 10) - open.length;
+  if (free <= 0) return note(null).then(() => undefined);
+  const held = new Set(open.map((p) => p.symbol.replace(/-EUR$/, "")));
+  const pool = market
+    .filter((t) => def.coins?.includes(t.base) && !held.has(t.base) && t.price > 0)
+    .filter((t, i, all) => all.findIndex((x) => x.base === t.base) === i)
+    .sort((a, b) => b.volume24h - a.volume24h);
+  const entered: string[] = [];
+  for (const t of pool) {
+    if (free <= 0) break;
+    // Las 24 velas de 1 h ya cerradas.
+    const bars = (await hourly(t.pair).catch(() => [])).slice(-25, -1);
+    const px = (await priceEur(t.pair).catch(() => null)) ?? null;
+    if (!px) continue;
+    const r = noiseIdea(bars, px);
+    if (!r || r.entry < px) continue; // no está en la parte baja de un rango
+    const w = (r.target - r.invalidation) / 1.1;
+    const lo = r.invalidation + 0.3 * w;
+    const stop = lo + 0.5 * w;
+    const st = await accountState(WS, def.key);
+    const budget = Math.min(st.summary.available, st.summary.equity * ((def.sizeOfEquityPct ?? 10) / 100));
+    if (budget < 10) break;
+    const symbol = `${t.base}-EUR`;
+    const quantity = allInQuantity(budget, px, costOf(st.account));
+    const inst = await prisma.market_instruments.findUnique({ where: { symbol }, select: { id: true } });
+    if (inst) await setLive(inst.id, px);
+    try {
+      await placeOrder(
+        WS,
+        null,
+        {
+          symbol,
+          direction: "short",
+          quantity,
+          stop,
+          target: px * 0.5,
+          execution: "now",
+          maxHoldDays: null,
+          notes: `${def.name}: ${t.base} pierde el suelo de su rango de 24 h (${r.width.toFixed(1).replace(".", ",")} %) con el mercado en defensa. Corto con stop a mitad del rango que baja detrás del precio.`,
+          source: "agente",
+          // Distancia del stop que baja detrás del precio: medio rango (la lee la vigilancia).
+          signalKey: `enjambre:${t.base}:${(0.5 * w).toPrecision(6)}:${Date.now()}`,
+        },
+        def.key,
+      );
+      entered.push(t.base);
+      free--;
+    } catch (e) {
+      actions.push(`${t.base}: no pudo abrir (${e instanceof Error ? e.message.slice(0, 100) : "error"})`);
+    }
+  }
+  if (entered.length) actions.push(`Entró en corto en ${entered.join(", ")}`);
+  await note(entered.length ? `Abre cortos en ${entered.join(", ")}` : "En defensa, pero ninguna moneda grande está ahora en la parte baja de un rango");
 }
 
 /** signal_key de las posiciones del agente, por id. */

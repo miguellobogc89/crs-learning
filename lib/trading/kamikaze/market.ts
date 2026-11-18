@@ -135,3 +135,8 @@ export async function referencePrice(symbol: string): Promise<number | null> {
   const pair = rules.has(`${base}EUR`) ? `${base}EUR` : rules.has(`${base}USDC`) ? `${base}USDC` : null;
   return pair ? priceEur(pair) : null;
 }
+
+/** Cierres diarios de un par (los últimos `days`, el de hoy incluido aunque no haya cerrado). */
+export async function dailyCloses(pair: string, days = 240): Promise<{ t: number; c: number }[]> {
+  return parseKlines(await get("/api/v3/klines", { symbol: pair, interval: "1d", limit: String(Math.min(1000, days)) })).map((b) => ({ t: b.t, c: b.c }));
+}

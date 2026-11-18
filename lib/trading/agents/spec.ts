@@ -40,6 +40,15 @@ export function kamikazeSpec(k: KamikazeDef): AgentSpec {
           ? `Cualquiera de las que publica FARO, pero solo con convicción alta (${k.minConviction ?? 4} o más de 5).`
           : "Las de rebote que publica FARO.";
   const stop = k.stopMode === "idea" ? "su stop (justo donde la idea deja de valer)" : "su stop (donde la idea deja de valer, entre un 5 % y un 40 % por debajo)";
+  if (k.engine === "enjambre-corto")
+    return {
+      market: "Cripto",
+      style: k.label ?? "Defensa",
+      ideas: "No usa las ideas de FARO: busca él mismo las monedas grandes (Bitcoin, Ethereum, Solana…) que llevan 24 h de lado en un rango estrecho y están perdiendo su suelo.",
+      when: "Solo con el mercado en defensa (Bitcoin por debajo de sus medias de 50 y 200 días o de su precio de hace 10 días). Revisa cada hora; en ataque no abre nada.",
+      size: `Vende en corto un ${nf(k.sizeOfEquityPct ?? 10)} % de su dinero en cada moneda, hasta ${slots} a la vez (empezó con ${nf(k.capital)} €). Sin apalancamiento.`,
+      exit: "Stop a mitad del rango (si rebota, la caída no era tal). Sin objetivo ni plazo: el stop baja detrás del precio a medio rango de distancia y deja correr la caída.",
+    };
   if (k.kinds) return cartaSpec(k, slots);
   return {
     market: "Cripto",

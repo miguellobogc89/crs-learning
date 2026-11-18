@@ -8,7 +8,7 @@ import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
 import { EquityChart, withLivePoint } from "./equity-chart";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SpecPills, SpecSheet } from "./agent-spec";
-import { AgentAvatar, card, ErrorNote, LoadingCard, ReturnPill, Rich } from "./ui";
+import { AgentAvatar, card, ErrorNote, LoadingCard, Pill, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { MirrorModal } from "./mirror-modal";
 import { agentMenu, ChipMode, CopyBadges, CopyModal, Creator, Decision, DotsMenu, runningFor, when, type Agent, type Data } from "./agents-panel";
@@ -268,7 +268,10 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                       <span className="flex min-w-0 items-center gap-3">
                         <AssetIcon symbol={p.symbol} name={p.name} size="sm" />
                         <span className="min-w-0">
-                          <span className="block truncate font-semibold text-slate-900">{p.name}</span>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate font-semibold text-slate-900">{p.name}</span>
+                            {p.direction === "short" && <Pill color="rose">Corto</Pill>}
+                          </span>
                           <span className="block text-xs text-slate-500">
                             {p.status === "pendiente" ? "Se compra en la próxima apertura" : `${int(p.quantity)} a ${eur(p.entryPrice ?? p.plannedEntry)}`}
                           </span>
@@ -298,7 +301,10 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                     <span className="flex min-w-0 items-center gap-3">
                       <AssetIcon symbol={p.symbol} name={p.name} size="sm" />
                       <span className="min-w-0">
-                        <span className="block truncate font-medium text-slate-900">{p.name}</span>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate font-medium text-slate-900">{p.name}</span>
+                          {"direction" in p && p.direction === "short" && <Pill color="rose">Corto</Pill>}
+                        </span>
                         <span className="block text-xs text-slate-500">
                           {dayFmt(p.exitDay)} · {p.exitReason ?? "cerrada"} · {eur(p.entryPrice)} → {eur(p.exitPrice)}
                         </span>
