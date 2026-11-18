@@ -312,7 +312,8 @@ async function shortSwarmTurn(def: KamikazeDef, accountId: string, market: Ticke
     const budget = Math.min(st.summary.available, st.summary.equity * ((def.sizeOfEquityPct ?? 10) / 100));
     if (budget < 10) break;
     const symbol = `${t.base}-EUR`;
-    const quantity = allInQuantity(budget, px, costOf(st.account));
+    // Con apalancamiento, el corto es `leverage` veces el margen (el 10 % de su dinero).
+    const quantity = allInQuantity(budget * (def.leverage ?? 1), px, costOf(st.account));
     const inst = await prisma.market_instruments.findUnique({ where: { symbol }, select: { id: true } });
     if (inst) await setLive(inst.id, px);
     try {
@@ -327,7 +328,7 @@ async function shortSwarmTurn(def: KamikazeDef, accountId: string, market: Ticke
           target: px * 0.5,
           execution: "now",
           maxHoldDays: null,
-          notes: `${def.name}: ${t.base} pierde el suelo de su rango de 24 h (${r.width.toFixed(1).replace(".", ",")} %) con el mercado en defensa. Corto con stop a mitad del rango que baja detrás del precio.`,
+          notes: `${def.name}: ${t.base} pierde el suelo de su rango de 24 h (${r.width.toFixed(1).replace(".", ",")} %) con el mercado en defensa. Corto${(def.leverage ?? 1) > 1 ? ` x${def.leverage}` : ""} con stop a mitad del rango que baja detrás del precio.`,
           source: "agente",
           // Distancia del stop que baja detrás del precio: medio rango (la lee la vigilancia).
           signalKey: `enjambre:${t.base}:${(0.5 * w).toPrecision(6)}:${Date.now()}`,

@@ -73,6 +73,8 @@ export type KamikazeDef = {
   targetFraction?: number;
   /** Motor propio en vez de tomar ideas de FARO: «enjambre-corto» = cortos de ruido roto, solo en defensa. */
   engine?: "enjambre-corto";
+  /** Apalancamiento de los cortos del ENJAMBRE (el tamaño de cada corto se multiplica por esto). */
+  leverage?: number;
 };
 
 /** Capital igual para todos los agentes desde el 16/11/2026: así su rentabilidad se compara limpia. */
@@ -293,6 +295,32 @@ ALL_KAMIKAZES.push(
     // Como Kraken Futures: 0,02 % al entrar y 0,05 % al salir (se cuenta 0,05 % en las dos, por prudencia).
     settings: { ...SETTINGS, commission_pct: 0.05, commission_min: 0, slippage_bps: 2, max_open_positions: 10 },
     tagline: "Gana cuando el mercado cae: con el mercado en defensa, vende en corto las monedas grandes que pierden el suelo de su rango, con un 10 % de su dinero en cada una (hasta 10), y deja correr la caída con un stop que baja detrás del precio.",
+  }),
+  crypto({
+    key: "enjambre-x2",
+    name: "ENJAMBRE x2",
+    label: "Defensa x2",
+    color: "orange",
+    sizeOfEquityPct: 10,
+    slots: 10,
+    coins: BIG_COINS,
+    engine: "enjambre-corto",
+    leverage: 2,
+    settings: { ...SETTINGS, commission_pct: 0.05, commission_min: 0, slippage_bps: 2, max_open_positions: 10 },
+    tagline: "El ENJAMBRE con apalancamiento x2: mismas operaciones, cada corto 2 veces más grande. Gana y pierde unas 2 veces más (simulado en un año: +33 % con caída máxima del −12 %).",
+  }),
+  crypto({
+    key: "enjambre-x3",
+    name: "ENJAMBRE x3",
+    label: "Defensa x3",
+    color: "fuchsia",
+    sizeOfEquityPct: 10,
+    slots: 10,
+    coins: BIG_COINS,
+    engine: "enjambre-corto",
+    leverage: 3,
+    settings: { ...SETTINGS, commission_pct: 0.05, commission_min: 0, slippage_bps: 2, max_open_positions: 10 },
+    tagline: "El ENJAMBRE con apalancamiento x3: mismas operaciones, cada corto 3 veces más grande. Gana y pierde unas 3 veces más (simulado en un año: +52 % con caída máxima del −18 %).",
   }),
 );
 
