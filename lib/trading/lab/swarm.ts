@@ -9,8 +9,19 @@
 import { noiseIdea } from "../carta";
 
 export type HBar = { t: number; o: number; h: number; l: number; c: number };
-export type SwarmVariant = { key: string; name: string; coins?: string[]; targetFraction?: number };
-type Pos = { base: string; qty: number; entry: number; stop: number; target: number; openedAt: number; cost: number };
+export type SwarmVariant = {
+  key: string;
+  name: string;
+  coins?: string[];
+  targetFraction?: number;
+  /** «short»: enjambre inverso. Al tocar la parte baja del rango, venta en corto (orden limitada al precio de
+   * cierre: 0 % si se llena en la hora siguiente), stop a mitad del rango que luego baja detrás del precio a
+   * medio rango de distancia, sin objetivo ni límite de tiempo. */
+  side?: "long" | "short";
+  /** Solo abre en esa fase del mercado (Detector B sobre Bitcoin diario). */
+  regime?: "ataque" | "defensa";
+};
+type Pos = { base: string; qty: number; entry: number; stop: number; target: number; openedAt: number; cost: number; short?: boolean; trail?: number; low?: number };
 type Order = { base: string; entry: number; stop: number; target: number; until: number; budget: number };
 
 const HOUR = 3_600_000;
@@ -20,7 +31,20 @@ const SIZE = 0.1;
 const MAX_HOLD = 8;
 const ENTRY_WAIT = 2;
 
-export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant: SwarmVariant, from: number, startCash = 1000) {
+/** Detector B: ataque si Bitcoin (cierres diarios) está sobre su media de 200 y de 50 días y sobre el precio de hace 10 días. */
+export function attackDays(daily: { t: number; c: number }[]) {
+  const out = new Map<string, boolean>();
+  for (let i = 200; i < daily.length; i++) {
+    const avg = (n: number) => daily.slice(i - n + 1, i + 1).reduce((s, d) => s + d.c, 0) / n;
+    const p = daily[i].c;
+    // Vale para el día siguiente (se decide con el cierre de ayer: sin mirar el futuro).
+    out.set(new Date(daily[i].t + 86_400_000).toISOString().slice(0, 10), p > avg(200) && p > avg(50) && p > daily[i - 10].c);
+  }
+  return out;
+}
+
+export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant: SwarmVariant, from: number, startCash = 1000, attack?: Map<string, boolean>) {
+  const short = variant.side === "short";
   // Índice por hora de cada moneda.
   const idx = new Map<string, Map<number, number>>();
   for (const [b, bars] of series) idx.set(b, new Map(bars.map((x, i) => [x.t, i])));
@@ -30,13 +54,14 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
   let cash = startCash;
   let pos: Pos[] = [];
   let orders: Order[] = [];
-  const trades: { base: string; pct: number; exit: "objetivo" | "stop" | "tiempo"; at: number }[] = [];
+  const trades: { base: string; pct: number; exit: "objetivo" | "stop" | "tiempo"; at: number; phase: "ataque" | "defensa" }[] = [];
   let peak = startCash, maxDd = 0;
   const monthly = new Map<string, { start: number; end: number }>();
   const close = (p: Pos, price: number, fee: number, exit: "objetivo" | "stop" | "tiempo", at: number) => {
-    const got = p.qty * price * (1 - fee);
+    // Corto: se recupera la garantía más (venta − recompra) menos la comisión de recompra.
+    const got = p.short ? p.cost + p.qty * (p.entry - price) - p.qty * price * fee : p.qty * price * (1 - fee);
     cash += got;
-    trades.push({ base: p.base, pct: (got / p.cost - 1) * 100, exit, at });
+    trades.push({ base: p.base, pct: (got / p.cost - 1) * 100, exit, at, phase: attack?.get(new Date(p.openedAt).toISOString().slice(0, 10)) ? "ataque" : "defensa" });
   };
   const barAt = (b: string, t: number) => {
     const i = idx.get(b)?.get(t);
@@ -49,6 +74,16 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
     for (const p of pos) {
       const bar = barAt(p.base, t);
       if (!bar) { keep.push(p); continue; }
+      if (p.short) {
+        // Stop por encima; primero se mira si saltó con el máximo de la vela, luego se baja con el mínimo.
+        if (bar.h >= p.stop) close(p, Math.max(p.stop, bar.o), TAKER, "stop", t);
+        else {
+          p.low = Math.min(p.low ?? p.entry, bar.l);
+          p.stop = Math.min(p.stop, p.low + p.trail!);
+          keep.push(p);
+        }
+        continue;
+      }
       if (bar.l <= p.stop) close(p, Math.min(p.stop, bar.o), TAKER, "stop", t);
       else if (bar.h >= p.target) close(p, Math.max(p.target, bar.o), 0, "objetivo", t);
       else if ((t + HOUR - p.openedAt) / HOUR >= MAX_HOLD) close(p, bar.c, TAKER, "tiempo", t);
@@ -59,6 +94,14 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
     const waiting: Order[] = [];
     for (const o of orders) {
       const bar = barAt(o.base, t);
+      if (short) {
+        if (bar && bar.h >= o.entry) {
+          const p: Pos = { base: o.base, qty: o.budget / o.entry, entry: o.entry, stop: o.stop, target: 0, openedAt: t, cost: o.budget, short: true, trail: o.target, low: o.entry };
+          if (bar.h >= o.stop) close(p, o.stop, TAKER, "stop", t);
+          else pos.push(p);
+        } else cash += o.budget; // no se llenó en su hora: se cancela
+        continue;
+      }
       if (bar && bar.l <= o.entry) {
         const qty = o.budget / o.entry;
         const p: Pos = { base: o.base, qty, entry: o.entry, stop: o.stop, target: o.target, openedAt: t, cost: o.budget };
@@ -70,7 +113,10 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
     orders = waiting;
     // Valor de la cartera al cierre de la hora.
     let equity = cash + orders.reduce((s, o) => s + o.budget, 0);
-    for (const p of pos) equity += p.qty * (barAt(p.base, t)?.c ?? p.entry);
+    for (const p of pos) {
+      const c = barAt(p.base, t)?.c ?? p.entry;
+      equity += p.short ? p.cost + p.qty * (p.entry - c) : p.qty * c;
+    }
     peak = Math.max(peak, equity);
     maxDd = Math.max(maxDd, (peak - equity) / peak);
     const m = new Date(t).toISOString().slice(0, 7);
@@ -80,7 +126,11 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
     // 3) Escáner al cierre de la hora.
     const bi = btcIdx.get(t);
     if (bi === undefined || bi < 24) continue;
-    if ((btc[bi].c / btc[bi - 24].c - 1) * 100 < -3) continue;
+    if (!short && (btc[bi].c / btc[bi - 24].c - 1) * 100 < -3) continue;
+    if (variant.regime && attack) {
+      const on = attack.get(new Date(t).toISOString().slice(0, 10));
+      if (on === undefined || (variant.regime === "ataque") !== on) continue;
+    }
     const busy = new Set([...pos.map((p) => p.base), ...orders.map((o) => o.base)]);
     for (const b of coins) {
       if (pos.length + orders.length >= SLOTS) break;
@@ -91,9 +141,18 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
       const price = bars[bars.length - 1].c;
       const r = noiseIdea(bars, price);
       if (!r) continue;
-      const target = variant.targetFraction ? r.entry + (r.target - r.entry) * variant.targetFraction : r.target;
       const budget = Math.min(cash, equity * SIZE);
       if (budget < 10) break;
+      if (short) {
+        // Solo cuando ya está en la parte baja del rango: corto con orden limitada al cierre (maker).
+        if (r.entry < price) continue;
+        const w = (r.target - r.invalidation) / 1.1; // ancho del rango (objetivo − stop = 1,1 rangos)
+        const lo = r.invalidation + 0.3 * w;
+        cash -= budget;
+        orders.push({ base: b, entry: price, stop: lo + 0.5 * w, target: 0.5 * w, until: t + 2 * HOUR, budget });
+        continue;
+      }
+      const target = variant.targetFraction ? r.entry + (r.target - r.entry) * variant.targetFraction : r.target;
       cash -= budget;
       if (r.entry >= price) {
         // Ya en la parte baja: compra al momento (taker).
@@ -118,6 +177,10 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
     winRatePct: r2((wins.length / Math.max(1, trades.length)) * 100),
     avgWinPct: r2(avg(wins.map((x) => x.pct))),
     avgLossPct: r2(avg(losses.map((x) => x.pct))),
+    byPhase: (["ataque", "defensa"] as const).map((ph) => {
+      const xs = trades.filter((x) => x.phase === ph);
+      return { phase: ph, trades: xs.length, winRatePct: r2((xs.filter((x) => x.pct > 0).length / Math.max(1, xs.length)) * 100), avgPct: r2(avg(xs.map((x) => x.pct))) };
+    }),
     exits: { objetivo: trades.filter((x) => x.exit === "objetivo").length, stop: trades.filter((x) => x.exit === "stop").length, tiempo: trades.filter((x) => x.exit === "tiempo").length },
     monthly: [...monthly.entries()].map(([m, v]) => ({ m, pct: r2((v.end / v.start - 1) * 100) })),
   };

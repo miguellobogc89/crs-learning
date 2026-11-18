@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { tickers } from "@/lib/trading/kamikaze/market";
 import { venueCoverage } from "@/lib/trading/agents/venues";
 import { BIG_COINS } from "@/lib/trading/kamikaze/roster";
-import { simulateSwarm, type HBar } from "@/lib/trading/lab/swarm";
+import { attackDays, simulateSwarm, type HBar, type SwarmVariant } from "@/lib/trading/lab/swarm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,17 +14,18 @@ export const maxDuration = 300;
 
 const HOUR = 3_600_000;
 
-async function klines(pair: string, from: number, to: number): Promise<HBar[]> {
+async function klines(pair: string, from: number, to: number, interval = "1h"): Promise<HBar[]> {
+  const step = interval === "1d" ? 24 * HOUR : HOUR;
   const out: HBar[] = [];
   let start = from;
   while (start < to) {
-    const q = new URLSearchParams({ symbol: pair, interval: "1h", startTime: String(start), limit: "1000" });
+    const q = new URLSearchParams({ symbol: pair, interval, startTime: String(start), limit: "1000" });
     const res = await fetch(`https://data-api.binance.vision/api/v3/klines?${q}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
     if (!res.ok) throw new Error(`Binance ${res.status} ${pair}`);
     const rows = (await res.json()) as unknown[][];
     if (!rows.length) break;
     for (const k of rows) out.push({ t: Number(k[0]), o: Number(k[1]), h: Number(k[2]), l: Number(k[3]), c: Number(k[4]) });
-    start = Number(rows[rows.length - 1][0]) + HOUR;
+    start = Number(rows[rows.length - 1][0]) + step;
     if (rows.length < 1000) break;
   }
   return out.filter((b) => b.t < to);
@@ -55,12 +56,18 @@ export async function GET(req: Request) {
     }));
   }
   const btc = series.get("BTC") ?? (await klines(btcPair, from - 24 * HOUR, to));
-  const variants = [
+  // Fase del mercado de cada día (Detector B con Bitcoin diario: hacen falta 200 días previos).
+  const daily = await klines(btcPair, from - 230 * 24 * HOUR, to, "1d");
+  const attack = attackDays(daily);
+  const variants: SwarmVariant[] = [
     { key: "enjambre", name: "ENJAMBRE" },
-    { key: "enjambre-grandes", name: "ENJAMBRE GRANDES", coins: BIG_COINS },
-    { key: "enjambre-rapido", name: "ENJAMBRE RÁPIDO", targetFraction: 0.5 },
+    { key: "enjambre-ataque", name: "ENJAMBRE solo en ataque", regime: "ataque" },
+    { key: "inverso-defensa", name: "INVERSO solo en defensa", side: "short", regime: "defensa" },
+    { key: "inverso", name: "INVERSO siempre", side: "short" },
+    { key: "inverso-grandes-defensa", name: "INVERSO GRANDES en defensa", side: "short", regime: "defensa", coins: BIG_COINS },
   ];
-  const results = variants.map((v) => simulateSwarm(series, btc, v, from));
+  const results = variants.map((v) => simulateSwarm(series, btc, v, from, 1000, attack));
+  const window = [...attack.entries()].filter(([d]) => d >= new Date(from).toISOString().slice(0, 10));
   const btcFrom = btc.find((b) => b.t >= from)?.o ?? null;
   const summary = {
     days,
@@ -68,6 +75,7 @@ export async function GET(req: Request) {
     to: new Date(to).toISOString(),
     coins: [...series.keys()],
     failed,
+    attackDaysPct: window.length ? Math.round((window.filter(([, on]) => on).length / window.length) * 100) : null,
     btcHoldPct: btcFrom ? Math.round((btc[btc.length - 1].c / btcFrom - 1) * 10_000) / 100 : null,
     results,
   };
