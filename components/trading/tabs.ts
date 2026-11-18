@@ -31,6 +31,9 @@ export const TRADING_SECTIONS: { title: string | null; items: TabDef[] }[] = [
 ];
 
 export const TRADING_TABS: TabDef[] = TRADING_SECTIONS.flatMap((s) => s.items);
+
+/** Las cuatro secciones principales del menú inferior móvil. */
+export const TRADING_PRIMARY_TABS: readonly TradingTab[] = ["inicio", "oportunidades", "agentes", "cartera"];
 export const isTradingTab = (v: string): v is TradingTab => (TRADING_TAB_KEYS as readonly string[]).includes(v);
 
 /** Secciones cuyo contenido se desplaza internamente para mantener visibles las pestañas. */
