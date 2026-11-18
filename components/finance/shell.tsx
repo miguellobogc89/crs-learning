@@ -115,7 +115,7 @@ function MoneyPanel({ syncing, msg, onSync }: { syncing: boolean; msg: string | 
         {data ? <span className="amount whitespace-nowrap text-lg font-bold tabular-nums text-slate-900">{eur(data.liquidity, 2)}</span> : <span className="h-6 w-20 animate-pulse rounded-md bg-slate-100" />}
       </div>
       {data && (accounts.length === 0 ? (
-        <Link href="/finanzas/conexiones" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">Conecta tus bancos →</Link>
+        <Link href="/finanzas/cuentas" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">Conecta tus bancos →</Link>
       ) : (
         <ul className="mt-2 space-y-2">
           {accounts.map((a) => (

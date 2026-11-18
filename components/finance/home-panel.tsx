@@ -30,7 +30,7 @@ export function Empty() {
       <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
         Con acceso de solo lectura a Santander, BBVA y Revolut, CRS Finance guarda tus movimientos, entiende cada uno y te dice cómo vas. También puedes importar extractos en CSV, Excel o PDF.
       </p>
-      <Link href="/finanzas/conexiones" className={`${primary} mt-5`}>Conectar un banco <ArrowRight className="h-4 w-4" /></Link>
+      <Link href="/finanzas/cuentas" className={`${primary} mt-5`}>Conectar un banco <ArrowRight className="h-4 w-4" /></Link>
     </div>
   );
 }

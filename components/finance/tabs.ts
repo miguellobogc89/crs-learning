@@ -20,8 +20,8 @@ export const FINANCE_SECTIONS: { title: string | null; items: TabDef[] }[] = [
   {
     title: "Ajustes",
     items: [
-      { key: "cuentas", label: "Cuentas", icon: Landmark, description: "Saldos y cuentas bancarias, incluidas las importadas." },
-      { key: "conexiones", label: "Conexiones", icon: Plug, description: "Integraciones con bancos y correo electrónico." },
+      { key: "cuentas", label: "Cuentas", icon: Landmark, description: "Saldos, cuentas bancarias y conexión con bancos." },
+      { key: "conexiones", label: "Conexiones", icon: Plug, description: "Integraciones con servicios externos como Gmail." },
       { key: "ajustes", label: "Preferencias", icon: Settings2, description: "Ciclo económico, reglas aprendidas y lo que recuerda el copiloto." },
     ],
   },
