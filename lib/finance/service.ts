@@ -63,6 +63,7 @@ export async function overview(userId: string, offset = 0) {
   const pendingReview = txs.filter((t) => t.source === "auto" || t.source === "pendiente").length;
   const pendingClassify = txs.filter((t) => t.source === "pendiente").length;
   const syncDue = !settings.lastSyncAt || Date.now() - new Date(settings.lastSyncAt).getTime() > AUTO_SYNC_HOURS * 3_600_000;
+  const includedAccountIds = new Set(accounts.filter((account) => account.included).map((account) => account.id));
   return {
     today,
     settings,
@@ -74,6 +75,11 @@ export async function overview(userId: string, offset = 0) {
     previous: prev,
     history: [...history].reverse().map((h) => ({ cycle: h.cycle, income: h.income, gifts: h.gifts, expenses: h.expenses, net: h.net, savedToInvestments: h.savedToInvestments })),
     cashflow: cashflowPeriods(txs, today),
+    recentExpenses: txs
+      .filter((tx) => tx.kind === "gasto" && tx.amount < 0 && includedAccountIds.has(tx.accountId))
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 5)
+      .map(({ id, date, amount, description, counterparty, category }) => ({ id, date, amount, description, counterparty, category })),
     liquiditySeries: liquiditySeries(accounts.filter((a) => a.included), txs, cycleDates),
     projection,
     budgets: budgetsNow,
