@@ -9,7 +9,7 @@ export const CARTERA_VIRTUAL_HREF = `${CARTERA_REAL_HREF}?modo=virtual`;
 
 export const TRADING_TAB_KEYS = ["inicio", "oportunidades", "agentes", "cartera", "mercados", "integraciones"] as const;
 export type TradingTab = (typeof TRADING_TAB_KEYS)[number];
-type TabDef = { key: TradingTab; label: string; icon: ComponentType<{ className?: string }>; description: string };
+type TabDef = { key: TradingTab; label: string; icon: ComponentType<{ className?: string; strokeWidth?: number }>; description: string };
 
 export const TRADING_SECTIONS: { title: string | null; items: TabDef[] }[] = [
   {
