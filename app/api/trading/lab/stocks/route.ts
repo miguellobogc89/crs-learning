@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { fetchDailyCandles } from "@/lib/trading/market-data";
-import { simulateStocks, type DBar, type Market } from "@/lib/trading/lab/stocks";
+import { holdAll, simulateRotation, simulateStocks, type DBar, type Market } from "@/lib/trading/lab/stocks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,7 +62,13 @@ export async function GET(req: Request) {
     const last = m.index[m.index.length - 1];
     return [m.key, first ? Math.round((last.c / first.c - 1) * 10_000) / 100 : null];
   }));
-  const summary = { years, from: new Date(from).toISOString(), markets: markets.map((m) => `${m.key}:${m.stocks.size}`), failed, indexPct, result };
+  const rotation = {
+    top3Ataque: simulateRotation(markets, from, { top: 3 }),
+    top3SinFiltro: simulateRotation(markets, from, { top: 3, gate: false }),
+    top1Ataque: simulateRotation(markets, from, { top: 1 }),
+    holdAllPct: holdAll(markets, from),
+  };
+  const summary = { years, from: new Date(from).toISOString(), markets: markets.map((m) => `${m.key}:${m.stocks.size}`), failed, indexPct, rotation, result };
   await prisma.$executeRaw`INSERT INTO trading_lab_results (name, params, result) VALUES ('enjambre-bolsa', ${JSON.stringify({ years })}::jsonb, ${JSON.stringify(summary)}::jsonb)`;
   return NextResponse.json(summary);
 }

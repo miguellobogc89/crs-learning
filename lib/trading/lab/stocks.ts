@@ -178,3 +178,86 @@ export function simulateStocks(markets: Market[], from: number, opts: { top?: nu
     monthly: [...monthly.entries()].map(([m, v]) => ({ m, pct: r2((v.end / v.start - 1) * 100) })),
   };
 }
+
+/**
+ * Rotación por países: todo el dinero repartido a partes iguales entre los `top` países más fuertes que están en
+ * ataque (el índice como si fuera un ETF). Se decide al cierre y se ejecuta a la apertura siguiente, solo cuando
+ * cambia el grupo. Sin países en ataque, efectivo. `gate: false` = los más fuertes aunque estén en defensa.
+ */
+export function simulateRotation(markets: Market[], from: number, opts: { top?: number; fee?: number; gate?: boolean } = {}) {
+  const top = opts.top ?? 3, fee = opts.fee ?? 0.0015, gate = opts.gate ?? true;
+  const rad = radar(markets);
+  const at = new Map(markets.map((m) => [m.key, new Map(m.index.map((b, i) => [dayKey(b.t), i]))]));
+  const days = [...new Set(markets.flatMap((m) => m.index.map((b) => dayKey(b.t))))].filter((d) => d >= dayKey(from)).sort();
+  let cash = 1000;
+  const units = new Map<string, number>();
+  const last = new Map<string, number>();
+  let want: string[] | null = null;
+  let peak = 1000, maxDd = 0, switches = 0;
+  const yearly = new Map<string, { start: number; end: number }>();
+  for (const d of days) {
+    for (const m of markets) {
+      const i = at.get(m.key)!.get(d);
+      if (i !== undefined) last.set(m.key, m.index[i].c);
+    }
+    // Ejecuta a la apertura lo decidido ayer (vende lo que sobra y reparte entre los nuevos).
+    if (want) {
+      const openOf = (k: string) => {
+        const i = at.get(k)!.get(d);
+        return i === undefined ? null : markets.find((m) => m.key === k)!.index[i].o;
+      };
+      for (const [k, u] of [...units]) {
+        if (want.includes(k)) continue;
+        const px = openOf(k);
+        if (px === null) continue;
+        cash += u * px * (1 - fee);
+        units.delete(k);
+      }
+      const buy = want.filter((k) => !units.has(k) && openOf(k) !== null);
+      if (buy.length) {
+        const slots = want.length - (want.length - buy.length);
+        const per = cash / slots;
+        for (const k of buy) {
+          units.set(k, (per * (1 - fee)) / openOf(k)!);
+          cash -= per;
+        }
+      }
+      switches++;
+      want = null;
+    }
+    let equity = cash;
+    for (const [k, u] of units) equity += u * (last.get(k) ?? 0);
+    peak = Math.max(peak, equity);
+    maxDd = Math.max(maxDd, (peak - equity) / peak);
+    const y = d.slice(0, 4);
+    const yy = yearly.get(y);
+    if (!yy) yearly.set(y, { start: equity, end: equity });
+    else yy.end = equity;
+    const pick = markets
+      .map((m) => ({ k: m.key, r: rad.get(m.key)?.get(d) }))
+      .filter((x) => x.r && (!gate || x.r.attack))
+      .sort((a, b) => b.r!.strength - a.r!.strength)
+      .slice(0, top)
+      .map((x) => x.k);
+    const now = [...units.keys()];
+    if (pick.length !== now.length || pick.some((k) => !units.has(k))) want = pick;
+  }
+  let final = cash;
+  for (const [k, u] of units) final += u * (last.get(k) ?? 0);
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  return {
+    returnPct: r2((final / 1000 - 1) * 100),
+    maxDrawdownPct: r2(maxDd * 100),
+    switches,
+    yearly: [...yearly.entries()].map(([y, v]) => ({ y, pct: r2((v.end / v.start - 1) * 100) })),
+  };
+}
+
+/** Referencia: comprar y mantener todos los índices a partes iguales. */
+export function holdAll(markets: Market[], from: number) {
+  const parts = markets.map((m) => {
+    const first = m.index.find((b) => b.t >= from);
+    return first ? m.index[m.index.length - 1].c / first.o : null;
+  }).filter((x): x is number => x !== null);
+  return Math.round((parts.reduce((s, x) => s + x, 0) / parts.length - 1) * 10_000) / 100;
+}
