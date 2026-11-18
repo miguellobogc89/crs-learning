@@ -155,6 +155,7 @@ export function IntegrationsPanel() {
                   <ConnectionRow
                     key={c.id}
                     c={c}
+                    readOnly={!p.capabilities.includes("place_order")}
                     showEnvironment={p.environments.length > 1}
                     canManage={data.canManage}
                     busy={busy}
@@ -335,9 +336,10 @@ function ConnectionInfo({ provider, connections, realEnabled }: { provider: Prov
 const actionPill = (on = false) => `inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${on ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`;
 
 function ConnectionRow({
-  c, showEnvironment, canManage, busy, onVerify, onDisconnect, onPermissions, onUseForTrading, onView,
+  c, readOnly, showEnvironment, canManage, busy, onVerify, onDisconnect, onPermissions, onUseForTrading, onView,
 }: {
   c: ConnectionView;
+  readOnly: boolean;
   showEnvironment: boolean;
   canManage: boolean;
   busy: string | null;
@@ -364,7 +366,7 @@ function ConnectionRow({
           <button type="button" className={actionPill()} onClick={onView}>
             <Eye className="size-3.5" /> Ver cuenta
           </button>
-          {PERMISSION.map((p) => {
+          {PERMISSION.filter((p) => !readOnly || p.key === "read").map((p) => {
             const on = c.permissions.includes(p.key);
             return (
               <button key={p.key} type="button" title={p.text} disabled={!!busy} onClick={() => toggle(p.key)}
@@ -374,7 +376,7 @@ function ConnectionRow({
               </button>
             );
           })}
-          {(canManage || c.usedByTrading) && (
+          {!readOnly && (canManage || c.usedByTrading) && (
             <button type="button" className={actionPill(c.usedByTrading)}
               title="Usar para la cartera de Trading" aria-pressed={c.usedByTrading}
               disabled={!!busy || !canManage} onClick={() => onUseForTrading(!c.usedByTrading)}>
@@ -418,8 +420,8 @@ function ConnectModal({
   const [environment, setEnvironment] = useState<BrokerEnvironment>(envs[0] ?? "demo");
   const [useServer, setUseServer] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
-  // Operativa desde el principio: leer, operar y automatismos (Oportunidades y copias). Se pueden quitar.
-  const [perms, setPerms] = useState<BrokerPermission[]>(["read", "trade", "auto"]);
+  // Los proveedores sin capacidad place_order se conectan únicamente en modo lectura.
+  const [perms, setPerms] = useState<BrokerPermission[]>(provider.capabilities.includes("place_order") ? ["read", "trade", "auto"] : ["read"]);
   const [realOk, setRealOk] = useState(false);
   const [remember, setRemember] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -572,7 +574,8 @@ function ConnectModal({
           <label className="flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-orange-900">
             <input type="checkbox" className="mt-1" checked={realOk} onChange={(e) => setRealOk(e.target.checked)} />
             <span>
-              <b>Es mi cuenta con dinero real</b> y mi clave no tiene los retiros habilitados. Con «Operar» y «Automático» la app podrá comprar y vender por mí (Oportunidades y copias).
+              <b>Es mi cuenta con dinero real</b> y mi clave no tiene los retiros habilitados.
+              {provider.capabilities.includes("place_order") && " Con «Operar» y «Automático» la app podrá comprar y vender por mí (Oportunidades y copias)."}
             </span>
           </label>
         )}
@@ -580,7 +583,7 @@ function ConnectModal({
         <div>
           <div className="mb-1.5 text-xs font-medium text-slate-600">Qué permites a CRS</div>
           <div className="space-y-1.5">
-            {PERMISSION.map((p) => {
+            {PERMISSION.filter((p) => provider.capabilities.includes("place_order") || p.key === "read").map((p) => {
               const on = perms.includes(p.key);
               return (
                 <label key={p.key} className="flex items-start gap-2">

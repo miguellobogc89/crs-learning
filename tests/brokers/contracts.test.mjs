@@ -58,18 +58,18 @@ const code = (fn, expected) =>
 // ---------------------------------------------------------------------------
 // Registro
 // ---------------------------------------------------------------------------
-test("registro: Trading 212, Binance, Bitvavo y Coinbase registrados y coherentes; los demás anunciados sin adaptador", () => {
+test("registro: brókeres disponibles, incluido Kraken Futures, y proveedores aún no habilitados", () => {
   assert.ok(brokerRegistry.has("trading212"));
   assert.deepEqual(checkAdapter(brokerRegistry.get("trading212")), []);
   assert.ok(brokerRegistry.has("binance"));
   assert.deepEqual(checkAdapter(brokerRegistry.get("binance")), []);
-  for (const id of ["bitvavo", "coinbase"]) {
+  for (const id of ["bitvavo", "coinbase", "kraken"]) {
     assert.ok(brokerRegistry.has(id));
     assert.deepEqual(checkAdapter(brokerRegistry.get(id)), []);
   }
   const list = brokerRegistry.list();
   const soon = list.filter((p) => p.availability === "soon").map((p) => p.id);
-  assert.deepEqual(soon.sort(), ["ibkr", "kraken"]);
+  assert.deepEqual(soon.sort(), ["ibkr"]);
   for (const id of soon) {
     assert.equal(brokerRegistry.has(id), false, `${id} no debe poder usarse`);
     code(() => brokerRegistry.get(id), "unsupported");
