@@ -510,6 +510,14 @@ export function summarize(txs: Tx[], cycle: Cycle, recurringKeys: Set<string> = 
   };
 }
 
+/** Detalle precargado de las mismas operaciones que suman las barras de gastos de un ciclo. */
+export function expenseTransactionsForCycle(txs: Tx[], cycle: Cycle) {
+  return txs
+    .filter((t) => inCycle(t, cycle) && (t.kind === "gasto" || t.kind === "devolucion"))
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map(({ id, date, amount, description, counterparty, category, kind }) => ({ id, date, amount, description, counterparty, category, kind }));
+}
+
 /** Periodos del gráfico de Inicio móvil. Usa la misma clasificación que el resto de Finanzas. */
 export function cashflowPeriods(txs: Tx[], today: string) {
   const dateLabel = (date: string, options: Intl.DateTimeFormatOptions) =>

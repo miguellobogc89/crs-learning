@@ -131,6 +131,21 @@ test("resumen: las internas y el ahorro no son gasto; las devoluciones restan; l
   assert.deepEqual(s.byCategory, [{ category: "compras", amount: 550 }]);
 });
 
+test("detalle de Inicio: precarga gastos y devoluciones del ciclo, ordenados y sin internas", () => {
+  const cycle = L.cycleFor("2026-11-18", 25);
+  const movements = [
+    tx("a", "S", "2026-11-02", -80, "Alquiler", "gasto", "vivienda"),
+    tx("b", "S", "2026-11-16", 20, "Devolución", "devolucion", "vivienda"),
+    tx("c", "R", "2026-11-17", -50, "Traspaso", "interna", "vivienda"),
+    tx("d", "S", "2026-10-23", -100, "Ciclo anterior", "gasto", "vivienda"),
+    tx("e", "S", "2026-11-18", -12, "Cena", "gasto", "restaurantes"),
+  ];
+  const detailed = L.expenseTransactionsForCycle(movements, cycle);
+  assert.deepEqual(detailed.map((t) => t.id), ["e", "b", "a"]);
+  assert.deepEqual(detailed.filter((t) => t.category === "vivienda").map((t) => t.amount), [20, -80]);
+  assert.equal(L.summarize(movements, cycle).byCategory.find((c) => c.category === "vivienda").amount, 60);
+});
+
 test("proyección: saldo de hoy + cobros − recibos − gasto variable medio; ¿me lo puedo permitir?", () => {
   const txs = history();
   const rec = L.detectRecurring(txs, "2026-11-17");

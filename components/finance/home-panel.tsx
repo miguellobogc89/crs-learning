@@ -16,6 +16,7 @@ import { BalanceLine, CategoryBars, CycleBars } from "./charts";
 import { useHideAmounts } from "./privacy";
 import { requestSync } from "./shell";
 import { BankLogo } from "./bank-logo";
+import { CategoryExpensesSheet } from "./category-expenses-sheet";
 
 type Overview = Awaited<ReturnType<typeof overview>>;
 const CASHFLOW_RANGES = ["7D", "1M", "6M", "1A"] as const;
@@ -107,6 +108,7 @@ export function HomePanel() {
   const [offset, setOffset] = useState(() => Math.min(0, Number(params.get("ciclo")) || 0));
   const [cashflowRange, setCashflowRange] = useState<CashflowRange>("1M");
   const [expensesView, setExpensesView] = useState<"categories" | "recent">("categories");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const { data, error, loading } = useFinance<Overview>(offset ? `overview?cycle=${offset}` : "overview");
   const { hidden, toggle } = useHideAmounts();
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
@@ -203,7 +205,7 @@ export function HomePanel() {
           <div>
             <p className="mb-3 text-xs text-slate-500">Gastos del ciclo actual</p>
             <CategoryBars items={v.categories} previous={v.previousCategories} limit={5}
-              onSelect={(category) => { window.location.href = `/finanzas/movimientos?categoria=${encodeURIComponent(category)}`; }} />
+              onSelect={setSelectedCategory} />
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -220,6 +222,14 @@ export function HomePanel() {
           </ul>
         )}
       </section>
+
+      <CategoryExpensesSheet
+        category={selectedCategory}
+        cycleLabel={v.cycle.label}
+        total={v.categories.find((c) => c.category === selectedCategory)?.amount ?? 0}
+        items={(v.categoryExpenses ?? []).filter((tx) => tx.category === selectedCategory)}
+        onClose={() => setSelectedCategory(null)}
+      />
 
       {/* Indicadores de escritorio */}
       <div className="hidden grid-cols-2 gap-3 sm:grid lg:grid-cols-3 lg:gap-4">
