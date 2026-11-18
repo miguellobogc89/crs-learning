@@ -510,6 +510,46 @@ export function summarize(txs: Tx[], cycle: Cycle, recurringKeys: Set<string> = 
   };
 }
 
+/** Periodos del gráfico de Inicio móvil. Usa la misma clasificación que el resto de Finanzas. */
+export function cashflowPeriods(txs: Tx[], today: string) {
+  const dateLabel = (date: string, options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("es-ES", { ...options, timeZone: "UTC" })
+      .format(toDate(date)).replaceAll(".", "");
+  const monthStart = (offset: number) => {
+    const d = toDate(today);
+    return iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + offset, 1)));
+  };
+  const bucket = (start: string, end: string, label: string, title: string) => {
+    const s = summarize(txs, { start, end, label });
+    return { label, title, income: round2(s.income + s.gifts), expenses: s.expenses, net: s.net };
+  };
+  const total = (points: ReturnType<typeof bucket>[]) => ({
+    points,
+    income: round2(points.reduce((s, p) => s + p.income, 0)),
+    expenses: round2(points.reduce((s, p) => s + p.expenses, 0)),
+    net: round2(points.reduce((s, p) => s + p.net, 0)),
+  });
+
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(today, i - 6);
+    return bucket(d, d, dateLabel(d, { weekday: "short" }), dateLabel(d, { day: "numeric", month: "long" }));
+  });
+  const first = addDays(today, -29);
+  const weeks = Array.from({ length: 5 }, (_, i) => {
+    const start = addDays(first, i * 7);
+    const end = addDays(start, Math.min(6, daysBetween(start, today)));
+    return bucket(start, end, dateLabel(start, { day: "numeric", month: "short" }),
+      `${dateLabel(start, { day: "numeric", month: "short" })} – ${dateLabel(end, { day: "numeric", month: "short" })}`);
+  });
+  const months = (count: number) => Array.from({ length: count }, (_, i) => {
+    const start = monthStart(i + 1 - count);
+    const next = monthStart(i + 2 - count);
+    const end = addDays(next, -1) > today ? today : addDays(next, -1);
+    return bucket(start, end, dateLabel(start, { month: "short" }), dateLabel(start, { month: "long", year: "numeric" }));
+  });
+  return { "7D": total(days), "1M": total(weeks), "6M": total(months(6)), "1A": total(months(12)) };
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // Presupuestos
 // ---------------------------------------------------------------------------------------------------------

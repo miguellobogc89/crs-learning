@@ -4,7 +4,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal-finance/enable-banking";
 import {
-  addDays, affordability, budgetStatus, cycleFor, daysBetween, detectAlerts, detectRecurring, liquiditySeries, merchantKey,
+  addDays, affordability, budgetStatus, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, liquiditySeries, merchantKey,
   normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
@@ -73,6 +73,7 @@ export async function overview(userId: string, offset = 0) {
     current,
     previous: prev,
     history: [...history].reverse().map((h) => ({ cycle: h.cycle, income: h.income, gifts: h.gifts, expenses: h.expenses, net: h.net, savedToInvestments: h.savedToInvestments })),
+    cashflow: cashflowPeriods(txs, today),
     liquiditySeries: liquiditySeries(accounts.filter((a) => a.included), txs, cycleDates),
     projection,
     budgets: budgetsNow,

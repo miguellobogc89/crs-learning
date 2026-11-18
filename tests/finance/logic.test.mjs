@@ -11,6 +11,28 @@ const tx = (id, account, date, amount, description, kind = "gasto", category = "
   category, kind, source: "ia", extraordinary: false, transferPairId: null, ...extra,
 });
 
+test("Inicio móvil: los cuatro periodos suman gastos e ingresos sin contar traspasos", () => {
+  const movements = [
+    tx("1", "S", "2026-11-18", 2000, "Nómina", "ingreso"),
+    tx("2", "S", "2026-11-17", -85, "Supermercado"),
+    tx("3", "R", "2026-11-17", -150, "Traspaso", "interna"),
+    tx("4", "S", "2026-11-16", 20, "Reembolso", "devolucion"),
+    tx("5", "S", "2026-11-13", 50, "Regalo", "regalo"),
+    tx("6", "S", "2026-10-22", -100, "Compra anterior"),
+    tx("7", "S", "2026-09-05", -300, "Gasto septiembre"),
+  ];
+  const result = L.cashflowPeriods(movements, "2026-11-18");
+  assert.equal(result["7D"].points.length, 7);
+  assert.equal(result["7D"].income, 2050);
+  assert.equal(result["7D"].expenses, 65);
+  assert.equal(result["7D"].net, 1985);
+  assert.equal(result["1M"].points.length, 5);
+  assert.equal(result["1M"].expenses, 165);
+  assert.equal(result["6M"].points.length, 6);
+  assert.equal(result["6M"].expenses, 465);
+  assert.equal(result["1A"].points.length, 12);
+});
+
 test("ciclo del 25 al 24: el 17 de noviembre cae en el ciclo que empezó el 25 de octubre", () => {
   assert.deepEqual(L.cycleFor("2026-11-17", 25), { start: "2026-10-25", end: "2026-11-24", label: "25 oct – 24 nov" });
   assert.equal(L.cycleFor("2026-11-25", 25).start, "2026-11-25");

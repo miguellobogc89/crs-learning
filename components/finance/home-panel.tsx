@@ -11,12 +11,14 @@ import { card, eur, flat, primary } from "@/components/trading/format";
 import { CardHeader, ErrorNote, SectionTitle } from "@/components/trading/ui";
 import { SkeletonStats, SkeletonList } from "@/components/trading/skeletons";
 import { fapi, refreshFinance, shortDay, useFinance } from "./api";
-import { BalanceLine, CategoryBars } from "./charts";
+import { BalanceLine, CategoryBars, CycleBars } from "./charts";
 import { useHideAmounts } from "./privacy";
 import { requestSync } from "./shell";
 import { BankLogo } from "./bank-logo";
 
 type Overview = Awaited<ReturnType<typeof overview>>;
+const CASHFLOW_RANGES = ["7D", "1M", "6M", "1A"] as const;
+type CashflowRange = (typeof CASHFLOW_RANGES)[number];
 
 export function Empty() {
   return (
@@ -102,6 +104,7 @@ function KpiCard({ icon: Icon, tint, label, mobileLabel, value, valueTone, sub, 
 export function HomePanel() {
   const params = useSearchParams();
   const [offset, setOffset] = useState(() => Math.min(0, Number(params.get("ciclo")) || 0));
+  const [cashflowRange, setCashflowRange] = useState<CashflowRange>("1M");
   const { data, error, loading } = useFinance<Overview>(offset ? `overview?cycle=${offset}` : "overview");
   const { hidden, toggle } = useHideAmounts();
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
@@ -114,6 +117,7 @@ export function HomePanel() {
   const expDelta = delta(t.expenses, v.previous?.expenses, !!v.previous?.partial, true);
   const goal = data.settings.savingsGoal;
   const review = data.pendingReview;
+  const cashflow = data.cashflow[cashflowRange];
 
   return (
     <div className={`space-y-4 pb-6 ${loading ? "opacity-80" : ""}`}>
@@ -143,8 +147,32 @@ export function HomePanel() {
         </Link>
       )}
 
-      {/* Tres cifras */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
+      {/* Inicio móvil: primero la evolución de ingresos y gastos, con su propio periodo. */}
+      <section className={`${card} ${flat} p-4 sm:hidden`}>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-slate-900">Evolución</h2>
+          <div className="flex shrink-0 rounded-lg bg-slate-100 p-0.5" role="group" aria-label="Periodo de la evolución">
+            {CASHFLOW_RANGES.map((range) => (
+              <button key={range} type="button" onClick={() => setCashflowRange(range)} aria-pressed={cashflowRange === range}
+                className={`rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${cashflowRange === range ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>
+                {range}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-4">
+          <CycleBars key={cashflowRange} data={cashflow.points} incomeColor="#16a34a" expenseColor="#2563eb" height={210} />
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+          <span className="text-sm text-slate-600">Ahorro neto del periodo</span>
+          <strong className={`amount text-lg font-bold tabular-nums ${cashflow.net >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+            {eur(cashflow.net, 2)}
+          </strong>
+        </div>
+      </section>
+
+      {/* Indicadores de escritorio */}
+      <div className="hidden grid-cols-2 gap-3 sm:grid lg:grid-cols-3 lg:gap-4">
         <KpiCard
           className="col-span-2 lg:col-span-1"
           icon={Landmark}
@@ -191,7 +219,7 @@ export function HomePanel() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Evolución del saldo */}
-        <section className={`${card} ${flat} p-4 sm:p-5 lg:col-span-2`}>
+        <section className={`${card} ${flat} hidden p-4 sm:block sm:p-5 lg:col-span-2`}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <SectionTitle icon={TrendingUp} tint="blue" size="base">Evolución de tu dinero</SectionTitle>
             <p className="flex gap-3 text-xs text-slate-500">

@@ -20,7 +20,9 @@ const compact = (v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toLocaleStri
 export type CyclePoint = { label: string; income: number; expenses: number; net: number; /** Texto del detalle (si no, la etiqueta). */ title?: string; current?: boolean };
 
 /** Ingresos frente a gastos por ciclo (barras agrupadas, una escala). */
-export function CycleBars({ data, height = 200 }: { data: CyclePoint[]; height?: number }) {
+export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseColor = EXPENSE }: {
+  data: CyclePoint[]; height?: number; incomeColor?: string; expenseColor?: string;
+}) {
   const [hover, setHover] = useState<number | null>(null);
   const W = 640;
   const H = height;
@@ -36,10 +38,10 @@ export function CycleBars({ data, height = 200 }: { data: CyclePoint[]; height?:
   return (
     <div className="relative">
       <div className="mb-2 flex items-center gap-4 text-xs text-slate-600">
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: INCOME }} /> Ingresos</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: EXPENSE }} /> Gastos</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: incomeColor }} /> Ingresos</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: expenseColor }} /> Gastos</span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Ingresos y gastos por ciclo" onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Ingresos y gastos del periodo" onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="#e2e8f0" strokeWidth={1} strokeDasharray={t === 0 ? undefined : "3 3"} />
@@ -57,8 +59,8 @@ export function CycleBars({ data, height = 200 }: { data: CyclePoint[]; height?:
           return (
             <g key={`${i}:${d.label}`} onMouseEnter={() => setHover(i)} onTouchStart={() => setHover(i)}>
               <rect x={cx - slot / 2} y={pad.t} width={slot} height={ih} fill="transparent" />
-              {bar(d.income, cx - bw - 1, INCOME)}
-              {bar(d.expenses, cx + 1, EXPENSE)}
+              {bar(d.income, cx - bw - 1, incomeColor)}
+              {bar(d.expenses, cx + 1, expenseColor)}
               <text x={cx} y={H - 8} textAnchor="middle" className={d.current ? "fill-slate-900 text-[10px] font-semibold" : "fill-slate-500 text-[10px]"}>{d.label}</text>
             </g>
           );
