@@ -3,7 +3,7 @@
 // Si todo funciona, tu dinero, el mercado en cuatro datos, cómo va cada familia de agentes y lo que gasta
 // la IA. Los indicadores detallados (lo que antes era Panorama) quedan en un desplegable al final.
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { AlertTriangle, Bot, ChevronDown, CircleCheck, Cpu, Gauge, Shield, Swords, Wallet } from "lucide-react";
+import { AlertTriangle, Bot, ChevronDown, Cpu, Gauge, Shield, Swords, Wallet } from "lucide-react";
 import type { getSummary } from "@/lib/trading/summary";
 import { api, card, eur, errorText, flat } from "./format";
 import { useTradingRefresh, useWarmStart } from "./navigation";
@@ -83,24 +83,15 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
         !error && <LoadingCard height="h-96" />
       ) : (
         <>
-          {/* ¿Funciona todo? */}
-          {data.health && (
-            <button
-              type="button"
-              onClick={openNotifications}
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left ${data.health.problems ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}
-            >
-              {data.health.problems ? <AlertTriangle className="h-5 w-5 shrink-0" /> : <CircleCheck className="h-5 w-5 shrink-0" />}
+          {data.health?.problems ? (
+            <button type="button" onClick={openNotifications} className="flex w-full items-center gap-3 rounded-2xl bg-red-50 px-4 py-3 text-left text-red-800">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
               <span className="min-w-0 flex-1">
-                <b className="block text-sm font-semibold">
-                  {data.health.problems ? `${data.health.problems} ${data.health.problems === 1 ? "problema" : "problemas"}` : "Todo funciona"}
-                </b>
-                <span className="block truncate text-xs opacity-80">
-                  {data.health.problems ? data.health.latest.join(" · ") : "FARO analiza y los agentes se revisan cada 5 minutos"}
-                </span>
+                <b className="block text-sm font-semibold">{data.health.problems} {data.health.problems === 1 ? "problema" : "problemas"}</b>
+                <span className="block truncate text-xs opacity-80">{data.health.latest.join(" · ")}</span>
               </span>
             </button>
-          )}
+          ) : null}
 
           <div className="grid gap-4 lg:grid-cols-2">
             {/* Tu dinero */}
