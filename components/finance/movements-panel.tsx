@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ArrowDownUp, ArrowLeftRight, CheckSquare2, ChevronDown, Filter, ListFilter, Loader2, Search, Sparkles, Star, X } from "lucide-react";
 import type { listTransactions } from "@/lib/finance/service";
-import { CATEGORIES, KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
+import { SELECTABLE_CATEGORIES, KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur, field, ghost, panel, primary, th } from "@/components/trading/format";
 import { ErrorNote, Modal, Pill } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
@@ -70,7 +70,7 @@ function EditModal({ item, onClose }: { item: Item | null; onClose: () => void }
     setDone(null);
   }, [item]);
   if (!item) return null;
-  const options = CATEGORIES.filter((c) => c.key !== "sin_clasificar" && (kind === "gasto" || kind === "devolucion" ? c.kind === "gasto" : kind === "ingreso" ? c.kind === "ingreso" : c.kind === kind));
+  const options = categoriesFor(kind);
   const save = async () => {
     setBusy(true);
     setErr(null);
@@ -168,8 +168,6 @@ const GROUPS: { value: Group; label: string }[] = [
   { value: "kind", label: "Tipo" },
   { value: "account", label: "Cuenta" },
 ];
-const FILTER_CATEGORIES = CATEGORIES.filter((c) => c.key !== "sin_clasificar")
-  .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
 const PAGE = 150;
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const isReview = (t: Item) => t.source === "auto" || t.source === "pendiente";
@@ -205,7 +203,7 @@ function writeLocal(key: string, value: unknown) {
 
 /** Categorías que encajan con un tipo (un gasto o una devolución usan las de gasto). */
 const categoriesFor = (kind: Kind) =>
-  CATEGORIES.filter((c) => c.key !== "sin_clasificar" && (kind === "gasto" || kind === "devolucion" ? c.kind === "gasto" : c.kind === kind));
+  SELECTABLE_CATEGORIES.filter((c) => (kind === "gasto" || kind === "devolucion" ? c.kind === "gasto" : c.kind === kind));
 
 /** Cambio rápido desde la propia fila: tipo o categoría con un toque. */
 function QuickEdit({ t, onMore, onDone }: { t: Item; onMore: () => void; onDone: (msg: string) => void }) {
@@ -517,7 +515,7 @@ export function MovementsPanel() {
                 {[
                   { title: "Estado", value: status, options: [{ value: "all", label: "Todos" }, { value: "revisar", label: "Por revisar" }, { value: "usuario", label: "Corregidos por mí" }, { value: "extra", label: "Extraordinarios" }], change: (v: string) => setStatus(v as Status) },
                   { title: "Tipo", value: kind, options: [{ value: "all", label: "Todos los tipos" }, ...KINDS.map((k) => ({ value: k, label: KIND_LABEL[k] }))], change: setKind },
-                  { title: "Categoría", value: category, options: [{ value: "all", label: "Todas las categorías" }, ...FILTER_CATEGORIES.map((c) => ({ value: c.key, label: c.label }))], change: setCategory },
+                  { title: "Categoría", value: category, options: [{ value: "all", label: "Todas las categorías" }, ...SELECTABLE_CATEGORIES.map((c) => ({ value: c.key, label: c.label }))], change: setCategory },
                 ].map((f) => (
                   <div key={f.title}>
                     <DropdownMenuSeparator />
@@ -561,7 +559,7 @@ export function MovementsPanel() {
           groups: [
             { key: "status", label: "Estado", value: status, allLabel: "Todos", options: [{ value: "revisar", label: "Por revisar" }, { value: "usuario", label: "Corregidos por mí" }, { value: "extra", label: "Extraordinarios" }] },
             { key: "kind", label: "Tipo", value: kind, allLabel: "Todos los tipos", allIcon: ListFilter, options: KINDS.map((k) => ({ value: k, label: KIND_LABEL[k] })) },
-            { key: "category", label: "Categoría", value: category, allLabel: "Todas las categorías", allIcon: ListFilter, options: FILTER_CATEGORIES.map((c) => ({ value: c.key, label: c.label })) },
+            { key: "category", label: "Categoría", value: category, allLabel: "Todas las categorías", allIcon: ListFilter, options: SELECTABLE_CATEGORIES.map((c) => ({ value: c.key, label: c.label })) },
           ],
           onChange: (key, value) => (key === "status" ? setStatus(value as Status) : key === "kind" ? setKind(value) : setCategory(value)),
           onClear: () => {

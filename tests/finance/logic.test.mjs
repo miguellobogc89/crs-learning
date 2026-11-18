@@ -73,6 +73,15 @@ test("videojuegos: categoría de gasto y tiendas de juegos, sin confundir Netfli
   assert.equal(L.keywordClass({ description: "NETFLIX.COM", counterparty: null, amount: -12.99 })?.category, "suscripciones");
 });
 
+test("los selectores de categorías están ordenados alfabéticamente", () => {
+  const labels = C.SELECTABLE_CATEGORIES.map((c) => c.label);
+  const gastos = C.EXPENSE_CATEGORIES.map((c) => c.label);
+  const alphabetical = (a, b) => a.localeCompare(b, "es", { sensitivity: "base" });
+  assert.deepEqual(labels, [...labels].sort(alphabetical));
+  assert.deepEqual(gastos, [...gastos].sort(alphabetical));
+  assert.equal(C.EXPENSE_CATEGORIES.some((c) => c.key === "videojuegos"), true);
+});
+
 test("la nómina de Endesa no es «suministros» y una entrada con nombre de comercio se deja a la IA", () => {
   const n = L.keywordClass({ description: "TRANSFERENCIA DE ENDESA X WAY S.L., CONCEPTO Sueldo/Salar.", counterparty: null, amount: 2894.77 });
   assert.deepEqual([n.category, n.kind], ["nomina", "ingreso"]);
