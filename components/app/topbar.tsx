@@ -8,6 +8,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Bell,
   ChevronDown,
   CircleHelp,
   LogOut,
@@ -19,6 +20,8 @@ import {
 
 import { logout } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { MobileAppHeader } from "@/components/platform/mobile-app-header";
+import { APP_SECTIONS } from "@/lib/navigation/app-sections";
 import { GlobalSearch } from "@/components/search/global-search";
 import {
   DropdownMenu,
@@ -63,9 +66,51 @@ export function AppTopbar({
   const pathname = usePathname();
   const userLabel = user.name ?? user.email ?? "Usuario";
   const isKnowledge = pathname.startsWith("/knowledge");
+  const appSection = Object.values(APP_SECTIONS).find((item) => pathname === item.href || pathname.startsWith(item.href + "/"));
+  const firstLevel = pathname.split("/").filter(Boolean).length === 1;
+  const primary = firstLevel && !["/settings", "/notifications", "/my-space", "/admin"].includes(pathname);
+  const mobileTitle = pathname === "/notifications"
+    ? "Notificaciones"
+    : pathname === "/settings"
+      ? "Configuración"
+      : pathname === "/my-space"
+        ? "Mi espacio"
+        : firstLevel
+          ? appSection?.label ?? "CRS LAB"
+          : pathname.endsWith("/new")
+            ? "Nuevo"
+            : "Detalle";
+  const backHref = appSection?.href && appSection.href !== pathname ? appSection.href : "/dashboard";
 
   return (
-<header className="relative z-50 flex h-[68px] shrink-0 items-start gap-3 bg-transparent px-page-padding-sm pt-3 sm:px-page-padding-md lg:px-page-padding-lg">    
+    <>
+      <MobileAppHeader
+        primary={primary}
+        menuControl={
+          <SheetTrigger asChild>
+            <button type="button" aria-label="Abrir el menú" className="flex size-11 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 active:bg-slate-100">
+              <Menu className="size-5" />
+            </button>
+          </SheetTrigger>
+        }
+        backHref={backHref}
+        title={<span className="truncate">{mobileTitle}</span>}
+        right={
+          pathname === "/notifications" ? (
+            <Bell className="size-5 text-slate-500" aria-hidden="true" />
+          ) : (
+            <Link href="/notifications" aria-label="Notificaciones" className="relative flex size-11 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100">
+              <Bell className="size-5" />
+              {unreadNotificationCount > 0 && (
+                <span className="absolute right-1 top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                  {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                </span>
+              )}
+            </Link>
+          )
+        }
+      />
+      <header className="relative z-50 hidden h-[68px] shrink-0 items-start gap-3 bg-transparent px-page-padding-sm pt-3 sm:px-page-padding-md md:flex lg:px-page-padding-lg">
   <SheetTrigger asChild>
         <button
           type="button"
@@ -224,6 +269,7 @@ lg:-translate-x-1/2
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-    </header>
+      </header>
+    </>
   );
 }
