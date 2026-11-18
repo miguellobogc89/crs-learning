@@ -4,6 +4,7 @@
 import { createBinanceAdapter } from "./adapters/binance";
 import { createBitvavoAdapter } from "./adapters/bitvavo";
 import { createCoinbaseAdapter } from "./adapters/coinbase";
+import { createKrakenAdapter } from "./adapters/kraken";
 import { createOkxAdapter } from "./adapters/okx";
 import { createRevolutXAdapter } from "./adapters/revolutx";
 import { createTrading212Adapter } from "./adapters/trading212";
@@ -16,6 +17,7 @@ brokerRegistry.register(createTrading212Adapter());
 brokerRegistry.register(createBinanceAdapter());
 brokerRegistry.register(createBitvavoAdapter());
 brokerRegistry.register(createCoinbaseAdapter());
+brokerRegistry.register(createKrakenAdapter());
 brokerRegistry.register(createOkxAdapter());
 brokerRegistry.register(createRevolutXAdapter());
 
@@ -35,7 +37,6 @@ const soon = (id: string, name: string, domain: string, markets: ProviderInfo["m
 });
 
 for (const info of [
-  soon("kraken", "Kraken", "kraken.com", ["crypto"], "Criptomonedas en euros."),
   soon("ibkr", "Interactive Brokers", "interactivebrokers.com", ["bolsa", "crypto"], "Acciones de todo el mundo, ETF y más."),
 ]) {
   brokerRegistry.announce(info);
