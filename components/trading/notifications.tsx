@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, Bell, CircleCheck, Info, X } from "lucide-react";
 import type { listNotifications } from "@/lib/trading/notifications";
+import { MobileAppHeader } from "@/components/platform/mobile-app-header";
 import { api } from "./format";
 import { useTradingRefresh, useWarmStart } from "./navigation";
 
@@ -162,13 +163,16 @@ export function NotificationsScreen({ open, onClose, data, markRead }: { open: b
           open ? "translate-x-0" : "pointer-events-none translate-x-full"
         }`}
       >
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200/70 px-2">
-          <button type="button" onClick={onClose} aria-label="Volver" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100 md:hidden">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <h2 className="flex-1 pl-1 text-[17px] font-semibold text-slate-900 md:pl-3">Notificaciones</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="hidden h-11 w-11 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 md:flex">
-            <X className="h-5 w-5" />
+        <MobileAppHeader
+          primary={false}
+          onBackClick={onClose}
+          title="Notificaciones"
+          right={<Bell className="size-5 text-slate-500" aria-hidden="true" />}
+        />
+        <header className="hidden h-14 shrink-0 items-center justify-between border-b border-slate-200/70 px-4 md:flex">
+          <h2 className="text-[17px] font-semibold text-slate-900">Notificaciones</h2>
+          <button type="button" onClick={onClose} aria-label="Cerrar" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100">
+            <X className="size-5" />
           </button>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
