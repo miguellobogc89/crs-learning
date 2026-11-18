@@ -13,7 +13,8 @@ import { logout } from "@/app/actions/auth";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PullToRefresh } from "@/components/trading/mobile-nav";
-import { BellButton, NotificationsScreen, useNotifications } from "@/components/trading/notifications";
+import { AppNotificationButton } from "@/components/platform/notification-button";
+import { NotificationsDrawer } from "@/components/platform/notifications-drawer";
 import { MobileAppHeader } from "@/components/platform/mobile-app-header";
 import { eur } from "@/components/trading/format";
 import { BOTTOM_TABS, FINANCE_SECTIONS, FINANCE_TABS, isFinanceTab, isFittedTab } from "./tabs";
@@ -316,7 +317,6 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
   const [open, setOpen] = useState(false);
   const scroller = useRef<HTMLElement>(null);
   const sync = useAutoSync();
-  const notes = useNotifications();
   const [notesOpen, setNotesOpen] = useState(false);
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => setNotesOpen(false), [pathname]);
@@ -354,7 +354,7 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
           }
           right={
             <div className="relative">
-              <BellButton unread={notes.data?.unread ?? 0} onClick={() => setNotesOpen(true)} />
+              <AppNotificationButton unread={0} onClick={() => setNotesOpen(true)} />
               {sync.syncing && <Loader2 className="pointer-events-none absolute bottom-0 left-0 size-3 animate-spin text-slate-400" aria-label="Sincronizando" />}
             </div>
           }
@@ -378,7 +378,15 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
 
       <BottomTabs />
 
-      <NotificationsScreen open={notesOpen} onClose={() => setNotesOpen(false)} data={notes.data} markRead={notes.markRead} />
+      <NotificationsDrawer open={notesOpen} onClose={() => setNotesOpen(false)}>
+        <div className="flex flex-col items-center gap-2 px-5 py-16 text-center">
+          <span className="flex size-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+            <LayoutGrid className="size-6" />
+          </span>
+          <b className="text-slate-800">Sin notificaciones</b>
+          <p className="max-w-xs text-sm leading-6 text-slate-500">Aquí aparecerán los avisos de Finanzas cuando estén disponibles.</p>
+        </div>
+      </NotificationsDrawer>
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left" showCloseButton={false} className="gap-0 p-0 data-[side=left]:w-full data-[side=left]:sm:max-w-sm lg:hidden" onOpenAutoFocus={(e) => e.preventDefault()}>
