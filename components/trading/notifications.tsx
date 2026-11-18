@@ -4,9 +4,10 @@
 // - tablet y ordenador: panel lateral a la derecha.
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Bell, CircleCheck, Info, X } from "lucide-react";
+import { AlertTriangle, CircleCheck, Info } from "lucide-react";
 import type { listNotifications } from "@/lib/trading/notifications";
-import { MobileAppHeader } from "@/components/platform/mobile-app-header";
+import { NotificationsDrawer } from "@/components/platform/notifications-drawer";
+export { AppNotificationButton as BellButton } from "@/components/platform/notification-button";
 import { api } from "./format";
 import { useTradingRefresh, useWarmStart } from "./navigation";
 
@@ -39,24 +40,6 @@ export function useNotifications() {
     await api("notifications/read", {}).catch(() => undefined);
   }, []);
   return { data, load, markRead };
-}
-
-export function BellButton({ unread, onClick, className = "" }: { unread: number; onClick: () => void; className?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={unread ? `Notificaciones: ${unread} sin leer` : "Notificaciones"}
-      className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 active:bg-slate-100 ${className}`}
-    >
-      <Bell className="h-5 w-5" />
-      {unread > 0 && (
-        <span className="absolute right-1.5 top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
-          {unread > 9 ? "9+" : unread}
-        </span>
-      )}
-    </button>
-  );
 }
 
 const LEVEL = {
@@ -139,46 +122,9 @@ export function NotificationsScreen({ open, onClose, data, markRead }: { open: b
     if (open && wasOpen.current && data && !shownRef.current) setShown(data);
     wasOpen.current = open;
   }, [open, data, markRead]);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [open, onClose]);
-
   return (
-    <>
-      {/* Fondo oscuro solo en tablet y ordenador. */}
-      <div
-        aria-hidden="true"
-        onClick={onClose}
-        className={`fixed inset-0 z-40 hidden bg-slate-900/20 transition-opacity duration-300 md:block ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
-      />
-      <aside
-        role="dialog"
-        aria-modal="true"
-        aria-label="Notificaciones"
-        aria-hidden={!open}
-        className={`fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-white pt-[env(safe-area-inset-top)] shadow-2xl transition-transform duration-300 ease-out md:max-w-md ${
-          open ? "translate-x-0" : "pointer-events-none translate-x-full"
-        }`}
-      >
-        <MobileAppHeader
-          primary={false}
-          onBackClick={onClose}
-          title="Notificaciones"
-          right={<Bell className="size-5 text-slate-500" aria-hidden="true" />}
-        />
-        <header className="hidden h-14 shrink-0 items-center justify-between border-b border-slate-200/70 px-4 md:flex">
-          <h2 className="text-[17px] font-semibold text-slate-900">Notificaciones</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100">
-            <X className="size-5" />
-          </button>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
-          <List data={shown} onNavigate={onClose} />
-        </div>
-      </aside>
-    </>
+    <NotificationsDrawer open={open} onClose={onClose}>
+      <List data={shown} onNavigate={onClose} />
+    </NotificationsDrawer>
   );
 }
