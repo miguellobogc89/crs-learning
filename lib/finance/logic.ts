@@ -510,6 +510,26 @@ export function summarize(txs: Tx[], cycle: Cycle, recurringKeys: Set<string> = 
   };
 }
 
+/** Historial precargado y agrupado por los mismos ciclos que usa el resumen de Finanzas. */
+export function expenseHistoryByCycle(txs: Tx[], rule: CycleRule) {
+  type Expense = Pick<Tx, "id" | "date" | "amount" | "description" | "counterparty" | "category" | "kind">;
+  const cycles = new Map<string, Cycle & { items: Expense[] }>();
+  for (const t of txs) {
+    if (t.kind !== "gasto" && t.kind !== "devolucion") continue;
+    const cycle = cycleFor(t.date, rule);
+    let entry = cycles.get(cycle.start);
+    if (!entry) {
+      entry = { ...cycle, items: [] };
+      cycles.set(cycle.start, entry);
+    }
+    const { id, date, amount, description, counterparty, category, kind } = t;
+    entry.items.push({ id, date, amount, description, counterparty, category, kind });
+  }
+  return [...cycles.values()]
+    .sort((a, b) => b.start.localeCompare(a.start))
+    .map((cycle) => ({ ...cycle, items: cycle.items.sort((a, b) => b.date.localeCompare(a.date)) }));
+}
+
 /** Periodos del gráfico de Inicio móvil. Usa la misma clasificación que el resto de Finanzas. */
 export function cashflowPeriods(txs: Tx[], today: string) {
   const dateLabel = (date: string, options: Intl.DateTimeFormatOptions) =>

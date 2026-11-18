@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal-finance/enable-banking";
 import {
   addDays, affordability, budgetStatus, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, liquiditySeries, merchantKey,
-  normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
+  expenseHistoryByCycle, normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getSettings, loadTxs } from "./store";
@@ -75,6 +75,7 @@ export async function overview(userId: string, offset = 0) {
     previous: prev,
     history: [...history].reverse().map((h) => ({ cycle: h.cycle, income: h.income, gifts: h.gifts, expenses: h.expenses, net: h.net, savedToInvestments: h.savedToInvestments })),
     cashflow: cashflowPeriods(txs, today),
+    categoryHistory: expenseHistoryByCycle(txs, ctx.startDay),
     recentExpenses: txs
       .filter((tx) => tx.kind === "gasto" && tx.amount < 0 && includedAccountIds.has(tx.accountId))
       .sort((a, b) => b.date.localeCompare(a.date))
