@@ -8,7 +8,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ChartCandlestick, ChevronRight, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
+import { ArrowLeft, ChartCandlestick, ChevronRight, Landmark, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -120,7 +120,7 @@ function MoneyPanel({ syncing, msg, onSync }: { syncing: boolean; msg: string | 
         <ul className="mt-2 space-y-2">
           {accounts.map((a) => (
             <li key={a.id}>
-              <Link href="/finanzas/conexiones" className="flex items-center gap-2 rounded-lg hover:bg-slate-50">
+              <Link href="/finanzas/cuentas" className="flex items-center gap-2 rounded-lg hover:bg-slate-50">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-white text-[10px] font-bold text-slate-500">
                   {(a.bank ? BANK_LABEL[a.bank] ?? a.bank : "Imp").slice(0, 3).toUpperCase()}
                 </span>
@@ -245,11 +245,12 @@ function BottomTabs() {
 
 /** Menú completo del móvil, como el de Trading: tu nombre arriba y, por grupos, el resto de pantallas. */
 function MobileMenu({ user, onClose, sync }: { user: FinanceProfile; onClose: () => void; sync: ReturnType<typeof useAutoSync> }) {
-  // Como el menú de Trading: por grupos, con Conexiones arriba.
+  // Como el menú de Trading: por grupos, separando cuentas de integraciones.
   const groups: { title: string; rows: { label: string; href: string; icon: typeof Plug }[] }[] = [
     {
       title: "Cuenta",
       rows: [
+        { label: "Cuentas", href: "/finanzas/cuentas", icon: Landmark },
         { label: "Conexiones", href: "/finanzas/conexiones", icon: Plug },
         { label: "Preferencias", href: "/finanzas/ajustes", icon: Settings },
       ],

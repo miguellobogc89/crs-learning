@@ -30,7 +30,7 @@ export function Empty() {
       <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
         Con acceso de solo lectura a Santander, BBVA y Revolut, CRS Finance guarda tus movimientos, entiende cada uno y te dice cómo vas. También puedes importar extractos en CSV, Excel o PDF.
       </p>
-      <Link href="/finanzas/conexiones" className={`${primary} mt-5`}>Ir a Cuentas <ArrowRight className="h-4 w-4" /></Link>
+      <Link href="/finanzas/conexiones" className={`${primary} mt-5`}>Conectar un banco <ArrowRight className="h-4 w-4" /></Link>
     </div>
   );
 }
@@ -294,7 +294,7 @@ export function HomePanel() {
         <section className={`${card} ${flat} hidden p-4 sm:block sm:p-5`}>
           <div className="flex items-center justify-between gap-2">
             <SectionTitle icon={Landmark} tint="slate" size="base">Tus cuentas</SectionTitle>
-            <Link href="/finanzas/conexiones" className="text-sm font-medium text-blue-700 hover:underline">Gestionar</Link>
+            <Link href="/finanzas/cuentas" className="text-sm font-medium text-blue-700 hover:underline">Gestionar</Link>
           </div>
           <ul className="mt-3 divide-y divide-slate-100">
             {v.accounts.map((a) => (
@@ -339,7 +339,7 @@ export function HomePanel() {
         </div>
       </div>
 
-      <Link href="/finanzas/conexiones" className={`${card} ${flat} flex items-center gap-3 p-4 sm:hidden`}>
+      <Link href="/finanzas/cuentas" className={`${card} ${flat} flex items-center gap-3 p-4 sm:hidden`}>
         <Landmark className="h-5 w-5 shrink-0 text-slate-500" />
         <span className="min-w-0 flex-1 text-sm font-semibold text-slate-900">Tus cuentas <span className="font-normal text-slate-500">({v.accounts.length})</span></span>
         <span className="amount text-sm font-semibold tabular-nums text-slate-900">{v.balance === null ? "—" : eur(v.balance, 2)}</span>
