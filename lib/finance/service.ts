@@ -10,6 +10,7 @@ import {
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getSettings, loadTxs } from "./store";
 import { AUTO_SYNC_HOURS } from "./sync";
+import { zombies } from "./gmail";
 
 const HISTORY_CYCLES = 12;
 
@@ -41,6 +42,24 @@ export async function financeContext(userId: string) {
 }
 export type FinanceContext = Awaited<ReturnType<typeof financeContext>>;
 
+/** Suscripciones zombi (Gmail): te cobran después de un correo de cancelación. */
+async function zombieAlerts(userId: string): Promise<Alert[]> {
+  const list = await zombies(userId).catch(() => []);
+  const day = (d: string) => d.split("-").reverse().join("/");
+  return list.map((z) => {
+    const name = z.merchant.charAt(0).toUpperCase() + z.merchant.slice(1);
+    const total = z.charges.reduce((s, c) => s - c.amount, 0);
+    const last = z.charges[z.charges.length - 1];
+    return {
+      key: `zombi:${z.messageId}:${z.charges.map((c) => c.id).join(",").slice(0, 120)}`,
+      level: "importante" as const,
+      title: `${name}: te siguen cobrando después de cancelar`,
+      body: `Recibiste la cancelación el ${day(z.cancelledOn)} («${z.subject.slice(0, 80)}»), pero después hay ${z.charges.length} ${z.charges.length === 1 ? "cargo" : "cargos"} por ${total.toFixed(2).replace(".", ",")} € (el último, el ${day(last.date)}). Reclámalo.`,
+      txIds: z.charges.map((c) => c.id),
+    };
+  });
+}
+
 async function connectionAlerts(userId: string): Promise<Alert[]> {
   const conns = await prisma.personal_bank_connections.findMany({ where: { user_id: userId }, select: { bank: true, institution_name: true, consent_expires_at: true } });
   const out: Alert[] = [];
@@ -56,7 +75,7 @@ async function connectionAlerts(userId: string): Promise<Alert[]> {
 export async function overview(userId: string, offset = 0) {
   const ctx = await financeContext(userId);
   const { txs, today, recurring, history, current, projection, budgetsNow, accounts, settings } = ctx;
-  const alerts = [...(await connectionAlerts(userId)), ...detectAlerts({ txs, today, recurring, history, current, budgets: budgetsNow })]
+  const alerts = [...(await zombieAlerts(userId)), ...(await connectionAlerts(userId)), ...detectAlerts({ txs, today, recurring, history, current, budgets: budgetsNow })]
     .filter((a) => !ctx.dismissed.has(a.key));
   const prev = history[0] ?? null;
   const cycleDates = [...history].reverse().map((h) => h.cycle.end).concat(today);

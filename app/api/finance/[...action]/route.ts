@@ -6,6 +6,7 @@ import { accountsView, budgetView, forecast, listTransactions, overview } from "
 import { syncUser } from "@/lib/finance/sync";
 import { bulkCorrect, classifyPending, correctTransaction } from "@/lib/finance/classify";
 import { cleanView } from "@/lib/finance/logic";
+import { disconnectGmail, gmailView, syncGmail } from "@/lib/finance/gmail";
 import { ask, chatHistory, clearChat } from "@/lib/finance/copilot";
 import { getMemory, getRules, getSettings } from "@/lib/finance/store";
 
@@ -46,6 +47,7 @@ export async function GET(req: Request, route: RouteContext) {
       return ok({ settings, rules: rules.map((r) => ({ ...r, categoryLabel: categoryLabel(r.category), hits: hits.get(r.id)?.hits ?? 0, label: hits.get(r.id)?.label ?? null })), memory });
     }
     if (action === "chat") return ok({ messages: await chatHistory(uid) });
+    if (action === "gmail") return ok(await gmailView(uid));
     return fail("Acción desconocida", 404);
   } catch (e) {
     if (missingTables(e)) return fail("Faltan las tablas de CRS Finance: aplica la migración 20261117170000_finance_app", 500);
@@ -102,6 +104,11 @@ export async function POST(req: Request, route: RouteContext) {
         data.savings_goal = goal;
       }
       await prisma.finance_settings.upsert({ where: { user_id: uid }, create: { user_id: uid, ...data }, update: data });
+      return ok({ ok: true });
+    }
+    if (action === "gmail/sync") return ok(await syncGmail(uid, new URL(req.url).origin));
+    if (action === "gmail/disconnect") {
+      await disconnectGmail(uid);
       return ok({ ok: true });
     }
     if (action === "view") {

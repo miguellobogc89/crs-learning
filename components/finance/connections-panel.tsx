@@ -10,6 +10,7 @@ import { SkeletonList } from "@/components/trading/skeletons";
 import { errorText, longDay, refreshFinance, useFinance } from "./api";
 import { requestSync } from "./shell";
 import { BankLogo } from "./bank-logo";
+import { GmailCard } from "./gmail-card";
 
 type View = Awaited<ReturnType<typeof accountsView>>;
 
@@ -99,6 +100,7 @@ export function ConnectionsPanel() {
           <span>Acceso bancario de solo lectura mediante Enable Banking.{data.lastSyncAt && <> Última sincronización: {new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(data.lastSyncAt))}.</>}</span>
         </p>
       </section>
+      <GmailCard />
     </div>
   );
 }
