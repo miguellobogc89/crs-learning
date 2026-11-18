@@ -17,6 +17,7 @@ import {
   Home,
   Inbox,
   Landmark,
+  LayoutGrid,
   ChartCandlestick,
   Library,
   Settings,
@@ -34,6 +35,11 @@ type AppSidebarProps = {
 };
 
 const navItems = [
+  {
+    href: "/apps",
+    icon: LayoutGrid,
+    label: "Mis aplicaciones",
+  },
   {
     href: "/dashboard",
     icon: Home,
