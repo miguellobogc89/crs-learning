@@ -22,6 +22,10 @@
     {
       "path": "/api/finance/cron",
       "schedule": "37 5 * * *"
+    },
+    {
+      "path": "/api/trading/lab/swarm?desde=2026-11-18",
+      "schedule": "23 6 * * *"
     }
   ]
 }

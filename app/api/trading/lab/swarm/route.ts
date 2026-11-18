@@ -32,10 +32,17 @@ async function klines(pair: string, from: number, to: number, interval = "1h"): 
 }
 
 export async function GET(req: Request) {
-  if (!(await auth())?.user?.id) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  const days = Math.min(365, Math.max(14, Number(new URL(req.url).searchParams.get("dias")) || 180));
-  const to = Math.floor(Date.now() / HOUR) * HOUR;
-  const from = to - days * 24 * HOUR;
+  // Con sesión, o desde el cron diario de Vercel (Authorization: Bearer CRON_SECRET).
+  const cron = !!process.env.CRON_SECRET && req.headers.get("authorization") === `Bearer ${process.env.CRON_SECRET}`;
+  if (!cron && !(await auth())?.user?.id) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  const q = new URL(req.url).searchParams;
+  // «desde=AAAA-MM-DD»: prueba fuera de muestra desde esa fecha hasta hoy (la usa el cron diario).
+  const since = q.get("desde") && /^\d{4}-\d{2}-\d{2}$/.test(q.get("desde")!) ? Date.parse(`${q.get("desde")}T00:00:00Z`) : null;
+  const days = since ? Math.max(1, Math.ceil((Date.now() - since) / (24 * HOUR))) : Math.min(365, Math.max(14, Number(q.get("dias")) || 180));
+  // «hasta=AAAA-MM-DD»: simula el periodo que termina ese día (para probar otros años, como 2022).
+  const until = q.get("hasta") && /^\d{4}-\d{2}-\d{2}$/.test(q.get("hasta")!) ? Date.parse(`${q.get("hasta")}T00:00:00Z`) + 24 * HOUR : Date.now();
+  const to = Math.floor(Math.min(until, Date.now()) / HOUR) * HOUR;
+  const from = since ?? to - days * 24 * HOUR;
   // Mismo universo que el escáner de hoy: monedas de Revolut X con más de 200.000 € de volumen, las 40 mayores.
   const [market, cov] = await Promise.all([tickers(), venueCoverage()]);
   const revx = cov?.find((v) => v.id === "revolutx")?.has ?? null;
@@ -83,6 +90,7 @@ export async function GET(req: Request) {
   const window = [...attack.entries()].filter(([d]) => d >= new Date(from).toISOString().slice(0, 10));
   const btcFrom = btc.find((b) => b.t >= from)?.o ?? null;
   const summary = {
+    until: q.get("hasta"),
     days,
     from: new Date(from).toISOString(),
     to: new Date(to).toISOString(),
@@ -93,6 +101,6 @@ export async function GET(req: Request) {
     btcHoldPct: btcFrom ? Math.round((btc[btc.length - 1].c / btcFrom - 1) * 10_000) / 100 : null,
     results,
   };
-  await prisma.$executeRaw`INSERT INTO trading_lab_results (name, params, result) VALUES ('enjambres', ${JSON.stringify({ days })}::jsonb, ${JSON.stringify(summary)}::jsonb)`;
+  await prisma.$executeRaw`INSERT INTO trading_lab_results (name, params, result) VALUES (${since ? "enjambres-vivo" : "enjambres"}, ${JSON.stringify({ days, desde: q.get("desde"), hasta: q.get("hasta") })}::jsonb, ${JSON.stringify(summary)}::jsonb)`;
   return NextResponse.json(summary);
 }
