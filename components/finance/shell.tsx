@@ -8,7 +8,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ChartCandlestick, ChevronRight, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
+import { ArrowLeft, ChartCandlestick, ChevronRight, LayoutGrid, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -161,6 +161,7 @@ function UserMenu({ user, inDrawer = false }: { user: FinanceProfile; inDrawer?:
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side={inDrawer ? "top" : "right"} align={inDrawer ? "start" : "end"} sideOffset={8} className="pointer-events-auto z-[60] w-52">
+          <DropdownMenuItem asChild><Link href="/apps"><LayoutGrid /> Mis aplicaciones</Link></DropdownMenuItem>
           <DropdownMenuItem asChild><Link href="/finanzas/ajustes"><Settings /> Preferencias</Link></DropdownMenuItem>
           <DropdownMenuItem asChild><Link href="/trading/inicio"><ChartCandlestick /> Ir a Trading</Link></DropdownMenuItem>
           {user.canAccessBusiness && <DropdownMenuItem asChild><Link href="/dashboard"><ArrowLeft /> Ir a Mi negocio</Link></DropdownMenuItem>}
@@ -257,6 +258,7 @@ function MobileMenu({ user, onClose, sync }: { user: FinanceProfile; onClose: ()
     {
       title: "Mis apps",
       rows: [
+        { label: "Ver todas", href: "/apps", icon: LayoutGrid },
         { label: "Ir a Trading", href: "/trading/inicio", icon: ChartCandlestick },
         ...(user.canAccessBusiness ? [{ label: "Ir a Mi negocio", href: "/dashboard", icon: ArrowLeft }] : []),
       ],
