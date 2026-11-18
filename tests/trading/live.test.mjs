@@ -53,8 +53,8 @@ test("agentes: con la bolsa abierta (9:30-17:30, laborables) compran al momento;
 test("agentes: cada hora con la bolsa abierta, cada 4 h fuera, configurable", () => {
   const open = new Date("2026-11-11T10:00:00Z");
   const night = new Date("2026-11-11T22:00:00Z");
-  assert.equal(meetingIntervalMinutes(open, {}), 60);
-  assert.equal(meetingIntervalMinutes(night, {}), 240);
+  assert.equal(meetingIntervalMinutes(open, {}), 120);
+  assert.equal(meetingIntervalMinutes(night, {}), 480);
   assert.equal(meetingIntervalMinutes(open, { TRADING_AGENT_MEETING_MINUTES: "30" }), 30);
   assert.equal(meetingIntervalMinutes(night, { TRADING_AGENT_MEETING_MINUTES_OFF: "0" }), 0);
   const now = Date.parse("2026-11-11T10:00:00Z");

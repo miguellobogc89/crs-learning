@@ -32,7 +32,11 @@ const env = (k: string, d: number) => {
   const n = Number(process.env[k]);
   return Number.isFinite(n) && n > 0 ? n : d;
 };
-const RUN_MIN = () => env("TRADING_FARO_MINUTES", 30);
+// Cada cuánto analiza FARO con IA (18/11/2026: de 30 a 60 min para gastar la mitad; las ideas valen horas
+// y la puntuación de las vivas y el escáner de ruido, sin IA, siguen cada 5 min).
+const RUN_MIN = () => env("TRADING_FARO_MINUTES", 60);
+/** Bolsa de EE. UU.: su propio intervalo (por defecto el mismo que el de crypto). */
+const RUN_MIN_US = () => env("TRADING_FARO_US_MINUTES", RUN_MIN());
 /** Cada idea viva se vuelve a puntuar como mucho cada estos minutos (una petición de velas). */
 const CHECK_MIN = 4;
 const DAY = 86_400_000;
@@ -705,7 +709,7 @@ const US_STYLES: KamikazeStyle[] = ["impulso", "rupturas"];
 
 async function maybeRunUs(force: boolean) {
   if (!force && !marketOpenNow("us")) return null;
-  const minutes = force ? 0 : RUN_MIN();
+  const minutes = force ? 0 : RUN_MIN_US();
   const claimed = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`INSERT INTO public.trading_faro_runs (status, scope, version)
     SELECT 'en_curso', 'us', ${FARO_VERSION} WHERE NOT EXISTS (
       SELECT 1 FROM public.trading_faro_runs

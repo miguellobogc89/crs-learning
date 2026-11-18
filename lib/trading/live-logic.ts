@@ -103,10 +103,11 @@ export function marketOpenNow(market: "bolsa" | "crypto" | "us", now = new Date(
 /**
  * Cada cuánto se reúne un agente: más a menudo con la bolsa abierta y menos fuera (solo crypto).
  * Configurable con TRADING_AGENT_MEETING_MINUTES y TRADING_AGENT_MEETING_MINUTES_OFF (0 = nunca).
+ * 18/11/2026: de 60/240 a 120/480 min para gastar menos IA (cada reunión es una llamada larga).
  */
 export function meetingIntervalMinutes(now = new Date(), env: Record<string, string | undefined> = process.env) {
   const n = (v: string | undefined, d: number) => (v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : d);
-  return marketOpenNow("bolsa", now) ? n(env.TRADING_AGENT_MEETING_MINUTES, 60) : n(env.TRADING_AGENT_MEETING_MINUTES_OFF, 240);
+  return marketOpenNow("bolsa", now) ? n(env.TRADING_AGENT_MEETING_MINUTES, 120) : n(env.TRADING_AGENT_MEETING_MINUTES_OFF, 480);
 }
 
 /** ¿Le toca reunirse a un agente cuya última reunión fue en `lastAt`? */
