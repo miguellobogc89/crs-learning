@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { tickers } from "@/lib/trading/kamikaze/market";
 import { venueCoverage } from "@/lib/trading/agents/venues";
 import { BIG_COINS } from "@/lib/trading/kamikaze/roster";
-import { attackDays, simulateSwarm, type HBar, type SwarmVariant } from "@/lib/trading/lab/swarm";
+import { attackDays, simulateSwarm, type Funding, type HBar, type SwarmVariant } from "@/lib/trading/lab/swarm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,17 +59,27 @@ export async function GET(req: Request) {
   // Fase del mercado de cada día (Detector B con Bitcoin diario: hacen falta 200 días previos).
   const daily = await klines(btcPair, from - 230 * 24 * HOUR, to, "1d");
   const attack = attackDays(daily);
+  // Funding histórico de Kraken (perpetuos PF_<moneda>USD; Bitcoin es XBT) de las monedas con datos.
+  const funding: Funding = new Map();
+  const noFunding: string[] = [];
+  for (const base of series.keys()) {
+    try {
+      const sym = `PF_${base === "BTC" ? "XBT" : base}USD`;
+      const res = await fetch(`https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=${sym}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+      const j = (await res.json()) as { rates?: { timestamp: string; relativeFundingRate: number }[] };
+      if (!j.rates?.length) { noFunding.push(base); continue; }
+      funding.set(base, new Map(j.rates.map((r) => [Math.floor(Date.parse(r.timestamp) / HOUR) * HOUR, Number(r.relativeFundingRate) || 0])));
+    } catch {
+      noFunding.push(base);
+    }
+  }
   const variants: SwarmVariant[] = [
-    { key: "enjambre", name: "ENJAMBRE" },
-    { key: "enjambre-ataque", name: "ENJAMBRE solo en ataque", regime: "ataque" },
-    { key: "inverso-defensa", name: "INVERSO solo en defensa", side: "short", regime: "defensa" },
-    { key: "inverso", name: "INVERSO siempre", side: "short" },
-    { key: "inverso-grandes-defensa", name: "INVERSO GRANDES en defensa", side: "short", regime: "defensa", coins: BIG_COINS },
-    { key: "rupturas-ataque", name: "RUPTURAS en ataque", side: "breakout", regime: "ataque" },
-    { key: "rupturas", name: "RUPTURAS siempre", side: "breakout" },
-    { key: "rupturas-grandes-ataque", name: "RUPTURAS GRANDES en ataque", side: "breakout", regime: "ataque", coins: BIG_COINS },
+    { key: "inverso-defensa", name: "INVERSO en defensa (sin costes de Kraken)", side: "short", regime: "defensa" },
+    { key: "inverso-defensa-kraken", name: "INVERSO en defensa · Kraken real", side: "short", regime: "defensa", kraken: true },
+    { key: "inverso-grandes-defensa", name: "INVERSO GRANDES en defensa (sin costes de Kraken)", side: "short", regime: "defensa", coins: BIG_COINS },
+    { key: "inverso-grandes-defensa-kraken", name: "INVERSO GRANDES en defensa · Kraken real", side: "short", regime: "defensa", coins: BIG_COINS, kraken: true },
   ];
-  const results = variants.map((v) => simulateSwarm(series, btc, v, from, 1000, attack));
+  const results = variants.map((v) => simulateSwarm(series, btc, v, from, 1000, attack, funding));
   const window = [...attack.entries()].filter(([d]) => d >= new Date(from).toISOString().slice(0, 10));
   const btcFrom = btc.find((b) => b.t >= from)?.o ?? null;
   const summary = {
@@ -78,6 +88,7 @@ export async function GET(req: Request) {
     to: new Date(to).toISOString(),
     coins: [...series.keys()],
     failed,
+    noFunding,
     attackDaysPct: window.length ? Math.round((window.filter(([, on]) => on).length / window.length) * 100) : null,
     btcHoldPct: btcFrom ? Math.round((btc[btc.length - 1].c / btcFrom - 1) * 10_000) / 100 : null,
     results,

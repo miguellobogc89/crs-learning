@@ -20,6 +20,8 @@ export type SwarmVariant = {
   side?: "long" | "short" | "breakout";
   /** Solo abre en esa fase del mercado (Detector B sobre Bitcoin diario). */
   regime?: "ataque" | "defensa";
+  /** Costes de Kraken en los cortos: 0,02 % al entrar y 0,05 % al salir, y su funding histórico. */
+  kraken?: boolean;
 };
 type Pos = { base: string; qty: number; entry: number; stop: number; target: number; openedAt: number; cost: number; short?: boolean; trail?: number; low?: number; high?: number };
 type Order = { base: string; entry: number; stop: number; target: number; until: number; budget: number; trail?: number };
@@ -43,8 +45,15 @@ export function attackDays(daily: { t: number; c: number }[]) {
   return out;
 }
 
-export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant: SwarmVariant, from: number, startCash = 1000, attack?: Map<string, boolean>) {
+/** Funding por moneda: hora (ms) → tasa relativa del periodo (positiva: los largos pagan a los cortos). */
+export type Funding = Map<string, Map<number, number>>;
+
+export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant: SwarmVariant, from: number, startCash = 1000, attack?: Map<string, boolean>, funding?: Funding) {
   const short = variant.side === "short";
+  const kraken = !!variant.kraken && short;
+  const exitFee = kraken ? 0.0005 : TAKER;
+  const entryFee = kraken ? 0.0002 : 0;
+  let fundingTotal = 0;
   const breakout = variant.side === "breakout";
   // Índice por hora de cada moneda.
   const idx = new Map<string, Map<number, number>>();
@@ -77,7 +86,14 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
       if (!bar) { keep.push(p); continue; }
       if (p.short) {
         // Stop por encima; primero se mira si saltó con el máximo de la vela, luego se baja con el mínimo.
-        if (bar.h >= p.stop) close(p, Math.max(p.stop, bar.o), TAKER, "stop", t);
+        // Funding de la hora: un corto cobra si la tasa es positiva y paga si es negativa.
+        const fr = kraken ? funding?.get(p.base)?.get(t) : undefined;
+        if (fr !== undefined) {
+          const f = p.qty * bar.o * fr;
+          cash += f;
+          fundingTotal += f;
+        }
+        if (bar.h >= p.stop) close(p, Math.max(p.stop, bar.o), exitFee, "stop", t);
         else {
           p.low = Math.min(p.low ?? p.entry, bar.l);
           p.stop = Math.min(p.stop, p.low + p.trail!);
@@ -107,8 +123,8 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
       const bar = barAt(o.base, t);
       if (short) {
         if (bar && bar.h >= o.entry) {
-          const p: Pos = { base: o.base, qty: o.budget / o.entry, entry: o.entry, stop: o.stop, target: 0, openedAt: t, cost: o.budget, short: true, trail: o.target, low: o.entry };
-          if (bar.h >= o.stop) close(p, o.stop, TAKER, "stop", t);
+          const p: Pos = { base: o.base, qty: (o.budget * (1 - entryFee)) / o.entry, entry: o.entry, stop: o.stop, target: 0, openedAt: t, cost: o.budget, short: true, trail: o.target, low: o.entry };
+          if (bar.h >= o.stop) close(p, o.stop, exitFee, "stop", t);
           else pos.push(p);
         } else cash += o.budget; // no se llenó en su hora: se cancela
         continue;
@@ -203,6 +219,7 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
     winRatePct: r2((wins.length / Math.max(1, trades.length)) * 100),
     avgWinPct: r2(avg(wins.map((x) => x.pct))),
     avgLossPct: r2(avg(losses.map((x) => x.pct))),
+    fundingEur: r2(fundingTotal),
     byPhase: (["ataque", "defensa"] as const).map((ph) => {
       const xs = trades.filter((x) => x.phase === ph);
       return { phase: ph, trades: xs.length, winRatePct: r2((xs.filter((x) => x.pct > 0).length / Math.max(1, xs.length)) * 100), avgPct: r2(avg(xs.map((x) => x.pct))) };
