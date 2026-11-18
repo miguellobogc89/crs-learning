@@ -8,7 +8,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ChartCandlestick, ChevronRight, LayoutGrid, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
+import { ArrowLeft, Bell, ChartCandlestick, ChevronRight, LayoutGrid, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -381,7 +381,7 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
       <NotificationsDrawer open={notesOpen} onClose={() => setNotesOpen(false)}>
         <div className="flex flex-col items-center gap-2 px-5 py-16 text-center">
           <span className="flex size-12 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-            <LayoutGrid className="size-6" />
+            <Bell className="size-6" />
           </span>
           <b className="text-slate-800">Sin notificaciones</b>
           <p className="max-w-xs text-sm leading-6 text-slate-500">Aquí aparecerán los avisos de Finanzas cuando estén disponibles.</p>
