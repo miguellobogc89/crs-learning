@@ -117,7 +117,8 @@ export function HomePanel() {
   const expDelta = delta(t.expenses, v.previous?.expenses, !!v.previous?.partial, true);
   const goal = data.settings.savingsGoal;
   const review = data.pendingReview;
-  const cashflow = data.cashflow[cashflowRange];
+  // Una respuesta anterior guardada en sessionStorage puede no tener todavía este campo.
+  const cashflow = data.cashflow?.[cashflowRange];
 
   return (
     <div className={`space-y-4 pb-6 ${loading ? "opacity-80" : ""}`}>
@@ -160,15 +161,23 @@ export function HomePanel() {
             ))}
           </div>
         </div>
-        <div className="mt-4">
-          <CycleBars key={cashflowRange} data={cashflow.points} incomeColor="#16a34a" expenseColor="#2563eb" height={210} />
-        </div>
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
-          <span className="text-sm text-slate-600">Ahorro neto del periodo</span>
-          <strong className={`amount text-lg font-bold tabular-nums ${cashflow.net >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-            {eur(cashflow.net, 2)}
-          </strong>
-        </div>
+        {cashflow ? (
+          <>
+            <div className="mt-4">
+              <CycleBars key={cashflowRange} data={cashflow.points} incomeColor="#16a34a" expenseColor="#2563eb" height={210} />
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+              <span className="text-sm text-slate-600">Ahorro neto del periodo</span>
+              <strong className={`amount text-lg font-bold tabular-nums ${cashflow.net >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                {eur(cashflow.net, 2)}
+              </strong>
+            </div>
+          </>
+        ) : (
+          <p className="py-8 text-center text-sm text-slate-500">
+            {loading ? "Actualizando evolución…" : "La evolución todavía no está disponible. Actualiza la página."}
+          </p>
+        )}
       </section>
 
       {/* Indicadores de escritorio */}
