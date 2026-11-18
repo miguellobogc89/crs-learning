@@ -1,20 +1,35 @@
 "use client";
 
-import { useState } from "react";
-import { Landmark, Trash2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { CheckCircle2, Landmark, Link2, Loader2, LockKeyhole, Plus, RefreshCw, Trash2, Unlink } from "lucide-react";
 import type { accountsView } from "@/lib/finance/service";
-import { card, eur, flat } from "@/components/trading/format";
-import { CardHeader, ErrorNote, SectionTitle } from "@/components/trading/ui";
+import { card, eur, flat, ghost, primary } from "@/components/trading/format";
+import { CardHeader, ErrorNote, Pill, SectionTitle } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { errorText, fapi, longDay, refreshFinance, useFinance } from "./api";
 import { BankLogo } from "./bank-logo";
+import { requestSync } from "./shell";
 
 type View = Awaited<ReturnType<typeof accountsView>>;
 
 export function AccountsPanel() {
+  const params = useSearchParams();
   const { data, error } = useFinance<View>("accounts");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const connected = params.get("banco") === "conectado";
+  const callbackError = params.get("error");
+  const synced = useRef(false);
+
+  useEffect(() => {
+    if (connected && !synced.current) {
+      synced.current = true;
+      requestSync();
+    }
+  }, [connected]);
 
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
   if (!data) return <SkeletonList rows={5} />;
@@ -46,15 +61,33 @@ export function AccountsPanel() {
     }
   };
 
+  const disconnectBank = async (bank: string) => {
+    if (!window.confirm("¿Desconectar este banco? Se revoca el permiso de lectura. Los movimientos ya guardados se conservan.")) return;
+    setBusy(bank);
+    setErr(null);
+    try {
+      const response = await fetch("/api/finance/banks", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bank }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "No se pudo desconectar");
+      refreshFinance();
+    } catch (e) {
+      setErr(errorText(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="space-y-4 pb-4">
+      {connected && <p className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><CheckCircle2 className="h-4 w-4" /> Banco conectado. Trayendo tus movimientos…</p>}
+      {callbackError && <ErrorNote>No se completó la conexión con el banco ({callbackError.replace(/_/g, " ")}). Inténtalo de nuevo.</ErrorNote>}
       {err && <ErrorNote>{err}</ErrorNote>}
       <section className={`${card} ${flat}`}>
         <CardHeader divider>
           <SectionTitle icon={Landmark} tint="blue" size="base">Mis cuentas</SectionTitle>
         </CardHeader>
         {data.accounts.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-slate-500 sm:px-6">No tienes cuentas todavía. Puedes conectar un banco desde Conexiones.</p>
+          <p className="px-4 py-5 text-sm text-slate-500 sm:px-6">No tienes cuentas todavía. Puedes añadir una con el botón de abajo.</p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {data.accounts.map((account: View["accounts"][number]) => (
@@ -78,7 +111,42 @@ export function AccountsPanel() {
             ))}
           </ul>
         )}
+        <div className="border-t border-slate-100 px-4 py-4 sm:px-6">
+          <button type="button" onClick={() => setPickerOpen(true)} className={`${primary} w-full justify-center sm:w-auto`}><Plus className="h-4 w-4" /> Conectar cuenta</button>
+        </div>
       </section>
+
+      <Sheet open={pickerOpen} onOpenChange={setPickerOpen}>
+        <SheetContent side="bottom" className="mx-auto max-h-[85dvh] w-full max-w-xl gap-0 overflow-hidden rounded-t-3xl pb-[env(safe-area-inset-bottom)]">
+          <SheetHeader className="border-b border-slate-100 px-5 pb-4 pt-5">
+            <SheetTitle>Conectar cuenta bancaria</SheetTitle>
+            <SheetDescription>Selecciona tu banco. El acceso a los movimientos es de solo lectura.</SheetDescription>
+          </SheetHeader>
+          {!data.configured && <p className="border-b border-slate-100 px-5 py-3 text-xs text-amber-700">La conexión bancaria no está configurada en el servidor.</p>}
+          <ul className="min-h-0 overflow-y-auto divide-y divide-slate-100">
+            {[...data.banks].sort((a, b) => Number(b.connected) - Number(a.connected)).map((bank) => (
+              <li key={bank.bank} className="flex flex-wrap items-center gap-3 px-5 py-4">
+                <BankLogo bank={bank.bank} className="h-11 w-11" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-slate-900">{bank.label}</span>
+                  <span className="block text-xs text-slate-500">{!bank.connected ? "Sin conectar" : bank.expired ? "Permiso caducado" : `Permiso hasta el ${longDay(bank.expiresAt)}`}</span>
+                </span>
+                {bank.connected && <Pill color={bank.expired ? "amber" : "emerald"}>{bank.expired ? "Caducado" : "Conectado"}</Pill>}
+                <span className="flex shrink-0 items-center gap-1">
+                  <a href={`/api/finance/banks/connect?bank=${bank.bank}`} onClick={(event) => { if (!data.configured) event.preventDefault(); }} className={`${bank.connected ? ghost : primary} ${!data.configured ? "pointer-events-none opacity-50" : ""}`}><Link2 className="h-4 w-4" /> {bank.connected ? "Renovar" : "Conectar"}</a>
+                  {bank.connected && <button type="button" onClick={() => void disconnectBank(bank.bank)} disabled={busy === bank.bank} className={ghost} aria-label={`Desconectar ${bank.label}`}>
+                    {busy === bank.bank ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}
+                  </button>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-1.5"><LockKeyhole className="h-3.5 w-3.5" /> Acceso mediante Enable Banking</span>
+            <button type="button" onClick={() => requestSync()} className="inline-flex items-center gap-1.5 font-medium text-blue-700"><RefreshCw className="h-3.5 w-3.5" /> Sincronizar</button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
