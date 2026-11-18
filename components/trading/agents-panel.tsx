@@ -191,7 +191,7 @@ export function AgentsPanel() {
           textKeys: ["nombre"],
         }}
         view={{ value: layoutPick === "cards" ? "grid" : "list", onChange: (value) => setLayout(value === "grid" ? "cards" : "list") }}
-        extra={<button type="button" onClick={() => setCreating(true)} className={`${primary} hidden whitespace-nowrap md:inline-flex`}><Plus className="h-4 w-4" /> Crear agente</button>}
+        extra={!isMobile ? <button type="button" onClick={() => setCreating(true)} className={`${primary} hidden whitespace-nowrap md:inline-flex`}><Plus className="h-4 w-4" /> Crear agente</button> : undefined}
       />
 
       <p className="shrink-0 text-xs text-slate-500">
