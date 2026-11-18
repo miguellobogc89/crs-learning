@@ -6,6 +6,7 @@
 // - tablet en horizontal y ordenador (≥ 1024 px): barra lateral completa con «Mi dinero».
 import Image from "next/image";
 import Link from "next/link";
+import { ModuleLogo } from "@/components/ui/module-logo";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ChartCandlestick, ChevronRight, Gauge, Landmark, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
@@ -176,7 +177,7 @@ function UserMenu({ user, inDrawer = false }: { user: FinanceProfile; inDrawer?:
 function NavHeader({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <Link href="/finanzas/inicio" onClick={onNavigate} aria-label="Inicio de Finanzas" className="inline-flex min-w-0 items-center gap-2">
-      <Image src="/logo/logo.png" alt="" width={28} height={28} className="size-7 shrink-0 object-contain" />
+      <ModuleLogo module="finance" />
       <span className="truncate text-sm font-semibold text-slate-900">CRS Finance</span>
     </Link>
   );

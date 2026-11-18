@@ -3,10 +3,10 @@
 
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SheetClose } from "@/components/ui/sheet";
+import { ModuleLogo } from "@/components/ui/module-logo";
 
 import {
   BarChart3,
@@ -139,14 +139,7 @@ export function AppSidebar({
               : "mb-5 w-app-navigation-rail",
           )}
         >
-<Image
-  src="/logo/logo.png"
-  alt="Crusader"
-  width={32}
-  height={32}
-  className="h-8 w-8 object-contain"
-  priority
-/>
+          <ModuleLogo module="business" className="size-8" />
 
           {mobile ? (
             <span className="ml-3 text-body font-semibold tracking-tight text-foreground">

@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
+import { ModuleLogo } from "@/components/ui/module-logo";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Gauge, Link2, Loader2, LogOut, PiggyBank, Settings, UserCircle } from "lucide-react";
@@ -97,7 +98,7 @@ export function TradingNavigationHeader({ onNavigate }: { onNavigate?: () => voi
   return (
     <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
       <Link href="/trading/inicio" onClick={onNavigate} aria-label="Inicio de Trading" className="inline-flex shrink-0 items-center">
-        <Image src="/logo/logo.png" alt="" width={28} height={28} className="size-7 shrink-0 object-contain" />
+        <ModuleLogo module="trading" />
       </Link>
       <Suspense fallback={<div className="h-8 w-24 shrink-0 rounded-lg bg-slate-100" />}>
         <PortfolioSwitcher onNavigate={onNavigate} />
