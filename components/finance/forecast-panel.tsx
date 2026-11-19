@@ -408,38 +408,47 @@ export function ForecastPanel({ view }: { view: View }) {
   const visibleSuggestions = (view.forecastSuggestions ?? []).filter((s) => s.startDate >= periodStart && s.startDate <= periodEnd);
   const visiblePlans = (view.forecastItems ?? []).filter((item) => forecastPlanOccurrences(item, periodStart, periodEnd).length > 0);
   const total = points.reduce((s, p) => ({ income: s.income + p.income, expenses: s.expenses + p.expenses }), { income: 0, expenses: 0 });
+  const goal = view.settings.savingsGoal ?? 0;
+  const goalPerCycle = view.settings.savingsFrequency === "semanal" ? goal * 52 / 12 : goal;
+  let savingsToAllocate = Math.max(0, goalPerCycle);
   const chartData = weeklyMode ? view.forecastNextWeeks.map((w, i) => {
     const fixedExpenses = Math.round(w.events.filter((event) => event.origin === "recurrente" && event.kind === "gasto")
       .reduce((sum, event) => sum + event.amount, 0) * 100) / 100;
+    const reservedSavings = Math.round(Math.min(Math.max(0, w.income), savingsToAllocate) * 100) / 100;
+    savingsToAllocate = Math.max(0, savingsToAllocate - reservedSavings);
     return { label: `Sem ${i + 1}`, title: `Semana ${i + 1} · ${shortDay(w.start)} – ${shortDay(w.end)}`,
-      income: w.income, expenses: w.expenses, net: w.net, available: w.openingBalance,
-      fixedExpenses, estimatedExpenses: Math.round((w.expenses - fixedExpenses) * 100) / 100 };
+      income: w.income, expenses: w.expenses, net: w.net, available: w.closingBalance,
+      fixedExpenses, estimatedExpenses: Math.round((w.expenses - fixedExpenses) * 100) / 100, reservedSavings };
   }) : points.map((p) => ({
     label: p.current ? "Ahora" : new Intl.DateTimeFormat("es-ES", { month: "short", timeZone: "UTC" }).format(new Date(`${p.cycle.end}T00:00:00Z`)).replace(".", ""),
     title: p.current ? `Desde hoy · ${p.cycle.label}` : `Previsto · ${p.cycle.label}`,
-    income: p.income, expenses: p.expenses, net: p.net, available: p.openingBalance, current: p.current,
+    income: p.income, expenses: p.expenses, net: p.net, available: p.closingBalance, current: p.current,
     fixedExpenses: p.fixedExpenses, estimatedExpenses: p.estimatedExpenses,
+    reservedSavings: Math.round(Math.min(Math.max(0, p.income), Math.max(0, goalPerCycle)) * 100) / 100,
   }));
-  const goal = view.settings.savingsGoal ?? 0;
-  const goalPerCycle = view.settings.savingsFrequency === "semanal" ? goal * 52 / 12 : goal;
+  const totalSavings = Math.round(chartData.reduce((sum, point) => sum + point.reservedSavings, 0) * 100) / 100;
   return <><div className={`space-y-4 transition-transform duration-200 ${detailKey ? "-translate-x-3" : ""}`}>
-    <section className={`${card} ${flat} space-y-4 p-4 sm:p-6`}>
-      <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-semibold text-slate-900">Lo que viene</h2>
-        <p className="mt-1 text-xs text-slate-500">Cada ciclo parte del dinero disponible al cerrar el anterior.</p></div>
+    <section className={`${card} ${flat} space-y-3 p-4 sm:p-6`}>
+      <div className="flex justify-end">
         <div className="flex rounded-xl bg-slate-100 p-1" role="group" aria-label="Periodo de previsión">{([1, 3, 6, 12] as const).map((n) => <button key={n} type="button" aria-pressed={range === n} onClick={() => setRange(n)}
           className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${range === n ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>{n}M</button>)}</div></div>
       {points.length ? <>
-        {weeklyMode && points[0] && <p className="text-xs font-medium text-slate-600">Por semanas · {shortDay(points[0].cycle.start)} – {shortDay(points[0].cycle.end)}</p>}
-        <CycleBars key={range} height={235} balanceLabel="Saldo inicial" data={chartData} />
-        <div className="grid gap-2 border-t border-slate-100 pt-4 sm:grid-cols-3">
-          <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Ingresos previstos</p><p className="amount mt-1 text-lg font-bold text-blue-700">{eur(total.income, 2)}</p></div>
-          <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Gastos previstos</p><p className="amount mt-1 text-lg font-bold text-rose-700">{eur(total.expenses, 2)}</p></div>
-          <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Saldo previsto al cierre</p><p className={`amount mt-1 text-lg font-bold ${(last?.closingBalance ?? 0) >= 0 ? "text-emerald-700" : "text-red-700"}`}>{last?.closingBalance === null ? "Sin saldo bancario" : eur(last?.closingBalance, 2)}</p></div>
+        <CycleBars key={range} height={235} balanceLabel="Disponible al cierre" data={chartData} showLegend={false} wideBars />
+        <div className="grid grid-cols-4 gap-1 border-t border-slate-100 pt-3 text-center sm:gap-3" aria-label="Totales de la previsión">
+          <div className="min-w-0" title={`Ingresos: ${eur(total.income, 2)}`} aria-label={`Ingresos: ${eur(total.income, 2)}`}>
+            <p className="amount truncate text-[10px] font-bold tabular-nums tracking-tight text-blue-700 sm:text-sm">{eur(total.income, 2)}</p>
+          </div>
+          <div className="min-w-0" title={`Gastos: ${eur(total.expenses, 2)}`} aria-label={`Gastos: ${eur(total.expenses, 2)}`}>
+            <p className="amount truncate text-[10px] font-bold tabular-nums tracking-tight text-rose-600 sm:text-sm">{eur(total.expenses, 2)}</p>
+          </div>
+          <div className="min-w-0" title={`Ahorro reservado: ${eur(totalSavings, 2)}`} aria-label={`Ahorro reservado: ${eur(totalSavings, 2)}`}>
+            <p className="amount truncate text-[10px] font-bold tabular-nums tracking-tight text-blue-400 sm:text-sm">{eur(totalSavings, 2)}</p>
+          </div>
+          <div className="min-w-0" title={`Disponible al final: ${last?.closingBalance === null || !last ? "Sin saldo" : eur(last.closingBalance, 2)}`}
+            aria-label={`Disponible al final: ${last?.closingBalance === null || !last ? "Sin saldo" : eur(last.closingBalance, 2)}`}>
+            <p className={`amount truncate text-[10px] font-bold tabular-nums tracking-tight sm:text-sm ${(last?.closingBalance ?? 0) >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{last?.closingBalance === null || !last ? "" : eur(last.closingBalance, 2)}</p>
+          </div>
         </div>
-        {goal > 0 && <p className="text-xs text-slate-600">Objetivo a reservar en {range} ciclos: <b>{eur(goalPerCycle * range, 2)}</b>. No se resta como gasto ni se mueve de tu cuenta.</p>}
-        <p className="text-xs leading-relaxed text-slate-500">{weeklyMode
-          ? `Cada semana parte del saldo previsto al cerrar la anterior. Los gastos cotidianos se estiman con ${eur(forecast.variableDaily, 2)}/día y los planes se sitúan en sus fechas.`
-          : `El primer ciclo parte del saldo bancario de hoy y solo suma cobros y pagos futuros. Los demás usan recurrencias y gasto variable medio (${eur(forecast.variableDaily, 2)}/día). Los planes añadidos se incluyen únicamente en esta previsión.`}</p>
         {!forecast.hasExpectedIncome && <p className="text-xs font-medium text-amber-700">Sin ingresos periódicos suficientes: puede faltar dinero por estimar.</p>}
       </> : <p className="py-6 text-sm text-slate-500">La previsión todavía no está disponible.</p>}
     </section>
