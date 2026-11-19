@@ -25,10 +25,9 @@ export type CyclePoint = { label: string; income: number; expenses: number; net:
 /** Tres columnas: ingresos (con ahorro reservado), gastos (habituales y estimados) y saldo. */
 export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseColor = EXPENSE, balanceLabel = "Saldo al cierre", showLegend = true, wideBars = false, onSelect }: {
   data: CyclePoint[]; height?: number; incomeColor?: string; expenseColor?: string; balanceLabel?: string; showLegend?: boolean; wideBars?: boolean;
-  onSelect?: (index: number) => void;
+  onSelect?: (index: number | null) => void;
 }) {
-  const [hover, setHover] = useState<number | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
+  const [pressed, setPressed] = useState<number | null>(null);
   const W = 640;
   const H = height;
   const pad = { l: 40, r: 8, t: 10, b: 8 };
@@ -46,7 +45,7 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
   const bw = wideBars ? Math.max(3, (slot - 4 * gap) / 3) : Math.min(30, Math.max(3, (slot - 12) / 3));
   const y = (v: number) => pad.t + ((max - v) / (max - bottom)) * ih;
   const ticks = [0, max / 2, max];
-  const activeIndex = hover ?? selected;
+  const activeIndex = pressed;
   const h = activeIndex === null ? null : data[activeIndex];
   const splitExpenses = data.some((d) => d.fixedExpenses !== undefined);
   const splitIncome = data.some((d) => d.reservedSavings !== undefined);
@@ -59,7 +58,7 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
         {splitExpenses && <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm border border-dashed border-rose-400 bg-rose-100" /> Estimado</span>}
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SAVINGS }} /> {balanceLabel}</span>
       </div>}
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`Ingresos, gastos y ${balanceLabel.toLowerCase()} por periodo`} onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`Ingresos, gastos y ${balanceLabel.toLowerCase()} por periodo`}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="#e2e8f0" strokeWidth={1} strokeDasharray={t === 0 ? undefined : "3 3"} />
@@ -75,11 +74,15 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
           };
           const incomeX = cx - 1.5 * bw - gap;
           const reserved = Math.min(Math.max(0, d.income), Math.max(0, d.reservedSavings ?? 0));
-          const selectBar = () => { setSelected(i); onSelect?.(i); };
+          const beginPress = () => { setPressed(i); onSelect?.(i); };
+          const endPress = () => { setPressed(null); onSelect?.(null); };
           return (
-            <g key={`${i}:${d.label}`} className="cursor-pointer" tabIndex={0} role="button" aria-label={`Ver importes de ${d.title ?? d.label}`}
-              onMouseEnter={() => setHover(i)} onTouchStart={selectBar} onClick={selectBar}
-              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectBar(); } }}>
+            <g key={`${i}:${d.label}`} className="cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-blue-700" tabIndex={0} role="button"
+              aria-label={`Mantén pulsado para ver importes de ${d.title ?? d.label}`}
+              onPointerDown={(event) => { if (event.button !== 0) return; event.currentTarget.setPointerCapture(event.pointerId); beginPress(); }}
+              onPointerUp={endPress} onPointerCancel={endPress} onLostPointerCapture={endPress}
+              onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && !event.repeat) { event.preventDefault(); beginPress(); } }}
+              onKeyUp={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); endPress(); } }}>
               <rect x={cx - slot / 2} y={pad.t} width={slot} height={ih} fill="transparent" />
               {bar(d.income - reserved, incomeX, incomeColor)}
               {reserved > 0 && <rect x={incomeX} y={y(d.income)} width={bw} height={y(d.income - reserved) - y(d.income)}
