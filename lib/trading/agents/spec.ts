@@ -46,7 +46,9 @@ export function kamikazeSpec(k: KamikazeDef): AgentSpec {
       style: k.label ?? "Defensa",
       ideas: "No usa las ideas de FARO: busca él mismo las monedas grandes (Bitcoin, Ethereum, Solana…) que llevan 24 h de lado en un rango estrecho y están perdiendo su suelo.",
       when: "Solo con el mercado en defensa (Bitcoin por debajo de sus medias de 50 y 200 días o de su precio de hace 10 días). Revisa cada hora; en ataque no abre nada.",
-      size: `Vende en corto un ${nf(k.sizeOfEquityPct ?? 10)} % de su dinero en cada moneda, hasta ${slots} a la vez (empezó con ${nf(k.capital)} €). Sin apalancamiento.`,
+      size: (k.leverage ?? 1) > 1
+        ? `Pone un ${nf(k.sizeOfEquityPct ?? 10)} % de su dinero como garantía de cada corto, con apalancamiento x${k.leverage} (cada corto vale ${nf((k.sizeOfEquityPct ?? 10) * (k.leverage ?? 1))} % de su dinero). Hasta ${slots} a la vez (empezó con ${nf(k.capital)} €).`
+        : `Vende en corto un ${nf(k.sizeOfEquityPct ?? 10)} % de su dinero en cada moneda, hasta ${slots} a la vez (empezó con ${nf(k.capital)} €). Sin apalancamiento.`,
       exit: "Stop a mitad del rango (si rebota, la caída no era tal). Sin objetivo ni plazo: el stop baja detrás del precio a medio rango de distancia y deja correr la caída.",
     };
   if (k.kinds) return cartaSpec(k, slots);

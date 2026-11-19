@@ -22,6 +22,8 @@ export type SwarmVariant = {
   regime?: "ataque" | "defensa";
   /** Costes de Kraken en los cortos: 0,02 % al entrar y 0,05 % al salir, y su funding histórico. */
   kraken?: boolean;
+  /** Apalancamiento de los cortos (margen aislado: si llega a liquidación se pierde solo el margen de esa posición). */
+  leverage?: number;
 };
 type Pos = { base: string; qty: number; entry: number; stop: number; target: number; openedAt: number; cost: number; short?: boolean; trail?: number; low?: number; high?: number };
 type Order = { base: string; entry: number; stop: number; target: number; until: number; budget: number; trail?: number };
@@ -54,6 +56,8 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
   const exitFee = kraken ? 0.0005 : TAKER;
   const entryFee = kraken ? 0.0002 : 0;
   let fundingTotal = 0;
+  const lev = short ? Math.max(1, variant.leverage ?? 1) : 1;
+  let liquidations = 0;
   const breakout = variant.side === "breakout";
   // Índice por hora de cada moneda.
   const idx = new Map<string, Map<number, number>>();
@@ -69,7 +73,7 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
   const monthly = new Map<string, { start: number; end: number }>();
   const close = (p: Pos, price: number, fee: number, exit: "objetivo" | "stop" | "tiempo", at: number) => {
     // Corto: se recupera la garantía más (venta − recompra) menos la comisión de recompra.
-    const got = p.short ? p.cost + p.qty * (p.entry - price) - p.qty * price * fee : p.qty * price * (1 - fee);
+    const got = p.short ? Math.max(0, p.cost + p.qty * (p.entry - price) - p.qty * price * fee) : p.qty * price * (1 - fee);
     cash += got;
     trades.push({ base: p.base, pct: (got / p.cost - 1) * 100, exit, at, phase: attack?.get(new Date(p.openedAt).toISOString().slice(0, 10)) ? "ataque" : "defensa" });
   };
@@ -93,7 +97,12 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
           cash += f;
           fundingTotal += f;
         }
-        if (bar.h >= p.stop) close(p, Math.max(p.stop, bar.o), exitFee, "stop", t);
+        // Liquidación (margen aislado): subida de ~1/apalancamiento menos el margen de mantenimiento (0,5 %).
+        const liq = lev > 1 ? p.entry * (1 + 1 / lev - 0.005) : Infinity;
+        if (liq < p.stop && bar.h >= liq) {
+          liquidations++;
+          close(p, liq, exitFee, "stop", t);
+        } else if (bar.h >= p.stop) close(p, Math.max(p.stop, bar.o), exitFee, "stop", t);
         else {
           p.low = Math.min(p.low ?? p.entry, bar.l);
           p.stop = Math.min(p.stop, p.low + p.trail!);
@@ -123,7 +132,7 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
       const bar = barAt(o.base, t);
       if (short) {
         if (bar && bar.h >= o.entry) {
-          const p: Pos = { base: o.base, qty: (o.budget * (1 - entryFee)) / o.entry, entry: o.entry, stop: o.stop, target: 0, openedAt: t, cost: o.budget, short: true, trail: o.target, low: o.entry };
+          const p: Pos = { base: o.base, qty: (o.budget * lev * (1 - entryFee)) / o.entry, entry: o.entry, stop: o.stop, target: 0, openedAt: t, cost: o.budget, short: true, trail: o.target, low: o.entry };
           if (bar.h >= o.stop) close(p, o.stop, exitFee, "stop", t);
           else pos.push(p);
         } else cash += o.budget; // no se llenó en su hora: se cancela
@@ -142,7 +151,7 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
     let equity = cash + orders.reduce((s, o) => s + o.budget, 0);
     for (const p of pos) {
       const c = barAt(p.base, t)?.c ?? p.entry;
-      equity += p.short ? p.cost + p.qty * (p.entry - c) : p.qty * c;
+      equity += p.short ? Math.max(0, p.cost + p.qty * (p.entry - c)) : p.qty * c;
     }
     peak = Math.max(peak, equity);
     maxDd = Math.max(maxDd, (peak - equity) / peak);
@@ -220,6 +229,8 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
     avgWinPct: r2(avg(wins.map((x) => x.pct))),
     avgLossPct: r2(avg(losses.map((x) => x.pct))),
     fundingEur: r2(fundingTotal),
+    leverage: lev,
+    liquidations,
     byPhase: (["ataque", "defensa"] as const).map((ph) => {
       const xs = trades.filter((x) => x.phase === ph);
       return { phase: ph, trades: xs.length, winRatePct: r2((xs.filter((x) => x.pct > 0).length / Math.max(1, xs.length)) * 100), avgPct: r2(avg(xs.map((x) => x.pct))) };

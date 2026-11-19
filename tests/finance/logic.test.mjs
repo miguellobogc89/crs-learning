@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { load } from "../trading/helpers.mjs";
 
 const L = load("lib/finance/logic.ts");
+const C = load("lib/finance/categories.ts");
 const P = load("lib/finance/parse.ts");
 
 const tx = (id, account, date, amount, description, kind = "gasto", category = "otros_gastos", extra = {}) => ({
@@ -45,6 +46,25 @@ test("clave de comercio sin tarjetas, fechas ni ruido", () => {
   assert.equal(L.merchantKey("Pago movil en NETFLIX.COM, Madrid"), "netflix.com");
 });
 
+test("las recomendaciones de seguros excluyen inversión y distinguen renovaciones semestrales", () => {
+  const movements = [
+    tx("occident", "S", "2026-10-14", -70, "OCCIDENT GCO Inv.multifondos 10-10-26 al 10-11-26", "gasto", "seguros"),
+    tx("occident-reciente", "S", "2026-11-17", -70, "RECIBO OCCIDENT GCO SEGU Y REAS", "gasto", "seguros"),
+    tx("mapfre-abril", "S", "2026-04-13", -175.01, "MAPFRE SEGURO AUTO MAT 1234ABC", "gasto", "seguros"),
+    tx("mapfre-octubre", "S", "2026-10-14", -174.99, "MAPFRE SEGURO AUTO MAT 1234ABC", "gasto", "seguros"),
+    tx("mapfre-otro", "S", "2026-07-20", -874.05, "MAPFRE SEGURO AUTO MAT 5678XYZ", "gasto", "seguros"),
+    tx("verti", "S", "2026-08-13", -619.02, "VERTI ASEGURADORA", "gasto", "seguros"),
+  ];
+  const proposals = L.insuranceForecastCandidates(movements, "2026-11-19", "2027-11-30");
+  assert.equal(proposals.length, 3);
+  const semi = proposals.find((s) => s.cadence === "semestral");
+  assert.equal(semi.startDate, "2027-04-14");
+  assert.equal(semi.evidence, 2);
+  assert.equal(semi.sourceTx.id, "mapfre-octubre");
+  assert.equal(proposals.some((s) => s.sourceTx.id === "occident"), false);
+  assert.equal(proposals.some((s) => s.startDate === "2027-08-13"), true);
+});
+
 test("una recarga de Revolut desde Santander se empareja como transferencia interna y no un gasto", () => {
   const pairs = L.findTransferPairs([
     tx("a", "santander", "2026-10-01", -200, "Transferencia a Revolut"),
@@ -62,6 +82,23 @@ test("palabras clave: súper, nómina, comida a domicilio e inversión", () => {
   assert.equal(L.keywordClass({ description: "Transferencia a Bitvavo", counterparty: null, amount: -100 }).kind, "ahorro");
   assert.equal(L.keywordClass({ description: "A cuenta de inversión", counterparty: null, amount: -1000 }).kind, "ahorro");
   assert.equal(L.keywordClass({ description: "NOMINA", counterparty: null, amount: -5 }), null, "una «nómina» que sale no es un ingreso");
+});
+
+test("videojuegos: categoría de gasto y tiendas de juegos, sin confundir Netflix", () => {
+  assert.equal(C.isCategory("videojuegos"), true);
+  assert.equal(C.categoryLabel("videojuegos"), "Videojuegos");
+  assert.equal(L.keywordClass({ description: "STEAMGAMES.COM", counterparty: null, amount: -29.99 })?.category, "videojuegos");
+  assert.equal(L.keywordClass({ description: "PLAYSTATION STORE", counterparty: null, amount: -49.99 })?.category, "videojuegos");
+  assert.equal(L.keywordClass({ description: "NETFLIX.COM", counterparty: null, amount: -12.99 })?.category, "suscripciones");
+});
+
+test("los selectores de categorías están ordenados alfabéticamente", () => {
+  const labels = C.SELECTABLE_CATEGORIES.map((c) => c.label);
+  const gastos = C.EXPENSE_CATEGORIES.map((c) => c.label);
+  const alphabetical = (a, b) => a.localeCompare(b, "es", { sensitivity: "base" });
+  assert.deepEqual(labels, [...labels].sort(alphabetical));
+  assert.deepEqual(gastos, [...gastos].sort(alphabetical));
+  assert.equal(C.EXPENSE_CATEGORIES.some((c) => c.key === "videojuegos"), true);
 });
 
 test("la nómina de Endesa no es «suministros» y una entrada con nombre de comercio se deja a la IA", () => {
@@ -163,6 +200,108 @@ test("proyección: saldo de hoy + cobros − recibos − gasto variable medio; �
   assert.equal(L.affordability(p, 300).verdict, "si");
   assert.equal(L.affordability(p, p.projectedNet - 100).verdict, "con_ajustes");
   assert.equal(L.affordability(p, 99_999).verdict, "no");
+});
+
+test("Inicio: previsión de 12 ciclos suma ingresos conocidos, recibos y gasto variable, sin regalos", () => {
+  const today = "2026-11-17";
+  const txs = [...history(), tx("regalo", "S", "2026-11-10", 300, "Cumpleaños", "regalo", "regalo_recibido")];
+  const recurring = L.detectRecurring(txs, today);
+  const keys = new Set(recurring.map((r) => r.key));
+  const summaries = [1, 2, 3].map((i) => L.summarize(txs, L.cycleFor(today, 25, -i), keys));
+  const current = L.summarize(txs, L.cycleFor(today, 25), keys);
+  const projection = L.projectCycle({ txs, today, startDay: 25, liquidity: 3000, recurring, savingsGoal: null, history: summaries });
+  const result = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000 });
+  assert.equal(result.points.length, 12);
+  assert.equal(result.points[0].net, Math.round((projection.pendingIncome - projection.pendingFixed - projection.expectedVariable) * 100) / 100, "no se deben sumar ingresos ya cobrados al saldo de hoy");
+  assert.equal(result.points[0].openingBalance, 3000);
+  assert.equal(result.points[0].closingBalance, projection.projectedEndBalance);
+  assert.equal(result.points[1].cycle.start, "2026-11-25");
+  assert.equal(result.points[1].income, 2100, "solo se repite la nómina; no el regalo de cumpleaños");
+  assert.equal(result.points[1].knownExpenses, 12.99, "se cuenta Netflix una sola vez");
+  assert.ok(result.points[1].expenses > result.points[1].knownExpenses, "se añade el gasto variable histórico");
+  assert.equal(result.points[1].net, Math.round((result.points[1].income - result.points[1].expenses) * 100) / 100);
+  const items = [
+    { id: "plan", title: "Regalos", kind: "gasto", amount: 250, startDate: "2026-12-10", endDate: null, source: "manual", sourceKey: null },
+  ];
+  const planned = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000, items });
+  assert.equal(planned.points[1].expenses, result.points[1].expenses + 250);
+  assert.equal(planned.points[1].closingBalance, Math.round((result.points[1].closingBalance - 250) * 100) / 100);
+  assert.equal(planned.points[0].expenses, result.points[0].expenses, "los planes futuros no alteran movimientos previos");
+  const weeks = L.forecastCycleWeeks({ point: planned.points[1], recurring, items, today });
+  assert.equal(weeks.length, 5, "el ciclo de 30 días se divide en cuatro semanas y un tramo final");
+  assert.equal(weeks[0].start, "2026-11-25");
+  assert.equal(weeks.at(-1).end, "2026-12-24");
+  assert.equal(weeks.reduce((sum, w) => sum + w.income, 0), planned.points[1].income);
+  assert.equal(Math.round(weeks.reduce((sum, w) => sum + w.expenses, 0) * 100) / 100, planned.points[1].expenses);
+  assert.equal(weeks.at(-1).closingBalance, planned.points[1].closingBalance);
+  assert.equal(weeks.some((w) => w.events.some((e) => e.label === "Regalos" && e.date === "2026-12-10")), true);
+
+  const netflix = recurring.find((r) => r.category === "suscripciones");
+  let chargeDate = netflix.nextDate;
+  while (chargeDate < planned.points[1].cycle.start) chargeDate = L.addDays(chargeDate, netflix.intervalDays);
+  const exception = { id: "override", title: "Netflix", kind: "gasto", amount: 5.99, startDate: chargeDate,
+    endDate: null, source: "manual", sourceKey: L.forecastOccurrenceKey(netflix, chargeDate) };
+  const skippedOccurrences = new Set([exception.sourceKey]);
+  const withoutCharge = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000,
+    items, skippedOccurrences });
+  assert.equal(withoutCharge.points[1].knownExpenses, planned.points[1].knownExpenses - 12.99, "omitir un recibo no afecta al gasto variable");
+  assert.equal(withoutCharge.points[2].knownExpenses, planned.points[2].knownExpenses, "la excepción no altera el mes siguiente");
+  const adjustedWeeks = L.forecastCycleWeeks({ point: withoutCharge.points[1], recurring, items, today, skippedOccurrences });
+  const omitted = adjustedWeeks.flatMap((w) => w.events).find((e) => e.occurrenceKey === exception.sourceKey);
+  assert.equal(omitted?.amount, 0);
+  assert.equal(omitted?.modified, true);
+  assert.equal(adjustedWeeks.at(-1).closingBalance, withoutCharge.points[1].closingBalance);
+  const adjusted = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000,
+    items: [...items, exception] });
+  assert.equal(adjusted.points[1].knownExpenses, planned.points[1].knownExpenses - 7);
+  const restored = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000, items });
+  assert.equal(restored.points[1].knownExpenses, planned.points[1].knownExpenses, "al restaurar vuelve el importe habitual");
+});
+
+test("previsión: los imprevistos periódicos se repiten en sus fechas y se muestran como estimados", () => {
+  const today = "2026-11-17";
+  const txs = history();
+  const recurring = L.detectRecurring(txs, today);
+  const keys = new Set(recurring.map((r) => r.key));
+  const summaries = [1, 2, 3].map((i) => L.summarize(txs, L.cycleFor(today, 25, -i), keys));
+  const current = L.summarize(txs, L.cycleFor(today, 25), keys);
+  const projection = L.projectCycle({ txs, today, startDay: 25, liquidity: 3000, recurring, savingsGoal: null, history: summaries });
+  const input = { txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000 };
+  const regular = L.forecastCashflow(input);
+  const item = { id: "dinner", title: "Clases", kind: "gasto", amount: 80, startDate: "2026-11-28", endDate: null,
+    source: "manual", sourceKey: "plan:mensual:00000000-0000-4000-8000-000000000001" };
+  assert.equal(L.forecastPlanFrequency(item.sourceKey), "mensual");
+  const planned = L.forecastCashflow({ ...input, items: [item] });
+  assert.equal(planned.points[1].plannedExpenses, 80);
+  assert.equal(planned.points[2].plannedExpenses, 80);
+  assert.equal(planned.points[1].expenses, regular.points[1].expenses + 80);
+  assert.equal(planned.points[1].fixedExpenses, regular.points[1].fixedExpenses);
+  assert.equal(planned.points[1].estimatedExpenses, regular.points[1].estimatedExpenses + 80);
+  const weeks = L.forecastCycleWeeks({ point: planned.points[1], recurring, today, items: [item] });
+  assert.equal(weeks.flatMap((w) => w.events).filter((e) => e.planId === "dinner").length, 1);
+  assert.equal(Math.round(weeks.reduce((total, w) => total + w.expenses, 0) * 100) / 100, planned.points[1].expenses);
+  const endOfMonth = { ...item, startDate: "2027-01-31" };
+  assert.deepEqual(L.forecastPlanOccurrences(endOfMonth, "2027-02-01", "2027-04-30"), ["2027-02-28", "2027-03-31", "2027-04-30"]);
+  assert.deepEqual(L.forecastPlanOccurrences({ ...item, sourceKey: "plan:semanal:00000000-0000-4000-8000-000000000001",
+    endDate: "2026-12-12" }, "2026-12-01", "2026-12-30"), ["2026-12-05", "2026-12-12"]);
+});
+
+test("Inicio: solo estima una nómina sin patrón recurrente cuando aparece en dos ciclos completos", () => {
+  const today = "2026-11-17";
+  const txs = [
+    tx("a", "S", "2026-08-27", 2000, "SALARIO ENTRADA A", "ingreso", "nomina"),
+    tx("b", "S", "2026-09-27", 2200, "PAGO EMPRESA B", "ingreso", "nomina"),
+    tx("c", "S", "2026-10-27", 300, "BONO EXTRA", "ingreso", "otros_ingresos", { extraordinary: true }),
+  ];
+  const history = [1, 2, 3].map((i) => L.summarize(txs, L.cycleFor(today, 25, -i)));
+  const current = L.summarize(txs, L.cycleFor(today, 25));
+  const recurring = L.detectRecurring(txs, today);
+  const projection = L.projectCycle({ txs, today, startDay: 25, liquidity: 1000, recurring, savingsGoal: null, history });
+  const result = L.forecastCashflow({ txs, today, startDay: 25, recurring, history, current, projection });
+  assert.equal(result.estimatedSalary, 2100);
+  assert.equal(result.points[1].income, 2100);
+  assert.equal(result.points[1].expenses, 0);
+  assert.equal(result.hasExpectedIncome, true);
 });
 
 test("presupuestos: gastado, restante y aviso si va más rápido que el ciclo", () => {

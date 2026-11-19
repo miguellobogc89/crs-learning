@@ -23,6 +23,7 @@ import { dailyCloses, eurPairs, hourly, priceEur, tickers } from "./market";
 import { KAMIKAZES, kamikazeByKey, type KamikazeDef } from "./roster";
 import { CARTA, isCartaKind, noiseIdea, refuerzoStop } from "../carta";
 import { attackDays } from "../lab/swarm";
+import { krakenCopyTurn } from "../kraken-copy";
 
 const WS = AGENTS_WORKSPACE;
 const DAY = 86_400_000;
@@ -111,6 +112,12 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
   const board = (await boardIdeas()).filter((i) => i.market === "crypto" && !off.includes(i.kind));
   const priceOf = (pair: string) => market.find((t) => t.pair === pair)?.price ?? null;
   await Promise.all(KAMIKAZES.map((def, i) => one(def, out.agents[i].actions)));
+  // Copia con dinero real en Kraken Futures del agente de cortos elegido (si está habilitado el dinero real).
+  const copied = await krakenCopyTurn().catch((e) => {
+    console.error("[agentes] copia en Kraken", e instanceof Error ? e.message.slice(0, 200) : e);
+    return [];
+  });
+  for (const c of copied) out.agents.find((a) => a.key === c.agent)?.actions.push(c.text);
   // Copia al instante: si un agente ha comprado o vendido, sus copias en tu exchange lo repiten ya,
   // sin esperar a la siguiente pasada del cron.
   const moved = out.agents.filter((a) => a.actions.some((x) => x.startsWith("Entró") || x.startsWith("Refuerza") || / (stop|objetivo)$/.test(x) || /: tiempo/.test(x))).map((a) => a.key);
@@ -312,7 +319,8 @@ async function shortSwarmTurn(def: KamikazeDef, accountId: string, market: Ticke
     const budget = Math.min(st.summary.available, st.summary.equity * ((def.sizeOfEquityPct ?? 10) / 100));
     if (budget < 10) break;
     const symbol = `${t.base}-EUR`;
-    const quantity = allInQuantity(budget, px, costOf(st.account));
+    // Con apalancamiento, el corto es `leverage` veces el margen (el 10 % de su dinero).
+    const quantity = allInQuantity(budget * (def.leverage ?? 1), px, costOf(st.account));
     const inst = await prisma.market_instruments.findUnique({ where: { symbol }, select: { id: true } });
     if (inst) await setLive(inst.id, px);
     try {
@@ -327,7 +335,7 @@ async function shortSwarmTurn(def: KamikazeDef, accountId: string, market: Ticke
           target: px * 0.5,
           execution: "now",
           maxHoldDays: null,
-          notes: `${def.name}: ${t.base} pierde el suelo de su rango de 24 h (${r.width.toFixed(1).replace(".", ",")} %) con el mercado en defensa. Corto con stop a mitad del rango que baja detrás del precio.`,
+          notes: `${def.name}: ${t.base} pierde el suelo de su rango de 24 h (${r.width.toFixed(1).replace(".", ",")} %) con el mercado en defensa. Corto${(def.leverage ?? 1) > 1 ? ` x${def.leverage}` : ""} con stop a mitad del rango que baja detrás del precio.`,
           source: "agente",
           // Distancia del stop que baja detrás del precio: medio rango (la lee la vigilancia).
           signalKey: `enjambre:${t.base}:${(0.5 * w).toPrecision(6)}:${Date.now()}`,
@@ -492,6 +500,8 @@ export async function kamikazeView(key: string) {
     style: def.style,
     capital: def.capital,
     slots: def.slots ?? 1,
+    /** No vende en un objetivo: el stop va siguiendo al precio (el «objetivo» guardado es solo un tope técnico). */
+    noTarget: def.engine === "enjambre-corto",
     /** Qué está haciendo ahora (o por qué no entra) y si está en pausa tras una pérdida. */
     note: row?.last_note ?? null,
     noteAt: row?.last_note_at?.toISOString() ?? null,

@@ -32,13 +32,13 @@ function GoalCard({ view }: { view: View }) {
     }
   };
   const p = view.projection;
-  const g = view.settings.savingsGoal;
+  const g = view.projection.savingsGoal;
   return (
     <section className={`${card} ${flat} p-4 sm:p-6`}>
-      <SectionTitle icon={Target} tint="emerald" size="base">Objetivo de ahorro por ciclo</SectionTitle>
+      <SectionTitle icon={Target} tint="emerald" size="base">Objetivo de ahorro</SectionTitle>
       <form className="mt-4 flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <input inputMode="decimal" value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="P. ej. 500" className={`${field} w-36`} />
-        <span className="text-sm text-slate-500">€ cada ciclo</span>
+        <span className="text-sm text-slate-500">€ {view.settings.savingsFrequency === "semanal" ? "por semana" : "por ciclo"}</span>
         <button type="submit" disabled={busy} className={ghost}>{busy && <Loader2 className="h-4 w-4 animate-spin" />} Guardar</button>
       </form>
       {err && <div className="mt-2"><ErrorNote>{err}</ErrorNote></div>}

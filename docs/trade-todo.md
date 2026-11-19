@@ -1,4 +1,4 @@
-# Trading: pendiente
+# Trade: pendientes
 
 Lista única de lo que queda, por prioridad (revisada el 17/11/2026). Lo hecho y el historial de cada
 cambio están en git; aquí solo va lo que falta.

@@ -71,6 +71,21 @@ export async function getPortfolio(workspaceId: string) {
     for (const [id, v] of byDay.get(d) ?? []) last.set(id, v);
     return { day: d, equity: [...last.values()].reduce((s, v) => s + v, 0) };
   });
+  // Último cierre diario anterior a hoy. No equivale a una muestra intradía de hace 24 h.
+  const today = dayKey(new Date());
+  const previous = equity.filter((e) => e.day < today).at(-1);
+  const previousDate = previous ? new Date(`${previous.day}T00:00:00.000Z`) : null;
+  // No comparar cierres antiguos ni mezclar aportaciones/retiros con rentabilidad.
+  const eligible = previousDate && Date.now() - previousDate.getTime() < 48 * 60 * 60 * 1000;
+  const flows = eligible ? await prisma.trading_transactions.findMany({
+    where: {
+      account_id: { in: ids },
+      created_at: { gte: previousDate! },
+      kind: { in: ["aportación", "retirada"] },
+    },
+    select: { amount: true },
+  }) : [];
+  const netFlows = flows.reduce((sum, flow) => sum + flow.amount, 0);
   const totalEquity = main.summary.equity + copies.reduce((s, c) => s + c.summary.equity, 0);
   const totalInitial = main.summary.initialCapital + copies.reduce((s, c) => s + c.summary.initialCapital, 0);
   return {
@@ -80,6 +95,7 @@ export async function getPortfolio(workspaceId: string) {
       equity: totalEquity,
       initialCapital: totalInitial,
       returnPct: totalInitial > 0 ? ((totalEquity - totalInitial) / totalInitial) * 100 : 0,
+      dailyChangePct: eligible && previous && previous.equity > 0 ? ((totalEquity - previous.equity - netFlows) / previous.equity) * 100 : null,
       cash: main.summary.cash + copies.reduce((s, c) => s + c.summary.cash, 0),
       reserved: main.summary.reserved + copies.reduce((s, c) => s + c.summary.reserved, 0),
       available: main.summary.available + copies.reduce((s, c) => s + c.summary.available, 0),

@@ -4,23 +4,25 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal-finance/enable-banking";
 import {
-  addDays, affordability, budgetStatus, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, liquiditySeries, merchantKey,
+  addDays, affordability, budgetStatus, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, forecastCycleWeeks, insuranceForecastCandidates, isForecastOverride, liquiditySeries, merchantKey, round2, median,
   expenseHistoryByCycle, normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
-import { getAccounts, getBudgets, getDismissed, getSettings, loadTxs } from "./store";
+import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, loadTxs } from "./store";
 import { AUTO_SYNC_HOURS } from "./sync";
+import { zombies } from "./gmail";
 
 const HISTORY_CYCLES = 12;
 
 /** Contexto común: datos y cálculos base de una persona (una sola lectura de la base de datos). */
 export async function financeContext(userId: string) {
-  const [settings, accounts, txs, budgets, { dismissed, cancelled }] = await Promise.all([
+  const [settings, accounts, txs, budgets, { dismissed, cancelled, skippedOccurrences }, forecastItems] = await Promise.all([
     getSettings(userId),
     getAccounts(userId),
     loadTxs(userId),
     getBudgets(userId),
     getDismissed(userId),
+    getForecastItems(userId),
   ]);
   const today = todayIso();
   // El ciclo empieza el día real en que entra la nómina (o el día fijado, adelantado si es festivo).
@@ -35,11 +37,116 @@ export async function financeContext(userId: string) {
   const included = accounts.filter((a) => a.included);
   const eur = included.filter((a) => a.currency === "EUR" && a.balance !== null);
   const liquidity = eur.length ? Math.round(eur.reduce((s, a) => s + (a.balance ?? 0), 0) * 100) / 100 : null;
-  const projection = projectCycle({ txs, today, startDay, liquidity, recurring, savingsGoal: settings.savingsGoal, history: historyWithData });
+  const savingsGoalCycle = settings.savingsGoal === null ? null : round2(settings.savingsGoal * (settings.savingsFrequency === "semanal" ? 52 / 12 : 1));
+  const projection = projectCycle({ txs, today, startDay, liquidity, recurring, savingsGoal: savingsGoalCycle, history: historyWithData });
   const budgetsNow = budgetStatus(budgets, current, today);
-  return { userId, settings, accounts, txs, budgets, budgetsNow, dismissed, cancelled, today, startDay, recurring, history: historyWithData, current, liquidity, projection };
+  return { userId, settings, accounts, txs, budgets, budgetsNow, dismissed, cancelled, skippedOccurrences, forecastItems, today, startDay, recurring, history: historyWithData, current, liquidity, projection };
 }
 export type FinanceContext = Awaited<ReturnType<typeof financeContext>>;
+
+type ForecastSuggestion = { key: string; title: string; detail: string; kind: "ingreso" | "gasto"; amount: number; startDate: string };
+type PayslipEvidence = { period_year: number; period_month: number; net_amount: unknown; extra_pay: unknown; salary_advances: unknown };
+const monthName = (month: number) => new Intl.DateTimeFormat("es-ES", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2026, month - 1, 1)));
+const extraTitle = (year: number, month: number) => `Paga extra · ${monthName(month)} ${year}`;
+
+async function payslipEvidence(userId: string) {
+  return prisma.$queryRaw<PayslipEvidence[]>`
+    SELECT period_year, period_month, net_amount, extra_pay, salary_advances
+    FROM public.finance_payslips WHERE user_id = ${userId}::uuid
+    ORDER BY period_year DESC, period_month DESC LIMIT 48
+  `;
+}
+
+function extraEstimate(payroll: PayslipEvidence[], p: PayslipEvidence) {
+  const regular = payroll.filter((r) => r.period_year === p.period_year && r.period_month !== p.period_month
+    && Number(r.extra_pay) < 100 && Number(r.salary_advances) === 0).map((r) => Number(r.net_amount));
+  return { medianNet: regular.length >= 2 ? median(regular) : null, regularCount: regular.length,
+    amount: regular.length >= 2 ? round2(Math.max(0, Number(p.net_amount) - median(regular))) : null };
+}
+
+/** Hipótesis anuales, nunca ingresos ni gastos confirmados hasta que el usuario las acepte. */
+async function forecastSuggestions(ctx: FinanceContext): Promise<ForecastSuggestion[]> {
+  const end = cycleFor(ctx.today, ctx.startDay, 11).end;
+  const result: ForecastSuggestion[] = [];
+  const payroll = await payslipEvidence(ctx.userId);
+  for (const p of payroll) {
+    if (Number(p.extra_pay) < 500) continue;
+    const year = p.period_year + 1;
+    const month = String(p.period_month).padStart(2, "0");
+    const startDate = cycleFor(`${year}-${month}-27`, ctx.startDay).start;
+    if (startDate < ctx.today || startDate > end) continue;
+    const { amount } = extraEstimate(payroll, p);
+    if (amount === null || amount < 100) continue;
+    result.push({ key: `forecast-extra:${year}-${month}`, title: extraTitle(year, p.period_month), kind: "ingreso", amount, startDate,
+      detail: `Tu nómina de ${p.period_month}/${p.period_year} incluyó una paga extra. Se propone la diferencia neta frente a tus nóminas habituales.` });
+  }
+  for (const candidate of insuranceForecastCandidates(ctx.txs, ctx.today, end)) {
+    const { key, title, amount, startDate, cadence, evidence, sourceTx } = candidate;
+    if (ctx.recurring.some((r) => r.active && r.key === merchantKey(sourceTx.description, sourceTx.counterparty))) continue;
+    result.push({ key, title, kind: "gasto", amount, startDate,
+      detail: evidence > 1 ? `Estimado a partir de ${evidence} recibos; posible renovación ${cadence}.`
+        : "Solo hay un recibo de referencia. Comprueba si se renueva cada año." });
+  }
+  return result.filter((s) => !ctx.dismissed.has(s.key) && !ctx.forecastItems.some((item) => item.sourceKey === s.key));
+}
+
+/** Justificación verificable de una sugerencia, con fuentes exclusivamente del usuario autenticado. */
+export async function forecastSource(userId: string, key: string) {
+  const extra = /^forecast-extra:(20\d{2})-(0[1-9]|1[0-2])$/.exec(key);
+  if (extra) {
+    const year = Number(extra[1]);
+    const month = Number(extra[2]);
+    const payroll = await payslipEvidence(userId);
+    const source = payroll.find((p) => p.period_year === year - 1 && p.period_month === month && Number(p.extra_pay) >= 500);
+    if (!source) return null;
+    const estimate = extraEstimate(payroll, source);
+    return { title: extraTitle(year, month), kind: "ingreso" as const,
+      estimate: estimate.amount, targetDate: `${year}-${extra[2]}-25`,
+      explanation: "Se ha comparado el neto de esa nómina con la mediana de tus nóminas normales del mismo año, sin paga extra ni adelantos.",
+      caution: Number(source.salary_advances) > 0 ? "Esta nómina contiene adelantos; la diferencia neta puede no representar exactamente el importe de la paga extra." : "Es una estimación basada en el año anterior, no un cobro confirmado por la empresa.",
+      source: { type: "payslip" as const, date: `${source.period_year}-${String(source.period_month).padStart(2, "0")}`,
+        label: `Nómina de ${monthName(month)} ${source.period_year}`, description: "Paga extraordinaria reflejada en tu nómina", amount: Number(source.net_amount) },
+      breakdown: [{ label: "Neto de aquella nómina", value: Number(source.net_amount) },
+        { label: "Paga extra bruta en la nómina", value: Number(source.extra_pay) },
+        { label: "Neto habitual (mediana)", value: estimate.medianNet },
+        { label: "Adelantos en esa nómina", value: Number(source.salary_advances) },
+        { label: "Nóminas habituales comparadas", value: estimate.regularCount, format: "count" }] };
+  }
+  if (!/^forecast-insurance:[a-z0-9-]+:\d{4}-\d{2}$/.test(key)) return null;
+  const ctx = await financeContext(userId);
+  const candidate = insuranceForecastCandidates(ctx.txs, ctx.today, cycleFor(ctx.today, ctx.startDay, 11).end)
+    .find((c) => c.key === key);
+  if (!candidate) return null;
+  const tx = candidate.sourceTx;
+  const account = ctx.accounts.find((a) => a.id === tx.accountId);
+  return { title: candidate.title, kind: "gasto" as const, estimate: candidate.amount, targetDate: candidate.startDate,
+    explanation: candidate.evidence > 1
+      ? `Detectamos ${candidate.evidence} cargos compatibles. La siguiente fecha se calcula con periodicidad ${candidate.cadence}.`
+      : "Solo encontramos este cargo. Hemos supuesto una renovación anual, pero no está verificada.",
+    caution: "El importe y la fecha son orientativos. Comprueba tu póliza antes de incluirlos.",
+    source: { type: "transaction" as const, date: tx.date, label: tx.counterparty || "Movimiento bancario",
+      description: tx.description, amount: tx.amount, account: account ? `${account.bank} · ${account.name}` : null },
+    related: candidate.supportingTxs.slice(0, 3).map((t) => ({ date: t.date, description: t.description, amount: t.amount })),
+    breakdown: [{ label: "Recibos compatibles encontrados", value: candidate.evidence, format: "count" }] };
+}
+
+/** Suscripciones zombi (Gmail): te cobran después de un correo de cancelación. */
+async function zombieAlerts(userId: string): Promise<Alert[]> {
+  const list = await zombies(userId).catch(() => []);
+  const day = (d: string) => d.split("-").reverse().join("/");
+  return list.map((z) => {
+    const name = z.merchant.charAt(0).toUpperCase() + z.merchant.slice(1);
+    const total = z.charges.reduce((s, c) => s - c.amount, 0);
+    const last = z.charges[z.charges.length - 1];
+    return {
+      key: `zombi:${z.messageId}:${z.charges.map((c) => c.id).join(",").slice(0, 120)}`,
+      level: "importante" as const,
+      title: `${name}: te siguen cobrando después de cancelar`,
+      body: `Recibiste la cancelación el ${day(z.cancelledOn)} («${z.subject.slice(0, 80)}»), pero después hay ${z.charges.length} ${z.charges.length === 1 ? "cargo" : "cargos"} por ${total.toFixed(2).replace(".", ",")} € (el último, el ${day(last.date)}). Reclámalo.`,
+      txIds: z.charges.map((c) => c.id),
+    };
+  });
+}
 
 async function connectionAlerts(userId: string): Promise<Alert[]> {
   const conns = await prisma.personal_bank_connections.findMany({ where: { user_id: userId }, select: { bank: true, institution_name: true, consent_expires_at: true } });
@@ -56,7 +163,8 @@ async function connectionAlerts(userId: string): Promise<Alert[]> {
 export async function overview(userId: string, offset = 0) {
   const ctx = await financeContext(userId);
   const { txs, today, recurring, history, current, projection, budgetsNow, accounts, settings } = ctx;
-  const alerts = [...(await connectionAlerts(userId)), ...detectAlerts({ txs, today, recurring, history, current, budgets: budgetsNow })]
+  const [zombie, connection, suggestions] = await Promise.all([zombieAlerts(userId), connectionAlerts(userId), forecastSuggestions(ctx)]);
+  const alerts = [...zombie, ...connection, ...detectAlerts({ txs, today, recurring, history, current, budgets: budgetsNow })]
     .filter((a) => !ctx.dismissed.has(a.key));
   const prev = history[0] ?? null;
   const cycleDates = [...history].reverse().map((h) => h.cycle.end).concat(today);
@@ -64,6 +172,21 @@ export async function overview(userId: string, offset = 0) {
   const pendingClassify = txs.filter((t) => t.source === "pendiente").length;
   const syncDue = !settings.lastSyncAt || Date.now() - new Date(settings.lastSyncAt).getTime() > AUTO_SYNC_HOURS * 3_600_000;
   const includedAccountIds = new Set(accounts.filter((account) => account.included).map((account) => account.id));
+  const balanceAccountIds = new Set(accounts.filter((account) => account.included && account.currency === "EUR" && account.balance !== null).map((account) => account.id));
+  const cashflow = cashflowPeriods(txs, today);
+  const futureCashflow = forecastCashflow({ txs, today, startDay: ctx.startDay, recurring, history, current, projection, liquidity: ctx.liquidity, items: ctx.forecastItems, skippedOccurrences: ctx.skippedOccurrences });
+  // Cinco tramos semanales, incluyendo el inicio del ciclo siguiente cuando
+  // el primero dura solo cuatro semanas (p. ej. febrero).
+  const nextWeeks = futureCashflow.points.slice(1, 3).flatMap((point) => forecastCycleWeeks({
+    point, recurring, items: ctx.forecastItems, today, skippedOccurrences: ctx.skippedOccurrences,
+  })).slice(0, 5);
+  for (const range of ["7D", "1M", "6M", "1A"] as const) {
+    for (const point of cashflow[range].points) {
+      if (ctx.liquidity === null) continue;
+      const later = txs.filter((t) => balanceAccountIds.has(t.accountId) && t.date > point.end).reduce((sum, t) => sum + t.amount, 0);
+      point.available = round2(ctx.liquidity - later);
+    }
+  }
   return {
     today,
     settings,
@@ -74,7 +197,11 @@ export async function overview(userId: string, offset = 0) {
     current,
     previous: prev,
     history: [...history].reverse().map((h) => ({ cycle: h.cycle, income: h.income, gifts: h.gifts, expenses: h.expenses, net: h.net, savedToInvestments: h.savedToInvestments })),
-    cashflow: cashflowPeriods(txs, today),
+    cashflow,
+    forecastCashflow: futureCashflow,
+    forecastNextWeeks: nextWeeks,
+    forecastItems: ctx.forecastItems.filter((item) => !isForecastOverride(item)),
+    forecastSuggestions: suggestions,
     categoryHistory: expenseHistoryByCycle(txs, ctx.startDay),
     recentExpenses: txs
       .filter((tx) => tx.kind === "gasto" && tx.amount < 0 && includedAccountIds.has(tx.accountId))

@@ -3,14 +3,25 @@
 // Si todo funciona, tu dinero, el mercado en cuatro datos, cómo va cada familia de agentes y lo que gasta
 // la IA. Los indicadores detallados (lo que antes era Panorama) quedan en un desplegable al final.
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { AlertTriangle, Bot, ChevronDown, CircleCheck, Cpu, Gauge, Shield, Swords, Wallet } from "lucide-react";
+import { AlertTriangle, Bot, ChevronDown, Cpu, Gauge, Wallet } from "lucide-react";
 import type { getSummary } from "@/lib/trading/summary";
+import type { getPortfolio } from "@/lib/trading/agents/copy";
+import type { manualView } from "@/lib/trading/manual/service";
+import type { mirrorView } from "@/lib/trading/mirror/service";
+import Link from "next/link";
 import { api, card, eur, errorText, flat } from "./format";
 import { useTradingRefresh, useWarmStart } from "./navigation";
 import { AGENT_DOT, ErrorNote, LoadingCard, ReturnPill } from "./ui";
 import { PulsePanel } from "./pulse-panel";
+import { AssetIcon } from "./asset-icon";
 
 type Summary = Awaited<ReturnType<typeof getSummary>>;
+type Virtual = Awaited<ReturnType<typeof getPortfolio>>;
+type Manual = Awaited<ReturnType<typeof manualView>>;
+type Mirrors = Awaited<ReturnType<typeof mirrorView>>;
+type Mode = "real" | "virtual";
+type Recent = { id: string; symbol: string; source: string; at: string; status: string; result: number | null };
+const displayDate = (at: string) => new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(at));
 
 /** Abre el panel de notificaciones (lo escucha la estructura de Trading). */
 export const openNotifications = () => window.dispatchEvent(new Event("trading:notifications"));
@@ -18,32 +29,6 @@ export const openNotifications = () => window.dispatchEvent(new Event("trading:n
 const nf = (v: number, d = 0) => v.toLocaleString("es-ES", { maximumFractionDigits: d, minimumFractionDigits: d });
 const compact = (v: number) => (v >= 1_000_000 ? `${nf(v / 1_000_000, 1)} M` : v >= 1000 ? `${nf(v / 1000, 0)} k` : nf(v));
 const signedPct = (v: number) => `${v > 0 ? "+" : ""}${nf(v, 1)} %`;
-
-function fgTone(v: number) {
-  if (v < 25) return { bar: "bg-red-500", text: "text-red-600" };
-  if (v < 45) return { bar: "bg-orange-500", text: "text-orange-600" };
-  if (v <= 55) return { bar: "bg-slate-400", text: "text-slate-600" };
-  if (v <= 75) return { bar: "bg-emerald-500", text: "text-emerald-600" };
-  return { bar: "bg-emerald-600", text: "text-emerald-700" };
-}
-const FG_LABEL: Record<string, string> = {
-  "Extreme Fear": "Miedo extremo",
-  Fear: "Miedo",
-  Neutral: "Neutral",
-  Greed: "Codicia",
-  "Extreme Greed": "Codicia extrema",
-};
-
-function Tile({ label, icon: Icon, children }: { label: string; icon: typeof Gauge; children: ReactNode }) {
-  return (
-    <div className="rounded-2xl bg-slate-50 px-3.5 py-3">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-        <Icon className="h-3.5 w-3.5" /> {label}
-      </div>
-      <div className="mt-1">{children}</div>
-    </div>
-  );
-}
 
 function Section({ title, icon: Icon, right, children }: { title: string; icon: typeof Gauge; right?: ReactNode; children: ReactNode }) {
   return (
@@ -62,6 +47,10 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
   useWarmStart<Summary>("summary", setData);
   const [error, setError] = useState<string | null>(null);
   const [more, setMore] = useState(false);
+  const [mode, setMode] = useState<Mode>("real");
+  const [virtual, setVirtual] = useState<Virtual | null>(null);
+  const [manual, setManual] = useState<Manual | null>(null);
+  const [mirrors, setMirrors] = useState<Mirrors | null>(null);
   const load = useCallback(async () => {
     try {
       setData(await api<Summary>("summary"));
@@ -74,6 +63,31 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
     void load();
   }, [load]);
   useTradingRefresh(load);
+  useEffect(() => {
+    let live = true;
+    const fetchMode = async () => {
+      if (mode === "virtual") {
+        const result = await api<Virtual>("portfolio").catch(() => null);
+        if (live) setVirtual(result);
+      } else {
+        const [m, r] = await Promise.all([api<Manual>("manual").catch(() => null), api<Mirrors>("mirror").catch(() => null)]);
+        if (live) { setManual(m); setMirrors(r); }
+      }
+    };
+    void fetchMode();
+    return () => { live = false; };
+  }, [mode]);
+
+  const recent: Recent[] = mode === "virtual"
+    ? [
+        ...(virtual?.main.positions ?? []).map(p => ({ id: `main:${p.id}`, symbol: p.symbol, source: "Manual virtual", at: p.createdAt, status: p.status, result: p.status === "cerrada" ? p.pnl : p.unrealized })),
+        ...(virtual?.copies ?? []).flatMap(copy => [...copy.positions, ...copy.closed].map(p => ({ id: `copy:${copy.agent}:${p.id}`, symbol: p.symbol, source: copy.name, at: p.createdAt, status: p.status, result: p.status === "cerrada" ? p.pnl : p.unrealized }))),
+      ]
+    : [
+        ...(manual?.trades ?? []).map(t => ({ id: `manual:${t.id}`, symbol: t.symbol, source: "Manual", at: t.closedAt ?? t.openedAt ?? "", status: t.status, result: t.result })),
+        ...(mirrors?.mirrors ?? []).flatMap(m => m.legs.filter(l => l.mode === "real").map(l => ({ id: `mirror:${l.id}`, symbol: l.symbol, source: m.name, at: l.closedAt ?? l.openedAt ?? "", status: l.status, result: l.result }))),
+      ];
+  recent.sort((a, b) => b.at.localeCompare(a.at));
 
   return (
     <div className="space-y-4 pb-6 lg:h-full lg:overflow-y-auto lg:pr-1">
@@ -83,99 +97,71 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
         !error && <LoadingCard height="h-96" />
       ) : (
         <>
-          {/* ¿Funciona todo? */}
-          {data.health && (
-            <button
-              type="button"
-              onClick={openNotifications}
-              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left ${data.health.problems ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}
-            >
-              {data.health.problems ? <AlertTriangle className="h-5 w-5 shrink-0" /> : <CircleCheck className="h-5 w-5 shrink-0" />}
+          {data.health?.problems ? (
+            <button type="button" onClick={openNotifications} className="flex w-full items-center gap-3 rounded-2xl bg-red-50 px-4 py-3 text-left text-red-800">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
               <span className="min-w-0 flex-1">
-                <b className="block text-sm font-semibold">
-                  {data.health.problems ? `${data.health.problems} ${data.health.problems === 1 ? "problema" : "problemas"}` : "Todo funciona"}
-                </b>
-                <span className="block truncate text-xs opacity-80">
-                  {data.health.problems ? data.health.latest.join(" · ") : "FARO analiza y los agentes se revisan cada 5 minutos"}
-                </span>
+                <b className="block text-sm font-semibold">{data.health.problems} {data.health.problems === 1 ? "problema" : "problemas"}</b>
+                <span className="block truncate text-xs opacity-80">{data.health.latest.join(" · ")}</span>
               </span>
             </button>
-          )}
+          ) : null}
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            {/* Tu dinero */}
-            <section className={`${card} ${flat} px-4 py-4 sm:px-5`}>
+          <section className={`${card} ${flat} px-4 py-4 sm:px-5`}>
+            <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                <Wallet className="h-3.5 w-3.5" /> Tu dinero real
+                <Wallet className="h-3.5 w-3.5" /> Tu dinero {mode === "real" ? "real" : "virtual"}
               </div>
-              {data.balance ? (
-                <div className="mt-1 flex flex-wrap items-center gap-3">
-                  <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(data.balance.total, 2)}</span>
-                  {data.balance.ch24h !== null && (
-                    <span className="flex items-center gap-1.5">
-                      <ReturnPill value={data.balance.ch24h} big />
-                      <span className="text-xs text-slate-400">24 h</span>
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <p className="mt-1 text-sm text-slate-500">Conecta un exchange en Conexiones para verlo aquí.</p>
-              )}
-            </section>
+              <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold" aria-label="Tipo de cartera">
+                {(["real", "virtual"] as const).map(value => (
+                  <button key={value} type="button" onClick={() => setMode(value)} aria-pressed={mode === value}
+                    className={`rounded-md px-3 py-1.5 transition-colors ${mode === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                    {value === "real" ? "Real" : "Virtual"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {mode === "real" ? data.balance ? (
+              <div className="mt-2 flex flex-wrap items-end gap-3">
+                <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(data.balance.total, 2)}</span>
+                {data.balance.ch24h !== null && <span className="mb-0.5"><ReturnPill value={data.balance.ch24h} big /></span>}
+              </div>
+            ) : <p className="mt-2 text-sm text-slate-500">Conecta un exchange en Conexiones para verlo aquí.</p>
+            : virtual ? (
+              <div className="mt-2 flex flex-wrap items-end gap-3">
+                <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(virtual.total.equity, 2)}</span>
+                {virtual.total.dailyChangePct !== null && (
+                  <span className="mb-0.5"><ReturnPill value={virtual.total.dailyChangePct} big /></span>
+                )}
+              </div>
+            ) : <p className="mt-2 text-sm text-slate-500">Cargando cartera virtual…</p>}
+            <div className="mt-5 border-t border-slate-100 pt-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-slate-900">Actividad reciente</h3>
+                <Link href="/trading/cartera" className="text-xs font-semibold text-blue-600 hover:underline">Ver mi cartera</Link>
+              </div>
+              {recent.length ? (
+                <ul className="divide-y divide-slate-100">
+                  {recent.slice(0, 3).map(item => (
+                    <li key={item.id} className="flex items-center gap-3 py-2.5 text-sm">
+                      <AssetIcon symbol={item.symbol} size="md" />
+                      <span className="min-w-0 flex-1">
+                        <b className="block truncate font-semibold text-slate-900">{item.symbol}</b>
+                        <span className="block truncate text-xs text-slate-500">{item.source} · {item.status}</span>
+                      </span>
+                      <span className="shrink-0 text-right">
+                        <span className={`block text-sm font-semibold tabular-nums ${item.result === null ? "text-slate-400" : item.result >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          {item.result === null ? "—" : `${item.result > 0 ? "+" : ""}${eur(item.result, 2)}`}
+                        </span>
+                        <span className="block text-[11px] text-slate-400">{item.at ? displayDate(item.at) : "—"}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="text-xs text-slate-500">No hay operaciones registradas en esta cartera.</p>}
+            </div>
+          </section>
 
-            {/* Mercado en cuatro datos */}
-            {data.market && (
-              <div className="grid grid-cols-2 gap-2.5">
-                <Tile label="Miedo y codicia" icon={Gauge}>
-                  {data.market.fearGreed ? (
-                    <>
-                      <span className={`text-2xl font-bold tabular-nums ${fgTone(data.market.fearGreed.value).text}`}>{data.market.fearGreed.value}</span>
-                      <span className="ml-1.5 text-xs text-slate-500">{FG_LABEL[data.market.fearGreed.label] ?? data.market.fearGreed.label}</span>
-                      <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-slate-200">
-                        <span className={`block h-full rounded-full ${fgTone(data.market.fearGreed.value).bar}`} style={{ width: `${data.market.fearGreed.value}%` }} />
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-slate-400">—</span>
-                  )}
-                </Tile>
-                <Tile label="Bitcoin" icon={Bot}>
-                  {data.market.btc ? (
-                    <>
-                      <span className="block text-lg font-bold tabular-nums text-slate-900">{eur(data.market.btc.price, 0)}</span>
-                      {data.market.btc.ch24h !== null && (
-                        <span className={`text-xs font-semibold tabular-nums ${data.market.btc.ch24h >= 0 ? "text-emerald-600" : "text-red-600"}`}>{signedPct(data.market.btc.ch24h)} en 24 h</span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="text-slate-400">—</span>
-                  )}
-                </Tile>
-                <Tile label="Mercado" icon={data.market.phase?.mode === "ataque" ? Swords : Shield}>
-                  {data.market.phase ? (
-                    <>
-                      <span className={`block text-lg font-bold ${data.market.phase.mode === "ataque" ? "text-emerald-600" : "text-red-600"}`}>
-                        {data.market.phase.mode === "ataque" ? "Ataque" : "Defensa"}
-                      </span>
-                      <span className="text-xs text-slate-500">desde hace {data.market.phase.days} {data.market.phase.days === 1 ? "día" : "días"}</span>
-                    </>
-                  ) : (
-                    <span className="text-slate-400">—</span>
-                  )}
-                </Tile>
-                <Tile label="Peso de Bitcoin" icon={Gauge}>
-                  {data.market.btcDominance !== null ? (
-                    <>
-                      <span className="block text-lg font-bold tabular-nums text-slate-900">{nf(data.market.btcDominance, 1)} %</span>
-                      <span className="text-xs text-slate-500">del mercado cripto</span>
-                    </>
-                  ) : (
-                    <span className="text-slate-400">—</span>
-                  )}
-                </Tile>
-              </div>
-            )}
-          </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             {/* Familias de agentes (solo los que han operado) */}

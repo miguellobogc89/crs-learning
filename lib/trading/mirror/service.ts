@@ -19,6 +19,7 @@ import { kamikazeByKey } from "../kamikaze/roster";
 import { chipByKey } from "../chip/roster";
 import { referencePrice } from "../kamikaze/market";
 import { legResult, MIN_ORDER_EUR, planMirror, stepQuantity } from "./logic";
+import { isShortSwarm, krakenProblem } from "../kraken-copy";
 
 const MODES = ["ensayo", "real"] as const;
 export type MirrorMode = (typeof MODES)[number];
@@ -72,11 +73,17 @@ export async function mirrorView(workspaceId: string) {
   const unrealizedOf = (m: (typeof mirrors)[number]) =>
     m.legs.reduce((sum, l) => {
       const p = l.status === "abierta" && l.mode === m.mode ? prices.get(l.symbol) : null;
+      // Cortos en Kraken (PF_…): se gana si el precio baja.
+      if (p && l.quantity && l.entry_price && l.pair?.startsWith("PF_")) return sum + l.quantity * (l.entry_price - p);
       return p && l.quantity && l.entry_price ? sum + legResult(l.quantity, l.entry_price, p) : sum;
     }, 0);
+  const kp = await krakenProblem();
   return {
     maxBudget: maxBudget(),
     real: { ready: real.ready, problem: realProblem(real) },
+    /** Agentes de cortos: se copian en Kraken Futures, no en el exchange de la cartera. */
+    kraken: { ready: !kp, problem: kp },
+    shortAgents: mirrors.map((m) => m.agent).filter(isShortSwarm),
     mirrors: mirrors.map((m) => ({
       agent: m.agent,
       /** Resultado de lo abierto a precio de ahora (con comisiones de salida estimadas). */
@@ -117,7 +124,7 @@ export async function setMirror(workspaceId: string, input: { agent?: unknown; b
   const mode = String(input.mode ?? "ensayo") as MirrorMode;
   if (!(MODES as readonly string[]).includes(mode)) throw new Error("Modo no válido");
   if (mode === "real") {
-    const problem = realProblem(await realConnection(workspaceId));
+    const problem = isShortSwarm(agent) ? await krakenProblem() : realProblem(await realConnection(workspaceId));
     if (problem) throw new Error(problem);
   }
   const existing = await prisma.trading_mirrors.findUnique({ where: { workspace_id_agent: { workspace_id: workspaceId, agent } } });
@@ -323,6 +330,8 @@ export async function runMirrors(opts: { agents?: string[] } = {}) {
   const mirrors = await prisma.trading_mirrors.findMany({ where: { active: true, ...(opts.agents ? { agent: { in: opts.agents } } : {}) } });
   const actions: string[] = [];
   for (const m of mirrors) {
+    // Los agentes de cortos se copian en Kraken Futures (lib/trading/kraken-copy.ts).
+    if (isShortSwarm(m.agent)) continue;
     try {
       // Tramos que se quedaron a medias (corte del cron): la venta se reintenta; la compra la revisas tú.
       const stale = new Date(Date.now() - STALE_MS);

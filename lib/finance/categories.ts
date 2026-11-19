@@ -31,6 +31,7 @@ export const CATEGORIES: CategoryDef[] = [
   { key: "alimentacion", label: "Alimentación", kind: "gasto", color: "emerald" },
   { key: "restaurantes", label: "Restaurantes", kind: "gasto", color: "orange" },
   { key: "ocio", label: "Ocio", kind: "gasto", color: "violet" },
+  { key: "videojuegos", label: "Videojuegos", kind: "gasto", color: "purple" },
   { key: "transporte", label: "Transporte", kind: "gasto", color: "amber" },
   { key: "compras", label: "Compras", kind: "gasto", color: "rose" },
   { key: "suscripciones", label: "Suscripciones", kind: "gasto", color: "fuchsia" },
@@ -60,8 +61,12 @@ export const categoryLabel = (key: string) => categoryOf(key).label;
 export const isCategory = (key: unknown): key is string => typeof key === "string" && BY_KEY.has(key);
 export const isKind = (v: unknown): v is Kind => typeof v === "string" && (KINDS as readonly string[]).includes(v);
 
+/** Opciones compartidas por los selectores de categorías, siempre en orden alfabético. */
+export const SELECTABLE_CATEGORIES = CATEGORIES.filter((c) => c.key !== "sin_clasificar")
+  .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+
 /** Categorías de gasto (para presupuestos y devoluciones). */
-export const EXPENSE_CATEGORIES = CATEGORIES.filter((c) => c.kind === "gasto" && c.key !== "sin_clasificar");
+export const EXPENSE_CATEGORIES = SELECTABLE_CATEGORIES.filter((c) => c.kind === "gasto");
 
 /** Color HEX de cada tono, para los gráficos SVG. */
 export const HEX: Record<string, string> = {

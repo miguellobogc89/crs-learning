@@ -6,7 +6,7 @@ import type { finance_transactions } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { connectorKey } from "@/lib/connectors/crypto";
 import { isKind, type Kind } from "./categories";
-import { cleanView, type Budget, type Rule, type Tx } from "./logic";
+import { cleanView, forecastPlanFrequency, type Budget, type ForecastItem, type Rule, type Tx } from "./logic";
 
 /** Huella de un IBAN (no se guarda el IBAN): sirve para reconocer transferencias a cuentas propias. */
 export function ibanHash(iban: string | null | undefined) {
@@ -50,9 +50,18 @@ export async function getSettings(userId: string) {
   return {
     cycleStartDay: s.cycle_start_day,
     savingsGoal: s.savings_goal === null ? null : Number(s.savings_goal),
+    savingsFrequency: s.savings_frequency === "semanal" ? "semanal" as const : "mensual" as const,
     lastSyncAt: s.last_sync_at?.toISOString() ?? null,
     view: cleanView(s.view),
   };
+}
+
+export async function getForecastItems(userId: string): Promise<ForecastItem[]> {
+  const rows = await prisma.finance_forecast_items.findMany({ where: { user_id: userId }, orderBy: { start_date: "asc" }, take: 300 });
+  return rows.map((r) => ({ id: r.id, title: r.title, kind: r.kind === "ingreso" ? "ingreso" : "gasto",
+    amount: Number(r.amount), startDate: r.start_date.toISOString().slice(0, 10),
+    endDate: r.end_date?.toISOString().slice(0, 10) ?? null, source: r.source, sourceKey: r.source_key,
+    frequency: forecastPlanFrequency(r.source_key) }));
 }
 
 export async function getRules(userId: string): Promise<Rule[]> {
@@ -83,16 +92,18 @@ export async function getAccounts(userId: string) {
   }));
 }
 
-/** Claves de avisos descartados y de recurrentes dados por cancelados («rec-cancel:<clave>»). */
+/** Claves de avisos, recurrentes cancelados y cargos omitidos solo en una fecha prevista. */
 export async function getDismissed(userId: string) {
   const rows = await prisma.finance_alert_dismissals.findMany({ where: { user_id: userId }, select: { key: true } });
   const dismissed = new Set<string>();
   const cancelled = new Set<string>();
+  const skippedOccurrences = new Set<string>();
   for (const r of rows) {
     if (r.key.startsWith("rec-cancel:")) cancelled.add(r.key.slice("rec-cancel:".length));
+    else if (r.key.startsWith("forecast-skip:")) skippedOccurrences.add(r.key.slice("forecast-skip:".length));
     else dismissed.add(r.key);
   }
-  return { dismissed, cancelled };
+  return { dismissed, cancelled, skippedOccurrences };
 }
 
 export async function getMemory(userId: string) {

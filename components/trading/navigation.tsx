@@ -1,9 +1,10 @@
 "use client";
 import Image from "next/image";
 import Link from "next/link";
+import { ModuleLogo } from "@/components/ui/module-logo";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, LayoutGrid, Link2, Loader2, LogOut, PiggyBank, Settings, UserCircle } from "lucide-react";
+import { ArrowLeft, ChevronRight, Gauge, LayoutGrid, Link2, Loader2, LogOut, PiggyBank, Settings, UserCircle } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { getWallets } from "@/lib/trading/wallets";
@@ -97,7 +98,7 @@ export function TradingNavigationHeader({ onNavigate }: { onNavigate?: () => voi
   return (
     <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
       <Link href="/trading/inicio" onClick={onNavigate} aria-label="Inicio de Trading" className="inline-flex shrink-0 items-center">
-        <Image src="/logo/logo.png" alt="" width={28} height={28} className="size-7 shrink-0 object-contain" />
+        <ModuleLogo module="trading" />
       </Link>
       <Suspense fallback={<div className="h-8 w-24 shrink-0 rounded-lg bg-slate-100" />}>
         <PortfolioSwitcher onNavigate={onNavigate} />
@@ -148,6 +149,9 @@ function TradingUserMenu({ user, inDrawer = false }: { user: TradingProfile; inD
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href={user.canAccessBusiness ? "/settings" : "/trading/integraciones"}><Settings /> Configuración</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/consumo-ia"><Gauge /> Consumo de IA</Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href="/finanzas/inicio"><PiggyBank /> Ir a Mis finanzas</Link>

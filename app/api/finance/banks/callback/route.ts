@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     request.nextUrl.searchParams.get("state"), currentUser.user.id,
   );
   const finish = (message: string) => {
-    const response = NextResponse.redirect(new URL(`/finanzas/conexiones?${message}`, request.url));
+    const response = NextResponse.redirect(new URL(`/finanzas/cuentas?${message}`, request.url));
     response.cookies.set(BANK_STATE_COOKIE, "", { path: BANK_CALLBACK_PATH, maxAge: 0 });
     return response;
   };

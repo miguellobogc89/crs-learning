@@ -6,9 +6,10 @@
 // - tablet en horizontal y ordenador (≥ 1024 px): barra lateral completa con «Mi dinero».
 import Image from "next/image";
 import Link from "next/link";
+import { ModuleLogo } from "@/components/ui/module-logo";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Bell, ChartCandlestick, ChevronRight, LayoutGrid, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
+import { ArrowLeft, Bell, ChartCandlestick, ChevronRight, Gauge, Landmark, LayoutGrid, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -118,12 +119,12 @@ function MoneyPanel({ syncing, msg, onSync }: { syncing: boolean; msg: string | 
         {data ? <span className="amount whitespace-nowrap text-lg font-bold tabular-nums text-slate-900">{eur(data.liquidity, 2)}</span> : <span className="h-6 w-20 animate-pulse rounded-md bg-slate-100" />}
       </div>
       {data && (accounts.length === 0 ? (
-        <Link href="/finanzas/conexiones" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">Conecta tus bancos →</Link>
+        <Link href="/finanzas/cuentas" className="mt-1 inline-block text-sm font-medium text-blue-700 hover:underline">Conecta tus bancos →</Link>
       ) : (
         <ul className="mt-2 space-y-2">
           {accounts.map((a) => (
             <li key={a.id}>
-              <Link href="/finanzas/conexiones" className="flex items-center gap-2 rounded-lg hover:bg-slate-50">
+              <Link href="/finanzas/cuentas" className="flex items-center gap-2 rounded-lg hover:bg-slate-50">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-white text-[10px] font-bold text-slate-500">
                   {(a.bank ? BANK_LABEL[a.bank] ?? a.bank : "Imp").slice(0, 3).toUpperCase()}
                 </span>
@@ -166,6 +167,7 @@ function UserMenu({ user, inDrawer = false }: { user: FinanceProfile; inDrawer?:
         <DropdownMenuContent side={inDrawer ? "top" : "right"} align={inDrawer ? "start" : "end"} sideOffset={8} className="pointer-events-auto z-[60] w-52">
           <DropdownMenuItem asChild><Link href="/apps"><LayoutGrid /> Mis aplicaciones</Link></DropdownMenuItem>
           <DropdownMenuItem asChild><Link href="/finanzas/ajustes"><Settings /> Preferencias</Link></DropdownMenuItem>
+          <DropdownMenuItem asChild><Link href="/consumo-ia"><Gauge /> Consumo de IA</Link></DropdownMenuItem>
           <DropdownMenuItem asChild><Link href="/trading/inicio"><ChartCandlestick /> Ir a Trading</Link></DropdownMenuItem>
           {user.canAccessBusiness && <DropdownMenuItem asChild><Link href="/dashboard"><ArrowLeft /> Ir a Mi negocio</Link></DropdownMenuItem>}
           <DropdownMenuSeparator />
@@ -179,7 +181,7 @@ function UserMenu({ user, inDrawer = false }: { user: FinanceProfile; inDrawer?:
 function NavHeader({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <Link href="/finanzas/inicio" onClick={onNavigate} aria-label="Inicio de Finanzas" className="inline-flex min-w-0 items-center gap-2">
-      <Image src="/logo/logo.png" alt="" width={28} height={28} className="size-7 shrink-0 object-contain" />
+      <ModuleLogo module="finance" />
       <span className="truncate text-sm font-semibold text-slate-900">CRS Finance</span>
     </Link>
   );
@@ -249,11 +251,12 @@ function BottomTabs() {
 
 /** Menú completo del móvil, como el de Trading: tu nombre arriba y, por grupos, el resto de pantallas. */
 function MobileMenu({ user, onClose, sync }: { user: FinanceProfile; onClose: () => void; sync: ReturnType<typeof useAutoSync> }) {
-  // Como el menú de Trading: por grupos, con Conexiones arriba.
+  // Como el menú de Trading: por grupos, separando cuentas de integraciones.
   const groups: { title: string; rows: { label: string; href: string; icon: typeof Plug }[] }[] = [
     {
       title: "Cuenta",
       rows: [
+        { label: "Cuentas", href: "/finanzas/cuentas", icon: Landmark },
         { label: "Conexiones", href: "/finanzas/conexiones", icon: Plug },
         { label: "Preferencias", href: "/finanzas/ajustes", icon: Settings },
       ],

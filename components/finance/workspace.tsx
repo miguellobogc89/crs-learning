@@ -1,7 +1,9 @@
 "use client";
 import { Suspense } from "react";
 import { TradingSkeleton } from "@/components/trading/skeletons";
+import { AccountsPanel } from "./accounts-panel";
 import { ConnectionsPanel } from "./connections-panel";
+import { DocumentsPanel } from "./documents-panel";
 import { CopilotPanel } from "./copilot-panel";
 import { HomePanel } from "./home-panel";
 import { MovementsPanel } from "./movements-panel";
@@ -15,6 +17,8 @@ export function FinanceWorkspace({ tab }: { tab: FinanceTab }) {
     : tab === "movimientos" ? <MovementsPanel />
     : tab === "plan" ? <PlanPanel />
     : tab === "copiloto" ? <CopilotPanel />
+    : tab === "documentos" ? <DocumentsPanel />
+    : tab === "cuentas" ? <AccountsPanel />
     : tab === "conexiones" ? <ConnectionsPanel />
     : <SettingsPanel />;
   const fitted = isFittedTab(tab);

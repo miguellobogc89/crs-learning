@@ -213,6 +213,62 @@ export function merchantKey(description: string, counterparty?: string | null) {
 export const searchText = (t: { description: string; counterparty: string | null }) =>
   normalize(`${t.description} ${t.counterparty ?? ""}`);
 
+/** Pólizas candidatas a renovación. No confundir aportaciones a inversión con primas de seguro. */
+export function insuranceForecastCandidates(txs: Tx[], today: string, end: string) {
+  const investment = /multifondos|inversion|inversiones|aportacion|fondo de inversion/;
+  const insurerOf = (label: string) => /mapfre/.test(label) ? "Mapfre" : /verti/.test(label) ? "Verti"
+    : /occident/.test(label) ? "Occident" : /seguro|aseguradora|poliza/.test(label) ? "seguro" : null;
+  const investmentPayments = txs.filter((tx) => tx.kind === "gasto" && investment.test(searchText(tx)))
+    .map((tx) => ({ insurer: insurerOf(searchText(tx)), amount: Math.abs(tx.amount) }));
+  const groups = new Map<string, Tx[]>();
+  for (const tx of txs) {
+    if (tx.kind !== "gasto" || tx.category !== "seguros" || tx.amount >= -50 || tx.date >= today) continue;
+    const label = searchText(tx);
+    if (investment.test(label)) continue;
+    const insurer = insurerOf(label);
+    if (!insurer) continue;
+    // El banco puede omitir «Inv.multifondos» en algunos recibos del mismo producto.
+    if (investmentPayments.some((p) => p.insurer === insurer && Math.abs(p.amount + tx.amount) < 2)) continue;
+    const plate = label.match(/\b(?:matricula|mat)\s*[:.]?\s*([a-z0-9]{6,9})\b/)?.[1];
+    // Si no consta la póliza, separar primas de importes muy distintos del mismo asegurador.
+    const policy = plate ?? `importe-${Math.round(Math.abs(tx.amount) / 25)}`;
+    const key = `${normalize(insurer).replace(/[^a-z0-9]+/g, "-")}-${policy}`;
+    const arr = groups.get(key) ?? [];
+    if (!arr.some((prev) => prev.date === tx.date && Math.abs(prev.amount - tx.amount) < 0.02)) arr.push(tx);
+    groups.set(key, arr);
+  }
+
+  const nextMonth = (date: string, months: number) => {
+    const d = toDate(date);
+    const day = d.getUTCDate();
+    const first = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, 1));
+    const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+    first.setUTCDate(Math.min(day, lastDay));
+    return iso(first);
+  };
+
+  const candidates: Array<{ key: string; title: string; amount: number; startDate: string; sourceTx: Tx; supportingTxs: Tx[]; cadence: "semestral" | "anual"; evidence: number }> = [];
+  for (const [groupKey, group] of groups) {
+    group.sort((a, b) => b.date.localeCompare(a.date));
+    const last = group[0];
+    if (!last) continue;
+    const semiannual = group.slice(1).some((t) => {
+      const gap = daysBetween(t.date, last.date);
+      return gap >= 155 && gap <= 210;
+    });
+    const months = semiannual ? 6 : 12;
+    let next = nextMonth(last.date, months);
+    while (next < today) next = nextMonth(next, months);
+    if (next > end) continue;
+    const insurer = /mapfre/.test(groupKey) ? "Mapfre" : /verti/.test(groupKey) ? "Verti"
+      : /occident/.test(groupKey) ? "Occident" : "seguro";
+    candidates.push({ key: `forecast-insurance:${groupKey}:${next.slice(0, 7)}`,
+      title: `Posible renovación · ${insurer}`, amount: round2(-last.amount), startDate: next,
+      sourceTx: last, supportingTxs: group.slice(1), cadence: semiannual ? "semestral" : "anual", evidence: group.length });
+  }
+  return candidates.sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // Clasificación por palabras clave (antes de la IA): comercios españoles habituales
 // ---------------------------------------------------------------------------------------------------------
@@ -230,11 +286,12 @@ const KEYWORDS: Keyword[] = [
   { re: /\b(iberdrola|endesa|naturgy|holaluz|totalenergies|repsol luz|canal de isabel|aguas|emasesa|aqualia|movistar|vodafone|orange|digi|jazztel|pepephone|masmovil|yoigo|lowi|simyo|o2|finetwork)\b/, category: "suministros" },
   { re: /\b(mercadona|carrefour|lidl|dia|alcampo|eroski|consum|aldi|hipercor|supercor|caprabo|bonpreu|ahorramas|gadis|froiz|el arbol|supermercado|fruteria|carniceria|panaderia|bm supermercados|masymas|spar|coviran)\b/, category: "alimentacion" },
   { re: /\b(glovo|just eat|uber ?eats|deliveroo|restaurante|rest\.?|bar|cafeteria|cafe|mcdonald|burger king|telepizza|domino|starbucks|kfc|vips|goiko|100 montaditos|tgb|taberna|cerveceria|pizzeria|sushi)\b/, category: "restaurantes" },
+  { re: /\b(steam|steamgames(?:\.com)?|steampowered|epic games|gog\.com|humble bundle|playstation store|nintendo eshop|xbox store)\b/, category: "videojuegos" },
   { re: /\b(netflix|spotify|hbo|max\.com|disney|prime video|amazon prime|apple\.com|itunes|icloud|youtube|google one|google storage|chatgpt|openai|anthropic|claude|dazn|filmin|movistar plus|audible|patreon|github|notion|adobe|microsoft 365|xbox|playstation|nintendo)\b/, category: "suscripciones" },
   { re: /\b(renfe|cabify|uber|bolt|freenow|metro|emt|tmb|alsa|blablacar|repsol|cepsa|bp|galp|shell|ballenoil|petroprix|plenoil|gasolinera|parking|aparcamiento|autopista|peaje|via t|itv|taller)\b/, category: "transporte" },
   { re: /\b(ryanair|vueling|iberia|easyjet|air europa|booking|airbnb|expedia|hotel|edreams|skyscanner)\b/, category: "viajes" },
   { re: /\b(amazon|amzn|aliexpress|zara|el corte ingles|decathlon|ikea|mediamarkt|media markt|pccomponentes|shein|primark|leroy merlin|fnac|temu|vinted|wallapop|pull bear|bershka|mango)\b/, category: "compras" },
-  { re: /\b(cine|cinesa|yelmo|teatro|ticketmaster|entradas|steam|concierto|gimnasio|basic fit|dreamfit|mcfit|padel)\b/, category: "ocio" },
+  { re: /\b(cine|cinesa|yelmo|teatro|ticketmaster|entradas|concierto|gimnasio|basic fit|dreamfit|mcfit|padel)\b/, category: "ocio" },
   { re: /\b(farmacia|clinica|dentista|hospital|sanitas|adeslas|asisa|dkv|optica|fisioterapia|medico)\b/, category: "salud" },
   { re: /\b(seguro|mapfre|mutua madrilena|axa|allianz|linea directa|generali|reale|zurich|verti)\b/, category: "seguros" },
   { re: /\b(prestamo|cuota prestamo|financiacion|cofidis|cetelem|klarna|aplazame|sequra)\b/, category: "prestamos" },
@@ -382,7 +439,7 @@ const median = (xs: number[]) => {
 export { median };
 
 /** Categorías de compra suelta: solo cuentan como recurrentes si el importe es prácticamente fijo. */
-const VARIABLE_CATEGORIES = new Set(["alimentacion", "restaurantes", "transporte", "compras", "efectivo", "ocio", "otros_gastos"]);
+const VARIABLE_CATEGORIES = new Set(["alimentacion", "restaurantes", "transporte", "compras", "efectivo", "ocio", "videojuegos", "otros_gastos"]);
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 export { round2 };
@@ -541,7 +598,7 @@ export function cashflowPeriods(txs: Tx[], today: string) {
   };
   const bucket = (start: string, end: string, label: string, title: string) => {
     const s = summarize(txs, { start, end, label });
-    return { label, title, income: round2(s.income + s.gifts), expenses: s.expenses, net: s.net };
+    return { start, end, label, title, income: round2(s.income + s.gifts), expenses: s.expenses, net: s.net, available: null as number | null };
   };
   const total = (points: ReturnType<typeof bucket>[]) => ({
     points,
@@ -610,6 +667,53 @@ export type Projection = {
   basis: string;
 };
 
+export type ForecastFrequency = "puntual" | "semanal" | "mensual" | "trimestral" | "anual";
+export type ForecastItem = { id: string; title: string; kind: "ingreso" | "gasto"; amount: number; startDate: string; endDate: string | null;
+  source: string; sourceKey: string | null; frequency?: ForecastFrequency };
+
+/** La periodicidad de los planes manuales se codifica en su clave sin modificar el esquema SQL. */
+export function forecastPlanFrequency(sourceKey: string | null): ForecastFrequency {
+  const frequency = /^plan:(semanal|mensual|trimestral|anual):[\da-f-]{36}$/.exec(sourceKey ?? "")?.[1];
+  return (frequency as ForecastFrequency | undefined) ?? "puntual";
+}
+
+export const isForecastOverride = (item: Pick<ForecastItem, "source" | "sourceKey">) =>
+  item.source === "override" || (item.sourceKey?.startsWith("rec:gasto:") ?? false);
+
+/** Fechas de un plan dentro de un periodo, ancladas al día original (31 ene → 28 feb → 31 mar). */
+export function forecastPlanOccurrences(item: ForecastItem, from: string, to: string): string[] {
+  const until = item.endDate && item.endDate < to ? item.endDate : to;
+  if (item.startDate > until || from > until) return [];
+  const frequency = item.frequency ?? forecastPlanFrequency(item.sourceKey);
+  if (frequency === "puntual") return item.startDate >= from ? [item.startDate] : [];
+  const dates: string[] = [];
+  if (frequency === "semanal") {
+    const jumps = Math.max(0, Math.floor(daysBetween(item.startDate, from) / 7));
+    for (let date = addDays(item.startDate, jumps * 7); date <= until; date = addDays(date, 7)) {
+      if (date >= from) dates.push(date);
+    }
+  } else {
+    const step = frequency === "mensual" ? 1 : frequency === "trimestral" ? 3 : 12;
+    const [y, m, d] = item.startDate.split("-").map(Number);
+    const [fromY, fromM] = from.split("-").map(Number);
+    const deltaMonths = (fromY - y) * 12 + fromM - m;
+    const anchor = (index: number) => {
+      const target = new Date(Date.UTC(y, m - 1 + index * step, 1));
+      const day = Math.min(d, new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate());
+      return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    };
+    for (let index = Math.max(0, Math.floor(deltaMonths / step) - 1); ; index++) {
+      const date = anchor(index);
+      if (date > until) break;
+      if (date >= from) dates.push(date);
+    }
+  }
+  return dates;
+}
+
+/** Una corrección solo afecta a una ocurrencia futura de un cargo habitual. */
+export const forecastOccurrenceKey = (r: Pick<Recurring, "key" | "kind">, date: string) => `rec:${r.kind}:${r.key}:${date}`;
+
 /**
  * Cómo acabará el ciclo: saldo de hoy + cobros previstos − recibos previstos − gasto variable esperado
  * (media diaria de los últimos ciclos completos, sin extraordinarios ni recurrentes).
@@ -667,6 +771,149 @@ export function projectCycle(opts: {
       ? `Gasto variable medio de los últimos ${complete.length} ciclos completos: ${variableDaily.toFixed(2)} €/día`
       : "Sin ciclos completos todavía: se usa el ritmo de gasto de este ciclo",
   };
+}
+
+/** Ingresos, gastos y ahorro estimados del ciclo actual y los 11 siguientes.
+ * Reutiliza la proyección del ciclo en curso, los cobros/recibos recurrentes y su media de gasto variable.
+ * Solo estima nóminas no detectadas como recurrentes si aparecen en al menos dos ciclos completos.
+ */
+export function forecastCashflow(opts: {
+  txs: Tx[];
+  today: string;
+  startDay: CycleRule;
+  recurring: Recurring[];
+  history: CycleSummary[];
+  current: CycleSummary;
+  projection: Projection;
+  liquidity?: number | null;
+  items?: ForecastItem[];
+  skippedOccurrences?: ReadonlySet<string>;
+}) {
+  const { txs, today, startDay, recurring, history, current, projection, items = [] } = opts;
+  const overrides = new Map(items.filter((i) => isForecastOverride(i) && i.sourceKey).map((i) => [i.sourceKey!, i.amount]));
+  const active = recurring.filter((r) => r.active);
+  const recurringKeys = new Set(active.map((r) => r.key));
+  const complete = history.filter((h) => h.cycle.end < current.cycle.start).slice(0, 3);
+  const hasRecurringSalary = active.some((r) => r.kind === "ingreso" && r.category === "nomina");
+  const unmatchedSalaries = hasRecurringSalary ? [] : complete.map((h) => round2(txs
+    .filter((t) => t.date >= h.cycle.start && t.date <= h.cycle.end
+      && t.kind === "ingreso" && t.category === "nomina" && !t.extraordinary
+      && !recurringKeys.has(merchantKey(t.description, t.counterparty)))
+    .reduce((sum, t) => sum + t.amount, 0)));
+  const salarySamples = unmatchedSalaries.filter((amount) => amount > 0);
+  const estimatedSalary = salarySamples.length >= 2 ? round2(median(salarySamples)) : 0;
+
+  let openingBalance = opts.liquidity ?? null;
+  const points = Array.from({ length: 12 }, (_, offset) => {
+    const cycle = cycleFor(today, startDay, offset);
+    const itemsInCycle = items.filter((item) => !isForecastOverride(item)).flatMap((item) =>
+      forecastPlanOccurrences(item, cycle.start > today ? cycle.start : today, cycle.end).map(() => item));
+    const extraIncome = round2(itemsInCycle.filter((i) => i.kind === "ingreso").reduce((s, i) => s + i.amount, 0));
+    const extraExpenses = round2(itemsInCycle.filter((i) => i.kind === "gasto").reduce((s, i) => s + i.amount, 0));
+    let knownIncome: number;
+    let knownExpenses: number;
+    let variableExpenses: number;
+    let salary: number;
+    if (offset === 0) {
+      // La caja de partida es el saldo bancario de HOY: no volver a sumar ingresos ya cobrados.
+      knownIncome = projection.pendingIncome;
+      knownExpenses = projection.pendingFixed;
+      variableExpenses = projection.expectedVariable;
+      salary = 0;
+    } else {
+      knownIncome = 0;
+      knownExpenses = 0;
+      for (const r of active) {
+        let next = r.nextDate;
+        while (next < cycle.start) next = addDays(next, r.intervalDays);
+        while (next <= cycle.end) {
+          const corrected = overrides.get(forecastOccurrenceKey(r, next));
+          const amount = opts.skippedOccurrences?.has(forecastOccurrenceKey(r, next)) ? 0 : corrected ?? Math.abs(r.amount);
+          if (r.kind === "ingreso" && r.amount > 0) knownIncome += amount;
+          else if (r.kind === "gasto" && r.amount < 0) knownExpenses += amount;
+          next = addDays(next, r.intervalDays);
+        }
+      }
+      variableExpenses = round2(projection.variableDaily * (daysBetween(cycle.start, cycle.end) + 1));
+      salary = estimatedSalary;
+    }
+    const income = round2(knownIncome + salary + extraIncome);
+    const expenses = round2(knownExpenses + variableExpenses + extraExpenses);
+    const net = round2(income - expenses);
+    const startBalance = openingBalance;
+    openingBalance = startBalance === null ? null : round2(startBalance + net);
+    return { cycle, income, expenses, net, openingBalance: startBalance, closingBalance: openingBalance,
+      knownIncome: round2(knownIncome), knownExpenses: round2(knownExpenses), variableExpenses,
+      fixedExpenses: round2(knownExpenses), estimatedExpenses: round2(variableExpenses + extraExpenses),
+      estimatedSalary: salary, plannedIncome: extraIncome, plannedExpenses: extraExpenses, current: offset === 0 };
+  });
+
+  return {
+    points,
+    estimatedSalary,
+    variableDaily: projection.variableDaily,
+    historyCycles: complete.length,
+    hasExpectedIncome: active.some((r) => r.kind === "ingreso" && r.amount > 0) || estimatedSalary > 0,
+  };
+}
+
+/** Desglose semanal de un ciclo futuro. Distribuye los mismos cobros, recibos y gasto variable que el total mensual. */
+export function forecastCycleWeeks(opts: {
+  point: ReturnType<typeof forecastCashflow>["points"][number];
+  recurring: Recurring[];
+  items: ForecastItem[];
+  today: string;
+  skippedOccurrences?: ReadonlySet<string>;
+}) {
+  const { point, recurring, items, today, skippedOccurrences } = opts;
+  const { cycle } = point;
+  const overrides = new Map(items.filter((i) => isForecastOverride(i) && i.sourceKey).map((i) => [i.sourceKey!, i.amount]));
+  const events: Array<{ date: string; label: string; amount: number; kind: "ingreso" | "gasto"; origin: "recurrente" | "plan" | "estimado";
+    occurrenceKey?: string; originalAmount?: number; modified?: boolean; lastDate?: string; frequency?: string; count?: number; planId?: string }> = [];
+  for (const r of recurring) {
+    if (!r.active) continue;
+    let date = r.nextDate;
+    while (date < cycle.start) date = addDays(date, r.intervalDays);
+    while (date <= cycle.end) {
+      const occurrenceKey = forecastOccurrenceKey(r, date);
+      const corrected = overrides.get(occurrenceKey);
+      const skipped = skippedOccurrences?.has(occurrenceKey) ?? false;
+      const event = { date, label: r.label, amount: skipped ? 0 : corrected ?? Math.abs(r.amount), origin: "recurrente" as const,
+        occurrenceKey, originalAmount: Math.abs(r.amount), modified: skipped || corrected !== undefined,
+        lastDate: r.lastDate, frequency: r.frequency, count: r.count };
+      if (r.kind === "ingreso" && r.amount > 0) events.push({ ...event, kind: "ingreso" });
+      else if (r.kind === "gasto" && r.amount < 0) events.push({ ...event, kind: "gasto" });
+      date = addDays(date, r.intervalDays);
+    }
+  }
+  if (point.estimatedSalary > 0) events.push({ date: cycle.start, label: "Nómina habitual estimada", amount: point.estimatedSalary, kind: "ingreso", origin: "estimado" });
+  for (const item of items) {
+    if (isForecastOverride(item)) continue;
+    for (const date of forecastPlanOccurrences(item, cycle.start > today ? cycle.start : today, cycle.end)) {
+      events.push({ date, label: item.title, amount: item.amount, kind: item.kind, origin: "plan", planId: item.id });
+    }
+  }
+  events.sort((a, b) => a.date.localeCompare(b.date) || b.amount - a.amount);
+
+  const weeks = [];
+  let balance = point.openingBalance;
+  let assignedVariable = 0;
+  for (let start = cycle.start; start <= cycle.end; start = addDays(start, 7)) {
+    const end = addDays(start, 6) < cycle.end ? addDays(start, 6) : cycle.end;
+    const weekEvents = events.filter((e) => e.date >= start && e.date <= end);
+    const income = round2(weekEvents.filter((e) => e.kind === "ingreso").reduce((sum, e) => sum + e.amount, 0));
+    const fixed = round2(weekEvents.filter((e) => e.kind === "gasto").reduce((sum, e) => sum + e.amount, 0));
+    // El último tramo absorbe el redondeo para cuadrar exactamente con el ciclo del gráfico.
+    const variable = end === cycle.end ? round2(point.variableExpenses - assignedVariable)
+      : round2(point.variableExpenses * (daysBetween(start, end) + 1) / (daysBetween(cycle.start, cycle.end) + 1));
+    assignedVariable = round2(assignedVariable + variable);
+    const expenses = round2(fixed + variable);
+    const net = round2(income - expenses);
+    const openingBalance: number | null = balance;
+    balance = balance === null ? null : round2(balance + net);
+    weeks.push({ start, end, income, expenses, variable, net, openingBalance, closingBalance: balance, events: weekEvents });
+  }
+  return weeks;
 }
 
 /** ¿Me lo puedo permitir? Efecto de una compra sobre el ahorro del ciclo, el objetivo y la liquidez. */

@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
+import { applyAiSettings } from "@/lib/ai/usage";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { categoryLabel, isCategory } from "@/lib/finance/categories";
-import { accountsView, budgetView, forecast, listTransactions, overview } from "@/lib/finance/service";
+import { accountsView, budgetView, financeContext, forecast, forecastSource, listTransactions, overview } from "@/lib/finance/service";
+import { payslipsView } from "@/lib/finance/payslips";
 import { syncUser } from "@/lib/finance/sync";
 import { bulkCorrect, classifyPending, correctTransaction } from "@/lib/finance/classify";
-import { cleanView } from "@/lib/finance/logic";
+import { addDays, cleanView, cycleFor, forecastOccurrenceKey } from "@/lib/finance/logic";
+import { disconnectGmail, gmailView, syncGmail } from "@/lib/finance/gmail";
 import { ask, chatHistory, clearChat } from "@/lib/finance/copilot";
 import { getMemory, getRules, getSettings } from "@/lib/finance/store";
 
@@ -26,6 +29,7 @@ async function userId() {
 }
 
 export async function GET(req: Request, route: RouteContext) {
+  await applyAiSettings();
   const uid = await userId();
   if (!uid) return fail("No autenticado", 401);
   const action = (await route.params).action.join("/");
@@ -38,14 +42,22 @@ export async function GET(req: Request, route: RouteContext) {
       const amount = Number(p.get("amount"));
       return ok(await forecast(uid, { amount: Number.isFinite(amount) ? amount : null, until: p.get("until") }));
     }
+    if (action === "forecast/source") {
+      const key = p.get("key") ?? "";
+      if (key.length > 160) return fail("Referencia no válida");
+      const source = await forecastSource(uid, key);
+      return source ? ok(source) : fail("No se encontró el movimiento de referencia", 404);
+    }
     if (action === "budget") return ok(await budgetView(uid));
     if (action === "accounts") return ok(await accountsView(uid));
+    if (action === "payslips") return ok(await payslipsView(uid));
     if (action === "settings") {
       const [settings, rules, memory] = await Promise.all([getSettings(uid), getRules(uid), getMemory(uid)]);
       const hits = new Map((await prisma.finance_rules.findMany({ where: { user_id: uid }, select: { id: true, hits: true, label: true } })).map((r) => [r.id, r]));
       return ok({ settings, rules: rules.map((r) => ({ ...r, categoryLabel: categoryLabel(r.category), hits: hits.get(r.id)?.hits ?? 0, label: hits.get(r.id)?.label ?? null })), memory });
     }
     if (action === "chat") return ok({ messages: await chatHistory(uid) });
+    if (action === "gmail") return ok(await gmailView(uid));
     return fail("Acción desconocida", 404);
   } catch (e) {
     if (missingTables(e)) return fail("Faltan las tablas de CRS Finance: aplica la migración 20261117170000_finance_app", 500);
@@ -55,6 +67,7 @@ export async function GET(req: Request, route: RouteContext) {
 }
 
 export async function POST(req: Request, route: RouteContext) {
+  await applyAiSettings();
   const uid = await userId();
   if (!uid) return fail("No autenticado", 401);
   const action = (await route.params).action.join("/");
@@ -92,7 +105,7 @@ export async function POST(req: Request, route: RouteContext) {
     if (action === "settings") {
       const day = Number(body.cycleStartDay);
       const goal = body.savingsGoal === null || body.savingsGoal === "" ? null : Number(body.savingsGoal);
-      const data: { cycle_start_day?: number; savings_goal?: number | null; updated_at: Date } = { updated_at: new Date() };
+      const data: { cycle_start_day?: number; savings_goal?: number | null; savings_frequency?: string; updated_at: Date } = { updated_at: new Date() };
       if (body.cycleStartDay !== undefined) {
         if (!Number.isInteger(day) || day < 1 || day > 28) return fail("El ciclo debe empezar entre el día 1 y el 28");
         data.cycle_start_day = day;
@@ -101,7 +114,91 @@ export async function POST(req: Request, route: RouteContext) {
         if (goal !== null && (!Number.isFinite(goal) || goal < 0)) return fail("Objetivo de ahorro no válido");
         data.savings_goal = goal;
       }
+      if (body.savingsFrequency !== undefined) {
+        if (body.savingsFrequency !== "mensual" && body.savingsFrequency !== "semanal") return fail("Frecuencia no válida");
+        data.savings_frequency = body.savingsFrequency;
+      }
       await prisma.finance_settings.upsert({ where: { user_id: uid }, create: { user_id: uid, ...data }, update: data });
+      return ok({ ok: true });
+    }
+    if (action === "forecast/occurrence") {
+      const key = str("key");
+      if (key.length > 160) return fail("Referencia no válida");
+      const ctx = await financeContext(uid);
+      const cycle = cycleFor(ctx.today, ctx.startDay, 1);
+      let match: { date: string; label: string } | null = null;
+      for (const r of ctx.recurring) {
+        if (!r.active || r.kind !== "gasto" || r.amount >= 0) continue;
+        let date = r.nextDate;
+        while (date < cycle.start) date = addDays(date, r.intervalDays);
+        while (date <= cycle.end) {
+          if (forecastOccurrenceKey(r, date) === key) match = { date, label: r.label };
+          date = addDays(date, r.intervalDays);
+        }
+      }
+      if (!match) return fail("Este cargo no está previsto para el próximo ciclo", 404);
+      const amount = body.amount === null ? null : Number(body.amount);
+      if (amount !== null && (!Number.isFinite(amount) || amount < 0 || amount > 1_000_000)) return fail("Importe no válido");
+      const rounded = amount === null ? null : Math.round(amount * 100) / 100;
+      const skipKey = `forecast-skip:${key}`;
+      if (rounded === null) await prisma.$transaction([
+        prisma.finance_forecast_items.deleteMany({ where: { user_id: uid, source_key: key } }),
+        prisma.finance_alert_dismissals.deleteMany({ where: { user_id: uid, key: skipKey } }),
+      ]);
+      else if (rounded === 0) await prisma.$transaction([
+        prisma.finance_forecast_items.deleteMany({ where: { user_id: uid, source_key: key } }),
+        prisma.finance_alert_dismissals.upsert({ where: { user_id_key: { user_id: uid, key: skipKey } },
+          create: { user_id: uid, key: skipKey }, update: {} }),
+      ]);
+      else await prisma.$transaction([
+        prisma.finance_alert_dismissals.deleteMany({ where: { user_id: uid, key: skipKey } }),
+        prisma.finance_forecast_items.upsert({
+          where: { user_id_source_key: { user_id: uid, source_key: key } },
+          create: { user_id: uid, title: match.label.slice(0, 100), kind: "gasto", amount: rounded,
+            start_date: new Date(`${match.date}T00:00:00Z`), source: "manual", source_key: key },
+          update: { amount: rounded },
+        }),
+      ]);
+      return ok({ ok: true });
+    }
+    if (action === "forecast/item") {
+      const id = str("id");
+      const title = str("title").trim().slice(0, 100);
+      const kind = str("kind");
+      const amount = Number(body.amount);
+      const startDate = str("startDate");
+      const endDate = str("endDate") || null;
+      const sourceKey = str("sourceKey") || null;
+      const frequency = str("frequency") || "puntual";
+      const roundedAmount = Math.round(amount * 100) / 100;
+      const validDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+      if (!title || !["ingreso", "gasto"].includes(kind) || !Number.isFinite(amount) || roundedAmount <= 0 || roundedAmount > 10_000_000
+        || !validDate(startDate) || (endDate !== null && (!validDate(endDate) || endDate < startDate))
+        || !["puntual", "semanal", "mensual", "trimestral", "anual"].includes(frequency)) return fail("Revisa el nombre, el importe, la periodicidad y las fechas");
+      if (sourceKey && (!sourceKey.startsWith("forecast-extra:") && !sourceKey.startsWith("forecast-insurance:"))) return fail("Sugerencia no válida");
+      if (sourceKey && frequency !== "puntual") return fail("Una sugerencia confirmada no puede repetirse automáticamente");
+      const fields = { title, kind, amount: roundedAmount, start_date: new Date(`${startDate}T00:00:00Z`),
+        end_date: endDate ? new Date(`${endDate}T00:00:00Z`) : null };
+      if (id) {
+        const existing = await prisma.finance_forecast_items.findFirst({ where: { id, user_id: uid }, select: { source: true, source_key: true } });
+        if (!existing || existing.source_key?.startsWith("rec:")) return fail("Plan no encontrado", 404);
+        const repeatKey = frequency === "puntual" ? null : `plan:${frequency}:${id}`;
+        const updated = await prisma.finance_forecast_items.updateMany({ where: { id, user_id: uid },
+          data: { ...fields, ...(existing.source === "manual" ? { source_key: repeatKey } : {}) } });
+        if (!updated.count) return fail("Plan no encontrado", 404);
+      } else {
+        await prisma.finance_forecast_items.create({ data: { ...fields, user_id: uid,
+          source: sourceKey ? "suggested" : "manual", source_key: sourceKey ?? (frequency === "puntual" ? null : `plan:${frequency}:${crypto.randomUUID()}`) } });
+      }
+      return ok({ ok: true });
+    }
+    if (action === "forecast/item/delete") {
+      await prisma.finance_forecast_items.deleteMany({ where: { id: str("id"), user_id: uid } });
+      return ok({ ok: true });
+    }
+    if (action === "gmail/sync") return ok(await syncGmail(uid, new URL(req.url).origin));
+    if (action === "gmail/disconnect") {
+      await disconnectGmail(uid);
       return ok({ ok: true });
     }
     if (action === "view") {

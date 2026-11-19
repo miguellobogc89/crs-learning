@@ -26,6 +26,70 @@ function maxDrawdown(points: { equity: number }[]) {
   return worst;
 }
 
+type OpenPosition = Agent["positions"][number];
+
+/**
+ * Pie de una posición abierta: dónde está el stop y qué significa.
+ *  - Stop sin tocar: el stop y lo que se perdería si salta.
+ *  - Stop movido: de dónde viene y, sobre todo, si ya asegura ganancia, está en la entrada o solo arriesga menos.
+ * La ganancia o pérdida «si salta» es aproximada (descuenta la comisión de entrada, no la de salida).
+ */
+function StopLine({ p, noTarget }: { p: OpenPosition; noTarget: boolean }) {
+  const entry = p.entryPrice;
+  const target = noTarget ? (
+    <span className="text-slate-500">Sin objetivo · el stop sigue al precio</span>
+  ) : (
+    <span className="text-emerald-700">Objetivo {eur(p.target)}</span>
+  );
+  if (entry === null) {
+    return (
+      <div className="mt-2 flex justify-between gap-3 text-[11px] tabular-nums">
+        <span className="text-red-700">Stop {eur(p.stop)}</span>
+        {target}
+      </div>
+    );
+  }
+  const long = p.direction === "long";
+  const eps = Math.abs(entry) * 1e-6;
+  const atStop = (stop: number) => (long ? stop - entry : entry - stop) * p.quantity - p.fees;
+  const moved = Math.abs(p.stop - p.initialStop) > eps;
+  const result = atStop(p.stop);
+  const atEntry = Math.abs(p.stop - entry) <= eps;
+  const signed = (v: number) => `${v >= 0 ? "+" : "−"}${eur(Math.abs(v), 2)}`;
+
+  if (!moved) {
+    return (
+      <div className="mt-2 flex justify-between gap-3 text-[11px] tabular-nums">
+        <span className="text-red-700">
+          Stop {eur(p.stop)} <span className="text-slate-400">· si salta {signed(result)}</span>
+        </span>
+        {target}
+      </div>
+    );
+  }
+
+  const tag = "inline-flex rounded-full px-2 py-0.5 font-medium";
+  const secured = result >= 0 && !atEntry;
+  const badge = secured ? (
+    <span className={`${tag} bg-emerald-50 text-emerald-700`}>Ganancia asegurada {signed(result)}</span>
+  ) : atEntry ? (
+    <span className={`${tag} bg-blue-50 text-blue-700`}>Sin riesgo · stop en la entrada</span>
+  ) : (
+    <span className={`${tag} bg-amber-50 text-amber-800`}>Riesgo bajado a {signed(result)} (era {signed(atStop(p.initialStop))})</span>
+  );
+  return (
+    <div className="mt-2 space-y-1 text-[11px] tabular-nums">
+      <div className="flex items-center justify-between gap-3">
+        <span className={secured ? "text-emerald-700" : "text-red-700"}>
+          Stop movido {eur(p.stop)} <span className="text-slate-400 line-through">{eur(p.initialStop)}</span>
+        </span>
+        {target}
+      </div>
+      <div>{badge}</div>
+    </div>
+  );
+}
+
 export function AgentPage({ agentKey }: { agentKey: string }) {
   const [data, setData] = useState<Data | null>(null);
   useWarmStart<Data>("agents", setData);
@@ -282,10 +346,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                         <span className="block text-xs tabular-nums text-slate-500">ahora {eur(p.lastPrice)}</span>
                       </span>
                     </div>
-                    <div className="mt-2 flex justify-between text-[11px] tabular-nums">
-                      <span className="text-red-700">Stop {eur(p.stop)}</span>
-                      <span className="text-emerald-700">Objetivo {eur(p.target)}</span>
-                    </div>
+                    <StopLine p={p} noTarget={a.kamikaze?.noTarget ?? false} />
                   </li>
                 ))}
               </ul>

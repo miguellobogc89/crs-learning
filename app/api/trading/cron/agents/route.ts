@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applyAiSettings } from "@/lib/ai/usage";
 import { runAgentsDaily } from "@/lib/trading/agents/service";
 
 export const runtime = "nodejs";
@@ -7,6 +8,7 @@ export const maxDuration = 60;
 
 /** Reunión diaria de los agentes, después del cierre (el cron de datos va antes). */
 export async function GET(req: Request) {
+  await applyAiSettings();
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`)
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });

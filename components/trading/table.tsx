@@ -203,6 +203,7 @@ export function DataTable<T>({
   height,
   sortBy,
   onSortChange,
+  hideMobileSort = false,
   mobileRow,
 }: {
   id: string;
@@ -220,6 +221,8 @@ export function DataTable<T>({
   /** Orden externo opcional: permite sincronizar cabeceras y una toolbar. */
   sortBy?: TableSort;
   onSortChange?: (value: TableSort) => void;
+  /** El orden se controla desde la barra superior compartida. */
+  hideMobileSort?: boolean;
   /**
    * En móvil, fila compacta de dos líneas en vez de ficha con todas las columnas: debajo del título,
    * `sub`; a la derecha, `right`. Sin esto, la ficha de etiqueta y valor de siempre.
@@ -301,7 +304,7 @@ export function DataTable<T>({
   const sortable = columns.filter((c) => c.sort && c.label);
   // En móvil, el orden va en un desplegable (no en una tira de píldoras que se sale de la pantalla).
   const sortChips =
-    mobile && sortable.length > 1 ? (
+    mobile && !hideMobileSort && sortable.length > 1 ? (
       <div className="flex items-center gap-2 text-sm">
         <span className="shrink-0 text-slate-500">Ordenar</span>
         <Combobox

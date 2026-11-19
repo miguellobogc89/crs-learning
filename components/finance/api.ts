@@ -40,7 +40,8 @@ export async function fapi<T>(path: string, body?: unknown): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { error?: string }).error || "No se pudo completar la operación");
-  if (body === undefined) remember(path, data);
+  // Las nóminas contienen datos sensibles: no persistirlas en sessionStorage.
+  if (body === undefined && !path.startsWith("payslips") && !path.startsWith("forecast/source")) remember(path, data);
   return data as T;
 }
 
