@@ -99,7 +99,7 @@ export async function POST(req: Request, route: RouteContext) {
     if (action === "settings") {
       const day = Number(body.cycleStartDay);
       const goal = body.savingsGoal === null || body.savingsGoal === "" ? null : Number(body.savingsGoal);
-      const data: { cycle_start_day?: number; savings_goal?: number | null; updated_at: Date } = { updated_at: new Date() };
+      const data: { cycle_start_day?: number; savings_goal?: number | null; savings_frequency?: string; updated_at: Date } = { updated_at: new Date() };
       if (body.cycleStartDay !== undefined) {
         if (!Number.isInteger(day) || day < 1 || day > 28) return fail("El ciclo debe empezar entre el día 1 y el 28");
         data.cycle_start_day = day;
@@ -108,7 +108,38 @@ export async function POST(req: Request, route: RouteContext) {
         if (goal !== null && (!Number.isFinite(goal) || goal < 0)) return fail("Objetivo de ahorro no válido");
         data.savings_goal = goal;
       }
+      if (body.savingsFrequency !== undefined) {
+        if (body.savingsFrequency !== "mensual" && body.savingsFrequency !== "semanal") return fail("Frecuencia no válida");
+        data.savings_frequency = body.savingsFrequency;
+      }
       await prisma.finance_settings.upsert({ where: { user_id: uid }, create: { user_id: uid, ...data }, update: data });
+      return ok({ ok: true });
+    }
+    if (action === "forecast/item") {
+      const id = str("id");
+      const title = str("title").trim().slice(0, 100);
+      const kind = str("kind");
+      const amount = Number(body.amount);
+      const startDate = str("startDate");
+      const endDate = str("endDate") || null;
+      const sourceKey = str("sourceKey") || null;
+      const validDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+      if (!title || !["ingreso", "gasto"].includes(kind) || !Number.isFinite(amount) || amount <= 0 || amount > 10_000_000
+        || !validDate(startDate) || (endDate !== null && (!validDate(endDate) || endDate < startDate))) return fail("Revisa el nombre, el importe y las fechas");
+      if (sourceKey && (!sourceKey.startsWith("forecast-extra:") && !sourceKey.startsWith("forecast-insurance:"))) return fail("Sugerencia no válida");
+      const fields = { title, kind, amount: Math.round(amount * 100) / 100, start_date: new Date(`${startDate}T00:00:00Z`),
+        end_date: endDate ? new Date(`${endDate}T00:00:00Z`) : null };
+      if (id) {
+        const updated = await prisma.finance_forecast_items.updateMany({ where: { id, user_id: uid }, data: fields });
+        if (!updated.count) return fail("Plan no encontrado", 404);
+      } else {
+        await prisma.finance_forecast_items.create({ data: { ...fields, user_id: uid,
+          source: sourceKey ? "suggested" : "manual", source_key: sourceKey } });
+      }
+      return ok({ ok: true });
+    }
+    if (action === "forecast/item/delete") {
+      await prisma.finance_forecast_items.deleteMany({ where: { id: str("id"), user_id: uid } });
       return ok({ ok: true });
     }
     if (action === "gmail/sync") return ok(await syncGmail(uid, new URL(req.url).origin));
