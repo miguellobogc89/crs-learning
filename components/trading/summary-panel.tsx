@@ -5,12 +5,22 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, Bot, ChevronDown, Cpu, Gauge, Wallet } from "lucide-react";
 import type { getSummary } from "@/lib/trading/summary";
+import type { getPortfolio } from "@/lib/trading/agents/copy";
+import type { manualView } from "@/lib/trading/manual/service";
+import type { mirrorView } from "@/lib/trading/mirror/service";
+import Link from "next/link";
 import { api, card, eur, errorText, flat } from "./format";
 import { useTradingRefresh, useWarmStart } from "./navigation";
 import { AGENT_DOT, ErrorNote, LoadingCard, ReturnPill } from "./ui";
 import { PulsePanel } from "./pulse-panel";
 
 type Summary = Awaited<ReturnType<typeof getSummary>>;
+type Virtual = Awaited<ReturnType<typeof getPortfolio>>;
+type Manual = Awaited<ReturnType<typeof manualView>>;
+type Mirrors = Awaited<ReturnType<typeof mirrorView>>;
+type Mode = "real" | "virtual";
+type Recent = { id: string; symbol: string; source: string; at: string; status: string };
+const displayDate = (at: string) => new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(at));
 
 /** Abre el panel de notificaciones (lo escucha la estructura de Trading). */
 export const openNotifications = () => window.dispatchEvent(new Event("trading:notifications"));
@@ -36,6 +46,10 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
   useWarmStart<Summary>("summary", setData);
   const [error, setError] = useState<string | null>(null);
   const [more, setMore] = useState(false);
+  const [mode, setMode] = useState<Mode>("real");
+  const [virtual, setVirtual] = useState<Virtual | null>(null);
+  const [manual, setManual] = useState<Manual | null>(null);
+  const [mirrors, setMirrors] = useState<Mirrors | null>(null);
   const load = useCallback(async () => {
     try {
       setData(await api<Summary>("summary"));
@@ -48,6 +62,31 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
     void load();
   }, [load]);
   useTradingRefresh(load);
+  useEffect(() => {
+    let live = true;
+    const fetchMode = async () => {
+      if (mode === "virtual") {
+        const result = await api<Virtual>("portfolio").catch(() => null);
+        if (live) setVirtual(result);
+      } else {
+        const [m, r] = await Promise.all([api<Manual>("manual").catch(() => null), api<Mirrors>("mirror").catch(() => null)]);
+        if (live) { setManual(m); setMirrors(r); }
+      }
+    };
+    void fetchMode();
+    return () => { live = false; };
+  }, [mode]);
+
+  const recent: Recent[] = mode === "virtual"
+    ? [
+        ...(virtual?.main.positions ?? []).map(p => ({ id: `main:${p.id}`, symbol: p.symbol, source: "Manual virtual", at: p.openedAt ?? "", status: p.status })),
+        ...(virtual?.copies ?? []).flatMap(copy => [...copy.positions, ...copy.closed].map(p => ({ id: `copy:${copy.agent}:${p.id}`, symbol: p.symbol, source: copy.name, at: p.openedAt ?? "", status: p.status }))),
+      ]
+    : [
+        ...(manual?.trades ?? []).map(t => ({ id: `manual:${t.id}`, symbol: t.symbol, source: "Manual", at: t.closedAt ?? t.openedAt ?? "", status: t.status })),
+        ...(mirrors?.mirrors ?? []).flatMap(m => m.legs.filter(l => l.mode === "real").map(l => ({ id: `mirror:${l.id}`, symbol: l.symbol, source: m.name, at: l.closedAt ?? l.openedAt ?? "", status: l.status }))),
+      ];
+  recent.sort((a, b) => b.at.localeCompare(a.at));
 
   return (
     <div className="space-y-4 pb-6 lg:h-full lg:overflow-y-auto lg:pr-1">
@@ -67,29 +106,51 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
             </button>
           ) : null}
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            {/* Tu dinero */}
-            <section className={`${card} ${flat} px-4 py-4 sm:px-5`}>
+          <section className={`${card} ${flat} px-4 py-4 sm:px-5`}>
+            <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                <Wallet className="h-3.5 w-3.5" /> Tu dinero real
+                <Wallet className="h-3.5 w-3.5" /> Tu dinero {mode === "real" ? "real" : "virtual"}
               </div>
-              {data.balance ? (
-                <div className="mt-1 flex flex-wrap items-center gap-3">
-                  <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(data.balance.total, 2)}</span>
-                  {data.balance.ch24h !== null && (
-                    <span className="flex items-center gap-1.5">
-                      <ReturnPill value={data.balance.ch24h} big />
-                      <span className="text-xs text-slate-400">24 h</span>
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <p className="mt-1 text-sm text-slate-500">Conecta un exchange en Conexiones para verlo aquí.</p>
-              )}
-            </section>
+              <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold" aria-label="Tipo de cartera">
+                {(["real", "virtual"] as const).map(value => (
+                  <button key={value} type="button" onClick={() => setMode(value)} aria-pressed={mode === value}
+                    className={`rounded-md px-3 py-1.5 transition-colors ${mode === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                    {value === "real" ? "Real" : "Virtual"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {mode === "real" ? data.balance ? (
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(data.balance.total, 2)}</span>
+                {data.balance.ch24h !== null && <span className="flex items-center gap-1.5"><ReturnPill value={data.balance.ch24h} big /><span className="text-xs text-slate-400">24 h</span></span>}
+              </div>
+            ) : <p className="mt-2 text-sm text-slate-500">Conecta un exchange en Conexiones para verlo aquí.</p>
+            : virtual ? (
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(virtual.total.equity, 2)}</span>
+                <ReturnPill value={virtual.total.returnPct} big />
+                <span className="text-xs text-slate-400">desde el inicio</span>
+              </div>
+            ) : <p className="mt-2 text-sm text-slate-500">Cargando cartera virtual…</p>}
+            <div className="mt-5 border-t border-slate-100 pt-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-slate-900">Actividad reciente</h3>
+                <Link href="/trading/cartera" className="text-xs font-semibold text-blue-600 hover:underline">Ver mi cartera</Link>
+              </div>
+              {recent.length ? (
+                <ul className="divide-y divide-slate-100">
+                  {recent.slice(0, 3).map(item => (
+                    <li key={item.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                      <span className="min-w-0 truncate"><b className="font-semibold text-slate-900">{item.symbol}</b><span className="ml-2 text-xs text-slate-500">{item.source} · {item.status}</span></span>
+                      <span className="shrink-0 text-xs text-slate-400">{item.at ? displayDate(item.at) : "—"}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="text-xs text-slate-500">No hay operaciones registradas en esta cartera.</p>}
+            </div>
+          </section>
 
-
-          </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             {/* Familias de agentes (solo los que han operado) */}
