@@ -147,10 +147,12 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
                       <span className="min-w-0 flex-1">
                         <b className="block truncate font-semibold text-slate-900">{item.symbol}</b>
                         <span className="block truncate text-xs text-slate-500">{item.source} · {item.status}</span>
-                        <span className="block text-[11px] text-slate-400">{item.at ? displayDate(item.at) : "—"}</span>
                       </span>
-                      <span className={`shrink-0 text-right text-sm font-semibold tabular-nums ${item.result === null ? "text-slate-400" : item.result >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                        {item.result === null ? "—" : `${item.result > 0 ? "+" : ""}${eur(item.result, 2)}`}
+                      <span className="shrink-0 text-right">
+                        <span className={`block text-sm font-semibold tabular-nums ${item.result === null ? "text-slate-400" : item.result >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          {item.result === null ? "—" : `${item.result > 0 ? "+" : ""}${eur(item.result, 2)}`}
+                        </span>
+                        <span className="block text-[11px] text-slate-400">{item.at ? displayDate(item.at) : "—"}</span>
                       </span>
                     </li>
                   ))}
