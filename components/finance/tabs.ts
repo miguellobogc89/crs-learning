@@ -1,9 +1,9 @@
 // components/finance/tabs.ts
 // Secciones de CRS Finance (panel lateral y rutas /finanzas/<clave>).
 import type { ComponentType } from "react";
-import { Home, Landmark, ListOrdered, MessageCircle, PiggyBank, Plug, Settings2 } from "lucide-react";
+import { FileText, Home, Landmark, ListOrdered, MessageCircle, PiggyBank, Plug, Settings2 } from "lucide-react";
 
-export const FINANCE_TAB_KEYS = ["inicio", "movimientos", "plan", "copiloto", "cuentas", "conexiones", "ajustes"] as const;
+export const FINANCE_TAB_KEYS = ["inicio", "movimientos", "plan", "copiloto", "documentos", "cuentas", "conexiones", "ajustes"] as const;
 export type FinanceTab = (typeof FINANCE_TAB_KEYS)[number];
 type TabDef = { key: FinanceTab; label: string; icon: ComponentType<{ className?: string; strokeWidth?: number }>; description: string };
 
@@ -15,6 +15,7 @@ export const FINANCE_SECTIONS: { title: string | null; items: TabDef[] }[] = [
       { key: "movimientos", label: "Movimientos", icon: ListOrdered, description: "Todos tus movimientos, entendidos y categorizados." },
       { key: "plan", label: "Plan", icon: PiggyBank, description: "Objetivo de ahorro, límites, gastos fijos y lo que te puedes permitir." },
       { key: "copiloto", label: "Copiloto", icon: MessageCircle, description: "Pregunta lo que quieras sobre tu dinero." },
+      { key: "documentos", label: "Documentos", icon: FileText, description: "Tus nóminas y sus conceptos, con todo el histórico." },
     ],
   },
   {
@@ -35,7 +36,7 @@ export const FITTED_TABS: readonly FinanceTab[] = ["movimientos", "copiloto"];
 export const isFittedTab = (tab: string) => (FITTED_TABS as readonly string[]).includes(tab);
 
 /** Barra inferior del móvil. */
-export const BOTTOM_TABS: FinanceTab[] = ["inicio", "movimientos", "plan", "copiloto"];
+export const BOTTOM_TABS: FinanceTab[] = ["inicio", "movimientos", "plan", "copiloto", "documentos"];
 
 /** Direcciones antiguas que ahora viven en otra sección. */
 export const LEGACY_TABS: Record<string, FinanceTab> = { presupuesto: "plan", prevision: "plan" };
