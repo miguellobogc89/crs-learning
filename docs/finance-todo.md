@@ -3,7 +3,7 @@
 Ideas y tareas del módulo de finanzas personales. Recopilación de conversaciones hasta el 19/11/2026; antes de implementar, comprobar el estado real en código y BD. No repetir tareas terminadas.
 
 ## Prioridad: datos y conexiones
-- [ ] Evaluar conexión bancaria de solo lectura para importar movimientos y saldos, con varias cuentas por usuario y coste de agregación controlado.
+- [ ] Investigar la opción más económica y viable para que otros usuarios conecten sus propias cuentas bancarias desde CRS Finance (proveedores de open banking, tarifas por usuario/cuenta, requisitos regulatorios y escalabilidad). Actualmente existe integración con Enable Banking, pero está habilitada solo para el propietario; no plantear la conexión bancaria como funcionalidad inexistente.
 - [ ] Consolidar movimientos y extractos bancarios sin duplicados, con histórico incremental y conciliación.
 - [ ] Revisar detección de suscripciones y cargos recurrentes, anomalías y aumentos de precio.
 - [ ] Aprovechar la conexión Gmail para identificar recibos y facturas relevantes, sin mezclarla con la sección Cuentas.
