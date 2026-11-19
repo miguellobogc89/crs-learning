@@ -111,6 +111,38 @@ function SavingsGoal({ settings }: { settings: View["settings"] }) {
   </section>;
 }
 
+function NextCycleWeeks({ weeks, cycle }: { weeks: View["forecastNextWeeks"]; cycle: View["forecastCashflow"]["points"][number] }) {
+  return <section className={`${card} ${flat} p-4 sm:p-6`}>
+    <h2 className="font-semibold text-slate-900">Tu próximo mes, semana a semana</h2>
+    <p className="mt-1 text-xs text-slate-500">{longDay(cycle.cycle.start)} – {longDay(cycle.cycle.end)} · ciclo de tu nómina</p>
+    <div className="mt-4 divide-y divide-slate-100">{weeks.map((week, index) => <div key={week.start} className="py-4 first:pt-0 last:pb-0">
+      <div className="flex items-start justify-between gap-3">
+        <div><p className="text-sm font-semibold text-slate-900">Semana {index + 1}</p>
+          <p className="text-xs text-slate-500">{shortDay(week.start)} – {shortDay(week.end)}</p></div>
+        <div className="text-right"><p className="text-[11px] text-slate-500">Disponible al cierre</p>
+          <p className={`amount text-base font-bold tabular-nums ${week.closingBalance === null ? "text-slate-500" : week.closingBalance >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{week.closingBalance === null ? "Sin saldo bancario" : eur(week.closingBalance, 2)}</p></div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded-lg bg-blue-50 px-3 py-2"><p className="text-slate-500">Ingresos</p><b className="amount mt-1 block text-sm tabular-nums text-blue-700">+{eur(week.income, 2)}</b></div>
+        <div className="rounded-lg bg-rose-50 px-3 py-2"><p className="text-slate-500">Gastos</p><b className="amount mt-1 block text-sm tabular-nums text-rose-700">−{eur(week.expenses, 2)}</b></div>
+      </div>
+      <details className="group mt-2" open={index === 0}>
+        <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-semibold text-blue-700 [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" /> Cobros y pagos previstos</summary>
+        <div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-3">
+          {week.events.map((event, i) => <div key={`${event.date}:${event.label}:${i}`} className="flex items-start justify-between gap-2 text-xs">
+            <div className="min-w-0"><p className="break-words font-medium text-slate-700">{event.label}</p><p className="text-slate-500">{shortDay(event.date)} · {event.origin === "plan" ? "Planificado" : event.origin === "estimado" ? "Estimado" : "Habitual"}</p></div>
+            <b className={`amount shrink-0 tabular-nums ${event.kind === "ingreso" ? "text-blue-700" : "text-rose-700"}`}>{event.kind === "ingreso" ? "+" : "−"}{eur(event.amount, 2)}</b>
+          </div>)}
+          {week.variable > 0 && <div className="flex justify-between gap-2 border-t border-slate-200 pt-2 text-xs text-slate-500"><span>Gastos cotidianos estimados</span><b className="amount shrink-0 tabular-nums text-rose-700">−{eur(week.variable, 2)}</b></div>}
+          {!week.events.length && week.variable === 0 && <p className="text-xs text-slate-500">Sin movimientos previstos.</p>}
+        </div>
+      </details>
+    </div>)}</div>
+    <p className="mt-4 border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-500">Los cobros y recibos habituales se sitúan en sus fechas esperadas. El gasto cotidiano se reparte como estimación; los importes semanales suman exactamente el mes mostrado arriba.</p>
+  </section>;
+}
+
 function ForecastSuggestions({ suggestions, onDetail }: { suggestions: Suggestion[]; onDetail: (key: string) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -139,12 +171,12 @@ function ForecastSuggestions({ suggestions, onDetail }: { suggestions: Suggestio
         <button type="button" disabled={busy !== null} onClick={() => void act(s, false)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 disabled:opacity-50"><X className="h-3.5 w-3.5" />No este año</button>
         <button type="button" onClick={() => onDetail(s.key)} className="ml-auto inline-flex items-center gap-0.5 rounded-lg px-1 py-1.5 text-xs font-semibold text-blue-700">Ver detalle <ChevronRight className="h-3.5 w-3.5" /></button>
       </div>
-    </li>)}</ul> : <p className="mt-4 text-sm text-slate-500">No hay nuevas sugerencias pendientes.</p>}
+    </li>)}</ul> : <p className="mt-4 text-sm text-slate-500">No hay sugerencias pendientes en este periodo.</p>}
     {error && <div className="mt-3"><ErrorNote>{error}</ErrorNote></div>}
   </section>;
 }
 
-function MyPlans({ items, onDetail }: { items: ForecastItem[]; onDetail: (key: string) => void }) {
+function MyPlans({ items, hiddenCount, onDetail }: { items: ForecastItem[]; hiddenCount: number; onDetail: (key: string) => void }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -186,7 +218,8 @@ function MyPlans({ items, onDetail }: { items: ForecastItem[]; onDetail: (key: s
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2"><b className={`amount text-sm tabular-nums ${item.kind === "ingreso" ? "text-blue-700" : "text-rose-700"}`}>{item.kind === "ingreso" ? "+" : "−"}{eur(item.amount, 2)}</b>
         <button type="button" disabled={busy} onClick={() => void remove(item.id)} aria-label={`Eliminar ${item.title}`} className="rounded-lg p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div>
-    </li>)}</ul> : <p className="mt-4 text-sm text-slate-500">Todavía no has añadido planes.</p>}
+    </li>)}</ul> : <p className="mt-4 text-sm text-slate-500">{hiddenCount ? "No hay planes en este periodo." : "Todavía no has añadido planes."}</p>}
+    {hiddenCount > 0 && <p className="mt-2 text-xs text-slate-500">{hiddenCount} {hiddenCount === 1 ? "plan fuera" : "planes fuera"} del periodo seleccionado. Amplía el plazo para verlo{hiddenCount === 1 ? "" : "s"}.</p>}
     {open && <div className="mt-4 space-y-3 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
       <label className="block text-xs font-medium text-slate-600">¿Qué tienes previsto?<input value={title} maxLength={100} onChange={(e) => setTitle(e.target.value)} placeholder="Regalos de Navidad" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
       <div className="flex gap-2">{(["gasto", "ingreso"] as const).map((k) => <button key={k} type="button" onClick={() => setKind(k)} aria-pressed={kind === k} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${kind === k ? "bg-blue-600 text-white" : "bg-white text-slate-600"}`}>{k === "gasto" ? "Gasto" : "Ingreso"}</button>)}</div>
@@ -210,6 +243,9 @@ export function ForecastPanel({ view }: { view: View }) {
   const forecast = view.forecastCashflow;
   const points = forecast?.points.slice(0, range) ?? [];
   const last = points.at(-1);
+  const periodEnd = last?.cycle.end ?? view.today;
+  const visibleSuggestions = (view.forecastSuggestions ?? []).filter((s) => s.startDate >= view.today && s.startDate <= periodEnd);
+  const visiblePlans = (view.forecastItems ?? []).filter((item) => item.startDate >= view.today && item.startDate <= periodEnd);
   const total = points.reduce((s, p) => ({ income: s.income + p.income, expenses: s.expenses + p.expenses }), { income: 0, expenses: 0 });
   const goal = view.settings.savingsGoal ?? 0;
   const goalPerCycle = view.settings.savingsFrequency === "semanal" ? goal * 52 / 12 : goal;
@@ -235,8 +271,9 @@ export function ForecastPanel({ view }: { view: View }) {
         {!forecast.hasExpectedIncome && <p className="text-xs font-medium text-amber-700">Sin ingresos periódicos suficientes: puede faltar dinero por estimar.</p>}
       </> : <p className="py-6 text-sm text-slate-500">La previsión todavía no está disponible.</p>}
     </section>
+    {forecast.points[1] && <NextCycleWeeks weeks={view.forecastNextWeeks} cycle={forecast.points[1]} />}
     <SavingsGoal key={`${view.settings.savingsGoal}:${view.settings.savingsFrequency}`} settings={view.settings} />
-    <ForecastSuggestions suggestions={view.forecastSuggestions ?? []} onDetail={setDetailKey} />
-    <MyPlans items={view.forecastItems ?? []} onDetail={setDetailKey} />
+    <ForecastSuggestions suggestions={visibleSuggestions} onDetail={setDetailKey} />
+    <MyPlans items={visiblePlans} hiddenCount={(view.forecastItems ?? []).length - visiblePlans.length} onDetail={setDetailKey} />
   </div><ForecastReferenceSheet key={detailKey ?? "closed"} referenceKey={detailKey} onClose={() => setDetailKey(null)} /></>;
 }
