@@ -13,6 +13,7 @@ import { fapi, longDay, refreshFinance, shortDay } from "./api";
 type View = Awaited<ReturnType<typeof overview>>;
 type Suggestion = View["forecastSuggestions"][number];
 type Reference = NonNullable<Awaited<ReturnType<typeof forecastSource>>>;
+type ForecastEvent = View["forecastNextWeeks"][number]["events"][number];
 
 function planTitle(item: ForecastItem) {
   const extra = /^forecast-extra:(\d{4})-(\d{2})$/.exec(item.sourceKey ?? "");
@@ -80,6 +81,66 @@ function ForecastReferenceSheet({ referenceKey, onClose }: { referenceKey: strin
   </Sheet>;
 }
 
+function ForecastEventSheet({ event, plan, onClose }: { event: ForecastEvent | null; plan?: ForecastItem; onClose: () => void }) {
+  const [amount, setAmount] = useState(event?.amount.toString() ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const recurring = event?.origin === "recurrente" && event.kind === "gasto" && !!event.occurrenceKey;
+  const editable = recurring || (event?.origin === "plan" && !!plan);
+  const act = async (value: number | null) => {
+    if (!event || !editable) return;
+    setSaving(true); setError(null);
+    try {
+      if (recurring) await fapi("forecast/occurrence", { key: event.occurrenceKey, amount: value });
+      else if (plan && value !== null) await fapi("forecast/item", { id: plan.id, title: plan.title, kind: plan.kind,
+        amount: value, startDate: plan.startDate, endDate: plan.endDate });
+      refreshFinance(); onClose();
+    } catch (e) { setError(e instanceof Error ? e.message : "No se pudo actualizar la previsión"); }
+    finally { setSaving(false); }
+  };
+  const parsed = Number(amount.replace(",", "."));
+  const valid = amount.trim() !== "" && Number.isFinite(parsed) && parsed >= (recurring ? 0 : 0.01) && parsed <= 1_000_000;
+  return <Sheet open={event !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <SheetContent side="right" showCloseButton={false} className="w-screen max-w-none gap-0 overflow-y-auto p-0 sm:max-w-lg">
+      <SheetHeader className="sticky top-0 z-10 border-b border-slate-100 bg-white px-4 py-3">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={onClose} aria-label="Volver al desglose semanal" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"><ArrowLeft className="h-5 w-5" /></button>
+          <div><SheetTitle className="font-semibold text-slate-900">Detalle del movimiento previsto</SheetTitle>
+            <SheetDescription>Solo afecta a tu previsión, no a la cuenta bancaria</SheetDescription></div>
+        </div>
+      </SheetHeader>
+      {event && <div className="space-y-5 p-5">
+        <div><p className="text-xs text-slate-500">{event.origin === "recurrente" ? "Movimiento habitual" : event.origin === "plan" ? "Plan añadido" : "Estimación"} · {longDay(event.date)}</p>
+          <h2 className="mt-2 text-lg font-semibold text-slate-900">{event.label}</h2>
+          <p className={`amount mt-2 text-2xl font-bold ${event.kind === "ingreso" ? "text-blue-700" : "text-rose-700"}`}>{event.modified && event.amount === 0 ? "Omitido este ciclo" : `${event.kind === "ingreso" ? "+" : "−"}${eur(event.amount, 2)}`}</p>
+        </div>
+        {event.origin === "recurrente" && <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">De dónde sale</h3>
+          <div className="mt-3 space-y-2 text-sm text-slate-700">
+            <p>Importe habitual: <b>{eur(event.originalAmount ?? event.amount, 2)}</b></p>
+            {event.lastDate && <p>Último movimiento: <b>{longDay(event.lastDate)}</b></p>}
+            {event.frequency && <p>Periodicidad detectada: <b>{event.frequency}</b></p>}
+            {event.count && <p>Movimientos utilizados: <b>{event.count}</b></p>}
+          </div>
+        </section>}
+        {event.origin === "plan" && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Este importe lo has añadido o confirmado en «Mis próximos planes».</p>}
+        {editable ? <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-900">Ajustar esta previsión</h3>
+          <label className="block text-xs font-medium text-slate-600">Importe previsto (€)
+            <input type="number" min={recurring ? "0" : "0.01"} max="1000000" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
+              className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-3 text-base text-slate-900" />
+          </label>
+          {recurring && <p className="text-xs leading-relaxed text-slate-500">Este cambio solo afecta al cargo del {longDay(event.date)}. Los siguientes meses mantienen el importe habitual.</p>}
+          {error && <ErrorNote>{error}</ErrorNote>}
+          <button type="button" disabled={saving || !valid} onClick={() => void act(parsed)} className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Guardando…" : "Guardar importe"}</button>
+          {recurring && event.amount !== 0 && <button type="button" disabled={saving} onClick={() => void act(0)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-50">No se cobrará este ciclo</button>}
+          {recurring && event.modified && <button type="button" disabled={saving} onClick={() => void act(null)} className="w-full px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-50">Restaurar importe habitual</button>}
+        </section> : <p className="text-sm text-slate-500">Esta estimación se calcula a partir de tu histórico y no tiene un cargo individual que cancelar.</p>}
+      </div>}
+    </SheetContent>
+  </Sheet>;
+}
+
 function SavingsGoal({ settings }: { settings: View["settings"] }) {
   const [amount, setAmount] = useState(settings.savingsGoal?.toString() ?? "");
   const [frequency, setFrequency] = useState<"mensual" | "semanal">(settings.savingsFrequency);
@@ -111,7 +172,7 @@ function SavingsGoal({ settings }: { settings: View["settings"] }) {
   </section>;
 }
 
-function NextCycleWeeks({ weeks, cycle }: { weeks: View["forecastNextWeeks"]; cycle: View["forecastCashflow"]["points"][number] }) {
+function NextCycleWeeks({ weeks, cycle, onEvent }: { weeks: View["forecastNextWeeks"]; cycle: View["forecastCashflow"]["points"][number]; onEvent: (event: ForecastEvent) => void }) {
   return <section className={`${card} ${flat} p-4 sm:p-6`}>
     <h2 className="font-semibold text-slate-900">Tu próximo mes, semana a semana</h2>
     <p className="mt-1 text-xs text-slate-500">{longDay(cycle.cycle.start)} – {longDay(cycle.cycle.end)} · ciclo de tu nómina</p>
@@ -130,10 +191,13 @@ function NextCycleWeeks({ weeks, cycle }: { weeks: View["forecastNextWeeks"]; cy
         <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-semibold text-blue-700 [&::-webkit-details-marker]:hidden">
           <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" /> Cobros y pagos previstos</summary>
         <div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-3">
-          {week.events.map((event, i) => <div key={`${event.date}:${event.label}:${i}`} className="flex items-start justify-between gap-2 text-xs">
-            <div className="min-w-0"><p className="break-words font-medium text-slate-700">{event.label}</p><p className="text-slate-500">{shortDay(event.date)} · {event.origin === "plan" ? "Planificado" : event.origin === "estimado" ? "Estimado" : "Habitual"}</p></div>
-            <b className={`amount shrink-0 tabular-nums ${event.kind === "ingreso" ? "text-blue-700" : "text-rose-700"}`}>{event.kind === "ingreso" ? "+" : "−"}{eur(event.amount, 2)}</b>
-          </div>)}
+          {week.events.map((event, i) => <button type="button" key={`${event.date}:${event.label}:${i}`} onClick={() => onEvent(event)}
+            className="flex w-full items-start justify-between gap-2 rounded-lg py-1 text-left text-xs hover:bg-white focus-visible:outline-2 focus-visible:outline-blue-500">
+            <div className="min-w-0"><p className={`break-words font-medium ${event.modified && event.amount === 0 ? "text-slate-400 line-through" : "text-slate-700"}`}>{event.label}</p>
+              <p className="text-slate-500">{shortDay(event.date)} · {event.modified ? event.amount === 0 ? "Omitido" : "Ajustado" : event.origin === "plan" ? "Planificado" : event.origin === "estimado" ? "Estimado" : "Habitual"}</p></div>
+            <b className={`amount ml-auto shrink-0 tabular-nums ${event.kind === "ingreso" ? "text-blue-700" : event.amount === 0 ? "text-slate-400" : "text-rose-700"}`}>{event.modified && event.amount === 0 ? "Omitido" : `${event.kind === "ingreso" ? "+" : "−"}${eur(event.amount, 2)}`}</b>
+            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+          </button>)}
           {week.variable > 0 && <div className="flex justify-between gap-2 border-t border-slate-200 pt-2 text-xs text-slate-500"><span>Gastos cotidianos estimados</span><b className="amount shrink-0 tabular-nums text-rose-700">−{eur(week.variable, 2)}</b></div>}
           {!week.events.length && week.variable === 0 && <p className="text-xs text-slate-500">Sin movimientos previstos.</p>}
         </div>
@@ -240,6 +304,7 @@ function MyPlans({ items, hiddenCount, onDetail }: { items: ForecastItem[]; hidd
 export function ForecastPanel({ view }: { view: View }) {
   const [range, setRange] = useState<1 | 3 | 6 | 12>(3);
   const [detailKey, setDetailKey] = useState<string | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<ForecastEvent | null>(null);
   const forecast = view.forecastCashflow;
   const weeklyMode = range === 1;
   const points = weeklyMode ? forecast.points.slice(1, 2) : forecast.points.slice(0, range);
@@ -280,9 +345,11 @@ export function ForecastPanel({ view }: { view: View }) {
         {!forecast.hasExpectedIncome && <p className="text-xs font-medium text-amber-700">Sin ingresos periódicos suficientes: puede faltar dinero por estimar.</p>}
       </> : <p className="py-6 text-sm text-slate-500">La previsión todavía no está disponible.</p>}
     </section>
-    {forecast.points[1] && <NextCycleWeeks weeks={view.forecastNextWeeks} cycle={forecast.points[1]} />}
+    {forecast.points[1] && <NextCycleWeeks weeks={view.forecastNextWeeks} cycle={forecast.points[1]} onEvent={setSelectedEvent} />}
     <SavingsGoal key={`${view.settings.savingsGoal}:${view.settings.savingsFrequency}`} settings={view.settings} />
     <ForecastSuggestions suggestions={visibleSuggestions} onDetail={setDetailKey} />
     <MyPlans items={visiblePlans} hiddenCount={(view.forecastItems ?? []).length - visiblePlans.length} onDetail={setDetailKey} />
-  </div><ForecastReferenceSheet key={detailKey ?? "closed"} referenceKey={detailKey} onClose={() => setDetailKey(null)} /></>;
+  </div><ForecastReferenceSheet key={detailKey ?? "closed"} referenceKey={detailKey} onClose={() => setDetailKey(null)} />
+    <ForecastEventSheet key={selectedEvent?.occurrenceKey ?? selectedEvent?.planId ?? selectedEvent?.date ?? "closed"} event={selectedEvent}
+      plan={view.forecastItems.find((item) => item.id === selectedEvent?.planId)} onClose={() => setSelectedEvent(null)} /></>;
 }
