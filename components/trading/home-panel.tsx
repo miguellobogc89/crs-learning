@@ -11,7 +11,7 @@ import { api, eur, errorText, pct } from "./format";
 import { useTradingRefresh, useWarmStart } from "./navigation";
 import { OpenAccount } from "./open-account";
 import { AVATAR, cap, ErrorNote, LoadingCard, PILL, ReturnPill } from "./ui";
-import { DataTable, Money, Segmented, sinceText, type Col } from "./table";
+import { DataTable, Money, Segmented, sinceText, type Col, type TableSort } from "./table";
 import { ActivityPanel } from "./activity-panel";
 import { SummaryPanel } from "./summary-panel";
 import { MarketOverviewPanel } from "./market-overview-panel";
@@ -85,6 +85,7 @@ export function HomePanel() {
   useWarmStart<Agents>("agents", setAgents);
   const [error, setError] = useState<string | null>(null);
   const [operatorQuery, setOperatorQuery] = useState("");
+  const [operatorSort, setOperatorSort] = useState<TableSort>(null);
   // Panel lateral del agente pulsado (y la copia con dinero real desde él).
   const [peekKey, setPeekKey] = useState<string | null>(null);
   const [mirrorFor, setMirrorFor] = useState<Agents["agents"][number] | null>(null);
@@ -118,7 +119,13 @@ export function HomePanel() {
   const header = (
     <div className="flex flex-col gap-3">
       {tabs}
-      <TableToolbar search={operatorQuery} onSearchChange={setOperatorQuery} searchPlaceholder="Buscar en Operadores..." />
+      <TableToolbar search={operatorQuery} onSearchChange={setOperatorQuery} searchPlaceholder="Buscar en Operadores..." sort={{ value: operatorSort, onChange: setOperatorSort, options: [
+        { label: "Rentabilidad: mayor a menor", value: { key: "ret", dir: -1 } },
+        { label: "Rentabilidad: menor a mayor", value: { key: "ret", dir: 1 } },
+        { label: "Patrimonio: mayor a menor", value: { key: "equity", dir: -1 } },
+        { label: "Nombre: A-Z", value: { key: "name", dir: 1 } },
+        { label: "Operaciones: más a menos", value: { key: "ops", dir: -1 } },
+      ] }} />
     </div>
   );
   const allPositions = [...account.main.positions, ...account.copies.flatMap((c) => c.positions)];
@@ -261,6 +268,9 @@ export function HomePanel() {
         id="inicio-operadores"
         height="min-h-0 flex-1"
         header={header}
+        sortBy={operatorSort}
+        onSortChange={setOperatorSort}
+        hideMobileSort
         columns={columns}
         rows={filteredRows}
         rowKey={(r) => r.key}
