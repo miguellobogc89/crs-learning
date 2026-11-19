@@ -1,7 +1,7 @@
 "use client";
-// Inicio: «¿cómo voy ahora?». Siempre abre en el ciclo actual (flechas para ver los anteriores): saldo,
+// Inicio: «Mi evolución» mantiene el ciclo actual (flechas para ver los anteriores): saldo,
 // disponible hasta fin de ciclo, gasto comparado con el ciclo anterior a la misma altura, evolución del saldo,
-// en qué se va el dinero, cuentas y lo pendiente. El análisis por periodos vive en Movimientos.
+// en qué se va el dinero, cuentas y lo pendiente. «Previsión» muestra próximos ciclos estimados.
 import Link from "next/link";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -105,6 +105,8 @@ function KpiCard({ icon: Icon, tint, label, mobileLabel, value, valueTone, sub, 
 
 export function HomePanel() {
   const params = useSearchParams();
+  const [homeView, setHomeView] = useState<"evolution" | "forecast">("evolution");
+  const [forecastRange, setForecastRange] = useState<3 | 6 | 12>(3);
   const [offset, setOffset] = useState(() => Math.min(0, Number(params.get("ciclo")) || 0));
   const [cashflowRange, setCashflowRange] = useState<CashflowRange>("1M");
   const [expensesView, setExpensesView] = useState<"categories" | "recent">("categories");
@@ -123,9 +125,75 @@ export function HomePanel() {
   const review = data.pendingReview;
   // Una respuesta anterior guardada en sessionStorage puede no tener todavía este campo.
   const cashflow = data.cashflow?.[cashflowRange];
+  const forecast = data.forecastCashflow;
+  const forecastPoints = forecast?.points.slice(0, forecastRange) ?? [];
+  const forecastTotals = forecastPoints.reduce((total, p) => ({
+    income: total.income + p.income, expenses: total.expenses + p.expenses, net: total.net + p.net,
+  }), { income: 0, expenses: 0, net: 0 });
 
   return (
     <div className={`space-y-4 pb-6 ${loading ? "opacity-80" : ""}`}>
+      <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 sm:max-w-sm" role="group" aria-label="Vista de inicio">
+        {([ ["evolution", "Mi evolución"], ["forecast", "Previsión"] ] as const).map(([view, label]) => (
+          <button key={view} type="button" onClick={() => setHomeView(view)} aria-pressed={homeView === view}
+            className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${homeView === view ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {homeView === "forecast" ? (
+        <section className={`${card} ${flat} space-y-4 p-4 sm:p-6`}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900 sm:text-lg">Lo que viene</h2>
+              <p className="mt-1 text-xs text-slate-500">Ingresos, gastos y ahorro estimados por ciclo.</p>
+            </div>
+            <div className="flex rounded-lg bg-slate-100 p-0.5" role="group" aria-label="Periodo de previsión">
+              {([3, 6, 12] as const).map((months) => (
+                <button key={months} type="button" onClick={() => setForecastRange(months)} aria-pressed={forecastRange === months}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${forecastRange === months ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>
+                  {months}M
+                </button>
+              ))}
+            </div>
+          </div>
+          {forecastPoints.length ? (
+            <>
+              <div className="overflow-x-auto">
+                <div className={forecastRange === 12 ? "min-w-[580px] sm:min-w-0" : "min-w-0"}>
+                  <CycleBars key={`forecast:${forecastRange}`} height={245} data={forecastPoints.map((p) => ({
+                    label: p.current ? "Ahora" : new Intl.DateTimeFormat("es-ES", { month: "short", timeZone: "UTC" }).format(new Date(`${p.cycle.end}T00:00:00Z`)).replace(".", ""),
+                    title: p.current ? `Ciclo actual · ${p.cycle.label}` : `Previsto · ${p.cycle.label}`,
+                    income: p.income, expenses: p.expenses, net: p.net, current: p.current,
+                  }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-2 border-t border-slate-100 pt-4 sm:grid-cols-3">
+                {([
+                  ["Ingresos previstos", forecastTotals.income, "text-blue-700"],
+                  ["Gastos previstos", forecastTotals.expenses, "text-rose-700"],
+                  ["Ahorro neto previsto", forecastTotals.net, forecastTotals.net >= 0 ? "text-emerald-700" : "text-red-700"],
+                ] as const).map(([label, value, tone]) => (
+                  <div key={label} className="flex items-baseline justify-between gap-3 rounded-xl bg-slate-50 px-3 py-3 sm:block">
+                    <p className="text-xs text-slate-500">{label}</p>
+                    <p className={`amount mt-1 text-lg font-bold tabular-nums ${tone}`}>{eur(value, 2)}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-1 text-xs leading-relaxed text-slate-500">
+                <p>Este ciclo incluye movimientos reales y lo pendiente. Los siguientes proyectan cobros y recibos periódicos detectados, más el gasto variable medio ({eur(forecast.variableDaily, 2)}/día). No se repiten regalos ni gastos extraordinarios.</p>
+                {forecast.estimatedSalary > 0 && <p>La nómina no tiene un patrón fijo detectado: se estima {eur(forecast.estimatedSalary, 2)} por ciclo con las últimas nóminas registradas.</p>}
+                {!forecast.hasExpectedIncome && <p className="font-medium text-amber-700">No se han identificado ingresos periódicos suficientes. El ahorro previsto puede ser inferior al real.</p>}
+                {!forecast.historyCycles && <p className="font-medium text-amber-700">Sin ciclos completos: el gasto variable se estima con el ritmo del ciclo actual.</p>}
+              </div>
+            </>
+          ) : (
+            <p className="py-8 text-center text-sm text-slate-500">La previsión aún no está disponible. Actualiza la página.</p>
+          )}
+        </section>
+      ) : (
+      <>
       {/* Ciclo: flechas para mirar atrás; «Ocultar importes» */}
       <div className="hidden items-center gap-2 sm:flex">
         <div className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-white">
@@ -275,6 +343,29 @@ export function HomePanel() {
         />
       </div>
 
+      {/* En escritorio también se comparan ingresos, gastos y ahorro neto; no solo el saldo bancario. */}
+      <section className={`${card} ${flat} hidden p-5 sm:block`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <SectionTitle icon={BarChart3} tint="blue" size="base">Ingresos, gastos y ahorro</SectionTitle>
+          <div className="flex rounded-lg bg-slate-100 p-0.5" role="group" aria-label="Periodo de la evolución">
+            {CASHFLOW_RANGES.map((range) => (
+              <button key={range} type="button" onClick={() => setCashflowRange(range)} aria-pressed={cashflowRange === range}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${cashflowRange === range ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>
+                {range}
+              </button>
+            ))}
+          </div>
+        </div>
+        {cashflow ? (
+          <>
+            <div className="mt-4"><CycleBars key={`desktop:${cashflowRange}`} data={cashflow.points} height={230} /></div>
+            <p className={`amount mt-3 text-right text-sm font-semibold tabular-nums ${cashflow.net >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+              Ahorro neto del periodo: {eur(cashflow.net, 2)}
+            </p>
+          </>
+        ) : <p className="py-8 text-center text-sm text-slate-500">La evolución todavía no está disponible.</p>}
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Evolución del saldo */}
         <section className={`${card} ${flat} hidden p-4 sm:block sm:p-5 lg:col-span-2`}>
@@ -350,6 +441,8 @@ export function HomePanel() {
         <p className="text-center text-xs text-slate-400">
           <button type="button" className="hover:underline" onClick={() => { requestSync(); refreshFinance(); }}>Actualizar con los bancos</button>
         </p>
+      )}
+      </>
       )}
     </div>
   );
