@@ -32,7 +32,10 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
   const W = 640;
   const H = height;
   const pad = { l: 40, r: 8, t: 10, b: 8 };
-  const max = niceMax(Math.max(1, ...data.flatMap((d) => [d.income, d.expenses, Math.max(0, d.available ?? 0)])));
+  const highestValue = Math.max(1, ...data.flatMap((d) => [d.income, d.expenses, Math.max(0, d.available ?? 0)]));
+  // En previsión ajustamos el eje Y al rango visible, con solo un 8 % de aire arriba.
+  // Mantenemos la escala común entre las barras del mismo rango para poder compararlas.
+  const max = wideBars ? highestValue * 1.08 : niceMax(highestValue);
   const bottom = 0;
   const iw = W - pad.l - pad.r;
   const ih = H - pad.t - pad.b;
