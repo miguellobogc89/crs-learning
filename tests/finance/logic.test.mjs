@@ -191,14 +191,22 @@ test("Inicio: previsión de 12 ciclos suma ingresos conocidos, recibos y gasto v
   const summaries = [1, 2, 3].map((i) => L.summarize(txs, L.cycleFor(today, 25, -i), keys));
   const current = L.summarize(txs, L.cycleFor(today, 25), keys);
   const projection = L.projectCycle({ txs, today, startDay: 25, liquidity: 3000, recurring, savingsGoal: null, history: summaries });
-  const result = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection });
+  const result = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000 });
   assert.equal(result.points.length, 12);
-  assert.equal(result.points[0].net, projection.projectedNet, "el ciclo actual debe cuadrar con la proyección que ya existe");
+  assert.equal(result.points[0].net, Math.round((projection.pendingIncome - projection.pendingFixed - projection.expectedVariable) * 100) / 100, "no se deben sumar ingresos ya cobrados al saldo de hoy");
+  assert.equal(result.points[0].openingBalance, 3000);
+  assert.equal(result.points[0].closingBalance, projection.projectedEndBalance);
   assert.equal(result.points[1].cycle.start, "2026-11-25");
   assert.equal(result.points[1].income, 2100, "solo se repite la nómina; no el regalo de cumpleaños");
   assert.equal(result.points[1].knownExpenses, 12.99, "se cuenta Netflix una sola vez");
   assert.ok(result.points[1].expenses > result.points[1].knownExpenses, "se añade el gasto variable histórico");
   assert.equal(result.points[1].net, Math.round((result.points[1].income - result.points[1].expenses) * 100) / 100);
+  const planned = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000, items: [
+    { id: "plan", title: "Regalos", kind: "gasto", amount: 250, startDate: "2026-12-10", endDate: null, source: "manual", sourceKey: null },
+  ] });
+  assert.equal(planned.points[1].expenses, result.points[1].expenses + 250);
+  assert.equal(planned.points[1].closingBalance, Math.round((result.points[1].closingBalance - 250) * 100) / 100);
+  assert.equal(planned.points[0].expenses, result.points[0].expenses, "los planes futuros no alteran movimientos previos");
 });
 
 test("Inicio: solo estima una nómina sin patrón recurrente cuando aparece en dos ciclos completos", () => {
