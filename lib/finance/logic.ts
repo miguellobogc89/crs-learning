@@ -745,6 +745,7 @@ export function forecastCashflow(opts: {
   projection: Projection;
   liquidity?: number | null;
   items?: ForecastItem[];
+  skippedOccurrences?: ReadonlySet<string>;
 }) {
   const { txs, today, startDay, recurring, history, current, projection, items = [] } = opts;
   const overrides = new Map(items.filter((i) => i.source === "override" && i.sourceKey).map((i) => [i.sourceKey!, i.amount]));
@@ -784,7 +785,7 @@ export function forecastCashflow(opts: {
         while (next < cycle.start) next = addDays(next, r.intervalDays);
         while (next <= cycle.end) {
           const corrected = overrides.get(forecastOccurrenceKey(r, next));
-          const amount = corrected === undefined ? Math.abs(r.amount) : corrected;
+          const amount = opts.skippedOccurrences?.has(forecastOccurrenceKey(r, next)) ? 0 : corrected ?? Math.abs(r.amount);
           if (r.kind === "ingreso" && r.amount > 0) knownIncome += amount;
           else if (r.kind === "gasto" && r.amount < 0) knownExpenses += amount;
           next = addDays(next, r.intervalDays);
@@ -818,8 +819,9 @@ export function forecastCycleWeeks(opts: {
   recurring: Recurring[];
   items: ForecastItem[];
   today: string;
+  skippedOccurrences?: ReadonlySet<string>;
 }) {
-  const { point, recurring, items, today } = opts;
+  const { point, recurring, items, today, skippedOccurrences } = opts;
   const { cycle } = point;
   const overrides = new Map(items.filter((i) => i.source === "override" && i.sourceKey).map((i) => [i.sourceKey!, i.amount]));
   const events: Array<{ date: string; label: string; amount: number; kind: "ingreso" | "gasto"; origin: "recurrente" | "plan" | "estimado";
@@ -831,8 +833,9 @@ export function forecastCycleWeeks(opts: {
     while (date <= cycle.end) {
       const occurrenceKey = forecastOccurrenceKey(r, date);
       const corrected = overrides.get(occurrenceKey);
-      const event = { date, label: r.label, amount: corrected ?? Math.abs(r.amount), origin: "recurrente" as const,
-        occurrenceKey, originalAmount: Math.abs(r.amount), modified: corrected !== undefined,
+      const skipped = skippedOccurrences?.has(occurrenceKey) ?? false;
+      const event = { date, label: r.label, amount: skipped ? 0 : corrected ?? Math.abs(r.amount), origin: "recurrente" as const,
+        occurrenceKey, originalAmount: Math.abs(r.amount), modified: skipped || corrected !== undefined,
         lastDate: r.lastDate, frequency: r.frequency, count: r.count };
       if (r.kind === "ingreso" && r.amount > 0) events.push({ ...event, kind: "ingreso" });
       else if (r.kind === "gasto" && r.amount < 0) events.push({ ...event, kind: "gasto" });
