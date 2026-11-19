@@ -142,11 +142,11 @@ export async function POST(req: Request, route: RouteContext) {
       const rounded = amount === null ? null : Math.round(amount * 100) / 100;
       const skipKey = `forecast-skip:${key}`;
       if (rounded === null) await prisma.$transaction([
-        prisma.finance_forecast_items.deleteMany({ where: { user_id: uid, source: "override", source_key: key } }),
+        prisma.finance_forecast_items.deleteMany({ where: { user_id: uid, source_key: key } }),
         prisma.finance_alert_dismissals.deleteMany({ where: { user_id: uid, key: skipKey } }),
       ]);
       else if (rounded === 0) await prisma.$transaction([
-        prisma.finance_forecast_items.deleteMany({ where: { user_id: uid, source: "override", source_key: key } }),
+        prisma.finance_forecast_items.deleteMany({ where: { user_id: uid, source_key: key } }),
         prisma.finance_alert_dismissals.upsert({ where: { user_id_key: { user_id: uid, key: skipKey } },
           create: { user_id: uid, key: skipKey }, update: {} }),
       ]);
@@ -155,7 +155,7 @@ export async function POST(req: Request, route: RouteContext) {
         prisma.finance_forecast_items.upsert({
           where: { user_id_source_key: { user_id: uid, source_key: key } },
           create: { user_id: uid, title: match.label.slice(0, 100), kind: "gasto", amount: rounded,
-            start_date: new Date(`${match.date}T00:00:00Z`), source: "override", source_key: key },
+            start_date: new Date(`${match.date}T00:00:00Z`), source: "manual", source_key: key },
           update: { amount: rounded },
         }),
       ]);
@@ -169,18 +169,26 @@ export async function POST(req: Request, route: RouteContext) {
       const startDate = str("startDate");
       const endDate = str("endDate") || null;
       const sourceKey = str("sourceKey") || null;
+      const frequency = str("frequency") || "puntual";
+      const roundedAmount = Math.round(amount * 100) / 100;
       const validDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
-      if (!title || !["ingreso", "gasto"].includes(kind) || !Number.isFinite(amount) || amount <= 0 || amount > 10_000_000
-        || !validDate(startDate) || (endDate !== null && (!validDate(endDate) || endDate < startDate))) return fail("Revisa el nombre, el importe y las fechas");
+      if (!title || !["ingreso", "gasto"].includes(kind) || !Number.isFinite(amount) || roundedAmount <= 0 || roundedAmount > 10_000_000
+        || !validDate(startDate) || (endDate !== null && (!validDate(endDate) || endDate < startDate))
+        || !["puntual", "semanal", "mensual", "trimestral", "anual"].includes(frequency)) return fail("Revisa el nombre, el importe, la periodicidad y las fechas");
       if (sourceKey && (!sourceKey.startsWith("forecast-extra:") && !sourceKey.startsWith("forecast-insurance:"))) return fail("Sugerencia no válida");
-      const fields = { title, kind, amount: Math.round(amount * 100) / 100, start_date: new Date(`${startDate}T00:00:00Z`),
+      if (sourceKey && frequency !== "puntual") return fail("Una sugerencia confirmada no puede repetirse automáticamente");
+      const fields = { title, kind, amount: roundedAmount, start_date: new Date(`${startDate}T00:00:00Z`),
         end_date: endDate ? new Date(`${endDate}T00:00:00Z`) : null };
       if (id) {
-        const updated = await prisma.finance_forecast_items.updateMany({ where: { id, user_id: uid }, data: fields });
+        const existing = await prisma.finance_forecast_items.findFirst({ where: { id, user_id: uid }, select: { source: true, source_key: true } });
+        if (!existing || existing.source_key?.startsWith("rec:")) return fail("Plan no encontrado", 404);
+        const repeatKey = frequency === "puntual" ? null : `plan:${frequency}:${id}`;
+        const updated = await prisma.finance_forecast_items.updateMany({ where: { id, user_id: uid },
+          data: { ...fields, ...(existing.source === "manual" ? { source_key: repeatKey } : {}) } });
         if (!updated.count) return fail("Plan no encontrado", 404);
       } else {
         await prisma.finance_forecast_items.create({ data: { ...fields, user_id: uid,
-          source: sourceKey ? "suggested" : "manual", source_key: sourceKey } });
+          source: sourceKey ? "suggested" : "manual", source_key: sourceKey ?? (frequency === "puntual" ? null : `plan:${frequency}:${crypto.randomUUID()}`) } });
       }
       return ok({ ok: true });
     }
