@@ -4,7 +4,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal-finance/enable-banking";
 import {
-  addDays, affordability, budgetStatus, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, insuranceForecastCandidates, liquiditySeries, merchantKey, round2, median,
+  addDays, affordability, budgetStatus, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, forecastCycleWeeks, insuranceForecastCandidates, liquiditySeries, merchantKey, round2, median,
   expenseHistoryByCycle, normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
@@ -174,6 +174,8 @@ export async function overview(userId: string, offset = 0) {
   const includedAccountIds = new Set(accounts.filter((account) => account.included).map((account) => account.id));
   const balanceAccountIds = new Set(accounts.filter((account) => account.included && account.currency === "EUR" && account.balance !== null).map((account) => account.id));
   const cashflow = cashflowPeriods(txs, today);
+  const futureCashflow = forecastCashflow({ txs, today, startDay: ctx.startDay, recurring, history, current, projection, liquidity: ctx.liquidity, items: ctx.forecastItems });
+  const nextCycle = futureCashflow.points[1];
   for (const range of ["7D", "1M", "6M", "1A"] as const) {
     for (const point of cashflow[range].points) {
       if (ctx.liquidity === null) continue;
@@ -192,7 +194,8 @@ export async function overview(userId: string, offset = 0) {
     previous: prev,
     history: [...history].reverse().map((h) => ({ cycle: h.cycle, income: h.income, gifts: h.gifts, expenses: h.expenses, net: h.net, savedToInvestments: h.savedToInvestments })),
     cashflow,
-    forecastCashflow: forecastCashflow({ txs, today, startDay: ctx.startDay, recurring, history, current, projection, liquidity: ctx.liquidity, items: ctx.forecastItems }),
+    forecastCashflow: futureCashflow,
+    forecastNextWeeks: nextCycle ? forecastCycleWeeks({ point: nextCycle, recurring, items: ctx.forecastItems, today }) : [],
     forecastItems: ctx.forecastItems,
     forecastSuggestions: suggestions,
     categoryHistory: expenseHistoryByCycle(txs, ctx.startDay),
