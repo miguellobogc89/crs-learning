@@ -670,6 +670,68 @@ export function projectCycle(opts: {
   };
 }
 
+/** Ingresos, gastos y ahorro estimados del ciclo actual y los 11 siguientes.
+ * Reutiliza la proyección del ciclo en curso, los cobros/recibos recurrentes y su media de gasto variable.
+ * Solo estima nóminas no detectadas como recurrentes si aparecen en al menos dos ciclos completos.
+ */
+export function forecastCashflow(opts: {
+  txs: Tx[];
+  today: string;
+  startDay: CycleRule;
+  recurring: Recurring[];
+  history: CycleSummary[];
+  current: CycleSummary;
+  projection: Projection;
+}) {
+  const { txs, today, startDay, recurring, history, current, projection } = opts;
+  const active = recurring.filter((r) => r.active);
+  const recurringKeys = new Set(active.map((r) => r.key));
+  const complete = history.filter((h) => h.cycle.end < current.cycle.start).slice(0, 3);
+  const hasRecurringSalary = active.some((r) => r.kind === "ingreso" && r.category === "nomina");
+  const unmatchedSalaries = hasRecurringSalary ? [] : complete.map((h) => round2(txs
+    .filter((t) => t.date >= h.cycle.start && t.date <= h.cycle.end
+      && t.kind === "ingreso" && t.category === "nomina" && !t.extraordinary
+      && !recurringKeys.has(merchantKey(t.description, t.counterparty)))
+    .reduce((sum, t) => sum + t.amount, 0)));
+  const salarySamples = unmatchedSalaries.filter((amount) => amount > 0);
+  const estimatedSalary = salarySamples.length >= 2 ? round2(median(salarySamples)) : 0;
+
+  const points = Array.from({ length: 12 }, (_, offset) => {
+    const cycle = cycleFor(today, startDay, offset);
+    if (offset === 0) {
+      const income = round2(current.income + current.gifts + projection.pendingIncome);
+      const expenses = round2(current.expenses + projection.pendingFixed + projection.expectedVariable);
+      return { cycle, income, expenses, net: round2(income - expenses), knownIncome: projection.pendingIncome,
+        knownExpenses: projection.pendingFixed, variableExpenses: projection.expectedVariable, estimatedSalary: 0, current: true };
+    }
+
+    let knownIncome = 0;
+    let knownExpenses = 0;
+    for (const r of active) {
+      let next = r.nextDate;
+      while (next < cycle.start) next = addDays(next, r.intervalDays);
+      while (next <= cycle.end) {
+        if (r.kind === "ingreso" && r.amount > 0) knownIncome += r.amount;
+        else if (r.kind === "gasto" && r.amount < 0) knownExpenses -= r.amount;
+        next = addDays(next, r.intervalDays);
+      }
+    }
+    const variableExpenses = round2(projection.variableDaily * (daysBetween(cycle.start, cycle.end) + 1));
+    const income = round2(knownIncome + estimatedSalary);
+    const expenses = round2(knownExpenses + variableExpenses);
+    return { cycle, income, expenses, net: round2(income - expenses), knownIncome: round2(knownIncome),
+      knownExpenses: round2(knownExpenses), variableExpenses, estimatedSalary, current: false };
+  });
+
+  return {
+    points,
+    estimatedSalary,
+    variableDaily: projection.variableDaily,
+    historyCycles: complete.length,
+    hasExpectedIncome: active.some((r) => r.kind === "ingreso" && r.amount > 0) || estimatedSalary > 0,
+  };
+}
+
 /** ¿Me lo puedo permitir? Efecto de una compra sobre el ahorro del ciclo, el objetivo y la liquidez. */
 export function affordability(p: Projection, amount: number) {
   const netAfter = round2(p.projectedNet - amount);
