@@ -542,7 +542,7 @@ export function cashflowPeriods(txs: Tx[], today: string) {
   };
   const bucket = (start: string, end: string, label: string, title: string) => {
     const s = summarize(txs, { start, end, label });
-    return { label, title, income: round2(s.income + s.gifts), expenses: s.expenses, net: s.net };
+    return { start, end, label, title, income: round2(s.income + s.gifts), expenses: s.expenses, net: s.net, available: null as number | null };
   };
   const total = (points: ReturnType<typeof bucket>[]) => ({
     points,
@@ -610,6 +610,8 @@ export type Projection = {
   safeToSpend: number | null;
   basis: string;
 };
+
+export type ForecastItem = { id: string; title: string; kind: "ingreso" | "gasto"; amount: number; startDate: string; endDate: string | null; source: string; sourceKey: string | null };
 
 /**
  * Cómo acabará el ciclo: saldo de hoy + cobros previstos − recibos previstos − gasto variable esperado
@@ -682,8 +684,10 @@ export function forecastCashflow(opts: {
   history: CycleSummary[];
   current: CycleSummary;
   projection: Projection;
+  liquidity?: number | null;
+  items?: ForecastItem[];
 }) {
-  const { txs, today, startDay, recurring, history, current, projection } = opts;
+  const { txs, today, startDay, recurring, history, current, projection, items = [] } = opts;
   const active = recurring.filter((r) => r.active);
   const recurringKeys = new Set(active.map((r) => r.key));
   const complete = history.filter((h) => h.cycle.end < current.cycle.start).slice(0, 3);
@@ -696,31 +700,45 @@ export function forecastCashflow(opts: {
   const salarySamples = unmatchedSalaries.filter((amount) => amount > 0);
   const estimatedSalary = salarySamples.length >= 2 ? round2(median(salarySamples)) : 0;
 
+  let openingBalance = opts.liquidity ?? null;
   const points = Array.from({ length: 12 }, (_, offset) => {
     const cycle = cycleFor(today, startDay, offset);
+    const itemsInCycle = items.filter((item) => item.startDate >= today && item.startDate >= cycle.start && item.startDate <= cycle.end);
+    const extraIncome = round2(itemsInCycle.filter((i) => i.kind === "ingreso").reduce((s, i) => s + i.amount, 0));
+    const extraExpenses = round2(itemsInCycle.filter((i) => i.kind === "gasto").reduce((s, i) => s + i.amount, 0));
+    let knownIncome: number;
+    let knownExpenses: number;
+    let variableExpenses: number;
+    let salary: number;
     if (offset === 0) {
-      const income = round2(current.income + current.gifts + projection.pendingIncome);
-      const expenses = round2(current.expenses + projection.pendingFixed + projection.expectedVariable);
-      return { cycle, income, expenses, net: round2(income - expenses), knownIncome: projection.pendingIncome,
-        knownExpenses: projection.pendingFixed, variableExpenses: projection.expectedVariable, estimatedSalary: 0, current: true };
-    }
-
-    let knownIncome = 0;
-    let knownExpenses = 0;
-    for (const r of active) {
-      let next = r.nextDate;
-      while (next < cycle.start) next = addDays(next, r.intervalDays);
-      while (next <= cycle.end) {
-        if (r.kind === "ingreso" && r.amount > 0) knownIncome += r.amount;
-        else if (r.kind === "gasto" && r.amount < 0) knownExpenses -= r.amount;
-        next = addDays(next, r.intervalDays);
+      // La caja de partida es el saldo bancario de HOY: no volver a sumar ingresos ya cobrados.
+      knownIncome = projection.pendingIncome;
+      knownExpenses = projection.pendingFixed;
+      variableExpenses = projection.expectedVariable;
+      salary = 0;
+    } else {
+      knownIncome = 0;
+      knownExpenses = 0;
+      for (const r of active) {
+        let next = r.nextDate;
+        while (next < cycle.start) next = addDays(next, r.intervalDays);
+        while (next <= cycle.end) {
+          if (r.kind === "ingreso" && r.amount > 0) knownIncome += r.amount;
+          else if (r.kind === "gasto" && r.amount < 0) knownExpenses -= r.amount;
+          next = addDays(next, r.intervalDays);
+        }
       }
+      variableExpenses = round2(projection.variableDaily * (daysBetween(cycle.start, cycle.end) + 1));
+      salary = estimatedSalary;
     }
-    const variableExpenses = round2(projection.variableDaily * (daysBetween(cycle.start, cycle.end) + 1));
-    const income = round2(knownIncome + estimatedSalary);
-    const expenses = round2(knownExpenses + variableExpenses);
-    return { cycle, income, expenses, net: round2(income - expenses), knownIncome: round2(knownIncome),
-      knownExpenses: round2(knownExpenses), variableExpenses, estimatedSalary, current: false };
+    const income = round2(knownIncome + salary + extraIncome);
+    const expenses = round2(knownExpenses + variableExpenses + extraExpenses);
+    const net = round2(income - expenses);
+    const startBalance = openingBalance;
+    openingBalance = startBalance === null ? null : round2(startBalance + net);
+    return { cycle, income, expenses, net, openingBalance: startBalance, closingBalance: openingBalance,
+      knownIncome: round2(knownIncome), knownExpenses: round2(knownExpenses), variableExpenses,
+      estimatedSalary: salary, plannedIncome: extraIncome, plannedExpenses: extraExpenses, current: offset === 0 };
   });
 
   return {
