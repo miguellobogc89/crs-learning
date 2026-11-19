@@ -13,13 +13,14 @@ import { api, card, eur, errorText, flat } from "./format";
 import { useTradingRefresh, useWarmStart } from "./navigation";
 import { AGENT_DOT, ErrorNote, LoadingCard, ReturnPill } from "./ui";
 import { PulsePanel } from "./pulse-panel";
+import { AssetIcon } from "./asset-icon";
 
 type Summary = Awaited<ReturnType<typeof getSummary>>;
 type Virtual = Awaited<ReturnType<typeof getPortfolio>>;
 type Manual = Awaited<ReturnType<typeof manualView>>;
 type Mirrors = Awaited<ReturnType<typeof mirrorView>>;
 type Mode = "real" | "virtual";
-type Recent = { id: string; symbol: string; source: string; at: string; status: string };
+type Recent = { id: string; symbol: string; source: string; at: string; status: string; result: number | null };
 const displayDate = (at: string) => new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(at));
 
 /** Abre el panel de notificaciones (lo escucha la estructura de Trading). */
@@ -79,12 +80,12 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
 
   const recent: Recent[] = mode === "virtual"
     ? [
-        ...(virtual?.main.positions ?? []).map(p => ({ id: `main:${p.id}`, symbol: p.symbol, source: "Manual virtual", at: p.createdAt, status: p.status })),
+        ...(virtual?.main.positions ?? []).map(p => ({ id: `main:${p.id}`, symbol: p.symbol, source: "Manual virtual", at: p.createdAt, status: p.status, result: p.status === "cerrada" ? p.pnl : p.unrealized })),
         ...(virtual?.copies ?? []).flatMap(copy => [...copy.positions, ...copy.closed].map(p => ({ id: `copy:${copy.agent}:${p.id}`, symbol: p.symbol, source: copy.name, at: p.createdAt, status: p.status }))),
       ]
     : [
-        ...(manual?.trades ?? []).map(t => ({ id: `manual:${t.id}`, symbol: t.symbol, source: "Manual", at: t.closedAt ?? t.openedAt ?? "", status: t.status })),
-        ...(mirrors?.mirrors ?? []).flatMap(m => m.legs.filter(l => l.mode === "real").map(l => ({ id: `mirror:${l.id}`, symbol: l.symbol, source: m.name, at: l.closedAt ?? l.openedAt ?? "", status: l.status }))),
+        ...(manual?.trades ?? []).map(t => ({ id: `manual:${t.id}`, symbol: t.symbol, source: "Manual", at: t.closedAt ?? t.openedAt ?? "", status: t.status, result: t.result })),
+        ...(mirrors?.mirrors ?? []).flatMap(m => m.legs.filter(l => l.mode === "real").map(l => ({ id: `mirror:${l.id}`, symbol: l.symbol, source: m.name, at: l.closedAt ?? l.openedAt ?? "", status: l.status, result: l.result }))),
       ];
   recent.sort((a, b) => b.at.localeCompare(a.at));
 
@@ -141,9 +142,16 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
               {recent.length ? (
                 <ul className="divide-y divide-slate-100">
                   {recent.slice(0, 3).map(item => (
-                    <li key={item.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                      <span className="min-w-0 truncate"><b className="font-semibold text-slate-900">{item.symbol}</b><span className="ml-2 text-xs text-slate-500">{item.source} · {item.status}</span></span>
-                      <span className="shrink-0 text-xs text-slate-400">{item.at ? displayDate(item.at) : "—"}</span>
+                    <li key={item.id} className="flex items-center gap-3 py-2.5 text-sm">
+                      <AssetIcon symbol={item.symbol} size="md" />
+                      <span className="min-w-0 flex-1">
+                        <b className="block truncate font-semibold text-slate-900">{item.symbol}</b>
+                        <span className="block truncate text-xs text-slate-500">{item.source} · {item.status}</span>
+                        <span className="block text-[11px] text-slate-400">{item.at ? displayDate(item.at) : "—"}</span>
+                      </span>
+                      <span className={`shrink-0 text-right text-sm font-semibold tabular-nums ${item.result === null ? "text-slate-400" : item.result >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                        {item.result === null ? "—" : `${item.result > 0 ? "+" : ""}${eur(item.result, 2)}`}
+                      </span>
                     </li>
                   ))}
                 </ul>
