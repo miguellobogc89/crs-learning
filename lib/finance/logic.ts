@@ -213,6 +213,62 @@ export function merchantKey(description: string, counterparty?: string | null) {
 export const searchText = (t: { description: string; counterparty: string | null }) =>
   normalize(`${t.description} ${t.counterparty ?? ""}`);
 
+/** Pólizas candidatas a renovación. No confundir aportaciones a inversión con primas de seguro. */
+export function insuranceForecastCandidates(txs: Tx[], today: string, end: string) {
+  const investment = /multifondos|inversion|inversiones|aportacion|fondo de inversion/;
+  const insurerOf = (label: string) => /mapfre/.test(label) ? "Mapfre" : /verti/.test(label) ? "Verti"
+    : /occident/.test(label) ? "Occident" : /seguro|aseguradora|poliza/.test(label) ? "seguro" : null;
+  const investmentPayments = txs.filter((tx) => tx.kind === "gasto" && investment.test(searchText(tx)))
+    .map((tx) => ({ insurer: insurerOf(searchText(tx)), amount: Math.abs(tx.amount) }));
+  const groups = new Map<string, Tx[]>();
+  for (const tx of txs) {
+    if (tx.kind !== "gasto" || tx.category !== "seguros" || tx.amount >= -50 || tx.date >= today) continue;
+    const label = searchText(tx);
+    if (investment.test(label)) continue;
+    const insurer = insurerOf(label);
+    if (!insurer) continue;
+    // El banco puede omitir «Inv.multifondos» en algunos recibos del mismo producto.
+    if (investmentPayments.some((p) => p.insurer === insurer && Math.abs(p.amount + tx.amount) < 2)) continue;
+    const plate = label.match(/\b(?:matricula|mat)\s*[:.]?\s*([a-z0-9]{6,9})\b/)?.[1];
+    // Si no consta la póliza, separar primas de importes muy distintos del mismo asegurador.
+    const policy = plate ?? `importe-${Math.round(Math.abs(tx.amount) / 25)}`;
+    const key = `${normalize(insurer).replace(/[^a-z0-9]+/g, "-")}-${policy}`;
+    const arr = groups.get(key) ?? [];
+    if (!arr.some((prev) => prev.date === tx.date && Math.abs(prev.amount - tx.amount) < 0.02)) arr.push(tx);
+    groups.set(key, arr);
+  }
+
+  const nextMonth = (date: string, months: number) => {
+    const d = toDate(date);
+    const day = d.getUTCDate();
+    const first = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, 1));
+    const lastDay = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+    first.setUTCDate(Math.min(day, lastDay));
+    return iso(first);
+  };
+
+  const candidates: Array<{ key: string; title: string; amount: number; startDate: string; sourceTx: Tx; supportingTxs: Tx[]; cadence: "semestral" | "anual"; evidence: number }> = [];
+  for (const [groupKey, group] of groups) {
+    group.sort((a, b) => b.date.localeCompare(a.date));
+    const last = group[0];
+    if (!last) continue;
+    const semiannual = group.slice(1).some((t) => {
+      const gap = daysBetween(t.date, last.date);
+      return gap >= 155 && gap <= 210;
+    });
+    const months = semiannual ? 6 : 12;
+    let next = nextMonth(last.date, months);
+    while (next < today) next = nextMonth(next, months);
+    if (next > end) continue;
+    const insurer = /mapfre/.test(groupKey) ? "Mapfre" : /verti/.test(groupKey) ? "Verti"
+      : /occident/.test(groupKey) ? "Occident" : "seguro";
+    candidates.push({ key: `forecast-insurance:${groupKey}:${next.slice(0, 7)}`,
+      title: `Posible renovación · ${insurer}`, amount: round2(-last.amount), startDate: next,
+      sourceTx: last, supportingTxs: group.slice(1), cadence: semiannual ? "semestral" : "anual", evidence: group.length });
+  }
+  return candidates.sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // Clasificación por palabras clave (antes de la IA): comercios españoles habituales
 // ---------------------------------------------------------------------------------------------------------
