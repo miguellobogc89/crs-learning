@@ -130,8 +130,7 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
             : virtual ? (
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(virtual.total.equity, 2)}</span>
-                <ReturnPill value={virtual.total.returnPct} big />
-                <span className="text-xs text-slate-400">desde el inicio</span>
+                {/* La cartera virtual no dispone todavía de una variación fiable de 24 h. */}
               </div>
             ) : <p className="mt-2 text-sm text-slate-500">Cargando cartera virtual…</p>}
             <div className="mt-5 border-t border-slate-100 pt-3">
