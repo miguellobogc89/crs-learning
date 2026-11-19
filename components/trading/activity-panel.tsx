@@ -12,6 +12,7 @@ import { useTradingRefresh, useWarmStart } from "./navigation";
 import { AVATAR, ErrorNote, LoadingCard, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { DataTable, Money, type Col } from "./table";
+import { TableToolbar } from "@/components/ui/table-toolbar";
 
 type Agents = Awaited<ReturnType<typeof getAgents>>;
 
@@ -173,6 +174,7 @@ export function ActivityPanel({ header }: { header?: ReactNode } = {}) {
   useWarmStart<Agents>("agents", setData);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Move | null>(null);
+  const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -188,7 +190,10 @@ export function ActivityPanel({ header }: { header?: ReactNode } = {}) {
   useTradingRefresh(load);
 
   if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard />;
-  const moves: Move[] = data.moves;
+  const q = query.trim().toLocaleLowerCase("es");
+  const moves: Move[] = q
+    ? data.moves.filter((m) => [m.name, m.asset, m.kind, OP[m.kind]?.label ?? ""].some((value) => value.toLocaleLowerCase("es").includes(q)))
+    : data.moves;
   const openAgent = (key: string) => router.push(`/trading/agentes/${key}?from=inicio`);
   const columns: Col<Move>[] = [
     {
@@ -234,7 +239,7 @@ export function ActivityPanel({ header }: { header?: ReactNode } = {}) {
       <DataTable
         id="actividad-v2"
         height="min-h-0 flex-1"
-        header={header}
+        header={<div className="flex flex-col gap-3">{header}<TableToolbar search={query} onSearchChange={setQuery} searchPlaceholder="Buscar en Actividad..." /></div>}
         columns={columns}
         rows={moves}
         rowKey={(m) => `${m.kind}-${m.id}`}
