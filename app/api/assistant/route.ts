@@ -1,7 +1,6 @@
 //app/api/assistant/route.ts
  
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 import type { Prisma } from "@prisma/client";
 import type {
   Response as ModelResponse,
@@ -20,7 +19,7 @@ import { listAccessibleKnowledgeSpaces } from "@/lib/services/knowledge-space.se
 import { recordResourceAccess } from "@/lib/services/resource-access.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { resolveRetrievalQuery } from "@/lib/ai/assistant/resolve-retrieval-query";
-import { getOpenAIModel } from "@/lib/ai/openai";
+import { getOpenAIClient, getOpenAIModel } from "@/lib/ai/openai";
 import {
   CHANGES_TOOL_NAME,
   changesTool,
@@ -41,10 +40,6 @@ import {
 
 /** Tool rounds per message (each round can run several queries). */
 const MAX_TOOL_ROUNDS = 6;
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -259,7 +254,7 @@ console.log("AI INPUT DEBUG", {
   let response: ModelResponse;
   for (let round = 0; ; round += 1) {
     const useTools = tables.length > 0 && round < MAX_TOOL_ROUNDS;
-    response = await openai.responses.create({
+    response = await getOpenAIClient().responses.create({
       model: assistantModel(),
       input,
       stream: false,
@@ -510,7 +505,7 @@ async function repairAnswerCitations({
   validationErrors: string[];
 }) {
   const repairResponse =
-    await openai.responses.create({
+    await getOpenAIClient().responses.create({
       model: getOpenAIModel(),
       input: [
         {
