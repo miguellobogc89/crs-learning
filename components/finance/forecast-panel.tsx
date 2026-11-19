@@ -441,7 +441,7 @@ export function ForecastPanel({ view }: { view: View }) {
           className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${range === n ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>{n}M</button>)}</div></div>
       {points.length ? <>
         <CycleBars key={range} height={235} balanceLabel="Disponible al cierre" data={chartData} showLegend={false} wideBars
-          onSelect={(index) => setSelectedChart({ range, index })} />
+          onSelect={(index) => setSelectedChart(index === null ? null : { range, index })} />
         <div className="grid grid-cols-4 gap-1 border-t border-slate-100 pt-3 text-center sm:gap-3" aria-label="Totales de la previsión">
           <div className="min-w-0" title={`Ingresos: ${eur(total.income, 2)}`} aria-label={`Ingresos: ${eur(total.income, 2)}`}>
             <p className="amount truncate text-[10px] font-bold tabular-nums tracking-tight text-blue-700 sm:text-sm">{eur(total.income, 2)}</p>
