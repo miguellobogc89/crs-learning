@@ -91,16 +91,18 @@ export async function getAccounts(userId: string) {
   }));
 }
 
-/** Claves de avisos descartados y de recurrentes dados por cancelados («rec-cancel:<clave>»). */
+/** Claves de avisos, recurrentes cancelados y cargos omitidos solo en una fecha prevista. */
 export async function getDismissed(userId: string) {
   const rows = await prisma.finance_alert_dismissals.findMany({ where: { user_id: userId }, select: { key: true } });
   const dismissed = new Set<string>();
   const cancelled = new Set<string>();
+  const skippedOccurrences = new Set<string>();
   for (const r of rows) {
     if (r.key.startsWith("rec-cancel:")) cancelled.add(r.key.slice("rec-cancel:".length));
+    else if (r.key.startsWith("forecast-skip:")) skippedOccurrences.add(r.key.slice("forecast-skip:".length));
     else dismissed.add(r.key);
   }
-  return { dismissed, cancelled };
+  return { dismissed, cancelled, skippedOccurrences };
 }
 
 export async function getMemory(userId: string) {
