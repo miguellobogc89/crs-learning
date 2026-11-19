@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { categoryLabel, isCategory } from "@/lib/finance/categories";
 import { accountsView, budgetView, forecast, listTransactions, overview } from "@/lib/finance/service";
+import { payslipsView } from "@/lib/finance/payslips";
 import { syncUser } from "@/lib/finance/sync";
 import { bulkCorrect, classifyPending, correctTransaction } from "@/lib/finance/classify";
 import { cleanView } from "@/lib/finance/logic";
@@ -43,6 +44,7 @@ export async function GET(req: Request, route: RouteContext) {
     }
     if (action === "budget") return ok(await budgetView(uid));
     if (action === "accounts") return ok(await accountsView(uid));
+    if (action === "payslips") return ok(await payslipsView(uid));
     if (action === "settings") {
       const [settings, rules, memory] = await Promise.all([getSettings(uid), getRules(uid), getMemory(uid)]);
       const hits = new Map((await prisma.finance_rules.findMany({ where: { user_id: uid }, select: { id: true, hits: true, label: true } })).map((r) => [r.id, r]));
