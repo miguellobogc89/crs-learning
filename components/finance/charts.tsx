@@ -27,7 +27,7 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
   const [hover, setHover] = useState<number | null>(null);
   const W = 640;
   const H = height;
-  const pad = { l: 40, r: 8, t: 10, b: 26 };
+  const pad = { l: 40, r: 8, t: 10, b: 8 };
   const max = niceMax(Math.max(1, ...data.flatMap((d) => [d.income, d.expenses, Math.max(0, d.available ?? 0)])));
   const bottom = 0;
   const iw = W - pad.l - pad.r;
@@ -64,11 +64,20 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
               {bar(d.income, cx - 1.5 * bw - 2, incomeColor)}
               {bar(d.expenses, cx - bw / 2, expenseColor)}
               {d.available !== null && d.available !== undefined && d.available > 0 && bar(d.available, cx + bw / 2 + 2, SAVINGS)}
-              <text x={cx} y={H - 8} textAnchor="middle" className={d.current ? "fill-slate-900 text-[10px] font-semibold" : "fill-slate-500 text-[10px]"}>{d.label}</text>
             </g>
           );
         })}
       </svg>
+      <div className="mt-1 flex w-full" aria-hidden="true">
+        <span style={{ width: `${pad.l / W * 100}%` }} className="shrink-0" />
+        <div className="grid min-w-0 flex-1" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}>
+          {data.map((d, i) => <span key={`${i}:${d.label}`} title={d.title ?? d.label}
+            className={`min-w-0 text-center text-[11px] leading-tight sm:text-xs ${d.current ? "font-bold text-slate-900" : "font-medium text-slate-600"} ${data.length > 9 && i % 2 === 1 && i !== data.length - 1 ? "max-sm:invisible" : ""}`}>
+            {d.label}
+          </span>)}
+        </div>
+        <span style={{ width: `${pad.r / W * 100}%` }} className="shrink-0" />
+      </div>
       {h && (
         <div className="pointer-events-none absolute right-0 top-0 rounded-xl border border-slate-100 bg-white px-3 py-2 text-xs shadow-lg">
           <p className="font-semibold text-slate-900">{h.title ?? h.label}</p>
