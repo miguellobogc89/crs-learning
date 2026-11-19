@@ -3,7 +3,8 @@ import { IntakeQueue } from "@/components/knowledge/import/intake-queue";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
-import { TRADING_HOME, hasBusinessAccess } from "@/lib/auth/business-access";
+import { TRADING_HOME } from "@/lib/auth/business-access";
+import { canAccessAppModule } from "@/lib/platform/access";
 import { isUserAdmin } from "@/lib/auth/admin";
 
 import { AppSidebar } from "@/components/app/sidebar";
@@ -40,7 +41,7 @@ export default async function AppLayout({
     redirect("/");
   }
 
-  if (!(await hasBusinessAccess(session.user.id))) {
+  if (!(await canAccessAppModule(session.user.id, "negocio"))) {
     redirect(TRADING_HOME);
   }
 

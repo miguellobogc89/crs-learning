@@ -12,7 +12,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "CRS Learning",
+  title: "CRS",
   description: "Trading, finanzas y herramientas de negocio en un solo lugar.",
   applicationName: "CRS",
   manifest: "/app/manifest.webmanifest",

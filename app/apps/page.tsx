@@ -12,8 +12,8 @@ import {
 
 import { logout } from "@/app/actions/auth";
 import { auth } from "@/auth";
-import { hasBusinessAccess } from "@/lib/auth/business-access";
-import { APP_MODULES, type AppDefinition, type AppId } from "@/lib/platform/apps";
+import { getAccessibleAppModules } from "@/lib/platform/access";
+import { type AppDefinition, type AppId } from "@/lib/platform/apps";
 
 const ICONS: Record<AppId, LucideIcon> = {
   trading: ChartCandlestick,
@@ -63,8 +63,7 @@ export default async function AppsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/");
 
-  const canAccessBusiness = await hasBusinessAccess(session.user.id);
-  const apps = APP_MODULES.filter((app) => app.access === "all" || canAccessBusiness);
+  const apps = await getAccessibleAppModules(session.user.id);
 
   return (
     <main className="min-h-dvh bg-[#F8FAFC] px-5 pb-12 pt-[max(1.5rem,env(safe-area-inset-top))] text-slate-900 sm:px-8 lg:px-12">
