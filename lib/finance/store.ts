@@ -6,7 +6,7 @@ import type { finance_transactions } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { connectorKey } from "@/lib/connectors/crypto";
 import { isKind, type Kind } from "./categories";
-import { cleanView, type Budget, type ForecastItem, type Rule, type Tx } from "./logic";
+import { cleanView, forecastPlanFrequency, type Budget, type ForecastItem, type Rule, type Tx } from "./logic";
 
 /** Huella de un IBAN (no se guarda el IBAN): sirve para reconocer transferencias a cuentas propias. */
 export function ibanHash(iban: string | null | undefined) {
@@ -60,7 +60,8 @@ export async function getForecastItems(userId: string): Promise<ForecastItem[]> 
   const rows = await prisma.finance_forecast_items.findMany({ where: { user_id: userId }, orderBy: { start_date: "asc" }, take: 300 });
   return rows.map((r) => ({ id: r.id, title: r.title, kind: r.kind === "ingreso" ? "ingreso" : "gasto",
     amount: Number(r.amount), startDate: r.start_date.toISOString().slice(0, 10),
-    endDate: r.end_date?.toISOString().slice(0, 10) ?? null, source: r.source, sourceKey: r.source_key }));
+    endDate: r.end_date?.toISOString().slice(0, 10) ?? null, source: r.source, sourceKey: r.source_key,
+    frequency: forecastPlanFrequency(r.source_key) }));
 }
 
 export async function getRules(userId: string): Promise<Rule[]> {
