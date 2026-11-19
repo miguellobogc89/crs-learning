@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, CalendarDays, Check, ChevronRight, PiggyBank, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronRight, PiggyBank, Plus, Trash2, X } from "lucide-react";
 import type { forecastSource, overview } from "@/lib/finance/service";
 import { forecastPlanOccurrences, type ForecastFrequency, type ForecastItem } from "@/lib/finance/logic";
 import { card, eur, flat } from "@/components/trading/format";
@@ -247,41 +247,59 @@ function SavingsGoal({ settings }: { settings: View["settings"] }) {
   </section>;
 }
 
-function NextCycleWeeks({ weeks, onEvent, onAdd }: { weeks: View["forecastNextWeeks"]; onEvent: (event: ForecastEvent) => void; onAdd: (week: ForecastWeek) => void }) {
-  return <section className={`${card} ${flat} p-4 sm:p-6`}>
-    <h2 className="font-semibold text-slate-900">Tus próximas 5 semanas</h2>
-    <p className="mt-1 text-xs text-slate-500">{longDay(weeks[0].start)} – {longDay(weeks.at(-1)!.end)}</p>
-    <div className="mt-4 divide-y divide-slate-100">{weeks.map((week, index) => <div key={week.start} className="py-4 first:pt-0 last:pb-0">
-      <div className="flex items-start justify-between gap-3">
-        <div><p className="text-sm font-semibold text-slate-900">Semana {index + 1}</p>
-          <p className="text-xs text-slate-500">{shortDay(week.start)} – {shortDay(week.end)}</p></div>
-        <div className="text-right"><p className="text-[11px] text-slate-500">Disponible al cierre</p>
-          <p className={`amount text-base font-bold tabular-nums ${week.closingBalance === null ? "text-slate-500" : week.closingBalance >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{week.closingBalance === null ? "Sin saldo bancario" : eur(week.closingBalance, 2)}</p></div>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-lg bg-blue-50 px-3 py-2"><p className="text-slate-500">Ingresos</p><b className="amount mt-1 block text-sm tabular-nums text-blue-700">+{eur(week.income, 2)}</b></div>
-        <div className="rounded-lg bg-rose-50 px-3 py-2"><p className="text-slate-500">Gastos</p><b className="amount mt-1 block text-sm tabular-nums text-rose-700">−{eur(week.expenses, 2)}</b></div>
-      </div>
-      <details className="group mt-2" open={index === 0}>
-        <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-semibold text-blue-700 [&::-webkit-details-marker]:hidden">
-          <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" /> Cobros y pagos previstos</summary>
-        <div className="mt-2 space-y-2 rounded-lg bg-slate-50 p-3">
-          {week.events.map((event, i) => <button type="button" key={`${event.date}:${event.label}:${i}`} onClick={() => onEvent(event)}
-            className="flex w-full items-start justify-between gap-2 rounded-lg py-1 text-left text-xs hover:bg-white focus-visible:outline-2 focus-visible:outline-blue-500">
-            <div className="min-w-0"><p className={`break-words font-medium ${event.modified && event.amount === 0 ? "text-slate-400 line-through" : "text-slate-700"}`}>{event.label}</p>
-              <p className="text-slate-500">{shortDay(event.date)} · {event.modified ? event.amount === 0 ? "Omitido" : "Ajustado" : event.origin === "plan" ? "Planificado" : event.origin === "estimado" ? "Estimado" : "Habitual"}</p></div>
-            <b className={`amount ml-auto shrink-0 tabular-nums ${event.kind === "ingreso" ? "text-blue-700" : event.amount === 0 ? "text-slate-400" : "text-rose-700"}`}>{event.modified && event.amount === 0 ? "Omitido" : `${event.kind === "ingreso" ? "+" : "−"}${eur(event.amount, 2)}`}</b>
-          </button>)}
-          {week.variable > 0 && <div className="flex justify-between gap-2 border-t border-slate-200 pt-2 text-xs text-slate-500"><span>Gastos cotidianos estimados</span><b className="amount shrink-0 tabular-nums text-rose-700">−{eur(week.variable, 2)}</b></div>}
-          {!week.events.length && week.variable === 0 && <p className="text-xs text-slate-500">Sin movimientos previstos.</p>}
-          <button type="button" onClick={() => onAdd({ start: week.start, end: week.end })}
-            className="flex w-full items-center gap-1.5 border-t border-slate-200 pt-3 text-left text-xs font-semibold text-blue-700 hover:text-blue-900">
-            <Plus className="h-4 w-4" /> Añadir imprevisto
-          </button>
+function NextCycleWeeks({ weeks, accumulatedSavings, onEvent, onAdd }: {
+  weeks: View["forecastNextWeeks"]; accumulatedSavings: number[];
+  onEvent: (event: ForecastEvent) => void; onAdd: (week: ForecastWeek) => void;
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  return <section className="space-y-2" aria-label="Desglose semanal de la previsión">
+    {weeks.map((week, index) => {
+      const isOpen = expanded === week.start;
+      const incomeCount = week.events.filter((event) => event.kind === "ingreso").length;
+      const expenseCount = week.events.filter((event) => event.kind === "gasto").length + (week.variable > 0 ? 1 : 0);
+      return <article key={week.start} className={`${card} overflow-hidden`}>
+        <button type="button" aria-expanded={isOpen} aria-controls={`forecast-week-${week.start}`}
+          onClick={() => setExpanded(isOpen ? null : week.start)}
+          className="flex w-full items-center gap-3 px-4 py-3 text-left focus-visible:outline-2 focus-visible:outline-blue-600">
+          <div className="min-w-0 flex-1"><p className="text-sm font-semibold text-slate-900">Semana {index + 1}</p>
+            <p className="mt-0.5 text-xs text-slate-500">{shortDay(week.start)} – {shortDay(week.end)}</p></div>
+          <div className="shrink-0 text-right text-[11px] leading-4 text-slate-500">
+            <p>{expenseCount} {expenseCount === 1 ? "gasto" : "gastos"}</p>
+            <p>{incomeCount} {incomeCount === 1 ? "ingreso" : "ingresos"}</p>
+          </div>
+          <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+        </button>
+        <div id={`forecast-week-${week.start}`} aria-hidden={!isOpen} inert={!isOpen}
+          className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+          <div className="min-h-0 overflow-hidden">
+            <div className="space-y-2 border-t border-slate-100 bg-slate-50 px-4 py-3">
+              {week.events.map((event, i) => <button type="button" key={`${event.date}:${event.label}:${i}`} onClick={() => onEvent(event)}
+                className="flex w-full items-start justify-between gap-2 rounded-lg py-1 text-left text-xs hover:bg-white focus-visible:outline-2 focus-visible:outline-blue-600">
+                <div className="min-w-0"><p className={`break-words font-medium ${event.modified && event.amount === 0 ? "text-slate-400 line-through" : "text-slate-700"}`}>{event.label}</p>
+                  <p className="text-slate-500">{shortDay(event.date)} · {event.modified ? event.amount === 0 ? "Omitido" : "Ajustado" : event.origin === "plan" ? "Planificado" : event.origin === "estimado" ? "Estimado" : "Habitual"}</p></div>
+                <b className={`amount ml-auto shrink-0 tabular-nums ${event.kind === "ingreso" ? "text-blue-700" : event.amount === 0 ? "text-slate-400" : "text-rose-700"}`}>{event.modified && event.amount === 0 ? "Omitido" : `${event.kind === "ingreso" ? "+" : "−"}${eur(event.amount, 2)}`}</b>
+              </button>)}
+              {week.variable > 0 && <div className="flex justify-between gap-2 border-t border-slate-200 pt-2 text-xs text-slate-500"><span>Gastos cotidianos estimados</span><b className="amount shrink-0 tabular-nums text-rose-700">−{eur(week.variable, 2)}</b></div>}
+              {!week.events.length && week.variable === 0 && <p className="text-xs text-slate-500">Sin movimientos previstos.</p>}
+              <button type="button" onClick={() => onAdd({ start: week.start, end: week.end })}
+                className="flex w-full items-center gap-1.5 border-t border-slate-200 pt-3 text-left text-xs font-semibold text-blue-700 hover:text-blue-900">
+                <Plus className="h-4 w-4" /> Añadir imprevisto
+              </button>
+            </div>
+          </div>
         </div>
-      </details>
-    </div>)}</div>
-    <p className="mt-4 border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-500">Los cobros y recibos habituales se sitúan en sus fechas esperadas. El gasto cotidiano se reparte como estimación; los importes semanales corresponden al gráfico superior.</p>
+        <div className="grid grid-cols-4 gap-1 border-t border-slate-100 px-3 py-3 text-center sm:gap-3" aria-label={`Totales de la semana ${index + 1}`}>
+          <div className="min-w-0" title={`Ingresos: ${eur(week.income, 2)}`}><p className="text-[10px] text-slate-500">Ingresos</p>
+            <p className="amount mt-1 truncate text-[10px] font-bold tabular-nums tracking-tight text-blue-700 sm:text-sm">+{eur(week.income, 2)}</p></div>
+          <div className="min-w-0" title={`Gastos: ${eur(week.expenses, 2)}`}><p className="text-[10px] text-slate-500">Gastos</p>
+            <p className="amount mt-1 truncate text-[10px] font-bold tabular-nums tracking-tight text-rose-600 sm:text-sm">−{eur(week.expenses, 2)}</p></div>
+          <div className="min-w-0" title={`Ahorro previsto acumulado: ${eur(accumulatedSavings[index] ?? 0, 2)}`}><p className="text-[10px] text-slate-500">Ahorro acum.</p>
+            <p className="amount mt-1 truncate text-[10px] font-bold tabular-nums tracking-tight text-blue-400 sm:text-sm">{eur(accumulatedSavings[index] ?? 0, 2)}</p></div>
+          <div className="min-w-0" title={`Disponible al cierre: ${week.closingBalance === null ? "Sin saldo" : eur(week.closingBalance, 2)}`}><p className="text-[10px] text-slate-500">Disponible</p>
+            <p className={`amount mt-1 truncate text-[10px] font-bold tabular-nums tracking-tight sm:text-sm ${(week.closingBalance ?? 0) >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{week.closingBalance === null ? "" : eur(week.closingBalance, 2)}</p></div>
+        </div>
+      </article>;
+    })}
   </section>;
 }
 
@@ -452,7 +470,7 @@ export function ForecastPanel({ view }: { view: View }) {
         {!forecast.hasExpectedIncome && <p className="text-xs font-medium text-amber-700">Sin ingresos periódicos suficientes: puede faltar dinero por estimar.</p>}
       </> : <p className="py-6 text-sm text-slate-500">La previsión todavía no está disponible.</p>}
     </section>
-    {weeks.length > 0 && <NextCycleWeeks weeks={weeks}
+    {weeks.length > 0 && <NextCycleWeeks weeks={weeks} accumulatedSavings={chartData.map((point) => point.accumulatedSavings)}
       onEvent={(event) => { setSelectedEvent(event); setEventOpen(true); }}
       onAdd={(week) => { setSelectedWeek(week); setNewPlanOpen(true); }} />}
     <SavingsGoal key={`${view.settings.savingsGoal}:${view.settings.savingsFrequency}`} settings={view.settings} />
