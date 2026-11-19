@@ -349,7 +349,7 @@ export function ForecastPanel({ view }: { view: View }) {
     <SavingsGoal key={`${view.settings.savingsGoal}:${view.settings.savingsFrequency}`} settings={view.settings} />
     <ForecastSuggestions suggestions={visibleSuggestions} onDetail={setDetailKey} />
     <MyPlans items={visiblePlans} hiddenCount={(view.forecastItems ?? []).length - visiblePlans.length} onDetail={setDetailKey} />
-  </div><ForecastReferenceSheet key={detailKey ?? "closed"} referenceKey={detailKey} onClose={() => setDetailKey(null)} />
-    <ForecastEventSheet key={selectedEvent?.occurrenceKey ?? selectedEvent?.planId ?? selectedEvent?.date ?? "closed"} event={selectedEvent}
+  </div><ForecastReferenceSheet key={`reference:${detailKey ?? "closed"}`} referenceKey={detailKey} onClose={() => setDetailKey(null)} />
+    <ForecastEventSheet key={`event:${selectedEvent?.occurrenceKey ?? selectedEvent?.planId ?? selectedEvent?.date ?? "closed"}`} event={selectedEvent}
       plan={view.forecastItems.find((item) => item.id === selectedEvent?.planId)} onClose={() => setSelectedEvent(null)} /></>;
 }
