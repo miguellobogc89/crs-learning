@@ -667,7 +667,49 @@ export type Projection = {
   basis: string;
 };
 
-export type ForecastItem = { id: string; title: string; kind: "ingreso" | "gasto"; amount: number; startDate: string; endDate: string | null; source: string; sourceKey: string | null };
+export type ForecastFrequency = "puntual" | "semanal" | "mensual" | "trimestral" | "anual";
+export type ForecastItem = { id: string; title: string; kind: "ingreso" | "gasto"; amount: number; startDate: string; endDate: string | null;
+  source: string; sourceKey: string | null; frequency?: ForecastFrequency };
+
+/** La periodicidad de los planes manuales se codifica en su clave sin modificar el esquema SQL. */
+export function forecastPlanFrequency(sourceKey: string | null): ForecastFrequency {
+  const frequency = /^plan:(semanal|mensual|trimestral|anual):[\da-f-]{36}$/.exec(sourceKey ?? "")?.[1];
+  return (frequency as ForecastFrequency | undefined) ?? "puntual";
+}
+
+export const isForecastOverride = (item: Pick<ForecastItem, "source" | "sourceKey">) =>
+  item.source === "override" || (item.sourceKey?.startsWith("rec:gasto:") ?? false);
+
+/** Fechas de un plan dentro de un periodo, ancladas al día original (31 ene → 28 feb → 31 mar). */
+export function forecastPlanOccurrences(item: ForecastItem, from: string, to: string): string[] {
+  const until = item.endDate && item.endDate < to ? item.endDate : to;
+  if (item.startDate > until || from > until) return [];
+  const frequency = item.frequency ?? forecastPlanFrequency(item.sourceKey);
+  if (frequency === "puntual") return item.startDate >= from ? [item.startDate] : [];
+  const dates: string[] = [];
+  if (frequency === "semanal") {
+    const jumps = Math.max(0, Math.floor(daysBetween(item.startDate, from) / 7));
+    for (let date = addDays(item.startDate, jumps * 7); date <= until; date = addDays(date, 7)) {
+      if (date >= from) dates.push(date);
+    }
+  } else {
+    const step = frequency === "mensual" ? 1 : frequency === "trimestral" ? 3 : 12;
+    const [y, m, d] = item.startDate.split("-").map(Number);
+    const [fromY, fromM] = from.split("-").map(Number);
+    const deltaMonths = (fromY - y) * 12 + fromM - m;
+    const anchor = (index: number) => {
+      const target = new Date(Date.UTC(y, m - 1 + index * step, 1));
+      const day = Math.min(d, new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate());
+      return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    };
+    for (let index = Math.max(0, Math.floor(deltaMonths / step) - 1); ; index++) {
+      const date = anchor(index);
+      if (date > until) break;
+      if (date >= from) dates.push(date);
+    }
+  }
+  return dates;
+}
 
 /** Una corrección solo afecta a una ocurrencia futura de un cargo habitual. */
 export const forecastOccurrenceKey = (r: Pick<Recurring, "key" | "kind">, date: string) => `rec:${r.kind}:${r.key}:${date}`;
@@ -748,7 +790,7 @@ export function forecastCashflow(opts: {
   skippedOccurrences?: ReadonlySet<string>;
 }) {
   const { txs, today, startDay, recurring, history, current, projection, items = [] } = opts;
-  const overrides = new Map(items.filter((i) => i.source === "override" && i.sourceKey).map((i) => [i.sourceKey!, i.amount]));
+  const overrides = new Map(items.filter((i) => isForecastOverride(i) && i.sourceKey).map((i) => [i.sourceKey!, i.amount]));
   const active = recurring.filter((r) => r.active);
   const recurringKeys = new Set(active.map((r) => r.key));
   const complete = history.filter((h) => h.cycle.end < current.cycle.start).slice(0, 3);
@@ -764,7 +806,8 @@ export function forecastCashflow(opts: {
   let openingBalance = opts.liquidity ?? null;
   const points = Array.from({ length: 12 }, (_, offset) => {
     const cycle = cycleFor(today, startDay, offset);
-    const itemsInCycle = items.filter((item) => item.source !== "override" && item.startDate >= today && item.startDate >= cycle.start && item.startDate <= cycle.end);
+    const itemsInCycle = items.filter((item) => !isForecastOverride(item)).flatMap((item) =>
+      forecastPlanOccurrences(item, cycle.start > today ? cycle.start : today, cycle.end).map(() => item));
     const extraIncome = round2(itemsInCycle.filter((i) => i.kind === "ingreso").reduce((s, i) => s + i.amount, 0));
     const extraExpenses = round2(itemsInCycle.filter((i) => i.kind === "gasto").reduce((s, i) => s + i.amount, 0));
     let knownIncome: number;
@@ -801,6 +844,7 @@ export function forecastCashflow(opts: {
     openingBalance = startBalance === null ? null : round2(startBalance + net);
     return { cycle, income, expenses, net, openingBalance: startBalance, closingBalance: openingBalance,
       knownIncome: round2(knownIncome), knownExpenses: round2(knownExpenses), variableExpenses,
+      fixedExpenses: round2(knownExpenses), estimatedExpenses: round2(variableExpenses + extraExpenses),
       estimatedSalary: salary, plannedIncome: extraIncome, plannedExpenses: extraExpenses, current: offset === 0 };
   });
 
@@ -823,7 +867,7 @@ export function forecastCycleWeeks(opts: {
 }) {
   const { point, recurring, items, today, skippedOccurrences } = opts;
   const { cycle } = point;
-  const overrides = new Map(items.filter((i) => i.source === "override" && i.sourceKey).map((i) => [i.sourceKey!, i.amount]));
+  const overrides = new Map(items.filter((i) => isForecastOverride(i) && i.sourceKey).map((i) => [i.sourceKey!, i.amount]));
   const events: Array<{ date: string; label: string; amount: number; kind: "ingreso" | "gasto"; origin: "recurrente" | "plan" | "estimado";
     occurrenceKey?: string; originalAmount?: number; modified?: boolean; lastDate?: string; frequency?: string; count?: number; planId?: string }> = [];
   for (const r of recurring) {
@@ -844,8 +888,10 @@ export function forecastCycleWeeks(opts: {
   }
   if (point.estimatedSalary > 0) events.push({ date: cycle.start, label: "Nómina habitual estimada", amount: point.estimatedSalary, kind: "ingreso", origin: "estimado" });
   for (const item of items) {
-    if (item.source === "override" || item.startDate < today || item.startDate < cycle.start || item.startDate > cycle.end) continue;
-    events.push({ date: item.startDate, label: item.title, amount: item.amount, kind: item.kind, origin: "plan", planId: item.id });
+    if (isForecastOverride(item)) continue;
+    for (const date of forecastPlanOccurrences(item, cycle.start > today ? cycle.start : today, cycle.end)) {
+      events.push({ date, label: item.title, amount: item.amount, kind: item.kind, origin: "plan", planId: item.id });
+    }
   }
   events.sort((a, b) => a.date.localeCompare(b.date) || b.amount - a.amount);
 
