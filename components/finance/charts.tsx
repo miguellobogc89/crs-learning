@@ -7,6 +7,7 @@ import { categoryLabel } from "@/lib/finance/categories";
 
 const INCOME = "#2563eb";
 const EXPENSE = "#fe2c55";
+const SAVINGS = "#16a34a";
 
 /** Escala «bonita» para el eje: 0, 500, 1.000… */
 function niceMax(v: number) {
@@ -19,7 +20,7 @@ const compact = (v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toLocaleStri
 
 export type CyclePoint = { label: string; income: number; expenses: number; net: number; /** Texto del detalle (si no, la etiqueta). */ title?: string; current?: boolean };
 
-/** Ingresos frente a gastos por ciclo (barras agrupadas, una escala). */
+/** Ingresos, gastos y ahorro neto por periodo (barras agrupadas; el déficit baja de cero). */
 export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseColor = EXPENSE }: {
   data: CyclePoint[]; height?: number; incomeColor?: string; expenseColor?: string;
 }) {
@@ -27,21 +28,24 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
   const W = 640;
   const H = height;
   const pad = { l: 40, r: 8, t: 10, b: 26 };
-  const max = niceMax(Math.max(1, ...data.flatMap((d) => [d.income, d.expenses])));
+  const max = niceMax(Math.max(1, ...data.flatMap((d) => [d.income, d.expenses, d.net])));
+  const min = Math.min(0, ...data.map((d) => d.net));
+  const bottom = min < 0 ? -niceMax(-min) : 0;
   const iw = W - pad.l - pad.r;
   const ih = H - pad.t - pad.b;
   const slot = iw / Math.max(1, data.length);
-  const bw = Math.min(46, Math.max(3, (slot - 12) / 2));
-  const y = (v: number) => pad.t + ih - (Math.max(0, v) / max) * ih;
-  const ticks = [0, max / 2, max];
+  const bw = Math.min(30, Math.max(3, (slot - 12) / 3));
+  const y = (v: number) => pad.t + ((max - v) / (max - bottom)) * ih;
+  const ticks = bottom < 0 ? [bottom, 0, max] : [0, max / 2, max];
   const h = hover === null ? null : data[hover];
   return (
     <div className="relative">
-      <div className="mb-2 flex items-center gap-4 text-xs text-slate-600">
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600">
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: incomeColor }} /> Ingresos</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: expenseColor }} /> Gastos</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SAVINGS }} /> Ahorro neto</span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Ingresos y gastos del periodo" onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Ingresos, gastos y ahorro neto por periodo" onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="#e2e8f0" strokeWidth={1} strokeDasharray={t === 0 ? undefined : "3 3"} />
@@ -51,16 +55,16 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
         {data.map((d, i) => {
           const cx = pad.l + slot * i + slot / 2;
           const bar = (v: number, x: number, color: string) => {
-            const top = y(v);
-            const hh = Math.max(0, pad.t + ih - top);
-            const r = Math.min(4, hh / 2, bw / 2);
-            return <path d={`M${x},${pad.t + ih} V${top + r} Q${x},${top} ${x + r},${top} H${x + bw - r} Q${x + bw},${top} ${x + bw},${top + r} V${pad.t + ih} Z`} fill={color} opacity={hover === null || hover === i ? 1 : 0.45} />;
+            const top = Math.min(y(v), y(0));
+            const hh = Math.abs(y(v) - y(0));
+            return <rect x={x} y={top} width={bw} height={hh} rx={Math.min(3, hh / 2, bw / 2)} fill={color} opacity={hover === null || hover === i ? 1 : 0.45} />;
           };
           return (
             <g key={`${i}:${d.label}`} onMouseEnter={() => setHover(i)} onTouchStart={() => setHover(i)}>
               <rect x={cx - slot / 2} y={pad.t} width={slot} height={ih} fill="transparent" />
-              {bar(d.income, cx - bw - 1, incomeColor)}
-              {bar(d.expenses, cx + 1, expenseColor)}
+              {bar(d.income, cx - 1.5 * bw - 2, incomeColor)}
+              {bar(d.expenses, cx - bw / 2, expenseColor)}
+              {bar(d.net, cx + bw / 2 + 2, d.net < 0 ? EXPENSE : SAVINGS)}
               <text x={cx} y={H - 8} textAnchor="middle" className={d.current ? "fill-slate-900 text-[10px] font-semibold" : "fill-slate-500 text-[10px]"}>{d.label}</text>
             </g>
           );
@@ -71,7 +75,7 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
           <p className="font-semibold text-slate-900">{h.title ?? h.label}</p>
           <p className="mt-1 flex justify-between gap-4 text-slate-600"><span>Ingresos</span><b className="tabular-nums text-slate-900">{eur(h.income, 2)}</b></p>
           <p className="flex justify-between gap-4 text-slate-600"><span>Gastos</span><b className="tabular-nums text-slate-900">{eur(h.expenses, 2)}</b></p>
-          <p className="flex justify-between gap-4 text-slate-600"><span>Ahorro</span><b className={`tabular-nums ${h.net >= 0 ? "text-emerald-700" : "text-red-700"}`}>{eur(h.net, 2)}</b></p>
+          <p className="flex justify-between gap-4 text-slate-600"><span>Ahorro neto</span><b className={`tabular-nums ${h.net >= 0 ? "text-emerald-700" : "text-red-700"}`}>{eur(h.net, 2)}</b></p>
         </div>
       )}
     </div>
