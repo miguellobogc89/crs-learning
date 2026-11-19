@@ -17,6 +17,7 @@ import { PullToRefresh } from "@/components/trading/mobile-nav";
 import { AppNotificationButton } from "@/components/platform/notification-button";
 import { NotificationsDrawer } from "@/components/platform/notifications-drawer";
 import { MobileAppHeader } from "@/components/platform/mobile-app-header";
+import { FinanceBottomTabs } from "@/components/finance/bottom-tabs";
 import { eur } from "@/components/trading/format";
 import { BOTTOM_TABS, FINANCE_SECTIONS, FINANCE_TABS, isFinanceTab, isFittedTab } from "./tabs";
 import { fapi, peek, refreshFinance, useFinanceRefresh } from "./api";
@@ -232,23 +233,6 @@ function Navigation({ user, large = false, onNavigate, sync }: { user: FinancePr
   );
 }
 
-function BottomTabs() {
-  const pathname = usePathname();
-  return (
-    <nav aria-label="Secciones" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-slate-200/70 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
-      {BOTTOM_TABS.map((key) => {
-        const t = FINANCE_TABS.find((x) => x.key === key)!;
-        const on = pathname === `/finanzas/${key}` || pathname.startsWith(`/finanzas/${key}/`);
-        return (
-          <Link key={key} href={`/finanzas/${key}`} aria-label={t.label} aria-current={on ? "page" : undefined} className={`flex h-14 flex-1 items-center justify-center ${on ? "text-blue-600" : "text-slate-400 active:text-slate-600"}`}>
-            <t.icon className="h-6 w-6" strokeWidth={on ? 2.4 : 2} />
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
 /** Menú completo del móvil, como el de Trading: tu nombre arriba y, por grupos, el resto de pantallas. */
 function MobileMenu({ user, onClose, sync }: { user: FinanceProfile; onClose: () => void; sync: ReturnType<typeof useAutoSync> }) {
   // Como el menú de Trading: por grupos, separando cuentas de integraciones.
@@ -379,7 +363,7 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
         </main>
       </div>
 
-      <BottomTabs />
+      <FinanceBottomTabs />
 
       <NotificationsDrawer open={notesOpen} onClose={() => setNotesOpen(false)}>
         <div className="flex flex-col items-center gap-2 px-5 py-16 text-center">
