@@ -14,6 +14,7 @@ import { AVATAR, cap, ErrorNote, LoadingCard, PILL, ReturnPill } from "./ui";
 import { DataTable, Money, Segmented, sinceText, type Col } from "./table";
 import { ActivityPanel } from "./activity-panel";
 import { SummaryPanel } from "./summary-panel";
+import { MarketOverviewPanel } from "./market-overview-panel";
 import { AgentSheet } from "./agent-sheet";
 import { MirrorModal } from "./mirror-modal";
 
@@ -49,11 +50,12 @@ export const ago = (iso: string) => {
   return new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", timeZone: "Europe/Madrid" }).format(new Date(iso));
 };
 
-type View = "resumen" | "operadores" | "actividad";
+type View = "resumen" | "operadores" | "actividad" | "mercado";
 const VIEW_URL: Record<View, string> = {
   resumen: "/trading/inicio",
   operadores: "/trading/inicio?vista=operadores",
   actividad: "/trading/inicio?vista=actividad",
+  mercado: "/trading/inicio?vista=mercado",
 };
 
 export function HomePanel() {
@@ -61,7 +63,7 @@ export function HomePanel() {
   const params = useSearchParams();
   const v = params.get("vista");
   // El Resumen (tu dinero, el mercado, los agentes, la IA y si todo funciona) es lo primero que se ve.
-  const view: View = v === "actividad" || v === "operadores" ? v : "resumen";
+  const view: View = v === "actividad" || v === "operadores" || v === "mercado" ? v : "resumen";
   // Solo cambia la URL en el navegador (sin ir al servidor): el cambio es instantáneo.
   const setView = (next: View) => window.history.replaceState(null, "", VIEW_URL[next]);
   const tabs = (
@@ -72,6 +74,7 @@ export function HomePanel() {
         { key: "resumen", label: "Resumen" },
         { key: "operadores", label: "Operadores" },
         { key: "actividad", label: "Actividad" },
+        { key: "mercado", label: "Mercado" },
       ]}
     />
   );
@@ -100,6 +103,7 @@ export function HomePanel() {
 
   // El Resumen tiene sus propios datos: sale enseguida (lo demás se sigue cargando detrás).
   if (view === "resumen") return <SummaryPanel tabs={tabs} />;
+  if (view === "mercado") return <MarketOverviewPanel tabs={tabs} />;
   if (!account || !agents)
     return error ? (
       <ErrorNote>{error}</ErrorNote>
