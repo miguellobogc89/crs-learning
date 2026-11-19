@@ -17,6 +17,7 @@ import { useHideAmounts } from "./privacy";
 import { requestSync } from "./shell";
 import { BankLogo } from "./bank-logo";
 import { CategoryExpensesSheet } from "./category-expenses-sheet";
+import { ForecastPanel } from "./forecast-panel";
 
 type Overview = Awaited<ReturnType<typeof overview>>;
 const CASHFLOW_RANGES = ["7D", "1M", "6M", "1A"] as const;
@@ -106,7 +107,6 @@ function KpiCard({ icon: Icon, tint, label, mobileLabel, value, valueTone, sub, 
 export function HomePanel() {
   const params = useSearchParams();
   const [homeView, setHomeView] = useState<"evolution" | "forecast">("evolution");
-  const [forecastRange, setForecastRange] = useState<3 | 6 | 12>(3);
   const [offset, setOffset] = useState(() => Math.min(0, Number(params.get("ciclo")) || 0));
   const [cashflowRange, setCashflowRange] = useState<CashflowRange>("1M");
   const [expensesView, setExpensesView] = useState<"categories" | "recent">("categories");
@@ -121,15 +121,10 @@ export function HomePanel() {
   const v = data.cycleView;
   const t = v.totals;
   const expDelta = delta(t.expenses, v.previous?.expenses, !!v.previous?.partial, true);
-  const goal = data.settings.savingsGoal;
+  const goal = data.projection.savingsGoal;
   const review = data.pendingReview;
   // Una respuesta anterior guardada en sessionStorage puede no tener todavía este campo.
   const cashflow = data.cashflow?.[cashflowRange];
-  const forecast = data.forecastCashflow;
-  const forecastPoints = forecast?.points.slice(0, forecastRange) ?? [];
-  const forecastTotals = forecastPoints.reduce((total, p) => ({
-    income: total.income + p.income, expenses: total.expenses + p.expenses, net: total.net + p.net,
-  }), { income: 0, expenses: 0, net: 0 });
 
   return (
     <div className={`space-y-4 pb-6 ${loading ? "opacity-80" : ""}`}>
@@ -143,55 +138,7 @@ export function HomePanel() {
       </div>
 
       {homeView === "forecast" ? (
-        <section className={`${card} ${flat} space-y-4 p-4 sm:p-6`}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-slate-900 sm:text-lg">Lo que viene</h2>
-              <p className="mt-1 text-xs text-slate-500">Ingresos, gastos y ahorro estimados por ciclo.</p>
-            </div>
-            <div className="flex rounded-lg bg-slate-100 p-0.5" role="group" aria-label="Periodo de previsión">
-              {([3, 6, 12] as const).map((months) => (
-                <button key={months} type="button" onClick={() => setForecastRange(months)} aria-pressed={forecastRange === months}
-                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${forecastRange === months ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>
-                  {months}M
-                </button>
-              ))}
-            </div>
-          </div>
-          {forecastPoints.length ? (
-            <>
-              <div className="overflow-x-auto">
-                <div className={forecastRange === 12 ? "min-w-[580px] sm:min-w-0" : "min-w-0"}>
-                  <CycleBars key={`forecast:${forecastRange}`} height={245} data={forecastPoints.map((p) => ({
-                    label: p.current ? "Ahora" : new Intl.DateTimeFormat("es-ES", { month: "short", timeZone: "UTC" }).format(new Date(`${p.cycle.end}T00:00:00Z`)).replace(".", ""),
-                    title: p.current ? `Ciclo actual · ${p.cycle.label}` : `Previsto · ${p.cycle.label}`,
-                    income: p.income, expenses: p.expenses, net: p.net, current: p.current,
-                  }))} />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-2 border-t border-slate-100 pt-4 sm:grid-cols-3">
-                {([
-                  ["Ingresos previstos", forecastTotals.income, "text-blue-700"],
-                  ["Gastos previstos", forecastTotals.expenses, "text-rose-700"],
-                  ["Ahorro neto previsto", forecastTotals.net, forecastTotals.net >= 0 ? "text-emerald-700" : "text-red-700"],
-                ] as const).map(([label, value, tone]) => (
-                  <div key={label} className="flex items-baseline justify-between gap-3 rounded-xl bg-slate-50 px-3 py-3 sm:block">
-                    <p className="text-xs text-slate-500">{label}</p>
-                    <p className={`amount mt-1 text-lg font-bold tabular-nums ${tone}`}>{eur(value, 2)}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="space-y-1 text-xs leading-relaxed text-slate-500">
-                <p>Este ciclo incluye movimientos reales y lo pendiente. Los siguientes proyectan cobros y recibos periódicos detectados, más el gasto variable medio ({eur(forecast.variableDaily, 2)}/día). No se repiten regalos ni gastos extraordinarios.</p>
-                {forecast.estimatedSalary > 0 && <p>La nómina no tiene un patrón fijo detectado: se estima {eur(forecast.estimatedSalary, 2)} por ciclo con las últimas nóminas registradas.</p>}
-                {!forecast.hasExpectedIncome && <p className="font-medium text-amber-700">No se han identificado ingresos periódicos suficientes. El ahorro previsto puede ser inferior al real.</p>}
-                {!forecast.historyCycles && <p className="font-medium text-amber-700">Sin ciclos completos: el gasto variable se estima con el ritmo del ciclo actual.</p>}
-              </div>
-            </>
-          ) : (
-            <p className="py-8 text-center text-sm text-slate-500">La previsión aún no está disponible. Actualiza la página.</p>
-          )}
-        </section>
+        <ForecastPanel view={data} />
       ) : (
       <>
       {/* Ciclo: flechas para mirar atrás; «Ocultar importes» */}
@@ -239,9 +186,9 @@ export function HomePanel() {
               <CycleBars key={cashflowRange} data={cashflow.points} height={210} />
             </div>
             <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
-              <span className="text-sm text-slate-600">Ahorro neto del periodo</span>
-              <strong className={`amount text-lg font-bold tabular-nums ${cashflow.net >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-                {eur(cashflow.net, 2)}
+              <span className="text-sm text-slate-600">Saldo al cierre</span>
+              <strong className={`amount text-lg font-bold tabular-nums ${(cashflow.points.at(-1)?.available ?? 0) >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                {cashflow.points.at(-1)?.available === null ? "" : eur(cashflow.points.at(-1)?.available, 2)}
               </strong>
             </div>
           </>
@@ -346,7 +293,7 @@ export function HomePanel() {
       {/* En escritorio también se comparan ingresos, gastos y ahorro neto; no solo el saldo bancario. */}
       <section className={`${card} ${flat} hidden p-5 sm:block`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <SectionTitle icon={BarChart3} tint="blue" size="base">Ingresos, gastos y ahorro</SectionTitle>
+          <SectionTitle icon={BarChart3} tint="blue" size="base">Ingresos, gastos y saldo</SectionTitle>
           <div className="flex rounded-lg bg-slate-100 p-0.5" role="group" aria-label="Periodo de la evolución">
             {CASHFLOW_RANGES.map((range) => (
               <button key={range} type="button" onClick={() => setCashflowRange(range)} aria-pressed={cashflowRange === range}
@@ -359,8 +306,8 @@ export function HomePanel() {
         {cashflow ? (
           <>
             <div className="mt-4"><CycleBars key={`desktop:${cashflowRange}`} data={cashflow.points} height={230} /></div>
-            <p className={`amount mt-3 text-right text-sm font-semibold tabular-nums ${cashflow.net >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-              Ahorro neto del periodo: {eur(cashflow.net, 2)}
+            <p className={`amount mt-3 text-right text-sm font-semibold tabular-nums ${(cashflow.points.at(-1)?.available ?? 0) >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+              Saldo al cierre: {cashflow.points.at(-1)?.available === null ? "" : eur(cashflow.points.at(-1)?.available, 2)}
             </p>
           </>
         ) : <p className="py-8 text-center text-sm text-slate-500">La evolución todavía no está disponible.</p>}
