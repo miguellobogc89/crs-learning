@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, CalendarDays, Check, ChevronRight, PiggyBank, Plus, Trash2, X } from "lucide-react";
 import type { forecastSource, overview } from "@/lib/finance/service";
-import type { ForecastItem } from "@/lib/finance/logic";
+import { forecastPlanOccurrences, type ForecastFrequency, type ForecastItem } from "@/lib/finance/logic";
 import { card, eur, flat } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -14,6 +14,12 @@ type View = Awaited<ReturnType<typeof overview>>;
 type Suggestion = View["forecastSuggestions"][number];
 type Reference = NonNullable<Awaited<ReturnType<typeof forecastSource>>>;
 type ForecastEvent = View["forecastNextWeeks"][number]["events"][number];
+type ForecastWeek = { start: string; end: string };
+const forecastFrequencies: { value: ForecastFrequency; label: string }[] = [
+  { value: "puntual", label: "Una vez" }, { value: "semanal", label: "Cada semana" },
+  { value: "mensual", label: "Cada mes" }, { value: "trimestral", label: "Cada 3 meses" }, { value: "anual", label: "Cada año" },
+];
+const frequencyLabel = (value: ForecastFrequency) => forecastFrequencies.find((option) => option.value === value)?.label ?? "Una vez";
 
 function planTitle(item: ForecastItem) {
   const extra = /^forecast-extra:(\d{4})-(\d{2})$/.exec(item.sourceKey ?? "");
@@ -93,13 +99,14 @@ function ForecastEventBody({ event, plan, onClose }: { event: ForecastEvent; pla
     try {
       if (recurring) await fapi("forecast/occurrence", { key: event.occurrenceKey, amount: value });
       else if (plan && value !== null) await fapi("forecast/item", { id: plan.id, title: plan.title, kind: plan.kind,
-        amount: value, startDate: plan.startDate, endDate: plan.endDate });
+        amount: value, startDate: plan.startDate, endDate: plan.endDate, frequency: plan.frequency ?? "puntual" });
       refreshFinance(); onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "No se pudo actualizar la previsión"); }
     finally { setSaving(false); }
   };
   const parsed = Number(amount.replace(",", "."));
   const valid = amount.trim() !== "" && Number.isFinite(parsed) && parsed >= (recurring ? 0 : 0.01) && parsed <= 1_000_000;
+  const changed = valid && Math.round(parsed * 100) !== Math.round(event.amount * 100);
   return <div className="min-h-0 space-y-5 overflow-y-auto px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4">
     <div><p className="text-xs text-slate-500">{event.origin === "recurrente" ? "Movimiento habitual" : event.origin === "plan" ? "Plan añadido" : "Estimación"} · {longDay(event.date)}</p>
       <h2 className="mt-2 break-words text-lg font-semibold text-slate-900">{event.label}</h2>
@@ -114,7 +121,7 @@ function ForecastEventBody({ event, plan, onClose }: { event: ForecastEvent; pla
         {event.count && <p>Movimientos utilizados: <b>{event.count}</b></p>}
       </div>
     </section>}
-    {event.origin === "plan" && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Este importe lo has añadido o confirmado en «Mis próximos planes».</p>}
+    {event.origin === "plan" && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Este importe lo has añadido o confirmado en «Mis próximos planes».{plan?.frequency && plan.frequency !== "puntual" ? " Si lo modificas, se actualizarán todas sus repeticiones." : ""}</p>}
     {editable ? <section className="space-y-3">
       <h3 className="text-sm font-semibold text-slate-900">Ajustar esta previsión</h3>
       <label className="block text-xs font-medium text-slate-600">Importe previsto (€)
@@ -123,28 +130,90 @@ function ForecastEventBody({ event, plan, onClose }: { event: ForecastEvent; pla
       </label>
       {recurring && <p className="text-xs leading-relaxed text-slate-500">Este cambio solo afecta al cargo del {longDay(event.date)}. Los siguientes meses mantienen el importe habitual.</p>}
       {error && <ErrorNote>{error}</ErrorNote>}
-      <button type="button" disabled={saving || !valid} onClick={() => void act(parsed)} className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Guardando…" : "Guardar importe"}</button>
-      {recurring && event.amount !== 0 && <button type="button" disabled={saving} onClick={() => void act(0)} className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-50">No se cobrará este ciclo</button>}
+      {recurring && event.amount !== 0 && <button type="button" disabled={saving} onClick={() => void act(0)} className="w-full rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 disabled:opacity-50">No se cobrará este mes</button>}
+      <button type="button" disabled={saving || !changed} onClick={() => void act(parsed)} className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">{saving ? "Guardando…" : "Guardar cambios"}</button>
       {recurring && event.modified && <button type="button" disabled={saving} onClick={() => void act(null)} className="w-full px-3 py-2 text-xs font-semibold text-blue-700 disabled:opacity-50">Restaurar importe habitual</button>}
     </section> : <p className="text-sm text-slate-500">Esta estimación se calcula a partir de tu histórico y no tiene un cargo individual que cancelar.</p>}
   </div>;
 }
 
-function ForecastEventSheet({ event, plan, open, onClose }: { event: ForecastEvent | null; plan?: ForecastItem; open: boolean; onClose: () => void }) {
+function ForecastBottomSheet({ open, onClose, title, description, children }: {
+  open: boolean; onClose: () => void; title: string; description: string; children: ReactNode;
+}) {
   return <Sheet open={open} onOpenChange={(value) => { if (!value) onClose(); }}>
     <SheetContent side="bottom" showCloseButton={false}
       className="mx-auto max-h-[90dvh] w-full max-w-xl gap-0 overflow-hidden rounded-t-2xl p-0 duration-300 data-[side=bottom]:data-open:slide-in-from-bottom-full data-[side=bottom]:data-closed:slide-out-to-bottom-full">
       <SheetHeader className="shrink-0 border-b border-slate-100 bg-white px-5 pb-3 pt-2">
         <div aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300" />
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0"><SheetTitle className="font-semibold text-slate-900">Detalle del movimiento previsto</SheetTitle>
-            <SheetDescription>Solo afecta a tu previsión, no a la cuenta bancaria</SheetDescription></div>
+          <div className="min-w-0"><SheetTitle className="font-semibold text-slate-900">{title}</SheetTitle>
+            <SheetDescription>{description}</SheetDescription></div>
           <button type="button" onClick={onClose} aria-label="Cerrar detalle" className="shrink-0 rounded-lg p-2 text-slate-600 hover:bg-slate-100"><X className="h-5 w-5" /></button>
         </div>
       </SheetHeader>
-      {event && <ForecastEventBody key={event.occurrenceKey ?? event.planId ?? `${event.date}:${event.label}`} event={event} plan={plan} onClose={onClose} />}
+      {children}
     </SheetContent>
   </Sheet>;
+}
+
+function ForecastEventSheet({ event, plan, open, onClose }: { event: ForecastEvent | null; plan?: ForecastItem; open: boolean; onClose: () => void }) {
+  return <ForecastBottomSheet open={open} onClose={onClose} title="Detalle del movimiento previsto" description="Solo afecta a tu previsión, no a la cuenta bancaria">
+    {event && <ForecastEventBody key={event.occurrenceKey ?? `${event.date}:${event.planId ?? event.label}`} event={event} plan={plan} onClose={onClose} />}
+  </ForecastBottomSheet>;
+}
+
+function ForecastNewPlanSheet({ week, open, onClose }: { week: ForecastWeek | null; open: boolean; onClose: () => void }) {
+  return <ForecastBottomSheet open={open} onClose={onClose} title="Añadir imprevisto" description="Gasto que quieres incluir en tu previsión, no en el banco">
+    {week && <ForecastNewPlanForm key={week.start} week={week} onClose={onClose} />}
+  </ForecastBottomSheet>;
+}
+
+function ForecastNewPlanForm({ week, onClose }: { week: ForecastWeek; onClose: () => void }) {
+  const [title, setTitle] = useState("");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(week.start);
+  const [frequency, setFrequency] = useState<ForecastFrequency>("puntual");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const value = Number(amount.replace(",", "."));
+  const valid = title.trim().length > 0 && amount.trim().length > 0 && Number.isFinite(value) && value >= 0.01
+    && value <= 10_000_000 && date >= week.start && date <= week.end;
+  const save = async () => {
+    if (!valid) return;
+    setSaving(true); setError(null);
+    try {
+      await fapi("forecast/item", { title: title.trim(), kind: "gasto", amount: value, startDate: date, frequency });
+      refreshFinance(); onClose();
+    } catch (e) { setError(e instanceof Error ? e.message : "No se pudo añadir el imprevisto"); }
+    finally { setSaving(false); }
+  };
+  return <div className="min-h-0 space-y-4 overflow-y-auto px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5">
+    <p className="text-xs text-slate-500">Semana del {shortDay(week.start)} al {shortDay(week.end)}</p>
+    <label className="block text-xs font-medium text-slate-600">Nombre
+      <input value={title} maxLength={100} onChange={(e) => setTitle(e.target.value)} placeholder="Cena de empresa, regalo, reparación…"
+        className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-3 text-base text-slate-900" />
+    </label>
+    <label className="block text-xs font-medium text-slate-600">Importe previsto (€)
+      <input type="number" min="0.01" max="10000000" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00"
+        className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-3 text-base text-slate-900" />
+    </label>
+    <label className="block text-xs font-medium text-slate-600">Fecha aproximada
+      <input type="date" min={week.start} max={week.end} value={date} onChange={(e) => setDate(e.target.value)}
+        className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-3 text-base text-slate-900" />
+    </label>
+    <label className="block text-xs font-medium text-slate-600">Periodicidad
+      <select value={frequency} onChange={(e) => setFrequency(e.target.value as ForecastFrequency)}
+        className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-base text-slate-900">
+        {forecastFrequencies.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
+    <p className="text-xs leading-relaxed text-slate-500">La fecha sirve para situarlo en el calendario. {frequency !== "puntual" ? "Se repetirá en los siguientes periodos de previsión." : "Es un gasto puntual y aproximado."}</p>
+    {error && <ErrorNote>{error}</ErrorNote>}
+    <div className="flex gap-2 pt-1">
+      <button type="button" disabled={saving} onClick={onClose} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-50">Cancelar</button>
+      <button type="button" disabled={saving || !valid} onClick={() => void save()} className="min-w-0 flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400">{saving ? "Guardando…" : "Guardar"}</button>
+    </div>
+  </div>;
 }
 
 function SavingsGoal({ settings }: { settings: View["settings"] }) {
@@ -178,7 +247,7 @@ function SavingsGoal({ settings }: { settings: View["settings"] }) {
   </section>;
 }
 
-function NextCycleWeeks({ weeks, cycle, onEvent }: { weeks: View["forecastNextWeeks"]; cycle: View["forecastCashflow"]["points"][number]; onEvent: (event: ForecastEvent) => void }) {
+function NextCycleWeeks({ weeks, cycle, onEvent, onAdd }: { weeks: View["forecastNextWeeks"]; cycle: View["forecastCashflow"]["points"][number]; onEvent: (event: ForecastEvent) => void; onAdd: (week: ForecastWeek) => void }) {
   return <section className={`${card} ${flat} p-4 sm:p-6`}>
     <h2 className="font-semibold text-slate-900">Tu próximo mes, semana a semana</h2>
     <p className="mt-1 text-xs text-slate-500">{longDay(cycle.cycle.start)} – {longDay(cycle.cycle.end)} · ciclo de tu nómina</p>
@@ -205,6 +274,10 @@ function NextCycleWeeks({ weeks, cycle, onEvent }: { weeks: View["forecastNextWe
           </button>)}
           {week.variable > 0 && <div className="flex justify-between gap-2 border-t border-slate-200 pt-2 text-xs text-slate-500"><span>Gastos cotidianos estimados</span><b className="amount shrink-0 tabular-nums text-rose-700">−{eur(week.variable, 2)}</b></div>}
           {!week.events.length && week.variable === 0 && <p className="text-xs text-slate-500">Sin movimientos previstos.</p>}
+          <button type="button" onClick={() => onAdd({ start: week.start, end: week.end })}
+            className="flex w-full items-center gap-1.5 border-t border-slate-200 pt-3 text-left text-xs font-semibold text-blue-700 hover:text-blue-900">
+            <Plus className="h-4 w-4" /> Añadir imprevisto
+          </button>
         </div>
       </details>
     </div>)}</div>
@@ -245,11 +318,15 @@ function ForecastSuggestions({ suggestions, onDetail }: { suggestions: Suggestio
   </section>;
 }
 
-function MyPlans({ items, hiddenCount, onDetail }: { items: ForecastItem[]; hiddenCount: number; onDetail: (key: string) => void }) {
+function MyPlans({ items, hiddenCount, periodStart, periodEnd, onDetail }: {
+  items: ForecastItem[]; hiddenCount: number; periodStart: string; periodEnd: string; onDetail: (key: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<"ingreso" | "gasto">("gasto");
+  const [frequency, setFrequency] = useState<ForecastFrequency>("puntual");
+  const [isSuggested, setIsSuggested] = useState(false);
   const [amount, setAmount] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -258,12 +335,14 @@ function MyPlans({ items, hiddenCount, onDetail }: { items: ForecastItem[]; hidd
   const edit = (item?: ForecastItem) => {
     setEditing(item?.id ?? null);
     setTitle(item?.title ?? ""); setKind(item?.kind ?? "gasto"); setAmount(item?.amount.toString() ?? "");
+    setFrequency(item?.frequency ?? "puntual"); setIsSuggested(item?.source === "suggested");
     setStartDate(item?.startDate ?? ""); setEndDate(item?.endDate ?? ""); setError(null); setOpen(true);
   };
   const save = async () => {
     setBusy(true); setError(null);
     try {
-      await fapi("forecast/item", { id: editing, title, kind, amount: Number(amount.replace(",", ".")), startDate, endDate: endDate || null });
+      await fapi("forecast/item", { id: editing, title, kind, amount: Number(amount.replace(",", ".")), startDate,
+        endDate: endDate || null, frequency });
       setOpen(false); refreshFinance();
     } catch (e) { setError(e instanceof Error ? e.message : "No se pudo guardar"); }
     finally { setBusy(false); }
@@ -279,20 +358,27 @@ function MyPlans({ items, hiddenCount, onDetail }: { items: ForecastItem[]; hidd
       <p className="mt-1 text-xs text-slate-500">Eventos que quieres presupuestar. No alteran el histórico real.</p></div>
       <button type="button" onClick={() => edit()} className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white"><Plus className="h-4 w-4" />Añadir</button>
     </div>
-    {items.length ? <ul className="mt-3 divide-y divide-slate-100">{items.map((item) => <li key={item.id} className="flex items-center gap-3 py-3">
+    {items.length ? <ul className="mt-3 divide-y divide-slate-100">{items.map((item) => {
+      const nextDate = forecastPlanOccurrences(item, periodStart, periodEnd)[0] ?? item.startDate;
+      return <li key={item.id} className="flex items-center gap-3 py-3">
       <CalendarDays className="h-4 w-4 shrink-0 text-slate-400" />
       <div className="min-w-0 flex-1"><button type="button" onClick={() => edit(item)} className="w-full text-left"><p className="truncate text-sm font-medium text-slate-900">{planTitle(item)}</p>
-        <p className="text-xs text-slate-500">{shortDay(item.startDate)} {item.startDate.slice(0, 4)}{item.endDate ? ` – ${shortDay(item.endDate)}` : ""} · {item.source === "suggested" ? "Confirmado" : "Planificado"}</p></button>
-        {item.sourceKey && <button type="button" onClick={() => onDetail(item.sourceKey!)} className="mt-1 inline-flex items-center text-xs font-semibold text-blue-700">Ver detalle <ChevronRight className="h-3.5 w-3.5" /></button>}
+        <p className="text-xs text-slate-500">{shortDay(nextDate)} {nextDate.slice(0, 4)}{item.endDate ? ` · hasta ${shortDay(item.endDate)}` : ""} · {item.source === "suggested" ? "Confirmado" : frequencyLabel(item.frequency ?? "puntual")}</p></button>
+        {item.source === "suggested" && item.sourceKey && <button type="button" onClick={() => onDetail(item.sourceKey!)} className="mt-1 inline-flex items-center text-xs font-semibold text-blue-700">Ver detalle <ChevronRight className="h-3.5 w-3.5" /></button>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2"><b className={`amount text-sm tabular-nums ${item.kind === "ingreso" ? "text-blue-700" : "text-rose-700"}`}>{item.kind === "ingreso" ? "+" : "−"}{eur(item.amount, 2)}</b>
         <button type="button" disabled={busy} onClick={() => void remove(item.id)} aria-label={`Eliminar ${item.title}`} className="rounded-lg p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div>
-    </li>)}</ul> : <p className="mt-4 text-sm text-slate-500">{hiddenCount ? "No hay planes en este periodo." : "Todavía no has añadido planes."}</p>}
+    </li>})}</ul> : <p className="mt-4 text-sm text-slate-500">{hiddenCount ? "No hay planes en este periodo." : "Todavía no has añadido planes."}</p>}
     {hiddenCount > 0 && <p className="mt-2 text-xs text-slate-500">{hiddenCount} {hiddenCount === 1 ? "plan fuera" : "planes fuera"} del periodo seleccionado. Amplía el plazo para verlo{hiddenCount === 1 ? "" : "s"}.</p>}
     {open && <div className="mt-4 space-y-3 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
       <label className="block text-xs font-medium text-slate-600">¿Qué tienes previsto?<input value={title} maxLength={100} onChange={(e) => setTitle(e.target.value)} placeholder="Regalos de Navidad" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
       <div className="flex gap-2">{(["gasto", "ingreso"] as const).map((k) => <button key={k} type="button" onClick={() => setKind(k)} aria-pressed={kind === k} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${kind === k ? "bg-blue-600 text-white" : "bg-white text-slate-600"}`}>{k === "gasto" ? "Gasto" : "Ingreso"}</button>)}</div>
       <label className="block text-xs font-medium text-slate-600">Presupuesto (€)<input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
+      {!isSuggested && <label className="block text-xs font-medium text-slate-600">Periodicidad
+        <select value={frequency} onChange={(e) => setFrequency(e.target.value as ForecastFrequency)} className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+          {forecastFrequencies.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+      </label>}
       <div className="grid grid-cols-2 gap-2">
         <label className="text-xs font-medium text-slate-600">Desde<input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm" /></label>
         <label className="text-xs font-medium text-slate-600">Hasta (opcional)<input type="date" min={startDate} value={endDate} onChange={(e) => setEndDate(e.target.value)} className="mt-1 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm" /></label>
@@ -311,6 +397,8 @@ export function ForecastPanel({ view }: { view: View }) {
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ForecastEvent | null>(null);
   const [eventOpen, setEventOpen] = useState(false);
+  const [selectedWeek, setSelectedWeek] = useState<ForecastWeek | null>(null);
+  const [newPlanOpen, setNewPlanOpen] = useState(false);
   const forecast = view.forecastCashflow;
   const weeklyMode = range === 1;
   const points = weeklyMode ? forecast.points.slice(1, 2) : forecast.points.slice(0, range);
@@ -318,15 +406,19 @@ export function ForecastPanel({ view }: { view: View }) {
   const periodStart = weeklyMode ? points[0]?.cycle.start ?? view.today : view.today;
   const periodEnd = last?.cycle.end ?? view.today;
   const visibleSuggestions = (view.forecastSuggestions ?? []).filter((s) => s.startDate >= periodStart && s.startDate <= periodEnd);
-  const visiblePlans = (view.forecastItems ?? []).filter((item) => item.startDate >= periodStart && item.startDate <= periodEnd);
+  const visiblePlans = (view.forecastItems ?? []).filter((item) => forecastPlanOccurrences(item, periodStart, periodEnd).length > 0);
   const total = points.reduce((s, p) => ({ income: s.income + p.income, expenses: s.expenses + p.expenses }), { income: 0, expenses: 0 });
-  const chartData = weeklyMode ? view.forecastNextWeeks.map((w, i) => ({
-    label: `Sem ${i + 1}`, title: `Semana ${i + 1} · ${shortDay(w.start)} – ${shortDay(w.end)}`,
-    income: w.income, expenses: w.expenses, net: w.net, available: w.openingBalance,
-  })) : points.map((p) => ({
+  const chartData = weeklyMode ? view.forecastNextWeeks.map((w, i) => {
+    const fixedExpenses = Math.round(w.events.filter((event) => event.origin === "recurrente" && event.kind === "gasto")
+      .reduce((sum, event) => sum + event.amount, 0) * 100) / 100;
+    return { label: `Sem ${i + 1}`, title: `Semana ${i + 1} · ${shortDay(w.start)} – ${shortDay(w.end)}`,
+      income: w.income, expenses: w.expenses, net: w.net, available: w.openingBalance,
+      fixedExpenses, estimatedExpenses: Math.round((w.expenses - fixedExpenses) * 100) / 100 };
+  }) : points.map((p) => ({
     label: p.current ? "Ahora" : new Intl.DateTimeFormat("es-ES", { month: "short", timeZone: "UTC" }).format(new Date(`${p.cycle.end}T00:00:00Z`)).replace(".", ""),
     title: p.current ? `Desde hoy · ${p.cycle.label}` : `Previsto · ${p.cycle.label}`,
     income: p.income, expenses: p.expenses, net: p.net, available: p.openingBalance, current: p.current,
+    fixedExpenses: p.fixedExpenses, estimatedExpenses: p.estimatedExpenses,
   }));
   const goal = view.settings.savingsGoal ?? 0;
   const goalPerCycle = view.settings.savingsFrequency === "semanal" ? goal * 52 / 12 : goal;
@@ -351,11 +443,15 @@ export function ForecastPanel({ view }: { view: View }) {
         {!forecast.hasExpectedIncome && <p className="text-xs font-medium text-amber-700">Sin ingresos periódicos suficientes: puede faltar dinero por estimar.</p>}
       </> : <p className="py-6 text-sm text-slate-500">La previsión todavía no está disponible.</p>}
     </section>
-    {forecast.points[1] && <NextCycleWeeks weeks={view.forecastNextWeeks} cycle={forecast.points[1]} onEvent={(event) => { setSelectedEvent(event); setEventOpen(true); }} />}
+    {forecast.points[1] && <NextCycleWeeks weeks={view.forecastNextWeeks} cycle={forecast.points[1]}
+      onEvent={(event) => { setSelectedEvent(event); setEventOpen(true); }}
+      onAdd={(week) => { setSelectedWeek(week); setNewPlanOpen(true); }} />}
     <SavingsGoal key={`${view.settings.savingsGoal}:${view.settings.savingsFrequency}`} settings={view.settings} />
     <ForecastSuggestions suggestions={visibleSuggestions} onDetail={setDetailKey} />
-    <MyPlans items={visiblePlans} hiddenCount={(view.forecastItems ?? []).length - visiblePlans.length} onDetail={setDetailKey} />
+    <MyPlans items={visiblePlans} hiddenCount={(view.forecastItems ?? []).length - visiblePlans.length}
+      periodStart={periodStart} periodEnd={periodEnd} onDetail={setDetailKey} />
   </div><ForecastReferenceSheet key={`reference:${detailKey ?? "closed"}`} referenceKey={detailKey} onClose={() => setDetailKey(null)} />
     <ForecastEventSheet event={selectedEvent} open={eventOpen}
-      plan={view.forecastItems.find((item) => item.id === selectedEvent?.planId)} onClose={() => setEventOpen(false)} /></>;
+      plan={view.forecastItems.find((item) => item.id === selectedEvent?.planId)} onClose={() => setEventOpen(false)} />
+    <ForecastNewPlanSheet week={selectedWeek} open={newPlanOpen} onClose={() => setNewPlanOpen(false)} /></>;
 }
