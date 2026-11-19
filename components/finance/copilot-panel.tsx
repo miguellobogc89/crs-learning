@@ -28,7 +28,9 @@ export function CopilotPanel() {
   useEffect(() => {
     if (data) setMessages(data.messages);
   }, [data]);
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [messages, busy]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, busy]);
 
   const send = async (q: string) => {
     const question = q.trim();
