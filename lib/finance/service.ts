@@ -196,7 +196,7 @@ export async function overview(userId: string, offset = 0) {
     cashflow,
     forecastCashflow: futureCashflow,
     forecastNextWeeks: nextCycle ? forecastCycleWeeks({ point: nextCycle, recurring, items: ctx.forecastItems, today }) : [],
-    forecastItems: ctx.forecastItems,
+    forecastItems: ctx.forecastItems.filter((item) => item.source !== "override"),
     forecastSuggestions: suggestions,
     categoryHistory: expenseHistoryByCycle(txs, ctx.startDay),
     recentExpenses: txs
