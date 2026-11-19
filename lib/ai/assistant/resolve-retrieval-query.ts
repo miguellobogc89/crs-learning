@@ -1,10 +1,5 @@
 // lib/ai/assistant/resolve-retrieval-query.ts
-import OpenAI from "openai";
-import { getOpenAIModel } from "@/lib/ai/openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { getOpenAIClient, getOpenAIModel } from "@/lib/ai/openai";
 
 type ConversationMessage = {
   role: string;
@@ -36,7 +31,7 @@ export async function resolveRetrievalQuery({
     })
     .join("\n\n");
 
-  const response = await openai.responses.create({
+  const response = await getOpenAIClient().responses.create({
     model: getOpenAIModel(),
 
     input: [
