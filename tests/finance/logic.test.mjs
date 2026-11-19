@@ -235,6 +235,23 @@ test("Inicio: previsión de 12 ciclos suma ingresos conocidos, recibos y gasto v
   assert.equal(Math.round(weeks.reduce((sum, w) => sum + w.expenses, 0) * 100) / 100, planned.points[1].expenses);
   assert.equal(weeks.at(-1).closingBalance, planned.points[1].closingBalance);
   assert.equal(weeks.some((w) => w.events.some((e) => e.label === "Regalos" && e.date === "2026-12-10")), true);
+
+  const netflix = recurring.find((r) => r.category === "suscripciones");
+  let chargeDate = netflix.nextDate;
+  while (chargeDate < planned.points[1].cycle.start) chargeDate = L.addDays(chargeDate, netflix.intervalDays);
+  const exception = { id: "override", title: "Netflix", kind: "gasto", amount: 0, startDate: chargeDate,
+    endDate: null, source: "override", sourceKey: L.forecastOccurrenceKey(netflix, chargeDate) };
+  const withoutCharge = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000, items: [...items, exception] });
+  assert.equal(withoutCharge.points[1].knownExpenses, planned.points[1].knownExpenses - 12.99, "omitir un recibo no afecta al gasto variable");
+  assert.equal(withoutCharge.points[2].knownExpenses, planned.points[2].knownExpenses, "la excepción no altera el mes siguiente");
+  const adjustedWeeks = L.forecastCycleWeeks({ point: withoutCharge.points[1], recurring, items: [...items, exception], today });
+  const omitted = adjustedWeeks.flatMap((w) => w.events).find((e) => e.occurrenceKey === exception.sourceKey);
+  assert.equal(omitted?.amount, 0);
+  assert.equal(omitted?.modified, true);
+  assert.equal(adjustedWeeks.at(-1).closingBalance, withoutCharge.points[1].closingBalance);
+  const adjusted = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000,
+    items: [...items, { ...exception, amount: 5.99 }] });
+  assert.equal(adjusted.points[1].knownExpenses, planned.points[1].knownExpenses - 7);
 });
 
 test("Inicio: solo estima una nómina sin patrón recurrente cuando aparece en dos ciclos completos", () => {
