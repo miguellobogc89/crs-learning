@@ -183,6 +183,42 @@ test("proyección: saldo de hoy + cobros − recibos − gasto variable medio; �
   assert.equal(L.affordability(p, 99_999).verdict, "no");
 });
 
+test("Inicio: previsión de 12 ciclos suma ingresos conocidos, recibos y gasto variable, sin regalos", () => {
+  const today = "2026-11-17";
+  const txs = [...history(), tx("regalo", "S", "2026-11-10", 300, "Cumpleaños", "regalo", "regalo_recibido")];
+  const recurring = L.detectRecurring(txs, today);
+  const keys = new Set(recurring.map((r) => r.key));
+  const summaries = [1, 2, 3].map((i) => L.summarize(txs, L.cycleFor(today, 25, -i), keys));
+  const current = L.summarize(txs, L.cycleFor(today, 25), keys);
+  const projection = L.projectCycle({ txs, today, startDay: 25, liquidity: 3000, recurring, savingsGoal: null, history: summaries });
+  const result = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection });
+  assert.equal(result.points.length, 12);
+  assert.equal(result.points[0].net, projection.projectedNet, "el ciclo actual debe cuadrar con la proyección que ya existe");
+  assert.equal(result.points[1].cycle.start, "2026-11-25");
+  assert.equal(result.points[1].income, 2100, "solo se repite la nómina; no el regalo de cumpleaños");
+  assert.equal(result.points[1].knownExpenses, 12.99, "se cuenta Netflix una sola vez");
+  assert.ok(result.points[1].expenses > result.points[1].knownExpenses, "se añade el gasto variable histórico");
+  assert.equal(result.points[1].net, Math.round((result.points[1].income - result.points[1].expenses) * 100) / 100);
+});
+
+test("Inicio: solo estima una nómina sin patrón recurrente cuando aparece en dos ciclos completos", () => {
+  const today = "2026-11-17";
+  const txs = [
+    tx("a", "S", "2026-08-27", 2000, "SALARIO ENTRADA A", "ingreso", "nomina"),
+    tx("b", "S", "2026-09-27", 2200, "PAGO EMPRESA B", "ingreso", "nomina"),
+    tx("c", "S", "2026-10-27", 300, "BONO EXTRA", "ingreso", "otros_ingresos", { extraordinary: true }),
+  ];
+  const history = [1, 2, 3].map((i) => L.summarize(txs, L.cycleFor(today, 25, -i)));
+  const current = L.summarize(txs, L.cycleFor(today, 25));
+  const recurring = L.detectRecurring(txs, today);
+  const projection = L.projectCycle({ txs, today, startDay: 25, liquidity: 1000, recurring, savingsGoal: null, history });
+  const result = L.forecastCashflow({ txs, today, startDay: 25, recurring, history, current, projection });
+  assert.equal(result.estimatedSalary, 2100);
+  assert.equal(result.points[1].income, 2100);
+  assert.equal(result.points[1].expenses, 0);
+  assert.equal(result.hasExpectedIncome, true);
+});
+
 test("presupuestos: gastado, restante y aviso si va más rápido que el ciclo", () => {
   const c = L.cycleFor("2026-11-17", 25);
   const s = L.summarize([tx("1", "S", "2026-10-26", -600, "Súper", "gasto", "alimentacion")], c);
