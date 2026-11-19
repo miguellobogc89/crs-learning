@@ -669,6 +669,9 @@ export type Projection = {
 
 export type ForecastItem = { id: string; title: string; kind: "ingreso" | "gasto"; amount: number; startDate: string; endDate: string | null; source: string; sourceKey: string | null };
 
+/** Una corrección solo afecta a una ocurrencia futura de un cargo habitual. */
+export const forecastOccurrenceKey = (r: Pick<Recurring, "key" | "kind">, date: string) => `rec:${r.kind}:${r.key}:${date}`;
+
 /**
  * Cómo acabará el ciclo: saldo de hoy + cobros previstos − recibos previstos − gasto variable esperado
  * (media diaria de los últimos ciclos completos, sin extraordinarios ni recurrentes).
@@ -744,6 +747,7 @@ export function forecastCashflow(opts: {
   items?: ForecastItem[];
 }) {
   const { txs, today, startDay, recurring, history, current, projection, items = [] } = opts;
+  const overrides = new Map(items.filter((i) => i.source === "override" && i.sourceKey).map((i) => [i.sourceKey!, i.amount]));
   const active = recurring.filter((r) => r.active);
   const recurringKeys = new Set(active.map((r) => r.key));
   const complete = history.filter((h) => h.cycle.end < current.cycle.start).slice(0, 3);
@@ -759,7 +763,7 @@ export function forecastCashflow(opts: {
   let openingBalance = opts.liquidity ?? null;
   const points = Array.from({ length: 12 }, (_, offset) => {
     const cycle = cycleFor(today, startDay, offset);
-    const itemsInCycle = items.filter((item) => item.startDate >= today && item.startDate >= cycle.start && item.startDate <= cycle.end);
+    const itemsInCycle = items.filter((item) => item.source !== "override" && item.startDate >= today && item.startDate >= cycle.start && item.startDate <= cycle.end);
     const extraIncome = round2(itemsInCycle.filter((i) => i.kind === "ingreso").reduce((s, i) => s + i.amount, 0));
     const extraExpenses = round2(itemsInCycle.filter((i) => i.kind === "gasto").reduce((s, i) => s + i.amount, 0));
     let knownIncome: number;
@@ -779,8 +783,10 @@ export function forecastCashflow(opts: {
         let next = r.nextDate;
         while (next < cycle.start) next = addDays(next, r.intervalDays);
         while (next <= cycle.end) {
-          if (r.kind === "ingreso" && r.amount > 0) knownIncome += r.amount;
-          else if (r.kind === "gasto" && r.amount < 0) knownExpenses -= r.amount;
+          const corrected = overrides.get(forecastOccurrenceKey(r, next));
+          const amount = corrected === undefined ? Math.abs(r.amount) : corrected;
+          if (r.kind === "ingreso" && r.amount > 0) knownIncome += amount;
+          else if (r.kind === "gasto" && r.amount < 0) knownExpenses += amount;
           next = addDays(next, r.intervalDays);
         }
       }
@@ -815,21 +821,28 @@ export function forecastCycleWeeks(opts: {
 }) {
   const { point, recurring, items, today } = opts;
   const { cycle } = point;
-  const events: Array<{ date: string; label: string; amount: number; kind: "ingreso" | "gasto"; origin: "recurrente" | "plan" | "estimado" }> = [];
+  const overrides = new Map(items.filter((i) => i.source === "override" && i.sourceKey).map((i) => [i.sourceKey!, i.amount]));
+  const events: Array<{ date: string; label: string; amount: number; kind: "ingreso" | "gasto"; origin: "recurrente" | "plan" | "estimado";
+    occurrenceKey?: string; originalAmount?: number; modified?: boolean; lastDate?: string; frequency?: string; count?: number; planId?: string }> = [];
   for (const r of recurring) {
     if (!r.active) continue;
     let date = r.nextDate;
     while (date < cycle.start) date = addDays(date, r.intervalDays);
     while (date <= cycle.end) {
-      if (r.kind === "ingreso" && r.amount > 0) events.push({ date, label: r.label, amount: r.amount, kind: "ingreso", origin: "recurrente" });
-      else if (r.kind === "gasto" && r.amount < 0) events.push({ date, label: r.label, amount: -r.amount, kind: "gasto", origin: "recurrente" });
+      const occurrenceKey = forecastOccurrenceKey(r, date);
+      const corrected = overrides.get(occurrenceKey);
+      const event = { date, label: r.label, amount: corrected ?? Math.abs(r.amount), origin: "recurrente" as const,
+        occurrenceKey, originalAmount: Math.abs(r.amount), modified: corrected !== undefined,
+        lastDate: r.lastDate, frequency: r.frequency, count: r.count };
+      if (r.kind === "ingreso" && r.amount > 0) events.push({ ...event, kind: "ingreso" });
+      else if (r.kind === "gasto" && r.amount < 0) events.push({ ...event, kind: "gasto" });
       date = addDays(date, r.intervalDays);
     }
   }
   if (point.estimatedSalary > 0) events.push({ date: cycle.start, label: "Nómina habitual estimada", amount: point.estimatedSalary, kind: "ingreso", origin: "estimado" });
   for (const item of items) {
-    if (item.startDate < today || item.startDate < cycle.start || item.startDate > cycle.end) continue;
-    events.push({ date: item.startDate, label: item.title, amount: item.amount, kind: item.kind, origin: "plan" });
+    if (item.source === "override" || item.startDate < today || item.startDate < cycle.start || item.startDate > cycle.end) continue;
+    events.push({ date: item.startDate, label: item.title, amount: item.amount, kind: item.kind, origin: "plan", planId: item.id });
   }
   events.sort((a, b) => a.date.localeCompare(b.date) || b.amount - a.amount);
 
