@@ -65,7 +65,7 @@ export function Combobox({
   }
 
   const trigger = <button type="button" disabled={disabled} aria-label={ariaLabel} title={selected?.label}
-    className={cn("inline-flex h-8 max-md:h-11 min-w-0 items-center justify-between gap-1.5 rounded-lg px-2.5 text-left text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+    className={cn("inline-flex h-8 max-md:h-11 min-w-0 items-center justify-between gap-1.5 rounded-lg px-2.5 text-left text-sm outline-none transition-colors focus-visible:border-[#0A58FF] focus-visible:ring-3 focus-visible:ring-[#0A58FF]/15 focus-visible:shadow-[0_0_18px_rgba(10,88,255,0.20)] disabled:cursor-not-allowed disabled:opacity-50",
       variant === "outline" ? "border border-slate-200 bg-white hover:border-slate-300" : "border border-transparent bg-transparent hover:border-slate-200 hover:bg-white data-[state=open]:border-slate-300 data-[state=open]:bg-white",
       className)}>
     <span className={cn("min-w-0 truncate", !selected && "text-slate-400")}>{renderValue ? renderValue(selected) : selected?.label ?? placeholder}</span>
@@ -76,7 +76,7 @@ export function Combobox({
         {showSearch && <div className={cn("relative mb-1 border-b border-slate-100 pb-1", mobile && "mx-4 mb-2")}>
           <SearchIcon className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
           <input autoFocus={!mobile} value={query} onChange={e => { setQuery(e.target.value); setActive(0); }} placeholder={searchPlaceholder}
-            className={cn("h-8 w-full rounded-md bg-transparent pl-7 pr-2 text-sm outline-none placeholder:text-slate-400", mobile && "h-11 text-base")} />
+            className={cn("h-8 w-full rounded-md bg-transparent pl-7 pr-2 text-sm outline-none placeholder:text-slate-400 focus-visible:ring-3 focus-visible:ring-[#0A58FF]/15 focus-visible:shadow-[0_0_18px_rgba(10,88,255,0.20)]", mobile && "h-11 text-base")} />
         </div>}
         <div ref={listRef} tabIndex={-1} role="listbox" aria-label={ariaLabel ?? placeholder}
           className={cn("max-h-64 overflow-y-auto outline-none", mobile && "min-h-0 max-h-none flex-1 overscroll-contain px-3")}>

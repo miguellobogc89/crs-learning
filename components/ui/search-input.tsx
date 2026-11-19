@@ -31,8 +31,8 @@ export function SearchInput({
           "transition-colors duration-150",
           "placeholder:text-slate-400",
           "hover:border-slate-300",
-          "focus:border-slate-700 focus:outline-none focus:ring-0",
-          "focus-visible:border-slate-700 focus-visible:outline-none focus-visible:ring-0",
+          "focus:border-[#0A58FF] focus:outline-none focus:ring-3 focus:ring-[#0A58FF]/15 focus:shadow-[0_0_18px_rgba(10,88,255,0.20)]",
+          "focus-visible:border-[#0A58FF] focus-visible:outline-none",
           hasValue ? "pr-10" : "pr-3",
           "[&::-webkit-search-cancel-button]:hidden",
         ].join(" ")}

@@ -19,11 +19,13 @@ import {
 } from "lucide-react";
 
 import { ActionBar } from "@/components/platform/action-bar";
-import { AdaptiveSelect } from "@/components/platform/adaptive-select";
+import { DetailScreen } from "@/components/platform/detail-screen";
 import { MobileAppHeader } from "@/components/platform/mobile-app-header";
 import { AppNotificationButton } from "@/components/platform/notification-button";
+import { NotificationsDrawer } from "@/components/platform/notifications-drawer";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { SearchInput } from "@/components/ui/search-input";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -138,7 +140,6 @@ export default function TradingComponentsPage() {
     : [{ title: "", rows: visibleRows }];
 
   const current = SECTIONS.find((item) => item.id === section) ?? SECTIONS[0];
-  const title = screen === "avisos" ? "Notificaciones" : screen === "detalle" ? "Detalle" : current.label;
 
   function navigate(next: SectionId) {
     setSection(next);
@@ -175,8 +176,8 @@ export default function TradingComponentsPage() {
                 key={item.id}
                 type="button"
                 onClick={() => navigate(item.id)}
-                aria-current={section === item.id && !screen ? "page" : undefined}
-                className={`flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition-colors ${section === item.id && !screen ? "bg-blue-50 text-[#0A58FF]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
+                aria-current={section === item.id ? "page" : undefined}
+                className={`flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition-colors ${section === item.id ? "bg-blue-50 text-[#0A58FF]" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
               >
                 <Icon className="size-5" /> {item.label}
               </button>
@@ -188,45 +189,27 @@ export default function TradingComponentsPage() {
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <MobileAppHeader
-          title={title}
-          primary={!screen}
+          title={current.label}
+          primary
           onMenuClick={() => setMenuOpen(true)}
-          onBackClick={() => setScreen(null)}
           right={notificationButton()}
         />
         <header className="hidden h-20 shrink-0 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center gap-3 border-b border-slate-200 bg-white px-6 md:grid lg:px-10">
           <button
             type="button"
-            onClick={() => screen ? setScreen(null) : setMenuOpen(true)}
-            aria-label={screen ? "Volver" : "Abrir menú"}
+            onClick={() => setMenuOpen(true)}
+            aria-label="Abrir menú"
             className="flex size-11 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-50"
           >
-            {screen ? <ArrowLeft className="size-5" /> : <Menu className="size-5" />}
+            <Menu className="size-5" />
           </button>
-          <h1 className="truncate text-center text-xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="truncate text-center text-xl font-semibold tracking-tight">{current.label}</h1>
           {notificationButton()}
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 md:pb-10 md:pt-8 lg:px-10">
           <div className="mx-auto max-w-5xl space-y-6">
-            {screen === "avisos" ? (
-              <DemoCard title="Notificaciones" description="Pantalla secundaria con flecha atrás y título centrado.">
-                <div className="flex flex-col items-center gap-3 py-10 text-center">
-                  <span className="flex size-14 items-center justify-center rounded-2xl bg-blue-50 text-[#0A58FF]"><Bell className="size-6" /></span>
-                  <p className="font-medium">Todo al día</p>
-                  <p className="text-sm text-slate-400">Los avisos reales se conectarán cuando migremos cada módulo.</p>
-                </div>
-              </DemoCard>
-            ) : screen === "detalle" ? (
-              <DemoCard title={selectedRow?.name ?? "Pantalla secundaria"} description="Ejemplo del patrón de navegación para fichas y detalles.">
-                <div className="space-y-3 rounded-xl bg-slate-50 p-4 text-sm">
-                  <p><span className="text-slate-500">Sección:</span> Trading</p>
-                  <p><span className="text-slate-500">Elemento:</span> {selectedRow?.category ?? "Ejemplo visual"}</p>
-                  {selectedRow && <p><span className="text-slate-500">Importe:</span> {euros(selectedRow.amount)}</p>}
-                </div>
-                <div className="mt-5"><Button type="button" variant="outline" className="h-10 rounded-xl" onClick={() => setScreen(null)}>Volver</Button></div>
-              </DemoCard>
-            ) : section === "inicio" ? (
+            {section === "inicio" ? (
               <>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0A58FF]">CRS · Trading</p>
@@ -272,9 +255,9 @@ export default function TradingComponentsPage() {
                   </DemoCard>
                   <DemoCard title="Listas desplegables" description="En móvil se abre una hoja desde abajo; en escritorio, una lista flotante.">
                     <div className="space-y-5">
-                      <Field label="Categoría (con búsqueda)"><AdaptiveSelect label="Categoría" value={category} options={CATEGORY_OPTIONS} onChange={setCategory} searchable placeholder="Selecciona una categoría" /></Field>
-                      <Field label="Periodicidad"><AdaptiveSelect label="Periodicidad" value={period} options={PERIOD_OPTIONS} onChange={setPeriod} /></Field>
-                      <Field label="Selector deshabilitado"><AdaptiveSelect label="Selector deshabilitado" value={null} options={PERIOD_OPTIONS} onChange={() => undefined} disabled placeholder="No disponible" /></Field>
+                      <Field label="Categoría (con búsqueda)"><Combobox ariaLabel="Categoría" value={category} options={CATEGORY_OPTIONS} onChange={setCategory} searchable placeholder="Selecciona una categoría" className="h-11 w-full rounded-xl px-3" /></Field>
+                      <Field label="Periodicidad"><Combobox ariaLabel="Periodicidad" value={period} options={PERIOD_OPTIONS} onChange={setPeriod} className="h-11 w-full rounded-xl px-3" /></Field>
+                      <Field label="Selector deshabilitado"><Combobox ariaLabel="Selector deshabilitado" value={null} options={PERIOD_OPTIONS} onChange={() => undefined} disabled placeholder="No disponible" className="h-11 w-full rounded-xl px-3" /></Field>
                     </div>
                   </DemoCard>
                   <DemoCard title="Búsqueda y selección" description="Buscador con limpieza rápida y control de selección.">
@@ -395,7 +378,6 @@ export default function TradingComponentsPage() {
         </main>
       </div>
 
-      {!screen && (
         <nav aria-label="Secciones del laboratorio" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           {SECTIONS.map((item) => {
             const Icon = item.icon;
@@ -407,7 +389,30 @@ export default function TradingComponentsPage() {
             );
           })}
         </nav>
-      )}
+
+      <DetailScreen
+        open={screen === "detalle"}
+        title={selectedRow?.name ?? "Detalle"}
+        onClose={() => setScreen(null)}
+        right={notificationButton()}
+      >
+        <DemoCard title={selectedRow?.name ?? "Pantalla secundaria"} description="Esta pantalla se desliza desde abajo y vuelve a bajar al cerrarla.">
+          <div className="space-y-3 rounded-xl bg-slate-50 p-4 text-sm">
+            <p><span className="text-slate-500">Sección:</span> Trading</p>
+            <p><span className="text-slate-500">Elemento:</span> {selectedRow?.category ?? "Ejemplo visual"}</p>
+            {selectedRow && <p><span className="text-slate-500">Importe:</span> {euros(selectedRow.amount)}</p>}
+          </div>
+          <div className="mt-5"><Button type="button" variant="outline" className="h-10 rounded-xl" onClick={() => setScreen(null)}>Volver</Button></div>
+        </DemoCard>
+      </DetailScreen>
+
+      <NotificationsDrawer open={screen === "avisos"} onClose={() => setScreen(null)}>
+        <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
+          <span className="flex size-14 items-center justify-center rounded-2xl bg-blue-50 text-[#0A58FF]"><Bell className="size-6" /></span>
+          <p className="font-medium">Todo al día</p>
+          <p className="text-sm text-slate-400">Los avisos reales se conectarán cuando migremos cada módulo.</p>
+        </div>
+      </NotificationsDrawer>
 
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left" showCloseButton={false} className="gap-0 p-0 data-[side=left]:w-full data-[side=left]:sm:max-w-sm">
@@ -418,7 +423,7 @@ export default function TradingComponentsPage() {
           <nav aria-label="Menú del laboratorio" className="min-h-0 flex-1 space-y-1 overflow-y-auto p-4">
             {SECTIONS.map((item) => {
               const Icon = item.icon;
-              return <button key={item.id} type="button" onClick={() => navigate(item.id)} className={`flex h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm ${section === item.id && !screen ? "bg-blue-50 font-semibold text-[#0A58FF]" : "text-slate-700"}`}><Icon className="size-5" />{item.label}</button>;
+              return <button key={item.id} type="button" onClick={() => navigate(item.id)} className={`flex h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm ${section === item.id ? "bg-blue-50 font-semibold text-[#0A58FF]" : "text-slate-700"}`}><Icon className="size-5" />{item.label}</button>;
             })}
           </nav>
           <Link href="/apps" className="flex h-14 items-center gap-3 border-t border-slate-100 px-6 text-sm text-slate-500"><LayoutGrid className="size-5" />Todas las aplicaciones</Link>
