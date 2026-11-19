@@ -1,3 +1,5 @@
+"use client";
+
 import { ModuleBottomTabs } from "@/components/platform/module-bottom-tabs";
 import { BOTTOM_TABS, FINANCE_TABS } from "./tabs";
 
