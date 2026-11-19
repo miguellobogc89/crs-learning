@@ -11,7 +11,7 @@ import { ago } from "./home-panel";
 import { useTradingRefresh, useWarmStart } from "./navigation";
 import { AVATAR, ErrorNote, LoadingCard, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
-import { DataTable, Money, type Col } from "./table";
+import { DataTable, Money, type Col, type TableSort } from "./table";
 import { TableToolbar } from "@/components/ui/table-toolbar";
 
 type Agents = Awaited<ReturnType<typeof getAgents>>;
@@ -175,6 +175,7 @@ export function ActivityPanel({ header }: { header?: ReactNode } = {}) {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Move | null>(null);
   const [query, setQuery] = useState("");
+  const [activitySort, setActivitySort] = useState<TableSort>(null);
 
   const load = useCallback(async () => {
     try {
@@ -239,8 +240,17 @@ export function ActivityPanel({ header }: { header?: ReactNode } = {}) {
       <DataTable
         id="actividad-v2"
         height="min-h-0 flex-1"
-        header={<div className="flex flex-col gap-3">{header}<TableToolbar search={query} onSearchChange={setQuery} searchPlaceholder="Buscar en Actividad..." /></div>}
+        header={<div className="flex flex-col gap-3">{header}<TableToolbar search={query} onSearchChange={setQuery} searchPlaceholder="Buscar en Actividad..." sort={{ value: activitySort, onChange: setActivitySort, options: [
+          { label: "Más recientes", value: { key: "at", dir: -1 } },
+          { label: "Más antiguos", value: { key: "at", dir: 1 } },
+          { label: "Operador: A-Z", value: { key: "who", dir: 1 } },
+          { label: "Activo: A-Z", value: { key: "asset", dir: 1 } },
+          { label: "Resultado: mayor a menor", value: { key: "pnl", dir: -1 } },
+        ] }} /></div>}
         columns={columns}
+        sortBy={activitySort}
+        onSortChange={setActivitySort}
+        hideMobileSort
         rows={moves}
         rowKey={(m) => `${m.kind}-${m.id}`}
         paginate
