@@ -175,7 +175,11 @@ export async function overview(userId: string, offset = 0) {
   const balanceAccountIds = new Set(accounts.filter((account) => account.included && account.currency === "EUR" && account.balance !== null).map((account) => account.id));
   const cashflow = cashflowPeriods(txs, today);
   const futureCashflow = forecastCashflow({ txs, today, startDay: ctx.startDay, recurring, history, current, projection, liquidity: ctx.liquidity, items: ctx.forecastItems, skippedOccurrences: ctx.skippedOccurrences });
-  const nextCycle = futureCashflow.points[1];
+  // Cinco tramos semanales, incluyendo el inicio del ciclo siguiente cuando
+  // el primero dura solo cuatro semanas (p. ej. febrero).
+  const nextWeeks = futureCashflow.points.slice(1, 3).flatMap((point) => forecastCycleWeeks({
+    point, recurring, items: ctx.forecastItems, today, skippedOccurrences: ctx.skippedOccurrences,
+  })).slice(0, 5);
   for (const range of ["7D", "1M", "6M", "1A"] as const) {
     for (const point of cashflow[range].points) {
       if (ctx.liquidity === null) continue;
@@ -195,7 +199,7 @@ export async function overview(userId: string, offset = 0) {
     history: [...history].reverse().map((h) => ({ cycle: h.cycle, income: h.income, gifts: h.gifts, expenses: h.expenses, net: h.net, savedToInvestments: h.savedToInvestments })),
     cashflow,
     forecastCashflow: futureCashflow,
-    forecastNextWeeks: nextCycle ? forecastCycleWeeks({ point: nextCycle, recurring, items: ctx.forecastItems, today, skippedOccurrences: ctx.skippedOccurrences }) : [],
+    forecastNextWeeks: nextWeeks,
     forecastItems: ctx.forecastItems.filter((item) => !isForecastOverride(item)),
     forecastSuggestions: suggestions,
     categoryHistory: expenseHistoryByCycle(txs, ctx.startDay),
