@@ -9,7 +9,6 @@ import {
   ChevronRight,
   CircleHelp,
   House,
-  LayoutGrid,
   Menu,
   MousePointer2,
   Search,
@@ -19,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { ActionBar } from "@/components/platform/action-bar";
+import { AppModuleLinks } from "@/components/platform/app-navigation";
 import { DetailScreen } from "@/components/platform/detail-screen";
 import { MobileAppHeader } from "@/components/platform/mobile-app-header";
 import { AppNotificationButton } from "@/components/platform/notification-button";
@@ -159,7 +159,7 @@ export default function TradingComponentsPage() {
 
   return (
     <div className="flex h-dvh min-h-0 w-full overflow-hidden bg-[#F8FAFC] text-slate-900">
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white px-4 py-6 md:flex">
+      <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white px-4 py-6 md:flex">
         <Link href="/apps" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
           <ArrowLeft className="size-4 text-slate-500" /> CRS
         </Link>
@@ -184,7 +184,10 @@ export default function TradingComponentsPage() {
             );
           })}
         </nav>
-        <p className="mt-auto px-3 text-xs leading-5 text-slate-400">Vista de estructura · Sin datos ni autenticación</p>
+        <div className="mt-7 border-t border-slate-100 pt-5">
+          <AppModuleLinks activeAppId="trading" />
+        </div>
+        <p className="mt-auto px-3 pt-6 text-xs leading-5 text-slate-400">Vista de estructura · Sin datos ni autenticación</p>
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -426,7 +429,9 @@ export default function TradingComponentsPage() {
               return <button key={item.id} type="button" onClick={() => navigate(item.id)} className={`flex h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm ${section === item.id ? "bg-blue-50 font-semibold text-[#0A58FF]" : "text-slate-700"}`}><Icon className="size-5" />{item.label}</button>;
             })}
           </nav>
-          <Link href="/apps" className="flex h-14 items-center gap-3 border-t border-slate-100 px-6 text-sm text-slate-500"><LayoutGrid className="size-5" />Todas las aplicaciones</Link>
+          <div className="shrink-0 border-t border-slate-100 p-4">
+            <AppModuleLinks activeAppId="trading" onNavigate={() => setMenuOpen(false)} />
+          </div>
         </SheetContent>
       </Sheet>
     </div>

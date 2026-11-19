@@ -5,6 +5,7 @@ export type AppDefinition = {
   title: string;
   description: string;
   href: string | null;
+  platformHref: string;
   access: "all" | "business";
 };
 
@@ -14,6 +15,7 @@ export const APP_MODULES: readonly AppDefinition[] = [
     title: "Trading",
     description: "Inversiones, cartera, mercados y agentes.",
     href: "/trading/inicio",
+    platformHref: "/apps/trading",
     access: "all",
   },
   {
@@ -21,20 +23,23 @@ export const APP_MODULES: readonly AppDefinition[] = [
     title: "Finances",
     description: "Cuentas, movimientos, gastos y ahorro.",
     href: "/finanzas/inicio",
+    platformHref: "/apps/finanzas",
     access: "all",
   },
   {
     id: "negocio",
-    title: "CRS LAB",
+    title: "CRS",
     description: "Conocimiento y herramientas para empresas.",
     href: "/dashboard",
+    platformHref: "/apps/negocio",
     access: "business",
   },
   {
     id: "heladeria",
     title: "Heladería",
     description: "Producción, costes y gestión del negocio.",
-    href: null, // No existe todavía una ruta publicada en este repositorio.
+    href: null, // La aplicación real todavía no dispone de una ruta publicada.
+    platformHref: "/apps/heladeria",
     access: "business",
   },
 ];
