@@ -227,8 +227,8 @@ export function HomePanel() {
             {(data.recentExpenses ?? []).map((tx) => (
               <li key={tx.id} className="flex items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-900">{tx.counterparty || tx.description}</p>
-                  <p className="mt-0.5 truncate text-xs text-slate-500">{shortDay(tx.date)} · {categoryLabel(tx.category)}</p>
+                  <p className="truncate text-sm font-medium text-slate-900">{tx.alias || tx.counterparty || tx.description}</p>
+                  <p className="mt-0.5 truncate text-xs text-slate-500">{shortDay(tx.date)} · {categoryLabel(tx.category)}{tx.subcategory ? ` · ${tx.subcategory}` : ""}</p>
                 </div>
                 <b className="amount shrink-0 text-sm tabular-nums text-slate-900">{eur(tx.amount, 2)}</b>
               </li>

@@ -83,7 +83,10 @@ export async function POST(req: Request, route: RouteContext) {
     if (action === "transaction") {
       return ok(await correctTransaction(uid, str("id"), {
         category: str("category"), kind: str("kind"), extraordinary: body.extraordinary === true,
-        note: typeof body.note === "string" ? body.note : undefined, applyToSimilar: body.applyToSimilar === true,
+        note: typeof body.note === "string" ? body.note : undefined,
+        alias: typeof body.alias === "string" ? body.alias : undefined,
+        subcategory: typeof body.subcategory === "string" ? body.subcategory : undefined,
+        applyToSimilar: body.applyToSimilar === true,
       }));
     }
     if (action === "budget") {

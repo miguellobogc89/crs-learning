@@ -17,7 +17,7 @@ const AI_MAX_BATCHES = 2;
 const EXTRAORDINARY_FROM = 2000;
 const isBig = (amount: number) => amount <= -EXTRAORDINARY_FROM;
 
-async function setClass(ids: string[], data: { category: string; kind: string; category_source: string; extraordinary?: boolean; transfer_pair_id?: string | null }) {
+async function setClass(ids: string[], data: { category: string; kind: string; category_source: string; extraordinary?: boolean; transfer_pair_id?: string | null; alias?: string | null; subcategory?: string | null }) {
   if (!ids.length) return;
   await prisma.finance_transactions.updateMany({ where: { id: { in: ids } }, data: { ...data, updated_at: new Date() } });
 }
@@ -136,7 +136,7 @@ export async function classifyPending(userId: string, opts: { useAi?: boolean; m
 }
 
 async function applyRuleTo(ids: string[], rule: Rule) {
-  await setClass(ids, { category: rule.category, kind: rule.kind, category_source: "regla", extraordinary: rule.extraordinary });
+  await setClass(ids, { category: rule.category, kind: rule.kind, category_source: "regla", extraordinary: rule.extraordinary, alias: rule.alias, subcategory: rule.subcategory });
   await prisma.finance_rules.update({ where: { id: rule.id }, data: { hits: { increment: ids.length } } }).catch(() => undefined);
 }
 
@@ -191,10 +191,12 @@ async function aiClassify(batch: Tx[], bankOf: Map<string, string>, memory: stri
  * aplica a todos los movimientos parecidos que no haya corregido a mano. Si deja de ser una transferencia
  * interna, se deshace la pareja y la otra mitad se vuelve a clasificar.
  */
-export async function correctTransaction(userId: string, id: string, input: { category: string; kind: string; extraordinary: boolean; note?: string | null; applyToSimilar: boolean }) {
+export async function correctTransaction(userId: string, id: string, input: { category: string; kind: string; extraordinary: boolean; note?: string | null; alias?: string | null; subcategory?: string | null; applyToSimilar: boolean }) {
   if (!isCategory(input.category) || !isKind(input.kind)) throw new Error("Categoría no válida");
   const row = await prisma.finance_transactions.findFirst({ where: { id, user_id: userId } });
   if (!row) throw new Error("Movimiento no encontrado");
+  const alias = input.alias === undefined ? row.alias : input.alias?.trim().slice(0, 80) || null;
+  const subcategory = input.subcategory === undefined ? row.subcategory : input.subcategory?.trim().slice(0, 80) || null;
   const category = input.kind === "interna" ? "transferencia_interna" : input.kind === "ahorro" && categoryOf(input.category).kind !== "ahorro" ? "ahorro_inversion" : input.category;
   let pair = row.transfer_pair_id;
   if (pair && input.kind !== "interna") {
@@ -206,6 +208,8 @@ export async function correctTransaction(userId: string, id: string, input: { ca
     where: { id },
     data: {
       category,
+      alias,
+      subcategory,
       kind: input.kind,
       extraordinary: input.extraordinary,
       category_source: "usuario",
@@ -223,14 +227,14 @@ export async function correctTransaction(userId: string, id: string, input: { ca
       const pattern = found;
       const rule = await prisma.finance_rules.upsert({
         where: { user_id_pattern: { user_id: userId, pattern } },
-        create: { user_id: userId, pattern, category, kind: input.kind, extraordinary: input.extraordinary, label: row.counterparty || row.description.slice(0, 80) },
-        update: { category, kind: input.kind, extraordinary: input.extraordinary },
+        create: { user_id: userId, pattern, category, alias, subcategory, kind: input.kind, extraordinary: input.extraordinary, label: row.counterparty || row.description.slice(0, 80) },
+        update: { category, alias, subcategory, kind: input.kind, extraordinary: input.extraordinary },
       });
       const all = await loadTxs(userId, { includeExcluded: true });
       const ids = all
         .filter((t) => t.id !== id && t.source !== "usuario" && !t.transferPairId && matchRule(t, [{ id: rule.id, pattern, category, kind: input.kind as Rule["kind"], extraordinary: input.extraordinary }]))
         .map((t) => t.id);
-      if (ids.length) await applyRuleTo(ids, { id: rule.id, pattern, category, kind: input.kind as Rule["kind"], extraordinary: input.extraordinary });
+      if (ids.length) await applyRuleTo(ids, { id: rule.id, pattern, category, alias, subcategory, kind: input.kind as Rule["kind"], extraordinary: input.extraordinary });
       similar = ids.length;
     }
   }

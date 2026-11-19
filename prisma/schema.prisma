@@ -2789,7 +2789,9 @@ model finance_transactions {
   description            String
   counterparty           String?
   counterparty_iban_hash String?
+  alias                  String?
   category               String           @default("sin_clasificar")
+  subcategory            String?
   kind                   String           @default("gasto")
   category_source        String           @default("pendiente")
   extraordinary          Boolean          @default(false)
@@ -2811,6 +2813,8 @@ model finance_rules {
   user_id       String   @db.Uuid
   pattern       String
   category      String
+  alias         String?
+  subcategory   String?
   kind          String
   extraordinary Boolean  @default(false)
   label         String?

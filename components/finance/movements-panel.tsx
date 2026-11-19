@@ -55,6 +55,8 @@ function EditModal({ item, onClose }: { item: Item | null; onClose: () => void }
   const [kind, setKind] = useState<Kind>("gasto");
   const [extra, setExtra] = useState(false);
   const [note, setNote] = useState("");
+  const [alias, setAlias] = useState("");
+  const [subcategory, setSubcategory] = useState("");
   const [similar, setSimilar] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -65,6 +67,8 @@ function EditModal({ item, onClose }: { item: Item | null; onClose: () => void }
     setKind(item.kind);
     setExtra(item.extraordinary);
     setNote(item.note ?? "");
+    setAlias(item.alias ?? "");
+    setSubcategory(item.subcategory ?? "");
     setSimilar(true);
     setErr(null);
     setDone(null);
@@ -76,7 +80,7 @@ function EditModal({ item, onClose }: { item: Item | null; onClose: () => void }
     setErr(null);
     try {
       const cat = options.some((o) => o.key === category) ? category : options[0]?.key ?? "otros_gastos";
-      const r = await fapi<{ similar: number }>("transaction", { id: item.id, category: cat, kind, extraordinary: extra, note, applyToSimilar: similar });
+      const r = await fapi<{ similar: number }>("transaction", { id: item.id, category: cat, kind, extraordinary: extra, note, alias, subcategory, applyToSimilar: similar });
       refreshFinance();
       if (r.similar) setDone(`Guardado. También se han actualizado ${r.similar} movimientos parecidos y la regla queda aprendida.`);
       else onClose();
@@ -124,6 +128,15 @@ function EditModal({ item, onClose }: { item: Item | null; onClose: () => void }
               </select>
             </label>
           )}
+          <label className="block">
+            <span className="mb-1.5 block font-medium text-slate-800">Alias del movimiento</span>
+            <input value={alias} maxLength={80} onChange={(e) => setAlias(e.target.value)} placeholder="Ej. Tabaco" className={`${field} w-full`} />
+            <span className="mt-1 block text-xs text-slate-500">Nombre visible. El concepto del banco no cambia.</span>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block font-medium text-slate-800">Subcategoría</span>
+            <input value={subcategory} maxLength={80} onChange={(e) => setSubcategory(e.target.value)} placeholder="Ej. Agua (en Suministros)" className={`${field} w-full`} />
+          </label>
           {(kind === "gasto" || kind === "devolucion") && (
             <label className="flex items-start gap-2.5">
               <input type="checkbox" checked={extra} onChange={(e) => setExtra(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300" />
@@ -171,7 +184,7 @@ const GROUPS: { value: Group; label: string }[] = [
 const PAGE = 150;
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const isReview = (t: Item) => t.source === "auto" || t.source === "pendiente";
-const label = (t: Item) => t.counterparty || t.description;
+const label = (t: Item) => t.alias || t.counterparty || t.description;
 
 /** Ingresos, gastos y neto de unas filas (sin movimientos entre cuentas ni cuentas excluidas). */
 function sums(rows: Item[]) {
@@ -354,7 +367,7 @@ export function MovementsPanel() {
       (kind === "all" || t.kind === kind) &&
       (category === "all" || t.category === category) &&
       (status === "all" || (status === "revisar" ? isReview(t) : status === "usuario" ? t.source === "usuario" : t.extraordinary)) &&
-      (!needle || fold(`${t.description} ${t.counterparty ?? ""} ${t.note ?? ""} ${t.account} ${Math.abs(t.amount).toFixed(2).replace(".", ",")}`).includes(needle)));
+      (!needle || fold(`${t.description} ${t.counterparty ?? ""} ${t.alias ?? ""} ${t.subcategory ?? ""} ${t.note ?? ""} ${t.account} ${Math.abs(t.amount).toFixed(2).replace(".", ",")}`).includes(needle)));
     const v = (t: Item): string | number => (sort.key === "date" ? t.date : sort.key === "abs" ? Math.abs(t.amount) : sort.key === "amount" ? t.amount : fold(label(t)));
     return [...out].sort((a, b) => {
       const x = v(a), y = v(b);
@@ -435,10 +448,11 @@ export function MovementsPanel() {
           {t.extraordinary && <Star className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label="Extraordinario" />}
           <span className="truncate font-medium text-slate-900" title={t.description}>{label(t)}</span>
         </span>
-        {t.note ? <span className="block truncate text-xs text-slate-500">{t.note}</span> : t.counterparty ? <span className="block truncate text-xs text-slate-400">{t.description}</span> : null}
+        {t.note ? <span className="block truncate text-xs text-slate-500">{t.note}</span> : (t.alias || t.counterparty) ? <span className="block truncate text-xs text-slate-400">{t.description}</span> : null}
       </td>
       <td className="whitespace-nowrap px-3 py-2.5">
         <QuickEdit t={t} onMore={() => setEditing(t)} onDone={setToast} />
+        {t.subcategory && <span className="ml-1 text-xs text-slate-500">· {t.subcategory}</span>}
         {isReview(t) && <span className="ml-1.5 text-xs text-amber-700">revisar</span>}
       </td>
       <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">{t.account}</td>
@@ -637,11 +651,13 @@ export function MovementsPanel() {
                           </span>
                           <span className="mt-1 flex items-center gap-2 text-xs text-slate-500">
                             <span>{shortDay(t.date)}</span>
-                            <CategoryPill t={t} />
                             {isReview(t) && <span className="text-amber-700">revisar</span>}
                           </span>
                         </span>
-                        <Amount t={t} />
+                        <span className="flex shrink-0 flex-col items-end gap-1">
+                          <Amount t={t} />
+                          <span className="max-w-[9rem] truncate text-[11px] text-slate-500">{categoryOf(t.category).label}{t.subcategory ? ` · ${t.subcategory}` : ""}</span>
+                        </span>
                       </button>
                     </li>
                   ))}

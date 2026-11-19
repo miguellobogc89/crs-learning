@@ -10,6 +10,8 @@ export type Tx = {
   amount: number;
   description: string;
   counterparty: string | null;
+  alias?: string | null;
+  subcategory?: string | null;
   counterpartyIbanHash: string | null;
   category: string;
   kind: Kind;
@@ -304,7 +306,7 @@ const KEYWORDS: Keyword[] = [
 
 export type Classification = { category: string; kind: Kind; source: "regla" | "interna" | "palabra" | "auto"; extraordinary?: boolean; ruleId?: string };
 
-export type Rule = { id: string; pattern: string; category: string; kind: Kind; extraordinary: boolean };
+export type Rule = { id: string; pattern: string; category: string; kind: Kind; extraordinary: boolean; alias?: string | null; subcategory?: string | null };
 
 /** Regla del usuario que encaja (la de patrón más largo, la más concreta). */
 export function matchRule(t: { description: string; counterparty: string | null }, rules: Rule[]) {
@@ -417,6 +419,7 @@ export type Recurring = {
   key: string;
   label: string;
   category: string;
+  subcategory?: string | null;
   kind: Kind;
   amount: number;
   lastAmount: number;
@@ -490,8 +493,9 @@ export function detectRecurring(txs: Tx[], today: string, cancelled: Set<string>
     const active = !cancelled.has(merchant) && daysBetween(last.date, today) <= intervalDays * 1.5 + 3;
     out.push({
       key: merchant,
-      label: cleanLabel(last.counterparty || last.description),
+      label: last.alias?.trim() || cleanLabel(last.counterparty || last.description),
       category: cat,
+      subcategory: last.subcategory,
       kind: last.kind,
       amount: round2(med) * (last.amount < 0 ? -1 : 1),
       lastAmount: last.amount,
@@ -869,6 +873,7 @@ export function forecastCycleWeeks(opts: {
   const { cycle } = point;
   const overrides = new Map(items.filter((i) => isForecastOverride(i) && i.sourceKey).map((i) => [i.sourceKey!, i.amount]));
   const events: Array<{ date: string; label: string; amount: number; kind: "ingreso" | "gasto"; origin: "recurrente" | "plan" | "estimado";
+    category?: string; subcategory?: string | null;
     occurrenceKey?: string; originalAmount?: number; modified?: boolean; lastDate?: string; frequency?: string; count?: number; planId?: string }> = [];
   for (const r of recurring) {
     if (!r.active) continue;
@@ -878,7 +883,7 @@ export function forecastCycleWeeks(opts: {
       const occurrenceKey = forecastOccurrenceKey(r, date);
       const corrected = overrides.get(occurrenceKey);
       const skipped = skippedOccurrences?.has(occurrenceKey) ?? false;
-      const event = { date, label: r.label, amount: skipped ? 0 : corrected ?? Math.abs(r.amount), origin: "recurrente" as const,
+      const event = { date, label: r.label, category: r.category, subcategory: r.subcategory, amount: skipped ? 0 : corrected ?? Math.abs(r.amount), origin: "recurrente" as const,
         occurrenceKey, originalAmount: Math.abs(r.amount), modified: skipped || corrected !== undefined,
         lastDate: r.lastDate, frequency: r.frequency, count: r.count };
       if (r.kind === "ingreso" && r.amount > 0) events.push({ ...event, kind: "ingreso" });
@@ -886,7 +891,7 @@ export function forecastCycleWeeks(opts: {
       date = addDays(date, r.intervalDays);
     }
   }
-  if (point.estimatedSalary > 0) events.push({ date: cycle.start, label: "Nómina habitual estimada", amount: point.estimatedSalary, kind: "ingreso", origin: "estimado" });
+  if (point.estimatedSalary > 0) events.push({ date: cycle.start, label: "Nómina habitual estimada", category: "nomina", amount: point.estimatedSalary, kind: "ingreso", origin: "estimado" });
   for (const item of items) {
     if (isForecastOverride(item)) continue;
     for (const date of forecastPlanOccurrences(item, cycle.start > today ? cycle.start : today, cycle.end)) {

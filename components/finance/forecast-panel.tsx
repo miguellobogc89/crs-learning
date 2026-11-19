@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, CalendarDays, Check, ChevronDown, ChevronRight, PiggyBank, Plus, Trash2, X } from "lucide-react";
 import type { forecastSource, overview } from "@/lib/finance/service";
 import { forecastPlanOccurrences, type ForecastFrequency, type ForecastItem } from "@/lib/finance/logic";
+import { categoryLabel } from "@/lib/finance/categories";
 import { card, eur, flat } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -247,8 +248,8 @@ function SavingsGoal({ settings }: { settings: View["settings"] }) {
   </section>;
 }
 
-function NextCycleWeeks({ weeks, accumulatedSavings, onEvent, onAdd }: {
-  weeks: View["forecastNextWeeks"]; accumulatedSavings: number[];
+function NextCycleWeeks({ weeks, accumulatedSavings, variableDaily, onEvent, onAdd }: {
+  weeks: View["forecastNextWeeks"]; accumulatedSavings: number[]; variableDaily: number;
   onEvent: (event: ForecastEvent) => void; onAdd: (week: ForecastWeek) => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -277,9 +278,12 @@ function NextCycleWeeks({ weeks, accumulatedSavings, onEvent, onAdd }: {
                 className="flex w-full items-start justify-between gap-2 rounded-lg py-1 text-left text-xs hover:bg-white focus-visible:outline-2 focus-visible:outline-blue-600">
                 <div className="min-w-0"><p className={`break-words font-medium ${event.modified && event.amount === 0 ? "text-slate-400 line-through" : "text-slate-700"}`}>{event.label}</p>
                   <p className="text-slate-500">{shortDay(event.date)} · {event.modified ? event.amount === 0 ? "Omitido" : "Ajustado" : event.origin === "plan" ? "Planificado" : event.origin === "estimado" ? "Estimado" : "Habitual"}</p></div>
-                <b className={`amount ml-auto shrink-0 tabular-nums ${event.kind === "ingreso" ? "text-blue-700" : event.amount === 0 ? "text-slate-400" : "text-rose-700"}`}>{event.modified && event.amount === 0 ? "Omitido" : `${event.kind === "ingreso" ? "+" : "−"}${eur(event.amount, 2)}`}</b>
+                <span className="ml-auto flex shrink-0 flex-col items-end gap-0.5">
+                  <b className={`amount tabular-nums ${event.kind === "ingreso" ? "text-blue-700" : event.amount === 0 ? "text-slate-400" : "text-rose-700"}`}>{event.modified && event.amount === 0 ? "Omitido" : `${event.kind === "ingreso" ? "+" : "−"}${eur(event.amount, 2)}`}</b>
+                  <span className="max-w-[9rem] truncate text-[11px] text-slate-500">{event.category ? categoryLabel(event.category) : event.origin === "plan" ? "Planificado" : "Estimado"}{event.subcategory ? ` · ${event.subcategory}` : ""}</span>
+                </span>
               </button>)}
-              {week.variable > 0 && <div className="flex justify-between gap-2 border-t border-slate-200 pt-2 text-xs text-slate-500"><span>Gastos cotidianos estimados</span><b className="amount shrink-0 tabular-nums text-rose-700">−{eur(week.variable, 2)}</b></div>}
+              {week.variable > 0 && <div className="flex justify-between gap-2 border-t border-slate-200 pt-2 text-xs text-slate-500"><span className="min-w-0">Gastos variables previstos<span className="mt-0.5 block text-[11px]">Media histórica: {eur(variableDaily, 2)} €/día · sin recibos fijos</span></span><span className="flex shrink-0 flex-col items-end gap-0.5"><b className="amount tabular-nums text-rose-700">−{eur(week.variable, 2)}</b><span className="text-[11px]">Estimación</span></span></div>}
               {!week.events.length && week.variable === 0 && <p className="text-xs text-slate-500">Sin movimientos previstos.</p>}
               <button type="button" onClick={() => onAdd({ start: week.start, end: week.end })}
                 className="flex w-full items-center gap-1.5 border-t border-slate-200 pt-3 text-left text-xs font-semibold text-blue-700 hover:text-blue-900">
@@ -470,7 +474,7 @@ export function ForecastPanel({ view }: { view: View }) {
         {!forecast.hasExpectedIncome && <p className="text-xs font-medium text-amber-700">Sin ingresos periódicos suficientes: puede faltar dinero por estimar.</p>}
       </> : <p className="py-6 text-sm text-slate-500">La previsión todavía no está disponible.</p>}
     </section>
-    {weeks.length > 0 && <NextCycleWeeks weeks={weeks} accumulatedSavings={chartData.map((point) => point.accumulatedSavings)}
+    {weeks.length > 0 && <NextCycleWeeks weeks={weeks} accumulatedSavings={chartData.map((point) => point.accumulatedSavings)} variableDaily={view.forecastCashflow.variableDaily}
       onEvent={(event) => { setSelectedEvent(event); setEventOpen(true); }}
       onAdd={(week) => { setSelectedWeek(week); setNewPlanOpen(true); }} />}
     <SavingsGoal key={`${view.settings.savingsGoal}:${view.settings.savingsFrequency}`} settings={view.settings} />

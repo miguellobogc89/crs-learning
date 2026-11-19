@@ -202,6 +202,25 @@ test("proyección: saldo de hoy + cobros − recibos − gasto variable medio; �
   assert.equal(L.affordability(p, 99_999).verdict, "no");
 });
 
+test("alias y subcategoría de un recibo se muestran en su previsión sin alterar los importes", () => {
+  const today = "2026-11-19";
+  const txs = [
+    tx("agua-1", "S", "2026-09-10", -28, "RECIBO ALJARAFESA", "gasto", "suministros", { alias: "Agua de casa", subcategory: "Agua" }),
+    tx("agua-2", "S", "2026-10-10", -29, "RECIBO ALJARAFESA", "gasto", "suministros", { alias: "Agua de casa", subcategory: "Agua" }),
+    tx("agua-3", "S", "2026-11-10", -29, "RECIBO ALJARAFESA", "gasto", "suministros", { alias: "Agua de casa", subcategory: "Agua" }),
+  ];
+  const recurring = L.detectRecurring(txs, today);
+  assert.equal(recurring.length, 1);
+  assert.equal(recurring[0].label, "Agua de casa");
+  assert.equal(recurring[0].subcategory, "Agua");
+  const point = { cycle: L.cycleFor("2026-12-05", 1), openingBalance: 1000, variableExpenses: 0, estimatedSalary: 0 };
+  const weeks = L.forecastCycleWeeks({ point, recurring, items: [], today });
+  const water = weeks.flatMap((week) => week.events).find((event) => event.label === "Agua de casa");
+  assert.equal(water?.category, "suministros");
+  assert.equal(water?.subcategory, "Agua");
+  assert.equal(water?.amount, 29);
+});
+
 test("Inicio: previsión de 12 ciclos suma ingresos conocidos, recibos y gasto variable, sin regalos", () => {
   const today = "2026-11-17";
   const txs = [...history(), tx("regalo", "S", "2026-11-10", 300, "Cumpleaños", "regalo", "regalo_recibido")];

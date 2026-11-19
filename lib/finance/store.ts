@@ -24,6 +24,8 @@ export const toTx = (r: TxRow): Tx => ({
   amount: Number(r.amount),
   description: r.description,
   counterparty: r.counterparty,
+  alias: r.alias,
+  subcategory: r.subcategory,
   counterpartyIbanHash: r.counterparty_iban_hash,
   category: r.category,
   kind: (isKind(r.kind) ? r.kind : "gasto") as Kind,
@@ -66,7 +68,7 @@ export async function getForecastItems(userId: string): Promise<ForecastItem[]> 
 
 export async function getRules(userId: string): Promise<Rule[]> {
   const rows = await prisma.finance_rules.findMany({ where: { user_id: userId }, orderBy: { created_at: "asc" } });
-  return rows.map((r) => ({ id: r.id, pattern: r.pattern, category: r.category, kind: (isKind(r.kind) ? r.kind : "gasto") as Kind, extraordinary: r.extraordinary }));
+  return rows.map((r) => ({ id: r.id, pattern: r.pattern, category: r.category, kind: (isKind(r.kind) ? r.kind : "gasto") as Kind, extraordinary: r.extraordinary, alias: r.alias, subcategory: r.subcategory }));
 }
 
 export async function getBudgets(userId: string): Promise<Budget[]> {

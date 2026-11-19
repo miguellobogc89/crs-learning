@@ -207,7 +207,7 @@ export async function overview(userId: string, offset = 0) {
       .filter((tx) => tx.kind === "gasto" && tx.amount < 0 && includedAccountIds.has(tx.accountId))
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 5)
-      .map(({ id, date, amount, description, counterparty, category }) => ({ id, date, amount, description, counterparty, category })),
+      .map(({ id, date, amount, description, counterparty, alias, category, subcategory }) => ({ id, date, amount, description, counterparty, alias, category, subcategory })),
     liquiditySeries: liquiditySeries(accounts.filter((a) => a.included), txs, cycleDates),
     projection,
     budgets: budgetsNow,
