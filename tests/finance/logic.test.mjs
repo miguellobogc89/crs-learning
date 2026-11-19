@@ -239,19 +239,23 @@ test("Inicio: previsión de 12 ciclos suma ingresos conocidos, recibos y gasto v
   const netflix = recurring.find((r) => r.category === "suscripciones");
   let chargeDate = netflix.nextDate;
   while (chargeDate < planned.points[1].cycle.start) chargeDate = L.addDays(chargeDate, netflix.intervalDays);
-  const exception = { id: "override", title: "Netflix", kind: "gasto", amount: 0, startDate: chargeDate,
+  const exception = { id: "override", title: "Netflix", kind: "gasto", amount: 5.99, startDate: chargeDate,
     endDate: null, source: "override", sourceKey: L.forecastOccurrenceKey(netflix, chargeDate) };
-  const withoutCharge = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000, items: [...items, exception] });
+  const skippedOccurrences = new Set([exception.sourceKey]);
+  const withoutCharge = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000,
+    items, skippedOccurrences });
   assert.equal(withoutCharge.points[1].knownExpenses, planned.points[1].knownExpenses - 12.99, "omitir un recibo no afecta al gasto variable");
   assert.equal(withoutCharge.points[2].knownExpenses, planned.points[2].knownExpenses, "la excepción no altera el mes siguiente");
-  const adjustedWeeks = L.forecastCycleWeeks({ point: withoutCharge.points[1], recurring, items: [...items, exception], today });
+  const adjustedWeeks = L.forecastCycleWeeks({ point: withoutCharge.points[1], recurring, items, today, skippedOccurrences });
   const omitted = adjustedWeeks.flatMap((w) => w.events).find((e) => e.occurrenceKey === exception.sourceKey);
   assert.equal(omitted?.amount, 0);
   assert.equal(omitted?.modified, true);
   assert.equal(adjustedWeeks.at(-1).closingBalance, withoutCharge.points[1].closingBalance);
   const adjusted = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000,
-    items: [...items, { ...exception, amount: 5.99 }] });
+    items: [...items, exception] });
   assert.equal(adjusted.points[1].knownExpenses, planned.points[1].knownExpenses - 7);
+  const restored = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000, items });
+  assert.equal(restored.points[1].knownExpenses, planned.points[1].knownExpenses, "al restaurar vuelve el importe habitual");
 });
 
 test("Inicio: solo estima una nómina sin patrón recurrente cuando aparece en dos ciclos completos", () => {
