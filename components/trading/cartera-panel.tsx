@@ -562,8 +562,8 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
     .filter((l) => l.mode === "real" && ["abriendo", "abierta", "vendiendo", "cerrada"].includes(l.status))
     .map((l) => ({
       id: "copia:" + l.id, ideaId: "", symbol: l.symbol, pair: l.pair,
-      status: l.status, amount: l.amount,
-      invested: l.quantity && l.entryPrice ? l.quantity * l.entryPrice : l.amount,
+      status: l.status, amount: l.amount ?? 0,
+      invested: l.quantity != null && l.entryPrice != null ? l.quantity * l.entryPrice : (l.amount ?? 0),
       entry: l.entryPrice, stop: 0, target: 0, trail: false, trailing: false,
       price: null, result: l.status === "cerrada" ? l.result : null,
       note: "Copia automática de " + m.name, openedAt: l.openedAt, closedAt: l.closedAt,
