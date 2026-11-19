@@ -4,7 +4,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal-finance/enable-banking";
 import {
-  addDays, affordability, budgetStatus, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, forecastCycleWeeks, insuranceForecastCandidates, liquiditySeries, merchantKey, round2, median,
+  addDays, affordability, budgetStatus, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, forecastCycleWeeks, insuranceForecastCandidates, isForecastOverride, liquiditySeries, merchantKey, round2, median,
   expenseHistoryByCycle, normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
@@ -196,7 +196,7 @@ export async function overview(userId: string, offset = 0) {
     cashflow,
     forecastCashflow: futureCashflow,
     forecastNextWeeks: nextCycle ? forecastCycleWeeks({ point: nextCycle, recurring, items: ctx.forecastItems, today, skippedOccurrences: ctx.skippedOccurrences }) : [],
-    forecastItems: ctx.forecastItems.filter((item) => item.source !== "override"),
+    forecastItems: ctx.forecastItems.filter((item) => !isForecastOverride(item)),
     forecastSuggestions: suggestions,
     categoryHistory: expenseHistoryByCycle(txs, ctx.startDay),
     recentExpenses: txs
