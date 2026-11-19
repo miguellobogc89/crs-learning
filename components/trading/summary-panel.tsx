@@ -122,19 +122,16 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
               </div>
             </div>
             {mode === "real" ? data.balance ? (
-              <div className="mt-2 flex flex-wrap items-center gap-3">
+              <div className="mt-2 flex flex-wrap items-end gap-3">
                 <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(data.balance.total, 2)}</span>
-                {data.balance.ch24h !== null && <span className="flex items-center gap-1.5"><ReturnPill value={data.balance.ch24h} big /><span className="text-xs text-slate-400">24 h</span></span>}
+                {data.balance.ch24h !== null && <span className="mb-0.5"><ReturnPill value={data.balance.ch24h} big /></span>}
               </div>
             ) : <p className="mt-2 text-sm text-slate-500">Conecta un exchange en Conexiones para verlo aquí.</p>
             : virtual ? (
-              <div className="mt-2 flex flex-wrap items-center gap-3">
+              <div className="mt-2 flex flex-wrap items-end gap-3">
                 <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(virtual.total.equity, 2)}</span>
                 {virtual.total.dailyChangePct !== null && (
-                  <span className="flex items-center gap-1.5">
-                    <ReturnPill value={virtual.total.dailyChangePct} big />
-                    <span className="text-xs text-slate-400">día</span>
-                  </span>
+                  <span className="mb-0.5"><ReturnPill value={virtual.total.dailyChangePct} big /></span>
                 )}
               </div>
             ) : <p className="mt-2 text-sm text-slate-500">Cargando cartera virtual…</p>}
