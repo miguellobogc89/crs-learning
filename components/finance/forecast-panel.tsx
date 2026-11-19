@@ -1,16 +1,84 @@
 "use client";
 
-import { useState } from "react";
-import { CalendarDays, Check, PiggyBank, Plus, Trash2, X } from "lucide-react";
-import type { overview } from "@/lib/finance/service";
+import { useEffect, useState } from "react";
+import { ArrowLeft, CalendarDays, Check, ChevronRight, PiggyBank, Plus, Trash2, X } from "lucide-react";
+import type { forecastSource, overview } from "@/lib/finance/service";
 import type { ForecastItem } from "@/lib/finance/logic";
 import { card, eur, flat } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { CycleBars } from "./charts";
-import { fapi, refreshFinance, shortDay } from "./api";
+import { fapi, longDay, refreshFinance, shortDay } from "./api";
 
 type View = Awaited<ReturnType<typeof overview>>;
 type Suggestion = View["forecastSuggestions"][number];
+type Reference = NonNullable<Awaited<ReturnType<typeof forecastSource>>>;
+
+function planTitle(item: ForecastItem) {
+  const extra = /^forecast-extra:(\d{4})-(\d{2})$/.exec(item.sourceKey ?? "");
+  if (item.title !== "Posible paga extra" || !extra) return item.title;
+  const month = new Intl.DateTimeFormat("es-ES", { month: "long", timeZone: "UTC" }).format(new Date(`${extra[1]}-${extra[2]}-01T00:00:00Z`));
+  return `Paga extra · ${month} ${extra[1]}`;
+}
+
+function ForecastReferenceSheet({ referenceKey, onClose }: { referenceKey: string | null; onClose: () => void }) {
+  const [reference, setReference] = useState<Reference | null>(null);
+  const [loading, setLoading] = useState(referenceKey !== null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!referenceKey) return;
+    let active = true;
+    fapi<Reference>(`forecast/source?key=${encodeURIComponent(referenceKey)}`)
+      .then((data) => { if (active) setReference(data); })
+      .catch((e) => { if (active) setError(e instanceof Error ? e.message : "No se pudo cargar el detalle"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [referenceKey]);
+  const open = referenceKey !== null;
+  return <Sheet open={open} onOpenChange={(value) => { if (!value) onClose(); }}>
+    <SheetContent side="right" showCloseButton={false} className="w-screen max-w-none gap-0 overflow-y-auto p-0 sm:max-w-lg">
+      <SheetHeader className="sticky top-0 z-10 border-b border-slate-100 bg-white px-4 py-3">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={onClose} aria-label="Volver a previsión" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"><ArrowLeft className="h-5 w-5" /></button>
+          <div className="min-w-0"><SheetTitle className="font-semibold text-slate-900">Detalle de la sugerencia</SheetTitle>
+            <SheetDescription>De dónde sale este cálculo</SheetDescription></div>
+        </div>
+      </SheetHeader>
+      <div className="space-y-5 p-5">
+        {loading && <p className="text-sm text-slate-500">Buscando el movimiento original…</p>}
+        {error && <ErrorNote>{error}</ErrorNote>}
+        {!loading && reference && !error && <>
+          <div><p className="text-sm font-semibold text-slate-900">{reference.title}</p>
+            <p className="mt-1 text-xs text-slate-500">Fecha prevista · {longDay(reference.targetDate)}</p>
+            {reference.estimate !== null && <p className={`amount mt-3 text-2xl font-bold tabular-nums ${reference.kind === "ingreso" ? "text-blue-700" : "text-rose-700"}`}>{reference.kind === "ingreso" ? "+" : "−"}{eur(reference.estimate, 2)}</p>}
+          </div>
+          <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{reference.source.type === "payslip" ? "Nómina de referencia" : "Movimiento de referencia"}</h3>
+            <p className="mt-3 text-sm font-semibold text-slate-900">{reference.source.label}</p>
+            <p className="mt-1 text-xs text-slate-500">{reference.source.type === "payslip" ? reference.source.date : longDay(reference.source.date)}</p>
+            <p className="amount mt-2 text-base font-semibold text-slate-900">{eur(reference.source.amount, 2)}</p>
+            <p className="mt-3 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-600">{reference.source.description}</p>
+            {"account" in reference.source && reference.source.account && <p className="mt-2 text-xs text-slate-500">Cuenta · {reference.source.account}</p>}
+          </section>
+          {"related" in reference && (reference.related?.length ?? 0) > 0 && <section>
+            <h3 className="text-sm font-semibold text-slate-900">Otros recibos que apoyan la estimación</h3>
+            <div className="mt-2 divide-y divide-slate-100">{(reference.related ?? []).map((tx) => <div key={`${tx.date}:${tx.amount}`} className="py-3">
+              <div className="flex justify-between gap-3 text-xs"><span className="text-slate-500">{longDay(tx.date)}</span><b className="amount shrink-0 text-slate-900">{eur(tx.amount, 2)}</b></div>
+              <p className="mt-1 break-words text-xs text-slate-600">{tx.description}</p>
+            </div>)}</div>
+          </section>}
+          <section><h3 className="text-sm font-semibold text-slate-900">Cómo se ha calculado</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">{reference.explanation}</p>
+            <div className="mt-3 divide-y divide-slate-100">{reference.breakdown.map((row) => <div key={row.label} className="flex items-baseline justify-between gap-3 py-2 text-xs">
+              <span className="text-slate-500">{row.label}</span><span className="shrink-0 font-semibold tabular-nums text-slate-800">{row.value === null ? "Sin datos" : "format" in row && row.format === "count" ? row.value : eur(row.value, 2)}</span>
+            </div>)}</div>
+          </section>
+          <p className="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">{reference.caution}</p>
+        </>}
+      </div>
+    </SheetContent>
+  </Sheet>;
+}
 
 function SavingsGoal({ settings }: { settings: View["settings"] }) {
   const [amount, setAmount] = useState(settings.savingsGoal?.toString() ?? "");
@@ -43,7 +111,7 @@ function SavingsGoal({ settings }: { settings: View["settings"] }) {
   </section>;
 }
 
-function ForecastSuggestions({ suggestions }: { suggestions: Suggestion[] }) {
+function ForecastSuggestions({ suggestions, onDetail }: { suggestions: Suggestion[]; onDetail: (key: string) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const act = async (item: Suggestion, include: boolean) => {
@@ -69,13 +137,14 @@ function ForecastSuggestions({ suggestions }: { suggestions: Suggestion[] }) {
       <div className="mt-3 flex gap-2">
         <button type="button" disabled={busy !== null} onClick={() => void act(s, true)} className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"><Check className="h-3.5 w-3.5" />Incluir</button>
         <button type="button" disabled={busy !== null} onClick={() => void act(s, false)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 disabled:opacity-50"><X className="h-3.5 w-3.5" />No este año</button>
+        <button type="button" onClick={() => onDetail(s.key)} className="ml-auto inline-flex items-center gap-0.5 rounded-lg px-1 py-1.5 text-xs font-semibold text-blue-700">Ver detalle <ChevronRight className="h-3.5 w-3.5" /></button>
       </div>
     </li>)}</ul> : <p className="mt-4 text-sm text-slate-500">No hay nuevas sugerencias pendientes.</p>}
     {error && <div className="mt-3"><ErrorNote>{error}</ErrorNote></div>}
   </section>;
 }
 
-function MyPlans({ items }: { items: ForecastItem[] }) {
+function MyPlans({ items, onDetail }: { items: ForecastItem[]; onDetail: (key: string) => void }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -111,10 +180,12 @@ function MyPlans({ items }: { items: ForecastItem[] }) {
     </div>
     {items.length ? <ul className="mt-3 divide-y divide-slate-100">{items.map((item) => <li key={item.id} className="flex items-center gap-3 py-3">
       <CalendarDays className="h-4 w-4 shrink-0 text-slate-400" />
-      <button type="button" onClick={() => edit(item)} className="min-w-0 flex-1 text-left"><p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
-        <p className="text-xs text-slate-500">{shortDay(item.startDate)}{item.endDate ? ` – ${shortDay(item.endDate)}` : ""} · {item.source === "suggested" ? "Confirmado" : "Planificado"}</p></button>
-      <b className={`amount shrink-0 text-sm tabular-nums ${item.kind === "ingreso" ? "text-blue-700" : "text-rose-700"}`}>{item.kind === "ingreso" ? "+" : "−"}{eur(item.amount, 2)}</b>
-      <button type="button" disabled={busy} onClick={() => void remove(item.id)} aria-label={`Eliminar ${item.title}`} className="rounded-lg p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+      <div className="min-w-0 flex-1"><button type="button" onClick={() => edit(item)} className="w-full text-left"><p className="truncate text-sm font-medium text-slate-900">{planTitle(item)}</p>
+        <p className="text-xs text-slate-500">{shortDay(item.startDate)} {item.startDate.slice(0, 4)}{item.endDate ? ` – ${shortDay(item.endDate)}` : ""} · {item.source === "suggested" ? "Confirmado" : "Planificado"}</p></button>
+        {item.sourceKey && <button type="button" onClick={() => onDetail(item.sourceKey!)} className="mt-1 inline-flex items-center text-xs font-semibold text-blue-700">Ver detalle <ChevronRight className="h-3.5 w-3.5" /></button>}
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-2"><b className={`amount text-sm tabular-nums ${item.kind === "ingreso" ? "text-blue-700" : "text-rose-700"}`}>{item.kind === "ingreso" ? "+" : "−"}{eur(item.amount, 2)}</b>
+        <button type="button" disabled={busy} onClick={() => void remove(item.id)} aria-label={`Eliminar ${item.title}`} className="rounded-lg p-1.5 text-slate-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div>
     </li>)}</ul> : <p className="mt-4 text-sm text-slate-500">Todavía no has añadido planes.</p>}
     {open && <div className="mt-4 space-y-3 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
       <label className="block text-xs font-medium text-slate-600">¿Qué tienes previsto?<input value={title} maxLength={100} onChange={(e) => setTitle(e.target.value)} placeholder="Regalos de Navidad" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" /></label>
@@ -135,13 +206,14 @@ function MyPlans({ items }: { items: ForecastItem[] }) {
 
 export function ForecastPanel({ view }: { view: View }) {
   const [range, setRange] = useState<3 | 6 | 12>(3);
+  const [detailKey, setDetailKey] = useState<string | null>(null);
   const forecast = view.forecastCashflow;
   const points = forecast?.points.slice(0, range) ?? [];
   const last = points.at(-1);
   const total = points.reduce((s, p) => ({ income: s.income + p.income, expenses: s.expenses + p.expenses }), { income: 0, expenses: 0 });
   const goal = view.settings.savingsGoal ?? 0;
   const goalPerCycle = view.settings.savingsFrequency === "semanal" ? goal * 52 / 12 : goal;
-  return <div className="space-y-4">
+  return <><div className={`space-y-4 transition-transform duration-200 ${detailKey ? "-translate-x-3" : ""}`}>
     <section className={`${card} ${flat} space-y-4 p-4 sm:p-6`}>
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-base font-semibold text-slate-900">Lo que viene</h2>
         <p className="mt-1 text-xs text-slate-500">Cada ciclo parte del dinero disponible al cerrar el anterior.</p></div>
@@ -164,7 +236,7 @@ export function ForecastPanel({ view }: { view: View }) {
       </> : <p className="py-6 text-sm text-slate-500">La previsión todavía no está disponible.</p>}
     </section>
     <SavingsGoal key={`${view.settings.savingsGoal}:${view.settings.savingsFrequency}`} settings={view.settings} />
-    <ForecastSuggestions suggestions={view.forecastSuggestions ?? []} />
-    <MyPlans items={view.forecastItems ?? []} />
-  </div>;
+    <ForecastSuggestions suggestions={view.forecastSuggestions ?? []} onDetail={setDetailKey} />
+    <MyPlans items={view.forecastItems ?? []} onDetail={setDetailKey} />
+  </div><ForecastReferenceSheet key={detailKey ?? "closed"} referenceKey={detailKey} onClose={() => setDetailKey(null)} /></>;
 }
