@@ -3,11 +3,11 @@ import { applyAiSettings } from "@/lib/ai/usage";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { categoryLabel, isCategory } from "@/lib/finance/categories";
-import { accountsView, budgetView, forecast, forecastSource, listTransactions, overview } from "@/lib/finance/service";
+import { accountsView, budgetView, financeContext, forecast, forecastSource, listTransactions, overview } from "@/lib/finance/service";
 import { payslipsView } from "@/lib/finance/payslips";
 import { syncUser } from "@/lib/finance/sync";
 import { bulkCorrect, classifyPending, correctTransaction } from "@/lib/finance/classify";
-import { cleanView } from "@/lib/finance/logic";
+import { addDays, cleanView, cycleFor, forecastOccurrenceKey } from "@/lib/finance/logic";
 import { disconnectGmail, gmailView, syncGmail } from "@/lib/finance/gmail";
 import { ask, chatHistory, clearChat } from "@/lib/finance/copilot";
 import { getMemory, getRules, getSettings } from "@/lib/finance/store";
@@ -119,6 +119,33 @@ export async function POST(req: Request, route: RouteContext) {
         data.savings_frequency = body.savingsFrequency;
       }
       await prisma.finance_settings.upsert({ where: { user_id: uid }, create: { user_id: uid, ...data }, update: data });
+      return ok({ ok: true });
+    }
+    if (action === "forecast/occurrence") {
+      const key = str("key");
+      if (key.length > 160) return fail("Referencia no válida");
+      const ctx = await financeContext(uid);
+      const cycle = cycleFor(ctx.today, ctx.startDay, 1);
+      let match: { date: string; label: string } | null = null;
+      for (const r of ctx.recurring) {
+        if (!r.active || r.kind !== "gasto" || r.amount >= 0) continue;
+        let date = r.nextDate;
+        while (date < cycle.start) date = addDays(date, r.intervalDays);
+        while (date <= cycle.end) {
+          if (forecastOccurrenceKey(r, date) === key) match = { date, label: r.label };
+          date = addDays(date, r.intervalDays);
+        }
+      }
+      if (!match) return fail("Este cargo no está previsto para el próximo ciclo", 404);
+      const amount = body.amount === null ? null : Number(body.amount);
+      if (amount !== null && (!Number.isFinite(amount) || amount < 0 || amount > 1_000_000)) return fail("Importe no válido");
+      if (amount === null) await prisma.finance_forecast_items.deleteMany({ where: { user_id: uid, source: "override", source_key: key } });
+      else await prisma.finance_forecast_items.upsert({
+        where: { user_id_source_key: { user_id: uid, source_key: key } },
+        create: { user_id: uid, title: match.label.slice(0, 100), kind: "gasto", amount: Math.round(amount * 100) / 100,
+          start_date: new Date(`${match.date}T00:00:00Z`), source: "override", source_key: key },
+        update: { amount: Math.round(amount * 100) / 100 },
+      });
       return ok({ ok: true });
     }
     if (action === "forecast/item") {
