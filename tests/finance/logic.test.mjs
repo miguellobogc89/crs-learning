@@ -240,7 +240,7 @@ test("Inicio: previsión de 12 ciclos suma ingresos conocidos, recibos y gasto v
   let chargeDate = netflix.nextDate;
   while (chargeDate < planned.points[1].cycle.start) chargeDate = L.addDays(chargeDate, netflix.intervalDays);
   const exception = { id: "override", title: "Netflix", kind: "gasto", amount: 5.99, startDate: chargeDate,
-    endDate: null, source: "override", sourceKey: L.forecastOccurrenceKey(netflix, chargeDate) };
+    endDate: null, source: "manual", sourceKey: L.forecastOccurrenceKey(netflix, chargeDate) };
   const skippedOccurrences = new Set([exception.sourceKey]);
   const withoutCharge = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000,
     items, skippedOccurrences });
@@ -256,6 +256,34 @@ test("Inicio: previsión de 12 ciclos suma ingresos conocidos, recibos y gasto v
   assert.equal(adjusted.points[1].knownExpenses, planned.points[1].knownExpenses - 7);
   const restored = L.forecastCashflow({ txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000, items });
   assert.equal(restored.points[1].knownExpenses, planned.points[1].knownExpenses, "al restaurar vuelve el importe habitual");
+});
+
+test("previsión: los imprevistos periódicos se repiten en sus fechas y se muestran como estimados", () => {
+  const today = "2026-11-17";
+  const txs = history();
+  const recurring = L.detectRecurring(txs, today);
+  const keys = new Set(recurring.map((r) => r.key));
+  const summaries = [1, 2, 3].map((i) => L.summarize(txs, L.cycleFor(today, 25, -i), keys));
+  const current = L.summarize(txs, L.cycleFor(today, 25), keys);
+  const projection = L.projectCycle({ txs, today, startDay: 25, liquidity: 3000, recurring, savingsGoal: null, history: summaries });
+  const input = { txs, today, startDay: 25, recurring, history: summaries, current, projection, liquidity: 3000 };
+  const regular = L.forecastCashflow(input);
+  const item = { id: "dinner", title: "Clases", kind: "gasto", amount: 80, startDate: "2026-11-28", endDate: null,
+    source: "manual", sourceKey: "plan:mensual:00000000-0000-4000-8000-000000000001" };
+  assert.equal(L.forecastPlanFrequency(item.sourceKey), "mensual");
+  const planned = L.forecastCashflow({ ...input, items: [item] });
+  assert.equal(planned.points[1].plannedExpenses, 80);
+  assert.equal(planned.points[2].plannedExpenses, 80);
+  assert.equal(planned.points[1].expenses, regular.points[1].expenses + 80);
+  assert.equal(planned.points[1].fixedExpenses, regular.points[1].fixedExpenses);
+  assert.equal(planned.points[1].estimatedExpenses, regular.points[1].estimatedExpenses + 80);
+  const weeks = L.forecastCycleWeeks({ point: planned.points[1], recurring, today, items: [item] });
+  assert.equal(weeks.flatMap((w) => w.events).filter((e) => e.planId === "dinner").length, 1);
+  assert.equal(Math.round(weeks.reduce((total, w) => total + w.expenses, 0) * 100) / 100, planned.points[1].expenses);
+  const endOfMonth = { ...item, startDate: "2027-01-31" };
+  assert.deepEqual(L.forecastPlanOccurrences(endOfMonth, "2027-02-01", "2027-04-30"), ["2027-02-28", "2027-03-31", "2027-04-30"]);
+  assert.deepEqual(L.forecastPlanOccurrences({ ...item, sourceKey: "plan:semanal:00000000-0000-4000-8000-000000000001",
+    endDate: "2026-12-12" }, "2026-12-01", "2026-12-30"), ["2026-12-05", "2026-12-12"]);
 });
 
 test("Inicio: solo estima una nómina sin patrón recurrente cuando aparece en dos ciclos completos", () => {
