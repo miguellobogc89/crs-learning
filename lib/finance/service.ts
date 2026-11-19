@@ -16,7 +16,7 @@ const HISTORY_CYCLES = 12;
 
 /** Contexto común: datos y cálculos base de una persona (una sola lectura de la base de datos). */
 export async function financeContext(userId: string) {
-  const [settings, accounts, txs, budgets, { dismissed, cancelled }, forecastItems] = await Promise.all([
+  const [settings, accounts, txs, budgets, { dismissed, cancelled, skippedOccurrences }, forecastItems] = await Promise.all([
     getSettings(userId),
     getAccounts(userId),
     loadTxs(userId),
@@ -40,7 +40,7 @@ export async function financeContext(userId: string) {
   const savingsGoalCycle = settings.savingsGoal === null ? null : round2(settings.savingsGoal * (settings.savingsFrequency === "semanal" ? 52 / 12 : 1));
   const projection = projectCycle({ txs, today, startDay, liquidity, recurring, savingsGoal: savingsGoalCycle, history: historyWithData });
   const budgetsNow = budgetStatus(budgets, current, today);
-  return { userId, settings, accounts, txs, budgets, budgetsNow, dismissed, cancelled, forecastItems, today, startDay, recurring, history: historyWithData, current, liquidity, projection };
+  return { userId, settings, accounts, txs, budgets, budgetsNow, dismissed, cancelled, skippedOccurrences, forecastItems, today, startDay, recurring, history: historyWithData, current, liquidity, projection };
 }
 export type FinanceContext = Awaited<ReturnType<typeof financeContext>>;
 
@@ -174,7 +174,7 @@ export async function overview(userId: string, offset = 0) {
   const includedAccountIds = new Set(accounts.filter((account) => account.included).map((account) => account.id));
   const balanceAccountIds = new Set(accounts.filter((account) => account.included && account.currency === "EUR" && account.balance !== null).map((account) => account.id));
   const cashflow = cashflowPeriods(txs, today);
-  const futureCashflow = forecastCashflow({ txs, today, startDay: ctx.startDay, recurring, history, current, projection, liquidity: ctx.liquidity, items: ctx.forecastItems });
+  const futureCashflow = forecastCashflow({ txs, today, startDay: ctx.startDay, recurring, history, current, projection, liquidity: ctx.liquidity, items: ctx.forecastItems, skippedOccurrences: ctx.skippedOccurrences });
   const nextCycle = futureCashflow.points[1];
   for (const range of ["7D", "1M", "6M", "1A"] as const) {
     for (const point of cashflow[range].points) {
@@ -195,7 +195,7 @@ export async function overview(userId: string, offset = 0) {
     history: [...history].reverse().map((h) => ({ cycle: h.cycle, income: h.income, gifts: h.gifts, expenses: h.expenses, net: h.net, savedToInvestments: h.savedToInvestments })),
     cashflow,
     forecastCashflow: futureCashflow,
-    forecastNextWeeks: nextCycle ? forecastCycleWeeks({ point: nextCycle, recurring, items: ctx.forecastItems, today }) : [],
+    forecastNextWeeks: nextCycle ? forecastCycleWeeks({ point: nextCycle, recurring, items: ctx.forecastItems, today, skippedOccurrences: ctx.skippedOccurrences }) : [],
     forecastItems: ctx.forecastItems.filter((item) => item.source !== "override"),
     forecastSuggestions: suggestions,
     categoryHistory: expenseHistoryByCycle(txs, ctx.startDay),
