@@ -46,6 +46,25 @@ test("clave de comercio sin tarjetas, fechas ni ruido", () => {
   assert.equal(L.merchantKey("Pago movil en NETFLIX.COM, Madrid"), "netflix.com");
 });
 
+test("las recomendaciones de seguros excluyen inversión y distinguen renovaciones semestrales", () => {
+  const movements = [
+    tx("occident", "S", "2026-10-14", -70, "OCCIDENT GCO Inv.multifondos 10-10-26 al 10-11-26", "gasto", "seguros"),
+    tx("occident-reciente", "S", "2026-11-17", -70, "RECIBO OCCIDENT GCO SEGU Y REAS", "gasto", "seguros"),
+    tx("mapfre-abril", "S", "2026-04-13", -175.01, "MAPFRE SEGURO AUTO MAT 1234ABC", "gasto", "seguros"),
+    tx("mapfre-octubre", "S", "2026-10-14", -174.99, "MAPFRE SEGURO AUTO MAT 1234ABC", "gasto", "seguros"),
+    tx("mapfre-otro", "S", "2026-07-20", -874.05, "MAPFRE SEGURO AUTO MAT 5678XYZ", "gasto", "seguros"),
+    tx("verti", "S", "2026-08-13", -619.02, "VERTI ASEGURADORA", "gasto", "seguros"),
+  ];
+  const proposals = L.insuranceForecastCandidates(movements, "2026-11-19", "2027-11-30");
+  assert.equal(proposals.length, 3);
+  const semi = proposals.find((s) => s.cadence === "semestral");
+  assert.equal(semi.startDate, "2027-04-14");
+  assert.equal(semi.evidence, 2);
+  assert.equal(semi.sourceTx.id, "mapfre-octubre");
+  assert.equal(proposals.some((s) => s.sourceTx.id === "occident"), false);
+  assert.equal(proposals.some((s) => s.startDate === "2027-08-13"), true);
+});
+
 test("una recarga de Revolut desde Santander se empareja como transferencia interna y no un gasto", () => {
   const pairs = L.findTransferPairs([
     tx("a", "santander", "2026-10-01", -200, "Transferencia a Revolut"),
