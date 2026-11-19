@@ -19,12 +19,13 @@ function niceMax(v: number) {
 const compact = (v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toLocaleString("es-ES", { maximumFractionDigits: 1 })} k` : v.toLocaleString("es-ES", { maximumFractionDigits: 0 }));
 
 export type CyclePoint = { label: string; income: number; expenses: number; net: number; available?: number | null;
-  fixedExpenses?: number; estimatedExpenses?: number; reservedSavings?: number;
+  fixedExpenses?: number; estimatedExpenses?: number; reservedSavings?: number; accumulatedSavings?: number;
   /** Texto del detalle (si no, la etiqueta). */ title?: string; current?: boolean };
 
 /** Tres columnas: ingresos (con ahorro reservado), gastos (habituales y estimados) y saldo. */
-export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseColor = EXPENSE, balanceLabel = "Saldo al cierre", showLegend = true, wideBars = false }: {
+export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseColor = EXPENSE, balanceLabel = "Saldo al cierre", showLegend = true, wideBars = false, onSelect }: {
   data: CyclePoint[]; height?: number; incomeColor?: string; expenseColor?: string; balanceLabel?: string; showLegend?: boolean; wideBars?: boolean;
+  onSelect?: (index: number) => void;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
@@ -36,8 +37,10 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
   const iw = W - pad.l - pad.r;
   const ih = H - pad.t - pad.b;
   const slot = iw / Math.max(1, data.length);
-  const gap = wideBars ? Math.min(5, slot / 18) : 2;
-  const bw = wideBars ? Math.min(42, Math.max(3, (slot - 2 * gap) / 3)) : Math.min(30, Math.max(3, (slot - 12) / 3));
+  const gap = wideBars ? Math.min(9, Math.max(3, slot / 22)) : 2;
+  // En previsión las tres barras ocupan la misma proporción de cada periodo,
+  // tanto al ver cuatro semanas como al ver doce meses.
+  const bw = wideBars ? Math.max(3, (slot - 4 * gap) / 3) : Math.min(30, Math.max(3, (slot - 12) / 3));
   const y = (v: number) => pad.t + ((max - v) / (max - bottom)) * ih;
   const ticks = [0, max / 2, max];
   const activeIndex = hover ?? selected;
@@ -67,12 +70,13 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
             const hh = Math.abs(y(v) - y(0));
             return <rect x={x} y={top} width={bw} height={hh} rx={Math.min(3, hh / 2, bw / 2)} fill={color} opacity={activeIndex === null || activeIndex === i ? 1 : 0.45} />;
           };
-          const incomeX = cx - 1.5 * bw - (wideBars ? gap : 2);
+          const incomeX = cx - 1.5 * bw - gap;
           const reserved = Math.min(Math.max(0, d.income), Math.max(0, d.reservedSavings ?? 0));
+          const selectBar = () => { setSelected(i); onSelect?.(i); };
           return (
             <g key={`${i}:${d.label}`} className="cursor-pointer" tabIndex={0} role="button" aria-label={`Ver importes de ${d.title ?? d.label}`}
-              onMouseEnter={() => setHover(i)} onTouchStart={() => setSelected(i)} onClick={() => setSelected(i)}
-              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(i); } }}>
+              onMouseEnter={() => setHover(i)} onTouchStart={selectBar} onClick={selectBar}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectBar(); } }}>
               <rect x={cx - slot / 2} y={pad.t} width={slot} height={ih} fill="transparent" />
               {bar(d.income - reserved, incomeX, incomeColor)}
               {reserved > 0 && <rect x={incomeX} y={y(d.income)} width={bw} height={y(d.income - reserved) - y(d.income)}
@@ -85,7 +89,7 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
                   rx={2} fill="#ffe4e6" stroke="#fb7185" strokeWidth={1.5} strokeDasharray="3 2"
                   opacity={activeIndex === null || activeIndex === i ? 1 : 0.45} />}
               </>}
-              {d.available !== null && d.available !== undefined && d.available > 0 && bar(d.available, cx + bw / 2 + (wideBars ? gap : 2), SAVINGS)}
+              {d.available !== null && d.available !== undefined && d.available > 0 && bar(d.available, cx + bw / 2 + gap, SAVINGS)}
             </g>
           );
         })}
@@ -105,6 +109,7 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
           <p className="font-semibold text-slate-900">{h.title ?? h.label}</p>
           <p className="mt-1 flex justify-between gap-4 text-slate-600"><span>{splitIncome ? "Ingresos sin ahorro" : "Ingresos"}</span><b className="tabular-nums" style={{ color: incomeColor }}>{eur(h.income - (h.reservedSavings ?? 0), 2)}</b></p>
           {splitIncome && <p className="flex justify-between gap-4 text-slate-600"><span>Ahorro previsto</span><b className="tabular-nums text-blue-400">{eur(h.reservedSavings ?? 0, 2)}</b></p>}
+          {h.accumulatedSavings !== undefined && <p className="flex justify-between gap-4 text-slate-600"><span>Total ahorrado hasta aquí</span><b className="tabular-nums text-blue-500">{eur(h.accumulatedSavings, 2)}</b></p>}
           {splitExpenses ? <>
             <p className="flex justify-between gap-4 text-slate-600"><span>Gastos habituales</span><b className="tabular-nums" style={{ color: expenseColor }}>{eur(h.fixedExpenses ?? 0, 2)}</b></p>
             <p className="flex justify-between gap-4 text-slate-600"><span>Gastos estimados</span><b className="tabular-nums text-rose-400">{eur(h.estimatedExpenses ?? 0, 2)}</b></p>
