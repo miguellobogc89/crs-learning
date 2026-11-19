@@ -139,13 +139,26 @@ export async function POST(req: Request, route: RouteContext) {
       if (!match) return fail("Este cargo no está previsto para el próximo ciclo", 404);
       const amount = body.amount === null ? null : Number(body.amount);
       if (amount !== null && (!Number.isFinite(amount) || amount < 0 || amount > 1_000_000)) return fail("Importe no válido");
-      if (amount === null) await prisma.finance_forecast_items.deleteMany({ where: { user_id: uid, source: "override", source_key: key } });
-      else await prisma.finance_forecast_items.upsert({
-        where: { user_id_source_key: { user_id: uid, source_key: key } },
-        create: { user_id: uid, title: match.label.slice(0, 100), kind: "gasto", amount: Math.round(amount * 100) / 100,
-          start_date: new Date(`${match.date}T00:00:00Z`), source: "override", source_key: key },
-        update: { amount: Math.round(amount * 100) / 100 },
-      });
+      const rounded = amount === null ? null : Math.round(amount * 100) / 100;
+      const skipKey = `forecast-skip:${key}`;
+      if (rounded === null) await prisma.$transaction([
+        prisma.finance_forecast_items.deleteMany({ where: { user_id: uid, source: "override", source_key: key } }),
+        prisma.finance_alert_dismissals.deleteMany({ where: { user_id: uid, key: skipKey } }),
+      ]);
+      else if (rounded === 0) await prisma.$transaction([
+        prisma.finance_forecast_items.deleteMany({ where: { user_id: uid, source: "override", source_key: key } }),
+        prisma.finance_alert_dismissals.upsert({ where: { user_id_key: { user_id: uid, key: skipKey } },
+          create: { user_id: uid, key: skipKey }, update: {} }),
+      ]);
+      else await prisma.$transaction([
+        prisma.finance_alert_dismissals.deleteMany({ where: { user_id: uid, key: skipKey } }),
+        prisma.finance_forecast_items.upsert({
+          where: { user_id_source_key: { user_id: uid, source_key: key } },
+          create: { user_id: uid, title: match.label.slice(0, 100), kind: "gasto", amount: rounded,
+            start_date: new Date(`${match.date}T00:00:00Z`), source: "override", source_key: key },
+          update: { amount: rounded },
+        }),
+      ]);
       return ok({ ok: true });
     }
     if (action === "forecast/item") {
