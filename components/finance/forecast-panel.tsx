@@ -247,10 +247,10 @@ function SavingsGoal({ settings }: { settings: View["settings"] }) {
   </section>;
 }
 
-function NextCycleWeeks({ weeks, cycle, onEvent, onAdd }: { weeks: View["forecastNextWeeks"]; cycle: View["forecastCashflow"]["points"][number]; onEvent: (event: ForecastEvent) => void; onAdd: (week: ForecastWeek) => void }) {
+function NextCycleWeeks({ weeks, onEvent, onAdd }: { weeks: View["forecastNextWeeks"]; onEvent: (event: ForecastEvent) => void; onAdd: (week: ForecastWeek) => void }) {
   return <section className={`${card} ${flat} p-4 sm:p-6`}>
-    <h2 className="font-semibold text-slate-900">Tu próximo mes, semana a semana</h2>
-    <p className="mt-1 text-xs text-slate-500">{longDay(cycle.cycle.start)} – {longDay(cycle.cycle.end)} · ciclo de tu nómina</p>
+    <h2 className="font-semibold text-slate-900">Tus próximas 5 semanas</h2>
+    <p className="mt-1 text-xs text-slate-500">{longDay(weeks[0].start)} – {longDay(weeks.at(-1)!.end)}</p>
     <div className="mt-4 divide-y divide-slate-100">{weeks.map((week, index) => <div key={week.start} className="py-4 first:pt-0 last:pb-0">
       <div className="flex items-start justify-between gap-3">
         <div><p className="text-sm font-semibold text-slate-900">Semana {index + 1}</p>
@@ -281,7 +281,7 @@ function NextCycleWeeks({ weeks, cycle, onEvent, onAdd }: { weeks: View["forecas
         </div>
       </details>
     </div>)}</div>
-    <p className="mt-4 border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-500">Los cobros y recibos habituales se sitúan en sus fechas esperadas. El gasto cotidiano se reparte como estimación; los importes semanales suman exactamente el mes mostrado arriba.</p>
+    <p className="mt-4 border-t border-slate-100 pt-3 text-xs leading-relaxed text-slate-500">Los cobros y recibos habituales se sitúan en sus fechas esperadas. El gasto cotidiano se reparte como estimación; los importes semanales corresponden al gráfico superior.</p>
   </section>;
 }
 
@@ -393,55 +393,43 @@ function MyPlans({ items, hiddenCount, periodStart, periodEnd, onDetail }: {
 }
 
 export function ForecastPanel({ view }: { view: View }) {
-  const [range, setRange] = useState<1 | 3 | 6 | 12>(3);
-  const [selectedChart, setSelectedChart] = useState<{ range: number; index: number } | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ForecastEvent | null>(null);
   const [eventOpen, setEventOpen] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState<ForecastWeek | null>(null);
   const [newPlanOpen, setNewPlanOpen] = useState(false);
   const forecast = view.forecastCashflow;
-  const weeklyMode = range === 1;
-  const points = weeklyMode ? forecast.points.slice(1, 2) : forecast.points.slice(0, range);
-  const last = points.at(-1);
-  const periodStart = weeklyMode ? points[0]?.cycle.start ?? view.today : view.today;
-  const periodEnd = last?.cycle.end ?? view.today;
+  const weeks = view.forecastNextWeeks.slice(0, 5);
+  const periodStart = weeks[0]?.start ?? view.today;
+  const periodEnd = weeks.at(-1)?.end ?? view.today;
   const visibleSuggestions = (view.forecastSuggestions ?? []).filter((s) => s.startDate >= periodStart && s.startDate <= periodEnd);
   const visiblePlans = (view.forecastItems ?? []).filter((item) => forecastPlanOccurrences(item, periodStart, periodEnd).length > 0);
-  const total = points.reduce((s, p) => ({ income: s.income + p.income, expenses: s.expenses + p.expenses }), { income: 0, expenses: 0 });
+  const total = weeks.reduce((s, week) => ({ income: s.income + week.income, expenses: s.expenses + week.expenses }), { income: 0, expenses: 0 });
+  const lastBalance = weeks.at(-1)?.closingBalance;
   const goal = view.settings.savingsGoal ?? 0;
   const goalPerCycle = view.settings.savingsFrequency === "semanal" ? goal * 52 / 12 : goal;
-  let savingsToAllocate = Math.max(0, goalPerCycle);
-  const rawChartData = weeklyMode ? view.forecastNextWeeks.map((w, i) => {
+  const cycleStarts = new Set(forecast.points.slice(1, 3).map((point) => point.cycle.start));
+  const rawChartData = weeks.map((w, i) => {
+    const cycleIndex = weeks.slice(0, i + 1).findLastIndex((week) => cycleStarts.has(week.start));
+    const previousIncome = weeks.slice(Math.max(0, cycleIndex), i).reduce((sum, week) => sum + Math.max(0, week.income), 0);
     const fixedExpenses = Math.round(w.events.filter((event) => event.origin === "recurrente" && event.kind === "gasto")
       .reduce((sum, event) => sum + event.amount, 0) * 100) / 100;
-    const reservedSavings = Math.round(Math.min(Math.max(0, w.income), savingsToAllocate) * 100) / 100;
-    savingsToAllocate = Math.max(0, savingsToAllocate - reservedSavings);
+    const reservedSavings = Math.round(Math.min(Math.max(0, w.income), Math.max(0, goalPerCycle - previousIncome)) * 100) / 100;
     return { label: `Sem ${i + 1}`, title: `Semana ${i + 1} · ${shortDay(w.start)} – ${shortDay(w.end)}`,
       income: w.income, expenses: w.expenses, net: w.net, available: w.closingBalance,
       fixedExpenses, estimatedExpenses: Math.round((w.expenses - fixedExpenses) * 100) / 100, reservedSavings };
-  }) : points.map((p) => ({
-    label: p.current ? "Ahora" : new Intl.DateTimeFormat("es-ES", { month: "short", timeZone: "UTC" }).format(new Date(`${p.cycle.end}T00:00:00Z`)).replace(".", ""),
-    title: p.current ? `Desde hoy · ${p.cycle.label}` : `Previsto · ${p.cycle.label}`,
-    income: p.income, expenses: p.expenses, net: p.net, available: p.closingBalance, current: p.current,
-    fixedExpenses: p.fixedExpenses, estimatedExpenses: p.estimatedExpenses,
-    reservedSavings: Math.round(Math.min(Math.max(0, p.income), Math.max(0, goalPerCycle)) * 100) / 100,
-  }));
+  });
   const chartData = rawChartData.reduce<Array<(typeof rawChartData)[number] & { accumulatedSavings: number }>>((items, point) => [
     ...items,
     { ...point, accumulatedSavings: Math.round(((items.at(-1)?.accumulatedSavings ?? 0) + point.reservedSavings) * 100) / 100 },
   ], []);
-  const selectedIndex = selectedChart?.range === range ? selectedChart.index : null;
   const totalSavings = chartData.at(-1)?.accumulatedSavings ?? 0;
   const savedUntilSelected = selectedIndex === null ? totalSavings : (chartData[selectedIndex]?.accumulatedSavings ?? 0);
   return <><div className={`space-y-4 transition-transform duration-200 ${detailKey ? "-translate-x-3" : ""}`}>
     <section className={`${card} ${flat} space-y-3 p-4 sm:p-6`}>
-      <div className="flex justify-end">
-        <div className="flex rounded-xl bg-slate-100 p-1" role="group" aria-label="Periodo de previsión">{([1, 3, 6, 12] as const).map((n) => <button key={n} type="button" aria-pressed={range === n} onClick={() => setRange(n)}
-          className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${range === n ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>{n}M</button>)}</div></div>
-      {points.length ? <>
-        <CycleBars key={range} height={235} balanceLabel="Disponible al cierre" data={chartData} showLegend={false} wideBars
-          onSelect={(index) => setSelectedChart(index === null ? null : { range, index })} />
+      {weeks.length ? <>
+        <CycleBars key={periodStart} height={235} balanceLabel="Disponible al cierre" data={chartData} showLegend={false} wideBars onSelect={setSelectedIndex} />
         <div className="grid grid-cols-4 gap-1 border-t border-slate-100 pt-3 text-center sm:gap-3" aria-label="Totales de la previsión">
           <div className="min-w-0" title={`Ingresos: ${eur(total.income, 2)}`} aria-label={`Ingresos: ${eur(total.income, 2)}`}>
             <p className="amount truncate text-[10px] font-bold tabular-nums tracking-tight text-blue-700 sm:text-sm">{eur(total.income, 2)}</p>
@@ -452,9 +440,9 @@ export function ForecastPanel({ view }: { view: View }) {
           <div className="min-w-0" title={`Ahorro reservado: ${eur(totalSavings, 2)}`} aria-label={`Ahorro reservado: ${eur(totalSavings, 2)}`}>
             <p className="amount truncate text-[10px] font-bold tabular-nums tracking-tight text-blue-400 sm:text-sm">{eur(totalSavings, 2)}</p>
           </div>
-          <div className="min-w-0" title={`Disponible al final: ${last?.closingBalance === null || !last ? "Sin saldo" : eur(last.closingBalance, 2)}`}
-            aria-label={`Disponible al final: ${last?.closingBalance === null || !last ? "Sin saldo" : eur(last.closingBalance, 2)}`}>
-            <p className={`amount truncate text-[10px] font-bold tabular-nums tracking-tight sm:text-sm ${(last?.closingBalance ?? 0) >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{last?.closingBalance === null || !last ? "" : eur(last.closingBalance, 2)}</p>
+          <div className="min-w-0" title={`Disponible al final: ${lastBalance === null || lastBalance === undefined ? "Sin saldo" : eur(lastBalance, 2)}`}
+            aria-label={`Disponible al final: ${lastBalance === null || lastBalance === undefined ? "Sin saldo" : eur(lastBalance, 2)}`}>
+            <p className={`amount truncate text-[10px] font-bold tabular-nums tracking-tight sm:text-sm ${(lastBalance ?? 0) >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{lastBalance === null || lastBalance === undefined ? "" : eur(lastBalance, 2)}</p>
           </div>
         </div>
         <div className="flex items-baseline justify-end gap-2 text-xs text-slate-500" aria-live="polite">
@@ -464,7 +452,7 @@ export function ForecastPanel({ view }: { view: View }) {
         {!forecast.hasExpectedIncome && <p className="text-xs font-medium text-amber-700">Sin ingresos periódicos suficientes: puede faltar dinero por estimar.</p>}
       </> : <p className="py-6 text-sm text-slate-500">La previsión todavía no está disponible.</p>}
     </section>
-    {forecast.points[1] && <NextCycleWeeks weeks={view.forecastNextWeeks} cycle={forecast.points[1]}
+    {weeks.length > 0 && <NextCycleWeeks weeks={weeks}
       onEvent={(event) => { setSelectedEvent(event); setEventOpen(true); }}
       onAdd={(week) => { setSelectedWeek(week); setNewPlanOpen(true); }} />}
     <SavingsGoal key={`${view.settings.savingsGoal}:${view.settings.savingsFrequency}`} settings={view.settings} />
