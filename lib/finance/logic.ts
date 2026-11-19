@@ -806,6 +806,54 @@ export function forecastCashflow(opts: {
   };
 }
 
+/** Desglose semanal de un ciclo futuro. Distribuye los mismos cobros, recibos y gasto variable que el total mensual. */
+export function forecastCycleWeeks(opts: {
+  point: ReturnType<typeof forecastCashflow>["points"][number];
+  recurring: Recurring[];
+  items: ForecastItem[];
+  today: string;
+}) {
+  const { point, recurring, items, today } = opts;
+  const { cycle } = point;
+  const events: Array<{ date: string; label: string; amount: number; kind: "ingreso" | "gasto"; origin: "recurrente" | "plan" | "estimado" }> = [];
+  for (const r of recurring) {
+    if (!r.active) continue;
+    let date = r.nextDate;
+    while (date < cycle.start) date = addDays(date, r.intervalDays);
+    while (date <= cycle.end) {
+      if (r.kind === "ingreso" && r.amount > 0) events.push({ date, label: r.label, amount: r.amount, kind: "ingreso", origin: "recurrente" });
+      else if (r.kind === "gasto" && r.amount < 0) events.push({ date, label: r.label, amount: -r.amount, kind: "gasto", origin: "recurrente" });
+      date = addDays(date, r.intervalDays);
+    }
+  }
+  if (point.estimatedSalary > 0) events.push({ date: cycle.start, label: "Nómina habitual estimada", amount: point.estimatedSalary, kind: "ingreso", origin: "estimado" });
+  for (const item of items) {
+    if (item.startDate < today || item.startDate < cycle.start || item.startDate > cycle.end) continue;
+    events.push({ date: item.startDate, label: item.title, amount: item.amount, kind: item.kind, origin: "plan" });
+  }
+  events.sort((a, b) => a.date.localeCompare(b.date) || b.amount - a.amount);
+
+  const weeks = [];
+  let balance = point.openingBalance;
+  let assignedVariable = 0;
+  for (let start = cycle.start; start <= cycle.end; start = addDays(start, 7)) {
+    const end = addDays(start, 6) < cycle.end ? addDays(start, 6) : cycle.end;
+    const weekEvents = events.filter((e) => e.date >= start && e.date <= end);
+    const income = round2(weekEvents.filter((e) => e.kind === "ingreso").reduce((sum, e) => sum + e.amount, 0));
+    const fixed = round2(weekEvents.filter((e) => e.kind === "gasto").reduce((sum, e) => sum + e.amount, 0));
+    // El último tramo absorbe el redondeo para cuadrar exactamente con el ciclo del gráfico.
+    const variable = end === cycle.end ? round2(point.variableExpenses - assignedVariable)
+      : round2(point.variableExpenses * (daysBetween(start, end) + 1) / (daysBetween(cycle.start, cycle.end) + 1));
+    assignedVariable = round2(assignedVariable + variable);
+    const expenses = round2(fixed + variable);
+    const net = round2(income - expenses);
+    const openingBalance: number | null = balance;
+    balance = balance === null ? null : round2(balance + net);
+    weeks.push({ start, end, income, expenses, variable, net, openingBalance, closingBalance: balance, events: weekEvents });
+  }
+  return weeks;
+}
+
 /** ¿Me lo puedo permitir? Efecto de una compra sobre el ahorro del ciclo, el objetivo y la liquidez. */
 export function affordability(p: Projection, amount: number) {
   const netAfter = round2(p.projectedNet - amount);
