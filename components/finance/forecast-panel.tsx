@@ -394,6 +394,7 @@ function MyPlans({ items, hiddenCount, periodStart, periodEnd, onDetail }: {
 
 export function ForecastPanel({ view }: { view: View }) {
   const [range, setRange] = useState<1 | 3 | 6 | 12>(3);
+  const [selectedChart, setSelectedChart] = useState<{ range: number; index: number } | null>(null);
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<ForecastEvent | null>(null);
   const [eventOpen, setEventOpen] = useState(false);
@@ -411,7 +412,7 @@ export function ForecastPanel({ view }: { view: View }) {
   const goal = view.settings.savingsGoal ?? 0;
   const goalPerCycle = view.settings.savingsFrequency === "semanal" ? goal * 52 / 12 : goal;
   let savingsToAllocate = Math.max(0, goalPerCycle);
-  const chartData = weeklyMode ? view.forecastNextWeeks.map((w, i) => {
+  const rawChartData = weeklyMode ? view.forecastNextWeeks.map((w, i) => {
     const fixedExpenses = Math.round(w.events.filter((event) => event.origin === "recurrente" && event.kind === "gasto")
       .reduce((sum, event) => sum + event.amount, 0) * 100) / 100;
     const reservedSavings = Math.round(Math.min(Math.max(0, w.income), savingsToAllocate) * 100) / 100;
@@ -426,14 +427,21 @@ export function ForecastPanel({ view }: { view: View }) {
     fixedExpenses: p.fixedExpenses, estimatedExpenses: p.estimatedExpenses,
     reservedSavings: Math.round(Math.min(Math.max(0, p.income), Math.max(0, goalPerCycle)) * 100) / 100,
   }));
-  const totalSavings = Math.round(chartData.reduce((sum, point) => sum + point.reservedSavings, 0) * 100) / 100;
+  const chartData = rawChartData.reduce<Array<(typeof rawChartData)[number] & { accumulatedSavings: number }>>((items, point) => [
+    ...items,
+    { ...point, accumulatedSavings: Math.round(((items.at(-1)?.accumulatedSavings ?? 0) + point.reservedSavings) * 100) / 100 },
+  ], []);
+  const selectedIndex = selectedChart?.range === range ? selectedChart.index : null;
+  const totalSavings = chartData.at(-1)?.accumulatedSavings ?? 0;
+  const savedUntilSelected = selectedIndex === null ? totalSavings : (chartData[selectedIndex]?.accumulatedSavings ?? 0);
   return <><div className={`space-y-4 transition-transform duration-200 ${detailKey ? "-translate-x-3" : ""}`}>
     <section className={`${card} ${flat} space-y-3 p-4 sm:p-6`}>
       <div className="flex justify-end">
         <div className="flex rounded-xl bg-slate-100 p-1" role="group" aria-label="Periodo de previsión">{([1, 3, 6, 12] as const).map((n) => <button key={n} type="button" aria-pressed={range === n} onClick={() => setRange(n)}
           className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${range === n ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>{n}M</button>)}</div></div>
       {points.length ? <>
-        <CycleBars key={range} height={235} balanceLabel="Disponible al cierre" data={chartData} showLegend={false} wideBars />
+        <CycleBars key={range} height={235} balanceLabel="Disponible al cierre" data={chartData} showLegend={false} wideBars
+          onSelect={(index) => setSelectedChart({ range, index })} />
         <div className="grid grid-cols-4 gap-1 border-t border-slate-100 pt-3 text-center sm:gap-3" aria-label="Totales de la previsión">
           <div className="min-w-0" title={`Ingresos: ${eur(total.income, 2)}`} aria-label={`Ingresos: ${eur(total.income, 2)}`}>
             <p className="amount truncate text-[10px] font-bold tabular-nums tracking-tight text-blue-700 sm:text-sm">{eur(total.income, 2)}</p>
@@ -448,6 +456,10 @@ export function ForecastPanel({ view }: { view: View }) {
             aria-label={`Disponible al final: ${last?.closingBalance === null || !last ? "Sin saldo" : eur(last.closingBalance, 2)}`}>
             <p className={`amount truncate text-[10px] font-bold tabular-nums tracking-tight sm:text-sm ${(last?.closingBalance ?? 0) >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{last?.closingBalance === null || !last ? "" : eur(last.closingBalance, 2)}</p>
           </div>
+        </div>
+        <div className="flex items-baseline justify-end gap-2 text-xs text-slate-500" aria-live="polite">
+          <span>Total ahorrado{selectedIndex === null ? "" : ` hasta ${chartData[selectedIndex]?.label ?? "este tramo"}`}</span>
+          <strong className="amount text-sm font-semibold tabular-nums text-blue-500">{eur(savedUntilSelected, 2)}</strong>
         </div>
         {!forecast.hasExpectedIncome && <p className="text-xs font-medium text-amber-700">Sin ingresos periódicos suficientes: puede faltar dinero por estimar.</p>}
       </> : <p className="py-6 text-sm text-slate-500">La previsión todavía no está disponible.</p>}
