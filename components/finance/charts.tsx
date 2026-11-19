@@ -19,13 +19,15 @@ function niceMax(v: number) {
 const compact = (v: number) => (Math.abs(v) >= 1000 ? `${(v / 1000).toLocaleString("es-ES", { maximumFractionDigits: 1 })} k` : v.toLocaleString("es-ES", { maximumFractionDigits: 0 }));
 
 export type CyclePoint = { label: string; income: number; expenses: number; net: number; available?: number | null;
-  fixedExpenses?: number; estimatedExpenses?: number; /** Texto del detalle (si no, la etiqueta). */ title?: string; current?: boolean };
+  fixedExpenses?: number; estimatedExpenses?: number; reservedSavings?: number;
+  /** Texto del detalle (si no, la etiqueta). */ title?: string; current?: boolean };
 
-/** Tres columnas independientes: ingresos, gastos y saldo bancario, sin mostrar el ahorro como gasto. */
-export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseColor = EXPENSE, balanceLabel = "Saldo al cierre" }: {
-  data: CyclePoint[]; height?: number; incomeColor?: string; expenseColor?: string; balanceLabel?: string;
+/** Tres columnas: ingresos (con ahorro reservado), gastos (habituales y estimados) y saldo. */
+export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseColor = EXPENSE, balanceLabel = "Saldo al cierre", showLegend = true, wideBars = false }: {
+  data: CyclePoint[]; height?: number; incomeColor?: string; expenseColor?: string; balanceLabel?: string; showLegend?: boolean; wideBars?: boolean;
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
   const W = 640;
   const H = height;
   const pad = { l: 40, r: 8, t: 10, b: 8 };
@@ -34,19 +36,23 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
   const iw = W - pad.l - pad.r;
   const ih = H - pad.t - pad.b;
   const slot = iw / Math.max(1, data.length);
-  const bw = Math.min(30, Math.max(3, (slot - 12) / 3));
+  const gap = wideBars ? Math.min(5, slot / 18) : 2;
+  const bw = wideBars ? Math.min(42, Math.max(3, (slot - 2 * gap) / 3)) : Math.min(30, Math.max(3, (slot - 12) / 3));
   const y = (v: number) => pad.t + ((max - v) / (max - bottom)) * ih;
   const ticks = [0, max / 2, max];
-  const h = hover === null ? null : data[hover];
+  const activeIndex = hover ?? selected;
+  const h = activeIndex === null ? null : data[activeIndex];
   const splitExpenses = data.some((d) => d.fixedExpenses !== undefined);
+  const splitIncome = data.some((d) => d.reservedSavings !== undefined);
   return (
     <div className="relative">
-      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600">
+      {showLegend && <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600">
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: incomeColor }} /> Ingresos</span>
+        {splitIncome && <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm border border-dashed border-blue-400 bg-blue-50" /> Ahorro reservado</span>}
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: expenseColor }} /> {splitExpenses ? "Gasto habitual" : "Gastos"}</span>
         {splitExpenses && <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm border border-dashed border-rose-400 bg-rose-100" /> Estimado</span>}
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SAVINGS }} /> {balanceLabel}</span>
-      </div>
+      </div>}
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`Ingresos, gastos y ${balanceLabel.toLowerCase()} por periodo`} onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
@@ -59,20 +65,27 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
           const bar = (v: number, x: number, color: string) => {
             const top = Math.min(y(v), y(0));
             const hh = Math.abs(y(v) - y(0));
-            return <rect x={x} y={top} width={bw} height={hh} rx={Math.min(3, hh / 2, bw / 2)} fill={color} opacity={hover === null || hover === i ? 1 : 0.45} />;
+            return <rect x={x} y={top} width={bw} height={hh} rx={Math.min(3, hh / 2, bw / 2)} fill={color} opacity={activeIndex === null || activeIndex === i ? 1 : 0.45} />;
           };
+          const incomeX = cx - 1.5 * bw - (wideBars ? gap : 2);
+          const reserved = Math.min(Math.max(0, d.income), Math.max(0, d.reservedSavings ?? 0));
           return (
-            <g key={`${i}:${d.label}`} onMouseEnter={() => setHover(i)} onTouchStart={() => setHover(i)}>
+            <g key={`${i}:${d.label}`} className="cursor-pointer" tabIndex={0} role="button" aria-label={`Ver importes de ${d.title ?? d.label}`}
+              onMouseEnter={() => setHover(i)} onTouchStart={() => setSelected(i)} onClick={() => setSelected(i)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(i); } }}>
               <rect x={cx - slot / 2} y={pad.t} width={slot} height={ih} fill="transparent" />
-              {bar(d.income, cx - 1.5 * bw - 2, incomeColor)}
+              {bar(d.income - reserved, incomeX, incomeColor)}
+              {reserved > 0 && <rect x={incomeX} y={y(d.income)} width={bw} height={y(d.income - reserved) - y(d.income)}
+                rx={2} fill="#dbeafe" fillOpacity={0.25} stroke={incomeColor} strokeWidth={1.5} strokeDasharray="3 2"
+                opacity={activeIndex === null || activeIndex === i ? 1 : 0.45} />}
               {d.fixedExpenses === undefined ? bar(d.expenses, cx - bw / 2, expenseColor) : <>
                 {bar(Math.min(d.expenses, Math.max(0, d.fixedExpenses)), cx - bw / 2, expenseColor)}
                 {d.expenses > d.fixedExpenses && <rect x={cx - bw / 2} y={y(d.expenses)} width={bw}
                   height={y(Math.min(d.expenses, Math.max(0, d.fixedExpenses))) - y(d.expenses)}
                   rx={2} fill="#ffe4e6" stroke="#fb7185" strokeWidth={1.5} strokeDasharray="3 2"
-                  opacity={hover === null || hover === i ? 1 : 0.45} />}
+                  opacity={activeIndex === null || activeIndex === i ? 1 : 0.45} />}
               </>}
-              {d.available !== null && d.available !== undefined && d.available > 0 && bar(d.available, cx + bw / 2 + 2, SAVINGS)}
+              {d.available !== null && d.available !== undefined && d.available > 0 && bar(d.available, cx + bw / 2 + (wideBars ? gap : 2), SAVINGS)}
             </g>
           );
         })}
@@ -90,13 +103,13 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
       {h && (
         <div className="pointer-events-none absolute right-0 top-0 rounded-xl border border-slate-100 bg-white px-3 py-2 text-xs shadow-lg">
           <p className="font-semibold text-slate-900">{h.title ?? h.label}</p>
-          <p className="mt-1 flex justify-between gap-4 text-slate-600"><span>Ingresos</span><b className="tabular-nums text-slate-900">{eur(h.income, 2)}</b></p>
-          <p className="flex justify-between gap-4 text-slate-600"><span>Gastos</span><b className="tabular-nums text-slate-900">{eur(h.expenses, 2)}</b></p>
-          {splitExpenses && <>
-            <p className="flex justify-between gap-4 text-slate-600"><span>Habituales</span><b className="tabular-nums text-slate-900">{eur(h.fixedExpenses ?? 0, 2)}</b></p>
-            <p className="flex justify-between gap-4 text-slate-600"><span>Estimados</span><b className="tabular-nums text-slate-900">{eur(h.estimatedExpenses ?? 0, 2)}</b></p>
-          </>}
-          <p className="flex justify-between gap-4 text-slate-600"><span>{balanceLabel}</span><b className={`tabular-nums ${(h.available ?? 0) >= 0 ? "text-emerald-700" : "text-red-700"}`}>{h.available === null || h.available === undefined ? "Sin saldo bancario" : eur(h.available, 2)}</b></p>
+          <p className="mt-1 flex justify-between gap-4 text-slate-600"><span>{splitIncome ? "Ingresos sin ahorro" : "Ingresos"}</span><b className="tabular-nums" style={{ color: incomeColor }}>{eur(h.income - (h.reservedSavings ?? 0), 2)}</b></p>
+          {splitIncome && <p className="flex justify-between gap-4 text-slate-600"><span>Ahorro previsto</span><b className="tabular-nums text-blue-400">{eur(h.reservedSavings ?? 0, 2)}</b></p>}
+          {splitExpenses ? <>
+            <p className="flex justify-between gap-4 text-slate-600"><span>Gastos habituales</span><b className="tabular-nums" style={{ color: expenseColor }}>{eur(h.fixedExpenses ?? 0, 2)}</b></p>
+            <p className="flex justify-between gap-4 text-slate-600"><span>Gastos estimados</span><b className="tabular-nums text-rose-400">{eur(h.estimatedExpenses ?? 0, 2)}</b></p>
+          </> : <p className="flex justify-between gap-4 text-slate-600"><span>Gastos</span><b className="tabular-nums" style={{ color: expenseColor }}>{eur(h.expenses, 2)}</b></p>}
+          <p className="flex justify-between gap-4 text-slate-600"><span>{balanceLabel}</span><b className={`tabular-nums ${(h.available ?? 0) >= 0 ? "text-green-600" : "text-red-700"}`}>{h.available === null || h.available === undefined ? "Sin saldo bancario" : eur(h.available, 2)}</b></p>
         </div>
       )}
     </div>
