@@ -3,7 +3,7 @@ import { applyAiSettings } from "@/lib/ai/usage";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { categoryLabel, isCategory } from "@/lib/finance/categories";
-import { accountsView, budgetView, forecast, listTransactions, overview } from "@/lib/finance/service";
+import { accountsView, budgetView, forecast, forecastSource, listTransactions, overview } from "@/lib/finance/service";
 import { payslipsView } from "@/lib/finance/payslips";
 import { syncUser } from "@/lib/finance/sync";
 import { bulkCorrect, classifyPending, correctTransaction } from "@/lib/finance/classify";
@@ -41,6 +41,12 @@ export async function GET(req: Request, route: RouteContext) {
     if (action === "forecast") {
       const amount = Number(p.get("amount"));
       return ok(await forecast(uid, { amount: Number.isFinite(amount) ? amount : null, until: p.get("until") }));
+    }
+    if (action === "forecast/source") {
+      const key = p.get("key") ?? "";
+      if (key.length > 160) return fail("Referencia no válida");
+      const source = await forecastSource(uid, key);
+      return source ? ok(source) : fail("No se encontró el movimiento de referencia", 404);
     }
     if (action === "budget") return ok(await budgetView(uid));
     if (action === "accounts") return ok(await accountsView(uid));
