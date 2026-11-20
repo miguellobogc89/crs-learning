@@ -96,9 +96,18 @@ export async function mirrorView(workspaceId: string) {
       startedAt: m.started_at.toISOString(),
       // Solo lo del modo actual: al pasar de prueba a real, lo de prueba no cuenta como dinero tuyo.
       result: m.legs.filter((l) => l.mode === m.mode).reduce((s, l) => s + (l.result ?? 0), 0),
-      legs: m.legs.map((l) => ({
+      legs: m.legs.map((l) => {
+        // Lo abierto, a precio de ahora (para la actividad de Mi cartera). Cortos en Kraken: se gana si baja.
+        const short = !!l.pair?.startsWith("PF_");
+        const price = l.status === "abierta" ? prices.get(l.symbol) ?? null : null;
+        const now =
+          price && l.quantity && l.entry_price ? (short ? l.quantity * (l.entry_price - price) : legResult(l.quantity, l.entry_price, price)) : null;
+        return {
         id: l.id,
         mode: l.mode,
+        short,
+        price,
+        unrealized: now,
         symbol: l.symbol,
         pair: l.pair,
         status: l.status,
@@ -111,7 +120,8 @@ export async function mirrorView(workspaceId: string) {
         openedAt: l.opened_at?.toISOString() ?? null,
         closedAt: l.closed_at?.toISOString() ?? null,
         createdAt: l.created_at.toISOString(),
-      })),
+        };
+      }),
     })),
   };
 }

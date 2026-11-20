@@ -565,9 +565,9 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
       status: l.status, amount: l.amount ?? 0,
       invested: l.quantity != null && l.entryPrice != null ? l.quantity * l.entryPrice : (l.amount ?? 0),
       entry: l.entryPrice, stop: 0, target: 0, trail: false, trailing: false,
-      price: null, result: l.status === "cerrada" ? l.result : null,
-      note: "Copia automática de " + m.name, openedAt: l.openedAt, closedAt: l.closedAt,
-      origin: m.name,
+      price: l.price ?? null, result: l.status === "cerrada" ? l.result : (l.unrealized ?? null),
+      note: (l.short ? "Corto copiado de " : "Copia automática de ") + m.name, openedAt: l.openedAt, closedAt: l.closedAt,
+      origin: m.name, short: !!l.short,
     })));
   const trades: Trade[] = [...(data?.trades ?? []).map((t) => ({ ...t, origin: null })), ...copied]
     .sort((a, b) => (b.closedAt ?? b.openedAt ?? "").localeCompare(a.closedAt ?? a.openedAt ?? ""));
@@ -660,13 +660,13 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
                 const open = t.status === "abierta";
                 const st = TRADE_STATUS[t.status] ?? { label: t.status, cls: "bg-slate-100 text-slate-600" };
                 const resultPct = t.result !== null && t.invested > 0 ? (t.result / t.invested) * 100 : null;
-                const exit = t.status === "cerrada" && t.result !== null && t.entry && t.invested > 0 ? t.entry * (1 + t.result / t.invested) : null;
+                const exit = t.status === "cerrada" && t.result !== null && t.entry && t.invested > 0 ? t.entry * (1 + ((t.short ? -1 : 1) * t.result) / t.invested) : null;
                 return (
                   <tr key={t.id} className="border-b border-slate-100/80 align-middle" title={t.note ?? undefined}>
                     <td className="px-2 py-2.5">
                       <b className="font-semibold text-slate-900">{name}</b>
                       <span className="block text-[11px] text-slate-400">
-                        {t.origin ? `Agente: ${t.origin} · ` : "Manual · "}{t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : t.openedAt ? `desde ${dateTime(t.openedAt)}` : dateTime(t.closedAt)}
+                        {t.origin ? `Agente: ${t.origin}${t.short ? " · corto" : ""} · ` : "Manual · "}{t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : t.openedAt ? `desde ${dateTime(t.openedAt)}` : dateTime(t.closedAt)}
                       </span>
                     </td>
                     <td className="px-2 py-2.5">
@@ -743,7 +743,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
   );
 }
 
-type Trade = Manual["trades"][number] & { origin?: string | null };
+type Trade = Manual["trades"][number] & { origin?: string | null; short?: boolean };
 
 /**
  * Móvil: tus oportunidades como lista (dos líneas por operación). Al tocar una, sube desde abajo su
