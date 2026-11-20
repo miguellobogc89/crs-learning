@@ -50,7 +50,7 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
   const splitExpenses = data.some((d) => d.fixedExpenses !== undefined);
   const splitIncome = data.some((d) => d.reservedSavings !== undefined);
   return (
-    <div className="relative">
+    <div className="relative select-none" style={{ WebkitUserSelect: "none", WebkitTouchCallout: "none" }}>
       {showLegend && <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600">
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: incomeColor }} /> Ingresos</span>
         {splitIncome && <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm border border-dashed border-blue-400 bg-blue-50" /> Ahorro reservado</span>}
@@ -58,7 +58,7 @@ export function CycleBars({ data, height = 200, incomeColor = INCOME, expenseCol
         {splitExpenses && <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm border border-dashed border-rose-400 bg-rose-100" /> Estimado</span>}
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SAVINGS }} /> {balanceLabel}</span>
       </div>}
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`Ingresos, gastos y ${balanceLabel.toLowerCase()} por periodo`}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full select-none touch-pan-y" role="img" aria-label={`Ingresos, gastos y ${balanceLabel.toLowerCase()} por periodo`} onContextMenu={(event) => event.preventDefault()}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="#e2e8f0" strokeWidth={1} strokeDasharray={t === 0 ? undefined : "3 3"} />
