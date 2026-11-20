@@ -40,6 +40,8 @@ export async function manualView(workspaceId: string) {
         invested: t.quantity && t.entry_price ? t.quantity * t.entry_price : t.amount,
         entry: t.entry_price,
         stop: t.stop,
+        initialStop: t.initial_stop ?? t.stop,
+        exitPrice: t.exit_price,
         target: t.target,
         trail: t.trail,
         trailing: t.trailing,

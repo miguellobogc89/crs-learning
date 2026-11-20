@@ -77,6 +77,11 @@ export async function mirrorView(workspaceId: string) {
       if (p && l.quantity && l.entry_price && l.pair?.startsWith("PF_")) return sum + l.quantity * (l.entry_price - p);
       return p && l.quantity && l.entry_price ? sum + legResult(l.quantity, l.entry_price, p) : sum;
     }, 0);
+  // El stop del agente en cada posición copiada (el inicial y el de ahora: si se ha movido, va persiguiendo).
+  const sources = await prisma.trading_positions
+    .findMany({ where: { id: { in: mirrors.flatMap((m) => m.legs.map((l) => l.source_position_id)) } }, select: { id: true, stop: true, initial_stop: true } })
+    .catch(() => []);
+  const stopOf = new Map(sources.map((p) => [p.id, p]));
   const kp = await krakenProblem();
   return {
     maxBudget: maxBudget(),
@@ -110,6 +115,8 @@ export async function mirrorView(workspaceId: string) {
         mode: l.mode,
         short,
         leverage: l.leverage ?? null,
+        stop: stopOf.get(l.source_position_id)?.stop ?? null,
+        initialStop: stopOf.get(l.source_position_id)?.initial_stop ?? stopOf.get(l.source_position_id)?.stop ?? null,
         price,
         unrealized: now,
         symbol: l.symbol,

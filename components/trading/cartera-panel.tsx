@@ -602,7 +602,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
       id: "copia:" + l.id, ideaId: "", symbol: l.symbol, pair: l.pair,
       status: l.status, amount: l.amount ?? 0,
       invested: l.quantity != null && l.entryPrice != null ? l.quantity * l.entryPrice : (l.amount ?? 0),
-      entry: l.entryPrice, stop: 0, target: 0, trail: false, trailing: false,
+      entry: l.entryPrice, stop: l.stop ?? 0, initialStop: l.initialStop ?? l.stop ?? 0, exitPrice: l.exitPrice ?? null, target: 0, trail: false, trailing: false,
       price: l.price ?? null, result: l.status === "cerrada" ? l.result : (l.unrealized ?? null),
       note: (l.short ? "Corto copiado de " : "Copia automática de ") + m.name, openedAt: l.openedAt, closedAt: l.closedAt,
       origin: m.name, short: !!l.short, leverage: l.leverage ?? null, margin: l.amount ?? null,
@@ -781,6 +781,116 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
   );
 }
 
+/** Precio de salida: el real si está guardado; si no, el que sale del resultado (aprox., sin comisiones). */
+function exitOf(t: Trade): { price: number | null; approx: boolean } {
+  if (t.exitPrice) return { price: t.exitPrice, approx: false };
+  if (t.status === "cerrada" && t.entry && t.result !== null && t.invested > 0) return { price: t.entry * (1 + ((t.short ? -1 : 1) * t.result) / t.invested), approx: true };
+  return { price: null, approx: false };
+}
+
+/** Cifras del detalle de una operación (panel que sube desde abajo). */
+function detailRows(t: Trade): [string, string, string][] {
+  const open = t.status === "abierta";
+  const exit = exitOf(t);
+  const rows: [string, string, string][] = t.short
+    ? [
+        ["Garantía", t.margin != null ? eur(t.margin, 2) : "—", "text-slate-900"],
+        ["Apalancamiento", t.leverage ? `x${t.leverage}` : "—", "text-slate-900"],
+        ["Tamaño del corto", eur(t.invested, 2), "text-slate-900"],
+      ]
+    : [["Invertido", eur(t.invested, 2), "text-slate-900"]];
+  rows.push(["Resultado", t.result === null ? "—" : `${signed(t.result)}${t.invested > 0 ? ` · ${pctText((t.result / t.invested) * 100)}` : ""}`, tone(t.result ?? 0)]);
+  rows.push(["Entrada", t.entry ? eur(t.entry) : "—", "text-slate-900"]);
+  rows.push(open ? ["Precio ahora", t.price !== null ? eur(t.price) : "—", "text-slate-900"] : [exit.approx ? "Salida aprox." : "Salida", eur(exit.price), "text-slate-900"]);
+  if (t.stop > 0) rows.push([open ? "Stop ahora" : "Último stop", eur(t.stop), "text-rose-700"]);
+  if (t.target > 0) rows.push(["Objetivo", eur(t.target), "text-emerald-700"]);
+  return rows;
+}
+
+/** ¿Se ha movido el stop desde que entró? (stop de persecución: sube en las compras, baja en los cortos). */
+function stopMove(t: Trade) {
+  if (!(t.stop > 0) || !(t.initialStop > 0)) return null;
+  const pct = ((t.stop - t.initialStop) / t.initialStop) * 100;
+  if (Math.abs(pct) < 0.05) return { moved: false, pct: 0, favor: false };
+  return { moved: true, pct, favor: t.short ? pct < 0 : pct > 0 };
+}
+
+function StopMove({ t }: { t: Trade }) {
+  const m = stopMove(t);
+  if (!m) return null;
+  return (
+    <div className={`rounded-xl px-3 py-2.5 text-xs ${m.moved && m.favor ? "bg-emerald-50 text-emerald-800" : "bg-slate-50 text-slate-600"}`}>
+      {m.moved ? (
+        <>
+          <b className="font-semibold">Stop de persecución {m.favor ? "activo" : "movido"}:</b> de {eur(t.initialStop)} a {eur(t.stop)} ({m.pct > 0 ? "+" : ""}
+          {m.pct.toFixed(1).replace(".", ",")} %){m.favor ? (t.short ? ", ha bajado detrás del precio." : ", ha subido detrás del precio.") : "."}
+        </>
+      ) : (
+        <>
+          <b className="font-semibold">Stop sin mover:</b> sigue en el inicial, {eur(t.initialStop)}.
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Gráfico simple del precio durante la operación: entrada, salida (o ahora), stop inicial y stop actual. */
+function TradeChart({ t }: { t: Trade }) {
+  const [points, setPoints] = useState<{ t: number; c: number }[] | null>(null);
+  const opened = t.openedAt ? new Date(t.openedAt).getTime() : null;
+  const closed = t.closedAt ? new Date(t.closedAt).getTime() : null;
+  useEffect(() => {
+    if (!opened) return;
+    const end = closed ?? Date.now();
+    const pad = Math.max(30 * 60_000, (end - opened) * 0.1);
+    let alive = true;
+    api<{ points: { t: number; c: number }[] }>(`trade-chart?symbol=${encodeURIComponent(t.symbol)}&from=${Math.floor(opened - pad)}&to=${Math.floor(end + (closed ? pad : 0))}`)
+      .then((r) => alive && setPoints(r.points), () => alive && setPoints([]));
+    return () => {
+      alive = false;
+    };
+  }, [t.symbol, opened, closed]);
+  if (!opened) return null;
+  if (points === null) return <div className="h-36 animate-pulse rounded-xl bg-slate-50" />;
+  if (points.length < 2) return <p className="text-xs text-slate-400">Sin gráfico para {coin(t.symbol)}.</p>;
+
+  const W = 320, H = 140, P = 6;
+  const exit = exitOf(t).price;
+  const levels = [t.entry ?? null, t.stop > 0 ? t.stop : null, t.initialStop > 0 ? t.initialStop : null, t.target > 0 ? t.target : null, exit].filter((v): v is number => v !== null && v > 0);
+  const ys = [...points.map((p) => p.c), ...levels];
+  const lo = Math.min(...ys), hi = Math.max(...ys);
+  const span = hi - lo || hi * 0.01 || 1;
+  const t0 = points[0].t, t1 = points[points.length - 1].t;
+  const x = (v: number) => P + ((v - t0) / Math.max(1, t1 - t0)) * (W - 2 * P);
+  const y = (v: number) => P + (1 - (v - lo) / span) * (H - 2 * P);
+  const path = points.map((p, i) => `${i ? "L" : "M"}${x(p.t).toFixed(1)},${y(p.c).toFixed(1)}`).join(" ");
+  const hline = (v: number, cls: string, dash?: string) => <line x1={P} x2={W - P} y1={y(v)} y2={y(v)} className={cls} strokeWidth={1} strokeDasharray={dash} />;
+  const stopMoved = stopMove(t)?.moved;
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-36 w-full" role="img" aria-label={`Precio de ${coin(t.symbol)} durante la operación`}>
+        {opened >= t0 && <line x1={x(opened)} x2={x(opened)} y1={P} y2={H - P} className="stroke-slate-200" strokeWidth={1} />}
+        {closed && closed <= t1 && <line x1={x(closed)} x2={x(closed)} y1={P} y2={H - P} className="stroke-slate-200" strokeWidth={1} />}
+        {t.target > 0 && hline(t.target, "stroke-emerald-500", "4 3")}
+        {stopMoved && t.initialStop > 0 && hline(t.initialStop, "stroke-rose-300", "2 3")}
+        {t.stop > 0 && hline(t.stop, "stroke-rose-500", "4 3")}
+        {t.entry && hline(t.entry, "stroke-slate-400", "4 3")}
+        <path d={path} fill="none" className="stroke-blue-600" strokeWidth={1.75} strokeLinejoin="round" />
+        {t.entry && opened >= t0 && <circle cx={x(opened)} cy={y(t.entry)} r={3.5} className="fill-slate-700" />}
+        {exit && closed && closed <= t1 && <circle cx={x(closed)} cy={y(exit)} r={3.5} className={(t.result ?? 0) >= 0 ? "fill-emerald-600" : "fill-rose-600"} />}
+      </svg>
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+        <span className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-blue-600" /> Precio</span>
+        {t.entry && <span className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-slate-400" /> Entrada</span>}
+        {t.stop > 0 && <span className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-rose-500" /> Stop{stopMoved ? " ahora" : ""}</span>}
+        {stopMoved && <span className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-rose-300" /> Stop inicial</span>}
+        {t.target > 0 && <span className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-emerald-500" /> Objetivo</span>}
+        {closed && <span className="inline-flex items-center gap-1"><i className={`inline-block h-2 w-2 rounded-full ${(t.result ?? 0) >= 0 ? "bg-emerald-600" : "bg-rose-600"}`} /> Salida</span>}
+      </div>
+    </div>
+  );
+}
+
 type Trade = Manual["trades"][number] & { origin?: string | null; short?: boolean; leverage?: number | null; margin?: number | null };
 
 /**
@@ -862,32 +972,15 @@ function MobileTrades({
         >
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-              {(
-                [
-                  ...(sel.short
-                    ? ([
-                        ["Garantía", sel.margin != null ? eur(sel.margin, 2) : "—", "text-slate-900"],
-                        ["Apalancamiento", sel.leverage ? `x${sel.leverage}` : "—", "text-slate-900"],
-                        ["Tamaño del corto", eur(sel.invested, 2), "text-slate-900"],
-                      ] as const)
-                    : ([["Invertido", eur(sel.invested, 2), "text-slate-900"]] as const)),
-                  ["Resultado", sel.result === null ? "—" : `${signed(sel.result)}${sel.invested > 0 ? ` · ${pctText((sel.result / sel.invested) * 100)}` : ""}`, tone(sel.result ?? 0)],
-                  ["Entrada", sel.entry ? eur(sel.entry) : "—", "text-slate-900"],
-                  [sel.status === "abierta" ? "Precio ahora" : "Salida aprox.", sel.status === "abierta" ? (sel.price !== null ? eur(sel.price) : "—") : sel.entry && sel.result !== null && sel.invested > 0 ? eur(sel.entry * (1 + ((sel.short ? -1 : 1) * sel.result) / sel.invested)) : "—", "text-slate-900"],
-                  ...(sel.origin
-                    ? []
-                    : ([
-                        ["Stop", eur(sel.stop), "text-rose-700"],
-                        ["Objetivo", eur(sel.target), "text-emerald-700"],
-                      ] as const)),
-                ] as const
-              ).map(([label, value, cls]) => (
+              {detailRows(sel).map(([label, value, cls]) => (
                 <div key={label}>
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
                   <div className={`mt-0.5 text-base font-semibold tabular-nums ${cls}`}>{value}</div>
                 </div>
               ))}
             </div>
+            <StopMove t={sel} />
+            <TradeChart t={sel} />
             {sel.status === "abierta" && !sel.origin && sel.entry && <StopTargetBar stop={sel.stop} target={sel.target} price={sel.price} entry={sel.entry} />}
             {sel.status === "abierta" && !sel.origin && (
               <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 px-4 py-3">

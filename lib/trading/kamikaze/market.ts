@@ -140,3 +140,20 @@ export async function referencePrice(symbol: string): Promise<number | null> {
 export async function dailyCloses(pair: string, days = 240): Promise<{ t: number; c: number }[]> {
   return parseKlines(await get("/api/v3/klines", { symbol: pair, interval: "1d", limit: String(Math.min(1000, days)) })).map((b) => ({ t: b.t, c: b.c }));
 }
+
+/**
+ * Precio de un valor de CRS (BTC-EUR…) entre dos momentos, en euros, para el gráfico de una operación:
+ * velas de 5 min si cabe en ~3 días, si no de 1 hora (hasta 1.000). Par EUR si existe; si no, USDC.
+ */
+export async function chartBars(symbol: string, from: number, to: number): Promise<{ t: number; c: number }[]> {
+  const base = symbol.replace(/-EUR$/, "").toUpperCase();
+  const rules = await eurPairs();
+  const candidates = [...rules.values()].filter((r) => r.base.toUpperCase() === base);
+  const pair = (candidates.find((r) => r.quote === "EUR") ?? candidates.find((r) => r.quote === "USDC"))?.pair;
+  if (!pair) return [];
+  const span = to - from;
+  const interval = span <= 80 * 3_600_000 ? "5m" : "1h";
+  const bars = parseKlines(await get("/api/v3/klines", { symbol: pair, interval, startTime: String(Math.floor(from)), endTime: String(Math.floor(to)), limit: "1000" }));
+  const k = pair.endsWith("USDC") ? await usdcInEur() : 1;
+  return bars.map((b) => ({ t: b.t, c: b.c * k }));
+}

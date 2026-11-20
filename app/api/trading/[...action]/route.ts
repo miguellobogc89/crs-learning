@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { chartBars } from "@/lib/trading/kamikaze/market";
 import { applyAiSettings } from "@/lib/ai/usage";
 import { addMyAgent, getWallets, myAgents, removeMyAgent } from "@/lib/trading/wallets";
 import { getMarketPhase } from "@/lib/trading/chip/phase-service";
@@ -70,6 +71,14 @@ export async function GET(req: Request, route: RouteContext) {
       return NextResponse.json(await getInstrument(ctx.workspaceId, symbol));
     }
     if (action === "manual") return NextResponse.json(await manualView(ctx.workspaceId));
+    if (action === "trade-chart") {
+      // Precio de una operación de Mi cartera (desde un poco antes de entrar hasta su salida o ahora).
+      const symbol = (url.searchParams.get("symbol") || "").trim().toUpperCase();
+      const from = Number(url.searchParams.get("from"));
+      const to = Number(url.searchParams.get("to")) || Date.now();
+      if (!symbol || !Number.isFinite(from) || from <= 0 || to <= from) return fail("Faltan el valor o las fechas");
+      return NextResponse.json({ points: await chartBars(symbol, from, Math.min(to, Date.now())).catch(() => []) });
+    }
     if (action === "phase") return NextResponse.json(await getMarketPhase());
     if (action === "pulse") return NextResponse.json(await getPulse());
     if (action === "summary") return NextResponse.json(await getSummary({ userId: ctx.userId, workspaceId: ctx.workspaceId }));
