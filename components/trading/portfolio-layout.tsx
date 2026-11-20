@@ -103,7 +103,13 @@ export function PortfolioBalance<T extends string>({
 }
 
 export function PortfolioColumns({ opportunities, agents }: { opportunities: ReactNode; agents: ReactNode }) {
-  return <div className="grid gap-5 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">{opportunities}{agents}</div>;
+  // En móvil, tus agentes arriba (gestionar a mano) y la actividad debajo; en escritorio, actividad a la izquierda.
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
+      <div className="order-2 flex min-w-0 flex-col lg:order-1">{opportunities}</div>
+      <div className="order-1 min-w-0 lg:order-2 lg:self-start">{agents}</div>
+    </div>
+  );
 }
 
 export function PortfolioAgents({ count, children }: { count?: string; children: ReactNode }) {

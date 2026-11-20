@@ -327,6 +327,16 @@ function AgentRow({ r, onClick, onRemove, removing }: { r: Row; onClick?: () => 
           </span>
         )}
       </button>
+      {onClick && (
+        <button
+          type="button"
+          onClick={onClick}
+          className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+          title={r.mirror ? "Dinero, apalancamiento, pausar o despedir" : "Darle dinero"}
+        >
+          {r.mirror ? "Gestionar" : "Dar dinero"}
+        </button>
+      )}
       <Link href={`/trading/agentes/${r.key}?from=cartera`} className="shrink-0 text-xs font-semibold text-blue-700 hover:underline" title="Ver el agente">
         <ArrowRight className="h-3.5 w-3.5" />
       </Link>
@@ -794,7 +804,7 @@ function MobileTrades({
   const sel = list.find((t) => t.id === selId) ?? null;
   return (
     <>
-      <ul className="-mx-1 divide-y divide-slate-100 md:hidden">
+      <ul className="-mx-1 max-h-[26rem] divide-y divide-slate-100 overflow-auto md:hidden">
         {list.map((t) => {
           const name = coin(t.symbol);
           const open = t.status === "abierta";
