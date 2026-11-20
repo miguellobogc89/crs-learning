@@ -93,6 +93,9 @@ export async function mirrorView(workspaceId: string) {
       mode: m.mode as MirrorMode,
       active: m.active,
       paused: m.paused,
+      /** Agentes de cortos: apalancamiento de tu copia (el tuyo o el del agente) y el del propio agente. */
+      leverage: isShortSwarm(m.agent) ? m.leverage ?? kamikazeByKey(m.agent)?.leverage ?? 1 : null,
+      agentLeverage: isShortSwarm(m.agent) ? kamikazeByKey(m.agent)?.leverage ?? 1 : null,
       startedAt: m.started_at.toISOString(),
       // Solo lo del modo actual: al pasar de prueba a real, lo de prueba no cuenta como dinero tuyo.
       result: m.legs.filter((l) => l.mode === m.mode).reduce((s, l) => s + (l.result ?? 0), 0),
@@ -149,6 +152,19 @@ export async function setMirror(workspaceId: string, input: { agent?: unknown; b
     update: { budget, mode, active: true, ...(restart ? { started_at: new Date() } : {}), updated_at: new Date() },
   });
   return { agent, budget: row.budget, mode: row.mode };
+}
+
+/** Apalancamiento de tu copia de un agente de cortos (x1 a x5). Se aplica a sus próximos cortos; lo abierto no cambia. */
+export const MAX_MIRROR_LEVERAGE = 5;
+export async function setMirrorLeverage(workspaceId: string, agentInput: unknown, leverageInput: unknown) {
+  const agent = String(agentInput ?? "");
+  if (!isShortSwarm(agent)) throw new Error("Solo se puede cambiar el apalancamiento de los agentes de cortos");
+  const leverage = Math.round(Number(leverageInput));
+  if (!(leverage >= 1 && leverage <= MAX_MIRROR_LEVERAGE)) throw new Error(`El apalancamiento tiene que estar entre x1 y x${MAX_MIRROR_LEVERAGE}`);
+  const m = await prisma.trading_mirrors.findUnique({ where: { workspace_id_agent: { workspace_id: workspaceId, agent } } });
+  if (!m || !m.active) throw new Error("No estás copiando a este agente");
+  await prisma.trading_mirrors.update({ where: { id: m.id }, data: { leverage, updated_at: new Date() } });
+  return { agent, leverage };
 }
 
 /** Pausa o reanuda una copia: en pausa no compra nada nuevo, pero vende lo que tiene cuando el agente sale. */

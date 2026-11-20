@@ -66,7 +66,8 @@ export async function krakenCopyTurn(): Promise<{ agent: string; text: string }[
   for (const m of mirrors) {
     const say = (text: string) => actions.push({ agent: m.agent, text });
     const def = kamikazeByKey(m.agent);
-    const lev = def?.leverage ?? 1;
+    // Apalancamiento: el que elegiste para tu copia o, si no, el del agente.
+    const lev = m.leverage ?? def?.leverage ?? 1;
     const real = m.mode === "real";
     const state = await accountState(AGENTS_WORKSPACE, m.agent);
     const legs = await prisma.trading_mirror_legs.findMany({ where: { mirror_id: m.id } });

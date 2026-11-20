@@ -443,6 +443,34 @@ function ManageModal({ r, free, maxBudget, onClose }: { r: Row; free: number; ma
             {r.mirror?.mode !== "real" && r.mirror && " Al guardar, pasa a dinero real."}
           </p>
 
+          {r.mirror && r.mirror.leverage !== null && (
+            <div className="space-y-2 border-t border-slate-100 pt-3">
+              <div className="flex items-baseline justify-between">
+                <span className="font-semibold text-slate-800">Apalancamiento de tu copia</span>
+                <span className="text-xs text-slate-400">el agente usa x{r.mirror.agentLeverage}</span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {[1, 2, 3, 4, 5].map((x) => (
+                  <button
+                    key={x}
+                    type="button"
+                    disabled={!!busy}
+                    onClick={() =>
+                      x !== r.mirror?.leverage &&
+                      void call("apalancamiento", "mirror/leverage", { agent: r.key, leverage: x }, `Tus próximos cortos de ${name} irán a x${x}. Lo que ya está abierto no cambia.`)
+                    }
+                    className={`rounded-xl border py-2 font-semibold tabular-nums ${r.mirror?.leverage === x ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}
+                  >
+                    x{x}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500">
+                Cada corto usa la misma garantía; el apalancamiento multiplica su tamaño, y con él lo que ganas y lo que pierdes. Se aplica a los próximos cortos.
+              </p>
+            </div>
+          )}
+
           {r.mirror && (
             <div className="space-y-1 border-t border-slate-100 pt-3 text-[15px]">
               <button
