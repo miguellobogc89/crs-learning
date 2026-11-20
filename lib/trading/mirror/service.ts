@@ -109,6 +109,7 @@ export async function mirrorView(workspaceId: string) {
         id: l.id,
         mode: l.mode,
         short,
+        leverage: l.leverage ?? null,
         price,
         unrealized: now,
         symbol: l.symbol,

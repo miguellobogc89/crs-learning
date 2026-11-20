@@ -605,7 +605,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
       entry: l.entryPrice, stop: 0, target: 0, trail: false, trailing: false,
       price: l.price ?? null, result: l.status === "cerrada" ? l.result : (l.unrealized ?? null),
       note: (l.short ? "Corto copiado de " : "Copia automática de ") + m.name, openedAt: l.openedAt, closedAt: l.closedAt,
-      origin: m.name, short: !!l.short,
+      origin: m.name, short: !!l.short, leverage: l.leverage ?? null, margin: l.amount ?? null,
     })));
   const trades: Trade[] = [...(data?.trades ?? []).map((t) => ({ ...t, origin: null })), ...copied]
     .sort((a, b) => (b.closedAt ?? b.openedAt ?? "").localeCompare(a.closedAt ?? a.openedAt ?? ""));
@@ -704,7 +704,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
                     <td className="px-2 py-2.5">
                       <b className="font-semibold text-slate-900">{name}</b>
                       <span className="block text-[11px] text-slate-400">
-                        {t.origin ? `Agente: ${t.origin}${t.short ? " · corto" : ""} · ` : "Manual · "}{t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : t.openedAt ? `desde ${dateTime(t.openedAt)}` : dateTime(t.closedAt)}
+                        {t.origin ? `Agente: ${t.origin}${t.short ? ` · corto${t.leverage ? ` x${t.leverage}` : ""}` : ""} · ` : "Manual · "}{t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : t.openedAt ? `desde ${dateTime(t.openedAt)}` : dateTime(t.closedAt)}
                       </span>
                     </td>
                     <td className="px-2 py-2.5">
@@ -781,7 +781,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
   );
 }
 
-type Trade = Manual["trades"][number] & { origin?: string | null; short?: boolean };
+type Trade = Manual["trades"][number] & { origin?: string | null; short?: boolean; leverage?: number | null; margin?: number | null };
 
 /**
  * Móvil: tus oportunidades como lista (dos líneas por operación). Al tocar una, sube desde abajo su
@@ -821,7 +821,7 @@ function MobileTrades({
                     {open && !t.origin && t.trail && <span className="shrink-0 text-[11px] font-medium text-emerald-700">sigue si sube</span>}
                   </span>
                   <span className="block truncate text-xs text-slate-500">
-                    {t.origin ? `Agente: ${t.origin} · ` : "Manual · "}{eur(t.invested, 2)} ·{" "}
+                    {t.origin ? `Agente: ${t.origin}${t.short && t.leverage ? ` · x${t.leverage}` : ""} · ` : "Manual · "}{eur(t.invested, 2)} ·{" "}
                     {open && t.entry && t.price !== null ? `${eur(t.entry)} → ${eur(t.price)}` : t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : dateTime(t.openedAt)}
                   </span>
                 </span>
@@ -846,7 +846,7 @@ function MobileTrades({
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${(TRADE_STATUS[sel.status] ?? { cls: "bg-slate-100 text-slate-600" }).cls}`}>{TRADE_STATUS[sel.status]?.label ?? sel.status}</span>
             </span>
           }
-          subtitle={sel.origin ? `Agente: ${sel.origin} · ${dateTime(sel.openedAt)}` : sel.status === "cerrada" && sel.closedAt ? `Cerrada el ${dateTime(sel.closedAt)}` : sel.openedAt ? `Desde el ${dateTime(sel.openedAt)}` : undefined}
+          subtitle={sel.origin ? `Agente: ${sel.origin}${sel.short ? ` · corto${sel.leverage ? ` x${sel.leverage}` : ""}` : ""} · ${dateTime(sel.openedAt)}` : sel.status === "cerrada" && sel.closedAt ? `Cerrada el ${dateTime(sel.closedAt)}` : sel.openedAt ? `Desde el ${dateTime(sel.openedAt)}` : undefined}
           footer={
             sel.status === "abierta" && !sel.origin && canManage ? (
               <button
@@ -864,12 +864,22 @@ function MobileTrades({
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
               {(
                 [
-                  ["Invertido", eur(sel.invested, 2), "text-slate-900"],
+                  ...(sel.short
+                    ? ([
+                        ["Garantía", sel.margin != null ? eur(sel.margin, 2) : "—", "text-slate-900"],
+                        ["Apalancamiento", sel.leverage ? `x${sel.leverage}` : "—", "text-slate-900"],
+                        ["Tamaño del corto", eur(sel.invested, 2), "text-slate-900"],
+                      ] as const)
+                    : ([["Invertido", eur(sel.invested, 2), "text-slate-900"]] as const)),
                   ["Resultado", sel.result === null ? "—" : `${signed(sel.result)}${sel.invested > 0 ? ` · ${pctText((sel.result / sel.invested) * 100)}` : ""}`, tone(sel.result ?? 0)],
                   ["Entrada", sel.entry ? eur(sel.entry) : "—", "text-slate-900"],
-                  [sel.status === "abierta" ? "Precio ahora" : "Salida aprox.", sel.status === "abierta" ? (sel.price !== null ? eur(sel.price) : "—") : sel.entry && sel.result !== null && sel.invested > 0 ? eur(sel.entry * (1 + sel.result / sel.invested)) : "—", "text-slate-900"],
-                  ["Stop", sel.origin ? "—" : eur(sel.stop), "text-rose-700"],
-                  ["Objetivo", sel.origin ? "—" : eur(sel.target), "text-emerald-700"],
+                  [sel.status === "abierta" ? "Precio ahora" : "Salida aprox.", sel.status === "abierta" ? (sel.price !== null ? eur(sel.price) : "—") : sel.entry && sel.result !== null && sel.invested > 0 ? eur(sel.entry * (1 + ((sel.short ? -1 : 1) * sel.result) / sel.invested)) : "—", "text-slate-900"],
+                  ...(sel.origin
+                    ? []
+                    : ([
+                        ["Stop", eur(sel.stop), "text-rose-700"],
+                        ["Objetivo", eur(sel.target), "text-emerald-700"],
+                      ] as const)),
                 ] as const
               ).map(([label, value, cls]) => (
                 <div key={label}>

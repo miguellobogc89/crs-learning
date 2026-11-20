@@ -109,7 +109,7 @@ export async function krakenCopyTurn(): Promise<{ agent: string; text: string }[
       const margin = m.budget * ((def?.sizeOfEquityPct ?? 10) / 100);
       const d = prec.get(pair) ?? 6;
       const size = Math.floor(((margin * lev) / entry) * 10 ** d) / 10 ** d;
-      const leg = { mirror_id: m.id, source_position_id: p.id, mode: m.mode, symbol: p.symbol, pair, amount: Math.round(margin * 100) / 100, quantity: size, entry_price: entry };
+      const leg = { mirror_id: m.id, source_position_id: p.id, mode: m.mode, symbol: p.symbol, pair, amount: Math.round(margin * 100) / 100, quantity: size, entry_price: entry, leverage: lev };
       if (!(size > 0)) {
         await prisma.trading_mirror_legs.create({ data: { ...leg, status: "omitida", note: "Por debajo del tamaño mínimo de Kraken" } });
         say(`Kraken: ${base} omitido (tamaño mínimo)`);
