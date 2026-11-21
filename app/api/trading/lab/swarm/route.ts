@@ -80,7 +80,18 @@ export async function GET(req: Request) {
       noFunding.push(base);
     }
   }
-  const variants: SwarmVariant[] = [1, 2, 3, 5, 10].map((leverage) => ({
+  // «regla=caidas»: AVALANCHA (cortos en caídas bruscas, en cualquier fase) en vez de ENJAMBRE.
+  const crash = q.get("regla") === "caidas";
+  const variants: SwarmVariant[] = crash
+    ? [1, 2, 3].map((leverage) => ({
+        key: `avalancha-x${leverage}`,
+        name: `AVALANCHA ${leverage}x (grandes, caídas bruscas, Kraken)`,
+        side: "caida" as const,
+        coins: BIG_COINS,
+        kraken: true,
+        leverage,
+      }))
+    : [1, 2, 3, 5, 10].map((leverage) => ({
     key: `enjambre-x${leverage}`,
     name: `ENJAMBRE ${leverage}x (grandes, defensa, Kraken)`,
     side: "short" as const,
@@ -104,6 +115,6 @@ export async function GET(req: Request) {
     btcHoldPct: btcFrom ? Math.round((btc[btc.length - 1].c / btcFrom - 1) * 10_000) / 100 : null,
     results,
   };
-  await prisma.$executeRaw`INSERT INTO trading_lab_results (name, params, result) VALUES (${since ? "enjambres-vivo" : "enjambres"}, ${JSON.stringify({ days, desde: q.get("desde"), hasta: q.get("hasta") })}::jsonb, ${JSON.stringify(summary)}::jsonb)`;
+  await prisma.$executeRaw`INSERT INTO trading_lab_results (name, params, result) VALUES (${crash ? "avalancha" : since ? "enjambres-vivo" : "enjambres"}, ${JSON.stringify({ days, desde: q.get("desde"), hasta: q.get("hasta"), regla: q.get("regla") })}::jsonb, ${JSON.stringify(summary)}::jsonb)`;
   return NextResponse.json(summary);
 }

@@ -71,8 +71,9 @@ export type KamikazeDef = {
   coins?: string[];
   /** Vende antes del objetivo de la idea: a esta fracción del recorrido (0,5 = a mitad de camino). */
   targetFraction?: number;
-  /** Motor propio en vez de tomar ideas de FARO: «enjambre-corto» = cortos de ruido roto, solo en defensa. */
-  engine?: "enjambre-corto";
+  /** Motor propio en vez de tomar ideas de FARO: «enjambre-corto» = cortos de ruido roto, solo en defensa;
+   * «avalancha» = cortos en caídas bruscas de todo el mercado (lib/trading/kamikaze/avalancha.ts), en cualquier fase. */
+  engine?: "enjambre-corto" | "avalancha";
   /** Apalancamiento de los cortos del ENJAMBRE (el tamaño de cada corto se multiplica por esto). */
   leverage?: number;
 };
@@ -321,6 +322,20 @@ ALL_KAMIKAZES.push(
     leverage: 3,
     settings: { ...SETTINGS, commission_pct: 0.05, commission_min: 0, slippage_bps: 2, max_open_positions: 10 },
     tagline: "El ENJAMBRE con apalancamiento x3: mismas operaciones, cada corto 3 veces más grande. Gana y pierde unas 3 veces más (simulado en un año: +52 % con caída máxima del −18 %).",
+  }),
+  // AVALANCHA (21/11/2026): cubre lo que ENJAMBRE deja fuera, las caídas fuertes que ya están en marcha.
+  // En prueba con dinero virtual: aún sin validar en el laboratorio (…/lab/swarm?regla=caidas).
+  crypto({
+    key: "avalancha",
+    name: "AVALANCHA",
+    label: "Caídas bruscas",
+    color: "blue",
+    sizeOfEquityPct: 10,
+    slots: 10,
+    coins: BIG_COINS,
+    engine: "avalancha",
+    settings: { ...SETTINGS, commission_pct: 0.05, commission_min: 0, slippage_bps: 5, max_open_positions: 10 },
+    tagline: "Gana en las caídas fuertes de todo el mercado: cuando Bitcoin cae y una moneda grande lleva más de un 4 % abajo en el día y sigue marcando mínimos, la vende en corto con un 10 % de su dinero (hasta 10) y deja correr la caída con un stop que baja detrás del precio.",
   }),
 );
 

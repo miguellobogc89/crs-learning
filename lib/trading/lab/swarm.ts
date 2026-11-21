@@ -7,6 +7,7 @@
 //  - Comisiones de Revolut X: 0 % maker (entrada limitada y venta en el objetivo), 0,09 % taker (stop, tiempo).
 //  - Freno: no abre nada si Bitcoin cae más de un 3 % en 24 h. 10 % del dinero por operación, 10 huecos.
 import { noiseIdea } from "../carta";
+import { AVALANCHA, crashIdea } from "../kamikaze/avalancha";
 
 export type HBar = { t: number; o: number; h: number; l: number; c: number };
 export type SwarmVariant = {
@@ -16,8 +17,10 @@ export type SwarmVariant = {
   targetFraction?: number;
   /** «short»: enjambre inverso. Al tocar la parte baja del rango, venta en corto (orden limitada al precio de
    * cierre: 0 % si se llena en la hora siguiente), stop a mitad del rango que luego baja detrás del precio a
-   * medio rango de distancia, sin objetivo ni límite de tiempo. */
-  side?: "long" | "short" | "breakout";
+   * medio rango de distancia, sin objetivo ni límite de tiempo.
+   * «caida»: AVALANCHA (lib/trading/kamikaze/avalancha.ts). Corto a mercado al cierre de la hora en una caída brusca
+   * que sigue (comisión de Kraken a mercado), stop que baja detrás del precio, sin objetivo ni límite de tiempo. */
+  side?: "long" | "short" | "breakout" | "caida";
   /** Solo abre en esa fase del mercado (Detector B sobre Bitcoin diario). */
   regime?: "ataque" | "defensa";
   /** Costes de Kraken en los cortos: 0,02 % al entrar y 0,05 % al salir, y su funding histórico. */
@@ -51,7 +54,10 @@ export function attackDays(daily: { t: number; c: number }[]) {
 export type Funding = Map<string, Map<number, number>>;
 
 export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant: SwarmVariant, from: number, startCash = 1000, attack?: Map<string, boolean>, funding?: Funding) {
-  const short = variant.side === "short";
+  const crash = variant.side === "caida";
+  const short = variant.side === "short" || crash;
+  // AVALANCHA: última salida de cada moneda (para no volver a entrar enseguida).
+  const lastExit = new Map<string, number>();
   const kraken = !!variant.kraken && short;
   const exitFee = kraken ? 0.0005 : TAKER;
   const entryFee = kraken ? 0.0002 : 0;
@@ -75,6 +81,7 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
     // Corto: se recupera la garantía más (venta − recompra) menos la comisión de recompra.
     const got = p.short ? Math.max(0, p.cost + p.qty * (p.entry - price) - p.qty * price * fee) : p.qty * price * (1 - fee);
     cash += got;
+    if (crash) lastExit.set(p.base, at);
     trades.push({ base: p.base, pct: (got / p.cost - 1) * 100, exit, at, phase: attack?.get(new Date(p.openedAt).toISOString().slice(0, 10)) ? "ataque" : "defensa" });
   };
   const barAt = (b: string, t: number) => {
@@ -173,6 +180,18 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
       if (busy.has(b)) continue;
       const i = idx.get(b)?.get(t);
       if (i === undefined || i < 24) continue;
+      if (crash) {
+        const left = lastExit.get(b);
+        if (left !== undefined && t - left < AVALANCHA.cooldownHours * HOUR) continue;
+        const r = crashIdea(series.get(b)!.slice(i - 24, i + 1), (btc[bi].c / btc[bi - 24].c - 1) * 100);
+        if (!r) continue;
+        const budget = Math.min(cash, equity * SIZE);
+        if (budget < 10) break;
+        cash -= budget;
+        // A mercado al cierre de la hora (comisión de taker); se vigila desde la hora siguiente.
+        pos.push({ base: b, qty: (budget * lev * (1 - exitFee)) / r.entry, entry: r.entry, stop: r.stop, target: 0, openedAt: t + HOUR, cost: budget, short: true, trail: r.trail, low: r.entry });
+        continue;
+      }
       if (breakout) {
         // Rango de las 24 h anteriores (sin la vela de ahora) y cierre por encima de su techo.
         if (i < 25) continue;

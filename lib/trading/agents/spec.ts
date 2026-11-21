@@ -8,6 +8,7 @@
 import { CARTA } from "../carta";
 import type { ChipDef } from "../chip/roster";
 import { MAX_CHASE_PCT } from "../faro/logic";
+import { AVALANCHA } from "../kamikaze/avalancha";
 import type { KamikazeDef } from "../kamikaze/roster";
 
 export type AgentSpec = {
@@ -40,6 +41,15 @@ export function kamikazeSpec(k: KamikazeDef): AgentSpec {
           ? `Cualquiera de las que publica FARO, pero solo con convicción alta (${k.minConviction ?? 4} o más de 5).`
           : "Las de rebote que publica FARO.";
   const stop = k.stopMode === "idea" ? "su stop (justo donde la idea deja de valer)" : "su stop (donde la idea deja de valer, entre un 5 % y un 40 % por debajo)";
+  if (k.engine === "avalancha")
+    return {
+      market: "Cripto",
+      style: k.label ?? "Caídas bruscas",
+      ideas: "No usa las ideas de FARO: busca él mismo las monedas grandes (Bitcoin, Ethereum, Solana…) que caen con fuerza junto con todo el mercado.",
+      when: `Cuando Bitcoin cae al menos un ${nf(AVALANCHA.btcDropPct)} % en 24 h y la moneda lleva entre un ${nf(AVALANCHA.minDropPct)} % y un ${nf(AVALANCHA.maxDropPct)} % abajo en el día y acaba de marcar un mínimo nuevo. En cualquier fase del mercado. Revisa cada hora; tras cerrar una moneda, espera ${nf(AVALANCHA.cooldownHours)} h para volver a ella.`,
+      size: `Vende en corto un ${nf(k.sizeOfEquityPct ?? 10)} % de su dinero en cada moneda, hasta ${slots} a la vez (empezó con ${nf(k.capital)} €). Sin apalancamiento.`,
+      exit: `Stop a ${String(AVALANCHA.atrMult).replace(".", ",")} veces lo que se mueve de media en una hora por encima de la entrada. Sin objetivo ni plazo: el stop baja detrás del precio a esa distancia y deja correr la caída.`,
+    };
   if (k.engine === "enjambre-corto")
     return {
       market: "Cripto",
