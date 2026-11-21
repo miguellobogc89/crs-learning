@@ -119,8 +119,8 @@ export async function POST(req: Request, route: RouteContext) {
       const name = str("name").trim().slice(0, 60);
       if (!name) return fail("Ponle un nombre al paquete");
       const ids = Array.isArray(body.txIds) ? [...new Set((body.txIds as unknown[]).filter((x): x is string => typeof x === "string"))].slice(0, 2000) : [];
-      // Solo movimientos del propio usuario.
-      const own = ids.length ? (await prisma.finance_transactions.findMany({ where: { user_id: uid, id: { in: ids } }, select: { id: true } })).map((t) => t.id) : [];
+      // Solo cargos de consumo del propio usuario: traspasos y aportaciones a ahorro o inversión no entran en paquetes.
+      const own = ids.length ? (await prisma.finance_transactions.findMany({ where: { user_id: uid, id: { in: ids }, kind: "gasto", amount: { lt: 0 } }, select: { id: true } })).map((t) => t.id) : [];
       const concepts = Array.isArray(body.conceptKeys) ? [...new Set((body.conceptKeys as unknown[]).filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.slice(0, 80)))].slice(0, 500) : [];
       // Cada cargo solo en un paquete: nada de lo que se guarda puede estar ya en otro.
       const id = str("id");

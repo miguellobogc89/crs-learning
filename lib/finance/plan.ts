@@ -238,6 +238,14 @@ export function conceptKey(description: string, counterparty?: string | null) {
   return unique.join(" ") || base;
 }
 
+/**
+ * Qué puede entrar en un paquete: solo consumo (tipo «gasto», comisiones incluidas). Los traspasos entre cuentas
+ * propias («interna») y las aportaciones a ahorro o inversión («ahorro») son movimientos patrimoniales: nunca
+ * cuentan como consumo, y así el ahorro no se descuenta dos veces (ya está en el objetivo de ahorro). Se aplica al
+ * calcular, de modo que si un movimiento se reclasifica después, deja de contar solo.
+ */
+export const isPackageCharge = (t: { kind: string; amount: number }) => t.kind === "gasto" && t.amount < 0;
+
 /** Si un cargo entra en un paquete: por su concepto (pasados y futuros) o marcado a mano. */
 export const inPackage = (p: { conceptKeys: string[]; txIds: string[] }, c: { id: string; concept: string }) =>
   p.conceptKeys.includes(c.concept) || p.txIds.includes(c.id);

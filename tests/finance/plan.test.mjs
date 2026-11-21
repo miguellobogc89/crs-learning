@@ -133,3 +133,11 @@ test("Objetivo del paquete: estado según el día del ciclo", () => {
   assert.equal(P.goalStatus(120, 100, 28, 30).status, "superado");
   assert.equal(P.goalStatus(120, 100, 28, 30).remaining, -20);
 });
+
+test("Paquetes: solo consumo; traspasos y aportaciones a ahorro/inversión no entran", () => {
+  assert.equal(P.isPackageCharge({ kind: "gasto", amount: -10 }), true);
+  assert.equal(P.isPackageCharge({ kind: "gasto", amount: -0.2 }), true); // comisión: es gasto
+  assert.equal(P.isPackageCharge({ kind: "ahorro", amount: -500 }), false);
+  assert.equal(P.isPackageCharge({ kind: "interna", amount: -300 }), false);
+  assert.equal(P.isPackageCharge({ kind: "devolucion", amount: 20 }), false);
+});

@@ -148,7 +148,7 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
       onClose={onClose}
       width="max-w-5xl"
       title={pack ? "Editar paquete" : "Nuevo paquete"}
-      subtitle="Marca un concepto para que entren todos sus cargos (los de antes y los que lleguen), o un cargo suelto en la vista por movimiento."
+      subtitle="Marca un concepto para que entren todos sus cargos (los de antes y los que lleguen), o un cargo suelto en la vista por movimiento. Solo aparecen gastos: los traspasos entre tus cuentas y las aportaciones a ahorro o inversión no son consumo."
       footer={
         <>
           <span className="mr-auto text-sm text-slate-500">

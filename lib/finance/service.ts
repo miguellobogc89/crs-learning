@@ -9,7 +9,7 @@ import {
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, getWishlist, loadTxs } from "./store";
-import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, goalStatus, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
+import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, goalStatus, isPackageCharge, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
 import { AUTO_SYNC_HOURS } from "./sync";
 import { zombies } from "./gmail";
 
@@ -442,7 +442,7 @@ export async function packagesView(userId: string) {
     financeContext(userId),
     prisma.finance_packages.findMany({ where: { user_id: userId }, orderBy: { created_at: "asc" } }),
   ]);
-  const all = ctx.txs.filter((t) => t.amount < 0 && t.kind !== "interna").map((t) => ({
+  const all = ctx.txs.filter(isPackageCharge).map((t) => ({
     id: t.id, date: t.date, amount: t.amount, accountId: t.accountId, category: t.category,
     concept: conceptKey(t.description, t.counterparty),
     description: t.alias || t.counterparty || t.description, detail: t.description,
