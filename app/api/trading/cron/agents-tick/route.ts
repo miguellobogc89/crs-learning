@@ -7,6 +7,7 @@ import { runMirrors } from "@/lib/trading/mirror/service";
 import { runManual } from "@/lib/trading/manual/service";
 import { chipTick } from "@/lib/trading/chip/engine";
 import { pruneNotifications, syncHealth } from "@/lib/trading/notifications";
+import { syncTradeEvents } from "@/lib/trading/trade-events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,9 +33,11 @@ export async function GET(req: Request) {
     const chips = await chipTick().catch((e) => [{ agent: "chip", skipped: e instanceof Error ? e.message : "error", actions: [] }]);
     const agents = await maybeRunAgents();
     // Avisos: qué se ha roto (o arreglado) desde la última revisión.
+    // Avisos de Mi cartera: compras, ventas y movimientos del stop de lo que tienes con dinero real.
+    const trades = await syncTradeEvents().catch((e) => ({ error: e instanceof Error ? e.message.slice(0, 200) : "error" }));
     const health = await syncHealth().catch((e) => ({ error: e instanceof Error ? e.message.slice(0, 200) : "error" }));
     if (new Date().getUTCHours() === 3 && new Date().getUTCMinutes() < 5) await pruneNotifications().catch(() => undefined);
-    return NextResponse.json({ live, kamikazes, chips, mirrors, manual, agents, health });
+    return NextResponse.json({ live, kamikazes, chips, mirrors, manual, agents, trades, health });
   } catch (e) {
     console.error("[trading] cron agents-tick", e);
     return NextResponse.json({ error: "Falló la revisión" }, { status: 500 });

@@ -16,7 +16,8 @@ export type Notification = {
   id: string;
   createdAt: string;
   key: string;
-  level: "error" | "aviso" | "ok";
+  /** operacion: compras, ventas y movimientos del stop de Mi cartera (trade-events.ts). */
+  level: "error" | "aviso" | "ok" | "operacion";
   title: string;
   body: string | null;
   href: string | null;

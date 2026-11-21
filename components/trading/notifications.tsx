@@ -4,7 +4,7 @@
 // - tablet y ordenador: panel lateral a la derecha.
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Bell, CircleCheck, Info, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowLeftRight, Bell, CircleCheck, Info, X } from "lucide-react";
 import type { listNotifications } from "@/lib/trading/notifications";
 import { api } from "./format";
 import { useTradingRefresh, useWarmStart } from "./navigation";
@@ -62,11 +62,14 @@ const LEVEL = {
   error: { icon: AlertTriangle, cls: "bg-red-50 text-red-600" },
   aviso: { icon: Info, cls: "bg-amber-50 text-amber-600" },
   ok: { icon: CircleCheck, cls: "bg-emerald-50 text-emerald-600" },
+  operacion: { icon: ArrowLeftRight, cls: "bg-blue-50 text-blue-600" },
 } as const;
 
 function Row({ n, onNavigate }: { n: Item; onNavigate: () => void }) {
   const L = LEVEL[n.level] ?? LEVEL.aviso;
-  const open = n.level !== "ok" && !n.resolvedAt;
+  // Las operaciones (compras, ventas, stop) no son problemas: sin «sigue abierto» ni «resuelto».
+  const problem = n.level === "error" || n.level === "aviso";
+  const open = problem && !n.resolvedAt;
   const body = (
     <>
       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${L.cls}`}>
@@ -80,7 +83,7 @@ function Row({ n, onNavigate }: { n: Item; onNavigate: () => void }) {
         {n.body && <span className="mt-0.5 block text-sm leading-snug text-slate-500">{n.body}</span>}
         <span className="mt-1 block text-xs text-slate-400">
           {when(n.createdAt)}
-          {n.level !== "ok" && (open ? " · sigue abierto" : n.resolvedAt ? ` · resuelto ${when(n.resolvedAt)}` : "")}
+          {problem && (open ? " · sigue abierto" : n.resolvedAt ? ` · resuelto ${when(n.resolvedAt)}` : "")}
         </span>
       </span>
     </>
@@ -105,7 +108,7 @@ function List({ data, onNavigate }: { data: Data | null; onNavigate: () => void 
       <div className="flex flex-col items-center gap-2 px-5 py-16 text-center">
         <CircleCheck className="h-10 w-10 text-emerald-500" />
         <b className="text-slate-800">Sin avisos</b>
-        <span className="text-sm text-slate-500">Si algo deja de funcionar (FARO, los agentes, un exchange o una copia), aparecerá aquí.</span>
+        <span className="text-sm text-slate-500">Aquí verás tus compras, ventas y movimientos del stop, y si algo deja de funcionar (FARO, los agentes, un exchange o una copia).</span>
       </div>
     );
   return (
