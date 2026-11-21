@@ -48,6 +48,8 @@ function ChargeList({ items }: { items: { id: string; date: string; amount: numb
 function PackageBar({ p, expectedPct }: { p: Pack; expectedPct: number }) {
   const [open, setOpen] = useState(false);
   const pr = p.progress;
+  // Sin objetivo, la barra compara con la media de los últimos ciclos (en gris): nunca queda vacía.
+  const vsAverage = !pr && p.average !== null && p.average > 0 ? Math.round((p.current / p.average) * 1000) / 10 : null;
   return (
     <li className="border-t border-slate-100 first:border-t-0">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="grid w-full grid-cols-[minmax(0,8rem)_minmax(0,1fr)_auto] items-center gap-3 py-3 text-left sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_9rem]">
@@ -58,18 +60,22 @@ function PackageBar({ p, expectedPct }: { p: Pack; expectedPct: number }) {
         <span className="relative h-3.5 rounded-full bg-slate-100">
           {pr ? (
             <span className={`absolute inset-y-0 left-0 rounded-full ${BAR[pr.status]}`} style={{ width: `${Math.min(100, Math.max(2, pr.pct))}%` }} />
+          ) : vsAverage !== null ? (
+            <span className="absolute inset-y-0 left-0 rounded-full bg-slate-400" style={{ width: `${Math.min(100, Math.max(2, vsAverage))}%` }} />
           ) : (
-            <span className="absolute inset-0 flex items-center pl-2 text-[11px] text-slate-400">sin objetivo</span>
+            <span className="absolute inset-0 flex items-center pl-2 text-[11px] text-slate-400">sin objetivo ni historial</span>
           )}
           <span className="absolute -inset-y-1 w-0.5 bg-slate-700" style={{ left: `${Math.min(100, expectedPct)}%` }} aria-hidden="true" />
         </span>
         <span className={`text-right text-sm tabular-nums ${pr?.status === "superado" ? "font-semibold text-red-700" : "text-slate-700"}`}>
-          {eur(p.current, 2)}{p.goal !== null && <span className="text-slate-400"> / {eur(p.goal, 2)}</span>}
+          {eur(p.current, 2)}
+          {p.goal !== null ? <span className="text-slate-400"> / {eur(p.goal, 2)}</span> : p.average !== null && <span className="block text-[11px] text-slate-400">media {eur(p.average, 2)}</span>}
         </span>
       </button>
       {open && (
         <div className="mb-3 rounded-xl bg-slate-50 px-3 py-2">
-          {pr && <p className="mb-1 text-xs text-slate-500">{pr.remaining >= 0 ? `Te quedan ${eur(pr.remaining, 2)} del objetivo` : `Te has pasado ${eur(-pr.remaining, 2)} del objetivo`} · media {eur(p.average, 2)}</p>}
+          {pr ? <p className="mb-1 text-xs text-slate-500">{pr.remaining >= 0 ? `Te quedan ${eur(pr.remaining, 2)} del objetivo` : `Te has pasado ${eur(-pr.remaining, 2)} del objetivo`} · media {eur(p.average, 2)}</p>
+            : vsAverage !== null && <p className="mb-1 text-xs text-slate-500">Sin objetivo: llevas el {Math.round(vsAverage)} % de tu media ({eur(p.average, 2)}) con el {Math.round(expectedPct)} % del ciclo. Ponle objetivo en Configurar mi plan.</p>}
           <ChargeList items={p.currentCharges} />
         </div>
       )}
@@ -127,7 +133,7 @@ export function PlanPanel() {
           <Stat
             label="Ahorro del ciclo"
             value={eur(saved, 2)}
-            hint={goal !== null ? (saved >= goal ? `Objetivo de ${eur(goal, 2)} cumplido` : `Objetivo ${eur(goal, 2)} · faltan ${eur(goal - saved, 2)}`) : "Ingresos − gastos del ciclo"}
+            hint={`Ingresado ${eur(cycleSaving.income, 2)} − gastado ${eur(cycleSaving.expenses, 2)}${goal !== null ? (saved >= goal ? ` · objetivo de ${eur(goal, 2)} cumplido` : ` · objetivo ${eur(goal, 2)}`) : ""}`}
             tone={goal !== null && saved >= goal ? "emerald" : saved < 0 ? "red" : "slate"}
           />
           <div role="button" tabIndex={0} onClick={() => setShowUnpackaged(!showUnpackaged)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowUnpackaged(!showUnpackaged); } }} className="cursor-pointer rounded-xl text-left focus-visible:outline-2 focus-visible:outline-blue-600" aria-expanded={showUnpackaged}>
@@ -150,7 +156,10 @@ export function PlanPanel() {
       <section className={`${card} ${flat}`}>
         <CardHeader>
           <SectionTitle icon={TrendingUp} tint="emerald" size="base">¿Voy dentro del plan?</SectionTitle>
-          <span className="flex items-center gap-1.5 text-xs text-slate-500"><span className="inline-block h-3 w-0.5 bg-slate-700" aria-hidden="true" /> día del ciclo ({Math.round(expectedPct)} %)</span>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-0.5 bg-slate-700" aria-hidden="true" /> día del ciclo ({Math.round(expectedPct)} %)</span>
+            {packages.some((p) => p.goal === null) && <span className="flex items-center gap-1.5"><span className="inline-block h-2 w-3 rounded-full bg-slate-400" aria-hidden="true" /> sin objetivo: frente a tu media</span>}
+          </span>
         </CardHeader>
         <ul className="px-4 pb-3 sm:px-6">
           {ordered.map((p) => <PackageBar key={p.id} p={p} expectedPct={expectedPct} />)}

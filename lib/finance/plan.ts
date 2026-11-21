@@ -296,7 +296,9 @@ export function planInsights(opts: {
     if (p.progress?.status === "atencion") out.push({ tone: "warning", text: `${p.name} va rápido: llevas el ${Math.round(p.progress.pct)} % con el ${Math.round(p.progress.expectedPct)} % del ciclo` });
   }
   if (opts.unpackaged.total > 0) out.push({ tone: "warning", text: `${eur(opts.unpackaged.total)} gastados que no están en ningún paquete (${opts.unpackaged.count} ${opts.unpackaged.count === 1 ? "cargo" : "cargos"})` });
-  if (opts.saving.goal !== null && opts.saving.goal > 0 && opts.saving.saved < opts.saving.goal) out.push({ tone: "warning", text: `Ahorro: llevas ${eur(Math.max(0, opts.saving.saved))} de ${eur(opts.saving.goal)}` });
+  if (opts.saving.goal !== null && opts.saving.goal > 0 && opts.saving.saved < opts.saving.goal) out.push({ tone: "warning", text: opts.saving.saved < 0
+    ? `Ahorro: este ciclo has gastado ${eur(-opts.saving.saved)} más de lo que has ingresado (objetivo ${eur(opts.saving.goal)})`
+    : `Ahorro: llevas ${eur(opts.saving.saved)} de ${eur(opts.saving.goal)}` });
   for (const p of opts.packages) {
     if (p.progress?.status === "ok" && p.progress.remaining > 0 && p.progress.pct < p.progress.expectedPct - 15) out.push({ tone: "success", text: `${p.name} va ${eur(p.progress.remaining)} por debajo del objetivo: tienes margen` });
   }

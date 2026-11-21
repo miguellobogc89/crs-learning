@@ -159,3 +159,8 @@ test("Qué te está desviando: primero lo que se pasa, luego lo pendiente, y com
   assert.match(ins[1].text, /186,00 € gastados que no están en ningún paquete/);
   assert.equal(P.planInsights({ packages: [], unpackaged: { total: 0, count: 0 }, saving: { saved: 600, goal: 500 }, daysLeft: 3 }).length, 0);
 });
+
+test("Qué te está desviando: el ahorro negativo se dice, no se esconde como 0", () => {
+  const [i] = P.planInsights({ packages: [], unpackaged: { total: 0, count: 0 }, saving: { saved: -732.94, goal: 500 }, daysLeft: 3 });
+  assert.match(i.text, /has gastado 732,94 € más de lo que has ingresado/);
+});
