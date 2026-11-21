@@ -24,6 +24,14 @@ const message = (e: unknown) => (e instanceof Error ? e.message.slice(0, 300) : 
 /** Prisma P2021: falta aplicar la migración de CRS Finance. */
 const missingTables = (e: unknown) => !!e && typeof e === "object" && (e as { code?: unknown }).code === "P2021";
 
+/** Cuenta del usuario (id), null para quitarla o false si no es suya. */
+async function ownAccount(uid: string, value: unknown): Promise<string | null | false> {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string") return false;
+  const found = await prisma.finance_accounts.findFirst({ where: { id: value, user_id: uid }, select: { id: true } });
+  return found ? found.id : false;
+}
+
 async function userId() {
   return (await auth())?.user?.id ?? null;
 }
@@ -94,11 +102,37 @@ export async function POST(req: Request, route: RouteContext) {
       const name = str("name").trim().slice(0, 60);
       const categories = Array.isArray(body.categories) ? (body.categories as unknown[]).filter(isCategory) : [];
       if (!name || !Number.isFinite(amount) || amount <= 0) return fail("Pon un nombre y un importe mayor que cero");
+      const kind = body.kind === "fijo" ? "fijo" : "variable";
+      const accountId = await ownAccount(uid, body.accountId);
+      if (accountId === false) return fail("Cuenta no encontrada", 404);
+      const id = str("id");
+      const data = { name, amount, categories, kind, ...(body.accountId !== undefined ? { account_id: accountId } : {}) };
+      if (id) {
+        const r = await prisma.finance_budgets.updateMany({ where: { id, user_id: uid }, data });
+        if (!r.count) return fail("Partida no encontrada", 404);
+      } else await prisma.finance_budgets.create({ data: { user_id: uid, ...data } });
+      return ok({ ok: true });
+    }
+    if (action === "wishlist") {
+      const title = str("title").trim().slice(0, 120);
+      const price = Number(body.price);
+      const saved = body.saved === undefined || body.saved === "" ? 0 : Number(body.saved);
+      const priority = [1, 2, 3].includes(Number(body.priority)) ? Number(body.priority) : 2;
+      const rawUrl = str("url").trim();
+      const url = rawUrl && /^https?:\/\//i.test(rawUrl) ? rawUrl.slice(0, 500) : null;
+      if (!title || !Number.isFinite(price) || price <= 0) return fail("Pon un nombre y un precio mayor que cero");
+      if (!Number.isFinite(saved) || saved < 0) return fail("Importe apartado no válido");
+      const purchased = typeof body.purchased === "boolean" ? { purchased_at: body.purchased ? new Date() : null } : {};
+      const data = { title, price, saved, url, priority, ...purchased };
       const id = str("id");
       if (id) {
-        const r = await prisma.finance_budgets.updateMany({ where: { id, user_id: uid }, data: { name, amount, categories } });
-        if (!r.count) return fail("Límite no encontrado", 404);
-      } else await prisma.finance_budgets.create({ data: { user_id: uid, name, amount, categories } });
+        const r = await prisma.finance_wishlist_items.updateMany({ where: { id, user_id: uid }, data });
+        if (!r.count) return fail("Deseo no encontrado", 404);
+      } else await prisma.finance_wishlist_items.create({ data: { user_id: uid, ...data } });
+      return ok({ ok: true });
+    }
+    if (action === "wishlist/delete") {
+      await prisma.finance_wishlist_items.deleteMany({ where: { id: str("id"), user_id: uid } });
       return ok({ ok: true });
     }
     if (action === "budget/delete") {
@@ -108,7 +142,7 @@ export async function POST(req: Request, route: RouteContext) {
     if (action === "settings") {
       const day = Number(body.cycleStartDay);
       const goal = body.savingsGoal === null || body.savingsGoal === "" ? null : Number(body.savingsGoal);
-      const data: { cycle_start_day?: number; savings_goal?: number | null; savings_frequency?: string; updated_at: Date } = { updated_at: new Date() };
+      const data: { cycle_start_day?: number; savings_goal?: number | null; savings_frequency?: string; expected_income?: number | null; income_account_id?: string | null; savings_account_id?: string | null; updated_at: Date } = { updated_at: new Date() };
       if (body.cycleStartDay !== undefined) {
         if (!Number.isInteger(day) || day < 1 || day > 28) return fail("El ciclo debe empezar entre el día 1 y el 28");
         data.cycle_start_day = day;
@@ -116,6 +150,17 @@ export async function POST(req: Request, route: RouteContext) {
       if (body.savingsGoal !== undefined) {
         if (goal !== null && (!Number.isFinite(goal) || goal < 0)) return fail("Objetivo de ahorro no válido");
         data.savings_goal = goal;
+      }
+      if (body.expectedIncome !== undefined) {
+        const income = body.expectedIncome === null || body.expectedIncome === "" ? null : Number(body.expectedIncome);
+        if (income !== null && (!Number.isFinite(income) || income <= 0)) return fail("Ingreso no válido");
+        data.expected_income = income;
+      }
+      for (const [key, column] of [["incomeAccountId", "income_account_id"], ["savingsAccountId", "savings_account_id"]] as const) {
+        if (body[key] === undefined) continue;
+        const accountId = await ownAccount(uid, body[key]);
+        if (accountId === false) return fail("Cuenta no encontrada", 404);
+        data[column] = accountId;
       }
       if (body.savingsFrequency !== undefined) {
         if (body.savingsFrequency !== "mensual" && body.savingsFrequency !== "semanal") return fail("Frecuencia no válida");

@@ -8,7 +8,8 @@ import {
   expenseHistoryByCycle, normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
-import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, loadTxs } from "./store";
+import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, getWishlist, loadTxs } from "./store";
+import { budgetWeeks, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, transferPlan, unclassifiedFor, wishStatus } from "./plan";
 import { AUTO_SYNC_HOURS } from "./sync";
 import { zombies } from "./gmail";
 
@@ -345,12 +346,36 @@ export async function budgetView(userId: string) {
     const h = ctx.history.slice(0, 3);
     return h.length ? Math.round((h.reduce((s, x) => s + (x.byCategory.find((c) => c.category === cat)?.amount ?? 0), 0) / h.length) * 100) / 100 : null;
   };
+  const recurring = ctx.recurring.map((r) => ({ ...r, cancelled: ctx.cancelled.has(r.key) }));
+  const cycle = ctx.current.cycle;
+  const { settings } = ctx;
+  const savingsGoalCycle = ctx.projection.savingsGoal;
+  const detectedIncome = detectIncome(ctx.history);
+  const detectedIncomeAccount = detectIncomeAccount(ctx.txs, cycleFor(ctx.today, ctx.startDay, -3).start);
+  const incomeAccountId = settings.incomeAccountId ?? detectedIncomeAccount;
+  const wishlist = await getWishlist(userId);
+  const accounts = ctx.accounts.filter((a) => a.included).map((a) => ({ id: a.id, name: a.name, bank: a.bank, last4: a.ibanLast4, balance: a.balance }));
+  const plan = {
+    cycle,
+    today: ctx.today,
+    balance: planBalance({ expectedIncome: settings.expectedIncome, detectedIncome, savingsGoal: savingsGoalCycle, budgets: ctx.budgets, detectedFixed: detectedFixedMonthly(recurring) }),
+    detectedIncome,
+    incomeAccountId,
+    incomeAccountDetected: settings.incomeAccountId === null,
+    savingsAccountId: settings.savingsAccountId,
+    transfers: transferPlan({ budgets: ctx.budgets, savingsGoal: savingsGoalCycle, savingsAccountId: settings.savingsAccountId, incomeAccountId, txs: ctx.txs, cycle }),
+    weeks: Object.fromEntries(ctx.budgets.filter((b) => b.kind !== "fijo").map((b) => [b.id, budgetWeeks(b, ctx.txs, cycle, ctx.today)])),
+    unclassified: Object.fromEntries(ctx.budgets.filter((b) => b.accountId).map((b) => [b.id, unclassifiedFor(b.accountId!, ctx.txs, cycle)])),
+    accounts,
+  };
   return {
     settings: ctx.settings,
     current: ctx.current,
     projection: ctx.projection,
     budgets: ctx.budgetsNow,
-    recurring: ctx.recurring.map((r) => ({ ...r, cancelled: ctx.cancelled.has(r.key) })),
+    plan,
+    wishlist: wishlist.map((w) => wishStatus(w, ctx.projection.safeToSpend)),
+    recurring,
     categoryAverages: Object.fromEntries([...new Set(ctx.history.flatMap((h) => h.byCategory.map((c) => c.category)))].map((c) => [c, avg(c)])),
   };
 }

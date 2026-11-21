@@ -191,6 +191,7 @@ model users {
   finance_transactions                                                                         finance_transactions[]
   finance_rules                                                                                finance_rules[]
   finance_budgets                                                                              finance_budgets[]
+  finance_wishlist_items                                                                       finance_wishlist_items[]
   finance_memory                                                                               finance_memory[]
   finance_chat_messages                                                                        finance_chat_messages[]
   finance_alert_dismissals                                                                     finance_alert_dismissals[]
@@ -2731,6 +2732,10 @@ model finance_settings {
   cycle_start_day Int       @default(25)
   savings_goal    Decimal?  @db.Decimal(14, 2)
   savings_frequency String  @default("mensual")
+  /// Planificación: ingreso esperado del ciclo (null = el detectado) y cuentas de cobro y de ahorro.
+  expected_income    Decimal? @db.Decimal(14, 2)
+  income_account_id  String?  @db.Uuid
+  savings_account_id String?  @db.Uuid
   last_sync_at    DateTime? @db.Timestamptz(6)
   /// Periodo (ciclo/mes y rango) y cuentas ocultas elegidos en pantalla.
   view            Json?
@@ -2836,8 +2841,28 @@ model finance_budgets {
   name       String
   categories String[] @default([])
   amount     Decimal  @db.Decimal(14, 2)
+  /// fijo | variable (Planificación).
+  kind       String   @default("variable")
+  /// Cuenta que paga la partida (para las transferencias del día de cobro).
+  account_id String?  @db.Uuid
   created_at DateTime @default(now()) @db.Timestamptz(6)
   users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id])
+}
+
+/// CRS Finance · Planificación: cosas que el usuario quiere comprarse.
+model finance_wishlist_items {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String    @db.Uuid
+  title        String
+  price        Decimal   @db.Decimal(14, 2)
+  saved        Decimal   @default(0) @db.Decimal(14, 2)
+  url          String?
+  priority     Int       @default(2)
+  purchased_at DateTime? @db.Timestamptz(6)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([user_id])
 }

@@ -43,3 +43,21 @@ Ideas y tareas del módulo de finanzas personales. Recopilación de conversacion
 - [ ] Diferenciarse por utilidad verificable, experiencia placentera y ejecución adaptada a España. Rocket Money/Rowan ya ofrece IA que detecta cargos, cancela suscripciones y actúa; «tener un agente» no es diferencial en sí mismo.
 - [ ] Validar el recorrido banco conectado → hallazgo útil → acción autorizada → beneficio demostrado.
 - [ ] No prometer gestiones automáticas ni fiscalidad exacta sin fuente de datos, requisitos regulatorios y controles suficientes.
+
+## Planificación · la hucha (21/11/2026)
+Objetivo: que cualquier usuario monte su plan del ciclo como lo hacía el propietario con ChatGPT: ahorro objetivo, gastos fijos reales, partidas variables (p. ej. ocio) con la cuenta que paga cada una, seguimiento semanal, avisos y lista de deseos. Nada a medida: partidas, importes, categorías y cuentas los decide cada usuario.
+
+Decisiones:
+- El gasto de una partida se mide **por categoría**, no por tarjeta (un taxi pagado con otra cuenta cuenta igual). La cuenta solo ayuda: la partida muestra los movimientos sin clasificar de su cuenta para clasificarlos.
+- **Sin arrastres manuales:** el límite semanal es lo que queda de la partida repartido entre los días que faltan del ciclo; lo que sobra se reparte en las semanas siguientes y lo que te pasas se descuenta. El dinero no gastado sigue en las cuentas (foto de saldos) como disponible hasta que el usuario lo mande a ahorro o a un deseo.
+
+Estado:
+- [x] **F1 · Plan del ciclo** (migración `20261121120000_finance_planning`, aplicada en Neon): partidas con tipo fijo/variable y cuenta que las paga; ingreso esperado (o detectado: mediana de los últimos ciclos), cuenta de cobro (o detectada) y cuenta de ahorro en `finance_settings`; tarjeta «Tu plan del ciclo» con el cuadre (ingreso − fijos − variables − ahorro = sin asignar; sin partidas fijas usa los recibos detectados) y las transferencias del día de cobro por cuenta, descontando lo ya movido. Lógica en `lib/finance/plan.ts` con tests en `tests/finance/plan.test.mjs`.
+- [x] **F3 · Semana** (adelantada): cada partida variable muestra la semana actual (gastado/límite/queda) y la tira de semanas del ciclo (lunes a domingo, recortadas al ciclo; futuras «previstas»).
+- [x] **F5 · Lista de deseos** (`finance_wishlist_items`): precio, apartado, prioridad, enlace, «comprado»; marca «te lo puedes permitir ya» con lo disponible sin tocar el ahorro (`projection.safeToSpend`).
+- [ ] **F2 · Fijos reales como sugerencia:** proponer los recurrentes detectados como partida fija (con su cuenta) y permitir marcar extraordinarios desde el plan.
+- [ ] **F4 · Notificaciones push** (reutilizar la PWA y el push de Trading): 80 % y 100 % del límite semanal, sobrante del domingo («¿a deseos o al ahorro?»), resumen del lunes y recordatorio de transferencias el día de cobro. Umbrales configurables.
+- [ ] Mandar el sobrante de la semana a un deseo con un toque (sumar a «apartado»).
+- [ ] Resumen al cierre del ciclo (plan frente a real y saldos finales) guardado como foto.
+- [ ] **F6 · IA crítica** sobre el plan: subidas de fijos, ritmo que no llega al ahorro, etc.
+- [ ] Sincronizar `finance_wishlist_items` y las nuevas columnas si se regenera el esquema con `prisma db pull` (las FK a `finance_accounts` existen en BD pero no como relación Prisma).
