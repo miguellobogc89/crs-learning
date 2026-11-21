@@ -9,7 +9,7 @@ import {
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, getWishlist, loadTxs } from "./store";
-import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, goalStatus, isPackageCharge, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
+import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, goalStatus, isPackageCharge, planInsights, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
 import { AUTO_SYNC_HOURS } from "./sync";
 import { zombies } from "./gmail";
 
@@ -486,6 +486,26 @@ export async function packagesView(userId: string) {
           .map(({ id, date, amount, description, detail }) => ({ id, date, amount, description, detail })),
       };
     }),
+    /** Gasto real del ciclo que no está en ningún paquete (≠ «pendiente de presupuestar», que habla de objetivos). */
+    unpackaged: (() => {
+      const items = all.filter((c) => !owner.has(c.id) && c.date >= current.start && c.date <= current.end)
+        .map(({ id, date, amount, description, detail }) => ({ id, date, amount, description, detail }));
+      return { total: round2(items.reduce((s, c) => s - c.amount, 0)), count: items.length, items };
+    })(),
+    insights: planInsights({
+      packages: packs.map((p) => {
+        const spent = packageSpend(p.id, owner, all, current);
+        return { name: p.name, goal: p.goal, current: spent, progress: goalStatus(spent, p.goal, day, totalDays) };
+      }),
+      unpackaged: (() => {
+        const rows = all.filter((c) => !owner.has(c.id) && c.date >= current.start && c.date <= current.end);
+        return { total: round2(rows.reduce((s, c) => s - c.amount, 0)), count: rows.length };
+      })(),
+      saving: { saved: round2(ctx.current.income - ctx.current.expenses), goal: ctx.projection.savingsGoal },
+      daysLeft: totalDays - day,
+    }),
+    /** Ahorro del ciclo hasta hoy: ingresos ordinarios − gasto real (las aportaciones a ahorro no son gasto). */
+    cycleSaving: { income: ctx.current.income, expenses: ctx.current.expenses, saved: round2(ctx.current.income - ctx.current.expenses) },
     accounts: ctx.accounts.filter((a) => a.included).map((a) => ({ id: a.id, name: a.name, bank: a.bank, last4: a.ibanLast4 })),
     charges,
   };

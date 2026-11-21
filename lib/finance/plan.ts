@@ -273,3 +273,32 @@ export function goalStatus(spent: number, goal: number | null, day: number, tota
   const status = pct >= 100 ? "superado" as const : pct > expectedPct + 10 && pct >= 50 ? "atencion" as const : "ok" as const;
   return { pct, expectedPct, remaining: round2(goal - spent), status };
 }
+
+export type PlanInsight = { tone: "danger" | "warning" | "success"; text: string };
+
+/**
+ * «Qué te está desviando»: frases deterministas a partir de los paquetes, el gasto sin paquete y el ahorro.
+ * Primero lo que se pasa, luego lo que va rápido o sin repartir, y al final dónde hay margen. Como mucho `max`.
+ */
+export function planInsights(opts: {
+  packages: { name: string; goal: number | null; current: number; progress: ReturnType<typeof goalStatus> }[];
+  unpackaged: { total: number; count: number };
+  saving: { saved: number; goal: number | null };
+  daysLeft: number;
+  max?: number;
+}): PlanInsight[] {
+  const eur = (v: number) => `${v.toFixed(2).replace(".", ",")} €`;
+  const out: PlanInsight[] = [];
+  for (const p of opts.packages) {
+    if (p.progress?.status === "superado") out.push({ tone: "danger", text: `${p.name}: te has pasado ${eur(-p.progress.remaining)} del objetivo${opts.daysLeft > 0 ? ` y quedan ${opts.daysLeft} días de ciclo` : ""}` });
+  }
+  for (const p of opts.packages) {
+    if (p.progress?.status === "atencion") out.push({ tone: "warning", text: `${p.name} va rápido: llevas el ${Math.round(p.progress.pct)} % con el ${Math.round(p.progress.expectedPct)} % del ciclo` });
+  }
+  if (opts.unpackaged.total > 0) out.push({ tone: "warning", text: `${eur(opts.unpackaged.total)} gastados que no están en ningún paquete (${opts.unpackaged.count} ${opts.unpackaged.count === 1 ? "cargo" : "cargos"})` });
+  if (opts.saving.goal !== null && opts.saving.goal > 0 && opts.saving.saved < opts.saving.goal) out.push({ tone: "warning", text: `Ahorro: llevas ${eur(Math.max(0, opts.saving.saved))} de ${eur(opts.saving.goal)}` });
+  for (const p of opts.packages) {
+    if (p.progress?.status === "ok" && p.progress.remaining > 0 && p.progress.pct < p.progress.expectedPct - 15) out.push({ tone: "success", text: `${p.name} va ${eur(p.progress.remaining)} por debajo del objetivo: tienes margen` });
+  }
+  return out.slice(0, opts.max ?? 3);
+}

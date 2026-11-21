@@ -9,7 +9,7 @@ import Link from "next/link";
 import { ModuleLogo } from "@/components/ui/module-logo";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ChartCandlestick, ChevronRight, Gauge, Landmark, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
+import { ArrowLeft, ChartCandlestick, ChevronRight, Gauge, Landmark, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, SlidersHorizontal, UserCircle, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -249,6 +249,10 @@ function BottomTabs() {
 function MobileMenu({ user, onClose, sync }: { user: FinanceProfile; onClose: () => void; sync: ReturnType<typeof useAutoSync> }) {
   // Como el menú de Trading: por grupos, separando cuentas de integraciones.
   const groups: { title: string; rows: { label: string; href: string; icon: typeof Plug }[] }[] = [
+    {
+      title: "Mi plan",
+      rows: [{ label: "Configurar mi plan", href: "/finanzas/configurar", icon: SlidersHorizontal }],
+    },
     {
       title: "Cuenta",
       rows: [

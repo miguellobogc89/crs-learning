@@ -141,3 +141,21 @@ test("Paquetes: solo consumo; traspasos y aportaciones a ahorro/inversión no en
   assert.equal(P.isPackageCharge({ kind: "interna", amount: -300 }), false);
   assert.equal(P.isPackageCharge({ kind: "devolucion", amount: 20 }), false);
 });
+
+test("Qué te está desviando: primero lo que se pasa, luego lo pendiente, y como mucho 3", () => {
+  const g = (spent, goal, day) => P.goalStatus(spent, goal, day, 30);
+  const ins = P.planInsights({
+    packages: [
+      { name: "Gasolina", goal: 120, current: 30, progress: g(30, 120, 27) },
+      { name: "Tabaco", goal: 80, current: 96, progress: g(96, 80, 27) },
+    ],
+    unpackaged: { total: 186, count: 14 },
+    saving: { saved: 412, goal: 500 },
+    daysLeft: 3,
+  });
+  assert.equal(ins.length, 3);
+  assert.equal(ins[0].tone, "danger");
+  assert.match(ins[0].text, /^Tabaco: te has pasado 16,00 €/);
+  assert.match(ins[1].text, /186,00 € gastados que no están en ningún paquete/);
+  assert.equal(P.planInsights({ packages: [], unpackaged: { total: 0, count: 0 }, saving: { saved: 600, goal: 500 }, daysLeft: 3 }).length, 0);
+});
