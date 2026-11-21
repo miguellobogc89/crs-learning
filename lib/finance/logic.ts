@@ -634,7 +634,8 @@ export function cashflowPeriods(txs: Tx[], today: string) {
 // ---------------------------------------------------------------------------------------------------------
 // Presupuestos
 // ---------------------------------------------------------------------------------------------------------
-export type Budget = { id: string; name: string; categories: string[]; amount: number };
+/** Partida del plan: `kind` fijo/variable y `accountId`, la cuenta que la paga (opcional). */
+export type Budget = { id: string; name: string; categories: string[]; amount: number; kind?: "fijo" | "variable"; accountId?: string | null };
 export type BudgetStatus = Budget & { spent: number; remaining: number; pct: number; expectedPct: number; status: "ok" | "atencion" | "superado" };
 
 /** Cómo va cada límite en el ciclo: gastado, restante y si va por encima del ritmo esperado. */

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { connectorKey } from "@/lib/connectors/crypto";
 import { isKind, type Kind } from "./categories";
 import { cleanView, forecastPlanFrequency, type Budget, type ForecastItem, type Rule, type Tx } from "./logic";
+import type { WishItem } from "./plan";
 
 /** Huella de un IBAN (no se guarda el IBAN): sirve para reconocer transferencias a cuentas propias. */
 export function ibanHash(iban: string | null | undefined) {
@@ -53,6 +54,9 @@ export async function getSettings(userId: string) {
     cycleStartDay: s.cycle_start_day,
     savingsGoal: s.savings_goal === null ? null : Number(s.savings_goal),
     savingsFrequency: s.savings_frequency === "semanal" ? "semanal" as const : "mensual" as const,
+    expectedIncome: s.expected_income === null ? null : Number(s.expected_income),
+    incomeAccountId: s.income_account_id,
+    savingsAccountId: s.savings_account_id,
     lastSyncAt: s.last_sync_at?.toISOString() ?? null,
     view: cleanView(s.view),
   };
@@ -73,7 +77,14 @@ export async function getRules(userId: string): Promise<Rule[]> {
 
 export async function getBudgets(userId: string): Promise<Budget[]> {
   const rows = await prisma.finance_budgets.findMany({ where: { user_id: userId }, orderBy: { created_at: "asc" } });
-  return rows.map((b) => ({ id: b.id, name: b.name, categories: b.categories, amount: Number(b.amount) }));
+  return rows.map((b) => ({ id: b.id, name: b.name, categories: b.categories, amount: Number(b.amount),
+    kind: b.kind === "fijo" ? "fijo" as const : "variable" as const, accountId: b.account_id }));
+}
+
+export async function getWishlist(userId: string): Promise<WishItem[]> {
+  const rows = await prisma.finance_wishlist_items.findMany({ where: { user_id: userId }, orderBy: [{ purchased_at: { sort: "asc", nulls: "first" } }, { priority: "asc" }, { created_at: "asc" }], take: 200 });
+  return rows.map((w) => ({ id: w.id, title: w.title, price: Number(w.price), saved: Number(w.saved), url: w.url, priority: w.priority,
+    purchasedAt: w.purchased_at?.toISOString() ?? null, createdAt: w.created_at.toISOString() }));
 }
 
 export async function getAccounts(userId: string) {
