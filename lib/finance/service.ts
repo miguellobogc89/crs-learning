@@ -464,6 +464,8 @@ export async function packagesView(userId: string) {
     /** Ciclos de la media, para que el modal proponga el objetivo con lo que se va marcando. */
     averageRanges: previous.map(({ start, end }) => ({ start, end })),
     averageIncome: incomes.length ? round2(incomes.reduce((a, b) => a + b, 0) / incomes.length) : null,
+    /** Objetivo de ahorro de Finanzas (el mismo que usa la previsión); perCycle con la misma conversión semanal → ciclo. */
+    savings: { amount: ctx.settings.savingsGoal, frequency: ctx.settings.savingsFrequency, perCycle: ctx.projection.savingsGoal },
     packages: packs.map((p) => {
       const prev = previous.map((c) => packageSpend(p.id, owner, all, c));
       const spent = packageSpend(p.id, owner, all, current);

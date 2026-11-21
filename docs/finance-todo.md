@@ -51,7 +51,8 @@ Se replantea la Planificación para ir paso a paso y construir solo la base. La 
 - [x] Cada cargo en un solo paquete (los paquetes reparten el dinero total; el análisis por categorías va aparte). El modal bloquea lo que ya está en otro paquete («En «Fijos»») y el servidor rechaza guardarlo repetido.
 - [x] Coste de cada paquete en la lista: este ciclo (con el día del ciclo), ciclo anterior y media de los 3 ciclos completos anteriores; al desplegar, los cargos de este ciclo y si va por encima o por debajo de la media.
 - [x] Objetivo por ciclo de cada paquete («Asigna un objetivo», opcional, propuesto con la media de lo marcado; `finance_packages.goal`, migración `20261121160000_finance_package_goal`). En la lista: «X de Y» con barra verde/ámbar/roja según el día del ciclo (los fijos, igual por ahora). Resumen arriba: ingreso medio (del histórico, mismos ciclos que la media), total en objetivos y sin asignar.
-- [ ] Más adelante: «sin paquete» (gasto real que no está en ningún paquete).
+- [x] Resumen de Plan (21/11/2026): ingreso medio por ciclo − presupuestado en paquetes − objetivo de ahorro = pendiente de presupuestar. El objetivo de ahorro es el de `finance_settings` (el mismo de la previsión de Inicio, con la misma conversión semanal → ciclo) y se edita desde Plan con el endpoint `settings`; no es un paquete.
+- [ ] Siguiente (visión `vision-plan.md`): no contar traspasos internos ni aportaciones a ahorro/inversión como consumo de paquetes; «Gastos sin paquete» separado de «Pendiente de presupuestar»; devoluciones que compensan; medias sin extraordinarios.
 - Los ingresos no se configuran: salen del histórico.
 
 ## Planificación · la hucha (21/11/2026, primera versión retirada de la pantalla)

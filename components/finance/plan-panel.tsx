@@ -300,17 +300,98 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
   );
 }
 
-/** Lo repartido en objetivos frente al ingreso medio (del histórico). */
+/** Edita el objetivo de ahorro de Finanzas (mismo dato y endpoint que la previsión de Inicio; no es un paquete). */
+function SavingsModal({ savings, open, onClose }: { savings: View["savings"]; open: boolean; onClose: () => void }) {
+  const [amount, setAmount] = useState("");
+  const [frequency, setFrequency] = useState<"mensual" | "semanal">("mensual");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    setAmount(savings.amount === null ? "" : String(savings.amount).replace(".", ","));
+    setFrequency(savings.frequency);
+    setErr(null);
+  }, [open, savings]);
+  const save = async () => {
+    const t = amount.trim().replace(/\s|€/g, "");
+    const value = t === "" ? null : Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+    if (value !== null && !(value >= 0)) { setErr("Escribe un importe válido"); return; }
+    setBusy(true);
+    setErr(null);
+    try {
+      await fapi("settings", { savingsGoal: value, savingsFrequency: frequency });
+      refreshFinance();
+      onClose();
+    } catch (e) {
+      setErr(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Objetivo de ahorro"
+      subtitle="Dinero que quieres reservar cada ciclo. No cuenta como gasto y es el mismo objetivo que ves en la previsión de Inicio."
+      footer={<><button type="button" onClick={onClose} className={ghost}>Cancelar</button><button type="button" onClick={() => void save()} disabled={busy} className={primary}>{busy && <Loader2 className="h-4 w-4 animate-spin" />} Guardar</button></>}
+    >
+      <div className="flex flex-wrap items-end gap-3 text-sm">
+        <label className="min-w-0 flex-1 text-xs font-medium text-slate-600">Importe (€)
+          <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Vacío = sin objetivo" className={`${field} mt-1 block w-full`} />
+        </label>
+        <div className="flex rounded-xl bg-slate-100 p-1" role="group" aria-label="Frecuencia del ahorro">
+          {(["mensual", "semanal"] as const).map((f) => (
+            <button key={f} type="button" aria-pressed={frequency === f} onClick={() => setFrequency(f)} className={`rounded-lg px-3 py-2 text-xs font-semibold ${frequency === f ? "bg-white text-blue-700 shadow-sm" : "text-slate-500"}`}>
+              {f === "mensual" ? "Mensual" : "Semanal"}
+            </button>
+          ))}
+        </div>
+      </div>
+      {frequency === "semanal" && <p className="mt-2 text-xs text-slate-500">En el plan se cuenta por ciclo: el importe semanal × 52 / 12.</p>}
+      {err && <div className="mt-3"><ErrorNote>{err}</ErrorNote></div>}
+    </Modal>
+  );
+}
+
+/**
+ * Resumen del reparto del ciclo: ingreso medio (del histórico) − objetivos de los paquetes − objetivo de ahorro
+ * = pendiente de presupuestar. Son objetivos, no gasto real: lo que ya has gastado está en cada paquete.
+ */
 function PlanSummary({ view }: { view: View }) {
+  const [editSavings, setEditSavings] = useState(false);
   const goals = Math.round(view.packages.reduce((s, p) => s + (p.goal ?? 0), 0) * 100) / 100;
   const withGoal = view.packages.filter((p) => p.goal !== null).length;
   const income = view.averageIncome;
-  const left = income === null ? null : Math.round((income - goals) * 100) / 100;
+  const saving = view.savings.perCycle ?? 0;
+  const pending = income === null ? null : Math.round((income - goals - saving) * 100) / 100;
+  const over = pending !== null && pending < 0;
+  const box = "rounded-xl bg-slate-50 p-3";
   return (
-    <div className="mx-4 mb-3 grid gap-3 rounded-xl bg-slate-50 p-3 text-sm sm:mx-6 sm:grid-cols-3">
-      <div><p className="text-xs text-slate-500">Ingreso medio ({view.averageCycles} {view.averageCycles === 1 ? "ciclo" : "ciclos"})</p><p className="font-semibold tabular-nums text-slate-900">{eur(income, 2)}</p></div>
-      <div><p className="text-xs text-slate-500">En objetivos ({withGoal} de {view.packages.length} paquetes)</p><p className="font-semibold tabular-nums text-slate-900">{eur(goals, 2)}</p></div>
-      <div><p className="text-xs text-slate-500">{left !== null && left < 0 ? "Te pasas del ingreso" : "Sin asignar"}</p><p className={`font-semibold tabular-nums ${left === null ? "text-slate-400" : left < 0 ? "text-red-700" : "text-emerald-700"}`}>{left === null ? "—" : eur(Math.abs(left), 2)}</p></div>
+    <div className="mx-4 mb-3 sm:mx-6">
+      <div className="grid gap-2 text-sm sm:grid-cols-4">
+        <div className={box}>
+          <p className="text-xs text-slate-500">Ingreso medio por ciclo</p>
+          <p className="font-semibold tabular-nums text-slate-900">{eur(income, 2)}</p>
+          <p className="text-[11px] text-slate-400">{view.averageCycles} {view.averageCycles === 1 ? "ciclo completo" : "ciclos completos"}</p>
+        </div>
+        <div className={box}>
+          <p className="text-xs text-slate-500">Presupuestado en paquetes</p>
+          <p className="font-semibold tabular-nums text-slate-900">− {eur(goals, 2)}</p>
+          <p className="text-[11px] text-slate-400">{withGoal} de {view.packages.length} paquetes con objetivo</p>
+        </div>
+        <button type="button" onClick={() => setEditSavings(true)} className={`${box} text-left hover:bg-slate-100`} title="Editar el objetivo de ahorro">
+          <p className="flex items-center justify-between gap-2 text-xs text-slate-500">Objetivo de ahorro <Pencil className="h-3.5 w-3.5 text-slate-400" /></p>
+          <p className="font-semibold tabular-nums text-slate-900">{view.savings.perCycle === null ? "Sin objetivo" : `− ${eur(view.savings.perCycle, 2)}`}</p>
+          <p className="text-[11px] text-slate-400">{view.savings.amount === null ? "Pulsa para fijarlo" : view.savings.frequency === "semanal" ? `${eur(view.savings.amount, 2)} por semana` : "por ciclo"}</p>
+        </button>
+        <div className={`${box} ${over ? "bg-red-50" : ""}`}>
+          <p className="text-xs text-slate-500">{over ? "Presupuestas de más" : "Pendiente de presupuestar"}</p>
+          <p className={`font-semibold tabular-nums ${pending === null ? "text-slate-400" : over ? "text-red-700" : "text-emerald-700"}`}>{pending === null ? "—" : eur(Math.abs(pending), 2)}</p>
+          <p className="text-[11px] text-slate-400">{over ? "Los objetivos superan tu ingreso medio" : "Ingreso que aún no tiene objetivo"}</p>
+        </div>
+      </div>
+      <SavingsModal savings={view.savings} open={editSavings} onClose={() => setEditSavings(false)} />
     </div>
   );
 }
