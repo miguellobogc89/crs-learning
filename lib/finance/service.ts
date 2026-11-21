@@ -432,3 +432,20 @@ export function searchTxs(ctx: FinanceContext, opts: { text?: string; category?:
     items: rows.slice(0, Math.min(opts.limit ?? 40, 100)).map((t) => ({ date: t.date, amount: t.amount, description: t.description, counterparty: t.counterparty, category: t.category, kind: t.kind, extraordinary: t.extraordinary })),
   };
 }
+
+/** Mi plan: los paquetes del usuario y los cargos (último año) para elegir los que entran en cada uno. */
+export async function packagesView(userId: string) {
+  const [rows, accounts, txs] = await Promise.all([
+    prisma.finance_packages.findMany({ where: { user_id: userId }, orderBy: { created_at: "asc" } }),
+    getAccounts(userId),
+    loadTxs(userId, { since: addDays(todayIso(), -365) }),
+  ]);
+  return {
+    packages: rows.map((p) => ({ id: p.id, name: p.name, txIds: p.tx_ids })),
+    accounts: accounts.filter((a) => a.included).map((a) => ({ id: a.id, name: a.name, bank: a.bank, last4: a.ibanLast4 })),
+    charges: txs.filter((t) => t.amount < 0 && t.kind !== "interna").map((t) => ({
+      id: t.id, date: t.date, amount: t.amount, accountId: t.accountId, category: t.category,
+      description: t.alias || t.counterparty || t.description, detail: t.description,
+    })),
+  };
+}

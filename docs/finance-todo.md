@@ -44,7 +44,15 @@ Ideas y tareas del módulo de finanzas personales. Recopilación de conversacion
 - [ ] Validar el recorrido banco conectado → hallazgo útil → acción autorizada → beneficio demostrado.
 - [ ] No prometer gestiones automáticas ni fiscalidad exacta sin fuente de datos, requisitos regulatorios y controles suficientes.
 
-## Planificación · la hucha (21/11/2026)
+## Mi plan · paquetes (21/11/2026, enfoque vigente)
+Se replantea la Planificación para ir paso a paso y construir solo la base. La pantalla Plan arranca vacía con «Crear paquete». Un paquete (Fijos, Tabaco, Restaurantes, Gasolina…) lo define cada usuario con los cargos que marca en un modal con buscador y filtros (cuenta, categoría, solo marcados). Tabla `finance_packages` (nombre + `tx_ids`), migración `20261121140000_finance_packages`.
+- [x] Carcasa: crear, renombrar, borrar paquetes y marcar sus cargos (último año, sin traspasos internos).
+- [ ] Decidir cómo entran los cargos del pasado y los futuros del mismo concepto aunque cambie el importe (p. ej. préstamo de la moto, comunidad).
+- [ ] Importe del paquete y seguimiento (pendiente de decidir).
+- Los ingresos no se configuran: salen del histórico.
+
+## Planificación · la hucha (21/11/2026, primera versión retirada de la pantalla)
+La interfaz de esta versión (asistente, partidas, semanas, transferencias, deseos) se ha quitado de la pantalla; la lógica (`lib/finance/plan.ts`) y las columnas siguen y se reaprovecharán si encajan.
 Objetivo: que cualquier usuario monte su plan del ciclo como lo hacía el propietario con ChatGPT: ahorro objetivo, gastos fijos reales, partidas variables (p. ej. ocio) con la cuenta que paga cada una, seguimiento semanal, avisos y lista de deseos. Nada a medida: partidas, importes, categorías y cuentas los decide cada usuario.
 
 Decisiones:

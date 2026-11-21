@@ -3,7 +3,7 @@ import { applyAiSettings } from "@/lib/ai/usage";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { categoryLabel, isCategory } from "@/lib/finance/categories";
-import { accountsView, budgetView, financeContext, forecast, forecastSource, listTransactions, overview } from "@/lib/finance/service";
+import { accountsView, budgetView, packagesView, financeContext, forecast, forecastSource, listTransactions, overview } from "@/lib/finance/service";
 import { payslipsView } from "@/lib/finance/payslips";
 import { syncUser } from "@/lib/finance/sync";
 import { bulkCorrect, classifyPending, correctTransaction } from "@/lib/finance/classify";
@@ -57,6 +57,7 @@ export async function GET(req: Request, route: RouteContext) {
       return source ? ok(source) : fail("No se encontró el movimiento de referencia", 404);
     }
     if (action === "budget") return ok(await budgetView(uid));
+    if (action === "packages") return ok(await packagesView(uid));
     if (action === "accounts") return ok(await accountsView(uid));
     if (action === "payslips") return ok(await payslipsView(uid));
     if (action === "settings") {
@@ -111,6 +112,25 @@ export async function POST(req: Request, route: RouteContext) {
         const r = await prisma.finance_budgets.updateMany({ where: { id, user_id: uid }, data });
         if (!r.count) return fail("Partida no encontrada", 404);
       } else await prisma.finance_budgets.create({ data: { user_id: uid, ...data } });
+      return ok({ ok: true });
+    }
+    if (action === "package") {
+      const name = str("name").trim().slice(0, 60);
+      if (!name) return fail("Ponle un nombre al paquete");
+      const ids = Array.isArray(body.txIds) ? [...new Set((body.txIds as unknown[]).filter((x): x is string => typeof x === "string"))].slice(0, 2000) : [];
+      // Solo movimientos del propio usuario.
+      const own = ids.length ? (await prisma.finance_transactions.findMany({ where: { user_id: uid, id: { in: ids } }, select: { id: true } })).map((t) => t.id) : [];
+      const id = str("id");
+      if (id) {
+        const r = await prisma.finance_packages.updateMany({ where: { id, user_id: uid }, data: { name, tx_ids: own } });
+        if (!r.count) return fail("Paquete no encontrado", 404);
+        return ok({ id });
+      }
+      const created = await prisma.finance_packages.create({ data: { user_id: uid, name, tx_ids: own }, select: { id: true } });
+      return ok(created);
+    }
+    if (action === "package/delete") {
+      await prisma.finance_packages.deleteMany({ where: { id: str("id"), user_id: uid } });
       return ok({ ok: true });
     }
     if (action === "plan/save") {
