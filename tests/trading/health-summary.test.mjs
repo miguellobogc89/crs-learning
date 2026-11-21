@@ -14,7 +14,7 @@ test("avisos: todo bien, ningún problema", () => {
 
 test("avisos: FARO parado, revisión parada, exchange caído, límite de IA y copia que falla", () => {
   const keys = (o) => H.healthProblems({ ...ok, ...o }).map((p) => p.key);
-  assert.deepEqual(keys({ lastFaroAt: ok.now - 90 * MIN }), ["faro-parado"]);
+  assert.deepEqual(keys({ lastFaroAt: ok.now - 150 * MIN }), ["faro-parado"]);
   assert.deepEqual(keys({ lastTickAt: ok.now - 25 * MIN }), ["revision-parada"]);
   assert.deepEqual(keys({ lastTickAt: null, lastFaroAt: null }), ["revision-parada", "faro-parado"]);
   assert.deepEqual(keys({ brokers: [{ provider: "coinbase", name: "Coinbase", error: "clave" }, { provider: "okx", name: "OKX", error: null }] }), ["exchange:coinbase"]);

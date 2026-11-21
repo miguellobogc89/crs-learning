@@ -17,8 +17,8 @@ export type HealthInput = {
   mirrorErrors: { id: string; agent: string; symbol: string; note: string | null }[];
 };
 
-/** FARO analiza cada 30 min: más de una hora sin hacerlo es que algo falla. */
-export const FARO_STALE_MIN = 65;
+/** FARO analiza cada hora (entre 60 y 65 min): avisa tras dos análisis seguidos sin terminar, no por uno suelto. */
+export const FARO_STALE_MIN = 130;
 /** La revisión es cada 5 min: más de 20 sin ella es que el cron no corre. */
 export const TICK_STALE_MIN = 20;
 
