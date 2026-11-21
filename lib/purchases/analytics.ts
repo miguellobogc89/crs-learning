@@ -81,11 +81,14 @@ export function normalizePurchases(data: AnalyticsData): { lines: Line[]; normal
 
 /** The columns «Productos comprados» adds: what was really bought and what it really cost. */
 export const PURCHASE_COLUMNS: Column[] = [
-  { key: "tipo", label: "Tipo", filter: true },
-  { key: "cantidad_real", label: "Cantidad real", kind: "number" }, { key: "unidad_real", label: "Ud." },
-  { key: "descuento_pct", label: "Dto. %", kind: "number" }, { key: "precio_final", label: "Precio final", kind: "money" },
-  { key: "ahorro", label: "Ahorro (regalo)", kind: "money" },
-  { key: "no_cuadra", label: "No cuadra", filter: true }, { key: "detalle", label: "Detalle" },
+  { key: "tipo", label: "Tipo", filter: true, width: 90, hint: "Compra o regalo (unidades sin cobrar)." },
+  { key: "cantidad_real", label: "Cantidad total", kind: "number", hint: "Total comprado en Kg, L o ud.: envases × contenido de cada envase." },
+  { key: "unidad_real", label: "Ud. total", width: 90, hint: "Unidad de «Cantidad total» y de «Coste real»." },
+  { key: "descuento_pct", label: "Dto. %", kind: "number", width: 80, hint: "Descuento en porcentaje sobre el precio de tarifa." },
+  { key: "precio_final", label: "Coste real s/IVA", kind: "money", width: 130, hint: "Lo que cuesta de verdad cada Kg, L o ud. («Ud. total»): sin IVA y con el descuento. Es el dato para los escandallos." },
+  { key: "ahorro", label: "Ahorro (regalo)", kind: "money", hint: "Lo que habrían costado las unidades regaladas." },
+  { key: "no_cuadra", label: "No cuadra", filter: true, width: 100, hint: "Cantidad × precio no da el importe: hay que revisar la línea." },
+  { key: "detalle", label: "Detalle", width: 320, hint: "Qué se ha corregido o calculado en la línea." },
 ];
 
 export function purchaseCells(n: Normalized | undefined): Record<string, CellValue> {

@@ -232,3 +232,24 @@ test('el catálogo manda: su envase, unidad e IVA valen para todas las compras d
   assert.equal(c.iva,21); assert.equal(c.envase,'200 ud'); assert.equal(c.importe,6,'7,26 € with 21 % VAT');
   assert.equal(c.cantidad_real,400); assert.equal(c.precio_final,0.015,'6 € ÷ 400 servilletas');
 });
+
+test('productos comprados: what the quantity and the tariff price measure, read or deduced from how the line adds up',()=>{
+ const rules=load('lib/purchases/rules.ts');
+ const line=(id,o)=>({id,grupo:id,factura:'f',fecha:null,proveedor:null,producto:id,documento:null,descuentoPct:null,envaseLeido:true,descuento:null,iva:10,unidad:null,importeConIva:null,importeSinIvaLeido:null,importeIvaLeido:null,...o});
+ const lines=[
+  line('saco',{cantidad:1,precio:1.93,importe:38.6,descuentoPct:20,envase:25,unidadEnvase:'Kg'}),   // 1 sack of 25 kg at 1,93 €/kg −20 %
+  line('cubo',{cantidad:5,precio:24.9,importe:249,descuentoPct:20,envase:2.5,unidadEnvase:'Kg'}),  // 5 tubs of 2,5 kg at 24,90 €/kg −20 %
+  line('caja',{cantidad:1,precio:39.47,importe:29.6,descuentoPct:25,envase:252,unidadEnvase:'ud'}), // 1 box of 252 at 39,47 €/box −25 %
+  line('kilos',{cantidad:12.5,precio:49.8,importe:249,envase:2.5,unidadEnvase:'Kg'}),               // 12,5 kg at 49,80 €/tub
+  line('regalo',{cantidad:1,precio:0,importe:0,envase:2.5,unidadEnvase:'Kg'}),
+ ];
+ const n=rules.normalizeLines(lines);
+ const u=id=>a.lineUnits(null,lines.find(l=>l.id===id),n.get(id));
+ assert.deepEqual(u('saco'),{unidad:'envase',precio_por:'Kg'});
+ assert.deepEqual(u('cubo'),{unidad:'envase',precio_por:'Kg'});
+ assert.equal(n.get('cubo').precio_final,19.92,'the real cost is per kilo');
+ assert.deepEqual(u('caja'),{unidad:'envase',precio_por:'envase'});
+ assert.deepEqual(u('kilos'),{unidad:'Kg',precio_por:'envase'});
+ assert.deepEqual(u('regalo'),{unidad:'envase',precio_por:null});
+ assert.deepEqual(a.lineUnits('KG',lines[0],n.get('saco')),{unidad:'Kg',precio_por:'Kg'},'a unit read on the invoice wins');
+});

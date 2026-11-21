@@ -338,6 +338,10 @@ export type Column = { key: string; label: string; kind?: "money" | "number" | "
   completar?: boolean;
   /** The cell lists several values joined with « · »: each one is offered (and filtered) on its own. */
   multi?: boolean;
+  /** What the column holds exactly, shown when hovering its header. */
+  hint?: string;
+  /** Default width in pixels (the person can drag it; theirs is remembered in their view). */
+  width?: number;
   edit?: { field: string; type: "text" | "number" | "date" | "select" | "boolean" | "party" | "link"; options?: { value: string; label: string }[] } };
 /** `title`: the column that names each row (used to point at rows: links, the assistant). Rows of records carry `_id`. */
 export type Table = { key: string; label: string; description: string; columns: Column[]; rows: Record<string, CellValue>[]; title?: string;
@@ -433,6 +437,25 @@ function customTable(key: string, t: CustomTable, live?: LiveCatalog | null): Ta
     ...(computed ? { history: Object.fromEntries(live!.history) } : {}) };
 }
 
+/**
+ * What a purchase line's quantity and tariff price measure («envase», «Kg», «L», «ud»): the unit read on the invoice
+ * when it is one; otherwise what made the line add up (lib/purchases/rules): packs at a price per kilo, kilos at a
+ * price per pack, or both in the same unit.
+ */
+export function lineUnits(read: string | null, line: { envase: number | null; unidadEnvase: "L" | "Kg" | "ud" | null } | undefined,
+  n: { estado: string; caso?: string; unidades: number | null; cantidad_real: number | null } | undefined): { unidad: string | null; precio_por: string | null } {
+  const measure = (u: string | null) => !u ? null : /^(l|lt|lts|litros?)\.?$/i.test(u.trim()) ? "L" : /^(kg|kgs|kilos?)\.?$/i.test(u.trim()) ? "Kg" : null;
+  const env = line?.envase && line.unidadEnvase ? line.unidadEnvase : null;
+  if (measure(read)) return { unidad: measure(read), precio_por: n?.caso === "precio_envase" ? "envase" : measure(read) };
+  if (n?.caso === "envases" || n?.caso === "contenido") return { unidad: "envase", precio_por: env };
+  if (n?.caso === "precio_envase") return { unidad: env, precio_por: "envase" };
+  if (n?.estado === "regalo") return { unidad: read ?? (env ? "envase" : "ud"), precio_por: null };
+  if (!n?.caso) return { unidad: read, precio_por: null };
+  // Added up as read: quantity and price measure the same thing (kilos when the product is priced per kilo).
+  const same = env && env !== "ud" && n.cantidad_real !== null && n.cantidad_real === n.unidades ? env : env ? "envase" : "ud";
+  return { unidad: read ?? same, precio_por: read ?? same };
+}
+
 function buildBaseTable(data: AnalyticsData, key: string): Table {
   const ix = indexes(data);
   const custom = key.startsWith("tabla:") ? data.custom?.find(t => `tabla:${t.typeKey}` === key) : undefined;
@@ -462,18 +485,24 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
       const aliasOf = new Map((linked?.catalog.rows ?? []).map(r => [r.id, str(r.values.alias)]));
       const pc = (k: string) => PURCHASE_COLUMNS.find(c => c.key === k)!;
       return { key, label: "Productos comprados", description: "Cada línea de compra con su fecha real (la del ticket cuando la factura agrupa varios) y lo que se pagó de verdad por unidad (descuentos y ofertas incluidos). Importes sin IVA salvo «Importe c/IVA».", title: "producto",
-      columns: [{ key: "fecha", label: "Fecha", kind: "date", edit: { field: "source_ticket_date", type: "date" } }, { key: "producto", label: "Producto", edit: { field: "description", type: "text" } },
-        { key: "alias", label: "Alias" }, { key: "proveedor", label: "Proveedor", filter: true },
-        { key: "cantidad", label: "Cantidad", kind: "number", edit: { field: "quantity", type: "number" } }, { key: "unidad", label: "Ud.", edit: { field: "unit", type: "text" } },
-        { key: "envase", label: "Envase" },
-        { key: "precio", label: "Precio ud.", kind: "money", edit: { field: "unit_price", type: "number" } }, pc("descuento_pct"),
-        { key: "precio_pagado", label: "Precio ud. con dto.", kind: "money" },
-        { key: "importe", label: "Importe s/IVA", kind: "money", edit: { field: "line_total", type: "number" } },
-        { key: "iva", label: "IVA %", kind: "number" },
+      // Grouped by meaning: who and what · what the invoice says · what it cost · what was really bought · checks.
+      columns: [{ key: "fecha", label: "Fecha", kind: "date", edit: { field: "source_ticket_date", type: "date" }, hint: "Fecha del ticket (o de la factura si no lo indica)." },
+        { key: "proveedor", label: "Proveedor", filter: true },
+        { key: "producto", label: "Producto", width: 280, edit: { field: "description", type: "text" }, hint: "Descripción tal como viene en la factura." },
+        { key: "alias", label: "Alias", hint: "Nombre común del producto, del catálogo." },
+        { key: "referencia", label: "Ref.", width: 90, edit: { field: "product_reference", type: "text" }, hint: "Código del producto del proveedor." }, pc("tipo"),
+        { key: "cantidad", label: "Cantidad facturada", kind: "number", edit: { field: "quantity", type: "number" }, hint: "La «Cantidad» de la factura. En qué va (envases, Kg, L o unidades) lo dice «Ud. cantidad»." },
+        { key: "unidad", label: "Ud. cantidad", width: 110, edit: { field: "unit", type: "text" }, hint: "En qué viene la cantidad facturada: envase, Kg, L o ud. Si la factura no lo dice, se deduce de cantidad × precio = importe." },
+        { key: "envase", label: "Contenido envase", width: 130, hint: "Lo que trae cada envase (del catálogo o del nombre del producto)." },
+        { key: "precio", label: "Precio tarifa s/IVA", kind: "money", edit: { field: "unit_price", type: "number" }, hint: "Precio de la factura, sin IVA y antes del descuento. Lo que mide lo dice «Precio por»." },
+        { key: "precio_por", label: "Precio por", width: 100, hint: "A qué va el precio de tarifa: Kg, L, envase o ud." },
+        pc("descuento_pct"), { key: "descuento", label: "Dto. €", kind: "money", edit: { field: "discount_amount", type: "number" }, hint: "Descuento en euros, si la factura lo da así." },
+        { key: "precio_pagado", label: "Importe ÷ cantidad", kind: "money", hint: "Importe sin IVA ÷ cantidad facturada: lo pagado por cada envase, Kg o ud. facturado (según «Ud. cantidad»)." },
+        { key: "importe", label: "Importe s/IVA", kind: "money", edit: { field: "line_total", type: "number" }, hint: "Importe de la línea sin IVA, con el descuento aplicado." },
+        { key: "iva", label: "IVA %", kind: "number", width: 80 },
         { key: "importe_iva", label: "Importe c/IVA", kind: "money", edit: { field: "line_total_with_tax", type: "number" } },
-        pc("tipo"), { key: "descuento", label: "Dto. €", kind: "money", edit: { field: "discount_amount", type: "number" } },
-        ...PURCHASE_COLUMNS.filter(c => c.key !== "tipo" && c.key !== "descuento_pct"), { key: "referencia", label: "Ref.", edit: { field: "product_reference", type: "text" } },
-        { key: "factura", label: "Factura" }, { key: "documento", label: "Documento", kind: "document" }],
+        pc("cantidad_real"), pc("unidad_real"), pc("precio_final"), pc("ahorro"), pc("no_cuadra"), pc("detalle"),
+        { key: "factura", label: "Factura", width: 110 }, { key: "documento", label: "Documento", kind: "document" }],
       rows: data.lines.map(l => {
         const inv = ix.byId.get(ix.invoiceOfLine.get(l.id) ?? "");
         const n = purchases.get(l.id);
@@ -490,7 +519,8 @@ function buildBaseTable(data: AnalyticsData, key: string): Table {
           alias: catalogRow ? aliasOf.get(catalogRow) ?? null : null,
           proveedor: inv ? companyName(ix.byId.get(ix.issuerOf.get(inv.id) ?? "")) : null, cantidad: q,
           precio: num(l.values.unit_price) ?? num(l.values.unit_price_with_tax), importe: sinIva, importe_iva: conIva,
-          unidad: str(l.values.unit), iva,
+          // What the quantity and the price measure: as read, or deduced from how the line adds up.
+          ...lineUnits(str(l.values.unit), pl, n), iva,
           envase: pl?.envase && pl.unidadEnvase ? `${String(pl.envase).replace(".", ",")} ${pl.unidadEnvase}` : null, descuento: num(l.values.discount_amount), referencia: str(l.values.product_reference),
           // What was really paid per unit, without VAT (after discounts and offers): amount ÷ quantity.
           precio_pagado: q && sinIva !== null ? Math.round((sinIva / q) * 1e5) / 1e5 : null,

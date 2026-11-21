@@ -115,7 +115,7 @@ export function MarketPanel({
             <input className={`${field} w-full pl-8`} placeholder="Buscar" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white">
               <tr>

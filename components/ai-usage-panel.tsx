@@ -82,7 +82,7 @@ export function AiUsagePanel() {
                 <h2 className="text-lg font-semibold text-slate-950">{a.label}</h2>
                 <p className="text-sm text-slate-500">{a.note}</p>
                 {rows.length ? (
-                  <table className="mt-4 w-full text-sm">
+                  <div className="mt-4 overflow-x-auto"><table className="w-full text-sm">
                     <thead><tr className="text-left text-xs text-slate-400"><th className="py-1 font-medium">Uso</th><th className="py-1 text-right font-medium">Llamadas</th><th className="py-1 text-right font-medium">Tokens</th><th className="py-1 text-right font-medium">Coste</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                       {rows.map((u) => (
@@ -94,7 +94,7 @@ export function AiUsagePanel() {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table></div>
                 ) : <p className="mt-4 text-sm text-slate-400">Sin consumo en los últimos 30 días.</p>}
                 <div className="mt-5 space-y-4">
                   {settings.map((s) => {

@@ -40,12 +40,12 @@ export function ColumnMenu({ column, rows, sort, filter, onSort, onFilter, onHid
   return <Popover.Root onOpenChange={o => { if (!o) setQuery(""); }}>
     {/* The whole header opens the menu (sort and filter), like a spreadsheet's column filter. */}
     <Popover.Trigger asChild>
-      <button type="button" aria-label={`Ordenar y filtrar ${column.label}`} title="Ordenar y filtrar"
-        className={cn("group/col inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 -mx-1.5 hover:bg-slate-200/60 hover:text-slate-900 data-[state=open]:bg-slate-200/70 data-[state=open]:text-slate-900",
+      <button type="button" aria-label={`Ordenar y filtrar ${column.label}`} title={column.hint ? `${column.label}: ${column.hint}` : `Ordenar y filtrar ${column.label}`}
+        className={cn("group/col inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-0.5 -mx-1.5 hover:bg-slate-200/60 hover:text-slate-900 data-[state=open]:bg-slate-200/70 data-[state=open]:text-slate-900",
           alignRight && "flex-row-reverse", (sorted || filtered) && "text-slate-900")}>
-        <span>{column.label}</span>
+        <span className="min-w-0 truncate">{column.label}</span>
         {sorted === "asc" ? <ArrowUp className="size-3" /> : sorted === "desc" ? <ArrowDown className="size-3" /> : null}
-        <Filter className={cn("size-3.5", filtered ? "fill-[#0A58FF] text-[#0A58FF]" : "text-slate-300 group-hover/col:text-slate-500")} />
+        <Filter className={cn("size-3.5 shrink-0", filtered ? "fill-[#0A58FF] text-[#0A58FF]" : "text-slate-300 group-hover/col:text-slate-500")} />
       </button>
     </Popover.Trigger>
     <Popover.Portal>

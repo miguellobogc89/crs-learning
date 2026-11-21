@@ -43,7 +43,7 @@ export function UnsupportedTypeView({ group, canEdit }: { group: Group; canEdit:
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#0A58FF] text-[11px] font-semibold text-white">{i + 1}</span>{text}</div>)}
     </div>
 
-    <table className="w-full text-sm">
+    <div className="overflow-x-auto"><table className="w-full text-sm">
       <thead className="bg-slate-50 text-xs text-slate-500"><tr>
         <th className="px-6 py-2.5 text-left font-semibold">Documento</th><th className="px-4 py-2.5 text-right font-semibold">Partes</th>
         <th className="px-4 py-2.5 text-left font-semibold">Estado</th><th className="px-6 py-2.5" /></tr></thead>
@@ -55,7 +55,7 @@ export function UnsupportedTypeView({ group, canEdit }: { group: Group; canEdit:
         <td className="px-6 py-2.5 text-right"><a href={`/api/knowledge/intake/files/${d.importFileId}`} target="_blank" rel="noreferrer"
           className="inline-flex items-center gap-1 text-xs font-medium text-[#0A58FF] hover:underline">Ver<ArrowRight className="size-3" /></a></td>
       </tr>)}</tbody>
-    </table>
+    </table></div>
 
     {editing && <TemplateDialog group={group} onClose={() => setEditing(false)}
       onCreated={(id, nombre, toDo, ignore) => { setEditing(false); setTarget(`plantilla:${id}`); void process(id, nombre, toDo, ignore); }} />}

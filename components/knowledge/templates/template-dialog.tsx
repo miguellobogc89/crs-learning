@@ -119,7 +119,7 @@ export function TemplateDialog({ group, onClose, onCreated }: { group: Group; on
           <section className="space-y-3">
             <div className="flex items-baseline justify-between"><p className={label}>Columnas ({t.campos.length})</p>
               <p className="text-xs text-slate-500">«Identifica»: evita guardar dos veces el mismo registro.</p></div>
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
               <table className="w-full text-sm"><thead className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500"><tr>
                 <th className="px-3 py-2 text-left font-semibold">Columna</th><th className="px-3 py-2 text-left font-semibold">Tipo de dato</th>
                 <th className="px-3 py-2 text-center font-semibold">Identifica</th><th className="w-10" /></tr></thead>
