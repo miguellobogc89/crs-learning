@@ -58,15 +58,18 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
 
   const accName = useMemo(() => new Map(view.accounts.map((a) => [a.id, a.name])), [view.accounts]);
   const usedCategories = useMemo(() => new Set(view.charges.map((c) => c.category)), [view.charges]);
-  const included = (c: Charge) => concepts.has(c.concept) || picked.has(c.id);
+  const packName = useMemo(() => new Map(view.packages.map((p) => [p.id, p.name])), [view.packages]);
+  /** Paquete (otro) que ya tiene este cargo: entonces aquí no se puede marcar. */
+  const takenBy = (c: Charge) => (c.owner && c.owner !== pack?.id ? packName.get(c.owner) ?? "otro paquete" : null);
+  const included = (c: Charge) => !takenBy(c) && (concepts.has(c.concept) || picked.has(c.id));
   const rows = useMemo(() => {
     const needle = fold(q.trim());
     return view.charges.filter((c) =>
       (account === "all" || c.accountId === account) &&
       (category === "all" || c.category === category) &&
-      (onlyPicked === "all" || concepts.has(c.concept) || picked.has(c.id)) &&
+      (onlyPicked === "all" || (onlyPicked === "si" ? !(c.owner && c.owner !== pack?.id) && (concepts.has(c.concept) || picked.has(c.id)) : !(c.owner && c.owner !== pack?.id))) &&
       (!needle || fold(`${c.description} ${c.detail} ${String(-c.amount).replace(".", ",")}`).includes(needle)));
-  }, [view.charges, q, account, category, onlyPicked, picked, concepts]);
+  }, [view.charges, q, account, category, onlyPicked, picked, concepts, pack?.id]);
   const groups = useMemo(() => {
     const map = new Map<string, ConceptGroup>();
     for (const c of rows) {
@@ -79,28 +82,33 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
 
   const shownRows = rows.slice(0, 500);
   const shownGroups = groups.slice(0, 500);
+  const groupTaken = (g: ConceptGroup) => g.rows.map(takenBy).find((x) => x) ?? null;
   const toggleConcept = (g: ConceptGroup) => {
+    if (groupTaken(g)) return;
     const on = concepts.has(g.key);
     setConcepts((s) => { const n = new Set(s); if (on) n.delete(g.key); else n.add(g.key); return n; });
     // Al marcar o desmarcar el concepto entero, sus cargos sueltos dejan de hacer falta.
     setPicked((s) => { const n = new Set(s); for (const c of view.charges) if (c.concept === g.key) n.delete(c.id); return n; });
   };
   const toggleRow = (c: Charge) => {
-    if (concepts.has(c.concept)) return;
+    if (concepts.has(c.concept) || takenBy(c)) return;
     setPicked((s) => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; });
   };
-  const allShown = mode === "concepto" ? shownGroups.length > 0 && shownGroups.every((g) => concepts.has(g.key)) : shownRows.length > 0 && shownRows.every(included);
+  const allShown = mode === "concepto"
+    ? shownGroups.some((g) => !groupTaken(g)) && shownGroups.every((g) => groupTaken(g) || concepts.has(g.key))
+    : shownRows.some((c) => !takenBy(c)) && shownRows.every((c) => takenBy(c) || included(c));
   const toggleShown = () => {
     if (mode === "concepto") {
-      setConcepts((s) => { const n = new Set(s); for (const g of shownGroups) { if (allShown) n.delete(g.key); else n.add(g.key); } return n; });
-      const keys = new Set(shownGroups.map((g) => g.key));
+      const free = shownGroups.filter((g) => !groupTaken(g));
+      setConcepts((s) => { const n = new Set(s); for (const g of free) { if (allShown) n.delete(g.key); else n.add(g.key); } return n; });
+      const keys = new Set(free.map((g) => g.key));
       setPicked((s) => { const n = new Set(s); for (const c of view.charges) if (keys.has(c.concept)) n.delete(c.id); return n; });
     } else {
-      setPicked((s) => { const n = new Set(s); for (const c of shownRows) { if (concepts.has(c.concept)) continue; if (allShown) n.delete(c.id); else n.add(c.id); } return n; });
+      setPicked((s) => { const n = new Set(s); for (const c of shownRows) { if (concepts.has(c.concept) || takenBy(c)) continue; if (allShown) n.delete(c.id); else n.add(c.id); } return n; });
     }
   };
   const toggleExpanded = (key: string) => setExpanded((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
-  const totalIncluded = useMemo(() => view.charges.filter((c) => concepts.has(c.concept) || picked.has(c.id)).length, [view.charges, concepts, picked]);
+  const totalIncluded = view.charges.filter(included).length;
   const accountsOf = (g: ConceptGroup) => {
     const ids = [...new Set(g.rows.map((r) => r.accountId))];
     return ids.length === 1 ? accName.get(ids[0]) ?? "—" : "Varias";
@@ -149,7 +157,7 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
             groups: [
               { key: "account", label: "Cuenta", value: account, allLabel: "Todas las cuentas", allIcon: ListFilter, options: view.accounts.map((a) => ({ value: a.id, label: a.name })) },
               { key: "category", label: "Categoría", value: category, allLabel: "Todas las categorías", allIcon: ListFilter, options: SELECTABLE_CATEGORIES.filter((c) => usedCategories.has(c.key)).map((c) => ({ value: c.key, label: c.label })) },
-              { key: "picked", label: "Marcados", value: onlyPicked, allLabel: "Todos", options: [{ value: "si", label: "Solo los marcados" }] },
+              { key: "picked", label: "Marcados", value: onlyPicked, allLabel: "Todos", options: [{ value: "si", label: "Solo los marcados" }, { value: "libres", label: "Disponibles (sin otro paquete)" }] },
             ],
             onChange: (key, value) => (key === "account" ? setAccount(value) : key === "category" ? setCategory(value) : setOnlyPicked(value)),
             onClear: () => { setAccount("all"); setCategory("all"); setOnlyPicked("all"); },
@@ -181,21 +189,22 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
             {mode === "concepto" ? (
               <tbody>
                 {shownGroups.map((g) => {
-                  const full = concepts.has(g.key);
-                  const partial = !full && g.rows.some((r) => picked.has(r.id));
+                  const taken = groupTaken(g);
+                  const full = !taken && concepts.has(g.key);
+                  const partial = !full && g.rows.some((r) => included(r));
                   const isOpen = expanded.has(g.key);
                   return (
                     <Fragment key={g.key}>
-                      <tr onClick={() => toggleConcept(g)} className={`cursor-pointer border-b border-slate-50 ${full ? "bg-blue-50/60" : partial ? "bg-blue-50/30" : "hover:bg-slate-50"}`}>
-                        <td className="px-3 py-2"><TriCheckbox checked={full} partial={partial} onChange={() => toggleConcept(g)} label={`Marcar ${g.label}`} /></td>
+                      <tr onClick={() => toggleConcept(g)} className={`border-b border-slate-50 ${taken ? "text-slate-400" : "cursor-pointer"} ${full ? "bg-blue-50/60" : partial ? "bg-blue-50/30" : taken ? "" : "hover:bg-slate-50"}`}>
+                        <td className="px-3 py-2"><TriCheckbox checked={full} partial={partial} disabled={!!taken} onChange={() => toggleConcept(g)} label={`Marcar ${g.label}`} /></td>
                         <td className="max-w-0 px-3 py-2">
                           <span className="flex items-center gap-1.5">
                             <button type="button" onClick={(e) => { e.stopPropagation(); toggleExpanded(g.key); }} aria-label={isOpen ? "Ocultar cargos" : "Ver cargos"} className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
                               <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`} />
                             </button>
                             <span className="min-w-0">
-                              <span className="block truncate font-medium text-slate-900">{g.label}</span>
-                              <span className="block text-xs text-slate-500">{g.rows.length} {g.rows.length === 1 ? "cargo" : "cargos"} · {categoryLabel(g.last.category)}</span>
+                              <span className={`block truncate font-medium ${taken ? "text-slate-400" : "text-slate-900"}`}>{g.label}</span>
+                              <span className="block text-xs text-slate-500">{taken ? <>En «{taken}»</> : <>{g.rows.length} {g.rows.length === 1 ? "cargo" : "cargos"} · {categoryLabel(g.last.category)}</>}</span>
                             </span>
                           </span>
                         </td>
@@ -204,11 +213,11 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
                         <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{eur(g.total / g.rows.length, 2)}</td>
                       </tr>
                       {isOpen && g.rows.map((c) => (
-                        <tr key={c.id} onClick={() => toggleRow(c)} className={`border-b border-slate-50 bg-slate-50/50 text-xs ${full ? "" : "cursor-pointer hover:bg-slate-100/60"}`}>
-                          <td className="py-1.5 pl-8 pr-3"><TriCheckbox checked={included(c)} disabled={full} onChange={() => toggleRow(c)} label="Marcar este cargo" /></td>
+                        <tr key={c.id} onClick={() => toggleRow(c)} className={`border-b border-slate-50 bg-slate-50/50 text-xs ${full || takenBy(c) ? "" : "cursor-pointer hover:bg-slate-100/60"}`}>
+                          <td className="py-1.5 pl-8 pr-3"><TriCheckbox checked={included(c)} disabled={full || !!takenBy(c)} onChange={() => toggleRow(c)} label="Marcar este cargo" /></td>
                           <td className="max-w-0 px-3 py-1.5"><span className="block truncate pl-6 text-slate-600" title={c.detail}>{shortDay(c.date)} · {c.detail}</span></td>
                           <td className="hidden whitespace-nowrap px-3 py-1.5 text-slate-500 md:table-cell">{accName.get(c.accountId) ?? "—"}</td>
-                          <td className="hidden px-3 py-1.5 md:table-cell">{full && <span className="text-slate-400">por concepto</span>}</td>
+                          <td className="hidden px-3 py-1.5 md:table-cell">{takenBy(c) ? <span className="text-slate-400">en «{takenBy(c)}»</span> : full && <span className="text-slate-400">por concepto</span>}</td>
                           <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-slate-700">{eur(-c.amount, 2)}</td>
                         </tr>
                       ))}
@@ -219,14 +228,15 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
             ) : (
               <tbody className="divide-y divide-slate-50">
                 {shownRows.map((c) => {
-                  const byConcept = concepts.has(c.concept);
+                  const taken = takenBy(c);
+                  const byConcept = !taken && concepts.has(c.concept);
                   return (
-                    <tr key={c.id} onClick={() => toggleRow(c)} className={`${byConcept ? "" : "cursor-pointer"} ${included(c) ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
-                      <td className="px-3 py-2"><TriCheckbox checked={included(c)} disabled={byConcept} onChange={() => toggleRow(c)} label="Marcar este cargo" /></td>
+                    <tr key={c.id} onClick={() => toggleRow(c)} className={`${byConcept || taken ? "" : "cursor-pointer"} ${taken ? "text-slate-400" : included(c) ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
+                      <td className="px-3 py-2"><TriCheckbox checked={included(c)} disabled={byConcept || !!taken} onChange={() => toggleRow(c)} label="Marcar este cargo" /></td>
                       <td className="whitespace-nowrap px-3 py-2 text-slate-500">{shortDay(c.date)}</td>
                       <td className="max-w-0 px-3 py-2">
-                        <span className="block truncate text-slate-900" title={c.detail}>{c.description}</span>
-                        {byConcept && <span className="block text-xs text-slate-400">entra por su concepto</span>}
+                        <span className={`block truncate ${taken ? "" : "text-slate-900"}`} title={c.detail}>{c.description}</span>
+                        {taken ? <span className="block text-xs text-slate-400">En «{taken}»</span> : byConcept && <span className="block text-xs text-slate-400">entra por su concepto</span>}
                       </td>
                       <td className="hidden whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell">{accName.get(c.accountId) ?? "—"}</td>
                       <td className="hidden whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell">{categoryLabel(c.category)}</td>
@@ -244,6 +254,59 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
         {err && <ErrorNote>{err}</ErrorNote>}
       </div>
     </Modal>
+  );
+}
+
+function PackageRow({ p, view, onEdit, onDelete }: { p: Pack; view: View; onEdit: () => void; onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  const up = p.average !== null && p.average > 0 ? p.current - p.average : null;
+  return (
+    <li>
+      <div onClick={() => setOpen(!open)} className="grid cursor-pointer grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 hover:bg-slate-50 sm:px-6 md:grid-cols-[1fr_7rem_7rem_7rem_4.5rem]">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <ChevronRight className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-90" : ""}`} />
+          <span className="min-w-0">
+            <span className="block truncate font-medium text-slate-900">{p.name}</span>
+            <span className="block truncate text-xs text-slate-500">{p.conceptKeys.length} {p.conceptKeys.length === 1 ? "concepto" : "conceptos"}{p.txIds.length ? ` y ${p.txIds.length} sueltos` : ""}</span>
+          </span>
+        </span>
+        <span className="text-right">
+          <span className="block font-semibold tabular-nums text-slate-900">{eur(p.current, 2)}</span>
+          <span className="block text-xs text-slate-500 md:hidden">media {eur(p.average, 2)}</span>
+        </span>
+        <span className="hidden text-right tabular-nums text-slate-600 md:block">{eur(p.previous, 2)}</span>
+        <span className="hidden text-right tabular-nums text-slate-600 md:block">{eur(p.average, 2)}</span>
+        <span className="hidden items-center justify-end gap-0.5 md:flex">
+          <button type="button" onClick={(e) => { e.stopPropagation(); onEdit(); }} aria-label="Editar" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><Pencil className="h-4 w-4" /></button>
+          <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }} aria-label="Borrar" className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+        </span>
+      </div>
+      {open && (
+        <div className="border-t border-slate-50 bg-slate-50/60 px-4 py-3 sm:px-6">
+          <div className="mb-2 flex items-center justify-between gap-3 text-xs text-slate-500">
+            <span>
+              Cargos de este ciclo ({p.currentCharges.length})
+              {up !== null && Math.abs(up) >= 0.01 && <> · {up > 0 ? `${eur(up, 2)} por encima de tu media` : `${eur(-up, 2)} por debajo de tu media`} (con el día {view.cycle.day} de {view.cycle.totalDays})</>}
+            </span>
+            <span className="flex gap-1 md:hidden">
+              <button type="button" onClick={onEdit} className="rounded-lg border border-slate-200 bg-white px-2 py-1 font-medium text-slate-600">Editar</button>
+              <button type="button" onClick={onDelete} className="rounded-lg border border-slate-200 bg-white px-2 py-1 font-medium text-red-600">Borrar</button>
+            </span>
+          </div>
+          {p.currentCharges.length === 0 ? <p className="text-xs text-slate-500">Sin cargos este ciclo.</p> : (
+            <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
+              {p.currentCharges.map((c) => (
+                <li key={c.id} className="flex items-center gap-3 py-1.5 text-sm">
+                  <span className="w-12 shrink-0 text-xs text-slate-400">{shortDay(c.date)}</span>
+                  <span className="min-w-0 flex-1 truncate text-slate-700" title={c.detail}>{c.description}</span>
+                  <span className="shrink-0 tabular-nums text-slate-900">{eur(-c.amount, 2)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -271,19 +334,13 @@ export function PlanPanel() {
       ) : (
         <section className={`${card} ${flat}`}>
           <CardHeader actions={<button type="button" onClick={create} className={ghost}><Plus className="h-4 w-4" /> Crear paquete</button>}>
-            <SectionTitle icon={Package} tint="blue" size="base">Mis paquetes</SectionTitle>
+            <SectionTitle icon={Package} tint="blue" size="base">Mis paquetes <span className="ml-1 text-sm font-normal text-slate-500">ciclo {shortDay(data.cycle.start)} – {shortDay(data.cycle.end)} · día {data.cycle.day} de {data.cycle.totalDays}</span></SectionTitle>
           </CardHeader>
+          <div className="hidden grid-cols-[1fr_7rem_7rem_7rem_4.5rem] gap-3 border-b border-slate-100 px-6 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 md:grid">
+            <span>Paquete</span><span className="text-right">Este ciclo</span><span className="text-right">Ciclo anterior</span><span className="text-right">Media {data.averageCycles > 0 ? `(${data.averageCycles})` : ""}</span><span />
+          </div>
           <ul className="divide-y divide-slate-100">
-            {data.packages.map((p) => (
-              <li key={p.id} className="flex items-center gap-3 px-4 py-3 sm:px-6">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium text-slate-900">{p.name}</span>
-                  <span className="block text-xs text-slate-500">{p.count} {p.count === 1 ? "cargo" : "cargos"} en el último año · {p.conceptKeys.length} {p.conceptKeys.length === 1 ? "concepto" : "conceptos"}{p.txIds.length ? ` y ${p.txIds.length} sueltos` : ""}</span>
-                </span>
-                <button type="button" onClick={() => { setEditing(p); setOpen(true); }} aria-label="Editar" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><Pencil className="h-4 w-4" /></button>
-                <button type="button" onClick={() => void remove(p)} aria-label="Borrar" className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
-              </li>
-            ))}
+            {data.packages.map((p) => <PackageRow key={p.id} p={p} view={data} onEdit={() => { setEditing(p); setOpen(true); }} onDelete={() => void remove(p)} />)}
           </ul>
         </section>
       )}

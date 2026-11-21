@@ -111,3 +111,17 @@ test("Concepto de paquete: sin referencias que cambian en cada pago", () => {
   assert.ok(P.inPackage({ conceptKeys: ["glovo"], txIds: [] }, { id: "x", concept: "glovo" }));
   assert.ok(P.inPackage({ conceptKeys: [], txIds: ["x"] }, { id: "x", concept: "otro" }));
 });
+
+test("Paquetes: cada cargo cuenta en un solo paquete y por ciclo", () => {
+  const packs = [{ id: "A", conceptKeys: ["glovo"], txIds: [] }, { id: "B", conceptKeys: [], txIds: ["g2", "x"] }];
+  const charges = [
+    { id: "g1", concept: "glovo", date: "2026-11-26", amount: -20 },
+    { id: "g2", concept: "glovo", date: "2026-11-27", amount: -10 },
+    { id: "x", concept: "otro", date: "2026-11-28", amount: -5 },
+    { id: "old", concept: "glovo", date: "2026-11-01", amount: -99 },
+  ];
+  const owner = P.packageOwners(packs, charges);
+  assert.equal(owner.get("g2"), "A");
+  assert.equal(P.packageSpend("A", owner, charges, cycle), 30);
+  assert.equal(P.packageSpend("B", owner, charges, cycle), 5);
+});

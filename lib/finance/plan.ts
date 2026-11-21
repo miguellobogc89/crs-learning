@@ -241,3 +241,18 @@ export function conceptKey(description: string, counterparty?: string | null) {
 /** Si un cargo entra en un paquete: por su concepto (pasados y futuros) o marcado a mano. */
 export const inPackage = (p: { conceptKeys: string[]; txIds: string[] }, c: { id: string; concept: string }) =>
   p.conceptKeys.includes(c.concept) || p.txIds.includes(c.id);
+
+/** Paquete al que pertenece cada cargo: un cargo solo cuenta en un paquete (el primero que lo reclama). */
+export function packageOwners<P extends { id: string; conceptKeys: string[]; txIds: string[] }, C extends { id: string; concept: string }>(packages: P[], charges: C[]) {
+  const owner = new Map<string, string>();
+  for (const c of charges) {
+    const p = packages.find((x) => inPackage(x, c));
+    if (p) owner.set(c.id, p.id);
+  }
+  return owner;
+}
+
+/** Gasto de un paquete en un ciclo (cargos menos devoluciones no se cuentan aún: solo cargos). */
+export function packageSpend(packageId: string, owner: Map<string, string>, charges: { id: string; date: string; amount: number }[], cycle: Cycle) {
+  return round2(charges.reduce((s, c) => s + (owner.get(c.id) === packageId && c.date >= cycle.start && c.date <= cycle.end ? -c.amount : 0), 0));
+}

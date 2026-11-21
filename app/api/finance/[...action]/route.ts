@@ -8,6 +8,7 @@ import { payslipsView } from "@/lib/finance/payslips";
 import { syncUser } from "@/lib/finance/sync";
 import { bulkCorrect, classifyPending, correctTransaction } from "@/lib/finance/classify";
 import { addDays, cleanView, cycleFor, forecastOccurrenceKey } from "@/lib/finance/logic";
+import { conceptKey } from "@/lib/finance/plan";
 import { disconnectGmail, gmailView, syncGmail } from "@/lib/finance/gmail";
 import { ask, chatHistory, clearChat } from "@/lib/finance/copilot";
 import { getMemory, getRules, getSettings } from "@/lib/finance/store";
@@ -121,8 +122,21 @@ export async function POST(req: Request, route: RouteContext) {
       // Solo movimientos del propio usuario.
       const own = ids.length ? (await prisma.finance_transactions.findMany({ where: { user_id: uid, id: { in: ids } }, select: { id: true } })).map((t) => t.id) : [];
       const concepts = Array.isArray(body.conceptKeys) ? [...new Set((body.conceptKeys as unknown[]).filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.slice(0, 80)))].slice(0, 500) : [];
-      const data = { name, tx_ids: own, concept_keys: concepts };
+      // Cada cargo solo en un paquete: nada de lo que se guarda puede estar ya en otro.
       const id = str("id");
+      const others = await prisma.finance_packages.findMany({ where: { user_id: uid, ...(id ? { id: { not: id } } : {}) }, select: { name: true, tx_ids: true, concept_keys: true } });
+      const conceptOf = async (ids: string[]) => ids.length
+        ? (await prisma.finance_transactions.findMany({ where: { user_id: uid, id: { in: ids } }, select: { id: true, description: true, counterparty: true } }))
+          .map((t) => ({ id: t.id, concept: conceptKey(t.description, t.counterparty), label: t.counterparty || t.description }))
+        : [];
+      const mine = await conceptOf(own);
+      for (const o of others) {
+        const theirs = await conceptOf(o.tx_ids);
+        const clash = concepts.find((k) => o.concept_keys.includes(k) || theirs.some((t) => t.concept === k))
+          ?? mine.find((t) => o.tx_ids.includes(t.id) || o.concept_keys.includes(t.concept))?.label;
+        if (clash) return fail(`«${clash}» ya está en el paquete «${o.name}»: cada cargo solo puede estar en un paquete`);
+      }
+      const data = { name, tx_ids: own, concept_keys: concepts };
       if (id) {
         const r = await prisma.finance_packages.updateMany({ where: { id, user_id: uid }, data });
         if (!r.count) return fail("Paquete no encontrado", 404);

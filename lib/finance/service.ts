@@ -9,7 +9,7 @@ import {
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, getWishlist, loadTxs } from "./store";
-import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, inPackage, transferPlan, unclassifiedFor, wishStatus } from "./plan";
+import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
 import { AUTO_SYNC_HOURS } from "./sync";
 import { zombies } from "./gmail";
 
@@ -433,24 +433,43 @@ export function searchTxs(ctx: FinanceContext, opts: { text?: string; category?:
   };
 }
 
-/** Mi plan: los paquetes del usuario y los cargos (último año) para elegir los que entran en cada uno. */
+/**
+ * Mi plan: los paquetes del usuario con lo que llevan este ciclo, el ciclo anterior y la media de los 3 anteriores,
+ * y los cargos del último año para elegir los que entran en cada uno (cada cargo solo en un paquete).
+ */
 export async function packagesView(userId: string) {
-  const [rows, accounts, txs] = await Promise.all([
+  const [ctx, rows] = await Promise.all([
+    financeContext(userId),
     prisma.finance_packages.findMany({ where: { user_id: userId }, orderBy: { created_at: "asc" } }),
-    getAccounts(userId),
-    loadTxs(userId, { since: addDays(todayIso(), -365) }),
   ]);
-  const charges = txs.filter((t) => t.amount < 0 && t.kind !== "interna").map((t) => ({
+  const all = ctx.txs.filter((t) => t.amount < 0 && t.kind !== "interna").map((t) => ({
     id: t.id, date: t.date, amount: t.amount, accountId: t.accountId, category: t.category,
     concept: conceptKey(t.description, t.counterparty),
     description: t.alias || t.counterparty || t.description, detail: t.description,
   }));
+  const packs = rows.map((p) => ({ id: p.id, name: p.name, conceptKeys: p.concept_keys, txIds: p.tx_ids }));
+  const owner = packageOwners(packs, all);
+  const current = cycleFor(ctx.today, ctx.startDay);
+  const oldest = ctx.txs.length ? ctx.txs[ctx.txs.length - 1].date : ctx.today;
+  const previous = [1, 2, 3].map((o) => cycleFor(ctx.today, ctx.startDay, -o)).filter((c) => c.start >= oldest);
+  const since = addDays(ctx.today, -365);
+  const charges = all.filter((c) => c.date >= since).map((c) => ({ ...c, owner: owner.get(c.id) ?? null }));
   return {
-    packages: rows.map((p) => {
-      const pack = { id: p.id, name: p.name, conceptKeys: p.concept_keys, txIds: p.tx_ids };
-      return { ...pack, count: charges.filter((c) => inPackage(pack, c)).length };
+    cycle: { ...current, day: daysBetween(current.start, ctx.today) + 1, totalDays: daysBetween(current.start, current.end) + 1 },
+    averageCycles: previous.length,
+    packages: packs.map((p) => {
+      const prev = previous.map((c) => packageSpend(p.id, owner, all, c));
+      return {
+        ...p,
+        count: charges.filter((c) => c.owner === p.id).length,
+        current: packageSpend(p.id, owner, all, current),
+        previous: prev.length ? prev[0] : null,
+        average: prev.length ? round2(prev.reduce((a, b) => a + b, 0) / prev.length) : null,
+        currentCharges: all.filter((c) => owner.get(c.id) === p.id && c.date >= current.start && c.date <= current.end)
+          .map(({ id, date, amount, description, detail }) => ({ id, date, amount, description, detail })),
+      };
     }),
-    accounts: accounts.filter((a) => a.included).map((a) => ({ id: a.id, name: a.name, bank: a.bank, last4: a.ibanLast4 })),
+    accounts: ctx.accounts.filter((a) => a.included).map((a) => ({ id: a.id, name: a.name, bank: a.bank, last4: a.ibanLast4 })),
     charges,
   };
 }
