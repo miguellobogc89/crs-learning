@@ -18,8 +18,8 @@ import { AGENTS_WORKSPACE, agentByKey } from "../agents/roster";
 import { kamikazeByKey } from "../kamikaze/roster";
 import { chipByKey } from "../chip/roster";
 import { referencePrice } from "../kamikaze/market";
-import { legResult, MIN_ORDER_EUR, planMirror, stepQuantity } from "./logic";
-import { isShortSwarm, krakenProblem } from "../kraken-copy";
+import { FEE_PCT, legResult, MIN_ORDER_EUR, planMirror, stepQuantity } from "./logic";
+import { isShortSwarm, KRAKEN_FEE_PCT, krakenProblem } from "../kraken-copy";
 
 const MODES = ["ensayo", "real"] as const;
 export type MirrorMode = (typeof MODES)[number];
@@ -115,6 +115,8 @@ export async function mirrorView(workspaceId: string) {
         mode: l.mode,
         short,
         leverage: l.leverage ?? null,
+        /** Comisión por lado con la que se calcula el resultado, en %. */
+        feePct: short ? KRAKEN_FEE_PCT : FEE_PCT,
         stop: stopOf.get(l.source_position_id)?.stop ?? null,
         initialStop: stopOf.get(l.source_position_id)?.initial_stop ?? stopOf.get(l.source_position_id)?.stop ?? null,
         price,

@@ -19,7 +19,9 @@ import { AGENTS_WORKSPACE } from "./agents/roster";
 import { kamikazeByKey } from "./kamikaze/roster";
 
 const FRESH_MS = 30 * 60_000;
-const FEE = 0.0005; // Kraken Futures: 0,05 % por orden a mercado.
+/** Kraken Futures: 0,05 % por orden a mercado. */
+export const KRAKEN_FEE_PCT = 0.05;
+const FEE = KRAKEN_FEE_PCT / 100;
 
 /** ¿Es un agente de cortos (se copia en Kraken)? */
 export const isShortSwarm = (agent: string) => kamikazeByKey(agent)?.engine === "enjambre-corto";

@@ -605,7 +605,7 @@ function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual 
       entry: l.entryPrice, stop: l.stop ?? 0, initialStop: l.initialStop ?? l.stop ?? 0, exitPrice: l.exitPrice ?? null, target: 0, trail: false, trailing: false,
       price: l.price ?? null, result: l.status === "cerrada" ? l.result : (l.unrealized ?? null),
       note: (l.short ? "Corto copiado de " : "Copia automática de ") + m.name, openedAt: l.openedAt, closedAt: l.closedAt,
-      origin: m.name, short: !!l.short, leverage: l.leverage ?? null, margin: l.amount ?? null,
+      origin: m.name, short: !!l.short, leverage: l.leverage ?? null, margin: l.amount ?? null, feePct: l.feePct,
     })));
   const trades: Trade[] = [...(data?.trades ?? []).map((t) => ({ ...t, origin: null })), ...copied]
     .sort((a, b) => (b.closedAt ?? b.openedAt ?? "").localeCompare(a.closedAt ?? a.openedAt ?? ""));
@@ -802,6 +802,18 @@ function detailRows(t: Trade): [string, string, string][] {
   rows.push(["Resultado", t.result === null ? "—" : `${signed(t.result)}${t.invested > 0 ? ` · ${pctText((t.result / t.invested) * 100)}` : ""}`, tone(t.result ?? 0)]);
   rows.push(["Entrada", t.entry ? eur(t.entry) : "—", "text-slate-900"]);
   rows.push(open ? ["Precio ahora", t.price !== null ? eur(t.price) : "—", "text-slate-900"] : [exit.approx ? "Salida aprox." : "Salida", eur(exit.price), "text-slate-900"]);
+  // Comisiones (estimadas con la tarifa del exchange): entrada sobre lo comprado; salida sobre lo vendido
+  // o, si sigue abierta, sobre lo que valdría al precio de ahora.
+  if (t.feePct > 0 && t.entry && t.invested > 0) {
+    const rate = t.feePct / 100;
+    const entryFee = t.invested * rate;
+    const out = open ? t.price : exit.price;
+    const exitFee = out ? t.invested * (out / t.entry) * rate : null;
+    const feeText = (v: number | null) => (v === null ? "—" : v > 0 && v < 0.01 ? "< 0,01 €" : eur(v, 2));
+    const rateText = `${String(t.feePct).replace(".", ",")} %`;
+    rows.push([`Comisión entrada · ${rateText}`, feeText(entryFee), "text-slate-700"]);
+    rows.push([`Comisión salida${open ? " (si vendes ya)" : ""}`, feeText(exitFee), "text-slate-700"]);
+  }
   if (t.stop > 0) rows.push([open ? "Stop ahora" : "Último stop", eur(t.stop), "text-rose-700"]);
   if (t.target > 0) rows.push(["Objetivo", eur(t.target), "text-emerald-700"]);
   return rows;
