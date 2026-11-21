@@ -9,7 +9,7 @@ import {
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, getWishlist, loadTxs } from "./store";
-import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
+import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, goalStatus, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
 import { AUTO_SYNC_HOURS } from "./sync";
 import { zombies } from "./gmail";
 
@@ -447,22 +447,31 @@ export async function packagesView(userId: string) {
     concept: conceptKey(t.description, t.counterparty),
     description: t.alias || t.counterparty || t.description, detail: t.description,
   }));
-  const packs = rows.map((p) => ({ id: p.id, name: p.name, conceptKeys: p.concept_keys, txIds: p.tx_ids }));
+  const packs = rows.map((p) => ({ id: p.id, name: p.name, conceptKeys: p.concept_keys, txIds: p.tx_ids, goal: p.goal === null ? null : Number(p.goal) }));
   const owner = packageOwners(packs, all);
   const current = cycleFor(ctx.today, ctx.startDay);
   const oldest = ctx.txs.length ? ctx.txs[ctx.txs.length - 1].date : ctx.today;
   const previous = [1, 2, 3].map((o) => cycleFor(ctx.today, ctx.startDay, -o)).filter((c) => c.start >= oldest);
   const since = addDays(ctx.today, -365);
+  const day = daysBetween(current.start, ctx.today) + 1;
+  const totalDays = daysBetween(current.start, current.end) + 1;
+  // Ingreso medio de los mismos ciclos completos que la media de los paquetes (del histórico, no se configura).
+  const incomes = ctx.history.filter((h) => previous.some((c) => c.start === h.cycle.start)).map((h) => h.income);
   const charges = all.filter((c) => c.date >= since).map((c) => ({ ...c, owner: owner.get(c.id) ?? null }));
   return {
-    cycle: { ...current, day: daysBetween(current.start, ctx.today) + 1, totalDays: daysBetween(current.start, current.end) + 1 },
+    cycle: { ...current, day, totalDays },
     averageCycles: previous.length,
+    /** Ciclos de la media, para que el modal proponga el objetivo con lo que se va marcando. */
+    averageRanges: previous.map(({ start, end }) => ({ start, end })),
+    averageIncome: incomes.length ? round2(incomes.reduce((a, b) => a + b, 0) / incomes.length) : null,
     packages: packs.map((p) => {
       const prev = previous.map((c) => packageSpend(p.id, owner, all, c));
+      const spent = packageSpend(p.id, owner, all, current);
       return {
         ...p,
+        progress: goalStatus(spent, p.goal, day, totalDays),
         count: charges.filter((c) => c.owner === p.id).length,
-        current: packageSpend(p.id, owner, all, current),
+        current: spent,
         previous: prev.length ? prev[0] : null,
         average: prev.length ? round2(prev.reduce((a, b) => a + b, 0) / prev.length) : null,
         currentCharges: all.filter((c) => owner.get(c.id) === p.id && c.date >= current.start && c.date <= current.end)

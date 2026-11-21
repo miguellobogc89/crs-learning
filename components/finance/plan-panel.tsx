@@ -11,6 +11,7 @@ import { CardHeader, ErrorNote, Modal, SectionTitle } from "@/components/trading
 import { SkeletonList } from "@/components/trading/skeletons";
 import { TableToolbar } from "@/components/ui/table-toolbar";
 import { errorText, fapi, refreshFinance, shortDay, useFinance } from "./api";
+import { BudgetBar } from "./charts";
 
 type View = Awaited<ReturnType<typeof packagesView>>;
 type Pack = View["packages"][number];
@@ -32,6 +33,7 @@ const VIEWS = [{ value: "concepto", label: "Por concepto" }, { value: "movimient
 
 function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | null; open: boolean; onClose: () => void }) {
   const [name, setName] = useState("");
+  const [goal, setGoal] = useState("");
   const [concepts, setConcepts] = useState<Set<string>>(new Set());
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState("concepto");
@@ -45,6 +47,7 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
   useEffect(() => {
     if (!open) return;
     setName(pack?.name ?? "");
+    setGoal(pack?.goal ? String(pack.goal).replace(".", ",") : "");
     setConcepts(new Set(pack?.conceptKeys ?? []));
     setPicked(new Set(pack?.txIds ?? []));
     setMode("concepto");
@@ -109,6 +112,15 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
   };
   const toggleExpanded = (key: string) => setExpanded((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const totalIncluded = view.charges.filter(included).length;
+  // Media por ciclo de lo que va quedando marcado: la propuesta para el objetivo.
+  const suggested = view.averageRanges.length
+    ? Math.round((view.charges.filter(included).reduce((s, c) => s + (view.averageRanges.some((r) => c.date >= r.start && c.date <= r.end) ? -c.amount : 0), 0) / view.averageRanges.length) * 100) / 100
+    : null;
+  const goalValue = (() => {
+    const t = goal.trim().replace(/\s|€/g, "");
+    if (!t) return null;
+    return Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+  })();
   const accountsOf = (g: ConceptGroup) => {
     const ids = [...new Set(g.rows.map((r) => r.accountId))];
     return ids.length === 1 ? accName.get(ids[0]) ?? "—" : "Varias";
@@ -118,7 +130,8 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
     setBusy(true);
     setErr(null);
     try {
-      await fapi("package", { id: pack?.id, name, conceptKeys: [...concepts], txIds: [...picked] });
+      if (goalValue !== null && !(goalValue > 0)) throw new Error("El objetivo debe ser un importe mayor que cero");
+      await fapi("package", { id: pack?.id, name, goal: goalValue, conceptKeys: [...concepts], txIds: [...picked] });
       refreshFinance();
       onClose();
     } catch (e) {
@@ -147,7 +160,19 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
       }
     >
       <div className="space-y-3 text-sm">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del paquete (p. ej. Fijos, Tabaco, Gasolina)" className={`${field} w-full`} />
+        <div className="grid gap-3 sm:grid-cols-[1fr_16rem]">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-slate-600">Nombre</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="P. ej. Fijos, Tabaco, Gasolina" className={`${field} w-full`} />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-slate-600">Asigna un objetivo por ciclo (opcional)</span>
+            <span className="flex items-center gap-2">
+              <input inputMode="decimal" value={goal} onChange={(e) => setGoal(e.target.value)} placeholder={suggested ? `Tu media: ${eur(suggested, 2)}` : "0,00 €"} className={`${field} w-full text-right tabular-nums`} />
+              {suggested !== null && suggested > 0 && <button type="button" onClick={() => setGoal(String(suggested).replace(".", ","))} className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50" title="Usar tu media de los últimos ciclos">Media</button>}
+            </span>
+          </label>
+        </div>
         <TableToolbar
           search={q}
           onSearchChange={setQ}
@@ -275,12 +300,27 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
   );
 }
 
+/** Lo repartido en objetivos frente al ingreso medio (del histórico). */
+function PlanSummary({ view }: { view: View }) {
+  const goals = Math.round(view.packages.reduce((s, p) => s + (p.goal ?? 0), 0) * 100) / 100;
+  const withGoal = view.packages.filter((p) => p.goal !== null).length;
+  const income = view.averageIncome;
+  const left = income === null ? null : Math.round((income - goals) * 100) / 100;
+  return (
+    <div className="mx-4 mb-3 grid gap-3 rounded-xl bg-slate-50 p-3 text-sm sm:mx-6 sm:grid-cols-3">
+      <div><p className="text-xs text-slate-500">Ingreso medio ({view.averageCycles} {view.averageCycles === 1 ? "ciclo" : "ciclos"})</p><p className="font-semibold tabular-nums text-slate-900">{eur(income, 2)}</p></div>
+      <div><p className="text-xs text-slate-500">En objetivos ({withGoal} de {view.packages.length} paquetes)</p><p className="font-semibold tabular-nums text-slate-900">{eur(goals, 2)}</p></div>
+      <div><p className="text-xs text-slate-500">{left !== null && left < 0 ? "Te pasas del ingreso" : "Sin asignar"}</p><p className={`font-semibold tabular-nums ${left === null ? "text-slate-400" : left < 0 ? "text-red-700" : "text-emerald-700"}`}>{left === null ? "—" : eur(Math.abs(left), 2)}</p></div>
+    </div>
+  );
+}
+
 function PackageRow({ p, view, onEdit, onDelete }: { p: Pack; view: View; onEdit: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
   const up = p.average !== null && p.average > 0 ? p.current - p.average : null;
   return (
     <li>
-      <div onClick={() => setOpen(!open)} className="grid cursor-pointer grid-cols-[1fr_auto] items-center gap-3 px-4 py-3 hover:bg-slate-50 sm:px-6 md:grid-cols-[1fr_7rem_7rem_7rem_4.5rem]">
+      <div onClick={() => setOpen(!open)} className="grid cursor-pointer grid-cols-[1fr_9rem] items-center gap-3 px-4 py-3 hover:bg-slate-50 sm:px-6 md:grid-cols-[1fr_11rem_7rem_7rem_4.5rem]">
         <span className="flex min-w-0 items-center gap-1.5">
           <ChevronRight className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-90" : ""}`} />
           <span className="min-w-0">
@@ -289,7 +329,11 @@ function PackageRow({ p, view, onEdit, onDelete }: { p: Pack; view: View; onEdit
           </span>
         </span>
         <span className="text-right">
-          <span className="block font-semibold tabular-nums text-slate-900">{eur(p.current, 2)}</span>
+          <span className="block whitespace-nowrap tabular-nums">
+            <b className={p.progress?.status === "superado" ? "text-red-700" : "text-slate-900"}>{eur(p.current, 2)}</b>
+            {p.goal !== null && <span className="text-xs text-slate-500"> de {eur(p.goal, 2)}</span>}
+          </span>
+          {p.progress && <span className="mt-1 block"><BudgetBar pct={p.progress.pct} expectedPct={p.progress.expectedPct} status={p.progress.status} /></span>}
           <span className="block text-xs text-slate-500 md:hidden">media {eur(p.average, 2)}</span>
         </span>
         <span className="hidden text-right tabular-nums text-slate-600 md:block">{eur(p.previous, 2)}</span>
@@ -304,6 +348,7 @@ function PackageRow({ p, view, onEdit, onDelete }: { p: Pack; view: View; onEdit
           <div className="mb-2 flex items-center justify-between gap-3 text-xs text-slate-500">
             <span>
               Cargos de este ciclo ({p.currentCharges.length})
+              {p.progress && <> · {p.progress.remaining >= 0 ? `te quedan ${eur(p.progress.remaining, 2)} del objetivo` : `te has pasado ${eur(-p.progress.remaining, 2)} del objetivo`}</>}
               {up !== null && Math.abs(up) >= 0.01 && <> · {up > 0 ? `${eur(up, 2)} por encima de tu media` : `${eur(-up, 2)} por debajo de tu media`} (con el día {view.cycle.day} de {view.cycle.totalDays})</>}
             </span>
             <span className="flex gap-1 md:hidden">
@@ -354,8 +399,9 @@ export function PlanPanel() {
           <CardHeader actions={<button type="button" onClick={create} className={ghost}><Plus className="h-4 w-4" /> Crear paquete</button>}>
             <SectionTitle icon={Package} tint="blue" size="base">Mis paquetes <span className="ml-1 text-sm font-normal text-slate-500">ciclo {shortDay(data.cycle.start)} – {shortDay(data.cycle.end)} · día {data.cycle.day} de {data.cycle.totalDays}</span></SectionTitle>
           </CardHeader>
-          <div className="hidden grid-cols-[1fr_7rem_7rem_7rem_4.5rem] gap-3 border-b border-slate-100 px-6 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 md:grid">
-            <span>Paquete</span><span className="text-right">Este ciclo</span><span className="text-right">Ciclo anterior</span><span className="text-right">Media {data.averageCycles > 0 ? `(${data.averageCycles})` : ""}</span><span />
+          <PlanSummary view={data} />
+          <div className="hidden grid-cols-[1fr_11rem_7rem_7rem_4.5rem] gap-3 border-b border-slate-100 px-6 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 md:grid">
+            <span>Paquete</span><span className="text-right">Este ciclo / objetivo</span><span className="text-right">Ciclo anterior</span><span className="text-right">Media {data.averageCycles > 0 ? `(${data.averageCycles})` : ""}</span><span />
           </div>
           <ul className="divide-y divide-slate-100">
             {data.packages.map((p) => <PackageRow key={p.id} p={p} view={data} onEdit={() => { setEditing(p); setOpen(true); }} onDelete={() => void remove(p)} />)}

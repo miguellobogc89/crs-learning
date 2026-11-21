@@ -50,7 +50,8 @@ Se replantea la Planificación para ir paso a paso y construir solo la base. La 
 - [x] Vista por concepto en el modal (selector «Por concepto / Por movimiento» en la cabecera estándar). Marcar un concepto mete sus cargos pasados y futuros aunque cambie el importe (`finance_packages.concept_keys`, migración `20261121150000_finance_package_concepts`); marcar un movimiento mete solo ese cargo. El concepto es `conceptKey` (lib/finance/plan.ts): la clave de comercio sin referencias que cambian en cada pago con tarjeta.
 - [x] Cada cargo en un solo paquete (los paquetes reparten el dinero total; el análisis por categorías va aparte). El modal bloquea lo que ya está en otro paquete («En «Fijos»») y el servidor rechaza guardarlo repetido.
 - [x] Coste de cada paquete en la lista: este ciclo (con el día del ciclo), ciclo anterior y media de los 3 ciclos completos anteriores; al desplegar, los cargos de este ciclo y si va por encima o por debajo de la media.
-- [ ] Siguiente: presupuesto (límite) de cada paquete, propuesto con su media. Más adelante: «sin paquete» (lo que queda por repartir).
+- [x] Objetivo por ciclo de cada paquete («Asigna un objetivo», opcional, propuesto con la media de lo marcado; `finance_packages.goal`, migración `20261121160000_finance_package_goal`). En la lista: «X de Y» con barra verde/ámbar/roja según el día del ciclo (los fijos, igual por ahora). Resumen arriba: ingreso medio (del histórico, mismos ciclos que la media), total en objetivos y sin asignar.
+- [ ] Más adelante: «sin paquete» (gasto real que no está en ningún paquete).
 - Los ingresos no se configuran: salen del histórico.
 
 ## Planificación · la hucha (21/11/2026, primera versión retirada de la pantalla)

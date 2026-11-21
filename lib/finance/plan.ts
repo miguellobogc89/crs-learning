@@ -256,3 +256,12 @@ export function packageOwners<P extends { id: string; conceptKeys: string[]; txI
 export function packageSpend(packageId: string, owner: Map<string, string>, charges: { id: string; date: string; amount: number }[], cycle: Cycle) {
   return round2(charges.reduce((s, c) => s + (owner.get(c.id) === packageId && c.date >= cycle.start && c.date <= cycle.end ? -c.amount : 0), 0));
 }
+
+/** Cómo va un paquete frente a su objetivo, teniendo en cuenta el día del ciclo (mismo criterio que los límites). */
+export function goalStatus(spent: number, goal: number | null, day: number, totalDays: number) {
+  if (goal === null || goal <= 0) return null;
+  const pct = round2((spent / goal) * 100);
+  const expectedPct = round2((Math.min(day, totalDays) / totalDays) * 100);
+  const status = pct >= 100 ? "superado" as const : pct > expectedPct + 10 && pct >= 50 ? "atencion" as const : "ok" as const;
+  return { pct, expectedPct, remaining: round2(goal - spent), status };
+}

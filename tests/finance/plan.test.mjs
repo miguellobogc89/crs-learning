@@ -125,3 +125,11 @@ test("Paquetes: cada cargo cuenta en un solo paquete y por ciclo", () => {
   assert.equal(P.packageSpend("A", owner, charges, cycle), 30);
   assert.equal(P.packageSpend("B", owner, charges, cycle), 5);
 });
+
+test("Objetivo del paquete: estado según el día del ciclo", () => {
+  assert.equal(P.goalStatus(100, null, 10, 30), null);
+  assert.equal(P.goalStatus(80, 100, 10, 30).status, "atencion"); // 80 % el día 10
+  assert.equal(P.goalStatus(80, 100, 28, 30).status, "ok");
+  assert.equal(P.goalStatus(120, 100, 28, 30).status, "superado");
+  assert.equal(P.goalStatus(120, 100, 28, 30).remaining, -20);
+});

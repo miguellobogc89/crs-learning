@@ -136,7 +136,9 @@ export async function POST(req: Request, route: RouteContext) {
           ?? mine.find((t) => o.tx_ids.includes(t.id) || o.concept_keys.includes(t.concept))?.label;
         if (clash) return fail(`«${clash}» ya está en el paquete «${o.name}»: cada cargo solo puede estar en un paquete`);
       }
-      const data = { name, tx_ids: own, concept_keys: concepts };
+      const goal = body.goal === null || body.goal === undefined || body.goal === "" ? null : Number(body.goal);
+      if (goal !== null && (!Number.isFinite(goal) || goal <= 0)) return fail("El objetivo debe ser un importe mayor que cero");
+      const data = { name, tx_ids: own, concept_keys: concepts, goal };
       if (id) {
         const r = await prisma.finance_packages.updateMany({ where: { id, user_id: uid }, data });
         if (!r.count) return fail("Paquete no encontrado", 404);
