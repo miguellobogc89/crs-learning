@@ -4,12 +4,12 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal-finance/enable-banking";
 import {
-  addDays, affordability, budgetStatus, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, forecastCycleWeeks, insuranceForecastCandidates, isForecastOverride, liquiditySeries, merchantKey, round2, median,
+  addDays, affordability, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, forecastCycleWeeks, insuranceForecastCandidates, isForecastOverride, liquiditySeries, merchantKey, round2, median,
   expenseHistoryByCycle, normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, getWishlist, loadTxs } from "./store";
-import { budgetWeeks, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, transferPlan, unclassifiedFor, wishStatus } from "./plan";
+import { budgetMovements, budgetWeeks, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, transferPlan, unclassifiedFor, wishStatus } from "./plan";
 import { AUTO_SYNC_HOURS } from "./sync";
 import { zombies } from "./gmail";
 
@@ -40,7 +40,7 @@ export async function financeContext(userId: string) {
   const liquidity = eur.length ? Math.round(eur.reduce((s, a) => s + (a.balance ?? 0), 0) * 100) / 100 : null;
   const savingsGoalCycle = settings.savingsGoal === null ? null : round2(settings.savingsGoal * (settings.savingsFrequency === "semanal" ? 52 / 12 : 1));
   const projection = projectCycle({ txs, today, startDay, liquidity, recurring, savingsGoal: savingsGoalCycle, history: historyWithData });
-  const budgetsNow = budgetStatus(budgets, current, today);
+  const budgetsNow = planBudgetStatus(budgets, txs, current.cycle, today);
   return { userId, settings, accounts, txs, budgets, budgetsNow, dismissed, cancelled, skippedOccurrences, forecastItems, today, startDay, recurring, history: historyWithData, current, liquidity, projection };
 }
 export type FinanceContext = Awaited<ReturnType<typeof financeContext>>;
@@ -346,7 +346,15 @@ export async function budgetView(userId: string) {
     const h = ctx.history.slice(0, 3);
     return h.length ? Math.round((h.reduce((s, x) => s + (x.byCategory.find((c) => c.category === cat)?.amount ?? 0), 0) / h.length) * 100) / 100 : null;
   };
-  const recurring = ctx.recurring.map((r) => ({ ...r, cancelled: ctx.cancelled.has(r.key) }));
+  // Cuenta que paga cada recibo: la del último cargo de ese comercio.
+  const lastAccount = new Map<string, string>();
+  for (const t of ctx.txs) {
+    if (t.amount >= 0) continue;
+    const k = merchantKey(t.description, t.counterparty);
+    if (!lastAccount.has(k)) lastAccount.set(k, t.accountId);
+  }
+  const recurring = ctx.recurring.map((r) => ({ ...r, cancelled: ctx.cancelled.has(r.key), accountId: lastAccount.get(r.key) ?? null,
+    monthly: round2(Math.abs(r.amount) * (30 / r.intervalDays)) }));
   const cycle = ctx.current.cycle;
   const { settings } = ctx;
   const savingsGoalCycle = ctx.projection.savingsGoal;
@@ -365,6 +373,7 @@ export async function budgetView(userId: string) {
     savingsAccountId: settings.savingsAccountId,
     transfers: transferPlan({ budgets: ctx.budgets, savingsGoal: savingsGoalCycle, savingsAccountId: settings.savingsAccountId, incomeAccountId, txs: ctx.txs, cycle }),
     weeks: Object.fromEntries(ctx.budgets.filter((b) => b.kind !== "fijo").map((b) => [b.id, budgetWeeks(b, ctx.txs, cycle, ctx.today)])),
+    movements: Object.fromEntries(ctx.budgets.map((b) => [b.id, budgetMovements(b, ctx.txs, cycle)])),
     unclassified: Object.fromEntries(ctx.budgets.filter((b) => b.accountId).map((b) => [b.id, unclassifiedFor(b.accountId!, ctx.txs, cycle)])),
     accounts,
   };

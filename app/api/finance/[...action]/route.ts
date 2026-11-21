@@ -113,6 +113,48 @@ export async function POST(req: Request, route: RouteContext) {
       } else await prisma.finance_budgets.create({ data: { user_id: uid, ...data } });
       return ok({ ok: true });
     }
+    if (action === "plan/save") {
+      // Asistente «Configurar plan»: ingreso, ahorro y todas las partidas de una vez.
+      const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+      const income = num(body.expectedIncome);
+      const goal = num(body.savingsGoal);
+      if (income !== null && (!Number.isFinite(income) || income <= 0)) return fail("Ingreso no válido");
+      if (goal !== null && (!Number.isFinite(goal) || goal < 0)) return fail("Ahorro no válido");
+      const incomeAccount = await ownAccount(uid, body.incomeAccountId);
+      const savingsAccount = await ownAccount(uid, body.savingsAccountId);
+      if (incomeAccount === false || savingsAccount === false) return fail("Cuenta no encontrada", 404);
+      const raw = Array.isArray(body.budgets) ? (body.budgets as Record<string, unknown>[]).slice(0, 40) : [];
+      const items: { id: string | null; name: string; amount: number; kind: string; categories: string[]; account_id: string | null; recurring_keys: string[] }[] = [];
+      for (const b of raw) {
+        const name = typeof b.name === "string" ? b.name.trim().slice(0, 60) : "";
+        const amount = Number(b.amount);
+        if (!name || !Number.isFinite(amount) || amount <= 0) return fail("Cada partida necesita un nombre y un importe mayor que cero");
+        const account = await ownAccount(uid, b.accountId);
+        if (account === false) return fail("Cuenta no encontrada", 404);
+        items.push({
+          id: typeof b.id === "string" && b.id ? b.id : null,
+          name, amount,
+          kind: b.kind === "fijo" ? "fijo" : "variable",
+          categories: Array.isArray(b.categories) ? [...new Set((b.categories as unknown[]).filter(isCategory))] : [],
+          account_id: account,
+          recurring_keys: Array.isArray(b.recurringKeys) ? (b.recurringKeys as unknown[]).filter((k): k is string => typeof k === "string").map((k) => k.slice(0, 150)).slice(0, 100) : [],
+        });
+      }
+      const keep = items.map((i) => i.id).filter((id): id is string => !!id);
+      await prisma.$transaction(async (db) => {
+        const settings = { expected_income: income, savings_goal: goal, savings_frequency: "mensual", income_account_id: incomeAccount, savings_account_id: savingsAccount, updated_at: new Date() };
+        await db.finance_settings.upsert({ where: { user_id: uid }, create: { user_id: uid, ...settings }, update: settings });
+        await db.finance_budgets.deleteMany({ where: { user_id: uid, id: { notIn: keep } } });
+        for (const { id, ...data } of items) {
+          if (id) {
+            const r = await db.finance_budgets.updateMany({ where: { id, user_id: uid }, data });
+            if (r.count) continue;
+          }
+          await db.finance_budgets.create({ data: { user_id: uid, ...data } });
+        }
+      });
+      return ok({ ok: true });
+    }
     if (action === "wishlist") {
       const title = str("title").trim().slice(0, 120);
       const price = Number(body.price);

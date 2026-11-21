@@ -78,3 +78,25 @@ test("Deseos: lo que falta y si cabe en lo disponible", () => {
   assert.equal(P.wishStatus(item, 100).affordableNow, false);
   assert.equal(P.wishStatus(item, null).progress, 25);
 });
+
+test("Los extraordinarios (IBI…) no cuentan en la partida ni en la semana, pero se listan", () => {
+  const b = { id: "1", name: "Casa", categories: ["impuestos"], amount: 200, kind: "fijo" };
+  const txs = [tx("ibi", "B", "2026-11-26", -467.97, "gasto", "impuestos", { extraordinary: true }), tx("tgss", "B", "2026-11-30", -88.56, "gasto", "impuestos")];
+  const [s] = P.planBudgetStatus([b], txs, cycle, "2026-12-01");
+  assert.equal(s.spent, 88.56);
+  assert.equal(s.kind, "fijo");
+  assert.equal(P.budgetWeeks(b, txs, cycle, "2026-12-01")[0].spent, 0);
+  const moves = P.budgetMovements(b, txs, cycle);
+  assert.equal(moves.length, 2);
+  assert.equal(moves.find((m) => m.id === "ibi").extraordinary, true);
+});
+
+test("Asistente: una partida fija por cuenta con los recibos marcados", () => {
+  const fixed = P.fixedPartidas([
+    { key: "hipoteca", label: "Hipoteca", category: "vivienda", monthly: 769.55, accountId: "B" },
+    { key: "luz", label: "Luz", category: "suministros", monthly: 57.2, accountId: "B" },
+    { key: "tgss", label: "TGSS", category: "impuestos", monthly: 88.56, accountId: "S" },
+  ], (id) => (id === "B" ? "BBVA" : "Santander"));
+  assert.equal(fixed.length, 2);
+  assert.deepEqual(fixed[0], { name: "Fijos · BBVA", amount: 826.75, categories: ["vivienda", "suministros"], accountId: "B", recurringKeys: ["hipoteca", "luz"] });
+});

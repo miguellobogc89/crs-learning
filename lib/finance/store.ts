@@ -78,7 +78,7 @@ export async function getRules(userId: string): Promise<Rule[]> {
 export async function getBudgets(userId: string): Promise<Budget[]> {
   const rows = await prisma.finance_budgets.findMany({ where: { user_id: userId }, orderBy: { created_at: "asc" } });
   return rows.map((b) => ({ id: b.id, name: b.name, categories: b.categories, amount: Number(b.amount),
-    kind: b.kind === "fijo" ? "fijo" as const : "variable" as const, accountId: b.account_id }));
+    kind: b.kind === "fijo" ? "fijo" as const : "variable" as const, accountId: b.account_id, recurringKeys: b.recurring_keys }));
 }
 
 export async function getWishlist(userId: string): Promise<WishItem[]> {

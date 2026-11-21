@@ -2,7 +2,7 @@
 // Planificación (la hucha): cuadre del plan del ciclo, límite semanal de cada partida, transferencias del día de
 // cobro y lista de deseos. Funciones puras sobre los datos de logic.ts (sin base de datos): las usa service.ts y
 // los tests. Nada está pensado para un usuario concreto: partidas, importes y cuentas los decide cada persona.
-import { addDays, daysBetween, median, round2, toDate, type Budget, type Cycle, type CycleSummary, type Recurring, type Tx } from "./logic";
+import { addDays, daysBetween, median, round2, toDate, type Budget, type BudgetStatus, type Cycle, type CycleSummary, type Recurring, type Tx } from "./logic";
 
 // ---------------------------------------------------------------------------------------------------------
 // Cuadre del plan: ingreso − fijos − variables − ahorro = sin asignar
@@ -74,11 +74,34 @@ export function cycleWeeks(cycle: Cycle): CycleWeek[] {
   return weeks;
 }
 
-/** Lo que cuenta para una partida: gasto real (menos devoluciones) de sus categorías; sin categorías = todo. */
+/** Si un movimiento es de una partida: gasto o devolución de sus categorías (sin categorías = todo el gasto). */
+export const inBudget = (b: Pick<Budget, "categories">, t: Tx) =>
+  (t.kind === "gasto" || t.kind === "devolucion") && (!b.categories.length || b.categories.includes(t.category));
+
+/** Lo que cuenta para una partida: gasto real (menos devoluciones), sin los extraordinarios (IBI, una avería…). */
 export function budgetSpend(b: Pick<Budget, "categories">, t: Tx) {
-  if (t.kind !== "gasto" && t.kind !== "devolucion") return 0;
-  if (b.categories.length && !b.categories.includes(t.category)) return 0;
-  return -t.amount;
+  return inBudget(b, t) && !t.extraordinary ? -t.amount : 0;
+}
+
+/** Cómo va cada partida en el ciclo (mismo formato que budgetStatus de logic.ts, pero sin extraordinarios). */
+export function planBudgetStatus(budgets: Budget[], txs: Tx[], cycle: Cycle, today: string): BudgetStatus[] {
+  const total = daysBetween(cycle.start, cycle.end) + 1;
+  const elapsed = Math.min(total, Math.max(1, daysBetween(cycle.start, today) + 1));
+  const expectedPct = round2((elapsed / total) * 100);
+  const inCycle = txs.filter((t) => t.date >= cycle.start && t.date <= cycle.end);
+  return budgets.map((b) => {
+    const spent = round2(inCycle.reduce((s, t) => s + budgetSpend(b, t), 0));
+    const pct = b.amount > 0 ? round2((spent / b.amount) * 100) : 0;
+    const status = pct >= 100 ? "superado" : pct > expectedPct + 10 && pct >= 50 ? "atencion" : "ok";
+    return { ...b, spent, remaining: round2(b.amount - spent), pct, expectedPct, status };
+  });
+}
+
+/** Movimientos de una partida en el ciclo (también los extraordinarios, para poder excluirlos o volver a contarlos). */
+export function budgetMovements(b: Pick<Budget, "categories">, txs: Tx[], cycle: Cycle, limit = 80) {
+  return txs.filter((t) => t.date >= cycle.start && t.date <= cycle.end && inBudget(b, t))
+    .sort((a, z) => z.date.localeCompare(a.date)).slice(0, limit)
+    .map((t) => ({ id: t.id, date: t.date, amount: t.amount, description: t.alias || t.counterparty || t.description, category: t.category, kind: t.kind, extraordinary: t.extraordinary }));
 }
 
 export type WeekStatus = "ok" | "cerca" | "superado" | "previsto";
@@ -176,4 +199,25 @@ export function wishStatus(item: WishItem, safeToSpend: number | null) {
     progress: item.price > 0 ? round2(Math.min(100, (item.saved / item.price) * 100)) : 0,
     affordableNow: item.purchasedAt === null && (missing === 0 || (safeToSpend !== null && missing <= safeToSpend)),
   };
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Asistente: partidas fijas a partir de los recibos detectados
+// ---------------------------------------------------------------------------------------------------------
+
+export type FixedSource = { key: string; label: string; category: string; monthly: number; accountId: string | null };
+export type FixedDraft = { name: string; amount: number; categories: string[]; accountId: string | null; recurringKeys: string[] };
+
+/** Una partida fija por cuenta que paga los recibos elegidos: importe = suma mensual, categorías = las de esos recibos. */
+export function fixedPartidas(selected: FixedSource[], accountName: (id: string | null) => string): FixedDraft[] {
+  const groups = new Map<string, FixedDraft>();
+  for (const r of selected) {
+    const k = r.accountId ?? "";
+    const g = groups.get(k) ?? { name: `Fijos · ${accountName(r.accountId)}`, amount: 0, categories: [], accountId: r.accountId, recurringKeys: [] };
+    g.amount += r.monthly;
+    if (!g.categories.includes(r.category)) g.categories.push(r.category);
+    g.recurringKeys.push(r.key);
+    groups.set(k, g);
+  }
+  return [...groups.values()].map((g) => ({ ...g, amount: round2(g.amount) })).sort((a, b) => b.amount - a.amount);
 }
