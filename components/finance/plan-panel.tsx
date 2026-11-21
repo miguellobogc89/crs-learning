@@ -164,7 +164,25 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
           }}
         />
         <div className="h-[50vh] overflow-y-auto rounded-xl border border-slate-100">
-          <table className="w-full text-sm">
+          <table className="w-full table-fixed text-sm">
+            {mode === "concepto" ? (
+              <colgroup>
+                <col className="w-10" />
+                <col />
+                <col className="hidden w-36 md:table-column" />
+                <col className="hidden w-32 md:table-column" />
+                <col className="w-24" />
+              </colgroup>
+            ) : (
+              <colgroup>
+                <col className="w-10" />
+                <col className="w-16" />
+                <col />
+                <col className="hidden w-36 md:table-column" />
+                <col className="hidden w-28 md:table-column" />
+                <col className="w-24" />
+              </colgroup>
+            )}
             <thead className="sticky top-0 z-10 bg-white">
               <tr className="border-b border-slate-100 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 <th className={`${th} w-10`}><TriCheckbox checked={allShown} onChange={toggleShown} label="Marcar todo lo visible" /></th>
@@ -197,7 +215,7 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
                     <Fragment key={g.key}>
                       <tr onClick={() => toggleConcept(g)} className={`border-b border-slate-50 ${taken ? "text-slate-400" : "cursor-pointer"} ${full ? "bg-blue-50/60" : partial ? "bg-blue-50/30" : taken ? "" : "hover:bg-slate-50"}`}>
                         <td className="px-3 py-2"><TriCheckbox checked={full} partial={partial} disabled={!!taken} onChange={() => toggleConcept(g)} label={`Marcar ${g.label}`} /></td>
-                        <td className="max-w-0 px-3 py-2">
+                        <td className="px-3 py-2">
                           <span className="flex items-center gap-1.5">
                             <button type="button" onClick={(e) => { e.stopPropagation(); toggleExpanded(g.key); }} aria-label={isOpen ? "Ocultar cargos" : "Ver cargos"} className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
                               <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`} />
@@ -208,16 +226,16 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
                             </span>
                           </span>
                         </td>
-                        <td className="hidden whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell">{accountsOf(g)}</td>
+                        <td className="hidden truncate whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell" title={accountsOf(g)}>{accountsOf(g)}</td>
                         <td className="hidden whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell">{shortDay(g.last.date)} · <span className="tabular-nums">{eur(-g.last.amount, 2)}</span></td>
                         <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{eur(g.total / g.rows.length, 2)}</td>
                       </tr>
                       {isOpen && g.rows.map((c) => (
                         <tr key={c.id} onClick={() => toggleRow(c)} className={`border-b border-slate-50 bg-slate-50/50 text-xs ${full || takenBy(c) ? "" : "cursor-pointer hover:bg-slate-100/60"}`}>
                           <td className="py-1.5 pl-8 pr-3"><TriCheckbox checked={included(c)} disabled={full || !!takenBy(c)} onChange={() => toggleRow(c)} label="Marcar este cargo" /></td>
-                          <td className="max-w-0 px-3 py-1.5"><span className="block truncate pl-6 text-slate-600" title={c.detail}>{shortDay(c.date)} · {c.detail}</span></td>
-                          <td className="hidden whitespace-nowrap px-3 py-1.5 text-slate-500 md:table-cell">{accName.get(c.accountId) ?? "—"}</td>
-                          <td className="hidden px-3 py-1.5 md:table-cell">{takenBy(c) ? <span className="text-slate-400">en «{takenBy(c)}»</span> : full && <span className="text-slate-400">por concepto</span>}</td>
+                          <td className="px-3 py-1.5"><span className="block truncate pl-6 text-slate-600" title={c.detail}>{shortDay(c.date)} · {c.description}</span></td>
+                          <td className="hidden truncate whitespace-nowrap px-3 py-1.5 text-slate-500 md:table-cell">{accName.get(c.accountId) ?? "—"}</td>
+                          <td className="hidden truncate px-3 py-1.5 md:table-cell">{takenBy(c) ? <span className="text-slate-400">en «{takenBy(c)}»</span> : full && <span className="text-slate-400">por concepto</span>}</td>
                           <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-slate-700">{eur(-c.amount, 2)}</td>
                         </tr>
                       ))}
@@ -234,12 +252,12 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
                     <tr key={c.id} onClick={() => toggleRow(c)} className={`${byConcept || taken ? "" : "cursor-pointer"} ${taken ? "text-slate-400" : included(c) ? "bg-blue-50/60" : "hover:bg-slate-50"}`}>
                       <td className="px-3 py-2"><TriCheckbox checked={included(c)} disabled={byConcept || !!taken} onChange={() => toggleRow(c)} label="Marcar este cargo" /></td>
                       <td className="whitespace-nowrap px-3 py-2 text-slate-500">{shortDay(c.date)}</td>
-                      <td className="max-w-0 px-3 py-2">
+                      <td className="px-3 py-2">
                         <span className={`block truncate ${taken ? "" : "text-slate-900"}`} title={c.detail}>{c.description}</span>
                         {taken ? <span className="block text-xs text-slate-400">En «{taken}»</span> : byConcept && <span className="block text-xs text-slate-400">entra por su concepto</span>}
                       </td>
-                      <td className="hidden whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell">{accName.get(c.accountId) ?? "—"}</td>
-                      <td className="hidden whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell">{categoryLabel(c.category)}</td>
+                      <td className="hidden truncate whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell">{accName.get(c.accountId) ?? "—"}</td>
+                      <td className="hidden truncate whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell">{categoryLabel(c.category)}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums text-slate-900">{eur(-c.amount, 2)}</td>
                     </tr>
                   );
