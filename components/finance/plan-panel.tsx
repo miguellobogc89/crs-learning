@@ -63,14 +63,14 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
   const usedCategories = useMemo(() => new Set(view.charges.map((c) => c.category)), [view.charges]);
   const packName = useMemo(() => new Map(view.packages.map((p) => [p.id, p.name])), [view.packages]);
   /** Paquete (otro) que ya tiene este cargo: entonces aquí no se puede marcar. */
-  const takenBy = (c: Charge) => (c.owner && c.owner !== pack?.id ? packName.get(c.owner) ?? "otro paquete" : null);
+  const takenBy = (c: Charge) => (c.patrimonial ? "Ahorro / inversión: no es consumo" : c.owner && c.owner !== pack?.id ? `En «${packName.get(c.owner) ?? "otro paquete"}»` : null);
   const included = (c: Charge) => !takenBy(c) && (concepts.has(c.concept) || picked.has(c.id));
   const rows = useMemo(() => {
     const needle = fold(q.trim());
     return view.charges.filter((c) =>
       (account === "all" || c.accountId === account) &&
       (category === "all" || c.category === category) &&
-      (onlyPicked === "all" || (onlyPicked === "si" ? !(c.owner && c.owner !== pack?.id) && (concepts.has(c.concept) || picked.has(c.id)) : !(c.owner && c.owner !== pack?.id))) &&
+      (onlyPicked === "all" || (onlyPicked === "si" ? !c.patrimonial && !(c.owner && c.owner !== pack?.id) && (concepts.has(c.concept) || picked.has(c.id)) : !c.patrimonial && !(c.owner && c.owner !== pack?.id))) &&
       (!needle || fold(`${c.description} ${c.detail} ${String(-c.amount).replace(".", ",")}`).includes(needle)));
   }, [view.charges, q, account, category, onlyPicked, picked, concepts, pack?.id]);
   const groups = useMemo(() => {
@@ -148,7 +148,7 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
       onClose={onClose}
       width="max-w-5xl"
       title={pack ? "Editar paquete" : "Nuevo paquete"}
-      subtitle="Marca un concepto para que entren todos sus cargos (los de antes y los que lleguen), o un cargo suelto en la vista por movimiento. Solo aparecen gastos: los traspasos entre tus cuentas y las aportaciones a ahorro o inversión no son consumo."
+      subtitle="Marca un concepto para que entren todos sus cargos (los de antes y los que lleguen), o un cargo suelto en la vista por movimiento. Las aportaciones a ahorro o inversión aparecen bloqueadas: son movimientos de patrimonio, no consumo."
       footer={
         <>
           <span className="mr-auto text-sm text-slate-500">
@@ -247,7 +247,7 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
                             </button>
                             <span className="min-w-0">
                               <span className={`block break-words font-medium ${taken ? "text-slate-400" : "text-slate-900"}`}>{g.label}</span>
-                              <span className="block text-xs text-slate-500">{taken ? <>En «{taken}»</> : <>{g.rows.length} {g.rows.length === 1 ? "cargo" : "cargos"} · {categoryLabel(g.last.category)}</>}</span>
+                              <span className="block text-xs text-slate-500">{taken ? <>{taken}</> : <>{g.rows.length} {g.rows.length === 1 ? "cargo" : "cargos"} · {categoryLabel(g.last.category)}</>}</span>
                             </span>
                           </span>
                         </td>
@@ -260,7 +260,7 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
                           <td className="py-1.5 pl-8 pr-3"><TriCheckbox checked={included(c)} disabled={full || !!takenBy(c)} onChange={() => toggleRow(c)} label="Marcar este cargo" /></td>
                           <td className="px-3 py-1.5"><span className="block break-words pl-6 text-slate-600" title={c.detail}>{shortDay(c.date)} · {c.description}</span></td>
                           <td className="hidden truncate whitespace-nowrap px-3 py-1.5 text-slate-500 md:table-cell">{accName.get(c.accountId) ?? "—"}</td>
-                          <td className="hidden truncate px-3 py-1.5 md:table-cell">{takenBy(c) ? <span className="text-slate-400">en «{takenBy(c)}»</span> : full && <span className="text-slate-400">por concepto</span>}</td>
+                          <td className="hidden truncate px-3 py-1.5 md:table-cell">{takenBy(c) ? <span className="text-slate-400">{takenBy(c)}</span> : full && <span className="text-slate-400">por concepto</span>}</td>
                           <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-slate-700">{eur(-c.amount, 2)}</td>
                         </tr>
                       ))}
@@ -279,7 +279,7 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
                       <td className="whitespace-nowrap px-3 py-2 text-slate-500">{shortDay(c.date)}</td>
                       <td className="px-3 py-2">
                         <span className={`block break-words ${taken ? "" : "text-slate-900"}`} title={c.detail}>{c.description}</span>
-                        {taken ? <span className="block text-xs text-slate-400">En «{taken}»</span> : byConcept && <span className="block text-xs text-slate-400">entra por su concepto</span>}
+                        {taken ? <span className="block text-xs text-slate-400">{taken}</span> : byConcept && <span className="block text-xs text-slate-400">entra por su concepto</span>}
                       </td>
                       <td className="hidden truncate whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell">{accName.get(c.accountId) ?? "—"}</td>
                       <td className="hidden truncate whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell">{categoryLabel(c.category)}</td>

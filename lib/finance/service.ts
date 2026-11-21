@@ -442,11 +442,14 @@ export async function packagesView(userId: string) {
     financeContext(userId),
     prisma.finance_packages.findMany({ where: { user_id: userId }, orderBy: { created_at: "asc" } }),
   ]);
-  const all = ctx.txs.filter(isPackageCharge).map((t) => ({
+  const toCharge = (t: (typeof ctx.txs)[number]) => ({
     id: t.id, date: t.date, amount: t.amount, accountId: t.accountId, category: t.category,
     concept: conceptKey(t.description, t.counterparty),
     description: t.alias || t.counterparty || t.description, detail: t.description,
-  }));
+  });
+  // Solo el consumo cuenta en los paquetes; las aportaciones a ahorro o inversión se ven en el modal, bloqueadas.
+  const all = ctx.txs.filter(isPackageCharge).map(toCharge);
+  const savingsMoves = ctx.txs.filter((t) => t.kind === "ahorro" && t.amount < 0).map(toCharge);
   const packs = rows.map((p) => ({ id: p.id, name: p.name, conceptKeys: p.concept_keys, txIds: p.tx_ids, goal: p.goal === null ? null : Number(p.goal) }));
   const owner = packageOwners(packs, all);
   const current = cycleFor(ctx.today, ctx.startDay);
@@ -457,7 +460,10 @@ export async function packagesView(userId: string) {
   const totalDays = daysBetween(current.start, current.end) + 1;
   // Ingreso medio de los mismos ciclos completos que la media de los paquetes (del histórico, no se configura).
   const incomes = ctx.history.filter((h) => previous.some((c) => c.start === h.cycle.start)).map((h) => h.income);
-  const charges = all.filter((c) => c.date >= since).map((c) => ({ ...c, owner: owner.get(c.id) ?? null }));
+  const charges = [
+    ...all.filter((c) => c.date >= since).map((c) => ({ ...c, owner: owner.get(c.id) ?? null, patrimonial: false })),
+    ...savingsMoves.filter((c) => c.date >= since).map((c) => ({ ...c, owner: null, patrimonial: true })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
   return {
     cycle: { ...current, day, totalDays },
     averageCycles: previous.length,
