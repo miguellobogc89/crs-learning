@@ -221,7 +221,7 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
                               <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`} />
                             </button>
                             <span className="min-w-0">
-                              <span className={`block truncate font-medium ${taken ? "text-slate-400" : "text-slate-900"}`}>{g.label}</span>
+                              <span className={`block break-words font-medium ${taken ? "text-slate-400" : "text-slate-900"}`}>{g.label}</span>
                               <span className="block text-xs text-slate-500">{taken ? <>En «{taken}»</> : <>{g.rows.length} {g.rows.length === 1 ? "cargo" : "cargos"} · {categoryLabel(g.last.category)}</>}</span>
                             </span>
                           </span>
@@ -233,7 +233,7 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
                       {isOpen && g.rows.map((c) => (
                         <tr key={c.id} onClick={() => toggleRow(c)} className={`border-b border-slate-50 bg-slate-50/50 text-xs ${full || takenBy(c) ? "" : "cursor-pointer hover:bg-slate-100/60"}`}>
                           <td className="py-1.5 pl-8 pr-3"><TriCheckbox checked={included(c)} disabled={full || !!takenBy(c)} onChange={() => toggleRow(c)} label="Marcar este cargo" /></td>
-                          <td className="px-3 py-1.5"><span className="block truncate pl-6 text-slate-600" title={c.detail}>{shortDay(c.date)} · {c.description}</span></td>
+                          <td className="px-3 py-1.5"><span className="block break-words pl-6 text-slate-600" title={c.detail}>{shortDay(c.date)} · {c.description}</span></td>
                           <td className="hidden truncate whitespace-nowrap px-3 py-1.5 text-slate-500 md:table-cell">{accName.get(c.accountId) ?? "—"}</td>
                           <td className="hidden truncate px-3 py-1.5 md:table-cell">{takenBy(c) ? <span className="text-slate-400">en «{takenBy(c)}»</span> : full && <span className="text-slate-400">por concepto</span>}</td>
                           <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-slate-700">{eur(-c.amount, 2)}</td>
@@ -253,7 +253,7 @@ function PackageModal({ view, pack, open, onClose }: { view: View; pack: Pack | 
                       <td className="px-3 py-2"><TriCheckbox checked={included(c)} disabled={byConcept || !!taken} onChange={() => toggleRow(c)} label="Marcar este cargo" /></td>
                       <td className="whitespace-nowrap px-3 py-2 text-slate-500">{shortDay(c.date)}</td>
                       <td className="px-3 py-2">
-                        <span className={`block truncate ${taken ? "" : "text-slate-900"}`} title={c.detail}>{c.description}</span>
+                        <span className={`block break-words ${taken ? "" : "text-slate-900"}`} title={c.detail}>{c.description}</span>
                         {taken ? <span className="block text-xs text-slate-400">En «{taken}»</span> : byConcept && <span className="block text-xs text-slate-400">entra por su concepto</span>}
                       </td>
                       <td className="hidden truncate whitespace-nowrap px-3 py-2 text-slate-500 md:table-cell">{accName.get(c.accountId) ?? "—"}</td>
@@ -284,7 +284,7 @@ function PackageRow({ p, view, onEdit, onDelete }: { p: Pack; view: View; onEdit
         <span className="flex min-w-0 items-center gap-1.5">
           <ChevronRight className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-90" : ""}`} />
           <span className="min-w-0">
-            <span className="block truncate font-medium text-slate-900">{p.name}</span>
+            <span className="block break-words font-medium text-slate-900">{p.name}</span>
             <span className="block truncate text-xs text-slate-500">{p.conceptKeys.length} {p.conceptKeys.length === 1 ? "concepto" : "conceptos"}{p.txIds.length ? ` y ${p.txIds.length} sueltos` : ""}</span>
           </span>
         </span>
@@ -316,7 +316,7 @@ function PackageRow({ p, view, onEdit, onDelete }: { p: Pack; view: View; onEdit
               {p.currentCharges.map((c) => (
                 <li key={c.id} className="flex items-center gap-3 py-1.5 text-sm">
                   <span className="w-12 shrink-0 text-xs text-slate-400">{shortDay(c.date)}</span>
-                  <span className="min-w-0 flex-1 truncate text-slate-700" title={c.detail}>{c.description}</span>
+                  <span className="min-w-0 flex-1 break-words text-slate-700" title={c.detail}>{c.description}</span>
                   <span className="shrink-0 tabular-nums text-slate-900">{eur(-c.amount, 2)}</span>
                 </li>
               ))}
