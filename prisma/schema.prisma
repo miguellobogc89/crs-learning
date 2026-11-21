@@ -2860,6 +2860,8 @@ model finance_packages {
   user_id    String   @db.Uuid
   name       String
   tx_ids     String[] @default([]) @db.Uuid
+  /// Conceptos marcados enteros (conceptKey de lib/finance/plan.ts): sus cargos pasados y futuros entran solos.
+  concept_keys String[] @default([])
   created_at DateTime @default(now()) @db.Timestamptz(6)
   users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 

@@ -120,13 +120,15 @@ export async function POST(req: Request, route: RouteContext) {
       const ids = Array.isArray(body.txIds) ? [...new Set((body.txIds as unknown[]).filter((x): x is string => typeof x === "string"))].slice(0, 2000) : [];
       // Solo movimientos del propio usuario.
       const own = ids.length ? (await prisma.finance_transactions.findMany({ where: { user_id: uid, id: { in: ids } }, select: { id: true } })).map((t) => t.id) : [];
+      const concepts = Array.isArray(body.conceptKeys) ? [...new Set((body.conceptKeys as unknown[]).filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.slice(0, 80)))].slice(0, 500) : [];
+      const data = { name, tx_ids: own, concept_keys: concepts };
       const id = str("id");
       if (id) {
-        const r = await prisma.finance_packages.updateMany({ where: { id, user_id: uid }, data: { name, tx_ids: own } });
+        const r = await prisma.finance_packages.updateMany({ where: { id, user_id: uid }, data });
         if (!r.count) return fail("Paquete no encontrado", 404);
         return ok({ id });
       }
-      const created = await prisma.finance_packages.create({ data: { user_id: uid, name, tx_ids: own }, select: { id: true } });
+      const created = await prisma.finance_packages.create({ data: { user_id: uid, ...data }, select: { id: true } });
       return ok(created);
     }
     if (action === "package/delete") {

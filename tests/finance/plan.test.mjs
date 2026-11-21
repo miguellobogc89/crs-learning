@@ -100,3 +100,14 @@ test("Asistente: una partida fija por cuenta con los recibos marcados", () => {
   assert.equal(fixed.length, 2);
   assert.deepEqual(fixed[0], { name: "Fijos · BBVA", amount: 826.75, categories: ["vivienda", "suministros"], accountId: "B", recurringKeys: ["hipoteca", "luz"] });
 });
+
+test("Concepto de paquete: sin referencias que cambian en cada pago", () => {
+  assert.equal(P.conceptKey("Glovo Glovo S1htdleu", "Glovo Glovo S1htdleu"), P.conceptKey("Glovo 04oct Sqsm1a1d", "Glovo 04oct Sqsm1a1d"));
+  assert.equal(P.conceptKey("Cabify Es 2646sdctza87", "Cabify Es 2646sdctza87"), P.conceptKey("Cabify Es 26435g1pu8hz", "Cabify Es 26435g1pu8hz"));
+  assert.equal(P.conceptKey("Freenow*ebbf70-2", "Freenow*ebbf70-2"), "freenow");
+  assert.equal(P.conceptKey("COMPRA Nintendo CB1742648039, Frankfurt am, TARJETA 5489019360941800 , COMISION 0,00", null),
+    P.conceptKey("COMPRA Nintendo CC1743127416, Frankfurt am, TARJETA 5489019360941800 , COMISION 0,00", null));
+  assert.notEqual(P.conceptKey("Bar Borbolla", "Bar Borbolla"), P.conceptKey("Bar Epoca", "Bar Epoca"));
+  assert.ok(P.inPackage({ conceptKeys: ["glovo"], txIds: [] }, { id: "x", concept: "glovo" }));
+  assert.ok(P.inPackage({ conceptKeys: [], txIds: ["x"] }, { id: "x", concept: "otro" }));
+});

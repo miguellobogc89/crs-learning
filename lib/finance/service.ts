@@ -9,7 +9,7 @@ import {
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, getWishlist, loadTxs } from "./store";
-import { budgetMovements, budgetWeeks, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, transferPlan, unclassifiedFor, wishStatus } from "./plan";
+import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, inPackage, transferPlan, unclassifiedFor, wishStatus } from "./plan";
 import { AUTO_SYNC_HOURS } from "./sync";
 import { zombies } from "./gmail";
 
@@ -440,12 +440,17 @@ export async function packagesView(userId: string) {
     getAccounts(userId),
     loadTxs(userId, { since: addDays(todayIso(), -365) }),
   ]);
+  const charges = txs.filter((t) => t.amount < 0 && t.kind !== "interna").map((t) => ({
+    id: t.id, date: t.date, amount: t.amount, accountId: t.accountId, category: t.category,
+    concept: conceptKey(t.description, t.counterparty),
+    description: t.alias || t.counterparty || t.description, detail: t.description,
+  }));
   return {
-    packages: rows.map((p) => ({ id: p.id, name: p.name, txIds: p.tx_ids })),
+    packages: rows.map((p) => {
+      const pack = { id: p.id, name: p.name, conceptKeys: p.concept_keys, txIds: p.tx_ids };
+      return { ...pack, count: charges.filter((c) => inPackage(pack, c)).length };
+    }),
     accounts: accounts.filter((a) => a.included).map((a) => ({ id: a.id, name: a.name, bank: a.bank, last4: a.ibanLast4 })),
-    charges: txs.filter((t) => t.amount < 0 && t.kind !== "interna").map((t) => ({
-      id: t.id, date: t.date, amount: t.amount, accountId: t.accountId, category: t.category,
-      description: t.alias || t.counterparty || t.description, detail: t.description,
-    })),
+    charges,
   };
 }

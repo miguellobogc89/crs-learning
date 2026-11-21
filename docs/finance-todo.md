@@ -47,7 +47,7 @@ Ideas y tareas del módulo de finanzas personales. Recopilación de conversacion
 ## Mi plan · paquetes (21/11/2026, enfoque vigente)
 Se replantea la Planificación para ir paso a paso y construir solo la base. La pantalla Plan arranca vacía con «Crear paquete». Un paquete (Fijos, Tabaco, Restaurantes, Gasolina…) lo define cada usuario con los cargos que marca en un modal con buscador y filtros (cuenta, categoría, solo marcados). Tabla `finance_packages` (nombre + `tx_ids`), migración `20261121140000_finance_packages`.
 - [x] Carcasa: crear, renombrar, borrar paquetes y marcar sus cargos (último año, sin traspasos internos).
-- [ ] Decidir cómo entran los cargos del pasado y los futuros del mismo concepto aunque cambie el importe (p. ej. préstamo de la moto, comunidad).
+- [x] Vista por concepto en el modal (selector «Por concepto / Por movimiento» en la cabecera estándar). Marcar un concepto mete sus cargos pasados y futuros aunque cambie el importe (`finance_packages.concept_keys`, migración `20261121150000_finance_package_concepts`); marcar un movimiento mete solo ese cargo. El concepto es `conceptKey` (lib/finance/plan.ts): la clave de comercio sin referencias que cambian en cada pago con tarjeta.
 - [ ] Importe del paquete y seguimiento (pendiente de decidir).
 - Los ingresos no se configuran: salen del histórico.
 

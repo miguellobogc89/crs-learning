@@ -2,7 +2,7 @@
 // Planificación (la hucha): cuadre del plan del ciclo, límite semanal de cada partida, transferencias del día de
 // cobro y lista de deseos. Funciones puras sobre los datos de logic.ts (sin base de datos): las usa service.ts y
 // los tests. Nada está pensado para un usuario concreto: partidas, importes y cuentas los decide cada persona.
-import { addDays, daysBetween, median, round2, toDate, type Budget, type BudgetStatus, type Cycle, type CycleSummary, type Recurring, type Tx } from "./logic";
+import { addDays, daysBetween, median, merchantKey, round2, toDate, type Budget, type BudgetStatus, type Cycle, type CycleSummary, type Recurring, type Tx } from "./logic";
 
 // ---------------------------------------------------------------------------------------------------------
 // Cuadre del plan: ingreso − fijos − variables − ahorro = sin asignar
@@ -221,3 +221,23 @@ export function fixedPartidas(selected: FixedSource[], accountName: (id: string 
   }
   return [...groups.values()].map((g) => ({ ...g, amount: round2(g.amount) })).sort((a, b) => b.amount - a.amount);
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// Mi plan · paquetes: concepto estandarizado de un cargo
+// ---------------------------------------------------------------------------------------------------------
+
+/**
+ * Concepto de un cargo para agrupar en los paquetes: la clave de comercio sin las referencias que cambian en cada
+ * pago con tarjeta («Glovo 04oct Sqsm1a1d», «Freenow*ebbf70-2», «Cabify Es 2646sdctza87») y sin palabras repetidas.
+ * Así «todo lo de Glovo» es un solo concepto aunque cambien la referencia, la fecha o el importe.
+ */
+export function conceptKey(description: string, counterparty?: string | null) {
+  const base = merchantKey(description, counterparty);
+  const words = base.split(" ").filter((w) => w && !/\d/.test(w));
+  const unique = words.filter((w, i) => w !== words[i - 1]);
+  return unique.join(" ") || base;
+}
+
+/** Si un cargo entra en un paquete: por su concepto (pasados y futuros) o marcado a mano. */
+export const inPackage = (p: { conceptKeys: string[]; txIds: string[] }, c: { id: string; concept: string }) =>
+  p.conceptKeys.includes(c.concept) || p.txIds.includes(c.id);
