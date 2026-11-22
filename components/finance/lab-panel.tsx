@@ -29,6 +29,10 @@ const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
 type Group = { key: string; name: string; categories: string[] };
+const LAB_STATE = "crs-finance:lab";
+const LAB_SCROLL = "crs-finance:lab-scroll";
+/** El contenedor que hace scroll en Finanzas (el <main> de la estructura). */
+const scroller = () => document.querySelector<HTMLElement>("main");
 const INITIAL: Group[] = [
   { key: "fijos", name: "Gastos fijos", categories: ["suministros", "suscripciones", "prestamos"] },
   { key: "ocio", name: "Ocio", categories: ["restaurantes", "ocio", "videojuegos"] },
@@ -134,6 +138,28 @@ export function LabPanel() {
   const { data, error } = useFinance<Packages>("packages");
   const [groups, setGroups] = useState<Group[]>(INITIAL);
   const [open, setOpen] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
+  // Al volver del detalle, la pantalla queda como se dejó: grupos, desplegado y scroll (en esta sesión).
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.sessionStorage.getItem(LAB_STATE) ?? "null") as { groups?: Group[]; open?: string | null } | null;
+      if (saved?.groups) setGroups(saved.groups);
+      if (saved && saved.open !== undefined) setOpen(saved.open);
+    } catch { /* sin almacenamiento: se empieza de cero */ }
+    setRestored(true);
+  }, []);
+  useEffect(() => {
+    if (!restored || !data) return;
+    try {
+      const y = Number(window.sessionStorage.getItem(LAB_SCROLL));
+      if (y > 0) requestAnimationFrame(() => { const el = scroller(); if (el) el.scrollTop = y; });
+      window.sessionStorage.removeItem(LAB_SCROLL);
+    } catch { /* ignorar */ }
+  }, [restored, data]);
+  useEffect(() => {
+    if (!restored) return;
+    try { window.sessionStorage.setItem(LAB_STATE, JSON.stringify({ groups, open })); } catch { /* ignorar */ }
+  }, [groups, open, restored]);
   const [adding, setAdding] = useState<Group | null>(null);
 
   // Gasto por categoría (con las simuladas) en este ciclo y en el anterior hasta el mismo día del ciclo.
@@ -154,7 +180,7 @@ export function LabPanel() {
   }, [data]);
 
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
-  if (!data || !byCategory) return <SkeletonList rows={4} />;
+  if (!data || !byCategory || !restored) return <SkeletonList rows={4} />;
 
   const used = new Set(groups.flatMap((g) => g.categories));
   const allKeys = [...EXPENSE_CATEGORIES.map((c) => c.key), "sin_clasificar", ...VIRTUAL.map((v) => v.key)];
@@ -171,6 +197,9 @@ export function LabPanel() {
     { key: "sin", name: "Sin partida", categories: free.filter((k) => cur(k) > 0 || (prv(k) ?? 0) > 0), editable: false },
   ];
 
+  const rememberScroll = () => {
+    try { window.sessionStorage.setItem(LAB_SCROLL, String(scroller()?.scrollTop ?? 0)); } catch { /* ignorar */ }
+  };
   const removeCat = (g: string, k: string) => setGroups((gs) => gs.map((x) => (x.key === g ? { ...x, categories: x.categories.filter((c) => c !== k) } : x)));
   // Añade a la partida; si alguna estaba en otra partida, se mueve (cada categoría en una sola partida).
   const addCats = (g: string, keys: string[]) => {
@@ -208,7 +237,7 @@ export function LabPanel() {
                   <ul className="divide-y divide-slate-50">
                     {sorted.map((k) => (
                       <li key={k} className="flex items-center gap-1">
-                        <Link href={`/finanzas/laboratorio/categoria/${encodeURIComponent(k)}`} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 active:bg-slate-50">
+                        <Link href={`/finanzas/laboratorio/categoria/${encodeURIComponent(k)}`} onClick={rememberScroll} scroll={false} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 active:bg-slate-50">
                           <span className="min-w-0 flex-1 text-sm text-slate-700">{labelOf(k)}</span>
                           <span className="shrink-0 text-right">
                             <span className="block text-sm tabular-nums text-slate-900">{eur(cur(k), 2)}</span>

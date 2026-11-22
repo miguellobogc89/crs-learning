@@ -7,7 +7,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ModuleLogo } from "@/components/ui/module-logo";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ChartCandlestick, ChevronRight, Gauge, Landmark, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, SlidersHorizontal, UserCircle, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
@@ -313,6 +313,10 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
   const parts = pathname.split("/").filter(Boolean);
   const section = parts[1] && isFinanceTab(parts[1]) ? parts[1] : "inicio";
   const tabDef = tabDefOf(section);
+  // Pantalla de detalle dentro de una sección (p. ej. /finanzas/laboratorio/categoria/…): flecha para volver.
+  const isDetail = parts.length > 2;
+  const router = useRouter();
+  const goBack = () => (window.history.length > 1 ? router.back() : router.push(`/finanzas/${section}`));
   const fitted = isFittedTab(section);
   const Icon = tabDef.icon;
   const [open, setOpen] = useState(false);
@@ -342,9 +346,15 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-slate-200/70 bg-white/95 px-2 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
-          <button type="button" onClick={() => setOpen(true)} aria-label="Abrir el menú" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
-            <Menu className="h-5 w-5" />
-          </button>
+          {isDetail ? (
+            <button type="button" onClick={goBack} aria-label="Volver" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          ) : (
+            <button type="button" onClick={() => setOpen(true)} aria-label="Abrir el menú" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
+              <Menu className="h-5 w-5" />
+            </button>
+          )}
           <h1 className="absolute left-1/2 flex max-w-[calc(100%-7rem)] -translate-x-1/2 items-center justify-center gap-2 text-[17px] font-bold text-slate-900">
             <Icon className="h-4 w-4 shrink-0 text-blue-600" />
             <span className="truncate">{tabDef.label}</span>
@@ -354,7 +364,11 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
 
         <div className="hidden shrink-0 items-start gap-3 px-6 pb-3 pt-5 md:flex lg:px-8">
           <h1 className="flex min-w-0 flex-1 items-center gap-3 text-[26px] font-semibold leading-[1.2] tracking-tight text-slate-950">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Icon className="h-5 w-5" /></span>
+            {isDetail ? (
+              <button type="button" onClick={goBack} aria-label="Volver" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200"><ArrowLeft className="h-5 w-5" /></button>
+            ) : (
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Icon className="h-5 w-5" /></span>
+            )}
             <span className="truncate">{tabDef.label}</span>
           </h1>
           {sync.syncing && <span className="mt-2 flex items-center gap-1.5 text-xs text-slate-400"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sincronizando</span>}

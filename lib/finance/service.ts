@@ -467,6 +467,8 @@ export async function packagesView(userId: string) {
   return {
     cycle: { ...current, day, totalDays },
     averageCycles: previous.length,
+    /** Ciclos del último par de años (el actual primero), para agrupar historiales por ciclo. */
+    cycles: Array.from({ length: 24 }, (_, i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c) => c.end >= oldest),
     /** Ciclos de la media, para que el modal proponga el objetivo con lo que se va marcando. */
     averageRanges: previous.map(({ start, end }) => ({ start, end })),
     averageIncome: incomes.length ? round2(incomes.reduce((a, b) => a + b, 0) / incomes.length) : null,

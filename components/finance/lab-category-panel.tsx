@@ -1,66 +1,102 @@
 "use client";
-// Laboratorio de Plan · detalle de una categoría: entra desde la derecha, con flecha para volver. Solo la lista de
-// sus movimientos de este ciclo, sin filtros; al tocar uno se edita con la misma ventana que en Movimientos
-// (movement-edit.tsx). Si cambia de categoría, sale de la lista y, al volver, la cifra del grupo ya está al día.
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
+// Laboratorio de Plan · detalle de una categoría. Entra desde la derecha; la flecha para volver está en la cabecera
+// de la app (shell.tsx, en cualquier pantalla de detalle). Encima de la lista, el nombre de la categoría y, a la
+// derecha, el ciclo que se está viendo y su importe: al hacer scroll y entrar en un ciclo anterior, cambian (como el
+// historial de categoría de Inicio). Al tocar un movimiento se edita con la misma ventana que en Movimientos
+// (movement-edit.tsx); si cambia de categoría, sale de la lista y, al volver, la cifra del grupo ya está al día.
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { packagesView } from "@/lib/finance/service";
 import { eur } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
-import { shortDay, useFinance } from "./api";
+import { useFinance } from "./api";
 import { EditModal, MovementRowButton, type Item, type List } from "./movement-edit";
 import { labCategory, labLabel } from "./lab-categories";
 
 type Packages = Awaited<ReturnType<typeof packagesView>>;
+type Cycle = Packages["cycles"][number];
+type Section = Cycle & { rows: Item[]; total: number };
+
+const scroller = () => document.querySelector<HTMLElement>("main");
 
 export function LabCategoryPanel({ categoryKey }: { categoryKey: string }) {
-  const router = useRouter();
   const list = useFinance<List>("transactions?all=1");
   const plan = useFinance<Packages>("packages");
   const [editing, setEditing] = useState<Item | null>(null);
-  const back = () => (window.history.length > 1 ? router.back() : router.push("/finanzas/laboratorio"));
+  const [visible, setVisible] = useState<string | null>(null);
+  const header = useRef<HTMLDivElement>(null);
+
+  // El detalle empieza arriba del todo (el contenedor de scroll es el mismo que el de la lista de grupos).
+  useEffect(() => { const el = scroller(); if (el) el.scrollTop = 0; }, []);
+
+  // Cargos de esta categoría (gastos de cuentas incluidas), agrupados por ciclo, el más reciente primero.
+  const sections = useMemo<Section[]>(() => {
+    if (!list.data || !plan.data) return [];
+    const rows = list.data.items.filter((t) => !t.excluded && t.kind === "gasto" && t.amount < 0
+      && labCategory(t.category, t.description, t.counterparty, t.alias) === categoryKey);
+    return plan.data.cycles.map((c) => {
+      const mine = rows.filter((t) => t.date >= c.start && t.date <= c.end).sort((a, b) => b.date.localeCompare(a.date));
+      return { ...c, rows: mine, total: Math.round(mine.reduce((s, t) => s - t.amount, 0) * 100) / 100 };
+    }).filter((s, i) => i === 0 || s.rows.length > 0);
+  }, [list.data, plan.data, categoryKey]);
+
+  // Ciclo que se ve bajo la cabecera fija: el último cuyo comienzo ya ha pasado por debajo de ella.
+  useEffect(() => {
+    const el = scroller();
+    if (!el || !sections.length) return;
+    const onScroll = () => {
+      const limit = (header.current?.getBoundingClientRect().bottom ?? 0) + 4;
+      let current = sections[0].start;
+      for (const node of el.querySelectorAll<HTMLElement>("[data-cycle]")) {
+        if (node.getBoundingClientRect().top > limit) break;
+        current = node.dataset.cycle ?? current;
+      }
+      setVisible(current);
+    };
+    onScroll();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [sections]);
 
   const error = list.error ?? plan.error;
-  const cycle = plan.data?.cycle;
-  // Mismos cargos que cuenta el grupo: gastos de cuentas incluidas, en este ciclo y de esta categoría.
-  const rows = list.data && cycle
-    ? list.data.items
-      .filter((t) => !t.excluded && t.kind === "gasto" && t.amount < 0 && t.date >= cycle.start && t.date <= cycle.end
-        && labCategory(t.category, t.description, t.counterparty, t.alias) === categoryKey)
-      .sort((a, b) => b.date.localeCompare(a.date))
-    : [];
-  const total = Math.round(rows.reduce((s, t) => s - t.amount, 0) * 100) / 100;
+  const active = sections.find((s) => s.start === visible) ?? sections[0];
 
   return (
     <div className="mx-auto max-w-xl animate-in fade-in-0 slide-in-from-right-10 pb-6 duration-200">
-      <header className="sticky top-0 z-10 -mx-1 mb-1 flex items-center gap-2 bg-white px-1 py-2">
-        <button type="button" onClick={back} aria-label="Volver" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-lg font-semibold text-slate-900">{labLabel(categoryKey)}</h2>
-          {cycle && (
-            <p className="text-xs text-slate-500">
-              {shortDay(cycle.start)} – {shortDay(cycle.end)} · {rows.length} {rows.length === 1 ? "cargo" : "cargos"} · <span className="font-medium tabular-nums text-slate-700">{eur(total, 2)}</span>
-            </p>
-          )}
-        </div>
-      </header>
+      <div ref={header} className="sticky top-0 z-10 -mx-3 flex items-end justify-between gap-3 border-b border-slate-100 bg-white px-4 pb-3 pt-1 md:-mx-0 md:px-1">
+        <h2 className="min-w-0 truncate text-lg font-semibold text-slate-900">{labLabel(categoryKey)}</h2>
+        {active && (
+          <div className="shrink-0 text-right">
+            <p className="text-lg font-semibold tabular-nums text-slate-900">{eur(active.total, 2)}</p>
+            <p className="text-xs text-slate-500">{active.label}</p>
+          </div>
+        )}
+      </div>
 
       {error && !list.data ? <ErrorNote>{error}</ErrorNote>
-        : !list.data || !cycle ? <SkeletonList rows={6} />
-        : rows.length === 0 ? <p className="py-10 text-center text-sm text-slate-400">No hay movimientos de esta categoría en este ciclo.</p>
-        : (
-          <ul className="divide-y divide-slate-100 border-y border-slate-100">
-            {rows.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 px-1 py-3">
-                <MovementRowButton t={t} onClick={() => setEditing(t)} />
-              </li>
-            ))}
-          </ul>
-        )}
+        : !list.data || !plan.data ? <SkeletonList rows={6} />
+        : sections.every((s) => s.rows.length === 0) ? <p className="py-10 text-center text-sm text-slate-400">No hay movimientos de esta categoría.</p>
+        : sections.map((s, i) => (
+          <section key={s.start} data-cycle={s.start}>
+            {i > 0 && (
+              <p className="flex justify-between bg-slate-50 px-1 py-1.5 text-xs text-slate-500">
+                <span>{s.label}</span>
+                <span className="tabular-nums">{eur(s.total, 2)}</span>
+              </p>
+            )}
+            {s.rows.length === 0
+              ? <p className="py-6 text-center text-sm text-slate-400">Nada en este ciclo todavía.</p>
+              : (
+                <ul className="divide-y divide-slate-100">
+                  {s.rows.map((t) => (
+                    <li key={t.id} className="flex items-center gap-3 px-1 py-3">
+                      <MovementRowButton t={t} onClick={() => setEditing(t)} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </section>
+        ))}
       <EditModal item={editing} onClose={() => setEditing(null)} />
     </div>
   );
