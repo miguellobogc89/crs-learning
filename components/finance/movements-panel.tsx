@@ -9,6 +9,7 @@ import type { listTransactions } from "@/lib/finance/service";
 import { SELECTABLE_CATEGORIES, KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur, panel, th } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
+import { MovementDetailSheet } from "./movement-detail";
 import { Amount, CategoryPill, EditModal, MovementRowButton, categoriesFor, isReview, label, type Item, type List } from "./movement-edit";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { errorText, fapi, refreshFinance, shortDay, useFinance } from "./api";
@@ -204,6 +205,8 @@ export function MovementsPanel() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [shown, setShown] = useState(PAGE);
   const [editing, setEditing] = useState<Item | null>(null);
+  // Detalle a pantalla completa (capa sobre la lista): por id, para mostrar siempre los datos al día.
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [reclassifying, setReclassifying] = useState(false);
 
@@ -487,7 +490,7 @@ export function MovementsPanel() {
                   <Fragment key={g.key}>
                     {group !== "none" && groupHeader(g, false)}
                     {g.visible.map((t) => (
-                      <tr key={t.id} onClick={() => setEditing(t)} className={`cursor-pointer hover:bg-slate-50 ${selected.has(t.id) ? "bg-blue-50/60" : ""} ${t.excluded ? "opacity-50" : ""}`}>
+                      <tr key={t.id} onClick={() => setViewingId(t.id)} className={`cursor-pointer hover:bg-slate-50 ${selected.has(t.id) ? "bg-blue-50/60" : ""} ${t.excluded ? "opacity-50" : ""}`}>
                         {rowCells(t)}
                       </tr>
                     ))}
@@ -503,7 +506,7 @@ export function MovementsPanel() {
                   {g.visible.map((t) => (
                     <li key={t.id} className={`flex items-center gap-3 px-4 py-3 ${selected.has(t.id) ? "bg-blue-50/60" : ""}`}>
                       {selectionMode && <Check checked={selected.has(t.id)} onChange={() => toggle([t.id], !selected.has(t.id))} label="Seleccionar" />}
-                      <MovementRowButton t={t} onClick={() => setEditing(t)} />
+                      <MovementRowButton t={t} onClick={() => setViewingId(t.id)} />
                     </li>
                   ))}
                 </Fragment>
@@ -522,6 +525,7 @@ export function MovementsPanel() {
         <div role="status" className="pointer-events-none fixed inset-x-0 bottom-24 z-50 mx-auto w-fit rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white shadow-lg md:bottom-8">{toast}</div>
       )}
       <EditModal item={editing} onClose={() => setEditing(null)} />
+      <MovementDetailSheet item={data?.items.find((t) => t.id === viewingId) ?? null} onClose={() => setViewingId(null)} />
     </div>
   );
 }

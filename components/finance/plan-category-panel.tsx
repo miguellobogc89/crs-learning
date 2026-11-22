@@ -3,7 +3,7 @@
 // de la app (shell.tsx, en cualquier pantalla de detalle). Encima de la lista, el nombre de la categoría y, a la
 // derecha, el ciclo que se está viendo y su importe: al hacer scroll y entrar en un ciclo anterior, cambian (como el
 // historial de categoría de Inicio). Al tocar un movimiento se edita con la misma ventana que en Movimientos
-// (movement-edit.tsx); si cambia de categoría, sale de la lista y, al volver, la cifra del grupo ya está al día.
+// (movement-detail.tsx); si cambia de categoría, sale de la lista y, al volver, la cifra del grupo ya está al día.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { planView } from "@/lib/finance/service";
 import { categoryLabel } from "@/lib/finance/categories";
@@ -11,7 +11,8 @@ import { eur } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { useFinance } from "./api";
-import { EditModal, MovementRowButton, type Item, type List } from "./movement-edit";
+import { MovementRowButton, type Item, type List } from "./movement-edit";
+import { MovementDetailSheet } from "./movement-detail";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Cycle = Plan["cycles"][number];
@@ -22,7 +23,7 @@ const scroller = () => document.querySelector<HTMLElement>("main");
 export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
   const list = useFinance<List>("transactions?all=1");
   const plan = useFinance<Plan>("plan");
-  const [editing, setEditing] = useState<Item | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [visible, setVisible] = useState<string | null>(null);
   const header = useRef<HTMLDivElement>(null);
 
@@ -90,14 +91,15 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
                 <ul className="divide-y divide-slate-100">
                   {s.rows.map((t) => (
                     <li key={t.id} className="flex items-center gap-3 px-1 py-3">
-                      <MovementRowButton t={t} onClick={() => setEditing(t)} />
+                      <MovementRowButton t={t} onClick={() => setViewingId(t.id)} />
                     </li>
                   ))}
                 </ul>
               )}
           </section>
         ))}
-      <EditModal item={editing} onClose={() => setEditing(null)} />
+      {/* Si se recategoriza, sale de esta lista; el detalle sigue mostrándose con sus datos al día hasta volver. */}
+      <MovementDetailSheet item={list.data?.items.find((t) => t.id === viewingId) ?? null} onClose={() => setViewingId(null)} />
     </div>
   );
 }

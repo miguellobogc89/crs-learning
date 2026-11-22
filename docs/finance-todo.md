@@ -78,6 +78,10 @@ Estado:
 - [ ] **F6 · IA crítica** sobre el plan: subidas de fijos, ritmo que no llega al ahorro, etc.
 - [ ] Sincronizar `finance_wishlist_items` y las nuevas columnas si se regenera el esquema con `prisma db pull` (las FK a `finance_accounts` existen en BD pero no como relación Prisma).
 
+## Movimientos: detalle a pantalla completa e iconos (22/11/2026)
+Inspirado en Fintonic. Filas con icono de color de su categoría (`category-icon.tsx`), punto azul si está por revisar, categoría y fecha debajo. Al tocar un movimiento (Movimientos, móvil y escritorio, y detalle de categoría de Plan) se abre su detalle a pantalla completa desde la derecha (`movement-detail.tsx`, capa sobre la lista: conserva filtros y scroll): importe grande, nombre, fecha, cuenta, categoría y nota; abajo Recategorizar (lista desde abajo, con «aplicar a los parecidos»), Extraordinario (un toque) y ✎ (edición completa).
+- Pendiente de lo comparado con Fintonic: pestañas Gastos / Ingresos / No computable en el móvil, agrupar por día dentro del ciclo, «Dividir» un gasto.
+
 ## Plan · grupos de categorías (22/11/2026, enfoque vigente)
 Sustituye a los paquetes y al laboratorio. Plan = lista de **grupos** (conjuntos de categorías; cada categoría en un solo grupo) con objetivo opcional por ciclo. Tabla `finance_plan_groups` (migración `20261122140000_finance_plan_groups`); `planView` y acciones `plan/group`, `plan/group/categories` (mueve la categoría si estaba en otro grupo) y `plan/group/delete`. La primera vez se crean 4 grupos: Gastos fijos (suministros, suscripciones, préstamos), Ocio (restaurantes, ocio, videojuegos), Moda y complementos (moda) y Comida a domicilio (comida_domicilio).
 - Pantalla (móvil primero): líneas finas, desplegable con categorías (gasto del ciclo y diferencia con el anterior a la misma altura), quitar con ×, añadir desde lista que sube desde abajo (buscador, «Sin grupo», «En otros grupos» que se mueven), «Añadir grupo» (nombre + objetivo), línea «Sin grupo». Al volver del detalle queda como se dejó (desplegado y scroll, en la sesión).

@@ -4,12 +4,13 @@
 // subcategoría, extraordinario, nota y «aplicar a los parecidos»). Una sola versión: lo que mejore aquí mejora en
 // todas partes.
 import { useEffect, useState } from "react";
-import { ArrowLeftRight, Loader2, Star } from "lucide-react";
+import { Loader2, Star } from "lucide-react";
 import type { listTransactions } from "@/lib/finance/service";
 import { SELECTABLE_CATEGORIES, KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur, field, ghost, primary } from "@/components/trading/format";
 import { ErrorNote, Modal, Pill } from "@/components/trading/ui";
 import { errorText, fapi, longDay, refreshFinance, shortDay } from "./api";
+import { CategoryIcon } from "./category-icon";
 
 export type List = Awaited<ReturnType<typeof listTransactions>>;
 export type Item = List["items"][number];
@@ -151,25 +152,25 @@ export function EditModal({ item, onClose }: { item: Item | null; onClose: () =>
   );
 }
 
-/** Fila de un movimiento en el móvil: nombre, fecha, importe y categoría. Al tocarla, se edita. */
+/**
+ * Fila de un movimiento en el móvil: icono de color de su categoría, nombre (con un punto azul si está por revisar),
+ * debajo la categoría y la fecha, y el importe a la derecha. Al tocarla se abre su detalle.
+ */
 export function MovementRowButton({ t, onClick }: { t: Item; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-70">
+      <CategoryIcon category={t.kind === "interna" ? "transferencia_interna" : t.category} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
-          {t.kind === "interna" && <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
-          {t.extraordinary && <Star className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
+          {isReview(t) && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-600" aria-label="Por revisar" />}
           <span className="truncate text-[15px] font-medium text-slate-900">{label(t)}</span>
+          {t.extraordinary && <Star className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label="Extraordinario" />}
         </span>
-        <span className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-          <span>{shortDay(t.date)}</span>
-          {isReview(t) && <span className="text-amber-700">revisar</span>}
+        <span className="mt-0.5 block truncate text-xs text-slate-500">
+          {t.kind === "gasto" || t.kind === "devolucion" ? categoryOf(t.category).label : KIND_LABEL[t.kind]}{t.subcategory ? ` · ${t.subcategory}` : ""} · {shortDay(t.date)}
         </span>
       </span>
-      <span className="flex shrink-0 flex-col items-end gap-1">
-        <Amount t={t} />
-        <span className="max-w-[9rem] truncate text-[11px] text-slate-500">{categoryOf(t.category).label}{t.subcategory ? ` · ${t.subcategory}` : ""}</span>
-      </span>
+      <Amount t={t} />
     </button>
   );
 }
