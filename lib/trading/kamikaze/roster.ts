@@ -324,7 +324,7 @@ ALL_KAMIKAZES.push(
     tagline: "El ENJAMBRE con apalancamiento x3: mismas operaciones, cada corto 3 veces más grande. Gana y pierde unas 3 veces más (simulado en un año: +52 % con caída máxima del −18 %).",
   }),
   // AVALANCHA (21/11/2026): cubre lo que ENJAMBRE deja fuera, las caídas fuertes que ya están en marcha.
-  // En prueba con dinero virtual: aún sin validar en el laboratorio (…/lab/swarm?regla=caidas).
+  // Archivada (22/11/2026): perdía en el laboratorio (…/lab/swarm?regla=caidas). Se deja para la historia.
   crypto({
     key: "avalancha",
     name: "AVALANCHA",
@@ -349,6 +349,8 @@ export const ARCHIVED_KAMIKAZES: ReadonlySet<string> = new Set([
   "cohete-persigue",
   "mecha",
   "vertigo-faro",
+  // Descartada el 22/11/2026: en el laboratorio perdía en el último año (−16 %) y en 2022 (−14 %).
+  "avalancha",
 ]);
 /** Los que están en activo. */
 export const KAMIKAZES = ALL_KAMIKAZES.filter((k) => !ARCHIVED_KAMIKAZES.has(k.key));

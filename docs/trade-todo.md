@@ -9,8 +9,7 @@ cambio están en git; aquí solo va lo que falta.
 - [ ] Marcar las ideas de monedas que no están en tu exchange («No está en Bitvavo») y desactivar «Ejecutar». Comprobar que FARO no proponga monedas fuera (el filtro de `venueBases()` falla abierto si Bitvavo no responde).
 - [ ] Mensajes claros cuando falla la conexión con un exchange (certificado o proxy de empresa, DNS, tiempo agotado) en vez del error técnico encadenado. La causa ya la detecta `networkCause()` en `lib/brokers/adapters/*/api.ts`.
 - [ ] Coste en euros de la IA: añadir en Vercel `TRADING_AI_PRICE_IN_EUR` y `TRADING_AI_PRICE_OUT_EUR` (euros por millón de tokens). Lo hace el usuario.
-- [ ] AVALANCHA (cortos en caídas bruscas, 21/11/2026): validarla en el laboratorio antes de copiarla con dinero real: `/api/trading/lab/swarm?regla=caidas&dias=365` y un año bajista (`&hasta=2022-12-31&dias=365`). Si sale bien, añadir AVALANCHA x2/x3.
-- [ ] Gestor de agentes (idea, cuando los agentes estén validados): un agente que decida en cada momento qué agente mueve tu dinero (ahora ENJAMBRE, ahora AVALANCHA, ahora ninguno) según la fase y lo que cada uno haya rendido en ella.
+- [ ] Gestor de agentes (idea, cuando los agentes estén validados): un agente que decida en cada momento qué agente mueve tu dinero (ahora ENJAMBRE, ahora otro, ahora ninguno) según la fase y lo que cada uno haya rendido en ella.
 
 ## 2. FARO aprende (cuando haya 2-3 semanas de datos)
 Base ya en marcha: versión (`FARO_VERSION`), foto completa del mercado en cada idea y todos los candidatos con su resultado (`trading_faro_candidates`).
