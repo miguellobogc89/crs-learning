@@ -9,6 +9,7 @@ import { CARTA } from "../carta";
 import type { ChipDef } from "../chip/roster";
 import { MAX_CHASE_PCT } from "../faro/logic";
 import { AVALANCHA } from "../kamikaze/avalancha";
+import { REBOTE } from "../kamikaze/rebote";
 import type { KamikazeDef } from "../kamikaze/roster";
 
 export type AgentSpec = {
@@ -41,6 +42,15 @@ export function kamikazeSpec(k: KamikazeDef): AgentSpec {
           ? `Cualquiera de las que publica FARO, pero solo con convicción alta (${k.minConviction ?? 4} o más de 5).`
           : "Las de rebote que publica FARO.";
   const stop = k.stopMode === "idea" ? "su stop (justo donde la idea deja de valer)" : "su stop (donde la idea deja de valer, entre un 5 % y un 40 % por debajo)";
+  if (k.engine === "rebote")
+    return {
+      market: "Cripto",
+      style: k.label ?? "Rebotes",
+      ideas: "No usa las ideas de FARO: busca él mismo las monedas grandes (Bitcoin, Ethereum, Solana…) que van cayendo (por debajo de su media de 20 días) y rebotan.",
+      when: `Solo con el mercado en defensa. Cuando la moneda ha rebotado entre un ${nf(REBOTE.minBouncePct)} % y un ${nf(REBOTE.maxBouncePct)} % desde su mínimo de 3 días sin recuperar la media, y el rebote se gira (una hora cierra por debajo de la anterior). Revisa cada hora; tras cerrar una moneda, espera ${nf(REBOTE.cooldownHours)} h para volver a ella.`,
+      size: `Vende en corto un ${nf(k.sizeOfEquityPct ?? 10)} % de su dinero en cada moneda, hasta ${slots} a la vez (empezó con ${nf(k.capital)} €). Sin apalancamiento.`,
+      exit: "Stop justo encima del máximo del rebote (si lo supera, el rebote era de verdad). Sin objetivo ni plazo: el stop baja detrás del precio a esa misma distancia y deja correr la caída.",
+    };
   if (k.engine === "avalancha")
     return {
       market: "Cripto",

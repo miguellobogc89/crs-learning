@@ -10,11 +10,11 @@ const { chooseIdea } = load("lib/trading/faro/logic.ts");
 
 test("ficha: todos los agentes en activo tienen las mismas cuatro líneas, 1.000 € y ninguno decide con IA", () => {
   const specs = [...KAMIKAZES.map(kamikazeSpec), ...CHIP_AGENTS.map(chipSpec)];
-  assert.deepEqual(specs.map((s) => s.style), ["Prudente", "Equilibrado", "Agresivo", "Diversificado", "Diversificado", "Diversificado", "Defensa", "Defensa x2", "Defensa x3", "Fase", "Fase"]);
+  assert.deepEqual(specs.map((s) => s.style), ["Prudente", "Equilibrado", "Agresivo", "Diversificado", "Diversificado", "Diversificado", "Defensa", "Defensa x2", "Defensa x3", "Rebotes", "Fase", "Fase"]);
   assert.match(chipSpec(CHIP_AGENTS[1]).ideas, /EE\. UU\./);
   for (const s of specs) for (const k of ["ideas", "when", "size", "exit"]) assert.ok(s[k].length > 10, `${s.style}: ${k}`);
   assert.ok([...KAMIKAZES, ...CHIP_AGENTS].every((a) => a.capital === 1000));
-  assert.deepEqual(KAMIKAZES.map((k) => k.name), ["ROCA", "BRÚJULA", "VÉRTIGO", "ENJAMBRE RUIDO", "ENJAMBRE RUIDO GRANDES", "ENJAMBRE RUIDO RÁPIDO", "ENJAMBRE", "ENJAMBRE x2", "ENJAMBRE x3"]);
+  assert.deepEqual(KAMIKAZES.map((k) => k.name), ["ROCA", "BRÚJULA", "VÉRTIGO", "ENJAMBRE RUIDO", "ENJAMBRE RUIDO GRANDES", "ENJAMBRE RUIDO RÁPIDO", "ENJAMBRE", "ENJAMBRE x2", "ENJAMBRE x3", "REBOTE"]);
 });
 
 test("riesgo por operación: el tamaño sale de lo que se pierde si salta el stop; ENJAMBRE, un 10 % fijo", () => {

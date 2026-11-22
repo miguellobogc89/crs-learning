@@ -19,11 +19,12 @@ import { dayDate } from "../sync";
 import { boardIdeas, faroTick, lastMarketView, noiseScan, setLive } from "../faro/engine";
 import { chooseIdea, trailingStop, type BoardIdea } from "../faro/logic";
 import { allInQuantity, exitNow, noiseLevels, noiseStop, positionBudget, protectedStop, type Ticker } from "./logic";
-import { dailyCloses, eurPairs, hourly, priceEur, tickers } from "./market";
+import { dailyCloses, eurPairs, hourly, hourlyN, priceEur, tickers } from "./market";
 import { KAMIKAZES, kamikazeByKey, type KamikazeDef } from "./roster";
 import { CARTA, isCartaKind, noiseIdea, refuerzoStop } from "../carta";
 import { attackDays } from "../lab/swarm";
 import { AVALANCHA, crashIdea } from "./avalancha";
+import { REBOTE, bounceShortIdea } from "./rebote";
 import { krakenCopyTurn } from "../kraken-copy";
 
 const WS = AGENTS_WORKSPACE;
@@ -138,7 +139,7 @@ async function tick(force: string | null): Promise<KamikazeTickSummary> {
       return;
     }
     try {
-      if (def.engine === "enjambre-corto" || def.engine === "avalancha") {
+      if (def.engine === "enjambre-corto" || def.engine === "avalancha" || def.engine === "rebote") {
         await shortSwarmTurn(def, account.id, market, rules, actions);
         return;
       }
@@ -297,6 +298,7 @@ async function shortSwarmTurn(def: KamikazeDef, accountId: string, market: Ticke
     await note(phase ? "Mercado en ataque: no abre cortos (espera a que el mercado pase a defensa)" : "Sin datos de la fase del mercado");
     return;
   }
+  if (def.engine === "rebote") return reboteScan(def, state, market, actions, note);
   const open = state.positions.filter((p) => p.status === "abierta" || p.status === "pendiente");
   let free = (def.slots ?? 10) - open.length;
   if (free <= 0) return note(null).then(() => undefined);
@@ -358,6 +360,73 @@ async function shortSwarmTurn(def: KamikazeDef, accountId: string, market: Ticke
  * AVALANCHA: escaneo de cada hora (la vigilancia de los stops es la del ENJAMBRE). Regla en ./avalancha.ts, la misma
  * que simula el laboratorio. En cualquier fase del mercado.
  */
+async function reboteScan(
+  def: KamikazeDef,
+  state: Awaited<ReturnType<typeof accountState>>,
+  market: Ticker[],
+  actions: string[],
+  note: (text: string | null) => Promise<unknown>,
+) {
+  const open = state.positions.filter((p) => p.status === "abierta" || p.status === "pendiente");
+  let free = (def.slots ?? 10) - open.length;
+  if (free <= 0) return void (await note(null));
+  const held = new Set(open.map((p) => p.symbol.replace(/-EUR$/, "")));
+  // Pausa por moneda: no vuelve a una en la que acaba de cerrar un corto.
+  const recent = await prisma.trading_positions.findMany({
+    where: { account_id: state.account.id, status: "cerrada", updated_at: { gte: new Date(Date.now() - REBOTE.cooldownHours * HOUR) } },
+    select: { symbol: true },
+  });
+  const cooling = new Set(recent.map((p) => p.symbol.replace(/-EUR$/, "")));
+  const pool = market
+    .filter((t) => def.coins?.includes(t.base) && !held.has(t.base) && !cooling.has(t.base) && t.price > 0)
+    .filter((t, i, all) => all.findIndex((x) => x.base === t.base) === i)
+    .sort((a, b) => b.volume24h - a.volume24h);
+  const entered: string[] = [];
+  for (const t of pool) {
+    if (free <= 0) break;
+    // 20 días de velas de 1 h ya cerradas (la de ahora, sin terminar, fuera).
+    const bars = (await hourlyN(t.pair, REBOTE.maPeriod + 2).catch(() => [])).slice(0, -1);
+    const r = bounceShortIdea(bars);
+    if (!r) continue;
+    const px = (await priceEur(t.pair).catch(() => null)) ?? null;
+    // Si desde el cierre de la hora ya ha vuelto por encima del stop, el rebote sigue: no entra.
+    if (!px || px >= r.stop) continue;
+    const st = await accountState(WS, def.key);
+    const budget = Math.min(st.summary.available, st.summary.equity * ((def.sizeOfEquityPct ?? 10) / 100));
+    if (budget < 10) break;
+    const symbol = `${t.base}-EUR`;
+    const quantity = allInQuantity(budget * (def.leverage ?? 1), px, costOf(st.account));
+    const inst = await prisma.market_instruments.findUnique({ where: { symbol }, select: { id: true } });
+    if (inst) await setLive(inst.id, px);
+    try {
+      await placeOrder(
+        WS,
+        null,
+        {
+          symbol,
+          direction: "short",
+          quantity,
+          stop: r.stop,
+          target: px * 0.5,
+          execution: "now",
+          maxHoldDays: null,
+          notes: `${def.name}: ${t.base} rebota un ${r.bouncePct.toFixed(1).replace(".", ",")} % dentro de su caída (por debajo de su media de 20 días) y se gira. Corto${(def.leverage ?? 1) > 1 ? ` x${def.leverage}` : ""} con el stop justo encima del rebote, que baja detrás del precio.`,
+          source: "agente",
+          // Distancia del stop que baja detrás del precio: el riesgo inicial (la lee la vigilancia).
+          signalKey: `rebote:${t.base}:${r.risk.toPrecision(6)}:${Date.now()}`,
+        },
+        def.key,
+      );
+      entered.push(t.base);
+      free--;
+    } catch (e) {
+      actions.push(`${t.base}: no pudo abrir (${e instanceof Error ? e.message.slice(0, 100) : "error"})`);
+    }
+  }
+  if (entered.length) actions.push(`Entró en corto en ${entered.join(", ")}`);
+  await note(entered.length ? `Abre cortos en ${entered.join(", ")}` : "En defensa, pero ninguna moneda grande está ahora girándose tras un rebote");
+}
+
 async function crashScan(
   def: KamikazeDef,
   state: Awaited<ReturnType<typeof accountState>>,
@@ -581,7 +650,7 @@ export async function kamikazeView(key: string) {
     capital: def.capital,
     slots: def.slots ?? 1,
     /** No vende en un objetivo: el stop va siguiendo al precio (el «objetivo» guardado es solo un tope técnico). */
-    noTarget: def.engine === "enjambre-corto" || def.engine === "avalancha",
+    noTarget: def.engine === "enjambre-corto" || def.engine === "avalancha" || def.engine === "rebote",
     /** Qué está haciendo ahora (o por qué no entra) y si está en pausa tras una pérdida. */
     note: row?.last_note ?? null,
     noteAt: row?.last_note_at?.toISOString() ?? null,

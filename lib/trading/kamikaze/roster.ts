@@ -73,7 +73,7 @@ export type KamikazeDef = {
   targetFraction?: number;
   /** Motor propio en vez de tomar ideas de FARO: «enjambre-corto» = cortos de ruido roto, solo en defensa;
    * «avalancha» = cortos en caídas bruscas de todo el mercado (lib/trading/kamikaze/avalancha.ts), en cualquier fase. */
-  engine?: "enjambre-corto" | "avalancha";
+  engine?: "enjambre-corto" | "avalancha" | "rebote";
   /** Apalancamiento de los cortos del ENJAMBRE (el tamaño de cada corto se multiplica por esto). */
   leverage?: number;
 };
@@ -322,6 +322,21 @@ ALL_KAMIKAZES.push(
     leverage: 3,
     settings: { ...SETTINGS, commission_pct: 0.05, commission_min: 0, slippage_bps: 2, max_open_positions: 10 },
     tagline: "El ENJAMBRE con apalancamiento x3: mismas operaciones, cada corto 3 veces más grande. Gana y pierde unas 3 veces más (simulado en un año: +52 % con caída máxima del −18 %).",
+  }),
+  // REBOTE (22/11/2026): corto en el rebote de una caída. Laboratorio (…/lab/swarm?regla=rebotes): +7,3 % en el
+  // último año (Bitcoin −30 %) y +5,8 % en 2022 (Bitcoin −58 %), peor bache −7,9 %, y poco parecido a ENJAMBRE
+  // (correlación diaria 0,26-0,36): las dos patas de la defensa no fallan a la vez.
+  crypto({
+    key: "rebote",
+    name: "REBOTE",
+    label: "Rebotes",
+    color: "teal",
+    sizeOfEquityPct: 10,
+    slots: 10,
+    coins: BIG_COINS,
+    engine: "rebote",
+    settings: { ...SETTINGS, commission_pct: 0.05, commission_min: 0, slippage_bps: 2, max_open_positions: 10 },
+    tagline: "Gana cuando el mercado cae a trompicones: con el mercado en defensa, espera a que una moneda grande en caída rebote un 5-10 % y la vende en corto cuando el rebote se gira, con un 10 % de su dinero (hasta 10) y el stop justo encima del rebote.",
   }),
   // AVALANCHA (21/11/2026): cubre lo que ENJAMBRE deja fuera, las caídas fuertes que ya están en marcha.
   // Archivada (22/11/2026): perdía en el laboratorio (…/lab/swarm?regla=caidas). Se deja para la historia.

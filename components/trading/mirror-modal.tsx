@@ -59,7 +59,7 @@ export function MirrorModal({
   const m = view?.mirrors.find((x) => x.agent === agent) ?? null;
   const active = !!m?.active;
   // Agentes de cortos (ENJAMBRE): el dinero real va a Kraken Futures.
-  const short = agent.startsWith("enjambre-corto") || /^enjambre-x\d+$/.test(agent) || agent.startsWith("avalancha");
+  const short = agent.startsWith("enjambre-corto") || /^enjambre-x\d+$/.test(agent) || agent.startsWith("avalancha") || agent === "rebote";
   const realReady = view ? (short ? view.kraken.ready : view.real.ready) : false;
   const realProblemText = view ? (short ? view.kraken.problem : view.real.problem) : null;
   const b = Number(budget.replace(",", "."));

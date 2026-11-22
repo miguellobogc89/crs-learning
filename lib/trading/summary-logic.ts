@@ -3,7 +3,7 @@
 
 /** Familias de agentes para ver de un vistazo cómo va cada enfoque. */
 export const AGENT_GROUPS: { key: string; label: string; agents: string[] }[] = [
-  { key: "defensa", label: "Defensa (cortos)", agents: ["enjambre-corto", "enjambre-x2", "enjambre-x3"] },
+  { key: "defensa", label: "Defensa (cortos)", agents: ["enjambre-corto", "enjambre-x2", "enjambre-x3", "rebote"] },
   { key: "enjambres", label: "Enjambres de ruido", agents: ["enjambre", "enjambre-grandes", "enjambre-rapido"] },
   { key: "riesgo", label: "Por riesgo", agents: ["roca", "brujula", "vertigo-10"] },
   { key: "reglas", label: "De reglas", agents: ["camaleon", "atlas"] },

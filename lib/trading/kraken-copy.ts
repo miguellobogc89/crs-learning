@@ -1,5 +1,5 @@
 // lib/trading/kraken-copy.ts
-// Copias de los agentes de cortos (ENJAMBRE, ENJAMBRE x2, ENJAMBRE x3, AVALANCHA) en Kraken Futures. Funcionan como las demás
+// Copias de los agentes de cortos (ENJAMBRE, ENJAMBRE x2, ENJAMBRE x3, REBOTE) en Kraken Futures. Funcionan como las demás
 // copias: se activan con «Copiar» en el agente (importe y modo ensayo o dinero real) y cada operación queda en
 // trading_mirror_legs, que es lo que enseña la app. En cada revisión de los agentes:
 //  - cada corto nuevo del agente (abierto hace menos de 30 min) se abre en Kraken: venta a mercado del perpetuo
@@ -26,7 +26,7 @@ const FEE = KRAKEN_FEE_PCT / 100;
 /** ¿Es un agente de cortos (se copia en Kraken)? */
 export const isShortSwarm = (agent: string) => {
   const e = kamikazeByKey(agent)?.engine;
-  return e === "enjambre-corto" || e === "avalancha";
+  return e === "enjambre-corto" || e === "avalancha" || e === "rebote";
 };
 
 async function krakenRow() {
