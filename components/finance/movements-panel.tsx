@@ -2,7 +2,7 @@
 // Movimientos: los del periodo elegido (el mismo de Inicio), con su significado (gasto, interna, ahorro…) y su
 // categoría. Se buscan, filtran, agrupan y ordenan con la cabecera común; se cambian de uno en uno o varios a la
 // vez, y al corregir se puede aplicar a los parecidos: la app crea una regla y aprende.
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ArrowDownUp, ArrowLeftRight, CheckSquare2, ChevronDown, Filter, ListFilter, Loader2, Search, Sparkles, Star, X } from "lucide-react";
 import type { listTransactions } from "@/lib/finance/service";
@@ -330,7 +330,12 @@ function Check({ checked, partial = false, onChange, label: aria }: { checked: b
 
 export function MovementsPanel() {
   const params = useSearchParams();
-  const { data, error, loading } = useFinance<List>("transactions");
+  const router = useRouter();
+  // Filtro temporal que llega desde Plan (?categoria=…&desde=…&hasta=…): no cambia el periodo guardado del usuario.
+  const tempFrom = params.get("desde");
+  const tempTo = params.get("hasta");
+  const temp = tempFrom && tempTo && /^\d{4}-\d{2}-\d{2}$/.test(tempFrom) && /^\d{4}-\d{2}-\d{2}$/.test(tempTo) ? { from: tempFrom, to: tempTo } : null;
+  const { data, error, loading } = useFinance<List>(temp ? "transactions?all=1" : "transactions");
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("all");
   const [category, setCategory] = useState(params.get("categoria") ?? "all");
@@ -364,6 +369,7 @@ export function MovementsPanel() {
     if (!data) return [];
     const needle = fold(q.trim());
     const out = data.items.filter((t) =>
+      (!temp || (t.date >= temp.from && t.date <= temp.to)) &&
       (kind === "all" || t.kind === kind) &&
       (category === "all" || t.category === category) &&
       (status === "all" || (status === "revisar" ? isReview(t) : status === "usuario" ? t.source === "usuario" : t.extraordinary)) &&
@@ -374,7 +380,7 @@ export function MovementsPanel() {
       const c = typeof x === "string" && typeof y === "string" ? x.localeCompare(y, "es") : (x as number) - (y as number);
       return c === 0 ? b.date.localeCompare(a.date) : c * sort.dir;
     });
-  }, [data, q, kind, category, status, sort]);
+  }, [data, q, kind, category, status, sort, temp?.from, temp?.to]);
 
   const groups = useMemo(() => {
     if (group === "none") return [{ key: "all", title: "", rows }];
@@ -495,8 +501,19 @@ export function MovementsPanel() {
     );
   };
 
+  const clearTemp = () => {
+    setCategory("all");
+    router.replace("/finanzas/movimientos");
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {temp && (
+        <div className="mb-3 flex shrink-0 items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm text-blue-800">
+          <span className="min-w-0 flex-1 truncate">Desde Plan: <b>{category === "all" ? "todos" : categoryOf(category).label}</b> · {shortDay(temp.from)} – {shortDay(temp.to)}</span>
+          <button type="button" onClick={clearTemp} aria-label="Quitar este filtro y ver todos los movimientos" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-blue-700 active:bg-blue-100"><X className="h-4 w-4" /></button>
+        </div>
+      )}
       <div className="mb-3 flex h-11 shrink-0 items-center gap-1.5 md:hidden" role="toolbar" aria-label="Buscar y filtrar movimientos">
         {mobileSearchOpen ? (
           <>
@@ -513,7 +530,7 @@ export function MovementsPanel() {
               {q && <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-blue-600" />}
             </button>
             {data && <AccountDropdown accounts={data.accounts.filter((a) => a.included)} view={data.view} />}
-            {data && <PeriodPicker view={data.view} label={data.label} iconOnly className="h-10 px-2.5" />}
+            {data && !temp && <PeriodPicker view={data.view} label={data.label} iconOnly className="h-10 px-2.5" />}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" aria-label="Filtrar movimientos" title="Filtrar" className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
@@ -568,7 +585,7 @@ export function MovementsPanel() {
         search={q}
         onSearchChange={setQ}
         searchPlaceholder="Buscar concepto, comercio, nota o importe..."
-        extra={data ? <PeriodPicker view={data.view} label={data.label} /> : null}
+        extra={data && !temp ? <PeriodPicker view={data.view} label={data.label} /> : null}
         filters={{
           groups: [
             { key: "status", label: "Estado", value: status, allLabel: "Todos", options: [{ value: "revisar", label: "Por revisar" }, { value: "usuario", label: "Corregidos por mí" }, { value: "extra", label: "Extraordinarios" }] },
