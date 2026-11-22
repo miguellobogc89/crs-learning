@@ -5,10 +5,11 @@
 //
 // Iteración 2: las partidas son solo grupos de categorías (cada categoría en una sola partida). Lista con líneas
 // finas; al pulsar una partida se despliegan sus categorías con su gasto, y se pueden quitar o añadir (en memoria,
-// sin guardar). «Moda», «Comida a domicilio» y «Mascotas» aún no existen como categorías: aquí se simulan por
+// sin guardar) desde una lista que sube desde abajo. «Moda», «Comida a domicilio» y «Mascotas» aún no existen como categorías: aquí se simulan por
 // comercio, sacándolas de la categoría que tengan hoy (Compras, Restaurantes, Otros…).
-import { useMemo, useState } from "react";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Plus, Search, X } from "lucide-react";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { packagesView } from "@/lib/finance/service";
 import { EXPENSE_CATEGORIES, categoryLabel } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
@@ -49,11 +50,98 @@ function Diff({ current, previous }: { current: number; previous: number | null 
   return <span className={`block text-xs font-medium tabular-nums ${d > 0 ? "text-red-600" : "text-emerald-600"}`}>{d > 0 ? "+" : "−"}{eur(Math.abs(d), 2)} vs anterior</span>;
 }
 
+
+/**
+ * «Añadir a <partida>»: lista que sube desde abajo (como el historial de categoría de Inicio). Arriba las categorías
+ * libres, por gasto del ciclo; debajo, en gris, las que están en otra partida, que se pueden traer (se mueven).
+ */
+function AddCategoriesSheet({ target, groups, allKeys, cur, onClose, onConfirm }: {
+  target: Group | null;
+  groups: Group[];
+  allKeys: string[];
+  cur: (k: string) => number;
+  onClose: () => void;
+  onConfirm: (keys: string[]) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const startY = useRef<number | null>(null);
+  useEffect(() => { if (target) { setQ(""); setPicked(new Set()); } }, [target]);
+  const needle = fold(q.trim()).trim();
+  const ownerOf = new Map(groups.flatMap((g) => g.categories.map((k) => [k, g] as const)));
+  const candidates = allKeys
+    .filter((k) => ownerOf.get(k)?.key !== target?.key)
+    .filter((k) => !needle || fold(labelOf(k)).includes(needle))
+    .sort((a, b) => cur(b) - cur(a) || labelOf(a).localeCompare(labelOf(b), "es"));
+  const free = candidates.filter((k) => !ownerOf.has(k));
+  const elsewhere = candidates.filter((k) => ownerOf.has(k));
+  const toggle = (k: string) => setPicked((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const moving = [...picked].filter((k) => ownerOf.has(k)).length;
+
+  const row = (k: string) => {
+    const on = picked.has(k);
+    const owner = ownerOf.get(k);
+    return (
+      <li key={k}>
+        <button type="button" onClick={() => toggle(k)} aria-pressed={on} className="flex w-full items-center gap-3 py-3.5 text-left active:bg-slate-50">
+          <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${on ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300"}`}>{on && <Check className="h-3.5 w-3.5" />}</span>
+          <span className="min-w-0 flex-1">
+            <span className={`block text-sm font-medium ${owner && !on ? "text-slate-500" : "text-slate-900"}`}>{labelOf(k)}</span>
+            {owner && <span className="block text-xs text-slate-400">{on ? `Se moverá desde ${owner.name}` : `En ${owner.name}`}</span>}
+          </span>
+          <span className={`shrink-0 text-sm tabular-nums ${cur(k) > 0 ? "text-slate-900" : "text-slate-400"}`}>{eur(cur(k), 2)}</span>
+        </button>
+      </li>
+    );
+  };
+
+  return (
+    <Sheet open={target !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="bottom" showCloseButton={false} className="data-[side=bottom]:h-[80dvh] max-h-[80dvh] gap-0 overflow-hidden rounded-t-3xl border-slate-200 bg-white p-0 sm:mx-auto sm:max-w-lg">
+        <div
+          className="shrink-0 touch-none px-5 pb-3 pt-3"
+          onTouchStart={(e) => { startY.current = e.touches[0]?.clientY ?? null; }}
+          onTouchEnd={(e) => { if (startY.current !== null && (e.changedTouches[0]?.clientY ?? 0) - startY.current > 70) onClose(); startY.current = null; }}
+          onTouchCancel={() => { startY.current = null; }}
+        >
+          <div aria-hidden="true" className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-slate-300" />
+          <SheetTitle className="text-lg font-semibold text-slate-900">Añadir a {target?.name}</SheetTitle>
+          <SheetDescription className="mt-0.5 text-xs text-slate-500">Gasto de este ciclo en cada categoría. Desliza hacia abajo para cerrar.</SheetDescription>
+          <label className="mt-3 flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2.5">
+            <Search className="h-4 w-4 shrink-0 text-slate-400" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar categoría" className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400" />
+          </label>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5">
+          {free.length > 0 && (
+            <section>
+              <p className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Sin partida</p>
+              <ul className="divide-y divide-slate-100">{free.map(row)}</ul>
+            </section>
+          )}
+          {elsewhere.length > 0 && (
+            <section className="pt-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">En otras partidas</p>
+              <ul className="divide-y divide-slate-100">{elsewhere.map(row)}</ul>
+            </section>
+          )}
+          {candidates.length === 0 && <p className="py-8 text-center text-sm text-slate-400">No hay categorías con ese nombre.</p>}
+        </div>
+        <div className="shrink-0 border-t border-slate-100 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+          <button type="button" onClick={() => { if (picked.size) onConfirm([...picked]); else onClose(); }} className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white active:bg-blue-700">
+            {picked.size ? `Añadir (${picked.size})${moving ? ` · ${moving} se mueven` : ""}` : "Cerrar"}
+          </button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export function LabPanel() {
   const { data, error } = useFinance<Packages>("packages");
   const [groups, setGroups] = useState<Group[]>(INITIAL);
   const [open, setOpen] = useState<string | null>(null);
-  const [adding, setAdding] = useState<string | null>(null);
+  const [adding, setAdding] = useState<Group | null>(null);
 
   // Gasto por categoría (con las simuladas) en este ciclo y en el anterior hasta el mismo día del ciclo.
   const byCategory = useMemo(() => {
@@ -91,8 +179,11 @@ export function LabPanel() {
   ];
 
   const removeCat = (g: string, k: string) => setGroups((gs) => gs.map((x) => (x.key === g ? { ...x, categories: x.categories.filter((c) => c !== k) } : x)));
-  const addCat = (g: string, k: string) => {
-    setGroups((gs) => gs.map((x) => (x.key === g ? { ...x, categories: [...x.categories, k] } : x)));
+  // Añade a la partida; si alguna estaba en otra partida, se mueve (cada categoría en una sola partida).
+  const addCats = (g: string, keys: string[]) => {
+    setGroups((gs) => gs.map((x) => (x.key === g
+      ? { ...x, categories: [...x.categories, ...keys.filter((k) => !x.categories.includes(k))] }
+      : { ...x, categories: x.categories.filter((c) => !keys.includes(c)) })));
     setAdding(null);
   };
 
@@ -108,7 +199,7 @@ export function LabPanel() {
           const muted = !g.editable;
           return (
             <li key={g.key}>
-              <button type="button" onClick={() => { setOpen(isOpen ? null : g.key); setAdding(null); }} aria-expanded={isOpen} className="flex w-full items-center gap-3 px-1 py-4 text-left active:bg-slate-50">
+              <button type="button" onClick={() => setOpen(isOpen ? null : g.key)} aria-expanded={isOpen} className="flex w-full items-center gap-3 px-1 py-4 text-left active:bg-slate-50">
                 <span className="min-w-0 flex-1">
                   <span className={`block text-base font-semibold ${muted ? "text-slate-500" : "text-slate-900"}`}>{g.name}</span>
                   <span className="mt-0.5 block truncate text-sm text-slate-400">{subtitle || "Sin categorías"}</span>
@@ -138,27 +229,18 @@ export function LabPanel() {
                     ))}
                     {sorted.length === 0 && <li className="py-2.5 text-sm text-slate-400">{g.editable ? "Sin categorías." : "Todo tu gasto está en alguna partida."}</li>}
                   </ul>
-                  {g.editable && (adding === g.key ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {free.length === 0 && <span className="text-xs text-slate-400">Todas las categorías ya están en alguna partida.</span>}
-                      {free.map((k) => (
-                        <button key={k} type="button" onClick={() => addCat(g.key, k)} className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 active:bg-slate-50">
-                          {labelOf(k)}{cur(k) > 0 ? ` · ${eur(cur(k), 2)}` : ""}
-                        </button>
-                      ))}
-                      <button type="button" onClick={() => setAdding(null)} className="rounded-full px-3 py-1.5 text-xs font-medium text-slate-400">Cancelar</button>
-                    </div>
-                  ) : (
-                    <button type="button" onClick={() => setAdding(g.key)} className="mt-2 inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-blue-600">
+                  {g.editable && (
+                    <button type="button" onClick={() => setAdding(groups.find((x) => x.key === g.key) ?? null)} className="mt-2 inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-blue-600">
                       <Plus className="h-4 w-4" /> Añadir categoría
                     </button>
-                  ))}
+                  )}
                 </div>
               )}
             </li>
           );
         })}
       </ul>
+      <AddCategoriesSheet target={adding} groups={groups} allKeys={allKeys} cur={cur} onClose={() => setAdding(null)} onConfirm={(keys) => adding && addCats(adding.key, keys)} />
     </div>
   );
 }
