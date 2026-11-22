@@ -3,7 +3,8 @@
 // de la campana (trading_notifications) que aún no se han mandado. Lo llama la revisión de cada 5 minutos.
 //
 // Los avisos de Trading son de tus cuentas con dinero real, así que solo se mandan a los móviles de usuarios
-// administradores (system_admin / system_super_admin), no a cualquiera que tenga sesión.
+// administradores (system_admin / system_super_admin), no a cualquiera que tenga sesión. Van al móvil las compras,
+// las ventas, los cambios de stop y la primera operación de cada agente; los fallos se quedan en la campana.
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -38,8 +39,8 @@ export async function isPushAdmin(userId: string) {
   return ADMIN_ROLES.includes(u?.system_role ?? "");
 }
 
-type Row = { id: string; endpoint: string; p256dh: string; auth: string; notify_trades: boolean; notify_stops: boolean; notify_health: boolean };
-const prefsOf = (r: Row): PushPrefs => ({ trades: r.notify_trades, stops: r.notify_stops, health: r.notify_health });
+type Row = { id: string; endpoint: string; p256dh: string; auth: string; notify_trades: boolean; notify_stops: boolean; notify_agents: boolean };
+const prefsOf = (r: Row): PushPrefs => ({ trades: r.notify_trades, stops: r.notify_stops, agents: r.notify_agents });
 const subOf = (r: Row): PushSub => ({ endpoint: r.endpoint, keys: { p256dh: r.p256dh, auth: r.auth } });
 
 /** Estado para la pantalla: clave pública, si este usuario puede recibirlas y las preferencias de este móvil. */
@@ -47,7 +48,7 @@ export async function pushState(userId: string, endpoint: string | null) {
   const [keys, admin] = await Promise.all([vapidKeys(), isPushAdmin(userId)]);
   const row = endpoint
     ? (
-        await prisma.$queryRaw<Row[]>(Prisma.sql`SELECT id::text AS id, endpoint, p256dh, auth, notify_trades, notify_stops, notify_health
+        await prisma.$queryRaw<Row[]>(Prisma.sql`SELECT id::text AS id, endpoint, p256dh, auth, notify_trades, notify_stops, notify_agents
           FROM public.push_subscriptions WHERE endpoint = ${endpoint} AND user_id = ${userId}::uuid`)
       )[0]
     : undefined;
@@ -71,7 +72,7 @@ export async function setPrefs(userId: string, endpoint: string, p: Partial<Push
   await prisma.$executeRaw(Prisma.sql`UPDATE public.push_subscriptions SET
       notify_trades = COALESCE(${p.trades ?? null}::boolean, notify_trades),
       notify_stops = COALESCE(${p.stops ?? null}::boolean, notify_stops),
-      notify_health = COALESCE(${p.health ?? null}::boolean, notify_health)
+      notify_agents = COALESCE(${p.agents ?? null}::boolean, notify_agents)
     WHERE endpoint = ${endpoint} AND user_id = ${userId}::uuid`);
 }
 
@@ -96,7 +97,7 @@ async function deliver(r: Row, msg: PushMessage, keys: VapidKeys) {
 }
 
 async function adminSubs(userId?: string) {
-  return prisma.$queryRaw<Row[]>(Prisma.sql`SELECT s.id::text AS id, s.endpoint, s.p256dh, s.auth, s.notify_trades, s.notify_stops, s.notify_health
+  return prisma.$queryRaw<Row[]>(Prisma.sql`SELECT s.id::text AS id, s.endpoint, s.p256dh, s.auth, s.notify_trades, s.notify_stops, s.notify_agents
     FROM public.push_subscriptions s JOIN public.users u ON u.id = s.user_id
     WHERE u.system_role::text = ANY(${ADMIN_ROLES}::text[]) AND s.failures < ${MAX_FAILURES}
       ${userId ? Prisma.sql`AND s.user_id = ${userId}::uuid` : Prisma.empty}`);
@@ -106,7 +107,7 @@ async function adminSubs(userId?: string) {
 export async function sendTest(userId: string) {
   const [keys, subs] = await Promise.all([vapidKeys(), adminSubs(userId)]);
   if (!subs.length) throw new Error("Este móvil no tiene las notificaciones activadas");
-  const out = await Promise.all(subs.map((r) => deliver(r, { title: "CRS Trading", body: "Las notificaciones funcionan. Aquí te llegarán tus operaciones y los fallos.", url: "/trading/inicio", tag: "prueba" }, keys)));
+  const out = await Promise.all(subs.map((r) => deliver(r, { title: "Aviso de prueba", body: "Las notificaciones funcionan: aquí te llegarán tus operaciones.", url: "/trading/notificaciones", tag: "prueba" }, keys)));
   return { sent: out.filter((x) => x === "ok").length, total: subs.length };
 }
 
@@ -126,6 +127,8 @@ export async function deliverPending(): Promise<{ notices: number; sent: number;
   let errors = 0;
   for (const n of fresh) {
     const kind = pushKind(n);
+    // Los fallos del sistema (FARO, agentes, exchanges) se quedan en la campana: no van al móvil.
+    if (kind === "health") continue;
     const msg: PushMessage = { title: n.title, body: n.body, url: n.href ?? "/trading/inicio", tag: n.key };
     for (const r of subs.filter((s) => prefsOf(s)[kind])) {
       const res = await deliver(r, msg, keys);

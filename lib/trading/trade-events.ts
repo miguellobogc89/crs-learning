@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { agentByKey } from "./agents/roster";
 import { kamikazeByKey } from "./kamikaze/roster";
 import { chipByKey } from "./chip/roster";
+import { AGENTS_WORKSPACE } from "./agents/roster";
 
 /** Ventana para avisar de compras y ventas (lo anterior al despliegue no se avisa). */
 const WINDOW_MS = 3 * 3_600_000;
@@ -174,4 +175,37 @@ export async function syncTradeEvents(now = Date.now()): Promise<{ compras: numb
     }
   }
   return out;
+}
+
+/**
+ * Primera operación de cada agente (22/11/2026): un aviso cuando un agente (con dinero virtual o no) abre la
+ * primera posición de su cuenta, para saber cuándo se estrena uno que llevaba días esperando. Solo las de las
+ * últimas horas: los que ya habían operado antes de esto no avisan. Si un agente se reinicia (cuenta nueva),
+ * vuelve a avisar con su primera operación.
+ */
+export async function syncAgentFirsts(now = Date.now()): Promise<number> {
+  const since = new Date(now - WINDOW_MS);
+  const firsts = await prisma.$queryRaw<{ account_id: string; agent: string; symbol: string; direction: string; entry: number | null; created_at: Date }[]>(Prisma.sql`
+    SELECT DISTINCT ON (a.id) a.id::text AS account_id, a.agent, p.symbol, p.direction,
+      COALESCE(p.entry_price, p.planned_entry) AS entry, p.created_at
+    FROM public.trading_accounts a JOIN public.trading_positions p ON p.account_id = a.id
+    WHERE a.workspace_id = ${AGENTS_WORKSPACE}::uuid AND COALESCE(a.agent, '') <> '' AND a.agent NOT LIKE 'copia:%' AND p.status NOT IN ('cancelada', 'error')
+    ORDER BY a.id, p.created_at ASC`);
+  const fresh = firsts.filter((f) => f.created_at.getTime() >= since.getTime());
+  if (!fresh.length) return 0;
+  const done = await prisma.$queryRaw<{ key: string }[]>(Prisma.sql`
+    SELECT key FROM public.trading_notifications WHERE key LIKE 'agente:primera:%'`);
+  const keys = new Set(done.map((d) => d.key));
+  let n = 0;
+  for (const f of fresh) {
+    const key = `agente:primera:${f.account_id}`;
+    if (keys.has(key)) continue;
+    const name = agentName(f.agent);
+    const what = f.direction === "short" ? "corto" : "compra";
+    await prisma.$executeRaw(Prisma.sql`INSERT INTO public.trading_notifications (key, level, title, body, href, resolved_at)
+      VALUES (${key}, 'operacion', ${`Primera operación · ${name}`},
+        ${`${name} se estrena: ${what} de ${coin(f.symbol)}${f.entry ? ` a ${eur(f.entry)}` : ""}.`}, ${`/trading/agentes/${f.agent}`}, now())`);
+    n++;
+  }
+  return n;
 }

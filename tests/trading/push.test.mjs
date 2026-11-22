@@ -86,12 +86,14 @@ test("push: firma VAPID válida con la clave pública que se da al navegador", (
   assert.ok(verify("sha256", Buffer.from(`${m[1]}.${m[2]}`), { key, dsaEncoding: "ieee-p1363" }, u(m[3])));
 });
 
-test("push: cada aviso va a su interruptor y los del stop vienen apagados", () => {
+test("push: cada aviso va a su interruptor, los del stop vienen apagados y los fallos no van al móvil", () => {
   const K = load("lib/push/kinds.ts");
   assert.equal(K.pushKind({ key: "op:compra:1", level: "operacion" }), "trades");
   assert.equal(K.pushKind({ key: "op:venta:1", level: "operacion" }), "trades");
   assert.equal(K.pushKind({ key: "op:stop:1:5.2", level: "operacion" }), "stops");
+  assert.equal(K.pushKind({ key: "agente:primera:abc", level: "operacion" }), "agents");
   assert.equal(K.pushKind({ key: "faro-parado", level: "error" }), "health");
   assert.equal(K.pushKind({ key: "faro-parado", level: "ok" }), "health");
-  assert.deepEqual(K.DEFAULT_PREFS, { trades: true, stops: false, health: true });
+  assert.deepEqual(K.DEFAULT_PREFS, { trades: true, stops: false, agents: true });
+  assert.deepEqual(Object.keys(K.KIND_LABEL), ["trades", "stops", "agents"]);
 });

@@ -4,8 +4,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { BellRing, ChevronRight, Send, Smartphone } from "lucide-react";
-import { KIND_LABEL, type PushKind, type PushPrefs } from "@/lib/push/kinds";
-import { card, ghost, primary } from "./format";
+import { KIND_LABEL, type PushPrefs } from "@/lib/push/kinds";
+import { card, flat, ghost, primary } from "./format";
 
 type State = { publicKey: string; allowed: boolean; subscribed: boolean; prefs: PushPrefs };
 type Support = "ok" | "instalar" | "no";
@@ -13,7 +13,8 @@ type Support = "ok" | "instalar" | "no";
 const SW_URL = "/trading-sw.js";
 const SCOPE = "/trading/";
 
-const SECTIONS: { title: string; kinds: { k: PushKind; help: string }[] }[] = [
+type Kind = keyof PushPrefs;
+const SECTIONS: { title: string; kinds: { k: Kind; help: string }[] }[] = [
   {
     title: "Operaciones",
     kinds: [
@@ -22,10 +23,12 @@ const SECTIONS: { title: string; kinds: { k: PushKind; help: string }[] }[] = [
     ],
   },
   {
-    title: "Sistema",
-    kinds: [{ k: "health", help: "Si FARO deja de analizar, los agentes no se revisan, un exchange no responde o una copia falla, y cuando se arregla." }],
+    title: "Agentes",
+    kinds: [{ k: "agents", help: "Cuando un agente opera por primera vez (también con dinero virtual), para saber cuándo se estrena uno que llevaba días esperando." }],
   },
 ];
+/** En el móvil, secciones a todo el ancho sin tarjeta (como el resto de la app); en tablet y ordenador, tarjetas. */
+const box = `${card} ${flat}`;
 
 async function call<T>(body?: unknown, endpoint?: string | null): Promise<T> {
   const res = await fetch(`/api/trading/push${body === undefined && endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : ""}`, {
@@ -65,9 +68,9 @@ function Switch({ on, disabled, onChange, label }: { on: boolean; disabled?: boo
       aria-label={label}
       disabled={disabled}
       onClick={onChange}
-      className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-40 ${on ? "bg-blue-600" : "bg-slate-200"}`}
+      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-40 ${on ? "bg-blue-600" : "bg-slate-200"}`}
     >
-      <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${on ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+      <span className={`block h-6 w-6 rounded-full bg-white shadow transition-transform ${on ? "translate-x-5" : "translate-x-0"}`} />
     </button>
   );
 }
@@ -130,7 +133,7 @@ export function PushSettingsPanel() {
       setEndpoint(sub.endpoint);
       setState({ ...state, subscribed: true });
       const t = await call<{ sent: number }>({ op: "test" });
-      setNote(t.sent ? "Activados: te acaba de llegar un aviso de prueba." : "Activados, pero el aviso de prueba no llegó.");
+      setNote(t.sent ? "Activadas: te acaba de llegar un aviso de prueba." : "Activadas, pero el aviso de prueba no llegó.");
     });
 
   const disable = () =>
@@ -145,7 +148,7 @@ export function PushSettingsPanel() {
       setState((s) => (s ? { ...s, subscribed: false } : s));
     });
 
-  const toggle = (k: PushKind) =>
+  const toggle = (k: Kind) =>
     run(async () => {
       if (!state || !endpoint) return;
       const prefs = { ...state.prefs, [k]: !state.prefs[k] };
@@ -159,7 +162,7 @@ export function PushSettingsPanel() {
       setNote(t.sent ? "Aviso de prueba enviado." : "No se pudo enviar el aviso de prueba.");
     });
 
-  if (sup === null || (sup === "ok" && !state && !note)) return <div className={`${card} p-5 text-sm text-slate-400`}>Cargando…</div>;
+  if (sup === null || (sup === "ok" && !state && !note)) return <div className={`${box} p-5 text-sm text-slate-400`}>Cargando…</div>;
 
   const denied = typeof Notification !== "undefined" && Notification.permission === "denied";
   const on = !!state?.subscribed;
@@ -167,16 +170,16 @@ export function PushSettingsPanel() {
   if (sup === "instalar") status = "Para recibir avisos en el iPhone, añade la app a la pantalla de inicio (Compartir → «Añadir a pantalla de inicio») y ábrela desde ahí.";
   else if (sup === "no") status = "Este navegador no admite notificaciones push.";
   else if (state && !state.allowed) status = "Los avisos de Trading son de las cuentas con dinero real y solo llegan a los administradores.";
-  else if (on) status = "Activados. Te llegan aunque la app esté cerrada.";
-  else if (denied) status = "Bloqueados en los ajustes del móvil: actívalos en Notificaciones → Trading y vuelve aquí.";
-  else status = "Recibe tus operaciones y los fallos aunque la app esté cerrada.";
+  else if (on) status = "Activadas. Te llegan aunque la app esté cerrada.";
+  else if (denied) status = "Bloqueadas en los ajustes del móvil: actívalas en Notificaciones → Trading y vuelve aquí.";
+  else status = "Recibe tus operaciones aunque la app esté cerrada.";
   const canEnable = sup === "ok" && !!state?.allowed && !on && !denied;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <section>
         <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Este dispositivo</h2>
-        <div className={`${card} p-4`}>
+        <div className={`${box} p-4`}>
           <div className="flex items-center gap-3">
             <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${on ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}>
               <Smartphone className="h-5 w-5" />
@@ -212,7 +215,7 @@ export function PushSettingsPanel() {
       {SECTIONS.map((s) => (
         <section key={s.title}>
           <h2 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{s.title}</h2>
-          <ul className={`${card} divide-y divide-slate-100`}>
+          <ul className={`${box} divide-y divide-slate-100`}>
             {s.kinds.map(({ k, help }) => (
               <li key={k} className="flex items-center gap-4 p-4">
                 <span className="min-w-0 flex-1">
@@ -225,7 +228,7 @@ export function PushSettingsPanel() {
           </ul>
         </section>
       ))}
-      <p className="px-1 text-xs text-slate-400">Lo que elijas vale para este móvil. Todos los avisos siguen apareciendo en la campana.</p>
+      <p className="px-1 text-xs text-slate-400">Lo que elijas vale para este móvil. Todos los avisos, también los fallos del sistema, siguen apareciendo en la campana.</p>
     </div>
   );
 }
