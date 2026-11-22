@@ -8,6 +8,7 @@
 //  - Freno: no abre nada si Bitcoin cae más de un 3 % en 24 h. 10 % del dinero por operación, 10 huecos.
 import { noiseIdea } from "../carta";
 import { AVALANCHA, crashIdea } from "../kamikaze/avalancha";
+import { REBOTE, bounceShortIdea, type ReboteParams } from "../kamikaze/rebote";
 
 export type HBar = { t: number; o: number; h: number; l: number; c: number };
 export type SwarmVariant = {
@@ -20,7 +21,11 @@ export type SwarmVariant = {
    * medio rango de distancia, sin objetivo ni límite de tiempo.
    * «caida»: AVALANCHA (lib/trading/kamikaze/avalancha.ts). Corto a mercado al cierre de la hora en una caída brusca
    * que sigue (comisión de Kraken a mercado), stop que baja detrás del precio, sin objetivo ni límite de tiempo. */
-  side?: "long" | "short" | "breakout" | "caida";
+  side?: "long" | "short" | "breakout" | "caida" | "rebote";
+  /** «rebote»: corto en el rebote de una caída (lib/trading/kamikaze/rebote.ts), con estos ajustes de la regla. */
+  rebote?: Partial<ReboteParams>;
+  /** «rebote»: la mitad sale en el mínimo de antes del rebote y la otra mitad con el stop que baja. */
+  split?: boolean;
   /** Solo abre en esa fase del mercado (Detector B sobre Bitcoin diario). */
   regime?: "ataque" | "defensa";
   /** Costes de Kraken en los cortos: 0,02 % al entrar y 0,05 % al salir, y su funding histórico. */
@@ -55,7 +60,9 @@ export type Funding = Map<string, Map<number, number>>;
 
 export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant: SwarmVariant, from: number, startCash = 1000, attack?: Map<string, boolean>, funding?: Funding) {
   const crash = variant.side === "caida";
-  const short = variant.side === "short" || crash;
+  const rebound = variant.side === "rebote";
+  const rp: ReboteParams = { ...REBOTE, ...(variant.rebote ?? {}) };
+  const short = variant.side === "short" || crash || rebound;
   // AVALANCHA: última salida de cada moneda (para no volver a entrar enseguida).
   const lastExit = new Map<string, number>();
   const kraken = !!variant.kraken && short;
@@ -77,11 +84,12 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
   const trades: { base: string; pct: number; exit: "objetivo" | "stop" | "tiempo"; at: number; phase: "ataque" | "defensa" }[] = [];
   let peak = startCash, maxDd = 0;
   const monthly = new Map<string, { start: number; end: number }>();
+  const daily = new Map<string, { start: number; end: number }>();
   const close = (p: Pos, price: number, fee: number, exit: "objetivo" | "stop" | "tiempo", at: number) => {
     // Corto: se recupera la garantía más (venta − recompra) menos la comisión de recompra.
     const got = p.short ? Math.max(0, p.cost + p.qty * (p.entry - price) - p.qty * price * fee) : p.qty * price * (1 - fee);
     cash += got;
-    if (crash) lastExit.set(p.base, at);
+    if (crash || rebound) lastExit.set(p.base, at);
     trades.push({ base: p.base, pct: (got / p.cost - 1) * 100, exit, at, phase: attack?.get(new Date(p.openedAt).toISOString().slice(0, 10)) ? "ataque" : "defensa" });
   };
   const barAt = (b: string, t: number) => {
@@ -110,6 +118,7 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
           liquidations++;
           close(p, liq, exitFee, "stop", t);
         } else if (bar.h >= p.stop) close(p, Math.max(p.stop, bar.o), exitFee, "stop", t);
+        else if (p.target > 0 && bar.l <= p.target) close(p, Math.min(p.target, bar.o), exitFee, "objetivo", t);
         else {
           p.low = Math.min(p.low ?? p.entry, bar.l);
           p.stop = Math.min(p.stop, p.low + p.trail!);
@@ -162,6 +171,10 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
     }
     peak = Math.max(peak, equity);
     maxDd = Math.max(maxDd, (peak - equity) / peak);
+    const dkey = new Date(t).toISOString().slice(0, 10);
+    const dd = daily.get(dkey);
+    if (!dd) daily.set(dkey, { start: equity, end: equity });
+    else dd.end = equity;
     const m = new Date(t).toISOString().slice(0, 7);
     const mm = monthly.get(m);
     if (!mm) monthly.set(m, { start: equity, end: equity });
@@ -180,6 +193,21 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
       if (busy.has(b)) continue;
       const i = idx.get(b)?.get(t);
       if (i === undefined || i < 24) continue;
+      if (rebound) {
+        const left = lastExit.get(b);
+        if (left !== undefined && t - left < rp.cooldownHours * HOUR) continue;
+        if (i < rp.maPeriod) continue;
+        const r = bounceShortIdea(series.get(b)!.slice(i - rp.maPeriod + 1, i + 1), rp);
+        if (!r) continue;
+        const budget = Math.min(cash, equity * SIZE);
+        if (budget < 10) break;
+        cash -= budget;
+        const leg = (cost: number, target: number): Pos => ({ base: b, qty: (cost * lev * (1 - exitFee)) / r.entry, entry: r.entry, stop: r.stop, target, openedAt: t + HOUR, cost, short: true, trail: r.risk, low: r.entry });
+        // A mercado al cierre de la hora; el stop baja detrás del precio a la distancia del riesgo inicial.
+        if (variant.split) pos.push(leg(budget / 2, r.target), leg(budget / 2, 0));
+        else pos.push(leg(budget, 0));
+        continue;
+      }
       if (crash) {
         const left = lastExit.get(b);
         if (left !== undefined && t - left < AVALANCHA.cooldownHours * HOUR) continue;
@@ -256,5 +284,23 @@ export function simulateSwarm(series: Map<string, HBar[]>, btc: HBar[], variant:
     }),
     exits: { objetivo: trades.filter((x) => x.exit === "objetivo").length, stop: trades.filter((x) => x.exit === "stop").length, tiempo: trades.filter((x) => x.exit === "tiempo").length },
     monthly: [...monthly.entries()].map(([m, v]) => ({ m, pct: r2((v.end / v.start - 1) * 100) })),
+    daily: [...daily.entries()].map(([d, v]) => ({ d, pct: Math.round((v.end / v.start - 1) * 1e5) / 1e3 })),
   };
+}
+
+/** Correlación de los resultados diarios de dos simulaciones (1: ganan y pierden los mismos días; 0: nada que ver). */
+export function dailyCorrelation(a: { d: string; pct: number }[], b: { d: string; pct: number }[]) {
+  const mb = new Map(b.map((x) => [x.d, x.pct]));
+  const pairs = a.filter((x) => mb.has(x.d)).map((x) => [x.pct, mb.get(x.d)!] as const).filter(([x, y]) => x !== 0 || y !== 0);
+  if (pairs.length < 10) return null;
+  const n = pairs.length;
+  const ma = pairs.reduce((s, [x]) => s + x, 0) / n;
+  const mbv = pairs.reduce((s, [, y]) => s + y, 0) / n;
+  let cov = 0, va = 0, vb = 0;
+  for (const [x, y] of pairs) {
+    cov += (x - ma) * (y - mbv);
+    va += (x - ma) ** 2;
+    vb += (y - mbv) ** 2;
+  }
+  return va > 0 && vb > 0 ? Math.round((cov / Math.sqrt(va * vb)) * 100) / 100 : null;
 }

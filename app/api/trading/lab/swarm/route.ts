@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { tickers } from "@/lib/trading/kamikaze/market";
 import { venueCoverage } from "@/lib/trading/agents/venues";
 import { BIG_COINS } from "@/lib/trading/kamikaze/roster";
-import { attackDays, simulateSwarm, type Funding, type HBar, type SwarmVariant } from "@/lib/trading/lab/swarm";
+import { attackDays, dailyCorrelation, simulateSwarm, type Funding, type HBar, type SwarmVariant } from "@/lib/trading/lab/swarm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,19 +50,22 @@ export async function GET(req: Request) {
     .filter((t, i, all) => all.findIndex((x) => x.base === t.base) === i)
     .slice(0, 40);
   const btcPair = market.find((t) => t.base === "BTC" && t.pair.endsWith("EUR"))?.pair ?? "BTCEUR";
+  // «regla=rebotes»: cortos en el rebote de una caída; necesitan 20 días de velas antes para su media.
+  const rebotes = q.get("regla") === "rebotes";
+  const warmup = (rebotes ? 21 * 24 : 24) * HOUR;
   const series = new Map<string, HBar[]>();
   const failed: string[] = [];
   for (let i = 0; i < pool.length; i += 8) {
     await Promise.all(pool.slice(i, i + 8).map(async (t) => {
       try {
-        const bars = await klines(t.pair, from - 24 * HOUR, to);
+        const bars = await klines(t.pair, from - warmup, to);
         if (bars.length > 48) series.set(t.base, bars);
       } catch {
         failed.push(t.base);
       }
     }));
   }
-  const btc = series.get("BTC") ?? (await klines(btcPair, from - 24 * HOUR, to));
+  const btc = series.get("BTC") ?? (await klines(btcPair, from - warmup, to));
   // Fase del mercado de cada día (Detector B con Bitcoin diario: hacen falta 200 días previos).
   const daily = await klines(btcPair, from - 230 * 24 * HOUR, to, "1d");
   const attack = attackDays(daily);
@@ -82,7 +85,16 @@ export async function GET(req: Request) {
   }
   // «regla=caidas»: AVALANCHA (cortos en caídas bruscas, en cualquier fase) en vez de ENJAMBRE.
   const crash = q.get("regla") === "caidas";
-  const variants: SwarmVariant[] = crash
+  const reb = (name: string, o: Partial<SwarmVariant>): SwarmVariant => ({ key: name, name, side: "rebote", regime: "defensa", coins: BIG_COINS, kraken: true, leverage: 1, ...o });
+  const variants: SwarmVariant[] = rebotes
+    ? [
+        reb("REBOTE 1x (rebote 5-10 %, mitad al mínimo)", { split: true }),
+        reb("REBOTE 1x (rebote 5-10 %, todo con stop que baja)", { split: false }),
+        reb("REBOTE 1x (rebote 3-12 %, mitad al mínimo)", { split: true, rebote: { minBouncePct: 3, maxBouncePct: 12 } }),
+        reb("REBOTE 2x (rebote 5-10 %, mitad al mínimo)", { split: true, leverage: 2 }),
+        { key: "enjambre-x1", name: "ENJAMBRE 1x (comparación)", side: "short", regime: "defensa", coins: BIG_COINS, kraken: true, leverage: 1 },
+      ]
+    : crash
     ? [1, 2, 3].map((leverage) => ({
         key: `avalancha-x${leverage}`,
         name: `AVALANCHA ${leverage}x (grandes, caídas bruscas, Kraken)`,
@@ -100,7 +112,10 @@ export async function GET(req: Request) {
     kraken: true,
     leverage,
   }));
-  const results = variants.map((v) => simulateSwarm(series, btc, v, from, 1000, attack, funding));
+  const sims = variants.map((v) => simulateSwarm(series, btc, v, from, 1000, attack, funding));
+  // Con los rebotes: cuánto se parece cada variante a ENJAMBRE (si gana y pierde los mismos días, no aporta).
+  const ref = rebotes ? sims[sims.length - 1] : null;
+  const results = sims.map((r) => ({ ...r, daily: undefined, correlationWithEnjambre: ref && r !== ref ? dailyCorrelation(r.daily, ref.daily) : null }));
   const window = [...attack.entries()].filter(([d]) => d >= new Date(from).toISOString().slice(0, 10));
   const btcFrom = btc.find((b) => b.t >= from)?.o ?? null;
   const summary = {
@@ -115,6 +130,6 @@ export async function GET(req: Request) {
     btcHoldPct: btcFrom ? Math.round((btc[btc.length - 1].c / btcFrom - 1) * 10_000) / 100 : null,
     results,
   };
-  await prisma.$executeRaw`INSERT INTO trading_lab_results (name, params, result) VALUES (${crash ? "avalancha" : since ? "enjambres-vivo" : "enjambres"}, ${JSON.stringify({ days, desde: q.get("desde"), hasta: q.get("hasta"), regla: q.get("regla") })}::jsonb, ${JSON.stringify(summary)}::jsonb)`;
+  await prisma.$executeRaw`INSERT INTO trading_lab_results (name, params, result) VALUES (${rebotes ? "rebotes" : crash ? "avalancha" : since ? "enjambres-vivo" : "enjambres"}, ${JSON.stringify({ days, desde: q.get("desde"), hasta: q.get("hasta"), regla: q.get("regla") })}::jsonb, ${JSON.stringify(summary)}::jsonb)`;
   return NextResponse.json(summary);
 }
