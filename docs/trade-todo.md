@@ -50,5 +50,5 @@ Base ya en marcha: versión (`FARO_VERSION`), foto completa del mercado en cada 
 ## 6. Más adelante (producto)
 - [ ] Liga semanal entre usuarios y agentes.
 - [ ] Páginas de usuarios con cartera pública (solo si el usuario la hace pública).
-- [ ] Avisos de los movimientos de los agentes (y más adelante por WhatsApp).
+- [ ] Avisos de los movimientos de los agentes por WhatsApp (las push al móvil ya están, 22/11/2026).
 - [ ] Revisar el programa de referidos de Trading 212.

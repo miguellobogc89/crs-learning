@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { syncHealth } from "@/lib/trading/notifications";
+import { deliverPending } from "@/lib/push/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,8 @@ export const maxDuration = 30;
 export async function GET() {
   try {
     const { problems } = await syncHealth();
+    // Al móvil también desde aquí: si la revisión de Vercel se para, este aviso es el único que sale.
+    await deliverPending().catch((e) => console.error("[push] vigilante", e));
     return NextResponse.json({ ok: problems.length === 0, problems: problems.map((p) => p.key) }, { status: problems.length ? 503 : 200 });
   } catch (e) {
     console.error("[trading] health", e);
