@@ -9,7 +9,7 @@
 // comercio, sacándolas de la categoría que tengan hoy (Compras, Restaurantes, Otros…).
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Plus, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, FolderPlus, Plus, Search, X } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { packagesView } from "@/lib/finance/service";
 import { EXPENSE_CATEGORIES } from "@/lib/finance/categories";
@@ -28,7 +28,7 @@ const labCategoryOf = (c: Charge) => labCategory(c.category, c.description, c.de
 const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
-type Group = { key: string; name: string; categories: string[] };
+type Group = { key: string; name: string; categories: string[]; goal?: number | null };
 const LAB_STATE = "crs-finance:lab";
 const LAB_SCROLL = "crs-finance:lab-scroll";
 /** El contenedor que hace scroll en Finanzas (el <main> de la estructura). */
@@ -134,11 +134,59 @@ function AddCategoriesSheet({ target, groups, allKeys, cur, onClose, onConfirm }
   );
 }
 
+/** «Nuevo grupo»: nombre y, si se quiere, un objetivo en euros por ciclo. */
+function NewGroupSheet({ open, onClose, onCreate }: { open: boolean; onClose: () => void; onCreate: (name: string, goal: number | null) => void }) {
+  const [name, setName] = useState("");
+  const [goal, setGoal] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const startY = useRef<number | null>(null);
+  useEffect(() => { if (open) { setName(""); setGoal(""); setErr(null); } }, [open]);
+  const submit = () => {
+    if (!name.trim()) { setErr("Ponle un nombre al grupo"); return; }
+    const t = goal.trim().replace(/\s|€/g, "");
+    const value = t ? Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t) : null;
+    if (value !== null && !(value > 0)) { setErr("El objetivo debe ser un importe mayor que cero"); return; }
+    onCreate(name.trim().slice(0, 40), value === null ? null : Math.round(value * 100) / 100);
+  };
+  return (
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="bottom" showCloseButton={false} className="gap-0 rounded-t-3xl border-slate-200 bg-white p-0 sm:mx-auto sm:max-w-lg">
+        <div
+          className="touch-none px-5 pt-3"
+          onTouchStart={(e) => { startY.current = e.touches[0]?.clientY ?? null; }}
+          onTouchEnd={(e) => { if (startY.current !== null && (e.changedTouches[0]?.clientY ?? 0) - startY.current > 70) onClose(); startY.current = null; }}
+          onTouchCancel={() => { startY.current = null; }}
+        >
+          <div aria-hidden="true" className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-slate-300" />
+          <SheetTitle className="text-lg font-semibold text-slate-900">Nuevo grupo</SheetTitle>
+          <SheetDescription className="mt-0.5 text-xs text-slate-500">Después eliges qué categorías entran en él.</SheetDescription>
+        </div>
+        <form className="space-y-4 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-slate-800">Nombre</span>
+            <input value={name} onChange={(e) => { setName(e.target.value); setErr(null); }} placeholder="Tabaco, Gasolina, Gimnasio…" maxLength={40} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-slate-800">Objetivo por ciclo <span className="font-normal text-slate-400">(opcional)</span></span>
+            <span className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+              <input inputMode="decimal" value={goal} onChange={(e) => { setGoal(e.target.value); setErr(null); }} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 text-base tabular-nums text-slate-900 outline-none" />
+              <span className="text-base text-slate-400">€</span>
+            </span>
+          </label>
+          {err && <p className="text-sm text-red-600">{err}</p>}
+          <button type="submit" className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white active:bg-blue-700">Crear y elegir categorías</button>
+        </form>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export function LabPanel() {
   const { data, error } = useFinance<Packages>("packages");
   const [groups, setGroups] = useState<Group[]>(INITIAL);
   const [open, setOpen] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
+  const [creating, setCreating] = useState(false);
   // Al volver del detalle, la pantalla queda como se dejó: grupos, desplegado y scroll (en esta sesión).
   useEffect(() => {
     try {
@@ -194,9 +242,16 @@ export function LabPanel() {
   // «Sin partida»: categorías que no están en ninguna partida y tienen gasto (para que nada se escape).
   const rows = [
     ...groups.map((g) => ({ ...g, editable: true })),
-    { key: "sin", name: "Sin partida", categories: free.filter((k) => cur(k) > 0 || (prv(k) ?? 0) > 0), editable: false },
+    { key: "sin", name: "Sin partida", categories: free.filter((k) => cur(k) > 0 || (prv(k) ?? 0) > 0), goal: null, editable: false },
   ];
 
+  const createGroup = (name: string, goal: number | null) => {
+    const g: Group = { key: `g${Date.now()}`, name, categories: [], goal };
+    setGroups((gs) => [...gs, g]);
+    setCreating(false);
+    setOpen(g.key);
+    setAdding(g);
+  };
   const rememberScroll = () => {
     try { window.sessionStorage.setItem(LAB_SCROLL, String(scroller()?.scrollTop ?? 0)); } catch { /* ignorar */ }
   };
@@ -219,7 +274,14 @@ export function LabPanel() {
           const sorted = [...g.categories].sort((a, b) => cur(b) - cur(a));
           const subtitle = sorted.slice(0, 3).map(labelOf).join(", ") + (sorted.length > 3 ? "…" : "");
           const muted = !g.editable;
-          return (
+          const addButton = !g.editable && (
+            <li key="add-group">
+              <button type="button" onClick={() => setCreating(true)} className="flex w-full items-center gap-2 px-1 py-4 text-left text-base font-medium text-blue-600 active:bg-slate-50">
+                <FolderPlus className="h-5 w-5" /> Añadir grupo
+              </button>
+            </li>
+          );
+          return [addButton,
             <li key={g.key}>
               <button type="button" onClick={() => setOpen(isOpen ? null : g.key)} aria-expanded={isOpen} className="flex w-full items-center gap-3 px-1 py-4 text-left active:bg-slate-50">
                 <span className="min-w-0 flex-1">
@@ -227,7 +289,9 @@ export function LabPanel() {
                   <span className="mt-0.5 block truncate text-sm text-slate-400">{subtitle || "Sin categorías"}</span>
                 </span>
                 <span className="shrink-0 text-right">
-                  <span className={`block text-lg font-semibold tabular-nums ${muted ? "text-slate-500" : "text-slate-900"}`}>{eur(now, 2)}</span>
+                  <span className={`block text-lg font-semibold tabular-nums ${muted ? "text-slate-500" : g.goal && now > g.goal ? "text-red-600" : "text-slate-900"}`}>
+                    {eur(now, 2)}{g.goal ? <span className="text-sm font-normal text-slate-400"> / {eur(g.goal, 2)}</span> : null}
+                  </span>
                   <Diff current={now} previous={before} />
                 </span>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
@@ -261,10 +325,11 @@ export function LabPanel() {
                   )}
                 </div>
               )}
-            </li>
-          );
+            </li>,
+          ];
         })}
       </ul>
+      <NewGroupSheet open={creating} onClose={() => setCreating(false)} onCreate={createGroup} />
       <AddCategoriesSheet target={adding} groups={groups} allKeys={allKeys} cur={cur} onClose={() => setAdding(null)} onConfirm={(keys) => adding && addCats(adding.key, keys)} />
     </div>
   );
