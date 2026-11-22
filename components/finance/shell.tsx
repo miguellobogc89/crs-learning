@@ -15,7 +15,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PullToRefresh } from "@/components/trading/mobile-nav";
 import { eur } from "@/components/trading/format";
-import { BOTTOM_TABS, FINANCE_SECTIONS, FINANCE_TABS, isFinanceTab, isFittedTab } from "./tabs";
+import { BOTTOM_TABS, FINANCE_SECTIONS, FINANCE_TABS, isFinanceTab, isFittedTab, tabDefOf } from "./tabs";
 import { fapi, peek, refreshFinance, useFinanceRefresh } from "./api";
 import { useHideAmounts } from "./privacy";
 
@@ -312,7 +312,7 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
   const pathname = usePathname();
   const parts = pathname.split("/").filter(Boolean);
   const section = parts[1] && isFinanceTab(parts[1]) ? parts[1] : "inicio";
-  const tabDef = FINANCE_TABS.find((t) => t.key === section) ?? FINANCE_TABS[0];
+  const tabDef = tabDefOf(section);
   const fitted = isFittedTab(section);
   const Icon = tabDef.icon;
   const [open, setOpen] = useState(false);

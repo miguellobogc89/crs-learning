@@ -9,6 +9,7 @@ import { HomePanel } from "./home-panel";
 import { MovementsPanel } from "./movements-panel";
 import { PlanPanel } from "./plan-panel";
 import { PlanConfigPanel } from "./plan-config-panel";
+import { LabPanel } from "./lab-panel";
 import { SettingsPanel } from "./settings-panel";
 import { isFittedTab, type FinanceTab } from "./tabs";
 
@@ -18,6 +19,7 @@ export function FinanceWorkspace({ tab }: { tab: FinanceTab }) {
     : tab === "movimientos" ? <MovementsPanel />
     : tab === "plan" ? <PlanPanel />
     : tab === "configurar" ? <PlanConfigPanel />
+    : tab === "laboratorio" ? <LabPanel />
     : tab === "copiloto" ? <CopilotPanel />
     : tab === "documentos" ? <DocumentsPanel />
     : tab === "cuentas" ? <AccountsPanel />

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { FinanceWorkspace } from "@/components/finance/workspace";
-import { FINANCE_TABS, LEGACY_TABS, isFinanceTab } from "@/components/finance/tabs";
+import { LEGACY_TABS, isFinanceTab, tabDefOf } from "@/components/finance/tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -9,8 +9,7 @@ type PageProps = { params: Promise<{ tab: string }> };
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { tab } = await params;
-  const section = FINANCE_TABS.find((item) => item.key === tab);
-  return section ? { title: `${section.label} · CRS Finance` } : {};
+  return isFinanceTab(tab) ? { title: `${tabDefOf(tab).label} · CRS Finance` } : {};
 }
 
 export default async function Page({ params }: PageProps) {
