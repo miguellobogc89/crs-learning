@@ -1,187 +1,340 @@
 "use client";
-// Plan (seguimiento): ¿voy dentro del plan este ciclo? Gastado en paquetes frente a lo presupuestado, ahorro del
-// ciclo, gastos sin paquete, una barra por paquete con el día del ciclo y qué te está desviando. Se configura en
-// «Configurar mi plan» (plan-config-panel.tsx); aquí no se edita nada.
+// Plan: grupos de gasto del usuario (Gastos fijos, Ocio, Moda…). Cada grupo es un conjunto de categorías (cada
+// categoría en un solo grupo) con un objetivo opcional por ciclo. Lista con líneas finas; al pulsar un grupo se
+// despliegan sus categorías con su gasto del ciclo y la diferencia con el anterior a la misma altura; se añaden
+// desde una lista que sube desde abajo y se quitan con la ×. Al tocar una categoría, su detalle entra desde la
+// derecha (/finanzas/plan/categoria/<clave>). Al volver, la pantalla queda como se dejó (desplegado y scroll).
+// Los grupos se guardan en finance_plan_groups (planView y acciones plan/group* de la API).
 import Link from "next/link";
-import { useState } from "react";
-import { AlertCircle, Check, ChevronRight, Package, SlidersHorizontal, TrendingUp } from "lucide-react";
-import type { packagesView } from "@/lib/finance/service";
-import { card, eur, flat, ghost, primary } from "@/components/trading/format";
-import { CardHeader, ErrorNote, SectionTitle } from "@/components/trading/ui";
+import { useEffect, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronRight, FolderPlus, Landmark, Plus, Search, X } from "lucide-react";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import type { planView } from "@/lib/finance/service";
+import { EXPENSE_CATEGORIES, categoryLabel } from "@/lib/finance/categories";
+import { eur, primary } from "@/components/trading/format";
+import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
-import { shortDay, useFinance } from "./api";
+import { errorText, fapi, refreshFinance, useFinance } from "./api";
 
-type View = Awaited<ReturnType<typeof packagesView>>;
-type Pack = View["packages"][number];
+type View = Awaited<ReturnType<typeof planView>>;
+type Group = View["groups"][number];
 
-const CONFIG = "/finanzas/configurar";
-const BAR: Record<"ok" | "atencion" | "superado", string> = { ok: "bg-emerald-500", atencion: "bg-amber-500", superado: "bg-red-500" };
+const labelOf = categoryLabel;
+const fold = (s: string) => ` ${s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
+const round2 = (v: number) => Math.round(v * 100) / 100;
+const PLAN_OPEN = "crs-finance:plan-open";
+const PLAN_SCROLL = "crs-finance:plan-scroll";
+/** El contenedor que hace scroll en Finanzas (el <main> de la estructura). */
+const scroller = () => document.querySelector<HTMLElement>("main");
+/** Todas las categorías de gasto que se pueden repartir en grupos. */
+const ALL_KEYS = [...EXPENSE_CATEGORIES.map((c) => c.key), "sin_clasificar"];
 
-function Stat({ label, value, hint, tone = "slate" }: { label: string; value: string; hint: string; tone?: "slate" | "emerald" | "amber" | "red" }) {
-  const box = tone === "amber" ? "bg-amber-50" : tone === "red" ? "bg-red-50" : "bg-slate-50";
-  const text = tone === "amber" ? "text-amber-800" : tone === "red" ? "text-red-700" : tone === "emerald" ? "text-emerald-700" : "text-slate-900";
-  return (
-    <div className={`rounded-xl p-3 ${box}`}>
-      <p className={`text-xs ${tone === "amber" ? "text-amber-800" : "text-slate-500"}`}>{label}</p>
-      <p className={`mt-0.5 text-xl font-semibold tabular-nums ${text}`}>{value}</p>
-      <p className={`text-xs ${tone === "amber" ? "text-amber-700" : "text-slate-500"}`}>{hint}</p>
-    </div>
-  );
+function Diff({ current, previous }: { current: number; previous: number | null }) {
+  if (previous === null) return <span className="block text-xs text-slate-400">sin ciclo anterior</span>;
+  const d = round2(current - previous);
+  if (Math.abs(d) < 0.01) return <span className="block text-xs text-slate-400">igual que el anterior</span>;
+  return <span className={`block text-xs font-medium tabular-nums ${d > 0 ? "text-red-600" : "text-emerald-600"}`}>{d > 0 ? "+" : "−"}{eur(Math.abs(d), 2)} vs anterior</span>;
 }
 
-function ChargeList({ items }: { items: { id: string; date: string; amount: number; description: string; detail: string }[] }) {
-  if (!items.length) return <p className="text-xs text-slate-500">Sin cargos este ciclo.</p>;
-  return (
-    <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
-      {items.map((c) => (
-        <li key={c.id} className="flex items-center gap-3 py-1.5 text-sm">
-          <span className="w-12 shrink-0 text-xs text-slate-400">{shortDay(c.date)}</span>
-          <span className="min-w-0 flex-1 break-words text-slate-700" title={c.detail}>{c.description}</span>
-          <span className="shrink-0 tabular-nums text-slate-900">{eur(-c.amount, 2)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
+/**
+ * «Añadir a <grupo>»: lista que sube desde abajo (como el historial de categoría de Inicio). Arriba las categorías
+ * libres, por gasto del ciclo; debajo, en gris, las que están en otro grupo, que se pueden traer (se mueven).
+ */
+function AddCategoriesSheet({ target, groups, allKeys, cur, onClose, onConfirm }: {
+  target: Group | null;
+  groups: Group[];
+  allKeys: string[];
+  cur: (k: string) => number;
+  onClose: () => void;
+  onConfirm: (keys: string[]) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const startY = useRef<number | null>(null);
+  useEffect(() => { if (target) { setQ(""); setPicked(new Set()); } }, [target]);
+  const needle = fold(q.trim()).trim();
+  const ownerOf = new Map(groups.flatMap((g) => g.categories.map((k) => [k, g] as const)));
+  const candidates = allKeys
+    .filter((k) => ownerOf.get(k)?.id !== target?.id)
+    .filter((k) => !needle || fold(labelOf(k)).includes(needle))
+    .sort((a, b) => cur(b) - cur(a) || labelOf(a).localeCompare(labelOf(b), "es"));
+  const free = candidates.filter((k) => !ownerOf.has(k));
+  const elsewhere = candidates.filter((k) => ownerOf.has(k));
+  const toggle = (k: string) => setPicked((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const moving = [...picked].filter((k) => ownerOf.has(k)).length;
 
-/** Una barra por paquete: lo gastado frente al objetivo, con la raya del día del ciclo. */
-function PackageBar({ p, expectedPct }: { p: Pack; expectedPct: number }) {
-  const [open, setOpen] = useState(false);
-  const pr = p.progress;
-  // Sin objetivo, la barra compara con la media de los últimos ciclos (en gris): nunca queda vacía.
-  const vsAverage = !pr && p.average !== null && p.average > 0 ? Math.round((p.current / p.average) * 1000) / 10 : null;
+  const row = (k: string) => {
+    const on = picked.has(k);
+    const owner = ownerOf.get(k);
+    return (
+      <li key={k}>
+        <button type="button" onClick={() => toggle(k)} aria-pressed={on} className="flex w-full items-center gap-3 py-3.5 text-left active:bg-slate-50">
+          <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${on ? "border-blue-600 bg-blue-600 text-white" : "border-slate-300"}`}>{on && <Check className="h-3.5 w-3.5" />}</span>
+          <span className="min-w-0 flex-1">
+            <span className={`block text-sm font-medium ${owner && !on ? "text-slate-500" : "text-slate-900"}`}>{labelOf(k)}</span>
+            {owner && <span className="block text-xs text-slate-400">{on ? `Se moverá desde ${owner.name}` : `En ${owner.name}`}</span>}
+          </span>
+          <span className={`shrink-0 text-sm tabular-nums ${cur(k) > 0 ? "text-slate-900" : "text-slate-400"}`}>{eur(cur(k), 2)}</span>
+        </button>
+      </li>
+    );
+  };
+
   return (
-    <li className="border-t border-slate-100 first:border-t-0">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="grid w-full grid-cols-[minmax(0,8rem)_minmax(0,1fr)_auto] items-center gap-3 py-3 text-left sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_9rem]">
-        <span className="flex min-w-0 items-center gap-1 text-sm font-medium text-slate-900">
-          <ChevronRight className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-90" : ""}`} />
-          <span className="break-words">{p.name}</span>
-        </span>
-        <span className="relative h-3.5 rounded-full bg-slate-100">
-          {pr ? (
-            <span className={`absolute inset-y-0 left-0 rounded-full ${BAR[pr.status]}`} style={{ width: `${Math.min(100, Math.max(2, pr.pct))}%` }} />
-          ) : vsAverage !== null ? (
-            <span className="absolute inset-y-0 left-0 rounded-full bg-slate-400" style={{ width: `${Math.min(100, Math.max(2, vsAverage))}%` }} />
-          ) : (
-            <span className="absolute inset-0 flex items-center pl-2 text-[11px] text-slate-400">sin objetivo ni historial</span>
-          )}
-          <span className="absolute -inset-y-1 w-0.5 bg-slate-700" style={{ left: `${Math.min(100, expectedPct)}%` }} aria-hidden="true" />
-        </span>
-        <span className={`text-right text-sm tabular-nums ${pr?.status === "superado" ? "font-semibold text-red-700" : "text-slate-700"}`}>
-          {eur(p.current, 2)}
-          {p.goal !== null ? <span className="text-slate-400"> / {eur(p.goal, 2)}</span> : p.average !== null && <span className="block text-[11px] text-slate-400">media {eur(p.average, 2)}</span>}
-        </span>
-      </button>
-      {open && (
-        <div className="mb-3 rounded-xl bg-slate-50 px-3 py-2">
-          {pr ? <p className="mb-1 text-xs text-slate-500">{pr.remaining >= 0 ? `Te quedan ${eur(pr.remaining, 2)} del objetivo` : `Te has pasado ${eur(-pr.remaining, 2)} del objetivo`} · media {eur(p.average, 2)}</p>
-            : vsAverage !== null && <p className="mb-1 text-xs text-slate-500">Sin objetivo: llevas el {Math.round(vsAverage)} % de tu media ({eur(p.average, 2)}) con el {Math.round(expectedPct)} % del ciclo. Ponle objetivo en Configurar mi plan.</p>}
-          <ChargeList items={p.currentCharges} />
+    <Sheet open={target !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="bottom" showCloseButton={false} className="data-[side=bottom]:h-[80dvh] max-h-[80dvh] gap-0 overflow-hidden rounded-t-3xl border-slate-200 bg-white p-0 sm:mx-auto sm:max-w-lg">
+        <div
+          className="shrink-0 touch-none px-5 pb-3 pt-3"
+          onTouchStart={(e) => { startY.current = e.touches[0]?.clientY ?? null; }}
+          onTouchEnd={(e) => { if (startY.current !== null && (e.changedTouches[0]?.clientY ?? 0) - startY.current > 70) onClose(); startY.current = null; }}
+          onTouchCancel={() => { startY.current = null; }}
+        >
+          <div aria-hidden="true" className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-slate-300" />
+          <SheetTitle className="text-lg font-semibold text-slate-900">Añadir a {target?.name}</SheetTitle>
+          <SheetDescription className="mt-0.5 text-xs text-slate-500">Gasto de este ciclo en cada categoría. Desliza hacia abajo para cerrar.</SheetDescription>
+          <label className="mt-3 flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2.5">
+            <Search className="h-4 w-4 shrink-0 text-slate-400" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar categoría" className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400" />
+          </label>
         </div>
-      )}
-    </li>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5">
+          {free.length > 0 && (
+            <section>
+              <p className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Sin grupo</p>
+              <ul className="divide-y divide-slate-100">{free.map(row)}</ul>
+            </section>
+          )}
+          {elsewhere.length > 0 && (
+            <section className="pt-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">En otros grupos</p>
+              <ul className="divide-y divide-slate-100">{elsewhere.map(row)}</ul>
+            </section>
+          )}
+          {candidates.length === 0 && <p className="py-8 text-center text-sm text-slate-400">No hay categorías con ese nombre.</p>}
+        </div>
+        <div className="shrink-0 border-t border-slate-100 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+          <button type="button" onClick={() => { if (picked.size) onConfirm([...picked]); else onClose(); }} className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white active:bg-blue-700">
+            {picked.size ? `Añadir (${picked.size})${moving ? ` · ${moving} se mueven` : ""}` : "Cerrar"}
+          </button>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-const INSIGHT = {
-  danger: { icon: TrendingUp, color: "text-red-600" },
-  warning: { icon: AlertCircle, color: "text-amber-600" },
-  success: { icon: Check, color: "text-emerald-600" },
-} as const;
+/** «Nuevo grupo»: nombre y, si se quiere, un objetivo en euros por ciclo. */
+function NewGroupSheet({ open, onClose, onCreate }: { open: boolean; onClose: () => void; onCreate: (name: string, goal: number | null) => void }) {
+  const [name, setName] = useState("");
+  const [goal, setGoal] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const startY = useRef<number | null>(null);
+  useEffect(() => { if (open) { setName(""); setGoal(""); setErr(null); } }, [open]);
+  const submit = () => {
+    if (!name.trim()) { setErr("Ponle un nombre al grupo"); return; }
+    const t = goal.trim().replace(/\s|€/g, "");
+    const value = t ? Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t) : null;
+    if (value !== null && !(value > 0)) { setErr("El objetivo debe ser un importe mayor que cero"); return; }
+    onCreate(name.trim().slice(0, 40), value === null ? null : Math.round(value * 100) / 100);
+  };
+  return (
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="bottom" showCloseButton={false} className="gap-0 rounded-t-3xl border-slate-200 bg-white p-0 sm:mx-auto sm:max-w-lg">
+        <div
+          className="touch-none px-5 pt-3"
+          onTouchStart={(e) => { startY.current = e.touches[0]?.clientY ?? null; }}
+          onTouchEnd={(e) => { if (startY.current !== null && (e.changedTouches[0]?.clientY ?? 0) - startY.current > 70) onClose(); startY.current = null; }}
+          onTouchCancel={() => { startY.current = null; }}
+        >
+          <div aria-hidden="true" className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-slate-300" />
+          <SheetTitle className="text-lg font-semibold text-slate-900">Nuevo grupo</SheetTitle>
+          <SheetDescription className="mt-0.5 text-xs text-slate-500">Después eliges qué categorías entran en él.</SheetDescription>
+        </div>
+        <form className="space-y-4 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-slate-800">Nombre</span>
+            <input value={name} onChange={(e) => { setName(e.target.value); setErr(null); }} placeholder="Tabaco, Gasolina, Gimnasio…" maxLength={40} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-slate-800">Objetivo por ciclo <span className="font-normal text-slate-400">(opcional)</span></span>
+            <span className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+              <input inputMode="decimal" value={goal} onChange={(e) => { setGoal(e.target.value); setErr(null); }} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 text-base tabular-nums text-slate-900 outline-none" />
+              <span className="text-base text-slate-400">€</span>
+            </span>
+          </label>
+          {err && <p className="text-sm text-red-600">{err}</p>}
+          <button type="submit" className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white active:bg-blue-700">Crear y elegir categorías</button>
+        </form>
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 export function PlanPanel() {
-  const { data, error } = useFinance<View>("packages");
-  const [showUnpackaged, setShowUnpackaged] = useState(false);
-  if (error && !data) return <ErrorNote>{error}</ErrorNote>;
-  if (!data) return <SkeletonList rows={6} />;
+  const { data, error } = useFinance<View>("plan");
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [open, setOpen] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [adding, setAdding] = useState<Group | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
-  const { cycle, packages, unpackaged, cycleSaving, savings } = data;
-  if (packages.length === 0) {
+  // Lo guardado manda; los cambios se pintan al momento y se confirman con el servidor.
+  useEffect(() => { if (data) setGroups(data.groups); }, [data]);
+  // Al volver del detalle, la pantalla queda como se dejó: grupo desplegado y scroll (en esta sesión).
+  useEffect(() => {
+    try { setOpen(window.sessionStorage.getItem(PLAN_OPEN) || null); } catch { /* sin almacenamiento */ }
+    setRestored(true);
+  }, []);
+  useEffect(() => {
+    if (!restored) return;
+    try { if (open) window.sessionStorage.setItem(PLAN_OPEN, open); else window.sessionStorage.removeItem(PLAN_OPEN); } catch { /* ignorar */ }
+  }, [open, restored]);
+  useEffect(() => {
+    if (!restored || !data) return;
+    try {
+      const y = Number(window.sessionStorage.getItem(PLAN_SCROLL));
+      if (y > 0) requestAnimationFrame(() => { const el = scroller(); if (el) el.scrollTop = y; });
+      window.sessionStorage.removeItem(PLAN_SCROLL);
+    } catch { /* ignorar */ }
+  }, [restored, data]);
+
+  if (error && !data) return <ErrorNote>{error}</ErrorNote>;
+  if (!data || !restored) return <SkeletonList rows={4} />;
+
+  // Antes de nada, una cuenta conectada: sin movimientos no hay nada que repartir ni que proponer.
+  if (!data.hasAccounts || !data.hasData) {
     return (
-      <section className={`${card} ${flat} flex flex-col items-center px-6 py-12 text-center`}>
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><Package className="h-6 w-6" /></span>
-        <h2 className="mt-4 text-lg font-semibold text-slate-900">Configura tu plan</h2>
-        <p className="mt-2 max-w-md text-sm text-slate-500">Crea tus paquetes (fijos, tabaco, gasolina…) con sus objetivos y aquí verás cada ciclo si vas dentro del plan.</p>
-        <Link href={CONFIG} className={`${primary} mt-6`}><SlidersHorizontal className="h-4 w-4" /> Configurar mi plan</Link>
+      <section className="mx-auto flex max-w-md flex-col items-center px-6 py-12 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><Landmark className="h-6 w-6" /></span>
+        <h2 className="mt-4 text-lg font-semibold text-slate-900">{data.hasAccounts ? "Aún no hay movimientos" : "Conecta tu banco para empezar"}</h2>
+        <p className="mt-2 text-sm text-slate-500">
+          {data.hasAccounts
+            ? "En cuanto entren tus movimientos, te propondremos tus primeros grupos de gasto."
+            : "Con tus movimientos te propondremos tus grupos de gasto (fijos, ocio, moda…) y verás cada ciclo dónde se va tu dinero."}
+        </p>
+        <Link href="/finanzas/cuentas" className={`${primary} mt-6`}><Landmark className="h-4 w-4" /> {data.hasAccounts ? "Ver mis cuentas" : "Conectar mi banco"}</Link>
       </section>
     );
   }
 
-  const expectedPct = Math.min(100, Math.round((cycle.day / cycle.totalDays) * 1000) / 10);
-  const spent = Math.round(packages.reduce((s, p) => s + p.current, 0) * 100) / 100;
-  const budgeted = Math.round(packages.reduce((s, p) => s + (p.goal ?? 0), 0) * 100) / 100;
-  const noGoal = packages.filter((p) => p.goal === null).length;
-  const goal = savings.perCycle;
-  const saved = cycleSaving.saved;
-  const ordered = [...packages].sort((a, b) => (b.progress?.pct ?? -1) - (a.progress?.pct ?? -1));
+  const cur = (k: string) => data.totals.now[k] ?? 0;
+  const prv = (k: string) => (data.previous ? data.totals.before[k] ?? 0 : null);
+  const sum = (keys: string[], f: (k: string) => number | null) => {
+    const vals = keys.map(f);
+    return vals.some((v) => v === null) ? null : round2(vals.reduce((s: number, v) => s + (v ?? 0), 0));
+  };
+  const used = new Set(groups.flatMap((g) => g.categories));
+  const free = ALL_KEYS.filter((k) => !used.has(k));
+  // «Sin grupo»: categorías con gasto que no están en ningún grupo (para que nada se escape).
+  const rows = [
+    ...groups.map((g) => ({ ...g, editable: true })),
+    { id: "sin", name: "Sin grupo", categories: free.filter((k) => cur(k) > 0 || (prv(k) ?? 0) > 0), goal: null, editable: false },
+  ];
+
+  const save = async (path: string, payload: unknown) => {
+    setErr(null);
+    try {
+      return await fapi<{ id?: string }>(path, payload);
+    } catch (e) {
+      setErr(errorText(e));
+      return null;
+    } finally {
+      refreshFinance();
+    }
+  };
+  const createGroup = async (name: string, goal: number | null) => {
+    setCreating(false);
+    const r = await save("plan/group", { name, goal });
+    if (!r?.id) return;
+    const g: Group = { id: r.id, name, categories: [], goal };
+    setGroups((gs) => [...gs, g]);
+    setOpen(g.id);
+    setAdding(g);
+  };
+  const removeCat = (id: string, k: string) => {
+    setGroups((gs) => gs.map((x) => (x.id === id ? { ...x, categories: x.categories.filter((c) => c !== k) } : x)));
+    void save("plan/group/categories", { id, remove: [k] });
+  };
+  // Añade al grupo; si alguna estaba en otro grupo, se mueve (cada categoría en un solo grupo).
+  const addCats = (id: string, keys: string[]) => {
+    setGroups((gs) => gs.map((x) => (x.id === id
+      ? { ...x, categories: [...x.categories, ...keys.filter((k) => !x.categories.includes(k))] }
+      : { ...x, categories: x.categories.filter((c) => !keys.includes(c)) })));
+    setAdding(null);
+    void save("plan/group/categories", { id, add: keys });
+  };
+  const rememberScroll = () => {
+    try { window.sessionStorage.setItem(PLAN_SCROLL, String(scroller()?.scrollTop ?? 0)); } catch { /* ignorar */ }
+  };
 
   return (
-    <div className="space-y-4 pb-4">
-      <section className={`${card} ${flat}`}>
-        <CardHeader actions={<Link href={CONFIG} className={ghost}><SlidersHorizontal className="h-4 w-4" /> Configurar mi plan</Link>}>
-          <SectionTitle icon={Package} tint="blue" size="base">
-            Este ciclo <span className="ml-1 text-sm font-normal text-slate-500">{shortDay(cycle.start)} – {shortDay(cycle.end)} · día {cycle.day} de {cycle.totalDays}</span>
-          </SectionTitle>
-        </CardHeader>
-        <div className="grid gap-2 px-4 pb-5 sm:grid-cols-3 sm:px-6">
-          <Stat
-            label="Gastado en paquetes"
-            value={eur(spent, 2)}
-            hint={budgeted > 0 ? `de ${eur(budgeted, 2)} presupuestados${noGoal ? ` · ${noGoal} sin objetivo` : ""}` : "Ningún paquete tiene objetivo"}
-            tone={budgeted > 0 && spent > budgeted ? "red" : "slate"}
-          />
-          <Stat
-            label="Ahorro del ciclo"
-            value={eur(saved, 2)}
-            hint={`Ingresado ${eur(cycleSaving.income, 2)} − gastado ${eur(cycleSaving.expenses, 2)}${goal !== null ? (saved >= goal ? ` · objetivo de ${eur(goal, 2)} cumplido` : ` · objetivo ${eur(goal, 2)}`) : ""}`}
-            tone={goal !== null && saved >= goal ? "emerald" : saved < 0 ? "red" : "slate"}
-          />
-          <div role="button" tabIndex={0} onClick={() => setShowUnpackaged(!showUnpackaged)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowUnpackaged(!showUnpackaged); } }} className="cursor-pointer rounded-xl text-left focus-visible:outline-2 focus-visible:outline-blue-600" aria-expanded={showUnpackaged}>
-            <Stat
-              label="Gastos sin paquete"
-              value={eur(unpackaged.total, 2)}
-              hint={unpackaged.count ? `${unpackaged.count} ${unpackaged.count === 1 ? "cargo" : "cargos"} · ${showUnpackaged ? "ocultar" : "ver"}` : "Todo tu gasto está en paquetes"}
-              tone={unpackaged.total > 0 ? "amber" : "slate"}
-            />
-          </div>
-        </div>
-        {showUnpackaged && unpackaged.count > 0 && (
-          <div className="mx-4 mb-5 rounded-xl bg-amber-50/60 px-3 py-2 sm:mx-6">
-            <p className="mb-1 text-xs text-amber-800">Gasto real de este ciclo que no está en ningún paquete. Asígnalo en <Link href={CONFIG} className="font-medium underline">Configurar mi plan</Link>.</p>
-            <ChargeList items={unpackaged.items} />
-          </div>
-        )}
-      </section>
-
-      <section className={`${card} ${flat}`}>
-        <CardHeader>
-          <SectionTitle icon={TrendingUp} tint="emerald" size="base">¿Voy dentro del plan?</SectionTitle>
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-            <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-0.5 bg-slate-700" aria-hidden="true" /> día del ciclo ({Math.round(expectedPct)} %)</span>
-            {packages.some((p) => p.goal === null) && <span className="flex items-center gap-1.5"><span className="inline-block h-2 w-3 rounded-full bg-slate-400" aria-hidden="true" /> sin objetivo: frente a tu media</span>}
-          </span>
-        </CardHeader>
-        <ul className="px-4 pb-3 sm:px-6">
-          {ordered.map((p) => <PackageBar key={p.id} p={p} expectedPct={expectedPct} />)}
-        </ul>
-      </section>
-
-      {data.insights.length > 0 && (
-        <section className={`${card} ${flat} p-4 sm:p-6`}>
-          <SectionTitle icon={AlertCircle} tint="amber" size="base">Qué te está desviando</SectionTitle>
-          <ul className="mt-3 space-y-2">
-            {data.insights.map((i) => {
-              const { icon: Icon, color } = INSIGHT[i.tone];
-              return (
-                <li key={i.text} className="flex items-start gap-2.5 text-sm text-slate-700">
-                  <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${color}`} aria-hidden="true" />
-                  <span>{i.text}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
+    <div className="mx-auto max-w-xl pb-6">
+      {err && <div className="mb-3"><ErrorNote>{err}</ErrorNote></div>}
+      <ul className="divide-y divide-slate-100 border-y border-slate-100">
+        {rows.map((g) => {
+          const isOpen = open === g.id;
+          const now = sum(g.categories, cur) ?? 0;
+          const before = sum(g.categories, prv);
+          const sorted = [...g.categories].sort((a, b) => cur(b) - cur(a));
+          const subtitle = sorted.slice(0, 3).map(labelOf).join(", ") + (sorted.length > 3 ? "…" : "");
+          const muted = !g.editable;
+          const addButton = !g.editable && (
+            <li key="add-group">
+              <button type="button" onClick={() => setCreating(true)} className="flex w-full items-center gap-2 px-1 py-4 text-left text-base font-medium text-blue-600 active:bg-slate-50">
+                <FolderPlus className="h-5 w-5" /> Añadir grupo
+              </button>
+            </li>
+          );
+          return [addButton,
+            <li key={g.id}>
+              <button type="button" onClick={() => setOpen(isOpen ? null : g.id)} aria-expanded={isOpen} className="flex w-full items-center gap-3 px-1 py-4 text-left active:bg-slate-50">
+                <span className="min-w-0 flex-1">
+                  <span className={`block text-base font-semibold ${muted ? "text-slate-500" : "text-slate-900"}`}>{g.name}</span>
+                  <span className="mt-0.5 block truncate text-sm text-slate-400">{subtitle || "Sin categorías"}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className={`block text-lg font-semibold tabular-nums ${muted ? "text-slate-500" : g.goal && now > g.goal ? "text-red-600" : "text-slate-900"}`}>
+                    {eur(now, 2)}{g.goal ? <span className="text-sm font-normal text-slate-400"> / {eur(g.goal, 2)}</span> : null}
+                  </span>
+                  <Diff current={now} previous={before} />
+                </span>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+              </button>
+              {isOpen && (
+                <div className="pb-3 pl-3">
+                  <ul className="divide-y divide-slate-50">
+                    {sorted.map((k) => (
+                      <li key={k} className="flex items-center gap-1">
+                        <Link href={`/finanzas/plan/categoria/${encodeURIComponent(k)}`} onClick={rememberScroll} scroll={false} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 active:bg-slate-50">
+                          <span className="min-w-0 flex-1 text-sm text-slate-700">{labelOf(k)}</span>
+                          <span className="shrink-0 text-right">
+                            <span className="block text-sm tabular-nums text-slate-900">{eur(cur(k), 2)}</span>
+                            <Diff current={cur(k)} previous={prv(k)} />
+                          </span>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+                        </Link>
+                        {g.editable && (
+                          <button type="button" onClick={() => removeCat(g.id, k)} aria-label={`Quitar ${labelOf(k)}`} className="shrink-0 rounded-lg p-1.5 text-slate-300 active:bg-slate-100 active:text-red-600">
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                    {sorted.length === 0 && <li className="py-2.5 text-sm text-slate-400">{g.editable ? "Sin categorías." : "Todo tu gasto está en algún grupo."}</li>}
+                  </ul>
+                  {g.editable && (
+                    <button type="button" onClick={() => setAdding(groups.find((x) => x.id === g.id) ?? null)} className="mt-2 inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-blue-600">
+                      <Plus className="h-4 w-4" /> Añadir categoría
+                    </button>
+                  )}
+                </div>
+              )}
+            </li>,
+          ];
+        })}
+      </ul>
+      <NewGroupSheet open={creating} onClose={() => setCreating(false)} onCreate={(name, goal) => void createGroup(name, goal)} />
+      <AddCategoriesSheet target={adding} groups={groups} allKeys={ALL_KEYS} cur={cur} onClose={() => setAdding(null)} onConfirm={(keys) => adding && addCats(adding.id, keys)} />
     </div>
   );
 }

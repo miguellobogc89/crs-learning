@@ -512,3 +512,49 @@ export async function packagesView(userId: string) {
     charges,
   };
 }
+
+/** Grupos con los que arranca Plan la primera vez (cada uno solo con categorías; el usuario los cambia). */
+const DEFAULT_PLAN_GROUPS: { name: string; categories: string[] }[] = [
+  { name: "Gastos fijos", categories: ["suministros", "suscripciones", "prestamos"] },
+  { name: "Ocio", categories: ["restaurantes", "ocio", "videojuegos"] },
+  { name: "Moda y complementos", categories: ["moda"] },
+  { name: "Comida a domicilio", categories: ["comida_domicilio"] },
+];
+
+/**
+ * Plan: los grupos del usuario (conjuntos de categorías con objetivo opcional) y, por categoría, el gasto de este
+ * ciclo y del ciclo anterior hasta el mismo día del ciclo. Solo gastos reales de cuentas incluidas (sin traspasos
+ * ni aportaciones a ahorro). Si aún no tiene grupos y ya hay movimientos, se crean los de inicio.
+ */
+export async function planView(userId: string) {
+  const ctx = await financeContext(userId);
+  const load = () => prisma.finance_plan_groups.findMany({ where: { user_id: userId }, orderBy: [{ position: "asc" }, { created_at: "asc" }] });
+  let rows = await load();
+  if (!rows.length && ctx.txs.length) {
+    await prisma.finance_plan_groups.createMany({ data: DEFAULT_PLAN_GROUPS.map((g, i) => ({ user_id: userId, name: g.name, categories: g.categories, position: i })) });
+    rows = await load();
+  }
+  const current = cycleFor(ctx.today, ctx.startDay);
+  const day = daysBetween(current.start, ctx.today) + 1;
+  const oldest = ctx.txs.length ? ctx.txs[ctx.txs.length - 1].date : ctx.today;
+  const prevCycle = cycleFor(ctx.today, ctx.startDay, -1);
+  const prevTo = addDays(prevCycle.start, day - 1) < prevCycle.end ? addDays(prevCycle.start, day - 1) : prevCycle.end;
+  const hasPrevious = prevCycle.start >= oldest;
+  const now: Record<string, number> = {};
+  const before: Record<string, number> = {};
+  for (const t of ctx.txs) {
+    if (!isPackageCharge(t)) continue;
+    if (t.date >= current.start && t.date <= current.end) now[t.category] = round2((now[t.category] ?? 0) - t.amount);
+    if (hasPrevious && t.date >= prevCycle.start && t.date <= prevTo) before[t.category] = round2((before[t.category] ?? 0) - t.amount);
+  }
+  return {
+    hasAccounts: ctx.accounts.length > 0,
+    hasData: ctx.txs.length > 0,
+    cycle: { ...current, day, totalDays: daysBetween(current.start, current.end) + 1 },
+    previous: hasPrevious ? { start: prevCycle.start, end: prevTo } : null,
+    /** Ciclos del último par de años (el actual primero), para el historial de una categoría. */
+    cycles: Array.from({ length: 24 }, (_, i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c, i) => i === 0 || c.end >= oldest),
+    groups: rows.map((g) => ({ id: g.id, name: g.name, categories: g.categories, goal: g.goal === null ? null : Number(g.goal) })),
+    totals: { now, before },
+  };
+}

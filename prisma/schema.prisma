@@ -193,6 +193,7 @@ model users {
   finance_budgets                                                                              finance_budgets[]
   finance_wishlist_items                                                                       finance_wishlist_items[]
   finance_packages                                                                             finance_packages[]
+  finance_plan_groups                                                                          finance_plan_groups[]
   finance_memory                                                                               finance_memory[]
   finance_chat_messages                                                                        finance_chat_messages[]
   finance_alert_dismissals                                                                     finance_alert_dismissals[]
@@ -2848,6 +2849,20 @@ model finance_budgets {
   account_id String?  @db.Uuid
   /// Recibos detectados (clave de comercio) que forman una partida fija.
   recurring_keys String[] @default([])
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id])
+}
+
+/// CRS Finance · Plan: grupos de gasto del usuario; cada uno es un conjunto de categorías con objetivo opcional.
+model finance_plan_groups {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  name       String
+  categories String[] @default([])
+  goal       Decimal? @db.Decimal(14, 2)
+  position   Int      @default(0)
   created_at DateTime @default(now()) @db.Timestamptz(6)
   users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 

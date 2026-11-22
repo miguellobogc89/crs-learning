@@ -9,7 +9,7 @@ import Link from "next/link";
 import { ModuleLogo } from "@/components/ui/module-logo";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ChartCandlestick, ChevronRight, Gauge, Landmark, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, SlidersHorizontal, UserCircle, X } from "lucide-react";
+import { ArrowLeft, ChartCandlestick, ChevronRight, Gauge, Landmark, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -250,10 +250,6 @@ function MobileMenu({ user, onClose, sync }: { user: FinanceProfile; onClose: ()
   // Como el menú de Trading: por grupos, separando cuentas de integraciones.
   const groups: { title: string; rows: { label: string; href: string; icon: typeof Plug }[] }[] = [
     {
-      title: "Mi plan",
-      rows: [{ label: "Configurar mi plan", href: "/finanzas/configurar", icon: SlidersHorizontal }],
-    },
-    {
       title: "Cuenta",
       rows: [
         { label: "Cuentas", href: "/finanzas/cuentas", icon: Landmark },
@@ -313,7 +309,7 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
   const parts = pathname.split("/").filter(Boolean);
   const section = parts[1] && isFinanceTab(parts[1]) ? parts[1] : "inicio";
   const tabDef = tabDefOf(section);
-  // Pantalla de detalle dentro de una sección (p. ej. /finanzas/laboratorio/categoria/…): flecha para volver.
+  // Pantalla de detalle dentro de una sección (p. ej. /finanzas/plan/categoria/…): flecha para volver.
   const isDetail = parts.length > 2;
   const router = useRouter();
   const goBack = () => (window.history.length > 1 ? router.back() : router.push(`/finanzas/${section}`));

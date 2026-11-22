@@ -78,7 +78,7 @@ test("una recarga de Revolut desde Santander se empareja como transferencia inte
 test("palabras clave: súper, nómina, comida a domicilio e inversión", () => {
   assert.equal(L.keywordClass({ description: "COMPRA MERCADONA", counterparty: null, amount: -30 }).category, "alimentacion");
   assert.equal(L.keywordClass({ description: "NOMINA ACME SL", counterparty: null, amount: 2000 }).kind, "ingreso");
-  assert.equal(L.keywordClass({ description: "Uber Eats pedido", counterparty: null, amount: -20 }).category, "restaurantes");
+  assert.equal(L.keywordClass({ description: "Uber Eats pedido", counterparty: null, amount: -20 }).category, "comida_domicilio");
   assert.equal(L.keywordClass({ description: "Transferencia a Bitvavo", counterparty: null, amount: -100 }).kind, "ahorro");
   assert.equal(L.keywordClass({ description: "A cuenta de inversión", counterparty: null, amount: -1000 }).kind, "ahorro");
   assert.equal(L.keywordClass({ description: "NOMINA", counterparty: null, amount: -5 }), null, "una «nómina» que sale no es un ingreso");
@@ -399,4 +399,18 @@ test("periodo elegido", () => {
   assert.equal(custom.buckets.length, 3);
   assert.equal(custom.buckets[0].start, "2026-09-01");
   assert.equal(L.cleanView({ range: "custom" }).range, "actual");
+});
+
+test("Categorías nuevas por comercio: comida a domicilio, moda y mascotas antes que las genéricas", () => {
+  const k = (description) => L.keywordClass({ description, counterparty: null, amount: -10 })?.category;
+  assert.equal(k("Glovo 04oct Sqsm1a1d"), "comida_domicilio");
+  assert.equal(k("Uber   * Eats Pending"), "comida_domicilio");
+  assert.equal(k("Uber   *one Membership") === "comida_domicilio", false);
+  assert.equal(k("Zara Sevilla Airesur"), "moda");
+  assert.equal(k("Zalando Payments"), "moda");
+  assert.equal(k("COMPRA H&M MADRID"), "moda");
+  assert.equal(k("Clinica Veterinaria Aljarafe"), "mascotas");
+  assert.equal(k("Farmacia Lda. Garcia"), "salud");
+  assert.equal(k("Bar Borbolla"), "restaurantes");
+  assert.equal(k("AMAZON MKTPLACE"), "compras");
 });

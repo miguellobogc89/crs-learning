@@ -78,6 +78,15 @@ Estado:
 - [ ] **F6 · IA crítica** sobre el plan: subidas de fijos, ritmo que no llega al ahorro, etc.
 - [ ] Sincronizar `finance_wishlist_items` y las nuevas columnas si se regenera el esquema con `prisma db pull` (las FK a `finance_accounts` existen en BD pero no como relación Prisma).
 
+## Plan · grupos de categorías (22/11/2026, enfoque vigente)
+Sustituye a los paquetes y al laboratorio. Plan = lista de **grupos** (conjuntos de categorías; cada categoría en un solo grupo) con objetivo opcional por ciclo. Tabla `finance_plan_groups` (migración `20261122140000_finance_plan_groups`); `planView` y acciones `plan/group`, `plan/group/categories` (mueve la categoría si estaba en otro grupo) y `plan/group/delete`. La primera vez se crean 4 grupos: Gastos fijos (suministros, suscripciones, préstamos), Ocio (restaurantes, ocio, videojuegos), Moda y complementos (moda) y Comida a domicilio (comida_domicilio).
+- Pantalla (móvil primero): líneas finas, desplegable con categorías (gasto del ciclo y diferencia con el anterior a la misma altura), quitar con ×, añadir desde lista que sube desde abajo (buscador, «Sin grupo», «En otros grupos» que se mueven), «Añadir grupo» (nombre + objetivo), línea «Sin grupo». Al volver del detalle queda como se dejó (desplegado y scroll, en la sesión).
+- Detalle de categoría `/finanzas/plan/categoria/<clave>`: entra desde la derecha, flecha atrás en la cabecera de la app, historial por ciclos con importe y ciclo fijos arriba que cambian al hacer scroll; editar con la misma ventana que Movimientos (`movement-edit.tsx`).
+- Plan exige cuenta conectada con movimientos.
+- Categorías nuevas: `moda`, `comida_domicilio`, `mascotas` (palabras clave antes de las genéricas; la IA las recibe en su lista).
+- Retirado: «Configurar mi plan», seguimiento por paquetes y laboratorio (las direcciones antiguas redirigen a Plan). `finance_packages` queda en BD sin uso; endpoints antiguos (`packages`, `package*`, `plan/save`, `budget*`) por limpiar.
+- Pendiente: renombrar/borrar grupo y cambiar su objetivo desde la pantalla; pulir la parte visual; devoluciones; notificaciones; copiloto con acceso a los grupos.
+
 ## Laboratorio de Plan (22/11/2026)
 `/finanzas/laboratorio` (fuera de los menús, solo lectura): pantalla para iterar el diseño de Plan con datos reales antes de llevarlo a Plan.
 - Grupos = conjuntos de categorías (cada categoría en un solo grupo); lista con líneas finas, desplegable; añadir categorías desde una lista que sube desde abajo (buscador, «Sin partida», «En otras partidas» que se pueden mover); línea «Sin partida».
