@@ -1,13 +1,13 @@
 // components/trading/tabs.ts
 // Secciones del módulo de trading (panel lateral y rutas /trading/<clave>).
 import type { ComponentType } from "react";
-import { Bot, Flame, Home, LineChart, Plug, Wallet } from "lucide-react";
+import { Bell, Bot, Flame, Home, LineChart, Plug, Wallet } from "lucide-react";
 
 export const VIRTUAL_PORTFOLIO_TITLE = "Mi cartera virtual";
 export const CARTERA_REAL_HREF = "/trading/cartera";
 export const CARTERA_VIRTUAL_HREF = `${CARTERA_REAL_HREF}?modo=virtual`;
 
-export const TRADING_TAB_KEYS = ["inicio", "oportunidades", "agentes", "cartera", "mercados", "integraciones"] as const;
+export const TRADING_TAB_KEYS = ["inicio", "oportunidades", "agentes", "cartera", "mercados", "integraciones", "notificaciones"] as const;
 export type TradingTab = (typeof TRADING_TAB_KEYS)[number];
 type TabDef = { key: TradingTab; label: string; icon: ComponentType<{ className?: string }>; description: string };
 
@@ -26,6 +26,7 @@ export const TRADING_SECTIONS: { title: string | null; items: TabDef[] }[] = [
     title: "Ajustes",
     items: [
       { key: "integraciones", label: "Conexiones", icon: Plug, description: "Tus brókeres conectados: cuentas, entorno demo o real, permisos y registro de órdenes." },
+      { key: "notificaciones", label: "Notificaciones", icon: Bell, description: "Avisos en el móvil: qué te llega (compras y ventas, stops, fallos) y en qué dispositivos." },
     ],
   },
 ];

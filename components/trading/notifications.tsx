@@ -8,7 +8,7 @@ import { AlertTriangle, ArrowLeft, ArrowLeftRight, Bell, CircleCheck, Info, X } 
 import type { listNotifications } from "@/lib/trading/notifications";
 import { api } from "./format";
 import { useTradingRefresh, useWarmStart } from "./navigation";
-import { PushSettings } from "./push-settings";
+import { PushSettingsLink } from "./push-settings";
 
 type Data = Awaited<ReturnType<typeof listNotifications>>;
 type Item = Data["items"][number];
@@ -176,7 +176,7 @@ export function NotificationsScreen({ open, onClose, data, markRead }: { open: b
           </button>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
-          {open && <PushSettings />}
+          <PushSettingsLink onNavigate={onClose} />
           <List data={shown} onNavigate={onClose} />
         </div>
       </aside>

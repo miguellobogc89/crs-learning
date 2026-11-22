@@ -10,7 +10,7 @@ export const DEFAULT_PREFS: PushPrefs = { trades: true, stops: false, health: tr
 export const KIND_LABEL: Record<PushKind, string> = {
   trades: "Compras y ventas",
   stops: "Movimientos del stop",
-  health: "Fallos (FARO, agentes, exchanges, copias)",
+  health: "Fallos del sistema",
 };
 
 /** A qué interruptor pertenece un aviso de trading_notifications. */

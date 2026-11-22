@@ -8,7 +8,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ArrowLeft, Bot, ChevronRight, Flame, Gift, Home, LifeBuoy, LogOut, PiggyBank, Plug, RefreshCw, UserCircle, UserCog, Wallet, X } from "lucide-react";
+import { ArrowLeft, Bell, Bot, ChevronRight, Flame, Gift, Home, LifeBuoy, LogOut, PiggyBank, Plug, RefreshCw, UserCircle, UserCog, Wallet, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 import { refreshTrading } from "./navigation";
 import type { TradingProfile } from "./navigation";
@@ -74,6 +74,7 @@ export function MobileMenu({ user, onClose }: { user: TradingProfile; onClose: (
       title: "Cuenta",
       items: [
         { label: "Conexiones", icon: Plug, href: "/trading/integraciones" },
+        { label: "Notificaciones", icon: Bell, href: "/trading/notificaciones" },
         { label: "Configuración de la cuenta", icon: UserCog, soon: true },
       ],
     },
