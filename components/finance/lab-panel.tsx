@@ -12,28 +12,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronRight, Plus, Search, X } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { packagesView } from "@/lib/finance/service";
-import { EXPENSE_CATEGORIES, categoryLabel } from "@/lib/finance/categories";
+import { EXPENSE_CATEGORIES } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { useFinance } from "./api";
+import { VIRTUAL, labCategory, labFold, labLabel } from "./lab-categories";
 
 type Packages = Awaited<ReturnType<typeof packagesView>>;
 type Charge = Packages["charges"][number];
 
-/** Categorías simuladas por comercio (palabra completa en el concepto). */
-const VIRTUAL: { key: string; label: string; merchants: string[] }[] = [
-  { key: "lab_domicilio", label: "Comida a domicilio", merchants: ["glovo", "uber eats", "ubereats", "just eat", "justeat", "deliveroo", "telepizza", "dominos", "domino s"] },
-  { key: "lab_moda", label: "Moda", merchants: ["zara", "mango", "primark", "h m", "pull bear", "pull and bear", "bershka", "stradivarius", "massimo dutti", "shein", "zalando", "springfield", "lefties", "oysho", "uniqlo", "levis", "nike", "adidas", "adidases", "foot locker", "jd sports", "parfois", "pandora", "vinted"] },
-  { key: "lab_mascotas", label: "Mascotas", merchants: ["veterinario", "veterinaria", "veterinarios", "kiwoko", "tiendanimal", "zooplus", "miscota", "mascotas", "animalia"] },
-];
-const fold = (s: string) => ` ${s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
-const labCategory = (c: Charge) => {
-  const text = fold(`${c.description} ${c.detail}`);
-  return VIRTUAL.find((v) => v.merchants.some((m) => text.includes(` ${m} `)))?.key ?? c.category;
-};
-const isVirtual = (key: string) => VIRTUAL.some((v) => v.key === key);
-const labelOf = (key: string) => VIRTUAL.find((v) => v.key === key)?.label ?? categoryLabel(key);
+const labelOf = labLabel;
+const fold = labFold;
+const labCategoryOf = (c: Charge) => labCategory(c.category, c.description, c.detail);
 const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -155,7 +146,7 @@ export function LabPanel() {
     const before = new Map<string, number>();
     for (const c of data.charges) {
       if (c.patrimonial) continue;
-      const k = labCategory(c);
+      const k = labCategoryOf(c);
       if (c.date >= cycle.start && c.date <= cycle.end) now.set(k, (now.get(k) ?? 0) - c.amount);
       if (prev && prevTo && c.date >= prev.start && c.date <= prevTo) before.set(k, (before.get(k) ?? 0) - c.amount);
     }
@@ -217,29 +208,14 @@ export function LabPanel() {
                   <ul className="divide-y divide-slate-50">
                     {sorted.map((k) => (
                       <li key={k} className="flex items-center gap-1">
-                        {(() => {
-                          const body = (
-                            <>
-                              <span className="min-w-0 flex-1 text-sm text-slate-700">
-                                {labelOf(k)}
-                                {isVirtual(k) && <span className="block text-[11px] text-slate-400">simulada: aún no está en Movimientos</span>}
-                              </span>
-                              <span className="shrink-0 text-right">
-                                <span className="block text-sm tabular-nums text-slate-900">{eur(cur(k), 2)}</span>
-                                <Diff current={cur(k)} previous={prv(k)} />
-                              </span>
-                            </>
-                          );
-                          // Ver por qué: abre Movimientos (la pantalla del menú) filtrado por esta categoría y este ciclo.
-                          return isVirtual(k)
-                            ? <span className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pr-6">{body}</span>
-                            : (
-                              <Link href={`/finanzas/movimientos?categoria=${encodeURIComponent(k)}&desde=${data.cycle.start}&hasta=${data.cycle.end}`} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 active:bg-slate-50">
-                                {body}
-                                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
-                              </Link>
-                            );
-                        })()}
+                        <Link href={`/finanzas/laboratorio/categoria/${encodeURIComponent(k)}`} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 active:bg-slate-50">
+                          <span className="min-w-0 flex-1 text-sm text-slate-700">{labelOf(k)}</span>
+                          <span className="shrink-0 text-right">
+                            <span className="block text-sm tabular-nums text-slate-900">{eur(cur(k), 2)}</span>
+                            <Diff current={cur(k)} previous={prv(k)} />
+                          </span>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+                        </Link>
                         {g.editable && (
                           <button type="button" onClick={() => removeCat(g.key, k)} aria-label={`Quitar ${labelOf(k)}`} className="shrink-0 rounded-lg p-1.5 text-slate-300 active:bg-slate-100 active:text-red-600">
                             <X className="h-4 w-4" />

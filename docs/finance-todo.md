@@ -77,3 +77,10 @@ Estado:
 - [ ] Resumen al cierre del ciclo (plan frente a real y saldos finales) guardado como foto.
 - [ ] **F6 · IA crítica** sobre el plan: subidas de fijos, ritmo que no llega al ahorro, etc.
 - [ ] Sincronizar `finance_wishlist_items` y las nuevas columnas si se regenera el esquema con `prisma db pull` (las FK a `finance_accounts` existen en BD pero no como relación Prisma).
+
+## Laboratorio de Plan (22/11/2026)
+`/finanzas/laboratorio` (fuera de los menús, solo lectura): pantalla para iterar el diseño de Plan con datos reales antes de llevarlo a Plan.
+- Grupos = conjuntos de categorías (cada categoría en un solo grupo); lista con líneas finas, desplegable; añadir categorías desde una lista que sube desde abajo (buscador, «Sin partida», «En otras partidas» que se pueden mover); línea «Sin partida».
+- Al tocar una categoría: pantalla de detalle que entra desde la derecha (`/finanzas/laboratorio/categoria/<clave>`), con flecha para volver, solo sus movimientos del ciclo; se editan con la misma ventana que Movimientos (`components/finance/movement-edit.tsx`, compartido).
+- Moda, Comida a domicilio y Mascotas simuladas por comercio (`lab-categories.ts`) hasta crearlas como categorías reales.
+- Pendiente: llamar «Grupos» a las partidas y «Añadir grupo», animaciones de desplegar, objetivos por grupo, cuenta obligatoria antes de Plan.

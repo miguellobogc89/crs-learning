@@ -2,15 +2,16 @@
 // Movimientos: los del periodo elegido (el mismo de Inicio), con su significado (gasto, interna, ahorro…) y su
 // categoría. Se buscan, filtran, agrupan y ordenan con la cabecera común; se cambian de uno en uno o varios a la
 // vez, y al corregir se puede aplicar a los parecidos: la app crea una regla y aprende.
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { ArrowDownUp, ArrowLeftRight, CheckSquare2, ChevronDown, Filter, ListFilter, Loader2, Search, Sparkles, Star, X } from "lucide-react";
 import type { listTransactions } from "@/lib/finance/service";
 import { SELECTABLE_CATEGORIES, KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
-import { eur, field, ghost, panel, primary, th } from "@/components/trading/format";
-import { ErrorNote, Modal, Pill } from "@/components/trading/ui";
+import { eur, panel, th } from "@/components/trading/format";
+import { ErrorNote } from "@/components/trading/ui";
+import { Amount, CategoryPill, EditModal, MovementRowButton, categoriesFor, isReview, label, type Item, type List } from "./movement-edit";
 import { SkeletonList } from "@/components/trading/skeletons";
-import { errorText, fapi, longDay, refreshFinance, shortDay, useFinance } from "./api";
+import { errorText, fapi, refreshFinance, shortDay, useFinance } from "./api";
 import { requestClassify } from "./shell";
 import { AccountChips, AccountDropdown, PeriodPicker } from "./period";
 import { TableToolbar, type ToolbarSort } from "@/components/ui/table-toolbar";
@@ -24,139 +25,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-type List = Awaited<ReturnType<typeof listTransactions>>;
-type Item = List["items"][number];
-
-const SOURCE_LABEL: Record<string, string> = {
-  usuario: "Corregido por ti",
-  regla: "Por una regla tuya",
-  interna: "Detectado entre tus cuentas",
-  palabra: "Por el comercio",
-  ia: "Clasificado por la IA",
-  auto: "Sin entender: revísalo",
-  pendiente: "Pendiente",
-};
-
-const KIND_COLOR: Record<Kind, string> = { gasto: "slate", ingreso: "emerald", regalo: "violet", devolucion: "teal", interna: "blue", ahorro: "amber" };
-
-function CategoryPill({ t }: { t: Pick<Item, "category" | "kind"> }) {
-  const c = categoryOf(t.category);
-  return <Pill color={t.kind === "gasto" ? c.color : KIND_COLOR[t.kind]}>{t.kind === "gasto" || t.kind === "devolucion" ? c.label : KIND_LABEL[t.kind]}</Pill>;
-}
-
-function Amount({ t }: { t: Item }) {
-  const muted = t.kind === "interna";
-  return <span className={`amount whitespace-nowrap font-semibold tabular-nums ${muted ? "text-slate-400" : t.amount > 0 ? "text-emerald-700" : "text-slate-900"}`}>{t.amount > 0 ? "+" : ""}{eur(t.amount, 2)}</span>;
-}
-
-function EditModal({ item, onClose }: { item: Item | null; onClose: () => void }) {
-  const [category, setCategory] = useState("otros_gastos");
-  const [kind, setKind] = useState<Kind>("gasto");
-  const [extra, setExtra] = useState(false);
-  const [note, setNote] = useState("");
-  const [alias, setAlias] = useState("");
-  const [subcategory, setSubcategory] = useState("");
-  const [similar, setSimilar] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
-  useEffect(() => {
-    if (!item) return;
-    setCategory(item.category);
-    setKind(item.kind);
-    setExtra(item.extraordinary);
-    setNote(item.note ?? "");
-    setAlias(item.alias ?? "");
-    setSubcategory(item.subcategory ?? "");
-    setSimilar(true);
-    setErr(null);
-    setDone(null);
-  }, [item]);
-  if (!item) return null;
-  const options = categoriesFor(kind);
-  const save = async () => {
-    setBusy(true);
-    setErr(null);
-    try {
-      const cat = options.some((o) => o.key === category) ? category : options[0]?.key ?? "otros_gastos";
-      const r = await fapi<{ similar: number }>("transaction", { id: item.id, category: cat, kind, extraordinary: extra, note, alias, subcategory, applyToSimilar: similar });
-      refreshFinance();
-      if (r.similar) setDone(`Guardado. También se han actualizado ${r.similar} movimientos parecidos y la regla queda aprendida.`);
-      else onClose();
-    } catch (e) {
-      setErr(errorText(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Modal
-      open={!!item}
-      onClose={onClose}
-      title={item.counterparty || item.description}
-      subtitle={`${longDay(item.date)} · ${item.account}${item.bank ? ` (${item.bank})` : ""} · ${SOURCE_LABEL[item.source] ?? item.source}`}
-      footer={done ? <button type="button" onClick={onClose} className={primary}>Hecho</button> : (
-        <>
-          <button type="button" onClick={onClose} className={ghost}>Cancelar</button>
-          <button type="button" onClick={() => void save()} disabled={busy} className={primary}>{busy && <Loader2 className="h-4 w-4 animate-spin" />} Guardar</button>
-        </>
-      )}
-    >
-      {done ? <p className="text-sm text-emerald-800">{done}</p> : (
-        <div className="space-y-4 text-sm">
-          <div className="flex items-baseline justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
-            <span className="min-w-0 truncate text-slate-600" title={item.description}>{item.description}</span>
-            <Amount t={item} />
-          </div>
-          <div>
-            <p className="mb-1.5 font-medium text-slate-800">¿Qué es este movimiento?</p>
-            <div className="flex flex-wrap gap-1.5">
-              {KINDS.map((k) => (
-                <button key={k} type="button" onClick={() => setKind(k)} className={`rounded-full border px-3 py-1.5 text-xs font-medium ${kind === k ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}>{KIND_LABEL[k]}</button>
-              ))}
-            </div>
-            <p className="mt-1.5 text-xs text-slate-500">
-              {kind === "interna" ? "No cuenta como gasto ni ingreso: es dinero que pasa entre tus cuentas." : kind === "ahorro" ? "Cuenta como ahorro, no como gasto." : kind === "devolucion" ? "Resta del gasto de la categoría que elijas." : kind === "regalo" ? "Se muestra aparte y no se proyecta como ingreso." : null}
-            </p>
-          </div>
-          {options.length > 1 && (
-            <label className="block">
-              <span className="mb-1.5 block font-medium text-slate-800">Categoría</span>
-              <select value={options.some((o) => o.key === category) ? category : options[0].key} onChange={(e) => setCategory(e.target.value)} className={`${field} w-full`}>
-                {options.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-              </select>
-            </label>
-          )}
-          <label className="block">
-            <span className="mb-1.5 block font-medium text-slate-800">Alias del movimiento</span>
-            <input value={alias} maxLength={80} onChange={(e) => setAlias(e.target.value)} placeholder="Ej. Tabaco" className={`${field} w-full`} />
-            <span className="mt-1 block text-xs text-slate-500">Nombre visible. El concepto del banco no cambia.</span>
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block font-medium text-slate-800">Subcategoría</span>
-            <input value={subcategory} maxLength={80} onChange={(e) => setSubcategory(e.target.value)} placeholder="Ej. Agua (en Suministros)" className={`${field} w-full`} />
-          </label>
-          {(kind === "gasto" || kind === "devolucion") && (
-            <label className="flex items-start gap-2.5">
-              <input type="checkbox" checked={extra} onChange={(e) => setExtra(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300" />
-              <span><span className="font-medium text-slate-800">Gasto extraordinario</span><span className="block text-xs text-slate-500">Puntual: no se tiene en cuenta para proyectar ni como hábito.</span></span>
-            </label>
-          )}
-          <label className="block">
-            <span className="mb-1.5 block font-medium text-slate-800">Nota (opcional)</span>
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="P. ej. «mi parte de la cena de Ana»" className={`${field} w-full`} />
-          </label>
-          <label className="flex items-start gap-2.5">
-            <input type="checkbox" checked={similar} onChange={(e) => setSimilar(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300" />
-            <span><span className="font-medium text-slate-800">Aplicar a los movimientos parecidos</span><span className="block text-xs text-slate-500">Crea una regla con este comercio para ahora y para los que lleguen.</span></span>
-          </label>
-          {err && <ErrorNote>{err}</ErrorNote>}
-        </div>
-      )}
-    </Modal>
-  );
-}
 
 // ---------------------------------------------------------------------------------------------------------
 // Movimientos: cabecera común (buscar, periodo, filtrar, agrupar, ordenar), cuentas, tabla agrupada con
@@ -183,9 +51,6 @@ const GROUPS: { value: Group; label: string }[] = [
 ];
 const PAGE = 150;
 const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-const isReview = (t: Item) => t.source === "auto" || t.source === "pendiente";
-const label = (t: Item) => t.alias || t.counterparty || t.description;
-
 /** Ingresos, gastos y neto de unas filas (sin movimientos entre cuentas ni cuentas excluidas). */
 function sums(rows: Item[]) {
   let income = 0, expenses = 0, saved = 0;
@@ -213,10 +78,6 @@ function writeLocal(key: string, value: unknown) {
     // Sin almacenamiento: vale para esta visita.
   }
 }
-
-/** Categorías que encajan con un tipo (un gasto o una devolución usan las de gasto). */
-const categoriesFor = (kind: Kind) =>
-  SELECTABLE_CATEGORIES.filter((c) => (kind === "gasto" || kind === "devolucion" ? c.kind === "gasto" : c.kind === kind));
 
 /** Cambio rápido desde la propia fila: tipo o categoría con un toque. */
 function QuickEdit({ t, onMore, onDone }: { t: Item; onMore: () => void; onDone: (msg: string) => void }) {
@@ -330,12 +191,7 @@ function Check({ checked, partial = false, onChange, label: aria }: { checked: b
 
 export function MovementsPanel() {
   const params = useSearchParams();
-  const router = useRouter();
-  // Filtro temporal que llega desde Plan (?categoria=…&desde=…&hasta=…): no cambia el periodo guardado del usuario.
-  const tempFrom = params.get("desde");
-  const tempTo = params.get("hasta");
-  const temp = tempFrom && tempTo && /^\d{4}-\d{2}-\d{2}$/.test(tempFrom) && /^\d{4}-\d{2}-\d{2}$/.test(tempTo) ? { from: tempFrom, to: tempTo } : null;
-  const { data, error, loading } = useFinance<List>(temp ? "transactions?all=1" : "transactions");
+  const { data, error, loading } = useFinance<List>("transactions");
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("all");
   const [category, setCategory] = useState(params.get("categoria") ?? "all");
@@ -369,7 +225,6 @@ export function MovementsPanel() {
     if (!data) return [];
     const needle = fold(q.trim());
     const out = data.items.filter((t) =>
-      (!temp || (t.date >= temp.from && t.date <= temp.to)) &&
       (kind === "all" || t.kind === kind) &&
       (category === "all" || t.category === category) &&
       (status === "all" || (status === "revisar" ? isReview(t) : status === "usuario" ? t.source === "usuario" : t.extraordinary)) &&
@@ -380,7 +235,7 @@ export function MovementsPanel() {
       const c = typeof x === "string" && typeof y === "string" ? x.localeCompare(y, "es") : (x as number) - (y as number);
       return c === 0 ? b.date.localeCompare(a.date) : c * sort.dir;
     });
-  }, [data, q, kind, category, status, sort, temp?.from, temp?.to]);
+  }, [data, q, kind, category, status, sort]);
 
   const groups = useMemo(() => {
     if (group === "none") return [{ key: "all", title: "", rows }];
@@ -501,19 +356,8 @@ export function MovementsPanel() {
     );
   };
 
-  const clearTemp = () => {
-    setCategory("all");
-    router.replace("/finanzas/movimientos");
-  };
-
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {temp && (
-        <div className="mb-3 flex shrink-0 items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm text-blue-800">
-          <span className="min-w-0 flex-1 truncate">Desde Plan: <b>{category === "all" ? "todos" : categoryOf(category).label}</b> · {shortDay(temp.from)} – {shortDay(temp.to)}</span>
-          <button type="button" onClick={clearTemp} aria-label="Quitar este filtro y ver todos los movimientos" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-blue-700 active:bg-blue-100"><X className="h-4 w-4" /></button>
-        </div>
-      )}
       <div className="mb-3 flex h-11 shrink-0 items-center gap-1.5 md:hidden" role="toolbar" aria-label="Buscar y filtrar movimientos">
         {mobileSearchOpen ? (
           <>
@@ -530,7 +374,7 @@ export function MovementsPanel() {
               {q && <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-blue-600" />}
             </button>
             {data && <AccountDropdown accounts={data.accounts.filter((a) => a.included)} view={data.view} />}
-            {data && !temp && <PeriodPicker view={data.view} label={data.label} iconOnly className="h-10 px-2.5" />}
+            {data && <PeriodPicker view={data.view} label={data.label} iconOnly className="h-10 px-2.5" />}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" aria-label="Filtrar movimientos" title="Filtrar" className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
@@ -585,7 +429,7 @@ export function MovementsPanel() {
         search={q}
         onSearchChange={setQ}
         searchPlaceholder="Buscar concepto, comercio, nota o importe..."
-        extra={data && !temp ? <PeriodPicker view={data.view} label={data.label} /> : null}
+        extra={data ? <PeriodPicker view={data.view} label={data.label} /> : null}
         filters={{
           groups: [
             { key: "status", label: "Estado", value: status, allLabel: "Todos", options: [{ value: "revisar", label: "Por revisar" }, { value: "usuario", label: "Corregidos por mí" }, { value: "extra", label: "Extraordinarios" }] },
@@ -659,23 +503,7 @@ export function MovementsPanel() {
                   {g.visible.map((t) => (
                     <li key={t.id} className={`flex items-center gap-3 px-4 py-3 ${selected.has(t.id) ? "bg-blue-50/60" : ""}`}>
                       {selectionMode && <Check checked={selected.has(t.id)} onChange={() => toggle([t.id], !selected.has(t.id))} label="Seleccionar" />}
-                      <button type="button" onClick={() => setEditing(t)} className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-70">
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-1.5">
-                            {t.kind === "interna" && <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
-                            {t.extraordinary && <Star className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
-                            <span className="truncate text-[15px] font-medium text-slate-900">{label(t)}</span>
-                          </span>
-                          <span className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                            <span>{shortDay(t.date)}</span>
-                            {isReview(t) && <span className="text-amber-700">revisar</span>}
-                          </span>
-                        </span>
-                        <span className="flex shrink-0 flex-col items-end gap-1">
-                          <Amount t={t} />
-                          <span className="max-w-[9rem] truncate text-[11px] text-slate-500">{categoryOf(t.category).label}{t.subcategory ? ` · ${t.subcategory}` : ""}</span>
-                        </span>
-                      </button>
+                      <MovementRowButton t={t} onClick={() => setEditing(t)} />
                     </li>
                   ))}
                 </Fragment>
