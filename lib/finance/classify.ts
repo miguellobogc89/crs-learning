@@ -300,3 +300,80 @@ export async function bulkCorrect(userId: string, ids: string[], input: { kind?:
   await classifyPending(userId, { useAi: false });
   return { ok: true, changed, similar, rules: patterns.size };
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// Detalle de un movimiento: llevar sus cambios a los parecidos (mismo comercio), con vista previa y deshacer
+// ---------------------------------------------------------------------------------------------------------
+export type SimilarField = "category" | "alias" | "subcategory";
+
+/** Movimientos parecidos a uno (mismo comercio, sin los corregidos a mano ni las transferencias emparejadas). */
+async function similarTo(userId: string, id: string) {
+  const row = await prisma.finance_transactions.findFirst({ where: { id, user_id: userId } });
+  if (!row) throw new Error("Movimiento no encontrado");
+  const pattern = rulePattern({ description: row.description, counterparty: row.counterparty });
+  if (!pattern) return { row, pattern: null, ids: [] as string[] };
+  const probe: Rule = { id: "probe", pattern, category: row.category, kind: (isKind(row.kind) ? row.kind : "gasto"), extraordinary: false };
+  const all = await loadTxs(userId, { includeExcluded: true });
+  const ids = all.filter((t) => t.id !== id && t.source !== "usuario" && !t.transferPairId && matchRule(t, [probe])).map((t) => t.id);
+  return { row, pattern, ids };
+}
+
+/** Cuántos parecidos tiene un movimiento (para preguntar «¿aplicar a los 13 de …?» antes de hacerlo). */
+export async function similarCount(userId: string, id: string) {
+  const { row, ids } = await similarTo(userId, id);
+  return { count: ids.length, label: row.alias || row.counterparty || row.description };
+}
+
+/**
+ * Lleva a los parecidos solo los campos pedidos (categoría —con su tipo—, alias, subcategoría) y los guarda como
+ * regla para los que lleguen. Nunca copia «extraordinario» ni la nota: son de cada movimiento. Devuelve lo
+ * necesario para deshacerlo.
+ */
+export async function applyToSimilarFields(userId: string, id: string, fields: SimilarField[]) {
+  const { row, pattern, ids } = await similarTo(userId, id);
+  if (!pattern || !fields.length) return { count: 0, undo: null };
+  const before = ids.length
+    ? await prisma.finance_transactions.findMany({ where: { user_id: userId, id: { in: ids } }, select: { id: true, category: true, kind: true, alias: true, subcategory: true, category_source: true } })
+    : [];
+  const prevRule = await prisma.finance_rules.findUnique({ where: { user_id_pattern: { user_id: userId, pattern } } });
+  const data: { category?: string; kind?: string; alias?: string | null; subcategory?: string | null } = {};
+  if (fields.includes("category")) { data.category = row.category; data.kind = row.kind; }
+  if (fields.includes("alias")) data.alias = row.alias;
+  if (fields.includes("subcategory")) data.subcategory = row.subcategory;
+  await prisma.finance_rules.upsert({
+    where: { user_id_pattern: { user_id: userId, pattern } },
+    create: { user_id: userId, pattern, category: row.category, kind: row.kind, extraordinary: false, alias: data.alias ?? null, subcategory: data.subcategory ?? null, label: row.counterparty || row.description.slice(0, 80) },
+    update: data,
+  });
+  if (ids.length) {
+    await prisma.finance_transactions.updateMany({ where: { user_id: userId, id: { in: ids } }, data: { ...data, category_source: "regla", updated_at: new Date() } });
+  }
+  return {
+    count: ids.length,
+    undo: {
+      pattern,
+      rule: prevRule ? { category: prevRule.category, kind: prevRule.kind, alias: prevRule.alias, subcategory: prevRule.subcategory } : null,
+      rows: before.map((b) => ({ id: b.id, category: b.category, kind: b.kind, alias: b.alias, subcategory: b.subcategory, source: b.category_source })),
+    },
+  };
+}
+
+type SimilarUndo = NonNullable<Awaited<ReturnType<typeof applyToSimilarFields>>["undo"]>;
+
+/** Deshace applyToSimilarFields: deja cada movimiento y la regla como estaban. */
+export async function undoSimilar(userId: string, undo: SimilarUndo) {
+  const rows = (undo.rows ?? []).slice(0, 5000);
+  const own = new Set((await prisma.finance_transactions.findMany({ where: { user_id: userId, id: { in: rows.map((r) => r.id) } }, select: { id: true } })).map((r) => r.id));
+  for (const r of rows) {
+    if (!own.has(r.id) || !isCategory(r.category) || !isKind(r.kind)) continue;
+    await prisma.finance_transactions.update({ where: { id: r.id }, data: { category: r.category, kind: r.kind, alias: r.alias, subcategory: r.subcategory, category_source: r.source, updated_at: new Date() } });
+  }
+  if (typeof undo.pattern === "string") {
+    if (undo.rule && isCategory(undo.rule.category) && isKind(undo.rule.kind)) {
+      await prisma.finance_rules.updateMany({ where: { user_id: userId, pattern: undo.pattern }, data: { category: undo.rule.category, kind: undo.rule.kind, alias: undo.rule.alias, subcategory: undo.rule.subcategory } });
+    } else if (!undo.rule) {
+      await prisma.finance_rules.deleteMany({ where: { user_id: userId, pattern: undo.pattern } });
+    }
+  }
+  return { ok: true };
+}

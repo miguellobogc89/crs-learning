@@ -6,7 +6,7 @@ import { categoryLabel, isCategory } from "@/lib/finance/categories";
 import { accountsView, budgetView, packagesView, planView, financeContext, forecast, forecastSource, listTransactions, overview } from "@/lib/finance/service";
 import { payslipsView } from "@/lib/finance/payslips";
 import { syncUser } from "@/lib/finance/sync";
-import { bulkCorrect, classifyPending, correctTransaction } from "@/lib/finance/classify";
+import { applyToSimilarFields, bulkCorrect, classifyPending, correctTransaction, similarCount, undoSimilar, type SimilarField } from "@/lib/finance/classify";
 import { addDays, cleanView, cycleFor, forecastOccurrenceKey } from "@/lib/finance/logic";
 import { conceptKey } from "@/lib/finance/plan";
 import { disconnectGmail, gmailView, syncGmail } from "@/lib/finance/gmail";
@@ -60,6 +60,7 @@ export async function GET(req: Request, route: RouteContext) {
     if (action === "budget") return ok(await budgetView(uid));
     if (action === "packages") return ok(await packagesView(uid));
     if (action === "plan") return ok(await planView(uid));
+    if (action === "transaction/similar") return ok(await similarCount(uid, p.get("id") ?? ""));
     if (action === "accounts") return ok(await accountsView(uid));
     if (action === "payslips") return ok(await payslipsView(uid));
     if (action === "settings") {
@@ -115,6 +116,18 @@ export async function POST(req: Request, route: RouteContext) {
         if (!r.count) return fail("Partida no encontrada", 404);
       } else await prisma.finance_budgets.create({ data: { user_id: uid, ...data } });
       return ok({ ok: true });
+    }
+    if (action === "transaction/similar/apply") {
+      // Detalle de un movimiento: llevar categoría, alias o subcategoría a los parecidos (nunca «extraordinario»).
+      const allowed: SimilarField[] = ["category", "alias", "subcategory"];
+      const fields = Array.isArray(body.fields) ? (body.fields as unknown[]).filter((f): f is SimilarField => allowed.includes(f as SimilarField)) : [];
+      if (!fields.length) return fail("No hay nada que aplicar");
+      return ok(await applyToSimilarFields(uid, str("id"), fields));
+    }
+    if (action === "transaction/similar/undo") {
+      const undo = body.undo as Parameters<typeof undoSimilar>[1] | undefined;
+      if (!undo || !Array.isArray(undo.rows)) return fail("Nada que deshacer");
+      return ok(await undoSimilar(uid, undo));
     }
     if (action === "plan/group") {
       // Crear o cambiar nombre/objetivo de un grupo de Plan.

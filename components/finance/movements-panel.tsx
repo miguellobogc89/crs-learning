@@ -10,7 +10,7 @@ import { SELECTABLE_CATEGORIES, KINDS, KIND_LABEL, categoryOf, type Kind } from 
 import { eur, panel, th } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { MovementDetailSheet } from "./movement-detail";
-import { Amount, CategoryPill, EditModal, MovementRowButton, categoriesFor, isReview, label, type Item, type List } from "./movement-edit";
+import { Amount, CategoryPill, MovementRowButton, categoriesFor, isReview, label, type Item, type List } from "./movement-edit";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { errorText, fapi, refreshFinance, shortDay, useFinance } from "./api";
 import { requestClassify } from "./shell";
@@ -204,7 +204,6 @@ export function MovementsPanel() {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [shown, setShown] = useState(PAGE);
-  const [editing, setEditing] = useState<Item | null>(null);
   // Detalle a pantalla completa (capa sobre la lista): por id, para mostrar siempre los datos al día.
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -315,7 +314,7 @@ export function MovementsPanel() {
         {t.note ? <span className="block truncate text-xs text-slate-500">{t.note}</span> : (t.alias || t.counterparty) ? <span className="block truncate text-xs text-slate-400">{t.description}</span> : null}
       </td>
       <td className="whitespace-nowrap px-3 py-2.5">
-        <QuickEdit t={t} onMore={() => setEditing(t)} onDone={setToast} />
+        <QuickEdit t={t} onMore={() => setViewingId(t.id)} onDone={setToast} />
         {t.subcategory && <span className="ml-1 text-xs text-slate-500">· {t.subcategory}</span>}
         {isReview(t) && <span className="ml-1.5 text-xs text-amber-700">revisar</span>}
       </td>
@@ -524,8 +523,7 @@ export function MovementsPanel() {
       {toast && (
         <div role="status" className="pointer-events-none fixed inset-x-0 bottom-24 z-50 mx-auto w-fit rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white shadow-lg md:bottom-8">{toast}</div>
       )}
-      <EditModal item={editing} onClose={() => setEditing(null)} />
-      <MovementDetailSheet item={data?.items.find((t) => t.id === viewingId) ?? null} onClose={() => setViewingId(null)} />
+      <MovementDetailSheet item={data?.items.find((t) => t.id === viewingId) ?? null} items={data?.items} onClose={() => setViewingId(null)} />
     </div>
   );
 }

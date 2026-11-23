@@ -99,7 +99,7 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
           </section>
         ))}
       {/* Si se recategoriza, sale de esta lista; el detalle sigue mostrándose con sus datos al día hasta volver. */}
-      <MovementDetailSheet item={list.data?.items.find((t) => t.id === viewingId) ?? null} onClose={() => setViewingId(null)} />
+      <MovementDetailSheet item={list.data?.items.find((t) => t.id === viewingId) ?? null} items={list.data?.items} onClose={() => setViewingId(null)} />
     </div>
   );
 }
