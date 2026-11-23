@@ -5,7 +5,7 @@
 //    rojo = más, izquierda verde = menos), de peor a mejor; los estables, en pills. Al desplegar, solo lo que se ha
 //    movido (categorías, o subcategorías si el grupo es de una sola categoría); al tocarlo, su detalle.
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Minus } from "lucide-react";
 import type { overview } from "@/lib/finance/service";
@@ -17,6 +17,7 @@ import { SkeletonList, SkeletonStats } from "@/components/trading/skeletons";
 import { shortDay, useFinance } from "./api";
 import { BalanceLine } from "./charts";
 import { CategoryIcon } from "./category-icon";
+import { LabCategoryPicker } from "./lab-category-picker";
 
 type Overview = Awaited<ReturnType<typeof overview>>;
 type Plan = {
@@ -347,6 +348,24 @@ function GoalsGlance({ plan }: { plan: Plan }) {
 }
 
 export function LabHome() {
+  const [view, setView] = useState<"inicio" | "selector">("inicio");
+  useEffect(() => {
+    try { if (window.sessionStorage.getItem("crs-finance:lab-view") === "selector") setView("selector"); } catch { /* ignorar */ }
+  }, []);
+  const pick = (v: "inicio" | "selector") => { setView(v); try { window.sessionStorage.setItem("crs-finance:lab-view", v); } catch { /* ignorar */ } };
+  const switcher = (
+    <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 sm:max-w-sm" role="group" aria-label="Prueba">
+      {([["inicio", "Inicio"], ["selector", "Selector de categorías"]] as const).map(([k, label]) => (
+        <button key={k} type="button" onClick={() => pick(k)} aria-pressed={view === k}
+          className={`rounded-lg px-3 py-2 text-sm font-semibold ${view === k ? "bg-white text-blue-700 shadow-sm" : "text-slate-600"}`}>{label}</button>
+      ))}
+    </div>
+  );
+  if (view === "selector") return <div className="space-y-4 pb-6">{switcher}<LabCategoryPicker /></div>;
+  return <LabHomeBody switcher={switcher} />;
+}
+
+function LabHomeBody({ switcher }: { switcher: ReactNode }) {
   const { data, error } = useFinance<Overview>("overview");
   const plan = useFinance<Plan>("plan");
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
@@ -356,6 +375,7 @@ export function LabHome() {
   const prevExp = v.previous?.expenses ?? null;
   return (
     <div className="space-y-4 pb-6">
+      {switcher}
       <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">Laboratorio: propuesta de Inicio con tus datos reales. Inicio no cambia hasta que lo decidamos.</p>
 
       {/* 1. Evolución del ciclo y lo que se viene */}
