@@ -607,7 +607,7 @@ export async function planView(userId: string) {
     history,
     daily,
     extras: extras.sort((a, b) => b.amount - a.amount),
-    budget: { income, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
+    budget: { income, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
     previous: hasPrevious ? { start: prevCycle.start, end: prevTo } : null,
     /** Ciclos del último par de años (el actual primero), para el historial de una categoría. */
     cycles: Array.from({ length: 24 }, (_, i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c, i) => i === 0 || c.end >= oldest),

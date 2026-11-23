@@ -1,21 +1,22 @@
 "use client";
-// Plan: grupos de gasto del usuario (Gastos fijos, Ocio, Moda…). Cada grupo es un conjunto de categorías (cada
-// categoría en un solo grupo) con un objetivo opcional por ciclo. Lista con líneas finas; al pulsar un grupo se
-// despliegan sus categorías con su gasto del ciclo y la diferencia con el anterior a la misma altura; se añaden
-// desde una lista que sube desde abajo y se quitan con la ×. Al tocar una categoría, su detalle entra desde la
-// derecha (/finanzas/plan/categoria/<clave>). Al volver, la pantalla queda como se dejó (desplegado y scroll).
-// Los grupos se guardan en finance_plan_groups (planView y acciones plan/group* de la API).
+// Mi plan («Tu mes», 23/11/2026): arriba lo que cobras (tus últimas nóminas) repartido en una barra — cada grupo
+// con su objetivo (o su media, en tono suave), lo que no está en ningún grupo, tu ahorro — y si cuadra. Debajo,
+// el ahorro con el margen que queda (positivo o negativo) y cada grupo con lo que te queda este mes (objetivo o
+// media − lo que llevas). Al tocar una fila se despliega: sus categorías (cada una a su detalle), el objetivo
+// editable y añadir categorías / renombrar o borrar. «Sin grupo», abajo del todo. Al volver de un detalle, la
+// pantalla queda como se dejó. Los grupos se guardan en finance_plan_groups (acciones plan/group* de la API).
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, FolderPlus, Landmark, Plus, Search, Target, X } from "lucide-react";
+import { Check, FolderPlus, Landmark, Pencil, PiggyBank, Plus, Search, X } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { planView } from "@/lib/finance/service";
-import { EXPENSE_CATEGORIES, categoryLabel } from "@/lib/finance/categories";
+import { EXPENSE_CATEGORIES, categoryHex, categoryLabel } from "@/lib/finance/categories";
 import { eur, primary } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { errorText, fapi, refreshFinance, useFinance } from "./api";
 import { aboveKeyboard, useKeyboardInset } from "./use-keyboard-inset";
+import { CategoryIcon } from "./category-icon";
 
 type View = Awaited<ReturnType<typeof planView>>;
 type Group = View["groups"][number];
@@ -29,13 +30,6 @@ const PLAN_SCROLL = "crs-finance:plan-scroll";
 const scroller = () => document.querySelector<HTMLElement>("main");
 /** Todas las categorías de gasto que se pueden repartir en grupos. */
 const ALL_KEYS = [...EXPENSE_CATEGORIES.map((c) => c.key), "sin_clasificar"];
-
-function Diff({ current, previous }: { current: number; previous: number | null }) {
-  if (previous === null) return <span className="block text-xs text-slate-400">sin ciclo anterior</span>;
-  const d = round2(current - previous);
-  if (Math.abs(d) < 0.01) return <span className="block text-xs text-slate-400">igual que el anterior</span>;
-  return <span className={`block text-xs font-medium tabular-nums ${d > 0 ? "text-red-600" : "text-emerald-600"}`}>{d > 0 ? "+" : "−"}{eur(Math.abs(d), 2)} vs anterior</span>;
-}
 
 /**
  * «Añadir a <grupo>»: lista que sube desde abajo (como el historial de categoría de Inicio). Arriba las categorías
@@ -188,6 +182,28 @@ function NewGroupSheet({ open, onClose, onCreate, editing = null, onDelete }: {
   );
 }
 
+/** Casilla de importe que guarda al salir de ella (o con Intro). Vacía = sin importe. */
+function AmountInput({ value, onCommit, placeholder, label }: { value: number | null; onCommit: (v: number | null) => void; placeholder: string; label: string }) {
+  const show = (v: number | null) => (v === null ? "" : String(v).replace(".", ","));
+  const [text, setText] = useState(show(value));
+  useEffect(() => setText(show(value)), [value]);
+  const commit = () => {
+    const t = text.trim().replace(/\s|€/g, "");
+    const v = t ? Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t) : null;
+    if (v !== null && (!Number.isFinite(v) || v < 0)) { setText(show(value)); return; }
+    const next = v === null || v === 0 ? null : round2(v);
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <span className="flex w-28 shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+      <input aria-label={label} inputMode="decimal" value={text} placeholder={placeholder} onChange={(e) => setText(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+        className="min-w-0 flex-1 bg-transparent py-2 text-right text-[16px] tabular-nums text-slate-900 outline-none placeholder:text-slate-300" />
+      <span className="text-sm text-slate-400">€</span>
+    </span>
+  );
+}
+
 export function PlanPanel() {
   const { data, error } = useFinance<View>("plan");
   const [groups, setGroups] = useState<Group[]>([]);
@@ -195,6 +211,10 @@ export function PlanPanel() {
   const [restored, setRestored] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Group | null>(null);
+  const [savingOverride, setSavingOverride] = useState<number | null | undefined>(undefined);
+  const [incomeOverride, setIncomeOverride] = useState<number | null | undefined>(undefined);
+  const [ready, setReady] = useState(false);
+  useEffect(() => { const t = requestAnimationFrame(() => setReady(true)); return () => cancelAnimationFrame(t); }, []);
   const [adding, setAdding] = useState<Group | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -239,18 +259,35 @@ export function PlanPanel() {
 
   const cur = (k: string) => data.totals.now[k] ?? 0;
   const extra = (k: string) => data.totals.extrasNow?.[k] ?? 0;
-  const prv = (k: string) => (data.previous ? data.totals.before[k] ?? 0 : null);
-  const sum = (keys: string[], f: (k: string) => number | null) => {
-    const vals = keys.map(f);
-    return vals.some((v) => v === null) ? null : round2(vals.reduce((s: number, v) => s + (v ?? 0), 0));
-  };
+  const sumOf = (keys: string[], f: (k: string) => number) => round2(keys.reduce((t, k) => t + f(k), 0));
+  // Media por categoría de los 3 ciclos cerrados anteriores (sin extraordinarios), para los grupos sin objetivo.
+  const closed = (data.history ?? []).slice(1, 4);
+  const avgOf = (keys: string[]) => (closed.length ? Math.round(closed.reduce((t, c) => t + keys.reduce((u, k) => u + (c.full[k] ?? 0), 0), 0) / closed.length) : 0);
   const used = new Set(groups.flatMap((g) => g.categories));
   const free = ALL_KEYS.filter((k) => !used.has(k));
-  // «Sin grupo»: categorías con gasto que no están en ningún grupo (para que nada se escape).
-  const rows = [
-    ...groups.map((g) => ({ ...g, editable: true })),
-    { id: "sin", name: "Sin grupo", categories: free.filter((k) => cur(k) > 0 || (prv(k) ?? 0) > 0 || extra(k) > 0), goal: null, editable: false },
+  const looseKeys = free.filter((k) => cur(k) > 0 || extra(k) > 0 || avgOf([k]) > 0);
+
+  const income = incomeOverride === undefined ? data.budget.income : incomeOverride;
+  const saving = savingOverride === undefined ? data.budget.savingsGoal : savingOverride;
+  const rows = groups.map((g) => {
+    const avg = avgOf(g.categories);
+    const base = g.goal ?? avg;
+    const spent = sumOf(g.categories, cur);
+    return { g, avg, base, spent, left: round2(base - spent), estimate: g.goal === null, color: categoryHex(g.categories[0] ?? "otros_gastos") };
+  });
+  const looseAvg = avgOf(looseKeys);
+  const planned = rows.reduce((t, r) => t + r.base, 0) + looseAvg + (saving ?? 0);
+  const margin = income === null ? null : round2(income - planned);
+  const total = Math.max(income ?? 0, planned, 1);
+  const pct = (v: number) => `${(Math.max(0, v) / total) * 100}%`;
+  const segs = [
+    ...rows.filter((r) => r.base > 0).map((r) => ({ key: r.g.id, label: r.g.name, amount: r.base, color: r.color, estimate: r.estimate })),
+    ...(looseAvg > 0 ? [{ key: "sin", label: "Sin grupo", amount: looseAvg, color: "#94a3b8", estimate: true }] : []),
+    ...(saving ? [{ key: "ahorro", label: "Ahorro", amount: saving, color: "#10b981", estimate: false }] : []),
   ];
+  const verdict = income === null ? { text: "No encontramos tu nómina: dinos cuánto cobras al mes para ver si tu plan cuadra.", tone: "text-slate-500" }
+    : margin !== null && margin >= 0 ? { text: `Tu plan cuadra: te quedan ${eur(margin, 0)} de margen al mes.`, tone: "text-emerald-700" }
+    : { text: `Tu plan se pasa ${eur(-(margin ?? 0), 0)} de lo que cobras: baja algún objetivo o ahorra menos.`, tone: "text-rose-700" };
 
   const save = async (path: string, payload: unknown) => {
     setErr(null);
@@ -271,6 +308,10 @@ export function PlanPanel() {
     setGroups((gs) => [...gs, g]);
     setOpen(g.id);
     setAdding(g);
+  };
+  const setGoal = (g: Group, goal: number | null) => {
+    setGroups((gs) => gs.map((x) => (x.id === g.id ? { ...x, goal } : x)));
+    void save("plan/group", { id: g.id, name: g.name, goal });
   };
   const updateGroup = (g: Group, name: string, goal: number | null) => {
     setEditing(null);
@@ -295,83 +336,167 @@ export function PlanPanel() {
     setAdding(null);
     void save("plan/group/categories", { id, add: keys });
   };
+  const saveSettings = (patch: { savingsGoal?: number | null; expectedIncome?: number | null }) => {
+    if ("savingsGoal" in patch) setSavingOverride(patch.savingsGoal ?? null);
+    if ("expectedIncome" in patch) setIncomeOverride(patch.expectedIncome ?? undefined);
+    void save("settings", patch);
+  };
   const rememberScroll = () => {
     try { window.sessionStorage.setItem(PLAN_SCROLL, String(scroller()?.scrollTop ?? 0)); } catch { /* ignorar */ }
   };
+  const toggle = (id: string) => setOpen((o) => (o === id ? null : id));
+
+  /** Categorías de un grupo con su gasto del mes; cada una abre su detalle. */
+  const CategoryList = ({ keys, groupId }: { keys: string[]; groupId: string | null }) => (
+    <ul className="divide-y divide-slate-100">
+      {[...keys].sort((a, b) => cur(b) - cur(a)).map((k) => (
+        <li key={k} className="flex items-center gap-1">
+          <Link href={`/finanzas/plan/categoria/${encodeURIComponent(k)}`} onClick={rememberScroll} scroll={false} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 active:bg-slate-50">
+            <CategoryIcon category={k} />
+            <span className="min-w-0 flex-1 truncate text-sm text-slate-800">{labelOf(k)}</span>
+            <span className="shrink-0 text-right">
+              <span className="amount block text-sm tabular-nums text-slate-900">{eur(cur(k), 2)}</span>
+              {extra(k) > 0 && <span className="amount block text-[11px] text-slate-500">+{eur(extra(k), 2)} extraordinarios</span>}
+            </span>
+          </Link>
+          {groupId && (
+            <button type="button" onClick={() => removeCat(groupId, k)} aria-label={`Quitar ${labelOf(k)} del grupo`} className="shrink-0 rounded-lg p-1.5 text-slate-300 active:bg-slate-100 active:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </li>
+      ))}
+      {keys.length === 0 && <li className="py-2.5 text-sm text-slate-400">Sin categorías todavía.</li>}
+    </ul>
+  );
 
   return (
-    <div className="mx-auto max-w-xl pb-6">
-      {err && <div className="mb-3"><ErrorNote>{err}</ErrorNote></div>}
+    <div className="mx-auto max-w-xl space-y-4 pb-6">
+      {err && <ErrorNote>{err}</ErrorNote>}
+
+      {/* Tu mes: lo que cobras, repartido */}
+      <section>
+        <p className="text-sm text-slate-500">Tu mes</p>
+        <div className="mt-0.5 flex items-end justify-between gap-3">
+          <p className="amount text-[30px] font-semibold leading-none tracking-tight text-slate-900">{income === null ? "—" : eur(income, 0)}</p>
+          <span className="text-right text-xs text-slate-500">{data.budget.fromSettings ? "lo que cobras al mes" : "según tus últimas nóminas"}</span>
+        </div>
+        {income === null && (
+          <div className="mt-3 flex items-center gap-3">
+            <span className="flex-1 text-sm text-slate-600">¿Cuánto cobras al mes?</span>
+            <AmountInput label="Lo que cobras al mes" value={null} placeholder="0" onCommit={(v) => saveSettings({ expectedIncome: v })} />
+          </div>
+        )}
+        <div className="mt-4 flex h-11 w-full overflow-hidden rounded-xl bg-slate-100" role="img"
+          aria-label={`Reparto: ${segs.map((x) => `${x.label} ${eur(x.amount, 0)}`).join(", ")}. ${verdict.text}`}>
+          {segs.map((x) => (
+            <span key={x.key} className="h-full border-r-2 border-white transition-[width] duration-700 ease-out last:border-r-0 motion-reduce:transition-none"
+              style={{ width: ready ? pct(x.amount) : "0%", backgroundColor: x.color, opacity: x.estimate ? 0.45 : 1 }} />
+          ))}
+        </div>
+        {margin !== null && margin < 0 && (
+          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+            <span className="ml-auto block h-full rounded-full bg-rose-500" style={{ width: pct(-margin) }} />
+          </div>
+        )}
+        <p className={`mt-3 text-[15px] font-medium ${verdict.tone}`}>{verdict.text}</p>
+        <p className="mt-1 text-[11px] text-slate-400">En tono suave, los grupos sin objetivo: cuentan con lo que sueles gastar.</p>
+      </section>
+
       <ul className="divide-y divide-slate-100 border-y border-slate-100">
-        {rows.map((g) => {
+        {/* Ahorro: tu objetivo y el margen que te queda (positivo o negativo) */}
+        <li>
+          <button type="button" onClick={() => toggle("ahorro")} aria-expanded={open === "ahorro"} className="flex w-full items-center gap-3 py-3.5 text-left active:bg-slate-50">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-gradient-to-b from-emerald-400 to-emerald-500" aria-hidden="true"><PiggyBank className="h-5 w-5 text-white" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-semibold text-slate-900">Ahorro</span>
+              <span className="amount block text-xs text-slate-500">{saving ? `Quieres apartar ${eur(saving, 0)} al mes` : "Aún no has dicho cuánto quieres ahorrar"}</span>
+            </span>
+            {margin !== null && (
+              <span className={`amount shrink-0 text-right text-[15px] font-semibold tabular-nums ${margin >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                {margin >= 0 ? "+" : "−"}{eur(Math.abs(margin), 0)}
+                <span className="block text-[11px] font-normal text-slate-500">de margen</span>
+              </span>
+            )}
+          </button>
+          {open === "ahorro" && (
+            <div className="flex items-center gap-3 pb-4 pl-12">
+              <span className="flex-1 text-sm text-slate-600">Ahorro al mes</span>
+              <AmountInput label="Ahorro al mes" value={saving} placeholder="0" onCommit={(v) => saveSettings({ savingsGoal: v })} />
+            </div>
+          )}
+        </li>
+
+        {/* Grupos: lo que te queda (objetivo o media − lo que llevas este mes) */}
+        {rows.map(({ g, avg, base, spent, left, estimate }) => {
           const isOpen = open === g.id;
-          const now = sum(g.categories, cur) ?? 0;
-          const before = sum(g.categories, prv);
-          const sorted = [...g.categories].sort((a, b) => cur(b) - cur(a));
-          const subtitle = sorted.slice(0, 3).map(labelOf).join(", ") + (sorted.length > 3 ? "…" : "");
-          const muted = !g.editable;
-          const addButton = !g.editable && (
-            <li key="add-group">
-              <button type="button" onClick={() => setCreating(true)} className="flex w-full items-center gap-2 px-1 py-4 text-left text-base font-medium text-blue-600 active:bg-slate-50">
-                <FolderPlus className="h-5 w-5" /> Añadir grupo
-              </button>
-            </li>
-          );
-          return [addButton,
+          const x = sumOf(g.categories, extra);
+          return (
             <li key={g.id}>
-              <button type="button" onClick={() => setOpen(isOpen ? null : g.id)} aria-expanded={isOpen} className="flex w-full items-center gap-3 px-1 py-4 text-left active:bg-slate-50">
+              <button type="button" onClick={() => toggle(g.id)} aria-expanded={isOpen} className="flex w-full items-center gap-3 py-3.5 text-left active:bg-slate-50">
+                <CategoryIcon category={g.categories[0] ?? "otros_gastos"} />
                 <span className="min-w-0 flex-1">
-                  <span className={`block text-base font-semibold ${muted ? "text-slate-500" : "text-slate-900"}`}>{g.name}</span>
-                  <span className="mt-0.5 block truncate text-sm text-slate-400">{subtitle || "Sin categorías"}</span>
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className={`block text-lg font-semibold tabular-nums ${muted ? "text-slate-500" : g.goal && now > g.goal ? "text-red-600" : "text-slate-900"}`}>
-                    {eur(now, 2)}{g.goal ? <span className="text-sm font-normal text-slate-400"> / {eur(g.goal, 2)}</span> : null}
+                  <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
+                  <span className="amount block truncate text-xs text-slate-500">
+                    Llevas {eur(spent, 0)} de {estimate ? `~${eur(base, 0)} (tu media)` : eur(base, 0)}
                   </span>
-                  <Diff current={now} previous={before} />
-                  {(() => { const x = round2(g.categories.reduce((t, k) => t + extra(k), 0)); return x > 0 ? <span className="amount block text-[11px] text-slate-500">+{eur(x, 2)} extraordinarios</span> : null; })()}
                 </span>
-                <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                <span className={`amount shrink-0 text-right text-[15px] font-semibold tabular-nums ${left >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                  {left >= 0 ? eur(left, 0) : `−${eur(-left, 0)}`}
+                  <span className="block text-[11px] font-normal text-slate-500">{left >= 0 ? "te quedan" : "te has pasado"}</span>
+                </span>
               </button>
               {isOpen && (
-                <div className="pb-3 pl-3">
-                  <ul className="divide-y divide-slate-50">
-                    {sorted.map((k) => (
-                      <li key={k} className="flex items-center gap-1">
-                        <Link href={`/finanzas/plan/categoria/${encodeURIComponent(k)}`} onClick={rememberScroll} scroll={false} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 active:bg-slate-50">
-                          <span className="min-w-0 flex-1 text-sm text-slate-700">{labelOf(k)}</span>
-                          <span className="shrink-0 text-right">
-                            <span className="block text-sm tabular-nums text-slate-900">{eur(cur(k), 2)}</span>
-                            <Diff current={cur(k)} previous={prv(k)} />
-                            {extra(k) > 0 && <span className="amount block text-[11px] text-slate-500">+{eur(extra(k), 2)} extraordinarios</span>}
-                          </span>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
-                        </Link>
-                        {g.editable && (
-                          <button type="button" onClick={() => removeCat(g.id, k)} aria-label={`Quitar ${labelOf(k)}`} className="shrink-0 rounded-lg p-1.5 text-slate-300 active:bg-slate-100 active:text-red-600">
-                            <X className="h-4 w-4" />
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                    {sorted.length === 0 && <li className="py-2.5 text-sm text-slate-400">{g.editable ? "Sin categorías." : "Todo tu gasto está en algún grupo."}</li>}
-                  </ul>
-                  {g.editable && (
-                    <div className="mt-2 flex flex-wrap gap-x-5">
-                      <button type="button" onClick={() => setAdding(groups.find((x) => x.id === g.id) ?? null)} className="inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-blue-600">
-                        <Plus className="h-4 w-4" /> Añadir categoría
-                      </button>
-                      <button type="button" onClick={() => setEditing(groups.find((x) => x.id === g.id) ?? null)} className="inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-blue-600">
-                        <Target className="h-4 w-4" /> {g.goal ? "Cambiar objetivo o nombre" : "Poner objetivo"}
-                      </button>
-                    </div>
-                  )}
+                <div className="pb-4 pl-3">
+                  {!estimate && avg > 0 && <p className="amount mb-1 text-xs text-slate-500">Sueles gastar ~{eur(avg, 0)} al mes.</p>}
+                  {x > 0 && <p className="amount mb-1 text-xs text-slate-500">Además, {eur(x, 2)} en extraordinarios, aparte.</p>}
+                  <CategoryList keys={g.categories} groupId={g.id} />
+                  <div className="mt-3 flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-slate-800">Objetivo al mes</span>
+                      <span className="amount block text-xs text-slate-500">{g.goal === null ? (avg > 0 ? `Vacío: cuenta con tu media (~${eur(avg, 0)})` : "Vacío: sin objetivo") : "Lo máximo que quieres gastar"}</span>
+                    </span>
+                    <AmountInput label={`Objetivo de ${g.name}`} value={g.goal} placeholder={avg > 0 ? String(avg) : "0"} onCommit={(v) => setGoal(g, v)} />
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-x-5">
+                    <button type="button" onClick={() => setAdding(g)} className="inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-blue-600">
+                      <Plus className="h-4 w-4" /> Añadir categorías
+                    </button>
+                    <button type="button" onClick={() => setEditing(g)} className="inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-slate-500">
+                      <Pencil className="h-4 w-4" /> Renombrar o borrar
+                    </button>
+                  </div>
                 </div>
               )}
-            </li>,
-          ];
+            </li>
+          );
         })}
+
+        <li>
+          <button type="button" onClick={() => setCreating(true)} className="flex w-full items-center gap-2 py-4 text-left text-[15px] font-medium text-blue-600 active:bg-slate-50">
+            <FolderPlus className="h-5 w-5" /> Añadir grupo
+          </button>
+        </li>
+
+        {/* Lo que no está en ningún grupo, abajo del todo */}
+        {looseKeys.length > 0 && (
+          <li>
+            <button type="button" onClick={() => toggle("sin")} aria-expanded={open === "sin"} className="flex w-full items-center gap-3 py-3.5 text-left active:bg-slate-50">
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-semibold text-slate-500">Sin grupo</span>
+                <span className="amount block truncate text-xs text-slate-400">Llevas {eur(sumOf(looseKeys, cur), 0)}; sueles gastar ~{eur(looseAvg, 0)}</span>
+              </span>
+            </button>
+            {open === "sin" && (
+              <div className="pb-4 pl-3">
+                <CategoryList keys={looseKeys} groupId={null} />
+                <p className="mt-2 text-xs text-slate-400">Para meter una en un grupo, ábrelo y pulsa «Añadir categorías».</p>
+              </div>
+            )}
+          </li>
+        )}
       </ul>
+
       <NewGroupSheet open={creating} onClose={() => setCreating(false)} onCreate={(name, goal) => void createGroup(name, goal)} />
       <NewGroupSheet open={!!editing} editing={editing} onClose={() => setEditing(null)}
         onCreate={(name, goal) => editing && updateGroup(editing, name, goal)} onDelete={() => editing && deleteGroup(editing)} />
