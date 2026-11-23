@@ -109,7 +109,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
     : `Vas a buen ritmo en ${good} de tus ${judged.length} grupos`;
   const remember = () => { try { window.sessionStorage.setItem(SCROLL_KEY, String(scroller()?.scrollTop ?? 0)); } catch { /* ignorar */ } };
   const toGroup = (id: string) => { remember(); try { window.sessionStorage.setItem("crs-finance:plan-open", id); } catch { /* ignorar */ } router.push("/finanzas/plan"); };
-  const toCategory = (c: string) => { remember(); router.push(`/finanzas/plan/categoria/${c}`); };
+  const toCategory = (c: string) => { remember(); router.push(`/finanzas/categoria/${c}`); };
 
   return (
     <div className="pb-2">

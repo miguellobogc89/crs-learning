@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PullToRefresh } from "@/components/trading/mobile-nav";
 import { eur } from "@/components/trading/format";
+import { categoryLabel } from "@/lib/finance/categories";
 import { BOTTOM_TABS, FINANCE_SECTIONS, FINANCE_TABS, isFinanceTab, isFittedTab, tabDefOf } from "./tabs";
 import { fapi, peek, refreshFinance, useFinanceRefresh } from "./api";
 import { useHideAmounts } from "./privacy";
@@ -317,8 +318,10 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
   const parts = pathname.split("/").filter(Boolean);
   const section = parts[1] && isFinanceTab(parts[1]) ? parts[1] : "inicio";
   const tabDef = tabDefOf(section);
-  // Pantalla de detalle dentro de una sección (p. ej. /finanzas/plan/categoria/…): flecha para volver.
+  // Pantalla de detalle (p. ej. /finanzas/categoria/<clave>): flecha para volver.
   const isDetail = parts.length > 2;
+  // Hoja de una categoría: su nombre en la cabecera; a la derecha, lo que la hoja pone en «finance-header-right».
+  const sheetTitle = parts[1] === "categoria" && parts[2] ? categoryLabel(decodeURIComponent(parts[2])) : null;
   const router = useRouter();
   const goBack = () => (window.history.length > 1 ? router.back() : router.push(`/finanzas/${section}`));
   const fitted = isFittedTab(section);
@@ -359,11 +362,18 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
               <Menu className="h-5 w-5" />
             </button>
           )}
-          <h1 className="absolute left-1/2 flex max-w-[calc(100%-7rem)] -translate-x-1/2 items-center justify-center gap-2 text-[17px] font-bold text-slate-900">
-            <Icon className="h-4 w-4 shrink-0 text-blue-600" />
-            <span className="truncate">{tabDef.label}</span>
-          </h1>
-          {sync.syncing && <Loader2 className="ml-auto mr-3 h-4 w-4 animate-spin text-slate-400" aria-label="Sincronizando" />}
+          {sheetTitle ? (
+            <>
+              <h1 className="min-w-0 flex-1 truncate text-[17px] font-bold text-slate-900">{sheetTitle}</h1>
+              <div id="finance-header-right" className="shrink-0 pr-2 text-right" />
+            </>
+          ) : (
+            <h1 className="absolute left-1/2 flex max-w-[calc(100%-7rem)] -translate-x-1/2 items-center justify-center gap-2 text-[17px] font-bold text-slate-900">
+              <Icon className="h-4 w-4 shrink-0 text-blue-600" />
+              <span className="truncate">{tabDef.label}</span>
+            </h1>
+          )}
+          {sync.syncing && !sheetTitle && <Loader2 className="ml-auto mr-3 h-4 w-4 animate-spin text-slate-400" aria-label="Sincronizando" />}
         </header>
 
         <div className="hidden shrink-0 items-start gap-3 px-6 pb-3 pt-5 md:flex lg:px-8">
@@ -373,8 +383,9 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
             ) : (
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Icon className="h-5 w-5" /></span>
             )}
-            <span className="truncate">{tabDef.label}</span>
+            <span className="truncate">{sheetTitle ?? tabDef.label}</span>
           </h1>
+          {sheetTitle && <div id="finance-header-right-desktop" className="shrink-0 pt-1 text-right" />}
           {sync.syncing && <span className="mt-2 flex items-center gap-1.5 text-xs text-slate-400"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sincronizando</span>}
         </div>
 

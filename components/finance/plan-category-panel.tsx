@@ -1,11 +1,11 @@
 "use client";
-// Plan · detalle de una categoría. Entra desde la derecha; la flecha para volver está en la cabecera
-// de la app (shell.tsx, en cualquier pantalla de detalle). Encima de la lista, el nombre de la categoría y, a la
-// derecha, el ciclo que se está viendo y su importe: al hacer scroll y entrar en un ciclo anterior, cambian (como el
-// historial de categoría de Inicio). Debajo de la cabecera, la evolución de los últimos 6 meses en una línea suave.
+// Hoja de una categoría (/finanzas/categoria/<clave>; no es una sección). Entra desde la derecha; en la cabecera de
+// la app, la flecha para volver, el nombre de la categoría y, a la derecha, el importe y el ciclo que se está viendo:
+// al hacer scroll y entrar en un ciclo anterior, cambian. Debajo de la cabecera, la evolución de los últimos 6 meses en una línea suave.
 // Al tocar un movimiento se edita con la misma ventana que en Movimientos
 // (movement-detail.tsx); si cambia de categoría, sale de la lista y, al volver, la cifra del grupo ya está al día.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { planView } from "@/lib/finance/service";
 import { categoryLabel } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
@@ -22,12 +22,26 @@ type Section = Cycle & { rows: Item[]; total: number; extra: number };
 
 const scroller = () => document.querySelector<HTMLElement>("main");
 
+/** Importe y ciclo, a la derecha de la cabecera de la app (móvil y escritorio). */
+function HeaderAmount({ total, label, extra }: { total: number; label: string; extra: number }) {
+  const [slots, setSlots] = useState<HTMLElement[]>([]);
+  useEffect(() => {
+    setSlots(["finance-header-right", "finance-header-right-desktop"].map((id) => document.getElementById(id)).filter((x): x is HTMLElement => !!x));
+  }, []);
+  const body = (
+    <>
+      <p className="amount text-[17px] font-semibold leading-tight tabular-nums text-slate-900">{eur(total, 2)}</p>
+      <p className="text-[11px] leading-tight text-slate-500">{label}{extra > 0 ? ` · +${eur(extra, 0)} extra` : ""}</p>
+    </>
+  );
+  return <>{slots.map((el) => createPortal(body, el, el.id))}</>;
+}
+
 export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
   const list = useFinance<List>("transactions?all=1");
   const plan = useFinance<Plan>("plan");
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [visible, setVisible] = useState<string | null>(null);
-  const header = useRef<HTMLDivElement>(null);
 
   // El detalle empieza arriba del todo (el contenedor de scroll es el mismo que el de la lista de grupos).
   useEffect(() => { const el = scroller(); if (el) el.scrollTop = 0; }, []);
@@ -65,7 +79,7 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
     const el = scroller();
     if (!el || !sections.length) return;
     const onScroll = () => {
-      const limit = (header.current?.getBoundingClientRect().bottom ?? 0) + 4;
+      const limit = el.getBoundingClientRect().top + 4;
       let current = sections[0].start;
       for (const node of el.querySelectorAll<HTMLElement>("[data-cycle]")) {
         if (node.getBoundingClientRect().top > limit) break;
@@ -83,16 +97,8 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
 
   return (
     <div className="mx-auto max-w-xl animate-in fade-in-0 slide-in-from-right-10 pb-6 duration-200">
-      {/* En el móvil, <main> tiene 12 px de margen arriba: la cabecera se pega 12 px más arriba para no dejar hueco. */}
-      <div ref={header} className="sticky -top-3 z-10 -mx-3 -mt-3 flex items-end justify-between gap-3 border-b border-slate-100 bg-white px-4 pb-3 pt-4 md:top-0 md:-mx-0 md:mt-0 md:px-1 md:pt-1">
-        <h2 className="min-w-0 truncate text-lg font-semibold text-slate-900">{categoryLabel(categoryKey)}</h2>
-        {active && (
-          <div className="shrink-0 text-right">
-            <p className="text-lg font-semibold tabular-nums text-slate-900">{eur(active.total, 2)}</p>
-            <p className="text-xs text-slate-500">{active.label}{active.extra > 0 ? ` · +${eur(active.extra, 2)} extraordinarios` : ""}</p>
-          </div>
-        )}
-      </div>
+      {/* El nombre va en la cabecera de la app; a su derecha, el importe y el ciclo que se está viendo (cambian con el scroll). */}
+      {active && <HeaderAmount total={active.total} label={active.label} extra={active.extra} />}
 
       {list.data && plan.data && (
         <section className="border-b border-slate-100 py-4" aria-label="Evolución de los últimos meses">
