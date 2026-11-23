@@ -2,7 +2,8 @@
 // Plan · detalle de una categoría. Entra desde la derecha; la flecha para volver está en la cabecera
 // de la app (shell.tsx, en cualquier pantalla de detalle). Encima de la lista, el nombre de la categoría y, a la
 // derecha, el ciclo que se está viendo y su importe: al hacer scroll y entrar en un ciclo anterior, cambian (como el
-// historial de categoría de Inicio). Al tocar un movimiento se edita con la misma ventana que en Movimientos
+// historial de categoría de Inicio). Debajo de la cabecera, la evolución de los últimos 6 meses en una línea suave.
+// Al tocar un movimiento se edita con la misma ventana que en Movimientos
 // (movement-detail.tsx); si cambia de categoría, sale de la lista y, al volver, la cifra del grupo ya está al día.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { planView } from "@/lib/finance/service";
@@ -13,6 +14,7 @@ import { SkeletonList } from "@/components/trading/skeletons";
 import { useFinance } from "./api";
 import { MovementRowButton, type Item, type List } from "./movement-edit";
 import { MovementDetailSheet } from "./movement-detail";
+import { TrendChart, type TrendPoint } from "./trend-chart";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Cycle = Plan["cycles"][number];
@@ -45,6 +47,19 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
     }).filter((s, i) => i === 0 || s.rows.length > 0);
   }, [list.data, plan.data, categoryKey]);
 
+  // Evolución de los últimos 6 meses (sin extraordinarios), del más antiguo al actual (en curso).
+  const trend = useMemo<TrendPoint[]>(() => {
+    if (!list.data || !plan.data) return [];
+    const rows = list.data.items.filter((t) => !t.excluded && t.kind === "gasto" && t.amount < 0 && !t.extraordinary && t.category === categoryKey);
+    const when = (t: (typeof rows)[number]) => t.imputedDate ?? t.date;
+    const month = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("es-ES", { month: "short", timeZone: "UTC" }).replace(".", "");
+    return plan.data.cycles.slice(0, 6).map((c, i) => ({
+      label: month(c.end),
+      value: Math.round(rows.filter((t) => when(t) >= c.start && when(t) <= c.end).reduce((x, t) => x - t.amount, 0) * 100) / 100,
+      current: i === 0,
+    })).reverse();
+  }, [list.data, plan.data, categoryKey]);
+
   // Ciclo que se ve bajo la cabecera fija: el último cuyo comienzo ya ha pasado por debajo de ella.
   useEffect(() => {
     const el = scroller();
@@ -68,7 +83,8 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
 
   return (
     <div className="mx-auto max-w-xl animate-in fade-in-0 slide-in-from-right-10 pb-6 duration-200">
-      <div ref={header} className="sticky top-0 z-10 -mx-3 flex items-end justify-between gap-3 border-b border-slate-100 bg-white px-4 pb-3 pt-1 md:-mx-0 md:px-1">
+      {/* En el móvil, <main> tiene 12 px de margen arriba: la cabecera se pega 12 px más arriba para no dejar hueco. */}
+      <div ref={header} className="sticky -top-3 z-10 -mx-3 -mt-3 flex items-end justify-between gap-3 border-b border-slate-100 bg-white px-4 pb-3 pt-4 md:top-0 md:-mx-0 md:mt-0 md:px-1 md:pt-1">
         <h2 className="min-w-0 truncate text-lg font-semibold text-slate-900">{categoryLabel(categoryKey)}</h2>
         {active && (
           <div className="shrink-0 text-right">
@@ -77,6 +93,13 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
           </div>
         )}
       </div>
+
+      {list.data && plan.data && (
+        <section className="border-b border-slate-100 py-4" aria-label="Evolución de los últimos meses">
+          <p className="px-1 text-xs text-slate-500">Últimos meses</p>
+          <div className="mt-1"><TrendChart points={trend} title={`Gasto en ${categoryLabel(categoryKey)}`} /></div>
+        </section>
+      )}
 
       {error && !list.data ? <ErrorNote>{error}</ErrorNote>
         : !list.data || !plan.data ? <SkeletonList rows={6} />
