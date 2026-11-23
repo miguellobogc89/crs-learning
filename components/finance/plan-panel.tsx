@@ -6,8 +6,8 @@
 // editable y añadir categorías / renombrar o borrar. «Sin grupo», abajo del todo. Al volver de un detalle, la
 // pantalla queda como se dejó. Los grupos se guardan en finance_plan_groups (acciones plan/group* de la API).
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { Check, FolderPlus, Landmark, Pencil, PiggyBank, Plus, Search, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Check, FolderPlus, Landmark, Pencil, PiggyBank, Plus, Search, X, Zap } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { planView } from "@/lib/finance/service";
 import { EXPENSE_CATEGORIES, categoryHex, categoryLabel } from "@/lib/finance/categories";
@@ -204,7 +204,8 @@ function AmountInput({ value, onCommit, placeholder, label }: { value: number | 
   );
 }
 
-export function PlanPanel() {
+/** `lab`: variante en pruebas en el laboratorio (ahorro aparte, extraordinarios, «Sin grupo» como fila, grupos a 0 recogidos). */
+export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
   const { data, error } = useFinance<View>("plan");
   const [groups, setGroups] = useState<Group[]>([]);
   const [open, setOpen] = useState<string | null>(null);
@@ -369,6 +370,172 @@ export function PlanPanel() {
       {keys.length === 0 && <li className="py-2.5 text-sm text-slate-400">Sin categorías todavía.</li>}
     </ul>
   );
+
+  // ── Variante del laboratorio ─────────────────────────────────────────────────────────────────
+  if (lab) {
+    const extras = data.extras ?? [];
+    const extrasTotal = round2(extras.reduce((t, e) => t + e.amount, 0));
+    const looseSpent = sumOf(looseKeys, cur);
+    const looseLeft = round2(looseAvg - looseSpent);
+    const active = rows.filter((r) => r.spent > 0 || sumOf(r.g.categories, extra) > 0).sort((a, b) => a.left - b.left);
+    const idle = rows.filter((r) => !active.includes(r));
+    // Lo que podrías ahorrar este mes si de aquí al final te ajustas a tus objetivos y medias (lo ya pasado no
+    // vuelve): lo que cobras − lo previsto o gastado en cada grupo y sin grupo − los extraordinarios del mes.
+    const monthSaving = income === null ? null : round2(income
+      - rows.reduce((t, r) => t + Math.max(r.base, r.spent), 0) - Math.max(looseAvg, looseSpent) - extrasTotal);
+    const savingTone = monthSaving === null ? "text-slate-500" : saving && monthSaving >= saving ? "text-emerald-700" : monthSaving >= 0 ? "text-amber-700" : "text-rose-700";
+    const planText = income === null ? verdict.text
+      : margin !== null && margin >= 0 ? `Sobre el papel tu plan cuadra: deja ${eur(margin, 0)} de margen.`
+      : `Sobre el papel tu plan se pasa ${eur(-(margin ?? 0), 0)} de lo que cobras: baja algún objetivo o ahorra menos.`;
+
+    const Line = ({ id, icon, name, sub, left, tone, children }: { id: string; icon: ReactNode; name: string; sub: string; left: ReactNode; tone: string; children?: ReactNode }) => (
+      <li>
+        <button type="button" onClick={() => toggle(id)} aria-expanded={open === id} className="flex w-full items-center gap-3 py-3.5 text-left active:bg-slate-50">
+          {icon}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold text-slate-900">{name}</span>
+            <span className="amount block truncate text-xs text-slate-500">{sub}</span>
+          </span>
+          <span className={`amount shrink-0 text-right text-[15px] font-semibold tabular-nums ${tone}`}>{left}</span>
+        </button>
+        {open === id && children && <div className="pb-4 pl-3">{children}</div>}
+      </li>
+    );
+    const leftCell = (left: number) => (
+      <>{left >= 0 ? eur(left, 0) : `−${eur(-left, 0)}`}<span className="block text-[11px] font-normal text-slate-500">{left >= 0 ? "te quedan" : "te has pasado"}</span></>
+    );
+    const groupBody = (r: (typeof rows)[number]) => {
+      const x = sumOf(r.g.categories, extra);
+      return (
+        <>
+          {!r.estimate && r.avg > 0 && <p className="amount mb-1 text-xs text-slate-500">Sueles gastar ~{eur(r.avg, 0)} al mes.</p>}
+          {x > 0 && <p className="amount mb-1 text-xs text-slate-500">Además, {eur(x, 2)} en extraordinarios, aparte.</p>}
+          <CategoryList keys={r.g.categories} groupId={r.g.id} />
+          <div className="mt-3 flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-slate-800">Objetivo al mes</span>
+              <span className="amount block text-xs text-slate-500">{r.g.goal === null ? (r.avg > 0 ? `Vacío: cuenta con tu media (~${eur(r.avg, 0)})` : "Vacío: sin objetivo") : "Lo máximo que quieres gastar"}</span>
+            </span>
+            <AmountInput label={`Objetivo de ${r.g.name}`} value={r.g.goal} placeholder={r.avg > 0 ? String(r.avg) : "0"} onCommit={(v) => setGoal(r.g, v)} />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-5">
+            <button type="button" onClick={() => setAdding(r.g)} className="inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-blue-600"><Plus className="h-4 w-4" /> Añadir categorías</button>
+            <button type="button" onClick={() => setEditing(r.g)} className="inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-slate-500"><Pencil className="h-4 w-4" /> Renombrar o borrar</button>
+          </div>
+        </>
+      );
+    };
+
+    return (
+      <div className="mx-auto max-w-xl space-y-5 pb-6">
+        {err && <ErrorNote>{err}</ErrorNote>}
+
+        <section>
+          <p className="text-sm text-slate-500">Tu mes</p>
+          <div className="mt-0.5 flex items-end justify-between gap-3">
+            <p className="amount text-[30px] font-semibold leading-none tracking-tight text-slate-900">{income === null ? "—" : eur(income, 0)}</p>
+            <span className="text-right text-xs text-slate-500">{data.budget.fromSettings ? "lo que cobras al mes" : "según tus últimas nóminas"}</span>
+          </div>
+          {income === null && (
+            <div className="mt-3 flex items-center gap-3">
+              <span className="flex-1 text-sm text-slate-600">¿Cuánto cobras al mes?</span>
+              <AmountInput label="Lo que cobras al mes" value={null} placeholder="0" onCommit={(v) => saveSettings({ expectedIncome: v })} />
+            </div>
+          )}
+          <div className="mt-4 flex h-11 w-full overflow-hidden rounded-xl bg-slate-100" role="img" aria-label={`Reparto: ${segs.map((x) => `${x.label} ${eur(x.amount, 0)}`).join(", ")}. ${planText}`}>
+            {segs.map((x) => (
+              <span key={x.key} className="h-full border-r-2 border-white transition-[width] duration-700 ease-out last:border-r-0 motion-reduce:transition-none"
+                style={{ width: ready ? pct(x.amount) : "0%", backgroundColor: x.color, opacity: x.estimate ? 0.45 : 1 }} />
+            ))}
+          </div>
+          {margin !== null && margin < 0 && (
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+              <span className="ml-auto block h-full rounded-full bg-rose-500" style={{ width: pct(-margin) }} />
+            </div>
+          )}
+          <p className={`mt-3 text-sm ${margin !== null && margin < 0 ? "text-rose-700" : "text-slate-600"}`}>{planText}</p>
+        </section>
+
+        {/* Ahorro, aparte: tu objetivo y lo que podrías ahorrar este mes de verdad */}
+        <section className="-mx-3 bg-emerald-50/70 px-4 py-4 sm:mx-0 sm:rounded-2xl">
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-gradient-to-b from-emerald-400 to-emerald-500" aria-hidden="true"><PiggyBank className="h-5 w-5 text-white" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] font-semibold text-slate-900">Ahorro</p>
+              <p className={`amount mt-1 text-2xl font-semibold tracking-tight ${savingTone}`}>{monthSaving === null ? "—" : `${monthSaving < 0 ? "−" : ""}${eur(Math.abs(monthSaving), 0)}`}</p>
+              <p className="text-xs text-slate-600">podrías ahorrar este mes si de aquí al final te ajustas a tus objetivos{saving ? `; tu objetivo es ${eur(saving, 0)}` : ""}.</p>
+              {extrasTotal > 0 && <p className="amount mt-1 text-xs text-slate-600">Los extraordinarios del mes te restan {eur(extrasTotal, 0)}.</p>}
+              <button type="button" onClick={() => toggle("ahorro")} className="mt-2 text-xs font-medium text-emerald-800 underline-offset-2 hover:underline">{open === "ahorro" ? "Cerrar" : saving ? "Cambiar mi objetivo de ahorro" : "Ponerme un objetivo de ahorro"}</button>
+              {open === "ahorro" && (
+                <div className="mt-2 flex items-center gap-3">
+                  <span className="flex-1 text-sm text-slate-700">Ahorro al mes</span>
+                  <AmountInput label="Ahorro al mes" value={saving} placeholder="0" onCommit={(v) => saveSettings({ savingsGoal: v })} />
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <ul className="divide-y divide-slate-100">
+          {active.map((r) => (
+            <Line key={r.g.id} id={r.g.id} icon={<CategoryIcon category={r.g.categories[0] ?? "otros_gastos"} />} name={r.g.name}
+              sub={`Llevas ${eur(r.spent, 0)} de ${r.estimate ? `~${eur(r.base, 0)} (tu media)` : eur(r.base, 0)}`}
+              left={leftCell(r.left)} tone={r.left >= 0 ? "text-emerald-700" : "text-rose-700"}>{groupBody(r)}</Line>
+          ))}
+          {(looseSpent > 0 || looseAvg > 0) && (
+            <Line id="sin" icon={<CategoryIcon category="otros_gastos" />} name="Otros gastos"
+              sub={`Sin grupo: llevas ${eur(looseSpent, 0)} de ~${eur(looseAvg, 0)} (tu media)`}
+              left={leftCell(looseLeft)} tone={looseLeft >= 0 ? "text-emerald-700" : "text-rose-700"}>
+              <CategoryList keys={looseKeys} groupId={null} />
+              <p className="mt-2 text-xs text-slate-400">Para meter una en un grupo, ábrelo y pulsa «Añadir categorías».</p>
+            </Line>
+          )}
+          {extrasTotal > 0 && (
+            <Line id="extras" icon={<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] bg-gradient-to-b from-amber-400 to-amber-500" aria-hidden="true"><Zap className="h-5 w-5 text-white" /></span>}
+              name="Extraordinarios" sub={extras.slice(0, 2).map((e) => e.label).join(", ") + (extras.length > 2 ? "…" : "")}
+              left={<>{eur(extrasTotal, 0)}<span className="block text-[11px] font-normal text-slate-500">este mes</span></>} tone="text-amber-700">
+              <ul className="divide-y divide-slate-100">
+                {extras.map((e, i) => (
+                  <li key={`${e.date}-${i}`} className="flex items-center gap-3 py-2.5">
+                    <CategoryIcon category={e.category} />
+                    <span className="min-w-0 flex-1 truncate text-sm text-slate-800">{e.label}</span>
+                    <span className="amount shrink-0 text-sm tabular-nums text-slate-900">{eur(e.amount, 2)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-slate-400">No cuentan para tus objetivos ni tus medias, pero sí salen de tu ahorro de este mes.</p>
+            </Line>
+          )}
+          {idle.length > 0 && (
+            <li>
+              <button type="button" onClick={() => toggle("idle")} aria-expanded={open === "idle"} className="w-full py-3.5 text-left text-sm text-slate-500 active:bg-slate-50">
+                Sin gastos este mes: {idle.map((r) => r.g.name).join(", ")}
+              </button>
+              {open === "idle" && (
+                <ul className="divide-y divide-slate-100 pb-2 pl-3">
+                  {idle.map((r) => (
+                    <Line key={r.g.id} id={`idle-${r.g.id}`} icon={<CategoryIcon category={r.g.categories[0] ?? "otros_gastos"} />} name={r.g.name}
+                      sub={r.estimate ? (r.avg > 0 ? `Sueles gastar ~${eur(r.avg, 0)}` : "Sin gasto los últimos meses") : `Objetivo ${eur(r.base, 0)}`}
+                      left={leftCell(r.left)} tone="text-emerald-700">{groupBody(r)}</Line>
+                  ))}
+                </ul>
+              )}
+            </li>
+          )}
+          <li>
+            <button type="button" onClick={() => setCreating(true)} className="flex w-full items-center gap-2 py-4 text-left text-[15px] font-medium text-blue-600 active:bg-slate-50">
+              <FolderPlus className="h-5 w-5" /> Añadir grupo
+            </button>
+          </li>
+        </ul>
+
+        <NewGroupSheet open={creating} onClose={() => setCreating(false)} onCreate={(name, goal) => void createGroup(name, goal)} />
+        <NewGroupSheet open={!!editing} editing={editing} onClose={() => setEditing(null)}
+          onCreate={(name, goal) => editing && updateGroup(editing, name, goal)} onDelete={() => editing && deleteGroup(editing)} />
+        <AddCategoriesSheet target={adding} groups={groups} allKeys={ALL_KEYS} cur={cur} onClose={() => setAdding(null)} onConfirm={(keys) => adding && addCats(adding.id, keys)} />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-xl space-y-4 pb-6">
