@@ -164,3 +164,31 @@ test("Qué te está desviando: el ahorro negativo se dice, no se esconde como 0"
   const [i] = P.planInsights({ packages: [], unpackaged: { total: 0, count: 0 }, saving: { saved: -732.94, goal: 500 }, daysLeft: 3 });
   assert.match(i.text, /has gastado 732,94 € más de lo que has ingresado/);
 });
+
+test("groupSummary: media a estas alturas, ritmo según tu historial y ahorro de 3 ciclos", () => {
+  const c = (full, atDay) => ({ full: { restaurantes: full }, atDay: { restaurantes: atDay } });
+  const cycles = [c(50, 50), c(100, 40), c(120, 60), c(80, 50), c(150, 0), c(150, 0), c(150, 0)];
+  const s = P.groupSummary({ categories: ["restaurantes"], cycles, goal: 100, day: 10, totalDays: 30 });
+  assert.equal(s.now, 50);
+  assert.equal(s.avgAtDay, 50);
+  assert.equal(s.vsAvg, 0);
+  // Sueles llevar 50 de 100 a estas alturas → se espera la mitad del objetivo.
+  assert.equal(s.expected, 50);
+  assert.equal(s.status, "bien");
+  assert.equal(s.saved3, 150);
+  assert.deepEqual(s.trend, [150, 150, 150, 80, 120, 100, 50]);
+});
+
+test("groupSummary: sin historial reparte el objetivo de forma lineal y marca lo superado", () => {
+  const one = [{ full: { ocio: 40 }, atDay: { ocio: 40 } }];
+  const a = P.groupSummary({ categories: ["ocio"], cycles: one, goal: 90, day: 10, totalDays: 30 });
+  assert.equal(a.expected, 30);
+  assert.equal(a.status, "atento");
+  assert.equal(a.vsAvg, null);
+  assert.equal(a.saved3, null);
+  const b = P.groupSummary({ categories: ["ocio"], cycles: one, goal: 30, day: 10, totalDays: 30 });
+  assert.equal(b.status, "superado");
+  assert.equal(b.left, -10);
+  const n = P.groupSummary({ categories: ["ocio"], cycles: one, goal: null, day: 10, totalDays: 30 });
+  assert.equal(n.status, null);
+});

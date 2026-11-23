@@ -304,3 +304,50 @@ export function planInsights(opts: {
   }
   return out.slice(0, opts.max ?? 3);
 }
+
+// ── Inicio: resumen de cada grupo ────────────────────────────────────────────────────────────────
+
+/** Gasto por categoría de un ciclo: entero (`full`) y hasta el mismo día del ciclo que hoy (`atDay`). */
+export type GroupCycleTotals = { full: Record<string, number>; atDay: Record<string, number> };
+export type GroupStatus = "bien" | "atento" | "superado";
+
+/**
+ * Resumen determinista de un grupo para Inicio. `cycles[0]` es el ciclo actual (parcial) y los siguientes, los
+ * cerrados del más reciente al más antiguo (solo los que tienen datos completos).
+ * - Comparación con «tu media a estas alturas»: media de los 3 ciclos cerrados anteriores hasta el mismo día.
+ * - Ritmo esperado hoy: el objetivo repartido según cómo sueles gastar en el grupo a lo largo del ciclo (si los
+ *   recibos caen al principio, a principio de ciclo ya se espera casi todo); sin historial, reparto lineal.
+ * - Ahorro de los últimos 3 ciclos frente a los 3 anteriores, cuando hay 6 cerrados.
+ */
+export function groupSummary(opts: { categories: string[]; cycles: GroupCycleTotals[]; goal: number | null; day: number; totalDays: number }) {
+  const { categories, cycles, goal, day, totalDays } = opts;
+  const sum = (r: Record<string, number> | undefined) => round2(categories.reduce((s, c) => s + (r?.[c] ?? 0), 0));
+  const now = sum(cycles[0]?.full);
+  const closed = cycles.slice(1);
+  const ref = closed.slice(0, 3);
+  const avg = (xs: number[]) => (xs.length ? round2(xs.reduce((s, x) => s + x, 0) / xs.length) : null);
+  const avgAtDay = avg(ref.map((c) => sum(c.atDay)));
+  const avgFull = avg(ref.map((c) => sum(c.full)));
+  const share = avgFull && avgFull > 0 && avgAtDay !== null
+    ? Math.min(1, Math.max(0, avgAtDay / avgFull))
+    : Math.min(1, Math.max(0, day / Math.max(1, totalDays)));
+  const expected = goal === null ? null : round2(goal * share);
+  const status: GroupStatus | null = goal === null ? null : now > goal ? "superado" : expected !== null && now > expected * 1.1 && now > 0 ? "atento" : "bien";
+  const last3 = closed.slice(0, 3);
+  const prev3 = closed.slice(3, 6);
+  const saved3 = last3.length === 3 && prev3.length === 3
+    ? round2(prev3.reduce((s, c) => s + sum(c.full), 0) - last3.reduce((s, c) => s + sum(c.full), 0))
+    : null;
+  return {
+    now,
+    goal,
+    left: goal === null ? null : round2(goal - now),
+    expected,
+    status,
+    avgAtDay,
+    vsAvg: avgAtDay === null ? null : round2(now - avgAtDay),
+    /** Del ciclo más antiguo al actual (máx. 7). */
+    trend: cycles.slice(0, 7).map((c) => sum(c.full)).reverse(),
+    saved3,
+  };
+}

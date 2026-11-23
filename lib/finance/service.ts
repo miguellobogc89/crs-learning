@@ -9,7 +9,7 @@ import {
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, getWishlist, loadTxs } from "./store";
-import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, goalStatus, isPackageCharge, planInsights, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
+import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, goalStatus, isPackageCharge, type GroupCycleTotals, planInsights, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
 import { AUTO_SYNC_HOURS } from "./sync";
 import { zombies } from "./gmail";
 
@@ -548,10 +548,27 @@ export async function planView(userId: string) {
     if (t.date >= current.start && t.date <= current.end) now[t.category] = round2((now[t.category] ?? 0) - t.amount);
     if (hasPrevious && t.date >= prevCycle.start && t.date <= prevTo) before[t.category] = round2((before[t.category] ?? 0) - t.amount);
   }
+  // Gasto por categoría de los últimos ciclos (el actual primero), entero y hasta el mismo día del ciclo, para el
+  // resumen de cada grupo en Inicio. Solo ciclos con datos completos (salvo el actual).
+  const history: GroupCycleTotals[] = [];
+  for (let i = 0; i < 7; i++) {
+    const c = i === 0 ? current : cycleFor(ctx.today, ctx.startDay, -i);
+    if (i > 0 && c.start < oldest) break;
+    const cut = addDays(c.start, day - 1) < c.end ? addDays(c.start, day - 1) : c.end;
+    const full: Record<string, number> = {};
+    const atDay: Record<string, number> = {};
+    for (const t of ctx.txs) {
+      if (!isPackageCharge(t) || t.date < c.start || t.date > c.end) continue;
+      full[t.category] = round2((full[t.category] ?? 0) - t.amount);
+      if (t.date <= cut) atDay[t.category] = round2((atDay[t.category] ?? 0) - t.amount);
+    }
+    history.push({ full, atDay });
+  }
   return {
     hasAccounts: ctx.accounts.length > 0,
     hasData: ctx.txs.length > 0,
     cycle: { ...current, day, totalDays: daysBetween(current.start, current.end) + 1 },
+    history,
     previous: hasPrevious ? { start: prevCycle.start, end: prevTo } : null,
     /** Ciclos del último par de años (el actual primero), para el historial de una categoría. */
     cycles: Array.from({ length: 24 }, (_, i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c, i) => i === 0 || c.end >= oldest),

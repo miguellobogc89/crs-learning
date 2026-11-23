@@ -18,6 +18,7 @@ import { requestSync } from "./shell";
 import { BankLogo } from "./bank-logo";
 import { CategoryExpensesSheet } from "./category-expenses-sheet";
 import { ForecastPanel } from "./forecast-panel";
+import { HomeGroups } from "./home-groups";
 
 type Overview = Awaited<ReturnType<typeof overview>>;
 const CASHFLOW_RANGES = ["7D", "1M", "6M", "1A"] as const;
@@ -166,6 +167,9 @@ export function HomePanel() {
           <ArrowRight className="h-4 w-4 shrink-0" />
         </Link>
       )}
+
+      {/* Cómo va cada grupo de Mi plan en este ciclo. */}
+      {v.isCurrent && <HomeGroups />}
 
       {/* Inicio móvil: primero la evolución de ingresos y gastos, con su propio periodo. */}
       <section className={`${card} ${flat} p-4 sm:hidden`}>
