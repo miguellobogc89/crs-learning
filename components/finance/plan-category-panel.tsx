@@ -1,7 +1,8 @@
 "use client";
-// Hoja de una categoría (/finanzas/categoria/<clave>; no es una sección). Entra desde la derecha; en la cabecera de
-// la app, la flecha para volver, el nombre de la categoría y, a la derecha, el importe y el ciclo que se está viendo:
-// al hacer scroll y entrar en un ciclo anterior, cambian. Debajo de la cabecera, la evolución de los últimos 6 meses en una línea suave.
+// Hojas de gasto (no son secciones): una categoría (/finanzas/categoria/<clave>) o un grupo (/finanzas/grupo/<id>,
+// con pills para quedarse con una de sus categorías). Entran desde la derecha; en la cabecera de la app, la flecha
+// para volver, el nombre y, a la derecha, el importe y el ciclo que se está viendo: al hacer scroll y entrar en un
+// ciclo anterior, cambian. Debajo de la cabecera, la evolución de los últimos 6 meses en una línea suave.
 // Al tocar un movimiento se edita con la misma ventana que en Movimientos
 // (movement-detail.tsx); si cambia de categoría, sale de la lista y, al volver, la cifra del grupo ya está al día.
 import { useEffect, useMemo, useState } from "react";
@@ -22,23 +23,48 @@ type Section = Cycle & { rows: Item[]; total: number; extra: number };
 
 const scroller = () => document.querySelector<HTMLElement>("main");
 
-/** Importe y ciclo, a la derecha de la cabecera de la app (móvil y escritorio). */
-function HeaderAmount({ total, label, extra }: { total: number; label: string; extra: number }) {
-  const [slots, setSlots] = useState<HTMLElement[]>([]);
+/** Lo que la hoja pone en la cabecera de la app (móvil y escritorio): el nombre y, a la derecha, importe y ciclo. */
+function HeaderSlots({ title, total, label, extra }: { title: string; total: number | null; label: string; extra: number }) {
+  const [slots, setSlots] = useState<{ title: HTMLElement[]; right: HTMLElement[] }>({ title: [], right: [] });
   useEffect(() => {
-    setSlots(["finance-header-right", "finance-header-right-desktop"].map((id) => document.getElementById(id)).filter((x): x is HTMLElement => !!x));
+    const get = (ids: string[]) => ids.map((id) => document.getElementById(id)).filter((x): x is HTMLElement => !!x);
+    setSlots({ title: get(["finance-header-title", "finance-header-title-desktop"]), right: get(["finance-header-right", "finance-header-right-desktop"]) });
   }, []);
-  const body = (
+  const right = total === null ? null : (
     <>
       <p className="amount text-[17px] font-semibold leading-tight tabular-nums text-slate-900">{eur(total, 2)}</p>
       <p className="text-[11px] leading-tight text-slate-500">{label}{extra > 0 ? ` · +${eur(extra, 0)} extra` : ""}</p>
     </>
   );
-  return <>{slots.map((el) => createPortal(body, el, el.id))}</>;
+  return (
+    <>
+      {slots.title.map((el) => createPortal(<>{title}</>, el, `t-${el.id}`))}
+      {right && slots.right.map((el) => createPortal(right, el, `r-${el.id}`))}
+    </>
+  );
 }
 
+/** Hoja de una categoría. */
 export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
+  return <SpendSheet title={categoryLabel(categoryKey)} categories={[categoryKey]} />;
+}
+
+/** Hoja de un grupo de Mi plan: todos sus movimientos, con pills para ver solo una categoría. */
+export function GroupPanel({ groupId }: { groupId: string }) {
+  const plan = useFinance<Plan>("plan");
+  if (plan.error && !plan.data) return <ErrorNote>{plan.error}</ErrorNote>;
+  if (!plan.data) return <SkeletonList rows={6} />;
+  const g = plan.data.groups.find((x) => x.id === groupId);
+  if (!g) return <p className="py-10 text-center text-sm text-slate-500">Este grupo ya no existe.</p>;
+  return <SpendSheet title={g.name} categories={g.categories} />;
+}
+
+function SpendSheet({ title, categories }: { title: string; categories: string[] }) {
   const list = useFinance<List>("transactions?all=1");
+  // Pill elegida (una categoría del grupo) o null = todas.
+  const [only, setOnly] = useState<string | null>(null);
+  const cats = only ? [only] : categories;
+  const catsKey = cats.join(",");
   const plan = useFinance<Plan>("plan");
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [visible, setVisible] = useState<string | null>(null);
@@ -50,7 +76,7 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
   const sections = useMemo<Section[]>(() => {
     if (!list.data || !plan.data) return [];
     const rows = list.data.items.filter((t) => !t.excluded && t.kind === "gasto" && t.amount < 0
-      && t.category === categoryKey);
+      && cats.includes(t.category));
     return plan.data.cycles.map((c) => {
       // Cada gasto cuenta en su fecha imputada si se la cambiaste («Cambiar fecha»), no en la del cargo.
       const when = (t: (typeof rows)[number]) => t.imputedDate ?? t.date;
@@ -59,12 +85,13 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
       const sum = (xs: typeof mine) => Math.round(xs.reduce((s, t) => s - t.amount, 0) * 100) / 100;
       return { ...c, rows: mine, total: sum(mine.filter((t) => !t.extraordinary)), extra: sum(mine.filter((t) => t.extraordinary)) };
     }).filter((s, i) => i === 0 || s.rows.length > 0);
-  }, [list.data, plan.data, categoryKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.data, plan.data, catsKey]);
 
   // Evolución de los últimos 6 meses (sin extraordinarios), del más antiguo al actual (en curso).
   const trend = useMemo<TrendPoint[]>(() => {
     if (!list.data || !plan.data) return [];
-    const rows = list.data.items.filter((t) => !t.excluded && t.kind === "gasto" && t.amount < 0 && !t.extraordinary && t.category === categoryKey);
+    const rows = list.data.items.filter((t) => !t.excluded && t.kind === "gasto" && t.amount < 0 && !t.extraordinary && cats.includes(t.category));
     const when = (t: (typeof rows)[number]) => t.imputedDate ?? t.date;
     const month = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("es-ES", { month: "short", timeZone: "UTC" }).replace(".", "");
     return plan.data.cycles.slice(0, 6).map((c, i) => ({
@@ -72,7 +99,18 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
       value: Math.round(rows.filter((t) => when(t) >= c.start && when(t) <= c.end).reduce((x, t) => x - t.amount, 0) * 100) / 100,
       current: i === 0,
     })).reverse();
-  }, [list.data, plan.data, categoryKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.data, plan.data, catsKey]);
+
+  // Categorías del grupo con gasto en los últimos meses, para las pills (de más a menos gasto).
+  const pills = useMemo(() => {
+    if (categories.length < 2 || !list.data || !plan.data) return [];
+    const from = plan.data.cycles[Math.min(5, plan.data.cycles.length - 1)]?.start ?? "";
+    const totals = new Map<string, number>();
+    for (const t of list.data.items) if (!t.excluded && t.kind === "gasto" && t.amount < 0 && categories.includes(t.category) && (t.imputedDate ?? t.date) >= from) totals.set(t.category, (totals.get(t.category) ?? 0) - t.amount);
+    return [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.data, plan.data, categories.join(",")]);
 
   // Ciclo que se ve bajo la cabecera fija: el último cuyo comienzo ya ha pasado por debajo de ella.
   useEffect(() => {
@@ -98,18 +136,29 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
   return (
     <div className="mx-auto max-w-xl animate-in fade-in-0 slide-in-from-right-10 pb-6 duration-200">
       {/* El nombre va en la cabecera de la app; a su derecha, el importe y el ciclo que se está viendo (cambian con el scroll). */}
-      {active && <HeaderAmount total={active.total} label={active.label} extra={active.extra} />}
+      <HeaderSlots title={only ? `${title} · ${categoryLabel(only)}` : title} total={active ? active.total : null} label={active?.label ?? ""} extra={active?.extra ?? 0} />
+
+      {pills.length > 1 && (
+        <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 pt-1 [scrollbar-width:none] md:mx-0 md:flex-wrap md:px-0">
+          {[null, ...pills].map((k) => (
+            <button key={k ?? "todo"} type="button" onClick={() => setOnly(k)} aria-pressed={only === k}
+              className={`h-8 shrink-0 rounded-full px-3.5 text-sm font-medium transition-colors ${only === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+              {k ? categoryLabel(k) : "Todo"}
+            </button>
+          ))}
+        </div>
+      )}
 
       {list.data && plan.data && (
         <section className="border-b border-slate-100 py-4" aria-label="Evolución de los últimos meses">
           <p className="px-1 text-xs text-slate-500">Últimos meses</p>
-          <div className="mt-1"><TrendChart points={trend} title={`Gasto en ${categoryLabel(categoryKey)}`} /></div>
+          <div className="mt-1"><TrendChart points={trend} title={`Gasto en ${only ? categoryLabel(only) : title}`} /></div>
         </section>
       )}
 
       {error && !list.data ? <ErrorNote>{error}</ErrorNote>
         : !list.data || !plan.data ? <SkeletonList rows={6} />
-        : sections.every((s) => s.rows.length === 0) ? <p className="py-10 text-center text-sm text-slate-400">No hay movimientos de esta categoría.</p>
+        : sections.every((s) => s.rows.length === 0) ? <p className="py-10 text-center text-sm text-slate-400">No hay movimientos.</p>
         : sections.map((s, i) => (
           <section key={s.start} data-cycle={s.start}>
             {i > 0 && (

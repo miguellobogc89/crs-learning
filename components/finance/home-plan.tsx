@@ -6,7 +6,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowUp, Check, ChevronRight, Minus } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { categoryLabel } from "@/lib/finance/categories";
 import { cumulative, deviationOf, groupSummary, isGradual, type GroupCycleTotals } from "@/lib/finance/plan";
 import { card, eur, flat } from "@/components/trading/format";
@@ -33,12 +33,6 @@ const scroller = () => document.querySelector<HTMLElement>("main");
 // ── Vista sin desplegar: a qué ritmo vas en cada grupo, en palabras y sin cifras ─────────────────
 
 type Pace = "bien" | "alto" | "pasado" | "sin_datos";
-const PACE_MARK: Record<Pace, { icon: typeof Check; bg: string; fg: string }> = {
-  bien: { icon: Check, bg: "bg-emerald-100", fg: "text-emerald-700" },
-  alto: { icon: ArrowUp, bg: "bg-amber-100", fg: "text-amber-700" },
-  pasado: { icon: AlertTriangle, bg: "bg-rose-100", fg: "text-rose-700" },
-  sin_datos: { icon: Minus, bg: "bg-slate-100", fg: "text-slate-400" },
-};
 const PACE_ORDER: Record<Pace, number> = { pasado: 0, alto: 1, bien: 2, sin_datos: 3 };
 
 /**
@@ -108,8 +102,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
     : good === judged.length ? (judged.length === 1 ? "Vas a buen ritmo" : `Vas a buen ritmo en tus ${judged.length} grupos`)
     : `Vas a buen ritmo en ${good} de tus ${judged.length} grupos`;
   const remember = () => { try { window.sessionStorage.setItem(SCROLL_KEY, String(scroller()?.scrollTop ?? 0)); } catch { /* ignorar */ } };
-  const toGroup = (id: string) => { remember(); try { window.sessionStorage.setItem("crs-finance:plan-open", id); } catch { /* ignorar */ } router.push("/finanzas/plan"); };
-  const toCategory = (c: string) => { remember(); router.push(`/finanzas/categoria/${c}`); };
+  const toSheet = (id: string) => { remember(); router.push(`/finanzas/grupo/${id}`); };
 
   return (
     <div className="pb-2">
@@ -118,9 +111,10 @@ function GoalsGlance({ plan }: { plan: Plan }) {
 
       <ul className="mt-3 divide-y divide-slate-100">
         {rows.map(({ g, s, pace, text }) => {
-          const mark = PACE_MARK[pace];
-          const Mark = mark.icon;
           const isOpen = open === g.id;
+          // Lo que sueles gastar en el grupo en un mes entero (media de los 3 ciclos cerrados), como referencia.
+          const closed = cycles.slice(1, 4);
+          const avgMonth = closed.length ? Math.round(closed.reduce((t, c) => t + g.categories.reduce((u, k) => u + (c.full[k] ?? 0), 0), 0) / closed.length) : 0;
           const cats = g.categories
             .map((c) => {
               const now = cur?.atDay[c] ?? 0;
@@ -138,15 +132,17 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                   <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
                   <span className="block truncate text-xs text-slate-500">{text}</span>
                 </span>
-                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${mark.bg}`} aria-hidden="true">
-                  <Mark className={`h-4 w-4 ${mark.fg}`} strokeWidth={2.5} />
+                {/* La cifra hace de semáforo: rojo si te has pasado, ámbar si vas rápido, neutro si vas bien. */}
+                <span className="shrink-0 text-right">
+                  <b className={`amount block text-[15px] font-semibold tabular-nums ${pace === "pasado" ? "text-rose-700" : pace === "alto" ? "text-amber-700" : "text-slate-900"}`}>{eur(s.now, 0)}</b>
+                  <span className="amount block text-[11px] tabular-nums text-slate-500">{s.goal !== null ? `de ${eur(s.goal, 0)}` : avgMonth > 0 ? `~${eur(avgMonth, 0)} al mes` : ""}</span>
                 </span>
               </button>
 
               <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
                 <div className="overflow-hidden">
                   <div className="mb-3 ml-12">
-                    <button type="button" onClick={() => toGroup(g.id)}
+                    <button type="button" onClick={() => toSheet(g.id)} aria-label={`Ver todos los movimientos de ${g.name}`}
                       className="flex w-full items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5 text-left hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
                       <span className="min-w-0 flex-1">
                         <span className="block text-xs text-slate-500">Gastado este mes</span>
@@ -160,7 +156,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                     <ul className="mt-1">
                       {cats.map(({ c, now, d }) => (
                         <li key={c}>
-                          <button type="button" onClick={() => toCategory(c)} className="flex w-full items-center gap-3 py-2.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
+                          <div className="flex w-full items-center gap-3 py-2.5">
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm text-slate-800">{categoryLabel(c)}</span>
                               {d && (
@@ -170,8 +166,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                               )}
                             </span>
                             <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(now, 2)}</span>
-                            <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
-                          </button>
+                          </div>
                         </li>
                       ))}
                       {!cats.length && <li className="py-2.5 text-sm text-slate-500">Sin gastos este mes.</li>}
