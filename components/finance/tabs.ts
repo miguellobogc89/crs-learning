@@ -1,9 +1,9 @@
 // components/finance/tabs.ts
 // Secciones de CRS Finance (panel lateral y rutas /finanzas/<clave>).
 import type { ComponentType } from "react";
-import { FileText, Home, Landmark, ListOrdered, MessageCircle, PiggyBank, Plug, Settings2 } from "lucide-react";
+import { FileText, FlaskConical, Home, Landmark, ListOrdered, MessageCircle, PiggyBank, Plug, Settings2 } from "lucide-react";
 
-export const FINANCE_TAB_KEYS = ["inicio", "movimientos", "plan", "copiloto", "documentos", "cuentas", "conexiones", "ajustes"] as const;
+export const FINANCE_TAB_KEYS = ["inicio", "movimientos", "plan", "copiloto", "documentos", "cuentas", "conexiones", "ajustes", "laboratorio"] as const;
 export type FinanceTab = (typeof FINANCE_TAB_KEYS)[number];
 type TabDef = { key: FinanceTab; label: string; icon: ComponentType<{ className?: string; strokeWidth?: number }>; description: string };
 
@@ -31,7 +31,9 @@ export const FINANCE_SECTIONS: { title: string | null; items: TabDef[] }[] = [
 export const FINANCE_TABS: TabDef[] = FINANCE_SECTIONS.flatMap((s) => s.items);
 
 /** Secciones que existen pero no salen en ningún menú (se entra por la dirección). */
-export const HIDDEN_TABS: TabDef[] = [];
+export const HIDDEN_TABS: TabDef[] = [
+  { key: "laboratorio", label: "Laboratorio", icon: FlaskConical, description: "Pruebas de pantallas antes de llevarlas a la app." },
+];
 export const tabDefOf = (key: string) => FINANCE_TABS.find((t) => t.key === key) ?? HIDDEN_TABS.find((t) => t.key === key) ?? FINANCE_TABS[0];
 export const isFinanceTab = (v: string): v is FinanceTab => (FINANCE_TAB_KEYS as readonly string[]).includes(v);
 
@@ -43,4 +45,4 @@ export const isFittedTab = (tab: string) => (FITTED_TABS as readonly string[]).i
 export const BOTTOM_TABS: FinanceTab[] = ["inicio", "movimientos", "plan", "copiloto", "documentos"];
 
 /** Direcciones antiguas que ahora viven en otra sección. */
-export const LEGACY_TABS: Record<string, FinanceTab> = { presupuesto: "plan", prevision: "plan", configurar: "plan", laboratorio: "plan" };
+export const LEGACY_TABS: Record<string, FinanceTab> = { presupuesto: "plan", prevision: "plan", configurar: "plan" };

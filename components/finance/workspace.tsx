@@ -6,6 +6,7 @@ import { ConnectionsPanel } from "./connections-panel";
 import { DocumentsPanel } from "./documents-panel";
 import { CopilotPanel } from "./copilot-panel";
 import { HomePanel } from "./home-panel";
+import { LabHome } from "./lab-home";
 import { MovementsPanel } from "./movements-panel";
 import { PlanPanel } from "./plan-panel";
 import { SettingsPanel } from "./settings-panel";
@@ -20,6 +21,7 @@ export function FinanceWorkspace({ tab }: { tab: FinanceTab }) {
     : tab === "documentos" ? <DocumentsPanel />
     : tab === "cuentas" ? <AccountsPanel />
     : tab === "conexiones" ? <ConnectionsPanel />
+    : tab === "laboratorio" ? <LabHome />
     : <SettingsPanel />;
   const fitted = isFittedTab(tab);
   return (
