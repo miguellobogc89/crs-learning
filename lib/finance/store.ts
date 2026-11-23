@@ -69,7 +69,7 @@ export async function getForecastItems(userId: string): Promise<ForecastItem[]> 
   return rows.map((r) => ({ id: r.id, title: r.title, kind: r.kind === "ingreso" ? "ingreso" : "gasto",
     amount: Number(r.amount), startDate: r.start_date.toISOString().slice(0, 10),
     endDate: r.end_date?.toISOString().slice(0, 10) ?? null, source: r.source, sourceKey: r.source_key,
-    frequency: forecastPlanFrequency(r.source_key) }));
+    frequency: forecastPlanFrequency(r.source_key), category: r.category, matchedTxId: r.matched_tx_id }));
 }
 
 export async function getRules(userId: string): Promise<Rule[]> {

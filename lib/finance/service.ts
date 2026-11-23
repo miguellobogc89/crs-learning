@@ -6,7 +6,7 @@ import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal
 import {
   addDays, affordability, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, forecastCycleWeeks, insuranceForecastCandidates, isForecastOverride, liquiditySeries, merchantKey, round2, median,
   expenseHistoryByCycle, normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
-  type Alert, type CycleRule, type CycleSummary, type Tx,
+  type Alert, type CycleRule, type CycleSummary, type ForecastItem, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, getWishlist, loadTxs } from "./store";
 import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, goalStatus, isPackageCharge, subKey, type GroupCycleTotals, planInsights, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
@@ -301,6 +301,8 @@ export async function listTransactions(userId: string, opts: { all?: boolean } =
     accounts,
     count: rows.length,
     bucketLabels,
+    /** Gastos previstos sin cumplir: arriba de la lista, en azul. */
+    planned: plannedOf(ctx.forecastItems),
     items: rows.slice(0, 5000).map((t) => {
       const acc = accById.get(t.accountId);
       return {
@@ -527,6 +529,13 @@ const DEFAULT_PLAN_GROUPS: { name: string; categories: string[] }[] = [
  * ciclo y del ciclo anterior hasta el mismo día del ciclo. Solo gastos reales de cuentas incluidas (sin traspasos
  * ni aportaciones a ahorro). Si aún no tiene grupos y ya hay movimientos, se crean los de inicio.
  */
+/** Gastos previstos («Añadir gasto» con fecha) que aún no se han cumplido con un cargo real. */
+export type Planned = { id: string; title: string; amount: number; date: string; category: string };
+const plannedOf = (items: ForecastItem[]): Planned[] => items
+  .filter((i) => i.source === "previsto" && i.kind === "gasto" && i.category && !i.matchedTxId)
+  .map((i) => ({ id: i.id, title: i.title, amount: i.amount, date: i.startDate, category: i.category as string }))
+  .sort((a, b) => b.date.localeCompare(a.date));
+
 /** Para medir el gasto, un movimiento cuenta en su fecha imputada (si la tiene), no en la del cargo. */
 const spendDated = <T extends { date: string; imputedDate?: string | null }>(t: T): T => (t.imputedDate ? { ...t, date: t.imputedDate } : t);
 
@@ -609,6 +618,7 @@ export async function planView(userId: string) {
     history,
     daily,
     extras: extras.sort((a, b) => b.amount - a.amount),
+    planned: plannedOf(ctx.forecastItems),
     budget: { income, incomeNow, othersGoal: ctx.settings.othersGoal, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
     previous: hasPrevious ? { start: prevCycle.start, end: prevTo } : null,
     /** Ciclos del último par de años (el actual primero), para el historial de una categoría. */

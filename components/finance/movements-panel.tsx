@@ -10,6 +10,7 @@ import { SELECTABLE_CATEGORIES, KINDS, KIND_LABEL, categoryOf, type Kind } from 
 import { eur, panel, th } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { MovementDetailSheet } from "./movement-detail";
+import { PlannedList } from "./planned";
 import { Amount, CategoryPill, MovementRowButton, categoriesFor, isReview, label, type Item, type List } from "./movement-edit";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { errorText, fapi, refreshFinance, shortDay, useFinance } from "./api";
@@ -473,6 +474,10 @@ export function MovementsPanel() {
           <p className="p-10 text-center text-sm text-slate-500">{q ? "Nada coincide con la búsqueda." : status === "revisar" ? "No hay nada por revisar. 👌" : filters ? "Ningún movimiento cumple los filtros." : "No hay movimientos en este periodo."}</p>
         ) : (
           <div className={`min-h-0 flex-1 overflow-auto ${loading ? "opacity-70" : ""}`}>
+            {/* Gastos previstos, en azul y arriba (los de la categoría filtrada, si hay filtro) */}
+            {status === "all" && !q && (kind === "all" || kind === "gasto") && (
+              <PlannedList className="px-3 pb-2 md:px-4" items={(data.planned ?? []).filter((x) => category === "all" || x.category === category)} />
+            )}
             {/* Ordenador: tabla */}
             <table className="hidden w-full text-sm md:table">
               <thead className="sticky top-0 z-10 bg-white shadow-[0_1px_0_#f1f5f9]">

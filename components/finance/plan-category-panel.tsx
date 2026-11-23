@@ -18,6 +18,7 @@ import { useFinance } from "./api";
 import { MovementRowButton, label, type Item, type List } from "./movement-edit";
 import { MovementDetailSheet } from "./movement-detail";
 import { TrendChart, type TrendPoint } from "./trend-chart";
+import { PlannedList } from "./planned";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Cycle = Plan["cycles"][number];
@@ -204,6 +205,8 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
           <div className="mt-1"><TrendChart points={trend} title={`Gasto en ${only ? categoryLabel(only) : title}`} /></div>
         </section>
       )}
+
+      {!extrasOnly && plan.data && <PlannedList className="pt-1" items={(plan.data.planned ?? []).filter((x) => cats.includes(x.category))} />}
 
       {error && !list.data ? <ErrorNote>{error}</ErrorNote>
         : !list.data || !plan.data ? <SkeletonList rows={6} />

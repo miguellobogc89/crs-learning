@@ -700,7 +700,9 @@ export type Projection = {
 
 export type ForecastFrequency = "puntual" | "semanal" | "mensual" | "trimestral" | "anual";
 export type ForecastItem = { id: string; title: string; kind: "ingreso" | "gasto"; amount: number; startDate: string; endDate: string | null;
-  source: string; sourceKey: string | null; frequency?: ForecastFrequency };
+  source: string; sourceKey: string | null; frequency?: ForecastFrequency;
+  /** Gasto previsto: su categoría y, si ya llegó el cargo, el movimiento con el que se cumplió. */
+  category?: string | null; matchedTxId?: string | null };
 
 /** La periodicidad de los planes manuales se codifica en su clave sin modificar el esquema SQL. */
 export function forecastPlanFrequency(sourceKey: string | null): ForecastFrequency {

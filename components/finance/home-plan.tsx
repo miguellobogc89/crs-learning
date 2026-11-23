@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import { categoryLabel } from "@/lib/finance/categories";
 import { cumulative, deviationOf, groupSummary, isGradual, type GroupCycleTotals } from "@/lib/finance/plan";
 import { card, eur, flat } from "@/components/trading/format";
@@ -15,6 +15,7 @@ import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { useFinance } from "./api";
 import { CategoryIcon } from "./category-icon";
+import { AddExpenseSheet, type Planned } from "./planned";
 
 type Plan = {
   hasData: boolean;
@@ -26,6 +27,7 @@ type Plan = {
   extras?: { date: string; label: string; amount: number; category: string }[];
   budget?: { income: number | null; savingsGoal: number | null; limit: number | null };
   totals?: { extrasNow?: Record<string, number> };
+  planned?: Planned[];
 };
 const OPEN_KEY = "crs-finance:home-open";
 const SCROLL_KEY = "crs-finance:home-scroll";
@@ -58,6 +60,7 @@ const sumCats = (r: Record<string, number> | undefined, cats: string[]) => cats.
 
 function GoalsGlance({ plan }: { plan: Plan }) {
   const router = useRouter();
+  const [adding, setAdding] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   // Al volver del detalle, todo queda como se dejó: lo desplegado y el scroll (en esta sesión).
@@ -112,6 +115,8 @@ function GoalsGlance({ plan }: { plan: Plan }) {
 
       <ul className="mt-3 divide-y divide-slate-100">
         {rows.map(({ g, s, pace, text }) => {
+          const plannedHere = (plan.planned ?? []).filter((x) => g.categories.includes(x.category));
+          const nPlanned = plannedHere.length;
           const single = g.categories.length <= 1;
           const isOpen = !single && open === g.id;
           // Lo que sueles gastar en el grupo en un mes entero (media de los 3 ciclos cerrados), como referencia.
@@ -133,7 +138,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                 <CategoryIcon category={g.categories[0]} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
-                  <span className="block truncate text-xs text-slate-500">{text}</span>
+                  <span className="block truncate text-xs text-slate-500">{text}{nPlanned > 0 && <span className="text-blue-700"> · {nPlanned} {nPlanned === 1 ? "previsto" : "previstos"}</span>}</span>
                 </span>
                 {/* La cifra hace de semáforo: rojo si te has pasado, ámbar si vas rápido, neutro si vas bien. */}
                 <span className="shrink-0 text-right">
@@ -150,7 +155,10 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                         <li key={c}>
                           <div className="flex w-full items-center gap-3 py-2.5">
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm text-slate-800">{categoryLabel(c)}</span>
+                              <span className="block truncate text-sm text-slate-800">
+                                {categoryLabel(c)}
+                                {(() => { const n = plannedHere.filter((x) => x.category === c).length; return n > 0 ? <span className="text-xs text-blue-700"> · {n} {n === 1 ? "previsto" : "previstos"}</span> : null; })()}
+                              </span>
                               {d && (
                                 <span className={`block truncate text-xs ${d.state === "estable" ? "text-slate-500" : d.state === "mejor" ? "text-emerald-700" : "text-amber-700"}`}>
                                   {d.state === "estable" ? "Igual que el mes pasado" : d.state === "mejor" ? "Menos que el mes pasado" : "Más que el mes pasado"}
@@ -174,6 +182,10 @@ function GoalsGlance({ plan }: { plan: Plan }) {
           );
         })}
       </ul>
+      <button type="button" onClick={() => setAdding(true)} className="mt-1 inline-flex items-center gap-1.5 py-3 text-[15px] font-medium text-blue-600">
+        <Plus className="h-5 w-5" /> Añadir gasto
+      </button>
+      <AddExpenseSheet open={adding} onClose={() => setAdding(false)} />
     </div>
   );
 }

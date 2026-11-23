@@ -2758,6 +2758,10 @@ model finance_forecast_items {
   end_date    DateTime? @db.Date
   source      String   @default("manual")
   source_key  String?
+  /// Gasto previsto («Añadir gasto» con fecha): su categoría, para contar en su grupo.
+  category    String?
+  /// Movimiento real con el que se cumplió (al llegar el cargo del banco deja de contar como previsto).
+  matched_tx_id String? @db.Uuid
   created_at  DateTime @default(now()) @db.Timestamptz(6)
 
   @@unique([user_id, source_key])
