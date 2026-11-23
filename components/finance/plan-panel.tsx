@@ -7,7 +7,7 @@
 // Los grupos se guardan en finance_plan_groups (planView y acciones plan/group* de la API).
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, FolderPlus, Landmark, Plus, Search, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, FolderPlus, Landmark, Plus, Search, Target, X } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { planView } from "@/lib/finance/service";
 import { EXPENSE_CATEGORIES, categoryLabel } from "@/lib/finance/categories";
@@ -125,12 +125,22 @@ function AddCategoriesSheet({ target, groups, allKeys, cur, onClose, onConfirm }
 }
 
 /** «Nuevo grupo»: nombre y, si se quiere, un objetivo en euros por ciclo. */
-function NewGroupSheet({ open, onClose, onCreate }: { open: boolean; onClose: () => void; onCreate: (name: string, goal: number | null) => void }) {
+/** Crear un grupo o, si se pasa `editing`, cambiar su nombre y su objetivo (y borrarlo). */
+function NewGroupSheet({ open, onClose, onCreate, editing = null, onDelete }: {
+  open: boolean; onClose: () => void; onCreate: (name: string, goal: number | null) => void;
+  editing?: { name: string; goal: number | null } | null; onDelete?: () => void;
+}) {
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const startY = useRef<number | null>(null);
-  useEffect(() => { if (open) { setName(""); setGoal(""); setErr(null); } }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    setName(editing?.name ?? "");
+    setGoal(editing?.goal ? String(editing.goal).replace(".", ",") : "");
+    setErr(null); setConfirmDelete(false);
+  }, [open, editing]);
   const inset = useKeyboardInset(open);
   const submit = () => {
     if (!name.trim()) { setErr("Ponle un nombre al grupo"); return; }
@@ -149,8 +159,8 @@ function NewGroupSheet({ open, onClose, onCreate }: { open: boolean; onClose: ()
           onTouchCancel={() => { startY.current = null; }}
         >
           <div aria-hidden="true" className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-slate-300" />
-          <SheetTitle className="text-lg font-semibold text-slate-900">Nuevo grupo</SheetTitle>
-          <SheetDescription className="mt-0.5 text-xs text-slate-500">Después eliges qué categorías entran en él.</SheetDescription>
+          <SheetTitle className="text-lg font-semibold text-slate-900">{editing ? "Editar grupo" : "Nuevo grupo"}</SheetTitle>
+          <SheetDescription className="mt-0.5 text-xs text-slate-500">{editing ? "El objetivo es lo máximo que quieres gastar en el grupo cada mes." : "Después eliges qué categorías entran en él."}</SheetDescription>
         </div>
         <form className="space-y-4 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4" onSubmit={(e) => { e.preventDefault(); submit(); }}>
           <label className="block">
@@ -158,14 +168,20 @@ function NewGroupSheet({ open, onClose, onCreate }: { open: boolean; onClose: ()
             <input value={name} onChange={(e) => { setName(e.target.value); setErr(null); }} placeholder="Tabaco, Gasolina, Gimnasio…" maxLength={40} className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-slate-800">Objetivo por ciclo <span className="font-normal text-slate-400">(opcional)</span></span>
+            <span className="mb-1.5 block text-sm font-medium text-slate-800">Objetivo al mes <span className="font-normal text-slate-400">(opcional)</span></span>
             <span className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
               <input inputMode="decimal" value={goal} onChange={(e) => { setGoal(e.target.value); setErr(null); }} placeholder="0,00" className="min-w-0 flex-1 bg-transparent py-3 text-base tabular-nums text-slate-900 outline-none" />
               <span className="text-base text-slate-400">€</span>
             </span>
           </label>
           {err && <p className="text-sm text-red-600">{err}</p>}
-          <button type="submit" className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white active:bg-blue-700">Crear y elegir categorías</button>
+          <button type="submit" className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white active:bg-blue-700">{editing ? "Guardar" : "Crear y elegir categorías"}</button>
+          {editing && onDelete && (
+            <button type="button" onClick={() => (confirmDelete ? onDelete() : setConfirmDelete(true))}
+              className={`w-full rounded-xl py-3 text-sm font-semibold ${confirmDelete ? "bg-red-600 text-white" : "text-red-600 active:bg-red-50"}`}>
+              {confirmDelete ? "Sí, borrar el grupo (sus categorías quedan sin grupo)" : "Borrar grupo"}
+            </button>
+          )}
         </form>
       </SheetContent>
     </Sheet>
@@ -178,6 +194,7 @@ export function PlanPanel() {
   const [open, setOpen] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Group | null>(null);
   const [adding, setAdding] = useState<Group | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -254,6 +271,17 @@ export function PlanPanel() {
     setOpen(g.id);
     setAdding(g);
   };
+  const updateGroup = (g: Group, name: string, goal: number | null) => {
+    setEditing(null);
+    setGroups((gs) => gs.map((x) => (x.id === g.id ? { ...x, name, goal } : x)));
+    void save("plan/group", { id: g.id, name, goal });
+  };
+  const deleteGroup = (g: Group) => {
+    setEditing(null);
+    setOpen(null);
+    setGroups((gs) => gs.filter((x) => x.id !== g.id));
+    void save("plan/group/delete", { id: g.id });
+  };
   const removeCat = (id: string, k: string) => {
     setGroups((gs) => gs.map((x) => (x.id === id ? { ...x, categories: x.categories.filter((c) => c !== k) } : x)));
     void save("plan/group/categories", { id, remove: [k] });
@@ -326,9 +354,14 @@ export function PlanPanel() {
                     {sorted.length === 0 && <li className="py-2.5 text-sm text-slate-400">{g.editable ? "Sin categorías." : "Todo tu gasto está en algún grupo."}</li>}
                   </ul>
                   {g.editable && (
-                    <button type="button" onClick={() => setAdding(groups.find((x) => x.id === g.id) ?? null)} className="mt-2 inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-blue-600">
-                      <Plus className="h-4 w-4" /> Añadir categoría
-                    </button>
+                    <div className="mt-2 flex flex-wrap gap-x-5">
+                      <button type="button" onClick={() => setAdding(groups.find((x) => x.id === g.id) ?? null)} className="inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-blue-600">
+                        <Plus className="h-4 w-4" /> Añadir categoría
+                      </button>
+                      <button type="button" onClick={() => setEditing(groups.find((x) => x.id === g.id) ?? null)} className="inline-flex items-center gap-1.5 py-1.5 text-sm font-medium text-blue-600">
+                        <Target className="h-4 w-4" /> {g.goal ? "Cambiar objetivo o nombre" : "Poner objetivo"}
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -337,6 +370,8 @@ export function PlanPanel() {
         })}
       </ul>
       <NewGroupSheet open={creating} onClose={() => setCreating(false)} onCreate={(name, goal) => void createGroup(name, goal)} />
+      <NewGroupSheet open={!!editing} editing={editing} onClose={() => setEditing(null)}
+        onCreate={(name, goal) => editing && updateGroup(editing, name, goal)} onDelete={() => editing && deleteGroup(editing)} />
       <AddCategoriesSheet target={adding} groups={groups} allKeys={ALL_KEYS} cur={cur} onClose={() => setAdding(null)} onConfirm={(keys) => adding && addCats(adding.id, keys)} />
     </div>
   );
