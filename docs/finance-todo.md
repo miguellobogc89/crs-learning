@@ -104,3 +104,5 @@ Sustituye a los paquetes y al laboratorio. Plan = lista de **grupos** (conjuntos
   enlace a Mi plan): no gusta. Repensar después.
 - Marcar los extraordinarios en el icono de la fila del movimiento (no solo en el subtítulo, que si es largo no
   se ve).
+- En «Tus grupos» de Inicio, al tocar una categoría del desplegable, abrir la hoja del grupo ya filtrada por esa
+  categoría (pill marcada).
