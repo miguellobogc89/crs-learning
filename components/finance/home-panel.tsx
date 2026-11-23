@@ -5,7 +5,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowRight, BarChart3, BellRing, ChevronLeft, ChevronRight, Eye, EyeOff, Info, Landmark, PiggyBank, Sparkles, TrendingUp, Wallet, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, BarChart3, BellRing, ChevronLeft, ChevronRight, Eye, EyeOff, Info, Landmark, PiggyBank, TrendingUp, Wallet, X } from "lucide-react";
 import type { overview } from "@/lib/finance/service";
 import { categoryLabel } from "@/lib/finance/categories";
 import { card, eur, flat, primary } from "@/components/trading/format";
@@ -161,7 +161,7 @@ export function HomePanel() {
       {/* Lo pendiente, arriba y con acción directa */}
       {v.isCurrent && review > 0 && (
         <Link href="/finanzas/movimientos?revisar=1" className="hidden items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-900 hover:bg-blue-50 sm:flex">
-          <Sparkles className="h-4 w-4 shrink-0 text-blue-600" />
+          <Info className="h-4 w-4 shrink-0 text-blue-600" />
           <span className="flex-1"><b>{review}</b> {review === 1 ? "movimiento" : "movimientos"} sin entender del todo: revísalos y la app aprende.</span>
           <ArrowRight className="h-4 w-4 shrink-0" />
         </Link>

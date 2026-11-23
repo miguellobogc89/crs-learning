@@ -2,7 +2,7 @@
 // Copiloto: conversación con la IA sobre tus datos reales. Las cifras salen de los cálculos de la app.
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ArrowUp, Loader2, RotateCcw, Sparkles } from "lucide-react";
+import { ArrowUp, Loader2, MessageCircle, RotateCcw } from "lucide-react";
 import { panel } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { errorText, fapi, refreshFinance, useFinance } from "./api";
@@ -64,7 +64,7 @@ export function CopilotPanel() {
           {error && !data && <ErrorNote>{error}</ErrorNote>}
           {messages.length === 0 && !busy ? (
             <div className="mx-auto max-w-xl py-8 text-center">
-              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><Sparkles className="h-6 w-6" /></span>
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><MessageCircle className="h-6 w-6" /></span>
               <h2 className="mt-4 text-lg font-semibold text-slate-900">Pregúntame por tu dinero</h2>
               <p className="mt-1 text-sm text-slate-500">Respondo con tus movimientos reales y te enseño el cálculo. Si algo no cuadra, te lo diré.</p>
               <div className="mt-5 flex flex-wrap justify-center gap-2">

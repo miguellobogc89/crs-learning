@@ -4,7 +4,7 @@
 // vez, y al corregir se puede aplicar a los parecidos: la app crea una regla y aprende.
 import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { ArrowDownUp, ArrowLeftRight, CheckSquare2, ChevronDown, Filter, ListFilter, Loader2, Search, Sparkles, X } from "lucide-react";
+import { ArrowDownUp, ArrowLeftRight, CheckSquare2, ChevronDown, Filter, ListFilter, Loader2, RefreshCw, Search, X } from "lucide-react";
 import type { listTransactions } from "@/lib/finance/service";
 import { SELECTABLE_CATEGORIES, KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur, panel, th } from "@/components/trading/format";
@@ -114,7 +114,7 @@ function QuickEdit({ t, onMore, onDone }: { t: Item; onMore: () => void; onDone:
           </>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onMore}><Sparkles className="mr-2 h-4 w-4" />Más opciones y aplicar a parecidos…</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onMore}><ListFilter className="mr-2 h-4 w-4" />Más opciones y aplicar a parecidos…</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -460,7 +460,7 @@ export function MovementsPanel() {
           {filters > 0 && <button type="button" onClick={() => { setStatus("all"); setKind("all"); setCategory("all"); }} className="text-xs font-medium text-blue-700 hover:underline">Quitar filtros</button>}
           {status === "revisar" && rows.length > 0 && (
             <button type="button" onClick={() => void reclassify()} disabled={reclassifying} className="ml-auto inline-flex items-center gap-1.5 text-sm font-medium text-blue-700 hover:underline disabled:opacity-50">
-              {reclassifying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Volver a intentarlo con la IA
+              {reclassifying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Volver a intentarlo con la IA
             </button>
           )}
         </div>

@@ -6,7 +6,7 @@
 // (copia lo que tenga el movimiento en ese momento, también a los que lleguen); si no lo pulsas, solo cambia este. «Extraordinario» y la nota nunca se copian. Es una capa sobre la lista, así que
 // al volver la lista conserva filtros y scroll. Lo usan Movimientos (móvil y escritorio) y Plan.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Check, ChevronRight, Loader2, Pencil, Search, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Loader2, Pencil, Search } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
@@ -151,8 +151,12 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   // Al abrir otro movimiento se empieza de cero y se consulta cuántos parecidos tiene y cuántos son distintos.
   const [checkedAt, setCheckedAt] = useState(0);
   const recheck = () => setCheckedAt((n) => n + 1);
+  // Cómo estaba al abrirlo: el botón de parecidos solo sale si lo has cambiado respecto a esto.
+  const [opened, setOpened] = useState<Values | null>(null);
   useEffect(() => {
     setOverride({}); setSheet(null); setEditingName(false); setSimilar(null); setToast(null); setErr(null);
+    setOpened(item ? valuesOf(item) : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
   useEffect(() => {
     if (!id) return;
@@ -176,6 +180,7 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   const v: Values = { ...valuesOf(item), ...override };
   const shownName = v.alias || item.counterparty || item.description;
   const spend = v.kind === "gasto" || v.kind === "devolucion";
+  const canExtra = spend || v.kind === "ingreso" || v.kind === "regalo";
 
   /** Guarda en este movimiento (al momento, con «Deshacer») y, si procede, lo apunta para los parecidos. */
   const save = async (patch: Partial<Values>, field: Field | null, text = "Guardado") => {
@@ -239,7 +244,10 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   const fieldsToApply: Field[] = ["category", ...(v.alias ? ["alias" as const] : []), ...(v.subcategory ? ["subcategory" as const] : [])];
   const applyText = fieldsToApply.map((f) => FIELD_LABEL[f]);
   // Solo si hay algo que replicar: parecidos que todavía no coinciden con este movimiento.
-  const showApply = !!similar && similar.differ > 0;
+  // y solo cuando tú has cambiado algo replicable en este movimiento.
+  const base = opened ?? valuesOf(item);
+  const edited = v.category !== base.category || v.kind !== base.kind || (v.alias ?? null) !== base.alias || (v.subcategory ?? null) !== base.subcategory;
+  const showApply = edited && !!similar && similar.differ > 0;
 
   return (
     <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -294,20 +302,6 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
                 <span className="w-9 shrink-0 text-center text-xs text-slate-400">Sub</span>
                 <span className={`min-w-0 flex-1 truncate text-[15px] ${v.subcategory ? "text-slate-800" : "text-slate-400"}`}>{v.subcategory || "Añadir subcategoría"}</span>
               </Row>
-              {spend && (
-                <li>
-                  <label className="flex cursor-pointer items-center gap-3 py-3.5">
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] text-slate-800">Extraordinario</span>
-                      <span className="block text-xs text-slate-400">Puntual: cuenta en tu gasto, pero no en tus medias ni en la previsión.</span>
-                    </span>
-                    <input type="checkbox" role="switch" checked={v.extraordinary} onChange={(e) => void save({ extraordinary: e.target.checked }, null, e.target.checked ? "Marcado como extraordinario" : "Ya no es extraordinario")} className="peer sr-only" />
-                    <span aria-hidden="true" className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${v.extraordinary ? "bg-amber-500" : "bg-slate-200"}`}>
-                      <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${v.extraordinary ? "left-[22px]" : "left-0.5"}`} />
-                    </span>
-                  </label>
-                </li>
-              )}
               <Row onClick={() => setSheet("note")}>
                 <span className="w-9 shrink-0 text-center text-xs text-slate-400">Nota</span>
                 <span className={`min-w-0 flex-1 whitespace-pre-line break-words text-[15px] ${v.note ? "text-slate-800" : "text-slate-400"}`}>{v.note || "Añadir una nota"}</span>
@@ -316,6 +310,20 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
                 <span className="w-9 shrink-0 text-center text-xs text-slate-400">Tipo</span>
                 <span className="min-w-0 flex-1 text-[15px] text-slate-800">{KIND_LABEL[v.kind]}</span>
               </Row>
+              {canExtra && (
+                <li>
+                  <label className="flex cursor-pointer items-center gap-3 py-3.5">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15px] text-slate-800">Extraordinario</span>
+                      <span className="block text-xs text-slate-400">{spend ? "Gasto puntual: cuenta en tu gasto, pero no en tus medias ni en la previsión." : "Ingreso puntual (un extra, una venta…): cuenta en tus ingresos, pero no como ingreso habitual."}</span>
+                    </span>
+                    <input type="checkbox" role="switch" checked={v.extraordinary} onChange={(e) => void save({ extraordinary: e.target.checked }, null, e.target.checked ? "Marcado como extraordinario" : "Ya no es extraordinario")} className="peer sr-only" />
+                    <span aria-hidden="true" className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${v.extraordinary ? "bg-amber-500" : "bg-slate-200"}`}>
+                      <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${v.extraordinary ? "left-[22px]" : "left-0.5"}`} />
+                    </span>
+                  </label>
+                </li>
+              )}
             </ul>
             {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
           </div>
@@ -323,7 +331,7 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
           {showApply && (
             <div className="shrink-0 border-t border-slate-100 bg-white px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
               <button type="button" onClick={() => void applySimilar()} disabled={busy} className="flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-blue-600 px-4 text-sm font-semibold text-blue-700 active:bg-blue-50 disabled:opacity-60">
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 shrink-0" />}
+                {busy && <Loader2 className="h-4 w-4 animate-spin" />}
                 <span className="truncate">Aplicar a {similar.differ === 1 ? "1 movimiento más" : `${similar.differ} movimientos más`} de «{similar.label}»</span>
               </button>
               <p className="mt-1.5 text-center text-xs text-slate-400">Copia {applyText.length > 1 ? `${applyText.slice(0, -1).join(", ")} y ${applyText[applyText.length - 1]}` : applyText[0]}, también a los que lleguen.</p>
