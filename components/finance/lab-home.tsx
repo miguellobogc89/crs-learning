@@ -203,24 +203,49 @@ const PACE_ORDER: Record<Pace, number> = { pasado: 0, alto: 1, bien: 2, sin_dato
 
 /**
  * Ritmo de un grupo. Con objetivo: lo gastado frente a lo que sueles llevar a estas alturas de ese objetivo (así el
- * día 1 con 50 de 60 no sale en verde). Sin objetivo: frente a tu media de los 3 ciclos anteriores al mismo día.
+ * día 1 con 50 de 60 no sale en verde). Sin objetivo: frente al mes (ciclo) pasado hasta el mismo día.
  */
-function paceOf(s: ReturnType<typeof groupSummary>): { pace: Pace; text: string } {
-  if (s.now <= 0) return { pace: "bien", text: "Sin gastos este ciclo" };
+function paceOf(s: ReturnType<typeof groupSummary>, lastMonth: number | null): { pace: Pace; text: string } {
+  if (s.now <= 0) return { pace: "bien", text: "Sin gastos este mes" };
   if (s.goal !== null) {
     if (s.status === "superado") return { pace: "pasado", text: "Has superado tu objetivo" };
     if (s.status === "atento") return { pace: "alto", text: "Ritmo alto para tu objetivo" };
     return { pace: "bien", text: "Buen ritmo para tu objetivo" };
   }
-  if (s.avgAtDay === null) return { pace: "sin_datos", text: "Aún sin historial para comparar" };
-  const d = deviationOf(s.now, s.avgAtDay);
-  if (d.state === "peor") return { pace: "pasado", text: "Ritmo muy alto respecto a tu media" };
-  if (d.state === "algo_peor") return { pace: "alto", text: "Ritmo alto respecto a tu media" };
-  return { pace: "bien", text: "Buen ritmo respecto a tu media" };
+  if (lastMonth === null) return { pace: "sin_datos", text: "Aún sin mes anterior para comparar" };
+  const d = deviationOf(s.now, lastMonth);
+  if (d.state === "peor") return { pace: "pasado", text: "Ritmo muy alto respecto al mes pasado" };
+  if (d.state === "algo_peor") return { pace: "alto", text: "Ritmo alto respecto al mes pasado" };
+  return { pace: "bien", text: "Buen ritmo respecto al mes pasado" };
 }
 
+const sumCats = (r: Record<string, number> | undefined, cats: string[]) => cats.reduce((t, c) => t + (r?.[c] ?? 0), 0);
+
 function GoalsGlance({ plan }: { plan: Plan }) {
+  const router = useRouter();
+  const [open, setOpen] = useState<string | null>(null);
+  const [restored, setRestored] = useState(false);
+  // Al volver del detalle, todo queda como se dejó: lo desplegado y el scroll (en esta sesión).
+  useEffect(() => {
+    try { setOpen(window.sessionStorage.getItem(OPEN_KEY) || null); } catch { /* sin almacenamiento */ }
+    setRestored(true);
+  }, []);
+  useEffect(() => {
+    if (!restored) return;
+    try { if (open) window.sessionStorage.setItem(OPEN_KEY, open); else window.sessionStorage.removeItem(OPEN_KEY); } catch { /* ignorar */ }
+  }, [open, restored]);
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      const y = Number(window.sessionStorage.getItem(SCROLL_KEY));
+      if (y > 0) requestAnimationFrame(() => { const el = scroller(); if (el) el.scrollTop = y; });
+      window.sessionStorage.removeItem(SCROLL_KEY);
+    } catch { /* ignorar */ }
+  }, [restored]);
+
   const cycles = plan.history ?? [];
+  const cur = cycles[0];
+  const last = cycles[1] ?? null;
   const { day, totalDays } = plan.cycle;
   const daysLeft = totalDays - day;
 
@@ -232,28 +257,42 @@ function GoalsGlance({ plan }: { plan: Plan }) {
   );
 
   const rows = plan.groups.filter((g) => g.categories.length)
-    .map((g) => ({ g, ...paceOf(groupSummary({ categories: g.categories, cycles, goal: g.goal, day, totalDays })) }))
+    .map((g) => {
+      const s = groupSummary({ categories: g.categories, cycles, goal: g.goal, day, totalDays });
+      return { g, s, ...paceOf(s, last ? sumCats(last.atDay, g.categories) : null) };
+    })
     .sort((a, b) => PACE_ORDER[a.pace] - PACE_ORDER[b.pace]);
   const judged = rows.filter((r) => r.pace !== "sin_datos");
   const good = judged.filter((r) => r.pace === "bien").length;
   const headline = !judged.length ? "Aún no hay con qué compararte"
     : good === judged.length ? (judged.length === 1 ? "Vas a buen ritmo" : `Vas a buen ritmo en tus ${judged.length} grupos`)
     : `Vas a buen ritmo en ${good} de tus ${judged.length} grupos`;
-  const goTo = (id: string) => { try { window.sessionStorage.setItem("crs-finance:plan-open", id); } catch { /* ignorar */ } };
+  const remember = () => { try { window.sessionStorage.setItem(SCROLL_KEY, String(scroller()?.scrollTop ?? 0)); } catch { /* ignorar */ } };
+  const toGroup = (id: string) => { remember(); try { window.sessionStorage.setItem("crs-finance:plan-open", id); } catch { /* ignorar */ } router.push("/finanzas/plan"); };
+  const toCategory = (c: string) => { remember(); router.push(`/finanzas/plan/categoria/${c}`); };
 
   return (
-    <div className="pb-4">
+    <div className="pb-2">
       <p className="text-[22px] font-semibold leading-tight tracking-tight text-slate-900">{headline}</p>
       <p className="mt-1 text-sm text-slate-500">{daysLeft > 1 ? `Quedan ${daysLeft} días de ciclo` : daysLeft === 1 ? "Queda 1 día de ciclo" : "Último día del ciclo"}</p>
 
-      <ul className="mt-4 space-y-2.5">
-        {rows.map(({ g, pace, text }) => {
+      <ul className="mt-3 divide-y divide-slate-100">
+        {rows.map(({ g, s, pace, text }) => {
           const mark = PACE_MARK[pace];
           const Mark = mark.icon;
+          const isOpen = open === g.id;
+          const cats = g.categories
+            .map((c) => {
+              const now = cur?.atDay[c] ?? 0;
+              const prev = last ? last.atDay[c] ?? 0 : null;
+              return { c, now, prev, d: prev === null ? null : deviationOf(now, prev) };
+            })
+            .filter((x) => x.now > 0 || (x.prev ?? 0) > 0)
+            .sort((a, b) => b.now - a.now);
           return (
             <li key={g.id}>
-              <Link href="/finanzas/plan" onClick={() => goTo(g.id)} aria-label={`${g.name}: ${text}`}
-                className="flex h-16 items-center gap-3 rounded-2xl border border-slate-100 bg-white px-3.5 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500">
+              <button type="button" onClick={() => setOpen(isOpen ? null : g.id)} aria-expanded={isOpen}
+                className="flex w-full items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
                 <CategoryIcon category={g.categories[0]} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
@@ -262,7 +301,43 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                 <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${mark.bg}`} aria-hidden="true">
                   <Mark className={`h-4 w-4 ${mark.fg}`} strokeWidth={2.5} />
                 </span>
-              </Link>
+              </button>
+
+              <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                <div className="overflow-hidden">
+                  <div className="mb-3 ml-12">
+                    <button type="button" onClick={() => toGroup(g.id)}
+                      className="flex w-full items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5 text-left hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs text-slate-500">Gastado este mes</span>
+                        <span className="amount block text-lg font-semibold tabular-nums tracking-tight text-slate-900">
+                          {eur(s.now, 2)}{s.goal !== null && <span className="text-sm font-normal text-slate-500"> de {eur(s.goal, 0)}</span>}
+                        </span>
+                      </span>
+                      <ChevronRight className="h-5 w-5 shrink-0 text-slate-400" />
+                    </button>
+                    <ul className="mt-1">
+                      {cats.map(({ c, now, d }) => (
+                        <li key={c}>
+                          <button type="button" onClick={() => toCategory(c)} className="flex w-full items-center gap-3 py-2.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm text-slate-800">{categoryLabel(c)}</span>
+                              {d && (
+                                <span className={`block truncate text-xs ${d.state === "estable" ? "text-slate-500" : d.state === "mejor" ? "text-emerald-700" : "text-amber-700"}`}>
+                                  {d.state === "estable" ? "Igual que el mes pasado" : d.state === "mejor" ? "Menos que el mes pasado" : "Más que el mes pasado"}
+                                </span>
+                              )}
+                            </span>
+                            <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(now, 2)}</span>
+                            <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+                          </button>
+                        </li>
+                      ))}
+                      {!cats.length && <li className="py-2.5 text-sm text-slate-500">Sin gastos este mes.</li>}
+                    </ul>
+                  </div>
+                </div>
+              </div>
             </li>
           );
         })}
