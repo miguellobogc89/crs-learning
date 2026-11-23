@@ -7,7 +7,7 @@
 // pantalla queda como se dejó. Los grupos se guardan en finance_plan_groups (acciones plan/group* de la API).
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, FolderPlus, Landmark, Pencil, PiggyBank, Plus, Search, X, Zap } from "lucide-react";
+import { Check, FolderPlus, Landmark, Pencil, PiggyBank, Plus, Search, SlidersHorizontal, X, Zap } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import type { planView } from "@/lib/finance/service";
 import { EXPENSE_CATEGORIES, categoryHex, categoryLabel } from "@/lib/finance/categories";
@@ -17,6 +17,7 @@ import { SkeletonList } from "@/components/trading/skeletons";
 import { errorText, fapi, refreshFinance, useFinance } from "./api";
 import { aboveKeyboard, useKeyboardInset } from "./use-keyboard-inset";
 import { CategoryIcon } from "./category-icon";
+import { CalibrateSheet } from "./calibrate-sheet";
 
 type View = Awaited<ReturnType<typeof planView>>;
 type Group = View["groups"][number];
@@ -215,6 +216,7 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
   const [savingOverride, setSavingOverride] = useState<number | null | undefined>(undefined);
   const [incomeOverride, setIncomeOverride] = useState<number | null | undefined>(undefined);
   const [ready, setReady] = useState(false);
+  const [calibrating, setCalibrating] = useState(false);
   useEffect(() => { const t = requestAnimationFrame(() => setReady(true)); return () => cancelAnimationFrame(t); }, []);
   const [adding, setAdding] = useState<Group | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -373,6 +375,8 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
 
   // ── Variante del laboratorio ─────────────────────────────────────────────────────────────────
   if (lab) {
+    // En esta versión, lo que cobras es lo cobrado este mes (si aún no ha entrado nada, tus últimas nóminas).
+    const incomeLab = data.budget.incomeNow > 0 ? data.budget.incomeNow : income;
     const extras = data.extras ?? [];
     const extrasTotal = round2(extras.reduce((t, e) => t + e.amount, 0));
     const looseSpent = sumOf(looseKeys, cur);
@@ -381,12 +385,15 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
     const idle = rows.filter((r) => !active.includes(r));
     // Lo que podrías ahorrar este mes si de aquí al final te ajustas a tus objetivos y medias (lo ya pasado no
     // vuelve): lo que cobras − lo previsto o gastado en cada grupo y sin grupo − los extraordinarios del mes.
-    const monthSaving = income === null ? null : round2(income
+    const monthSaving = incomeLab === null ? null : round2(incomeLab
       - rows.reduce((t, r) => t + Math.max(r.base, r.spent), 0) - Math.max(looseAvg, looseSpent) - extrasTotal);
     const savingTone = monthSaving === null ? "text-slate-500" : saving && monthSaving >= saving ? "text-emerald-700" : monthSaving >= 0 ? "text-amber-700" : "text-rose-700";
-    const planText = income === null ? verdict.text
-      : margin !== null && margin >= 0 ? `Sobre el papel tu plan cuadra: deja ${eur(margin, 0)} de margen.`
-      : `Sobre el papel tu plan se pasa ${eur(-(margin ?? 0), 0)} de lo que cobras: baja algún objetivo o ahorra menos.`;
+    const marginLab = incomeLab === null ? null : round2(incomeLab - planned);
+    const totalLab = Math.max(incomeLab ?? 0, planned, 1);
+    const pctLab = (v: number) => `${(Math.max(0, v) / totalLab) * 100}%`;
+    const planText = incomeLab === null ? verdict.text
+      : marginLab !== null && marginLab >= 0 ? `Sobre el papel tu plan cuadra: deja ${eur(marginLab, 0)} de margen.`
+      : `Sobre el papel tu plan se pasa ${eur(-(marginLab ?? 0), 0)} de lo que cobras: baja algún objetivo o ahorra menos.`;
 
     const Line = ({ id, icon, name, sub, left, tone, children }: { id: string; icon: ReactNode; name: string; sub: string; left: ReactNode; tone: string; children?: ReactNode }) => (
       <li>
@@ -431,12 +438,18 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
         {err && <ErrorNote>{err}</ErrorNote>}
 
         <section>
-          <p className="text-sm text-slate-500">Tu mes</p>
-          <div className="mt-0.5 flex items-end justify-between gap-3">
-            <p className="amount text-[30px] font-semibold leading-none tracking-tight text-slate-900">{income === null ? "—" : eur(income, 0)}</p>
-            <span className="text-right text-xs text-slate-500">{data.budget.fromSettings ? "lo que cobras al mes" : "según tus últimas nóminas"}</span>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-slate-500">Tu mes</p>
+            <button type="button" onClick={() => setCalibrating(true)} disabled={incomeLab === null} aria-label="Calibrar tu mes"
+              className="-mr-1 flex h-10 w-10 items-center justify-center rounded-xl text-slate-600 active:bg-slate-100 disabled:opacity-30">
+              <SlidersHorizontal className="h-5 w-5" />
+            </button>
           </div>
-          {income === null && (
+          <div className="flex items-end justify-between gap-3">
+            <p className="amount text-[30px] font-semibold leading-none tracking-tight text-slate-900">{incomeLab === null ? "—" : eur(incomeLab, 0)}</p>
+            <span className="text-right text-xs text-slate-500">{data.budget.incomeNow > 0 ? "cobrado este mes" : "aún no has cobrado: tus últimas nóminas"}</span>
+          </div>
+          {incomeLab === null && (
             <div className="mt-3 flex items-center gap-3">
               <span className="flex-1 text-sm text-slate-600">¿Cuánto cobras al mes?</span>
               <AmountInput label="Lo que cobras al mes" value={null} placeholder="0" onCommit={(v) => saveSettings({ expectedIncome: v })} />
@@ -445,15 +458,15 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
           <div className="mt-4 flex h-11 w-full overflow-hidden rounded-xl bg-slate-100" role="img" aria-label={`Reparto: ${segs.map((x) => `${x.label} ${eur(x.amount, 0)}`).join(", ")}. ${planText}`}>
             {segs.map((x) => (
               <span key={x.key} className="h-full border-r-2 border-white transition-[width] duration-700 ease-out last:border-r-0 motion-reduce:transition-none"
-                style={{ width: ready ? pct(x.amount) : "0%", backgroundColor: x.color, opacity: x.estimate ? 0.45 : 1 }} />
+                style={{ width: ready ? pctLab(x.amount) : "0%", backgroundColor: x.color, opacity: x.estimate ? 0.45 : 1 }} />
             ))}
           </div>
-          {margin !== null && margin < 0 && (
+          {marginLab !== null && marginLab < 0 && (
             <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-              <span className="ml-auto block h-full rounded-full bg-rose-500" style={{ width: pct(-margin) }} />
+              <span className="ml-auto block h-full rounded-full bg-rose-500" style={{ width: pctLab(-marginLab) }} />
             </div>
           )}
-          <p className={`mt-3 text-sm ${margin !== null && margin < 0 ? "text-rose-700" : "text-slate-600"}`}>{planText}</p>
+          <p className={`mt-3 text-sm ${marginLab !== null && marginLab < 0 ? "text-rose-700" : "text-slate-600"}`}>{planText}</p>
         </section>
 
         {/* Ahorro, aparte: tu objetivo y lo que podrías ahorrar este mes de verdad */}
@@ -533,6 +546,15 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
         <NewGroupSheet open={!!editing} editing={editing} onClose={() => setEditing(null)}
           onCreate={(name, goal) => editing && updateGroup(editing, name, goal)} onDelete={() => editing && deleteGroup(editing)} />
         <AddCategoriesSheet target={adding} groups={groups} allKeys={ALL_KEYS} cur={cur} onClose={() => setAdding(null)} onConfirm={(keys) => adding && addCats(adding.id, keys)} />
+        {incomeLab !== null && (
+          <CalibrateSheet open={calibrating} onClose={() => setCalibrating(false)} income={incomeLab} saving={saving} groups={groups}
+            history={data.history ?? []} prevDaily={data.daily?.prev ?? {}} others={looseAvg}
+            onApply={(sav, goals) => {
+              setCalibrating(false);
+              saveSettings({ savingsGoal: sav || null });
+              for (const { id, goal } of goals) { const g = groups.find((x) => x.id === id); if (g) setGoal(g, goal); }
+            }} />
+        )}
       </div>
     );
   }

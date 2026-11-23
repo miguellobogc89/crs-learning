@@ -461,3 +461,46 @@ export function isGradual(categories: string[], cycles: GroupCycleTotals[], prev
   for (const cat of categories) (prevDaily[cat] ?? []).forEach((v, i) => { if (v > 0) days.add(i); });
   return !(sd / mean < 0.15 && days.size <= 6);
 }
+
+// ── Calibrar el mes: cuánto puedes gastar en cada grupo para ahorrar lo que quieres ──────────────
+
+export type CalibrateItem = {
+  id: string;
+  /** Lo que sueles gastar (media) o, si no hay, su objetivo. */
+  base: number;
+  /** Recibos fijos: no se recortan (cuentan con su base). */
+  fixed: boolean;
+  /** Importe que has fijado tú a mano (candado): no se recalcula. */
+  locked: number | null;
+};
+
+/**
+ * Reparte lo que cobras: primero el ahorro, los fijos y lo que has fijado a mano; lo que queda se reparte entre los
+ * grupos flexibles en proporción a lo que sueles gastar en cada uno (redondeado a 5 €, hacia abajo, para no pasarte).
+ * Si no llega, los flexibles quedan a 0 y `shortfall` dice cuánto falta; `maxSaving` es lo máximo que podrías ahorrar
+ * con los fijos y lo fijado a mano.
+ */
+export function calibrate(opts: { income: number; saving: number; items: CalibrateItem[] }) {
+  const { income, saving, items } = opts;
+  const fixedTotal = items.filter((i) => i.fixed).reduce((t, i) => t + i.base, 0);
+  const lockedTotal = items.filter((i) => !i.fixed && i.locked !== null).reduce((t, i) => t + (i.locked ?? 0), 0);
+  const flexible = items.filter((i) => !i.fixed && i.locked === null);
+  const flexBase = flexible.reduce((t, i) => t + Math.max(0, i.base), 0);
+  const available = round2(income - saving - fixedTotal - lockedTotal);
+  const amounts: Record<string, number> = {};
+  for (const i of items) {
+    if (i.fixed) amounts[i.id] = round2(i.base);
+    else if (i.locked !== null) amounts[i.id] = round2(i.locked);
+    else if (available <= 0 || flexBase <= 0) amounts[i.id] = 0;
+    else amounts[i.id] = Math.floor((available * Math.max(0, i.base)) / flexBase / 5) * 5;
+  }
+  const used = Object.values(amounts).reduce((t, v) => t + v, 0);
+  return {
+    amounts,
+    available,
+    shortfall: available < 0 ? round2(-available) : 0,
+    /** Lo que no se ha repartido por redondear (o porque no hay grupos flexibles): queda libre. */
+    spare: round2(income - saving - used),
+    maxSaving: round2(Math.max(0, income - fixedTotal - lockedTotal)),
+  };
+}

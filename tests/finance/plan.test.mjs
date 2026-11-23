@@ -236,3 +236,26 @@ test("Gráfico de Inicio: acumulado por categorías y grupos graduales frente a 
   assert.equal(P.isGradual(["ocio"], cycles, prev), true);
   assert.equal(P.isGradual(["vivienda"], cycles.slice(0, 2), prev), true);
 });
+
+test("calibrate: reparte lo que queda entre los flexibles según lo que sueles gastar, respeta fijos y candados", () => {
+  const items = [
+    { id: "fijos", base: 1200, fixed: true, locked: null },
+    { id: "ocio", base: 400, fixed: false, locked: null },
+    { id: "comida", base: 100, fixed: false, locked: null },
+    { id: "moda", base: 200, fixed: false, locked: null },
+  ];
+  const r = P.calibrate({ income: 2400, saving: 500, items });
+  // Quedan 700 para 700 de media: cada uno lo suyo.
+  assert.deepEqual(r.amounts, { fijos: 1200, ocio: 400, comida: 100, moda: 200 });
+  // Ahorrar 850: quedan 350 → la mitad a cada uno.
+  const half = P.calibrate({ income: 2400, saving: 850, items });
+  assert.deepEqual(half.amounts, { fijos: 1200, ocio: 200, comida: 50, moda: 100 });
+  // Ocio con candado a 300: los 50 restantes se reparten entre comida y moda.
+  const lock = P.calibrate({ income: 2400, saving: 850, items: items.map((i) => (i.id === "ocio" ? { ...i, locked: 300 } : i)) });
+  assert.deepEqual(lock.amounts, { fijos: 1200, ocio: 300, comida: 15, moda: 30 });
+  // No llega: flexibles a 0, falta y máximo ahorro posible.
+  const short = P.calibrate({ income: 1500, saving: 500, items });
+  assert.equal(short.shortfall, 200);
+  assert.equal(short.amounts.ocio, 0);
+  assert.equal(short.maxSaving, 300);
+});

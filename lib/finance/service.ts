@@ -599,6 +599,8 @@ export async function planView(userId: string) {
     }
   }
   const income = ctx.settings.expectedIncome ?? detectIncome(ctx.history);
+  // Lo que has cobrado de verdad este mes (ingresos ordinarios: nómina, intereses…; no regalos ni devoluciones).
+  const incomeNow = round2(ctx.txs.filter((t) => t.kind === "ingreso" && t.amount > 0 && t.date >= current.start && t.date <= current.end).reduce((x, t) => x + t.amount, 0));
   const savingsGoal = ctx.projection.savingsGoal;
   return {
     hasAccounts: ctx.accounts.length > 0,
@@ -607,7 +609,7 @@ export async function planView(userId: string) {
     history,
     daily,
     extras: extras.sort((a, b) => b.amount - a.amount),
-    budget: { income, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
+    budget: { income, incomeNow, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
     previous: hasPrevious ? { start: prevCycle.start, end: prevTo } : null,
     /** Ciclos del último par de años (el actual primero), para el historial de una categoría. */
     cycles: Array.from({ length: 24 }, (_, i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c, i) => i === 0 || c.end >= oldest),
