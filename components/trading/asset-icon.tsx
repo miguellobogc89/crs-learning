@@ -2,10 +2,11 @@
 // Icono de cada valor: logo de la empresa (favicon de su web) o de la criptomoneda.
 // Si no hay logo o no carga, se muestran las iniciales en un círculo de color.
 import { useState } from "react";
-import { CRYPTO, IBEX35, INDEX_SYMBOL } from "@/lib/trading/market-data";
+import { CRYPTO, IBEX35, INDEX_SYMBOL, US_STOCKS } from "@/lib/trading/market-data";
 
 /** Web de cada empresa del IBEX 35, para sacar su logo. */
 const DOMAIN: Record<string, string> = {
+  ...Object.fromEntries(US_STOCKS.map((u) => [u.symbol, u.domain])),
   "ACS.MC": "grupoacs.com",
   "ACX.MC": "acerinox.com",
   "AENA.MC": "aena.es",
@@ -45,7 +46,7 @@ const DOMAIN: Record<string, string> = {
 };
 
 /** Para los sitios donde solo llega el nombre del valor. */
-const BY_NAME = new Map([...IBEX35, ...CRYPTO].map((i) => [i.name.toLowerCase(), i.symbol]));
+const BY_NAME = new Map([...IBEX35, ...CRYPTO, ...US_STOCKS].map((i) => [i.name.toLowerCase(), i.symbol]));
 
 const PALETTE = ["bg-blue-100 text-blue-700", "bg-emerald-100 text-emerald-700", "bg-violet-100 text-violet-700", "bg-orange-100 text-orange-700", "bg-rose-100 text-rose-700", "bg-cyan-100 text-cyan-700", "bg-amber-100 text-amber-800"];
 

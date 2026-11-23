@@ -197,3 +197,35 @@ export function allInQuantity(cash: number, price: number, cost: { commissionPct
   const unit = price * (1 + cost.slippageBps / 10_000) * (1 + cost.commissionPct / 100);
   return Math.floor(((cash * 0.995) / unit) * 1e6) / 1e6;
 }
+
+// ---------------------------------------------------------------------------
+// Tamaño de cada operación y salidas «de ruido» (16/11/2026)
+// ---------------------------------------------------------------------------
+/**
+ * Cuánto dinero meter en una operación:
+ * - `sizeOfEquityPct`: un % fijo del patrimonio (diversificación);
+ * - `riskPct`: lo justo para perder ese % del patrimonio si salta el stop (patrimonio × riesgo ÷ distancia);
+ * - si no, el capital repartido entre sus operaciones a la vez.
+ * Nunca más que el efectivo disponible.
+ */
+export function positionBudget(o: { equity: number; available: number; capital: number; slots: number; price: number; stop: number; riskPct?: number; sizeOfEquityPct?: number }) {
+  let want: number;
+  if (o.sizeOfEquityPct) want = (o.equity * o.sizeOfEquityPct) / 100;
+  else if (o.riskPct) {
+    const dist = o.price > 0 ? (o.price - o.stop) / o.price : 0;
+    want = dist > 0 ? (o.equity * o.riskPct) / 100 / dist : 0;
+  } else want = o.capital / Math.max(1, o.slots);
+  return Math.max(0, Math.min(want, o.available));
+}
+
+/** Salida «de ruido»: objetivo +3 % y stop como mucho un 3 % por debajo (o en la invalidación, si está más cerca). */
+export const NOISE = { target: 3, maxStop: 3, armAt: 1.5, lockAt: 0.5, trail: 1.5 } as const;
+export function noiseLevels(price: number, invalidation: number) {
+  return { stop: Math.max(invalidation, price * (1 - NOISE.maxStop / 100)), target: price * (1 + NOISE.target / 100) };
+}
+
+/** Desde +1,5 %, el stop pasa por encima de la entrada (+0,5 %, cubre comisiones) y sigue al precio a un 1,5 %. Nunca baja. */
+export function noiseStop(p: { entry: number; stop: number }, price: number) {
+  if (!(price >= p.entry * (1 + NOISE.armAt / 100))) return p.stop;
+  return Math.max(p.stop, p.entry * (1 + NOISE.lockAt / 100), price * (1 - NOISE.trail / 100));
+}

@@ -86,7 +86,8 @@ test("FARO-2: descarta rebotes, subidas perseguidas, impulsos en máximos, Bitco
   assert.match(why("impulso", { fromHigh3d: -0.3 })[0], /máximo/);
   assert.deepEqual(why("ruptura", { fromHigh3d: -0.3 }), [], "una ruptura en máximos es lo normal");
   assert.match(why("noticia", { btc24h: -3.5 })[0], /Bitcoin cae/);
-  assert.match(why("noticia", { phase: "defensa" })[0], /defensa/);
+  assert.match(why("impulso", { phase: "defensa" })[0], /defensa/);
+  assert.deepEqual(why("noticia", { phase: "defensa" }), [], "las noticias valen en cualquier momento del mercado (carta)");
   assert.match(why("noticia", { riskPct: 4, rewardPct: 5 })[0], /objetivo corto/);
   assert.equal(faro2Verdict("noticia", { ...base, btc24h: null, phase: null }).pass, true, "lo que no se sabe no descarta");
 });

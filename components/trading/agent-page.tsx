@@ -1,19 +1,19 @@
 "use client";
 // Página de un agente: su gráfica arriba, sus datos y, en pestañas, lo que tiene abierto, su historial,
-// sus decisiones y (kamikazes) sus rondas. Para cualquier público: todo explicado sin jerga.
+// sus decisiones y cómo opera (su ficha). Para cualquier público: todo explicado sin jerga.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, Info, Wallet } from "lucide-react";
-import { api, dayFmt, errorText, eur, eur0, flat, ghost, int, pct, primary, tone } from "./format";
+import { Info, Wallet } from "lucide-react";
+import { api, dayFmt, errorText, eur, eur0, flat, int, pct, primary, tone } from "./format";
 import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
 import { EquityChart, withLivePoint } from "./equity-chart";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Pill, ReturnPill, Rich } from "./ui";
+import { SpecPills, SpecSheet } from "./agent-spec";
+import { AgentAvatar, card, ErrorNote, LoadingCard, Pill, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { MirrorModal } from "./mirror-modal";
-import { AgentVenuePills } from "./agent-venues";
-import { agentMenu, ChipMode, CopyBadges, CopyModal, Creator, Decision, DotsMenu, Rounds, runningFor, when, type Agent, type Data } from "./agents-panel";
+import { agentMenu, ChipMode, CopyBadges, CopyModal, Creator, Decision, DotsMenu, runningFor, when, type Agent, type Data } from "./agents-panel";
 
-type Tab = "abiertas" | "historial" | "decisiones" | "rondas";
+type Tab = "abiertas" | "historial" | "decisiones" | "ficha";
 
 /** Mayor caída desde un máximo, en % (sobre la curva de patrimonio). */
 function maxDrawdown(points: { equity: number }[]) {
@@ -24,6 +24,70 @@ function maxDrawdown(points: { equity: number }[]) {
     if (peak > 0) worst = Math.min(worst, ((p.equity - peak) / peak) * 100);
   }
   return worst;
+}
+
+type OpenPosition = Agent["positions"][number];
+
+/**
+ * Pie de una posición abierta: dónde está el stop y qué significa.
+ *  - Stop sin tocar: el stop y lo que se perdería si salta.
+ *  - Stop movido: de dónde viene y, sobre todo, si ya asegura ganancia, está en la entrada o solo arriesga menos.
+ * La ganancia o pérdida «si salta» es aproximada (descuenta la comisión de entrada, no la de salida).
+ */
+function StopLine({ p, noTarget }: { p: OpenPosition; noTarget: boolean }) {
+  const entry = p.entryPrice;
+  const target = noTarget ? (
+    <span className="text-slate-500">Sin objetivo · el stop sigue al precio</span>
+  ) : (
+    <span className="text-emerald-700">Objetivo {eur(p.target)}</span>
+  );
+  if (entry === null) {
+    return (
+      <div className="mt-2 flex justify-between gap-3 text-[11px] tabular-nums">
+        <span className="text-red-700">Stop {eur(p.stop)}</span>
+        {target}
+      </div>
+    );
+  }
+  const long = p.direction === "long";
+  const eps = Math.abs(entry) * 1e-6;
+  const atStop = (stop: number) => (long ? stop - entry : entry - stop) * p.quantity - p.fees;
+  const moved = Math.abs(p.stop - p.initialStop) > eps;
+  const result = atStop(p.stop);
+  const atEntry = Math.abs(p.stop - entry) <= eps;
+  const signed = (v: number) => `${v >= 0 ? "+" : "−"}${eur(Math.abs(v), 2)}`;
+
+  if (!moved) {
+    return (
+      <div className="mt-2 flex justify-between gap-3 text-[11px] tabular-nums">
+        <span className="text-red-700">
+          Stop {eur(p.stop)} <span className="text-slate-400">· si salta {signed(result)}</span>
+        </span>
+        {target}
+      </div>
+    );
+  }
+
+  const tag = "inline-flex rounded-full px-2 py-0.5 font-medium";
+  const secured = result >= 0 && !atEntry;
+  const badge = secured ? (
+    <span className={`${tag} bg-emerald-50 text-emerald-700`}>Ganancia asegurada {signed(result)}</span>
+  ) : atEntry ? (
+    <span className={`${tag} bg-blue-50 text-blue-700`}>Sin riesgo · stop en la entrada</span>
+  ) : (
+    <span className={`${tag} bg-amber-50 text-amber-800`}>Riesgo bajado a {signed(result)} (era {signed(atStop(p.initialStop))})</span>
+  );
+  return (
+    <div className="mt-2 space-y-1 text-[11px] tabular-nums">
+      <div className="flex items-center justify-between gap-3">
+        <span className={secured ? "text-emerald-700" : "text-red-700"}>
+          Stop movido {eur(p.stop)} <span className="text-slate-400 line-through">{eur(p.initialStop)}</span>
+        </span>
+        {target}
+      </div>
+      <div>{badge}</div>
+    </div>
+  );
 }
 
 export function AgentPage({ agentKey }: { agentKey: string }) {
@@ -55,11 +119,10 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
   if (!a) return <ErrorNote>Este agente no existe o ya no está disponible.</ErrorNote>;
 
   const s = a.summary;
-  const rank = [...data.agents].sort((x, y) => y.summary.returnPct - x.summary.returnPct).findIndex((x) => x.key === a.key) + 1;
   const open = a.positions.filter((p) => p.status === "abierta").length;
   const pending = a.positions.filter((p) => p.status === "pendiente").length;
   const dd = maxDrawdown(points);
-  const hasInsights = !!(a.chip || a.lastRun?.marketView || a.kamikaze?.current?.note || a.lastRun?.status === "error");
+  const hasInsights = !!(a.chip || a.lastRun?.marketView || a.kamikaze?.note || a.lastRun?.status === "error");
 
   const meet = async () => {
     setBusy(true);
@@ -83,9 +146,10 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
   };
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: "ficha", label: "Cómo opera" },
     { key: "abiertas", label: "Abiertas", count: a.positions.length },
     { key: "historial", label: "Historial", count: a.closed.length },
-    ...(a.kamikaze ? [{ key: "rondas" as const, label: "Rondas", count: a.kamikaze.stats.rounds }] : [{ key: "decisiones" as const, label: "Decisiones", count: a.proposals.length }]),
+    { key: "decisiones", label: "Decisiones", count: a.proposals.length },
   ];
   const lastRunId = a.lastRun?.id;
   const pendingIds = new Set(a.positions.filter((p) => p.status === "pendiente").map((p) => p.id));
@@ -99,14 +163,12 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
         <section className={`${card} ${flat} flex flex-col px-4 py-4 sm:px-5 lg:min-h-0 lg:flex-1 lg:overflow-hidden`}>
           <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-4">
-              <AgentAvatar color={a.color} size="lg" />
+              {/* En el móvil, el nombre y el icono ya están en la barra de arriba. */}
+              <span className="hidden md:block"><AgentAvatar color={a.color} size="lg" /></span>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-xl font-bold tracking-tight text-slate-900">{a.name}</h2>
-                  <Pill color={a.color}>{cap(a.profile)}</Pill>
-                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
-                    #{rank} de {data.agents.length}
-                  </span>
+                  <h2 className="hidden text-xl font-bold tracking-tight text-slate-900 md:block">{a.name}</h2>
+                  <SpecPills spec={a.spec} />
                   {hasInsights && (
                     <TooltipProvider delayDuration={150}>
                       <Tooltip>
@@ -147,10 +209,10 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                                 </p>
                               </div>
                             )}
-                            {(a.lastRun?.marketView || a.kamikaze?.current?.note) && (
+                            {(a.lastRun?.marketView || a.kamikaze?.note) && (
                               <div className={a.chip ? "mt-4 border-t border-slate-100 pt-4" : ""}>
                                 <h3 className="mb-2 font-semibold text-slate-900">Cómo ve el mercado</h3>
-                                <Rich text={a.lastRun?.marketView ?? a.kamikaze?.current?.note ?? ""} />
+                                <Rich text={a.lastRun?.marketView ?? a.kamikaze?.note ?? ""} />
                               </div>
                             )}
                             {a.lastRun?.status === "error" && (
@@ -165,7 +227,6 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                   )}
                 </div>
                 <p className="mt-1 max-w-xl text-sm text-slate-600">{a.tagline}</p>
-                <AgentVenuePills v={a.venues} className="mt-2" />
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   <Creator mine={a.mine} /> · {runningFor(a.startedAt)}
                   {a.lastRun && <> · última decisión {when(a.lastRun.at)}</>}
@@ -173,14 +234,9 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {data.canCopy && !a.kamikaze && (
-                <button type="button" className={primary} onClick={() => setCopying(true)}>
-                  <Copy className="h-4 w-4" /> {a.copyWeightPct !== null ? "Cambiar copia" : "Copiar"}
-                </button>
-              )}
               {data.canCopy && (
-                <button type="button" className={a.kamikaze ? primary : ghost} onClick={() => setMirroring(true)}>
-                  <Wallet className="h-4 w-4" /> Dinero real
+                <button type="button" className={primary} onClick={() => setMirroring(true)}>
+                  <Wallet className="h-4 w-4" /> Copiar con dinero real
                 </button>
               )}
               <DotsMenu
@@ -203,7 +259,20 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
             <ChipMode a={a} big />
             <span className="pb-1 text-sm text-slate-500">desde {eur0(s.initialCapital)}</span>
           </div>
-          {(a.copyWeightPct !== null || a.mirror) && (
+          {data.references.some((r) => r.returnPct !== null) && (
+            <p className="mt-1 shrink-0 text-xs text-slate-500">
+              En el mismo tiempo:{" "}
+              {data.references
+                .filter((r) => r.returnPct !== null)
+                .map((r, i) => (
+                  <span key={r.key} title={r.description}>
+                    {i > 0 && " · "}
+                    {r.name.toLowerCase()} <b className={`font-semibold tabular-nums ${tone(r.returnPct)}`}>{pct(r.returnPct!, 1)}</b>
+                  </span>
+                ))}
+            </p>
+          )}
+          {a.mirror && (
             <div className="mt-2 shrink-0">
               <CopyBadges a={a} />
             </div>
@@ -263,7 +332,10 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                       <span className="flex min-w-0 items-center gap-3">
                         <AssetIcon symbol={p.symbol} name={p.name} size="sm" />
                         <span className="min-w-0">
-                          <span className="block truncate font-semibold text-slate-900">{p.name}</span>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate font-semibold text-slate-900">{p.name}</span>
+                            {p.direction === "short" && <Pill color="rose">Corto</Pill>}
+                          </span>
                           <span className="block text-xs text-slate-500">
                             {p.status === "pendiente" ? "Se compra en la próxima apertura" : `${int(p.quantity)} a ${eur(p.entryPrice ?? p.plannedEntry)}`}
                           </span>
@@ -274,10 +346,7 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                         <span className="block text-xs tabular-nums text-slate-500">ahora {eur(p.lastPrice)}</span>
                       </span>
                     </div>
-                    <div className="mt-2 flex justify-between text-[11px] tabular-nums">
-                      <span className="text-red-700">Stop {eur(p.stop)}</span>
-                      <span className="text-emerald-700">Objetivo {eur(p.target)}</span>
-                    </div>
+                    <StopLine p={p} noTarget={a.kamikaze?.noTarget ?? false} />
                   </li>
                 ))}
               </ul>
@@ -293,7 +362,10 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
                     <span className="flex min-w-0 items-center gap-3">
                       <AssetIcon symbol={p.symbol} name={p.name} size="sm" />
                       <span className="min-w-0">
-                        <span className="block truncate font-medium text-slate-900">{p.name}</span>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate font-medium text-slate-900">{p.name}</span>
+                          {"direction" in p && p.direction === "short" && <Pill color="rose">Corto</Pill>}
+                        </span>
                         <span className="block text-xs text-slate-500">
                           {dayFmt(p.exitDay)} · {p.exitReason ?? "cerrada"} · {eur(p.entryPrice)} → {eur(p.exitPrice)}
                         </span>
@@ -333,12 +405,12 @@ export function AgentPage({ agentKey }: { agentKey: string }) {
               </ul>
             ))}
 
-          {tab === "rondas" && a.kamikaze && <Rounds k={a.kamikaze} equity={s.equity} />}
+          {tab === "ficha" && <SpecSheet spec={a.spec} />}
         </div>
       </section>
 
       {copying && <CopyModal agent={a as Agent} onClose={() => setCopying(false)} />}
-      {mirroring && <MirrorModal agent={a.key} name={a.name} onClose={() => setMirroring(false)} />}
+      {mirroring && <MirrorModal agent={a.key} name={a.name} venues={a.venues} onClose={() => setMirroring(false)} />}
     </div>
   );
 }

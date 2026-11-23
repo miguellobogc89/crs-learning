@@ -110,7 +110,7 @@ export function PortfolioPanel({ onOpenChart }: { onOpenChart: (symbol: string) 
     <div className="space-y-5">
       {error && <ErrorNote>{error}</ErrorNote>}
       <PortfolioBalance
-        title="Tu dinero virtual"
+        title="Dinero virtual"
         total={total.equity}
         available={total.available}
         working={total.invested + total.reserved}

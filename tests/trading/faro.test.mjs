@@ -18,7 +18,7 @@ test("faro: valida niveles, tipo, candidatos y duplicados", () => {
   assert.equal(rejected.length, 3);
   const dup = F.checkIdeas([idea()], { candidates: cands, livePairs: ["SOLEUR"] });
   assert.equal(dup.ok.length, 0, "no repite un par que ya está vivo");
-  assert.equal(F.checkIdeas([idea({ valid_hours: 99 })], { candidates: cands, livePairs: [] }).ok[0].validHours, 24);
+  assert.equal(F.checkIdeas([idea({ valid_hours: 99 })], { candidates: cands, livePairs: [] }).ok[0].validHours, 3, "un impulso vale como mucho su plazo máximo de la carta (3 h)");
 });
 
 const track = { price: 100, invalidation: 90, target: 115, createdAt: 0, validUntil: 6 * H, best: 0, worst: 0 };
@@ -70,4 +70,17 @@ test("faro: motivo cuando no entra, variantes de entrada y stop que sube", () =>
   assert.equal(F.chooseIdea("impulso", board, () => 100, now, new Set(), { stopMode: "idea" }).pick.stop, 97, "stop justo en la invalidación");
   assert.equal(F.trailingStop({ entry: 100, initialStop: 90, stop: 90 }, 130), 117, "misma distancia (10 %) que el riesgo inicial");
   assert.equal(F.trailingStop({ entry: 100, initialStop: 90, stop: 117 }, 120), 117, "nunca baja");
+});
+
+test("faro: retroceso con orden limitada; sin tocar su precio a tiempo, «sin entrar»", () => {
+  const r = F.checkIdeas([idea({ kind: "retroceso", entry: 97, invalidation: 94, target: 104 })], { candidates: cands, livePairs: [] });
+  assert.equal(r.ok[0].price, 97, "la referencia es el precio de la orden");
+  assert.equal(r.ok[0].validHours, 6 + 6, "6 h para entrar + el plazo que diga la IA (6 h; el máximo de un retroceso es 48 h)");
+  assert.equal(F.checkIdeas([idea({ kind: "retroceso", entry: 101, invalidation: 94, target: 104 })], { candidates: cands, livePairs: [] }).ok.length, 0, "la entrada tiene que estar por debajo");
+  const t = { price: 97, invalidation: 94, target: 104, createdAt: 0, validUntil: 20 * H, best: 0, worst: 0 };
+  assert.equal(F.scoreLimitIdea(t, 6 * H, [bar(0, 100, 101, 99, 100)], 7 * H, 100).status, "sin_entrar");
+  assert.equal(F.scoreLimitIdea(t, 6 * H, [bar(0, 100, 101, 99, 100)], 2 * H, 100).status, "viva");
+  const win = F.scoreLimitIdea(t, 6 * H, [bar(0, 100, 101, 96.5, 98), bar(H, 98, 105, 97.5, 104)], 3 * H, 104);
+  assert.equal(win.status, "acierto");
+  assert.equal(F.scoreLimitIdea(t, 6 * H, [bar(0, 100, 101, 93, 95)], H, 95).status, "fallo", "entra y rompe en la misma vela");
 });

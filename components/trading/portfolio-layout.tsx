@@ -8,8 +8,9 @@ type Period = { key: string; label: string };
 
 export function PortfolioBalance<T extends string>({
   title, total, available, working, opportunities, earned, returnPct, points, initial, intraday,
-  periods, period, onPeriodChange, refreshing, onRefresh, note, empty, setup,
+  periods, period, onPeriodChange, refreshing, onRefresh, note, empty, setup, venues,
 }: {
+  /** Etiqueta pequeña sobre el saldo («Saldo total», «Dinero virtual»…). El título de la página ya dice dónde estás. */
   title: string;
   total: number;
   available: number;
@@ -25,9 +26,12 @@ export function PortfolioBalance<T extends string>({
   onPeriodChange: (period: T) => void;
   refreshing: boolean;
   onRefresh: () => void;
+  /** Aclaración de la gráfica: va en el «i» del periodo, no como texto suelto. */
   note: string;
   empty: string;
   setup?: ReactNode;
+  /** Desglose por exchange (Mi cartera). */
+  venues?: ReactNode;
 }) {
   const kpis = [
     { icon: Wallet, label: "Disponible", value: available, tip: "Capital libre para operar" },
@@ -37,44 +41,25 @@ export function PortfolioBalance<T extends string>({
   ];
 
   return (
-    <section className={`${card} ${flat} px-4 pb-3 pt-4 sm:px-6 sm:pt-5`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 text-[15px] font-medium text-slate-800">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-            <Wallet className="h-5 w-5" />
-          </span>
-          {title}
-        </div>
+    <section className={`${card} ${flat} px-4 pb-4 pt-4 sm:px-6 sm:pt-5`}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</span>
         {!setup && (
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="Periodo del gráfico">
-              {periods.map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={period === key}
-                  onClick={() => onPeriodChange(key)}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium ${period === key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={refreshing}
-              title="Actualizar saldo, gráfica y oportunidades"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} /> Actualizar
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            title="Actualizar saldo, gráfica y oportunidades"
+            aria-label="Actualizar"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
         )}
       </div>
       {setup ?? (
         <>
-          <div className="mt-3 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] xl:items-center">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] xl:items-center">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900 sm:text-5xl">{eur(total, 2)}</span>
               {returnPct !== null && <ReturnPill value={returnPct} big />}
@@ -92,10 +77,25 @@ export function PortfolioBalance<T extends string>({
               ))}
             </div>
           </div>
-          <div className="mt-3">
-            <EquityChart points={points} initial={initial} height={145} ranges={false} intraday={intraday} balanceOnly empty={empty} />
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <div className="flex gap-1 rounded-lg bg-slate-100 p-1" role="group" aria-label="Periodo del gráfico" title={note}>
+              {periods.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={period === key}
+                  onClick={() => onPeriodChange(key)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium ${period === key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          <p className="mt-1 text-[11px] leading-snug text-slate-400">{note}</p>
+          <div className="mt-1">
+            <EquityChart points={points} initial={initial} height={170} ranges={false} intraday={intraday} balanceOnly flush empty={empty} />
+          </div>
+          {venues && <div className="mt-4 border-t border-slate-100 pt-3">{venues}</div>}
         </>
       )}
     </section>
@@ -103,7 +103,13 @@ export function PortfolioBalance<T extends string>({
 }
 
 export function PortfolioColumns({ opportunities, agents }: { opportunities: ReactNode; agents: ReactNode }) {
-  return <div className="grid gap-5 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">{opportunities}{agents}</div>;
+  // En móvil, tus agentes arriba (gestionar a mano) y la actividad debajo; en escritorio, actividad a la izquierda.
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
+      <div className="order-2 flex min-w-0 flex-col lg:order-1">{opportunities}</div>
+      <div className="order-1 min-w-0 lg:order-2 lg:self-start">{agents}</div>
+    </div>
+  );
 }
 
 export function PortfolioAgents({ count, children }: { count?: string; children: ReactNode }) {

@@ -10,7 +10,7 @@ import { normalizePurchases } from "./analytics";
  */
 export type Fix = { lineId: string; producto: string | null; valores: Record<string, number | string | null>; motivo: "descuento" | "envases" | "cantidad" | "iva" | "importe" };
 const UNIT: Record<string, string> = { L: "l", Kg: "kg", ud: "ud" };
-const r4 = (n: number) => Math.round(n * 10000) / 10000;
+const r4 = (n: number) => Math.round(n * 1e5) / 1e5;   // prices keep up to 5 decimals
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export function cleanupPlan(data: AnalyticsData): Fix[] {

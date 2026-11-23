@@ -10,7 +10,16 @@ import { normalizeLines, type Line, type Normalized } from "./rules";
  */
 const num = (v: unknown): number | null => typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : null;
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
-const unitOf = (u: string | null): Line["unidadEnvase"] => !u ? null : /^l/i.test(u) ? "L" : /^k/i.test(u) ? "Kg" : /^u/i.test(u) ? "ud" : null;
+const unitOf = (u: string | null): Line["unidadEnvase"] => !u ? null : /^l/i.test(u) ? "L" : /^k/i.test(u) ? "Kg" : /^u/i.test(u) || u.trim() === "1" ? "ud" : null;
+/** A VAT rate as typed in the catalog: 10, "10", "10 %", "10,5" or 0.1 → 10. */
+const rateOf = (v: unknown): number | null => {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v.replace("%", "").replace(",", ".").trim()) : NaN;
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n > 0 && n < 1 ? Math.round(n * 1000) / 10 : n;
+};
+/** The product's VAT rate from its catalog row (the «iva» column, when the catalog has one). */
+export const catalogIva = (row: { values: Record<string, unknown> } | undefined): number | null =>
+  row && row.values.iva !== undefined && row.values.iva !== null && row.values.iva !== "" ? rateOf(row.values.iva) : null;
 
 /**
  * The product catalog of the purchases: the table (made with the assistant) that «Productos comprados» links to and
@@ -42,15 +51,22 @@ export function purchaseLines(data: AnalyticsData): Line[] {
     const producto = str(l.values.description);
     const c = catalogRow.get(catalogOf.get(l.id) ?? "");
     const fromCatalog = c && num(c.values.envase) && unitOf(str(c.values.unidad)) ? { cantidad: num(c.values.envase)!, unidad: unitOf(str(c.values.unidad))! } : null;
-    // Content per pack: as read from the invoice first, then the catalog, then the product name.
+    // Content per pack: the product's catalog row decides (set once there, it applies to all its purchases);
+    // without it, as read from the invoice, then from the product name.
     const read = num(l.values.package_content) && unitOf(str(l.values.package_unit)) ? { cantidad: num(l.values.package_content)!, unidad: unitOf(str(l.values.package_unit))! } : null;
-    const measure = read ?? fromCatalog ?? parseMeasure(producto);
+    const measure = fromCatalog ?? read ?? parseMeasure(producto);
+    const readAsCatalog = !!read && (!fromCatalog || (read.cantidad === fromCatalog.cantidad && read.unidad === fromCatalog.unidad));
+    // VAT rate: the catalog's, when the product has one there; else the one read on the invoice.
+    const iva = catalogIva(c) ?? num(l.values.tax_rate);
+    // Only the amount with VAT was read: without VAT when the price was read without it (so both match); else as read.
+    const withTax = num(l.values.line_total_with_tax);
+    const withoutTax = withTax !== null && iva !== null && num(l.values.unit_price) !== null ? Math.round(withTax / (1 + iva / 100) * 100) / 100 : withTax;
     const discount = num(l.values.discount_amount);
     return { id: l.id, grupo: `${(proveedor ?? "").toLowerCase()}|${(producto ?? "").toLowerCase().replace(/\s+/g, " ")}`, factura: invoiceId,
       fecha: str(l.values.source_ticket_date) ?? (inv ? str(inv.values.issue_date) : null), proveedor, producto,
       documento: (invoiceId && data.documents?.[invoiceId]?.fileId) || null,
-      cantidad: num(l.values.quantity) ?? num(l.values.package_count), descuentoPct: num(l.values.discount_percent), envaseLeido: !!read, precio: num(l.values.unit_price) ?? num(l.values.unit_price_with_tax), descuento: discount !== null ? Math.abs(discount) : null,
-      importe: num(l.values.line_total) ?? num(l.values.line_total_with_tax), iva: num(l.values.tax_rate), unidad: str(l.values.unit),
+      cantidad: num(l.values.quantity) ?? num(l.values.package_count), descuentoPct: num(l.values.discount_percent), envaseLeido: readAsCatalog, precio: num(l.values.unit_price) ?? num(l.values.unit_price_with_tax), descuento: discount !== null ? Math.abs(discount) : null,
+      importe: num(l.values.line_total) ?? withoutTax, iva, unidad: str(l.values.unit),
       // Only when the amount without VAT was read too: then the one with VAT can confirm it.
       importeConIva: num(l.values.line_total) !== null ? num(l.values.line_total_with_tax) : null,
       importeSinIvaLeido: num(l.values.line_total), importeIvaLeido: num(l.values.line_total_with_tax),
@@ -65,11 +81,14 @@ export function normalizePurchases(data: AnalyticsData): { lines: Line[]; normal
 
 /** The columns «Productos comprados» adds: what was really bought and what it really cost. */
 export const PURCHASE_COLUMNS: Column[] = [
-  { key: "tipo", label: "Tipo", filter: true },
-  { key: "cantidad_real", label: "Cantidad real", kind: "number" }, { key: "unidad_real", label: "Ud." },
-  { key: "descuento_pct", label: "Dto. %", kind: "number" }, { key: "precio_final", label: "Precio final", kind: "money" },
-  { key: "ahorro", label: "Ahorro (regalo)", kind: "money" },
-  { key: "no_cuadra", label: "No cuadra", filter: true }, { key: "detalle", label: "Detalle" },
+  { key: "tipo", label: "Tipo", filter: true, width: 90, hint: "Compra o regalo (unidades sin cobrar)." },
+  { key: "cantidad_real", label: "Cantidad total", kind: "number", hint: "Total comprado en Kg, L o ud.: envases × contenido de cada envase." },
+  { key: "unidad_real", label: "Ud. total", width: 90, hint: "Unidad de «Cantidad total» y de «Coste real»." },
+  { key: "descuento_pct", label: "Dto. %", kind: "number", width: 80, hint: "Descuento en porcentaje sobre el precio de tarifa." },
+  { key: "precio_final", label: "Coste real s/IVA", kind: "money", width: 130, hint: "Lo que cuesta de verdad cada Kg, L o ud. («Ud. total»): sin IVA y con el descuento. Es el dato para los escandallos." },
+  { key: "ahorro", label: "Ahorro (regalo)", kind: "money", hint: "Lo que habrían costado las unidades regaladas." },
+  { key: "no_cuadra", label: "No cuadra", filter: true, width: 100, hint: "Cantidad × precio no da el importe: hay que revisar la línea." },
+  { key: "detalle", label: "Detalle", width: 320, hint: "Qué se ha corregido o calculado en la línea." },
 ];
 
 export function purchaseCells(n: Normalized | undefined): Record<string, CellValue> {

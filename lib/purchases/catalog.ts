@@ -98,10 +98,10 @@ export function liveCatalog(data: AnalyticsData): LiveCatalog | null {
     const gifts = own.length > 0 && own.every(l => n(l.id)?.estado === "regalo");
     let revisar = !last && !gifts && own.length > 0;
     if (last) {
-      out.precio_unidad = envase ? r(last.unit, 4) : null;
-      out.precio_envase = envase ? r(last.unit * envase, 2) : r(last.unit, last.unit < 1 ? 4 : 2);
+      out.precio_unidad = envase ? r(last.unit, 5) : null;
+      out.precio_envase = r(envase ? last.unit * envase : last.unit, 5);
       const tarifa = envase ? last.tarifa * envase : last.tarifa;
-      out.precio_tarifa = r(tarifa, tarifa < 1 ? 4 : 2);
+      out.precio_tarifa = r(tarifa, 5);
       if (paid.length >= 2) {
         let desde = last.fecha;
         for (const p of [...paid].reverse()) { if (Math.abs(p.unit - last.unit) <= 0.005 && p.fecha) desde = p.fecha; else break; }
@@ -149,7 +149,7 @@ function purchaseHistory(own: ReturnType<typeof normalizePurchases>["lines"], no
     const units = x?.unidades ?? l.cantidad;
     const tipo = x?.estado === "regalo" ? "Regalo" : x?.estado === "no_cuadra" ? "No cuadra" : "Compra";
     return { id: l.id, fecha: l.fecha, cantidad: l.cantidad, unidad: l.unidad, precio: l.precio, dto_pct: x?.descuento_pct ?? l.descuentoPct ?? null,
-      precio_ud: tipo === "Regalo" ? 0 : sinIva !== null && units ? r(sinIva / units, 4) : null, importe: sinIva, importe_iva: conIva, tipo,
+      precio_ud: tipo === "Regalo" ? 0 : sinIva !== null && units ? r(sinIva / units, 5) : null, importe: sinIva, importe_iva: conIva, tipo,
       factura: l.factura ? invoiceNumber.get(l.factura) ?? null : null, documento: l.documento, cambio: false };
   });
   let prev: number | null = null;

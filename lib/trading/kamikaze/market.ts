@@ -98,6 +98,14 @@ export async function hourly(pair: string): Promise<Bar[]> {
   return bars.map((b) => ({ ...b, o: b.o * k, h: b.h * k, l: b.l * k, c: b.c * k, qv: b.qv * k }));
 }
 
+/** Las últimas `n` velas horarias de un par (hasta 1000), en euros: para reglas con medias largas (REBOTE, 20 días). */
+export async function hourlyN(pair: string, n: number): Promise<Bar[]> {
+  const bars = parseKlines(await get("/api/v3/klines", { symbol: pair, interval: "1h", limit: String(Math.min(1000, Math.max(1, Math.floor(n)))) }));
+  if (!pair.endsWith("USDC")) return bars;
+  const k = await usdcInEur();
+  return bars.map((b) => ({ ...b, o: b.o * k, h: b.h * k, l: b.l * k, c: b.c * k, qv: b.qv * k }));
+}
+
 /** Velas horarias de los ~3 días anteriores a un momento pasado, en euros (para reconstruir lo que se veía). */
 export async function hourlyUntil(pair: string, end: number): Promise<Bar[]> {
   const bars = parseKlines(await get("/api/v3/klines", { symbol: pair, interval: "1h", endTime: String(Math.floor(end)), limit: "72" })).filter((b) => b.t < end);
@@ -134,4 +142,26 @@ export async function referencePrice(symbol: string): Promise<number | null> {
   const rules = await eurPairs();
   const pair = rules.has(`${base}EUR`) ? `${base}EUR` : rules.has(`${base}USDC`) ? `${base}USDC` : null;
   return pair ? priceEur(pair) : null;
+}
+
+/** Cierres diarios de un par (los últimos `days`, el de hoy incluido aunque no haya cerrado). */
+export async function dailyCloses(pair: string, days = 240): Promise<{ t: number; c: number }[]> {
+  return parseKlines(await get("/api/v3/klines", { symbol: pair, interval: "1d", limit: String(Math.min(1000, days)) })).map((b) => ({ t: b.t, c: b.c }));
+}
+
+/**
+ * Precio de un valor de CRS (BTC-EUR…) entre dos momentos, en euros, para el gráfico de una operación:
+ * velas de 5 min si cabe en ~3 días, si no de 1 hora (hasta 1.000). Par EUR si existe; si no, USDC.
+ */
+export async function chartBars(symbol: string, from: number, to: number): Promise<{ t: number; c: number }[]> {
+  const base = symbol.replace(/-EUR$/, "").toUpperCase();
+  const rules = await eurPairs();
+  const candidates = [...rules.values()].filter((r) => r.base.toUpperCase() === base);
+  const pair = (candidates.find((r) => r.quote === "EUR") ?? candidates.find((r) => r.quote === "USDC"))?.pair;
+  if (!pair) return [];
+  const span = to - from;
+  const interval = span <= 80 * 3_600_000 ? "5m" : "1h";
+  const bars = parseKlines(await get("/api/v3/klines", { symbol: pair, interval, startTime: String(Math.floor(from)), endTime: String(Math.floor(to)), limit: "1000" }));
+  const k = pair.endsWith("USDC") ? await usdcInEur() : 1;
+  return bars.map((b) => ({ t: b.t, c: b.c * k }));
 }

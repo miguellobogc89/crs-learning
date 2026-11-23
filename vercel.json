@@ -1,4 +1,7 @@
 {
+  "regions": [
+    "fra1"
+  ],
   "crons": [
     {
       "path": "/api/tenders/cron",
@@ -11,6 +14,18 @@
     {
       "path": "/api/trading/cron/agents",
       "schedule": "15 18 * * 1-5"
+    },
+    {
+      "path": "/api/trading/cron/agents-tick",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/finance/cron",
+      "schedule": "37 5 * * *"
+    },
+    {
+      "path": "/api/trading/lab/swarm?desde=2026-11-18",
+      "schedule": "23 6 * * *"
     }
   ]
 }

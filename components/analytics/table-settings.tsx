@@ -20,7 +20,7 @@ export function TableSettingsButton() {
     if (next.has(key)) next.delete(key); else if (shown > 1) next.add(key);
     update({ hidden: [...next] });
   };
-  const changed = view.hidden.length > 0 || !!view.groupBy;
+  const changed = view.hidden.length > 0 || !!view.groupBy || Object.keys(view.widths).length > 0;
 
   return <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
     <PopoverPrimitive.Trigger asChild>

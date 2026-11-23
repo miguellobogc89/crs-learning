@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { load } from "./helpers.mjs";
 
 const { validateCommittee } = load("lib/trading/committee/prompt.ts");
-const { AGENTS, agentByKey, agentInstructions } = load("lib/trading/agents/roster.ts");
+const { ALL_AGENTS: AGENTS, AGENTS: ACTIVE, agentByKey, agentInstructions } = load("lib/trading/agents/roster.ts");
 
 const cost = { commissionPct: 0, commissionMin: 0, slippageBps: 0 };
 const asset = (symbol, market = "bolsa") => ({
@@ -50,4 +50,9 @@ test("agentes: mercado bajista — el precavido no compra, el arriesgado solo co
 test("agentes: sin reglas de agente, el comité normal no cambia", () => {
   const v = validateCommittee({ market_view: "", watchlist: [], proposals: [buy("A"), buy("B"), buy("C")] }, ctx(null, { bolsa: "bajista", crypto: "lateral" }));
   assert.ok(v.proposals.every((p) => p.status === "propuesta"));
+});
+
+test("agentes: el comité entero queda archivado (la IA ya no invierte) pero localizable", () => {
+  assert.deepEqual(ACTIVE.map((a) => a.key), []);
+  assert.ok(agentByKey("argo") && agentByKey("nova") && agentByKey("vertigo"));
 });

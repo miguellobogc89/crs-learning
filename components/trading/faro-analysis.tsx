@@ -28,9 +28,9 @@ const dayTime = (t: number) => new Intl.DateTimeFormat("es-ES", { day: "2-digit"
 
 type Segment = "todas" | "faro2" | "descartadas" | "azar";
 const SEGMENTS: [Segment, string][] = [
-  ["todas", "Todas las ideas"],
-  ["faro2", "FARO-2: las que pasa"],
-  ["descartadas", "FARO-2: las que descarta"],
+  ["faro2", "Publicadas"],
+  ["descartadas", "Descartadas por el filtro"],
+  ["todas", "Todas (antes del filtro)"],
   ["azar", "Al azar (control)"],
 ];
 
@@ -38,7 +38,7 @@ export function FaroAnalysis() {
   const [data, setData] = useState<A | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [segment, setSegment] = useState<Segment>("todas");
+  const [segment, setSegment] = useState<Segment>("faro2");
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -173,23 +173,23 @@ export function FaroAnalysis() {
   );
 }
 
-/** FARO-2 (en pruebas) frente a FARO: mismas ideas, solo las que pasan sus filtros. */
+/** El filtro de FARO: de las ideas que propone, las que publica frente a las que descarta. */
 function Faro2Card({ f2, totalIdeas }: { f2: A["faro2"]; totalIdeas: number }) {
   const rows: [string, A["faro2"]["all"], string][] = [
-    ["FARO (todas con contexto)", f2.all, "text-slate-900"],
-    ["FARO-2: las que pasa", f2.pass, "text-slate-900"],
-    ["Las que descarta", f2.rejected, "text-slate-500"],
+    ["Todas las que propone", f2.all, "text-slate-900"],
+    ["Publicadas (pasan el filtro)", f2.pass, "text-slate-900"],
+    ["Descartadas por el filtro", f2.rejected, "text-slate-500"],
   ];
   return (
     <section className="border-t border-slate-100 pt-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-slate-900">FARO-2 en pruebas</h3>
+        <h3 className="text-[15px] font-semibold text-slate-900">El filtro de FARO</h3>
         <span className="text-xs text-slate-500">
           Contexto disponible en {int(f2.judged)} de {int(totalIdeas)} ideas{f2.judged < totalIdeas ? " · se reconstruyen unas 10 cada 5 min" : ""}
         </span>
       </div>
       <p className="mt-0.5 text-xs text-slate-500">
-        Las mismas ideas de FARO, pero solo las que pasan unos filtros fijos: sin rebotes, sin perseguir subidas (más de +12 % en 24 h o +4 % en 1 h), sin impulsos pegados al máximo, nada con Bitcoin cayendo más de un 2 % o el mercado en defensa, y objetivo de al menos 1,5 veces el riesgo.
+        FARO propone ideas y su filtro decide cuáles se publican (solo esas ven los agentes). Descarta, con reglas fijas: sin rebotes, sin perseguir subidas (más de +12 % en 24 h o +4 % en 1 h), sin impulsos pegados al máximo, nada con Bitcoin cayendo más de un 2 % o el mercado en defensa, y objetivo de al menos 1,5 veces el riesgo.
       </p>
       {f2.judged === 0 ? (
         <p className="py-4 text-sm text-slate-500">Todavía no hay ideas con contexto. Si no aparecen en unos minutos, falta aplicar la migración de «features».</p>
@@ -248,10 +248,10 @@ function Faro2Card({ f2, totalIdeas }: { f2: A["faro2"]; totalIdeas: number }) {
 /** ¿Elige la IA mejor que el azar? Mismo periodo, mismas candidatas, mismo riesgo y recorrido. */
 function ControlTable({ f2 }: { f2: A["faro2"] }) {
   const rows: [string, A["faro2"]["all"]][] = [
-    ["FARO", f2.faroSameWindow],
-    ["FARO-2", f2.faro2SameWindow],
+    ["FARO, antes del filtro", f2.faroSameWindow],
+    ["FARO, publicadas", f2.faro2SameWindow],
     ["Al azar", f2.control],
-    ["Al azar que pasa FARO-2", f2.controlPass],
+    ["Al azar que pasa el filtro", f2.controlPass],
   ];
   return (
     <div className="mt-4 border-t border-slate-100 pt-3">

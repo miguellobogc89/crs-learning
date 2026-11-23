@@ -1,7 +1,6 @@
 //app/api/assistant/route.ts
  
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 import type { Prisma } from "@prisma/client";
 import type {
   Response as ModelResponse,
@@ -20,7 +19,8 @@ import { listAccessibleKnowledgeSpaces } from "@/lib/services/knowledge-space.se
 import { recordResourceAccess } from "@/lib/services/resource-access.service";
 import { getActiveWorkspaceContext } from "@/lib/services/workspace.service";
 import { resolveRetrievalQuery } from "@/lib/ai/assistant/resolve-retrieval-query";
-import { getOpenAIModel } from "@/lib/ai/openai";
+import { getOpenAIClient, getOpenAIModel } from "@/lib/ai/openai";
+import { applyAiSettings, recordAiUsage } from "@/lib/ai/usage";
 import {
   CHANGES_TOOL_NAME,
   changesTool,
@@ -42,11 +42,9 @@ import {
 /** Tool rounds per message (each round can run several queries). */
 const MAX_TOOL_ROUNDS = 6;
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function POST(request: Request) {
+  // Modelo del asistente elegido en «Consumo de IA» (manda sobre OPENAI_ASSISTANT_MODEL de Vercel).
+  await applyAiSettings();
   const session = await auth();
 
   if (!session?.user?.id) {
@@ -259,7 +257,7 @@ console.log("AI INPUT DEBUG", {
   let response: ModelResponse;
   for (let round = 0; ; round += 1) {
     const useTools = tables.length > 0 && round < MAX_TOOL_ROUNDS;
-    response = await openai.responses.create({
+    response = await getOpenAIClient().responses.create({
       model: assistantModel(),
       input,
       stream: false,
@@ -267,6 +265,7 @@ console.log("AI INPUT DEBUG", {
     });
     tokensInput += response.usage?.input_tokens ?? 0;
     tokensOutput += response.usage?.output_tokens ?? 0;
+    await recordAiUsage("business", "asistente", assistantModel(), response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0);
     const calls = response.output.filter(
       (item): item is ResponseFunctionToolCall => item.type === "function_call",
     );
@@ -510,7 +509,7 @@ async function repairAnswerCitations({
   validationErrors: string[];
 }) {
   const repairResponse =
-    await openai.responses.create({
+    await getOpenAIClient().responses.create({
       model: getOpenAIModel(),
       input: [
         {

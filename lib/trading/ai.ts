@@ -10,6 +10,7 @@
 import "server-only";
 import { getOpenAIClient } from "@/lib/ai/openai";
 import { prisma } from "@/lib/prisma";
+import { recordAiUsage } from "@/lib/ai/usage";
 
 export type AiTier = "fast" | "smart";
 
@@ -92,8 +93,18 @@ export async function aiJson<T>(opts: {
     { timeout: opts.timeoutMs ?? 60_000, maxRetries: 1 },
   );
   await record(opts.purpose, response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0);
+  await recordAiUsage("trade", opts.purpose, model, response.usage?.input_tokens ?? 0, response.usage?.output_tokens ?? 0);
   if (response.status !== "completed" || !response.output_text?.trim()) throw new Error("La IA no completó la respuesta");
-  return JSON.parse(response.output_text) as T;
+  // Postgres no admite el carácter nulo (\u0000) en texto ni JSON: si la IA lo cuela, el guardado entero falla.
+  return stripNul(JSON.parse(response.output_text.replace(/\u0000/g, ""))) as T;
+}
+
+/** Quita los caracteres nulos de todos los textos (también los que llegan escapados como \\u0000 en el JSON). */
+function stripNul(v: unknown): unknown {
+  if (typeof v === "string") return v.replace(/\u0000/g, "");
+  if (Array.isArray(v)) return v.map(stripNul);
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, stripNul(x)]));
+  return v;
 }
 
 export function aiModelInfo() {

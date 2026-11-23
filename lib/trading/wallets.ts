@@ -10,9 +10,9 @@ import { referencePrice } from "./kamikaze/market";
 import { legResult } from "./mirror/logic";
 import { madridDay } from "./accounts";
 import { dayDate, dayKey } from "./sync";
-import { agentByKey } from "./agents/roster";
+import { agentByKey, ARCHIVED_AGENTS } from "./agents/roster";
 import { chipByKey } from "./chip/roster";
-import { kamikazeByKey } from "./kamikaze/roster";
+import { ARCHIVED_KAMIKAZES, kamikazeByKey } from "./kamikaze/roster";
 
 /** Los saldos se piden como mucho una vez por minuto (el panel lateral se refresca solo). */
 const TTL_MS = 60_000;
@@ -132,6 +132,8 @@ export async function getWallets(actor: Extract<BrokerActor, { kind: "user" }>, 
 }
 
 
+const isActiveAgent = (key: string) => !ARCHIVED_AGENTS.has(key) && !ARCHIVED_KAMIKAZES.has(key);
+
 /** Agentes del usuario (como mucho MAX_OWN) y la evolución de su dinero real. */
 export const MAX_OWN = 3;
 
@@ -148,7 +150,8 @@ export async function myAgents(workspaceId: string) {
     byDay.set(dayKey(s.day), [...last.values()].reduce((a, b) => a + b, 0));
   }
   return {
-    owned: owned.map((o) => o.agent),
+    // Los archivados ya no cuentan ni se enseñan (su historial sigue en la base de datos).
+    owned: owned.map((o) => o.agent).filter(isActiveAgent),
     max: MAX_OWN,
     history: [...byDay.entries()].map(([day, equity]) => ({ day, equity })),
   };
@@ -158,7 +161,8 @@ export async function myAgents(workspaceId: string) {
 export async function addMyAgent(workspaceId: string, key: unknown) {
   const agent = String(key ?? "");
   if (!(agentByKey(agent) || kamikazeByKey(agent) || chipByKey(agent))) throw new Error("Ese agente no existe");
-  const owned = await prisma.trading_user_agents.findMany({ where: { workspace_id: workspaceId }, select: { agent: true } });
+  if (!isActiveAgent(agent)) throw new Error("Ese agente está archivado");
+  const owned = (await prisma.trading_user_agents.findMany({ where: { workspace_id: workspaceId }, select: { agent: true } })).filter((o) => isActiveAgent(o.agent));
   if (owned.some((o) => o.agent === agent)) return { ok: true };
   if (owned.length >= MAX_OWN) throw new Error(`Ya tienes ${MAX_OWN} agentes: quita uno para dejar hueco`);
   await prisma.trading_user_agents.create({ data: { workspace_id: workspaceId, agent } });

@@ -1,12 +1,13 @@
 "use client";
 // Copiar a un agente en tu exchange de cripto: presupuesto, modo (ensayo o dinero real) y las órdenes que se han
 // hecho (o se habrían hecho, en ensayo) siguiéndole.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ComponentProps } from "react";
 import { Loader2 } from "lucide-react";
 import type { mirrorView } from "@/lib/trading/mirror/service";
 import { api, errorText, field, ghost, primary } from "./format";
 import { Modal } from "./ui";
 import { Money, sinceText } from "./table";
+import { AgentVenuePills } from "./agent-venues";
 
 type View = Awaited<ReturnType<typeof mirrorView>> & { canManage: boolean };
 type Leg = View["mirrors"][number]["legs"][number];
@@ -20,7 +21,19 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   error: { label: "Revisar", tone: "bg-red-50 text-red-700" },
 };
 
-export function MirrorModal({ agent, name, onClose }: { agent: string; name: string; onClose: () => void }) {
+
+export function MirrorModal({
+  agent,
+  name,
+  venues,
+  onClose,
+}: {
+  agent: string;
+  name: string;
+  /** En qué exchanges se le puede copiar (solo se enseña aquí, que es donde importa). */
+  venues?: ComponentProps<typeof AgentVenuePills>["v"];
+  onClose: () => void;
+}) {
   const [view, setView] = useState<View | null>(null);
   const [budget, setBudget] = useState("20");
   const [mode, setMode] = useState<"ensayo" | "real">("ensayo");
@@ -45,6 +58,10 @@ export function MirrorModal({ agent, name, onClose }: { agent: string; name: str
 
   const m = view?.mirrors.find((x) => x.agent === agent) ?? null;
   const active = !!m?.active;
+  // Agentes de cortos (ENJAMBRE): el dinero real va a Kraken Futures.
+  const short = agent.startsWith("enjambre-corto") || /^enjambre-x\d+$/.test(agent) || agent.startsWith("avalancha") || agent === "rebote";
+  const realReady = view ? (short ? view.kraken.ready : view.real.ready) : false;
+  const realProblemText = view ? (short ? view.kraken.problem : view.real.problem) : null;
   const b = Number(budget.replace(",", "."));
   const valid = b >= 5 && b <= (view?.maxBudget ?? 100);
 
@@ -110,9 +127,16 @@ export function MirrorModal({ agent, name, onClose }: { agent: string; name: str
         error ? <p className="text-sm text-red-700">{error}</p> : <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
       ) : (
         <div className="space-y-4 text-sm text-slate-700">
+          {venues && venues.venues.length > 0 && (
+            <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+              <div className="text-xs font-medium text-slate-600">Dónde se le puede copiar</div>
+              <AgentVenuePills v={{ markets: [], venues: venues.venues }} className="mt-1.5" />
+              <p className="mt-1.5 text-[11px] text-slate-500">En gris, los que aún no se pueden usar con dinero real. «2/4» = ese exchange tiene 2 de las 4 monedas que mira el agente.</p>
+            </div>
+          )}
           <p>
-            Cada 5 minutos se mira qué tiene abierto {name}. Si acaba de entrar en una cripto con par en euros, se compra lo mismo con tu presupuesto (en
-            proporción a lo que él metió); cuando sale, se vende. Solo se copian entradas de menos de 30 minutos, para no comprar más caro que él.
+            En cuanto {name} compra o vende, se repite en tu exchange al momento con tu presupuesto (en proporción a lo que él metió). Si por lo que sea se
+            retrasa, una revisión periódica lo recoge; pero nunca se copia una entrada de hace más de 30 minutos, para no comprar más caro que él.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
@@ -128,18 +152,18 @@ export function MirrorModal({ agent, name, onClose }: { agent: string; name: str
                 </button>
                 <button
                   type="button"
-                  disabled={!view.real.ready}
-                  title={view.real.problem ?? undefined}
+                  disabled={!realReady}
+                  title={realProblemText ?? undefined}
                   onClick={() => setMode("real")}
                   className={`rounded-xl border px-3 py-2 text-left disabled:opacity-50 ${mode === "real" ? "border-red-500 bg-red-50" : "border-slate-200"}`}
                 >
                   <b className="block text-slate-900">Dinero real</b>
-                  <span className="text-xs text-slate-500">Envía las órdenes a tu exchange</span>
+                  <span className="text-xs text-slate-500">{short ? "Abre los mismos cortos en tu Kraken" : "Envía las órdenes a tu exchange"}</span>
                 </button>
               </div>
             </div>
           </div>
-          {!view.real.ready && <p className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs">Para el modo real: {view.real.problem}.</p>}
+          {!realReady && <p className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs">Para el modo real: {realProblemText}.</p>}
           {!valid && <p className="text-xs text-amber-700">Elige entre 5 € y {view.maxBudget} €.</p>}
           {done && <p className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-800">{done}</p>}
           {error && <p className="text-red-700">{error}</p>}

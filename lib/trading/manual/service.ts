@@ -11,7 +11,7 @@ import { BrokerError } from "@/lib/brokers/types";
 import { referencePrice } from "../kamikaze/market";
 import { MIN_ORDER_EUR, stepQuantity } from "../mirror/logic";
 import { maxBudget, realConnection, realOrder, realProblem, venueFor } from "../mirror/service";
-import { manualStep, tradeResult } from "./logic";
+import { manualStep, tradeResult, MANUAL_FEE_PCT } from "./logic";
 
 const STALE_MS = 10 * 60_000;
 const MAX_SELL_ATTEMPTS = 5;
@@ -40,6 +40,10 @@ export async function manualView(workspaceId: string) {
         invested: t.quantity && t.entry_price ? t.quantity * t.entry_price : t.amount,
         entry: t.entry_price,
         stop: t.stop,
+        initialStop: t.initial_stop ?? t.stop,
+        exitPrice: t.exit_price,
+        /** Comisión por lado con la que se calcula el resultado (Bitvavo, taker), en %. */
+        feePct: MANUAL_FEE_PCT,
         target: t.target,
         trail: t.trail,
         trailing: t.trailing,

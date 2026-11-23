@@ -8,6 +8,7 @@ import { HomePanel } from "./home-panel";
 import { IntegrationsPanel } from "./integrations-panel";
 import { MarketsPanel } from "./markets-panel";
 import { PortfolioPanel } from "./portfolio-panel";
+import { PushSettingsPanel } from "./push-settings";
 import { ShellMeta } from "./shell";
 import { VIRTUAL_PORTFOLIO_TITLE, isFittedTab, type TradingTab } from "./tabs";
 
@@ -29,6 +30,7 @@ export function TradingWorkspace({ tab, virtual = false }: { tab: TradingTab; vi
   else if (tab === "agentes") body = <AgentsPanel />;
   else if (tab === "mercados") body = <MarketsPanel />;
   else if (tab === "integraciones") body = <IntegrationsPanel />;
+  else if (tab === "notificaciones") body = <PushSettingsPanel />;
 
   const fitted = isFittedTab(tab);
   return (

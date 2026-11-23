@@ -3,9 +3,10 @@
 // el precio después y elegir cuál toma cada kamikaze. Sin red ni base de datos: lo prueban los tests.
 import type { Bar } from "../kamikaze/logic";
 import type { KamikazeStyle } from "../kamikaze/roster";
+import { CARTA, ideaValidHours, isCartaKind, isLimitKind } from "../carta";
 
-export type IdeaKind = "impulso" | "ruptura" | "rebote" | "noticia";
-export const KINDS: IdeaKind[] = ["impulso", "ruptura", "rebote", "noticia"];
+export type IdeaKind = "impulso" | "ruptura" | "rebote" | "noticia" | "retroceso" | "ruido" | "tendencia";
+export const KINDS: IdeaKind[] = ["impulso", "ruptura", "rebote", "noticia", "retroceso", "ruido", "tendencia"];
 /**
  * Tipos que FARO ya no publica. Rebotes: 0 aciertos en 58 ideas (−2,1 % de media) del 11 al 14/11/2026.
  * Se puede cambiar con TRADING_FARO_OFF (lista separada por comas; vacío = ninguno apagado).
@@ -16,13 +17,17 @@ export const DISABLED_KINDS: IdeaKind[] = (() => {
   return KINDS.filter((k) => list.includes(k));
 })();
 export const ENABLED_KINDS: IdeaKind[] = KINDS.filter((k) => !DISABLED_KINDS.includes(k));
-export type IdeaStatus = "viva" | "acierto" | "fallo" | "caducada";
+/** Los que propone la IA de FARO (ruido y tendencia salen de escáneres de reglas, sin IA). */
+export const AI_KINDS: IdeaKind[] = ENABLED_KINDS.filter((k) => !isCartaKind(k) || CARTA[k].source === "FARO");
+/** «sin_entrar»: orden limitada que caducó sin que el precio bajara a su nivel (no cuenta como resultado). */
+export type IdeaStatus = "viva" | "acierto" | "fallo" | "caducada" | "sin_entrar";
 
 /** Qué tipos de idea toma cada estilo de kamikaze. */
 export const STYLE_KINDS: Record<KamikazeStyle, IdeaKind[]> = {
   impulso: ["impulso"],
   rupturas: ["ruptura", "noticia"],
   rebotes: ["rebote"],
+  selectivo: ["impulso", "ruptura", "noticia"],
 };
 
 /** Coste de ida y vuelta que se descuenta al puntuar una idea (comisiones + deslizamiento). */
@@ -42,6 +47,8 @@ export type AiIdea = {
   valid_hours: number;
   rationale: string;
   risks: string;
+  /** Solo «retroceso»: precio de la orden limitada (por debajo del de ahora). */
+  entry?: number | null;
 };
 
 export type CheckedIdea = {
@@ -84,8 +91,19 @@ export function checkIdeas(
       reject("ya hay una idea viva de este par");
       continue;
     }
-    const down = ((c.price - i.invalidation) / c.price) * 100;
-    const up = ((i.target - c.price) / c.price) * 100;
+    // Retroceso: la referencia es el precio de la orden limitada, que tiene que estar por debajo del de ahora.
+    let ref = c.price;
+    if (isLimitKind(i.kind)) {
+      const e = Number(i.entry);
+      const below = Number.isFinite(e) ? ((c.price - e) / c.price) * 100 : NaN;
+      if (!(below >= 0.5 && below <= 15)) {
+        reject("la entrada de un retroceso tiene que estar entre un 0,5 % y un 15 % por debajo del precio");
+        continue;
+      }
+      ref = e;
+    }
+    const down = ((ref - i.invalidation) / ref) * 100;
+    const up = ((i.target - ref) / ref) * 100;
     if (!(down >= 1 && down <= 40)) {
       reject("la invalidación tiene que estar entre un 1 % y un 40 % por debajo del precio");
       continue;
@@ -103,10 +121,11 @@ export function checkIdeas(
       pair,
       kind: i.kind as IdeaKind,
       conviction: Math.max(1, Math.min(5, Math.round(i.conviction || 1))),
-      price: c.price,
+      price: ref,
       invalidation: i.invalidation,
       target: i.target,
-      validHours: Math.max(1, Math.min(24, Math.round(i.valid_hours || 6))),
+      // Con el plazo máximo de su tipo en la carta (y el tiempo de entrar, si es limitada).
+      validHours: isCartaKind(i.kind) ? ideaValidHours(i.kind, Math.max(1, Math.min(24, Math.round(i.valid_hours || 6)))) : Math.max(1, Math.min(24, Math.round(i.valid_hours || 6))),
       rationale: String(i.rationale ?? "").slice(0, 1200),
       risks: i.risks ? String(i.risks).slice(0, 600) : null,
     });
@@ -183,6 +202,26 @@ export function scoreIdea(i: IdeaTrack, bars: Bar[], now: number, livePrice: num
   return { status: "viva", best, worst, lastPrice, exitPrice: null, resultPct: lastPrice !== null ? net(pctOf(i.price, lastPrice)) : null, resolvedAt: null };
 }
 
+/**
+ * Idea con orden limitada (retroceso, ruido): no empieza hasta que una vela toca su precio antes de
+ * `entryUntil`. Si no lo toca a tiempo: «sin_entrar» (sin resultado). Si lo toca y en esa misma vela
+ * también rompe la invalidación, cuenta como fallo.
+ */
+export function scoreLimitIdea(i: IdeaTrack, entryUntil: number, bars: Bar[], now: number, livePrice: number | null): IdeaScore {
+  const fill = bars.find((b) => b.t >= i.createdAt && b.t < entryUntil && b.l <= i.price);
+  const touchedLive = !fill && livePrice !== null && now < entryUntil && livePrice <= i.price;
+  if (!fill && !touchedLive) {
+    if (now >= entryUntil) return { status: "sin_entrar", best: 0, worst: 0, lastPrice: livePrice, exitPrice: null, resultPct: null, resolvedAt: entryUntil };
+    return { status: "viva", best: 0, worst: 0, lastPrice: livePrice, exitPrice: null, resultPct: null, resolvedAt: null };
+  }
+  if (fill && fill.l <= i.invalidation) {
+    return { status: "fallo", best: 0, worst: pctOf(i.price, i.invalidation), lastPrice: i.invalidation, exitPrice: i.invalidation, resultPct: net(pctOf(i.price, i.invalidation)), resolvedAt: fill.t };
+  }
+  // Desde la vela siguiente a la entrada, como cualquier idea.
+  const from = fill ? fill.t + 1 : now;
+  return scoreIdea({ ...i, createdAt: from }, bars, now, livePrice);
+}
+
 // ---------------------------------------------------------------------------
 // Qué idea toma un kamikaze
 // ---------------------------------------------------------------------------
@@ -191,8 +230,16 @@ export type BoardIdea = { id: string; pair: string; kind: string; conviction: nu
 /** Margen máximo que puede haber subido el precio desde la idea para que aún valga entrar. */
 export const MAX_CHASE_PCT = 3;
 
-export type PickOptions = { maxChasePct?: number; stopMode?: "clamp" | "idea" };
-const TYPE_TEXT: Record<KamikazeStyle, string> = { impulso: "impulso", rupturas: "ruptura o noticia", rebotes: "rebote" };
+export type PickOptions = {
+  maxChasePct?: number;
+  stopMode?: "clamp" | "idea";
+  minConviction?: number;
+  /** Tipos de la carta que coge (si no, los de su estilo). */
+  kinds?: string[];
+  /** Usa el stop y el objetivo de la idea tal cual (sin el mínimo de +10 % de los antiguos kamikazes). */
+  ideaLevels?: boolean;
+};
+const TYPE_TEXT: Record<KamikazeStyle, string> = { impulso: "impulso", rupturas: "ruptura o noticia", rebotes: "rebote", selectivo: "convicción alta" };
 const pct1 = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
 
 /**
@@ -209,23 +256,38 @@ export function chooseIdea<T extends BoardIdea>(
   opts: PickOptions = {},
 ): { pick: { idea: T; price: number; stop: number; target: number } } | { reason: string } {
   const chase = opts.maxChasePct ?? MAX_CHASE_PCT;
-  const kinds = STYLE_KINDS[style] as string[];
-  const mine = ideas.filter((i) => kinds.includes(i.kind) && i.validUntil > now);
-  if (!mine.length) return { reason: `No hay ideas de ${TYPE_TEXT[style]} en el tablón` };
+  const kinds = opts.kinds ?? (STYLE_KINDS[style] as string[]);
+  const what = opts.kinds ? opts.kinds.map((k) => (isCartaKind(k) ? CARTA[k].label.toLowerCase() : k)).join(", ") : TYPE_TEXT[style];
+  const mine = ideas.filter((i) => kinds.includes(i.kind) && i.validUntil > now && i.conviction >= (opts.minConviction ?? 0));
+  if (!mine.length) return { reason: `No hay ideas de ${what} en el tablón` };
   const free = mine.filter((i) => !taken.has(i.id));
-  if (!free.length) return { reason: `Ya entró en las ideas de ${TYPE_TEXT[style]} que hay` };
+  if (!free.length) return { reason: `Ya entró en las ideas de ${what} que hay` };
   const priced = free.map((i) => ({ i, p: price(i.pair) }));
+  // A mercado: si el precio no se ha escapado. Limitadas: solo cuando el precio baja a su nivel (y dentro de su tiempo de entrar).
+  const inWindow = (i: T) => !isCartaKind(i.kind) || CARTA[i.kind].entryHours === null || now <= i.createdAt + (CARTA[i.kind].entryHours ?? 0) * HOUR;
   const options = priced
-    .filter((x): x is { i: T; p: number } => x.p !== null && x.p > x.i.invalidation && x.p <= x.i.price * (1 + chase / 100))
+    .filter((x): x is { i: T; p: number } =>
+      x.p !== null &&
+      x.p > x.i.invalidation &&
+      inWindow(x.i) &&
+      (isLimitKind(x.i.kind) ? x.p <= x.i.price * 1.002 : x.p <= x.i.price * (1 + chase / 100)),
+    )
     .sort((a, b) => b.i.conviction - a.i.conviction || b.i.createdAt - a.i.createdAt);
   const best = options[0];
   if (!best) {
     const why = priced.map(({ i, p }) =>
-      p === null ? `${i.pair}: sin precio` : p <= i.invalidation ? `${i.pair}: por debajo de la invalidación` : `${i.pair}: ya escapada (${pct1(((p - i.price) / i.price) * 100)})`,
+      p === null
+        ? `${i.pair}: sin precio`
+        : p <= i.invalidation
+          ? `${i.pair}: por debajo de la invalidación`
+          : isLimitKind(i.kind)
+            ? `${i.pair}: esperando a que baje a ${i.price.toPrecision(5)} (${pct1(((p - i.price) / i.price) * 100)} por encima)`
+            : `${i.pair}: ya escapada (${pct1(((p - i.price) / i.price) * 100)})`,
     );
-    return { reason: `${free.length === 1 ? "1 idea" : `${free.length} ideas`} de ${TYPE_TEXT[style]}, ninguna a tiro: ${why.join(" · ")}` };
+    return { reason: `${free.length === 1 ? "1 idea" : `${free.length} ideas`} de ${what}, ninguna a tiro: ${why.join(" · ")}` };
   }
   const { i, p } = best;
+  if (opts.ideaLevels) return { pick: { idea: i, price: p, stop: i.invalidation, target: i.target } };
   const stop = opts.stopMode === "idea" ? i.invalidation : Math.min(p * 0.95, Math.max(p * 0.6, i.invalidation));
   const target = Math.max(i.target, p * 1.1);
   return { pick: { idea: i, price: p, stop, target } };
@@ -332,6 +394,8 @@ export const FARO2_RULES = {
 
 export function faro2Verdict(kind: string, f: IdeaFeatures | null): { pass: boolean; reasons: string[] } | null {
   if (!f) return null;
+  // Los escáneres de la carta (ruido, tendencia) ya son reglas: el filtro es para lo que propone la IA.
+  if (isCartaKind(kind) && CARTA[kind].source === "Escáner") return null;
   const r = FARO2_RULES;
   const reasons: string[] = [];
   const p = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`;
@@ -340,7 +404,8 @@ export function faro2Verdict(kind: string, f: IdeaFeatures | null): { pass: bool
   if (f.ch1h > r.maxCh1h) reasons.push(`subió ${p(f.ch1h)} en la última hora: llega tarde`);
   if (kind === "impulso" && f.fromHigh3d > r.impulseMinFromHigh3d) reasons.push("impulso pegado al máximo de 3 días");
   if (f.btc24h !== null && f.btc24h < r.minBtc24h) reasons.push(`Bitcoin cae ${p(f.btc24h)} en 24 h`);
-  if (f.phase === "defensa") reasons.push("mercado en defensa");
+  // En defensa solo se descartan los tipos que piden mercado en ataque (las noticias valen siempre).
+  if (f.phase === "defensa" && (!isCartaKind(kind) || CARTA[kind].regime === "ataque")) reasons.push("mercado en defensa");
   if (f.riskPct > 0 && f.rewardPct < r.minRewardRisk * f.riskPct) reasons.push(`objetivo corto para lo que arriesga (${p(f.rewardPct)} frente a −${f.riskPct.toFixed(1).replace(".", ",")} %)`);
   return { pass: reasons.length === 0, reasons };
 }
@@ -428,4 +493,51 @@ export function simulateLevels(
       out[simKey(sm, tm)] = [sc.resultPct, sc.status === "acierto" ? "a" : sc.status === "fallo" ? "f" : "c"];
     }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Base para aprender (17/11/2026)
+// ---------------------------------------------------------------------------
+/**
+ * Versión de FARO: sube cada vez que cambian sus reglas, su prompt o su filtro, para poder comparar
+ * versiones en las mismas condiciones. Formato AAAA-MM-DD.n. Historial:
+ *  - 2026-11-17.1: carta de oportunidades (retroceso, ruido, tendencia), plazos por tipo, filtro por
+ *    momento del mercado, foto completa del mercado y candidatos guardados.
+ */
+export const FARO_VERSION = "2026-11-17.1";
+
+/** RSI de 14 periodos (Wilder) sobre cierres; null si no hay velas suficientes. */
+export function rsi(closes: number[], period = 14): number | null {
+  if (closes.length < period + 1) return null;
+  let gain = 0;
+  let loss = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = closes[i] - closes[i - 1];
+    if (d > 0) gain += d;
+    else loss -= d;
+  }
+  gain /= period;
+  loss /= period;
+  for (let i = period + 1; i < closes.length; i++) {
+    const d = closes[i] - closes[i - 1];
+    gain = (gain * (period - 1) + Math.max(0, d)) / period;
+    loss = (loss * (period - 1) + Math.max(0, -d)) / period;
+  }
+  if (loss === 0) return gain === 0 ? 50 : 100;
+  return Math.round((100 - 100 / (1 + gain / loss)) * 10) / 10;
+}
+
+/** Lo que pasó con un candidato tras el análisis: a 6 y 24 h, lo máximo que subió, lo máximo que bajó y dónde acabó (en %). */
+export type CandidateOutcome = Record<"h6" | "h24", { up: number; down: number; close: number } | null>;
+
+export function candidateOutcome(bars: Bar[], t0: number, price: number): CandidateOutcome {
+  const win = (hours: number) => {
+    const end = t0 + hours * HOUR;
+    // Desde la primera vela completa tras el análisis (la que estaba en curso tiene precios de antes).
+    const w = bars.filter((b) => b.t >= t0 && b.t < end);
+    if (!w.length || !(price > 0)) return null;
+    const p = (v: number) => Math.round(((v - price) / price) * 10000) / 100;
+    return { up: p(Math.max(...w.map((b) => b.h))), down: p(Math.min(...w.map((b) => b.l))), close: p(w[w.length - 1].c) };
+  };
+  return { h6: win(6), h24: win(24) };
 }

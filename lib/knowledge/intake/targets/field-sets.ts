@@ -75,7 +75,7 @@ const articleLines = (required: boolean): EntityDef => ({
     f("unit_price_basis", "Precio unitario con o sin impuestos", "enum", false, "«sin_impuestos» o «con_impuestos» según indique la columna; vacío si no se indica."),
     f("discount", "Descuento en euros", "decimal", false, "Descuento de la línea en euros, solo si se imprime como importe."),
     f("discount_percent", "Descuento (%)", "decimal", false, "Porcentaje de descuento de la línea (columna «Dto.», «% Dto.»…), sin el símbolo %. Si la columna de descuento es un porcentaje, va aquí y no en «Descuento en euros»."),
-    f("tax_rate", "Tipo de impuesto", "text", false, "Tipo de la línea tal como aparece."),
+    f("tax_rate", "Tipo de impuesto", "text", false, "Porcentaje de IVA de la línea (21, 10, 4…). Si la línea solo trae un código o letra (1, 2, A, B…) y el documento tiene una leyenda que dice a qué porcentaje corresponde, el porcentaje; si no la tiene, el código tal como aparece. Vacío si la línea no indica nada."),
     f("line_total", "Importe de la línea", "decimal", true, "Importe total de la línea tal como aparece; si hay dos columnas de importe (sin y con impuestos), el SIN impuestos."),
     f("line_total_with_tax", "Importe de la línea con impuestos", "decimal", false, "Solo si el documento imprime OTRA columna de importe de la línea con impuestos (Importe TTI, Total IVA incl.)."),
     f("line_total_basis", "Importe con o sin impuestos", "enum", false, "«sin_impuestos» o «con_impuestos» según indique la columna; vacío si no se indica."),

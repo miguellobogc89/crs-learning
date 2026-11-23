@@ -3,12 +3,27 @@ import { filterValue, type Sort } from "./table-query";
 
 /**
  * How a person likes to see one table (saved per person, workspace and table): which columns are hidden, which
- * column groups the rows, the order and the rows per page. Pure: what is saved is validated against the table's
+ * column groups the rows, the order, the rows per page and the width of each column. Pure: what is saved is validated against the table's
  * current columns, so a column that no longer exists is simply forgotten.
  */
-export type TableView = { hidden: string[]; groupBy: string | null; sort: Sort; pageSize: number };
+export type TableView = { hidden: string[]; groupBy: string | null; sort: Sort; pageSize: number; widths: Record<string, number> };
 export const PAGE_SIZES = [25, 50, 100] as const;
-export const DEFAULT_VIEW: TableView = { hidden: [], groupBy: null, sort: null, pageSize: 25 };
+export const DEFAULT_VIEW: TableView = { hidden: [], groupBy: null, sort: null, pageSize: 25, widths: {} };
+export const MIN_WIDTH = 60, MAX_WIDTH = 800;
+
+/** The width a column takes: the one the person dragged, else the column's own, else one that suits its kind. */
+export function columnWidth(c: Column, widths: Record<string, number> = {}): number {
+  if (widths[c.key]) return widths[c.key];
+  if (c.width) return c.width;
+  switch (c.kind) {
+    case "date": return 110;
+    case "money": return 130;
+    case "number": return 110;
+    case "boolean": return 100;
+    case "document": return 90;
+    default: return Math.min(240, Math.max(120, c.label.length * 9 + 40));
+  }
+}
 
 /** Columns rows can be grouped by: names, categories, yes/no, dates (not amounts or links). */
 export const groupable = (c: Column) => c.kind !== "document" && c.kind !== "money" && c.kind !== "number";
@@ -24,7 +39,11 @@ export function normalizeView(raw: unknown, columns?: Column[]): TableView {
   const s = v.sort as { key?: unknown; dir?: unknown } | null | undefined;
   const sort: Sort = s && known(s.key) && (s.dir === "asc" || s.dir === "desc") ? { key: s.key, dir: s.dir } : null;
   const pageSize = PAGE_SIZES.includes(v.pageSize as (typeof PAGE_SIZES)[number]) ? v.pageSize as number : DEFAULT_VIEW.pageSize;
-  return { hidden, groupBy, sort, pageSize };
+  // Widths in whole pixels, within limits, only of columns that exist (at most 100).
+  const w = v.widths && typeof v.widths === "object" && !Array.isArray(v.widths) ? v.widths as Record<string, unknown> : {};
+  const widths = Object.fromEntries(Object.entries(w).filter(([k, n]) => known(k) && typeof n === "number" && Number.isFinite(n)).slice(0, 100)
+    .map(([k, n]) => [k, Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, n as number)))]));
+  return { hidden, groupBy, sort, pageSize, widths };
 }
 
 /**

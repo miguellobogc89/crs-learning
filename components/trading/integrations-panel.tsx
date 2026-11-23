@@ -1,9 +1,10 @@
 "use client";
-// Integraciones: catálogo de brókeres y conexiones del usuario. Todo lo que se pinta sale del módulo
+// Conexiones: catálogo de brókeres y conexiones del usuario. Todo lo que se pinta sale del módulo
 // central (/api/brokers): proveedores, capacidades, entornos, permisos y estado. Aquí no hay lógica
 // de ningún bróker concreto. Las credenciales se envían una vez y no vuelven nunca al navegador.
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, ClipboardList, Eye, KeyRound, Loader2, Plug, PlugZap, RefreshCw, ShieldAlert, Unplug } from "lucide-react";
+import { CheckCircle2, ClipboardList, Eye, Info, Loader2, PlugZap, RefreshCw, Unplug } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ConnectionView, ProviderView } from "@/lib/brokers/gateway";
 import type { BrokerEnvironment, BrokerPermission, OrderStatus } from "@/lib/brokers/types";
 import { errorText, field, ghost, panel, primary, th } from "./format";
@@ -56,11 +57,6 @@ const PERMISSION: { key: BrokerPermission; label: string; text: string }[] = [
   { key: "trade", label: "Operar", text: "Enviar y cancelar las órdenes que tú pidas." },
   { key: "auto", label: "Automático", text: "Que los automatismos de CRS (guardián del stop, modo automático) operen por ti." },
 ];
-const STATUS_PILL: Record<ConnectionView["status"], { label: string; color: string }> = {
-  active: { label: "Conectada", color: "emerald" },
-  error: { label: "Con error", color: "orange" },
-  disconnected: { label: "Desconectada", color: "slate" },
-};
 const ORDER_STATUS: Record<OrderStatus, string> = {
   pending_submit: "enviando",
   open: "abierta",
@@ -126,85 +122,41 @@ export function IntegrationsPanel() {
   };
 
   if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard />;
-  const available = data.providers.filter((p) => p.availability === "available");
+  const connectionsByProvider = new Map<string, ConnectionView[]>();
+  for (const connection of data.connections) {
+    if (connection.status === "disconnected") continue;
+    const existing = connectionsByProvider.get(connection.provider) ?? [];
+    connectionsByProvider.set(connection.provider, [...existing, connection]);
+  }
+  const isConnected = (provider: ProviderView) => (connectionsByProvider.get(provider.id) ?? []).some((c) => c.status === "active");
+  const available = data.providers.filter((p) => p.availability === "available")
+    .sort((a, b) => Number(isConnected(b)) - Number(isConnected(a)));
   const soon = data.providers.filter((p) => p.availability === "soon");
-  const trading = data.connections.find((c) => c.usedByTrading) ?? null;
 
   return (
     <div className="space-y-6">
-      <section className={`${card} px-6 py-5`}>
-        <h2 className="flex items-center gap-3 text-lg font-semibold text-slate-900">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-            <Plug className="h-5 w-5" />
-          </span>
-          Integraciones con brókeres
-        </h2>
-        <p className="mt-2 max-w-3xl text-sm text-slate-600">
-          Conecta tus cuentas para que CRS pueda leerlas y, si lo autorizas, enviar las órdenes que tú decidas. Cada conexión es tuya, con su
-          entorno (demo o real) fijo y los permisos que elijas. Tus claves se guardan cifradas y nunca vuelven a la pantalla.
-        </p>
-        <p className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-600">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-          <span>
-            Conectar un bróker es una conexión técnica: CRS no gestiona tu dinero ni te asesora. Tú decides cada operación o qué automatismos
-            permites.{" "}
-            {data.realEnabled ? <b>Las cuentas con dinero real están habilitadas en este servidor.</b> : "Las cuentas con dinero real no están habilitadas: solo demo."}
-          </span>
-        </p>
-        <div className="mt-3 text-sm text-slate-600">
-          Cartera de Trading:{" "}
-          {trading ? (
-            <b className="text-slate-900">
-              {data.providers.find((p) => p.id === trading.provider)?.name ?? trading.provider} · {envLabel(trading.environment)}
-            </b>
-          ) : (
-            <span className="text-slate-500">sin bróker (solo el simulador)</span>
-          )}
-        </div>
-      </section>
-
       {error && <ErrorNote>{error}</ErrorNote>}
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        {available.map((p) => {
-          const conns = data.connections.filter((c) => c.provider === p.id && c.status !== "disconnected");
-          const freeEnvs = p.environments.filter((e) => (e !== "real" || data.realEnabled) && !conns.some((c) => c.environment === e));
-          return (
-            <article key={p.id} className={`${card} flex flex-col`}>
-              <div className="flex items-start gap-3 px-6 pt-5">
-                <Logo p={p} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-[15px] font-semibold text-slate-900">{p.name}</h3>
-                    <Pill color="emerald">Disponible</Pill>
-                    {p.environments.map((e) => (
-                      <Pill key={e} color={e === "real" ? "orange" : "blue"}>
-                        {envLabel(e)}
-                      </Pill>
-                    ))}
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">{p.description}</p>
+      <TooltipProvider delayDuration={150}>
+        <div className="grid items-start gap-3 lg:grid-cols-2">
+          {available.map((p) => {
+            const conns = connectionsByProvider.get(p.id) ?? [];
+            const freeEnvs = p.environments.filter((e) => (e !== "real" || data.realEnabled) && !conns.some((c) => c.environment === e));
+            return (
+              <article key={p.id} className={`${card} space-y-3 p-4`}>
+                <div className="flex items-center gap-2.5">
+                  <Logo p={p} size="h-9 w-9" />
+                  <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900">{p.name}</h2>
+                  {!conns.length && <Pill>Desconectada</Pill>}
+                  <ConnectionInfo provider={p} connections={conns} realEnabled={data.realEnabled} />
                 </div>
-              </div>
-              <ul className="mt-3 flex flex-wrap gap-1.5 px-6">
-                {p.capabilities.map((c) => (
-                  <li key={c} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
-                    {CAPABILITY[c] ?? c}
-                  </li>
-                ))}
-                {p.orderTypes.length > 0 && (
-                  <li className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
-                    Órdenes {p.orderTypes.map((t) => ORDER_TYPE[t] ?? t).join(", ")}
-                  </li>
-                )}
-                <li className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">{p.markets.map((m) => (m === "crypto" ? "Crypto" : "Bolsa")).join(" y ")}</li>
-              </ul>
-
-              <div className="mt-4 space-y-3 px-6">
+                {p.fees && <Fees fees={p.fees} />}
                 {conns.map((c) => (
                   <ConnectionRow
                     key={c.id}
                     c={c}
+                    readOnly={!p.capabilities.includes("place_order")}
+                    showEnvironment={p.environments.length > 1}
                     canManage={data.canManage}
                     busy={busy}
                     onVerify={() => act(`verify:${c.id}`, "verify", { connectionId: c.id })}
@@ -216,30 +168,18 @@ export function IntegrationsPanel() {
                     onView={() => setViewing({ c, p })}
                   />
                 ))}
-                {!conns.length && <p className="text-sm text-slate-500">No tienes ninguna cuenta conectada.</p>}
-              </div>
-
-              {p.notes.length > 0 && (
-                <ul className="mt-4 list-disc space-y-0.5 px-6 pl-10 text-xs text-slate-500">
-                  {p.notes.map((n) => (
-                    <li key={n}>{n}</li>
-                  ))}
-                </ul>
-              )}
-
-              <footer className="mt-auto flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-3 pt-3">
-                {freeEnvs.length > 0 ? (
-                  <button type="button" className={primary} onClick={() => setConnecting(p)}>
-                    <PlugZap className="h-4 w-4" /> Conectar cuenta
-                  </button>
-                ) : (
-                  <span className="text-xs text-slate-400">Ya tienes conectados todos los entornos disponibles.</span>
+                {freeEnvs.length > 0 && (
+                  <div className="flex justify-end">
+                    <button type="button" className={ghost} onClick={() => setConnecting(p)}>
+                      <PlugZap className="h-4 w-4" /> {conns.length ? "Conectar otro entorno" : "Conectar"}
+                    </button>
+                  </div>
                 )}
-              </footer>
-            </article>
-          );
-        })}
-      </div>
+              </article>
+            );
+          })}
+        </div>
+      </TooltipProvider>
 
       {soon.length > 0 && (
         <div>
@@ -359,17 +299,48 @@ export function IntegrationsPanel() {
   );
 }
 
+function ConnectionInfo({ provider, connections, realEnabled }: { provider: ProviderView; connections: ConnectionView[]; realEnabled: boolean }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" aria-label={`Información de ${provider.name}`} className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900">
+          <Info className="size-4" aria-hidden="true" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="end" sideOffset={6} className="max-h-[min(26rem,var(--radix-tooltip-content-available-height))] overflow-y-auto">
+        <div className="space-y-2">
+          <p>{provider.description}</p>
+          <p>{[provider.markets.map((m) => m === "crypto" ? "Cripto" : "Bolsa").join(" y "), provider.environments.map(envLabel).join(" / ")].join(" · ")}</p>
+          <p>{provider.capabilities.map((capability) => CAPABILITY[capability] ?? capability).join(" · ")}</p>
+          {provider.orderTypes.length > 0 && <p>Órdenes {provider.orderTypes.map((type) => ORDER_TYPE[type] ?? type).join(", ")}.</p>}
+          {!realEnabled && provider.environments.includes("real") && <p>Las conexiones con dinero real están deshabilitadas en este servidor.</p>}
+          {provider.notes.length > 0 && (
+            <ul className="list-disc space-y-1 pl-4">
+              {provider.notes.map((note) => <li key={note}>{note}</li>)}
+            </ul>
+          )}
+          {connections.map((connection) => (
+            <p key={connection.id} className="border-t border-current/20 pt-2">
+              {envLabel(connection.environment)} · {connection.accountLabel ?? "Cuenta"}{connection.currency && ` · ${connection.currency}`}
+              {connection.lastCheckedAt && <><br />Comprobada {when(connection.lastCheckedAt)}</>}
+              {connection.credentialsSource === "server" ? <><br />Clave del servidor (solo desarrollo)</> : connection.hasSavedCredentials ? <><br />Clave API guardada y cifrada</> : null}
+              {connection.lastError && <><br />{connection.lastError}</>}
+            </p>
+          ))}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+const actionPill = (on = false) => `inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${on ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`;
+
 function ConnectionRow({
-  c,
-  canManage,
-  busy,
-  onVerify,
-  onDisconnect,
-  onPermissions,
-  onUseForTrading,
-  onView,
+  c, readOnly, showEnvironment, canManage, busy, onVerify, onDisconnect, onPermissions, onUseForTrading, onView,
 }: {
   c: ConnectionView;
+  readOnly: boolean;
+  showEnvironment: boolean;
   canManage: boolean;
   busy: string | null;
   onVerify: () => void;
@@ -378,87 +349,52 @@ function ConnectionRow({
   onUseForTrading: (use: boolean) => void;
   onView: () => void;
 }) {
-  const st = STATUS_PILL[c.status];
+  const active = c.status === "active";
   const toggle = (k: BrokerPermission) => {
     const has = c.permissions.includes(k);
-    // Operar implica leer y automático implica operar: al quitar uno, se quitan los que dependen de él.
     const next = has
       ? c.permissions.filter((p) => p !== k && !(k === "read" && p !== "read") && !(k === "trade" && p === "auto"))
       : [...c.permissions, k];
     onPermissions(next);
   };
+
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <Pill color={st.color}>{st.label}</Pill>
-          <Pill color={c.environment === "real" ? "orange" : "blue"}>{envLabel(c.environment)}</Pill>
-          <b className="font-semibold text-slate-900">{c.accountLabel ?? "Cuenta"}</b>
-          {c.currency && <span className="text-xs text-slate-500">{c.currency}</span>}
-          {c.credentialsSource === "server" ? (
-            <span className="inline-flex items-center gap-1 text-xs text-slate-500" title="Usa la clave configurada en el servidor (solo desarrollo)">
-              <KeyRound className="h-3.5 w-3.5" /> clave del servidor
-            </span>
-          ) : c.hasSavedCredentials ? (
-            <span className="inline-flex items-center gap-1 text-xs text-emerald-700" title="API key guardada cifrada en el servidor">
-              <KeyRound className="h-3.5 w-3.5" /> API key guardada
-            </span>
-          ) : null}
-        </div>
-        <div className="flex gap-1.5">
-          {c.status === "active" && (
-            <button type="button" className={ghost} onClick={onView}>
-              <Eye className="h-4 w-4" /> Ver cuenta
+    <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+      <Pill color={active ? "emerald" : "slate"}>{active ? "Conectada" : "Desconectada"}{showEnvironment && ` · ${envLabel(c.environment)}`}</Pill>
+      {active ? (
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={`Acciones y permisos de la cuenta ${envLabel(c.environment)}`}>
+          <button type="button" className={actionPill()} onClick={onView}>
+            <Eye className="size-3.5" /> Ver cuenta
+          </button>
+          {PERMISSION.filter((p) => !readOnly || p.key === "read").map((p) => {
+            const on = c.permissions.includes(p.key);
+            return (
+              <button key={p.key} type="button" title={p.text} disabled={!!busy} onClick={() => toggle(p.key)}
+                aria-pressed={on} className={actionPill(on)}>
+                {on && <CheckCircle2 className="size-3.5" />}
+                {p.label}
+              </button>
+            );
+          })}
+          {!readOnly && (canManage || c.usedByTrading) && (
+            <button type="button" className={actionPill(c.usedByTrading)}
+              title="Usar para la cartera de Trading" aria-pressed={c.usedByTrading}
+              disabled={!!busy || !canManage} onClick={() => onUseForTrading(!c.usedByTrading)}>
+              {c.usedByTrading && <CheckCircle2 className="size-3.5" />}
+              Cartera
             </button>
           )}
-          <button type="button" className={ghost} title="Comprobar la conexión" disabled={!!busy} onClick={onVerify}>
-            {busy === `verify:${c.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          </button>
-          <button type="button" className={`${ghost} text-red-700`} disabled={!!busy} onClick={onDisconnect}>
-            {busy === `disc:${c.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unplug className="h-4 w-4" />} Desconectar
-          </button>
         </div>
-      </div>
-      {c.lastError && <p className="mt-2 text-xs text-red-700">{c.lastError}</p>}
-      <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Permisos">
-        {PERMISSION.map((p) => {
-          const on = c.permissions.includes(p.key);
-          return (
-            <button
-              key={p.key}
-              type="button"
-              title={p.text}
-              disabled={!!busy || c.status !== "active"}
-              onClick={() => toggle(p.key)}
-              aria-pressed={on}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium disabled:opacity-50 ${on ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-500 hover:text-slate-800"}`}
-            >
-              {on && <CheckCircle2 className="h-3.5 w-3.5" />}
-              {p.label}
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-        <span>Comprobada {when(c.lastCheckedAt)}</span>
-        {c.usedByTrading ? (
-          <span className="inline-flex items-center gap-2">
-            <Pill color="violet">Usada por la cartera de Trading</Pill>
-            {canManage && (
-              <button type="button" className="font-medium text-slate-600 hover:underline" disabled={!!busy} onClick={() => onUseForTrading(false)}>
-                Quitar
-              </button>
-            )}
-          </span>
-        ) : (
-          canManage &&
-          c.status === "active" && (
-            <button type="button" className="font-semibold text-blue-700 hover:underline" disabled={!!busy} onClick={() => onUseForTrading(true)}>
-              Usar para la cartera de Trading
-            </button>
-          )
-        )}
-      </div>
+      ) : (
+        <button type="button" className={actionPill()} disabled={!!busy} onClick={onVerify}>
+          {busy === `verify:${c.id}` ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+          Reintentar
+        </button>
+      )}
+      <button type="button" className={`${ghost} ml-auto text-red-700`} disabled={!!busy} onClick={onDisconnect}>
+        {busy === `disc:${c.id}` ? <Loader2 className="size-4 animate-spin" /> : <Unplug className="size-4" />}
+        Desconectar
+      </button>
     </div>
   );
 }
@@ -484,8 +420,8 @@ function ConnectModal({
   const [environment, setEnvironment] = useState<BrokerEnvironment>(envs[0] ?? "demo");
   const [useServer, setUseServer] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
-  // Operativa desde el principio: leer, operar y automatismos (Oportunidades y copias). Se pueden quitar.
-  const [perms, setPerms] = useState<BrokerPermission[]>(["read", "trade", "auto"]);
+  // Los proveedores sin capacidad place_order se conectan únicamente en modo lectura.
+  const [perms, setPerms] = useState<BrokerPermission[]>(provider.capabilities.includes("place_order") ? ["read", "trade", "auto"] : ["read"]);
   const [realOk, setRealOk] = useState(false);
   const [remember, setRemember] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -638,7 +574,8 @@ function ConnectModal({
           <label className="flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-orange-900">
             <input type="checkbox" className="mt-1" checked={realOk} onChange={(e) => setRealOk(e.target.checked)} />
             <span>
-              <b>Es mi cuenta con dinero real</b> y mi clave no tiene los retiros habilitados. Con «Operar» y «Automático» la app podrá comprar y vender por mí (Oportunidades y copias).
+              <b>Es mi cuenta con dinero real</b> y mi clave no tiene los retiros habilitados.
+              {provider.capabilities.includes("place_order") && " Con «Operar» y «Automático» la app podrá comprar y vender por mí (Oportunidades y copias)."}
             </span>
           </label>
         )}
@@ -646,7 +583,7 @@ function ConnectModal({
         <div>
           <div className="mb-1.5 text-xs font-medium text-slate-600">Qué permites a CRS</div>
           <div className="space-y-1.5">
-            {PERMISSION.map((p) => {
+            {PERMISSION.filter((p) => provider.capabilities.includes("place_order") || p.key === "read").map((p) => {
               const on = perms.includes(p.key);
               return (
                 <label key={p.key} className="flex items-start gap-2">
@@ -672,3 +609,17 @@ function ConnectModal({
     </Modal>
   );
 }
+
+const feePct = (v: number) => `${v.toLocaleString("es-ES", { maximumFractionDigits: 2 })} %`;
+
+/** Comisión por compra o venta: la que pagan las copias (al momento) y la de las órdenes que esperan. */
+function Fees({ fees }: { fees: NonNullable<ProviderView["fees"]> }) {
+  return (
+    <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600" title={`Fuente: ${fees.source}${fees.note ? `. ${fees.note}` : ""}`}>
+      <b className="font-semibold text-slate-900">Comisión {feePct(fees.taker)}</b> por compra o venta al momento (como las copias)
+      {fees.maker !== fees.taker && <> · {feePct(fees.maker)} con órdenes que esperan</>}
+      {fees.note && <span className="block text-[11px] text-slate-400">{fees.note}</span>}
+    </p>
+  );
+}
+

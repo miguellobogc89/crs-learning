@@ -1,12 +1,12 @@
 "use client";
-import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileText, GitMerge, History, Loader2, MoreHorizontal, Pencil, Plus, Trash2, Undo2, X } from "lucide-react";
 import type { CellValue, Column, Table } from "@/lib/analytics/compute";
 import type { PurchaseHistoryRow } from "@/lib/purchases/catalog";
 import { activeColumnFilter, queryRows, type ColumnFilter } from "@/lib/analytics/table-query";
 import { addDefaults, addExtras, groupEdits, rowCapabilities, type PendingEdit } from "@/lib/analytics/table-rows";
-import { groupRows, PAGE_SIZES } from "@/lib/analytics/table-view";
+import { columnWidth, groupRows, MAX_WIDTH, MIN_WIDTH, PAGE_SIZES } from "@/lib/analytics/table-view";
 import { useTableView } from "./table-view-context";
 import { addTableRowAction, deleteTableRowsAction, mergeCompaniesAction, restoreTableRowsAction, saveTableChangesAction, setInvoicePartyAction, setTableLinkAction } from "@/app/(app)/analytics/actions";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -17,7 +17,7 @@ import { RecordHistory } from "./record-history";
 import { Combobox } from "@/components/ui/combobox";
 import { SearchInput } from "@/components/ui/search-input";
 import { cn } from "@/lib/utils";
-import { fmtDate, fmtMoney, fmtNumber } from "./format";
+import { fmtDate, fmtMoney, fmtNumber, fmtPrice, fmtPriceNumber, isPriceColumn } from "./format";
 
 type Row = Record<string, CellValue>;
 /** A correction typed in a cell, not saved yet: shown in yellow until «Guardar». */
@@ -28,10 +28,10 @@ const right = (c: Column) => c.kind === "money" || c.kind === "number";
 /** A value as the cell editor shows it: "12,5", "31/12/2026". */
 const editText = (v: CellValue, c: Column) => v === null || v === undefined ? "" : c.edit?.type === "date" && typeof v === "string" ? fmtDate(v)
   : typeof v === "number" ? String(v).replace(".", ",") : String(v);
-const show = (v: CellValue, kind?: Column["kind"]) => {
+const show = (v: CellValue, kind?: Column["kind"], price = false) => {
   if (v === null || v === "") return <span className="text-slate-300">—</span>;
-  if (kind === "money" && typeof v === "number") return fmtMoney(v);
-  if (kind === "number" && typeof v === "number") return fmtNumber(v);
+  if (kind === "money" && typeof v === "number") return price ? fmtPrice(v) : fmtMoney(v);
+  if (kind === "number" && typeof v === "number") return price ? fmtPriceNumber(v) : fmtNumber(v);
   if (kind === "date" && typeof v === "string") return fmtDate(v);
   return String(v);
 };
@@ -41,6 +41,8 @@ const show = (v: CellValue, kind?: Column["kind"]) => {
  * cells that can be corrected in place (company name, "Mi empresa", invoice type, category, issuer and customer).
  * Each change is a new revision of the record. Which columns show, the grouping, the order and the rows per page come
  * from the person's saved view (header «Ajustes»); grouped, each group shows its rows count and its totals.
+ * Columns keep a fixed width (dragged on the edge of the header, double click to undo, remembered per person) and
+ * the table scrolls sideways when they do not fit.
  */
 export function DataTable({ table, canEdit = false, canManage = false, companies = [], invoices = [], initialFilters = {} }: { table: Table; canEdit?: boolean; canManage?: boolean; companies?: Company[];
   invoices?: { value: string; label: string; hint: string | null }[]; initialFilters?: Record<string, string> }) {
@@ -71,6 +73,24 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
   const purchaseHistory = table.history;
   const toggleRow = (id: string) => setOpenRows(o => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const { view, update } = useTableView(table.columns);
+  // The column being resized (its live width while dragging; saved in the view when released).
+  const [drag, setDrag] = useState<{ key: string; width: number } | null>(null);
+  const widthOf = (c: Column) => drag?.key === c.key ? drag.width : columnWidth(c, view.widths);
+  function startResize(e: ReactPointerEvent, c: Column) {
+    e.preventDefault(); e.stopPropagation();
+    const startX = e.clientX, start = widthOf(c);
+    let width = start;
+    const move = (ev: PointerEvent) => { width = Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, start + ev.clientX - startX))); setDrag({ key: c.key, width }); };
+    const up = () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      document.body.style.cursor = ""; document.body.style.userSelect = "";
+      setDrag(null);
+      if (width !== start) update({ widths: { ...view.widths, [c.key]: width } });
+    };
+    document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  }
+  const resetWidth = (c: Column) => { if (!(c.key in view.widths)) return; const rest = { ...view.widths }; delete rest[c.key]; update({ widths: rest }); };
   const { sort, pageSize, groupBy } = view;
   const groupColumn = groupBy ? table.columns.find(c => c.key === groupBy) : undefined;
   // Grouped, the grouping column goes first (each group row then reads «Producto · cantidades · precios…»).
@@ -196,8 +216,8 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
             const missing = !p && c.completar && (r[c.key] === null || r[c.key] === undefined || r[c.key] === "");
             const staged = p ? <span className="font-medium text-slate-900">{p.text || <span className="italic text-slate-400">vacío</span>}</span> : undefined;
             return <td key={c.key} title={p ? (p.error ?? `Antes: ${editText(p.before, c) || "vacío"} · sin guardar`) : typeof r[c.key] === "string" && !c.edit ? r[c.key] as string : undefined}
-              className={cn("px-2.5 py-1.5 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" ? "whitespace-nowrap"
-                : !c.edit && typeof r[c.key] === "string" && "max-w-[18rem] truncate", missing && "bg-amber-50/70",
+              className={cn("overflow-hidden px-2.5 py-1.5 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" ? "whitespace-nowrap"
+                : !c.edit && typeof r[c.key] === "string" && "truncate", missing && "bg-amber-50/70",
                 p && (p.error ? "bg-rose-100/70" : "bg-amber-100/80"))}>
               {c.kind === "document" ? (typeof r[c.key] === "string"
                   ? <a href={`/api/knowledge/intake/files/${r[c.key]}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-[#0A58FF] hover:underline"><FileText className="size-3.5" />Ver</a>
@@ -218,14 +238,14 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
                       {cellBusy && <Loader2 className="size-3 animate-spin text-slate-400" />}</span>
                 : editable && (c.edit!.type === "number" || c.edit!.type === "date")
                   ? <EditableText value={p ? p.text : editText(r[c.key] ?? null, c)}
-                      display={staged ?? (missing ? <span className="font-medium text-amber-700">Por completar</span> : show(r[c.key] ?? null, c.kind))} allowEmpty busy={false} onSave={v => save(r, c, v)} />
+                      display={staged ?? (missing ? <span className="font-medium text-amber-700">Por completar</span> : show(r[c.key] ?? null, c.kind, isPriceColumn(c)))} allowEmpty busy={false} onSave={v => save(r, c, v)} />
                 : canEdit && c.edit?.type === "party" && typeof r._id === "string"
                   ? <PartyCell current={(c.edit.field === "issuer" ? r._issuer : r._customer) as string | null} label={c.label} companies={companies} busy={cellBusy}
                       onSave={choice => saveParty(r, c, choice)} />
                 : editable && c.edit!.type === "text" ? <EditableText value={p ? p.text : String(r[c.key] ?? "")} allowEmpty={!!c.completar || table.key.startsWith("tabla:") || table.key.startsWith("plantilla:")}
                     display={staged ?? (missing ? <span className="font-medium text-amber-700">Por completar</span> : undefined)} busy={false} onSave={v => save(r, c, v)} />
                 : missing ? <span className="font-medium text-amber-700">Por completar</span>
-                : show(r[c.key] ?? null, c.kind)}
+                : show(r[c.key] ?? null, c.kind, isPriceColumn(c))}
             </td>;
           });
   // A row that needs the person (`_attention`: why) stands out in light yellow.
@@ -263,7 +283,7 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
     </tr> : null];
   };
 
-  return <section className="overflow-clip rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+  return <section className="min-w-0 max-w-full overflow-clip rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
     <div className="border-b border-slate-200 px-5 py-3.5">
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput className="w-full sm:w-72" placeholder="Buscar en la tabla…" value={search} onChange={v => { setSearch(v); setPage(1); }} />
@@ -290,14 +310,27 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
     {error && <p className="border-b border-rose-100 bg-rose-50 px-5 py-2 text-sm text-rose-700">{error}</p>}
     {notice && <p className="border-b border-emerald-100 bg-emerald-50 px-5 py-2 text-sm text-emerald-800">{notice}</p>}
     {table.rows.length ? <>
-      <div className="max-h-[65vh] overflow-auto"><table className="w-full min-w-[640px] border-collapse text-left text-sm">
+      <div className="max-h-[65vh] overflow-auto"><table className="min-w-full table-fixed border-collapse text-left text-sm"
+        style={{ width: columns.reduce((a, c) => a + widthOf(c), 0) + (purchaseHistory ? 32 : 0) + (mergeable ? 150 : 0) + (recordRows ? 40 : 0) }}>
+        <colgroup>
+          {purchaseHistory && <col style={{ width: 32 }} />}
+          {columns.map(c => <col key={c.key} style={{ width: widthOf(c) }} />)}
+          {mergeable && <col style={{ width: 150 }} />}
+          {recordRows && <col style={{ width: 40 }} />}
+        </colgroup>
         <thead className="sticky top-0 z-10 bg-slate-50 text-xs text-slate-500"><tr>
           {purchaseHistory && <th className="w-8 bg-slate-50 py-2.5 pl-2 pr-0" aria-label="Compras" />}
-          {columns.map(c => <th key={c.key} className={cn("whitespace-nowrap bg-slate-50 px-2.5 py-2.5 font-semibold", right(c) && "text-right")}
+          {columns.map(c => <th key={c.key} title={c.hint ? `${c.label}: ${c.hint}` : c.label}
+            className={cn("relative overflow-hidden whitespace-nowrap bg-slate-50 px-2.5 py-2.5 font-semibold", right(c) && "text-right")}
             aria-sort={sort?.key === c.key ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}>
-            {c.kind === "document" ? c.label : <ColumnMenu column={c} rows={table.rows} sort={sort} filter={columnFilters[c.key]} alignRight={right(c)}
+            {c.kind === "document" ? <span className="block truncate">{c.label}</span> : <ColumnMenu column={c} rows={table.rows} sort={sort} filter={columnFilters[c.key]} alignRight={right(c)}
               onSort={dir => setSort(c.key, dir)} onFilter={f => setFilter(c.key, f)}
               onHide={columns.length > 1 ? () => update({ hidden: [...view.hidden, c.key] }) : undefined} />}
+            {/* Drag the edge to change the width; double click goes back to the default one. */}
+            <span role="separator" aria-orientation="vertical" aria-label={`Ancho de ${c.label}`} title="Arrastra para cambiar el ancho · doble clic para restablecerlo"
+              onPointerDown={e => startResize(e, c)} onDoubleClick={() => resetWidth(c)} onClick={e => e.stopPropagation()}
+              className={cn("absolute inset-y-0 right-0 w-1.5 cursor-col-resize touch-none select-none border-r border-slate-200 hover:bg-[#0A58FF]/40",
+                drag?.key === c.key && "bg-[#0A58FF]/60")} />
           </th>)}
           {mergeable && <th className="px-2.5 py-2.5" />}
           {recordRows && <th className="sticky right-0 w-10 bg-slate-50 px-2 py-2.5" />}
@@ -309,14 +342,15 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
             if (c.key === groupColumn!.key) return <span className={cn("font-semibold", g.key === "__empty" ? "text-slate-400" : "text-slate-900")}>{g.label}</span>;
             const cell = g.cells[c.key];
             if (!cell || cell.type === "empty") return null;
-            if (cell.type === "same") return show(cell.value, c.kind);
+            if (cell.type === "same") return show(cell.value, c.kind, isPriceColumn(c));
             if (cell.type === "sum") return <span className="font-semibold text-slate-900">{c.kind === "money" ? fmtMoney(cell.value) : fmtNumber(cell.value)}</span>;
-            if (cell.type === "range") return <span>{c.kind === "money" ? `${fmtMoney(cell.min)} – ${fmtMoney(cell.max)}` : `${fmtNumber(cell.min)} – ${fmtNumber(cell.max)}`}</span>;
+            if (cell.type === "range") { const f = c.kind === "money" ? (isPriceColumn(c) ? fmtPrice : fmtMoney) : isPriceColumn(c) ? fmtPriceNumber : fmtNumber;
+              return <span>{`${f(cell.min)} – ${f(cell.max)}`}</span>; }
             return <span className="text-xs italic text-slate-400">{cell.count} distintos</span>;
           };
           return [<tr key={`g:${g.key}`} className="border-t border-slate-200 bg-slate-50/70 hover:bg-slate-100/70">
             {purchaseHistory && <td />}
-            {columns.map((c, ci) => <td key={c.key} className={cn("px-2.5 py-2 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" && "whitespace-nowrap")}>
+            {columns.map((c, ci) => <td key={c.key} className={cn("overflow-hidden px-2.5 py-2 text-slate-700", right(c) ? "whitespace-nowrap text-right tabular-nums" : c.kind === "date" ? "whitespace-nowrap" : "truncate")}>
               {ci === 0 ? <button type="button" onClick={() => toggleGroup(g.key)} aria-expanded={expanded} className="flex w-full items-center gap-2 text-left">
                 <ChevronDown className={cn("size-4 shrink-0 text-slate-400 transition-transform", !expanded && "-rotate-90")} />
                 <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium tabular-nums text-slate-500 ring-1 ring-slate-200" title="Filas en el grupo">{g.rows.length.toLocaleString("es-ES")}</span>
@@ -419,7 +453,7 @@ export function DataTable({ table, canEdit = false, canManage = false, companies
  * and with VAT, gifts, and its invoice. A purchase whose price per unit differs from the one before it is marked.
  */
 function PurchaseHistory({ rows }: { rows: PurchaseHistoryRow[] }) {
-  const prices = new Set(rows.filter(r => r.tipo === "Compra" && r.precio_ud !== null).map(r => r.precio_ud!.toFixed(4)));
+  const prices = new Set(rows.filter(r => r.tipo === "Compra" && r.precio_ud !== null).map(r => r.precio_ud!.toFixed(5)));
   return <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
     <p className="border-b border-slate-100 px-3 py-1.5 text-xs text-slate-500">
       {rows.length} {rows.length === 1 ? "compra" : "compras"} · {prices.size} {prices.size === 1 ? "precio" : "precios distintos"}
@@ -433,9 +467,9 @@ function PurchaseHistory({ rows }: { rows: PurchaseHistoryRow[] }) {
         <td className="whitespace-nowrap px-2.5 py-1">{h.fecha ? fmtDate(h.fecha) : "—"}</td>
         <td className="px-2.5 py-1 text-right tabular-nums">{h.cantidad !== null ? fmtNumber(h.cantidad) : "—"}</td>
         <td className="px-2.5 py-1">{h.unidad ?? "—"}</td>
-        <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums">{h.precio !== null ? fmtMoney(h.precio) : "—"}</td>
+        <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums">{h.precio !== null ? fmtPrice(h.precio) : "—"}</td>
         <td className="px-2.5 py-1 text-right tabular-nums">{h.dto_pct ? `${fmtNumber(h.dto_pct)} %` : "—"}</td>
-        <td className="whitespace-nowrap px-2.5 py-1 text-right font-medium tabular-nums text-slate-900">{h.precio_ud !== null ? fmtMoney(h.precio_ud) : "—"}
+        <td className="whitespace-nowrap px-2.5 py-1 text-right font-medium tabular-nums text-slate-900">{h.precio_ud !== null ? fmtPrice(h.precio_ud) : "—"}
           {h.cambio && <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-800" title="Precio distinto al de la compra anterior">cambio</span>}</td>
         <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums">{h.importe !== null ? fmtMoney(h.importe) : "—"}</td>
         <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums">{h.importe_iva !== null ? fmtMoney(h.importe_iva) : "—"}</td>
@@ -463,14 +497,15 @@ function EditableText({ value, busy, onSave, display, allowEmpty = false }: { va
   const start = () => { done.current = false; setDraft(value); setEditing(true); };
   const cancel = () => { done.current = true; setEditing(false); };
   // Double click on the value (or the pencil) to correct it; Enter saves, Esc cancels.
-  if (!editing) return <span className="group inline-flex cursor-text items-center gap-1.5 rounded px-0.5 -mx-0.5 hover:bg-[#0A58FF]/5" onDoubleClick={start} title="Doble clic para editar">{display ?? (value || <span className="text-slate-300">—</span>)}
+  if (!editing) return <span className="group inline-flex max-w-full cursor-text items-center gap-1.5 rounded px-0.5 -mx-0.5 hover:bg-[#0A58FF]/5" onDoubleClick={start}
+    title={value ? `${value} · doble clic para editar` : "Doble clic para editar"}><span className="min-w-0 truncate">{display ?? (value || <span className="text-slate-300">—</span>)}</span>
     <button type="button" aria-label="Corregir" onClick={start} className="rounded p-0.5 text-slate-300 opacity-0 hover:text-[#0A58FF] group-hover:opacity-100 focus:opacity-100"><Pencil className="size-3.5" /></button>
     {busy && <Loader2 className="size-3 animate-spin text-slate-400" />}</span>;
   // Saved once: Enter, the tick, or leaving the field (unless cancelled with Esc or the cross).
   const commit = async () => { if (done.current) return; done.current = true; if ((draft.trim() || allowEmpty) && draft.trim() !== value) await onSave(draft); setEditing(false); };
-  return <span className="inline-flex items-center gap-1">
+  return <span className="flex w-full min-w-0 items-center gap-1">
     <input autoFocus onFocus={e => e.target.select()} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void commit(); if (e.key === "Escape") cancel(); }} onBlur={() => void commit()}
-      className="h-7 w-56 rounded-lg border border-[#0A58FF] px-2 text-sm outline-none" />
+      className="h-7 w-full min-w-24 rounded-lg border border-[#0A58FF] px-2 text-sm outline-none" />
     <button type="button" aria-label="Guardar" onMouseDown={e => e.preventDefault()} onClick={() => void commit()} className="rounded p-1 text-emerald-600 hover:bg-emerald-50"><Check className="size-3.5" /></button>
     <button type="button" aria-label="Cancelar" onMouseDown={e => e.preventDefault()} onClick={cancel} className="rounded p-1 text-slate-400 hover:bg-slate-100"><X className="size-3.5" /></button>
   </span>;

@@ -8,10 +8,13 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { accountState, closePosition, ensureAccount, OPEN_STATUSES, placeOrder, processAccount, resetAccount } from "../accounts";
+import { accountState, closePosition, OPEN_STATUSES, placeOrder, processAccount, resetAccount } from "../accounts";
 import { replicate } from "../agents/copy";
 import { AGENTS_WORKSPACE } from "../agents/roster";
-import { CHIP, contextAt, explainDetectorB, type Coin } from "../lab/strategies";
+import { ensureFresh } from "../agents/restart";
+import { runMirrors } from "../mirror/service";
+import { breakoutOn, CHIP, contextAt, explainDetectorB, explainDetectorOn, type Coin } from "../lab/strategies";
+import { marketOpenNow } from "../live-logic";
 import { CRYPTO_MARKET, CRYPTO_BENCHMARK } from "../market-data";
 import { dayDate, dayKey, loadSeries } from "../sync";
 import { CHIP_AGENTS, chipByKey, type ChipDef } from "./roster";
@@ -44,17 +47,20 @@ type ProposalRow = {
 
 export type ChipRunSummary = { agent: string; skipped?: string; mode?: "ataque" | "defensa"; actions: string[] };
 
+/** Cuenta del agente; si cambió su capital, lo anterior se archiva y empieza de cero (agents/restart). */
 async function ensureChip(def: ChipDef) {
-  return ensureAccount(WS, def.key, { name: def.name, capital: def.capital, settings: def.settings });
+  return ensureFresh(def.key, { name: def.name, capital: def.capital, settings: def.settings });
 }
 
-/** Velas diarias cerradas de las crypto (sin la de hoy, que aún se está formando). */
-async function closedCoins(): Promise<{ coins: Coin[]; lastDay: number | null }> {
-  const inst = await prisma.market_instruments.findMany({ where: { market: CRYPTO_MARKET, active: true }, select: { id: true, symbol: true } });
+/** Velas diarias cerradas de su mercado (sin la de hoy, que aún se está formando). Crypto, salvo `universe`. */
+async function closedCoins(def: ChipDef): Promise<{ coins: Coin[]; lastDay: number | null }> {
+  const market = def.universe?.market ?? CRYPTO_MARKET;
+  const bench = def.universe?.benchmark ?? CRYPTO_BENCHMARK;
+  const inst = await prisma.market_instruments.findMany({ where: { market, active: true }, select: { id: true, symbol: true } });
   const series = await loadSeries(inst.map((i) => i.id), new Date(Date.now() - 330 * DAY));
   const today = dayOf(Date.now());
   const coins = inst.map((i) => ({ symbol: i.symbol, candles: (series.get(i.id) ?? []).filter((c) => dayOf(c.t) < today) }));
-  const btc = coins.find((c) => c.symbol === CRYPTO_BENCHMARK)?.candles ?? [];
+  const btc = coins.find((c) => c.symbol === bench)?.candles ?? [];
   return { coins, lastDay: btc.length ? dayOf(btc[btc.length - 1].t) : null };
 }
 
@@ -62,6 +68,9 @@ async function closedCoins(): Promise<{ coins: Coin[]; lastDay: number | null }>
 export async function chipTick(force = false): Promise<ChipRunSummary[]> {
   const out: ChipRunSummary[] = [];
   for (const def of CHIP_AGENTS) out.push(await runChip(def, force).catch((e) => ({ agent: def.key, skipped: e instanceof Error ? e.message : "error", actions: [] })));
+  // Copia al instante de lo que haya comprado o vendido.
+  const moved = out.filter((r) => !r.skipped && r.actions.length).map((r) => r.agent);
+  if (moved.length) await runMirrors({ agents: moved }).catch((e) => console.error("[trading] copias de CAMALEÓN", e));
   return out;
 }
 
@@ -85,13 +94,19 @@ async function runChip(def: ChipDef, force: boolean): Promise<ChipRunSummary> {
   const actions: string[] = [];
   const account = await ensureChip(def);
   const today = dayOf(Date.now());
-  const last = await prisma.trading_committee_runs.findFirst({ where: { workspace_id: WS, agent: def.key }, orderBy: { created_at: "desc" }, select: { created_at: true } });
-  if (!force && last && last.created_at.getTime() >= today) return { agent: def.key, skipped: "ya decidió hoy", actions };
+  const stocks = !!def.universe;
+  const last = await prisma.trading_committee_runs.findFirst({ where: { workspace_id: WS, agent: def.key }, orderBy: { created_at: "desc" }, select: { created_at: true, as_of: true } });
+  if (!force && !stocks && last && last.created_at.getTime() >= today) return { agent: def.key, skipped: "ya decidió hoy", actions };
 
-  const { coins, lastDay } = await closedCoins();
-  if (lastDay === null) return { agent: def.key, skipped: "sin datos de Bitcoin", actions };
-  // Solo decide con la vela de ayer: si aún no ha llegado, espera a la próxima revisión.
-  if (!force && lastDay < today - DAY) return { agent: def.key, skipped: "aún no está la vela de ayer", actions };
+  const { coins, lastDay } = await closedCoins(def);
+  if (lastDay === null) return { agent: def.key, skipped: `sin datos de ${def.universe?.label ?? "Bitcoin"}`, actions };
+  if (stocks) {
+    // Bolsa: una decisión por cada sesión cerrada nueva (no hay velas en fin de semana ni festivos).
+    if (!force && last?.as_of && dayOf(last.as_of.getTime()) >= lastDay) return { agent: def.key, skipped: "ya decidió con la última sesión", actions };
+  } else if (!force && lastDay < today - DAY) {
+    // Crypto: solo decide con la vela de ayer; si aún no ha llegado, espera a la próxima revisión.
+    return { agent: def.key, skipped: "aún no está la vela de ayer", actions };
+  }
 
   // Turno: evita que dos servidores muevan al agente a la vez.
   const got = await prisma.$executeRaw(Prisma.sql`UPDATE public.trading_accounts SET meeting_lease_until = now() + interval '3 minutes'
@@ -104,9 +119,9 @@ async function runChip(def: ChipDef, force: boolean): Promise<ChipRunSummary> {
     const open = state.positions.filter((p) => (OPEN_STATUSES as readonly string[]).includes(p.status));
     const step = Math.floor((lastDay - dayOf(account.created_at.getTime())) / DAY);
     const ctx = contextAt(coins, lastDay, step, (s) => open.some((p) => p.symbol === s));
-    const why = explainDetectorB(ctx);
+    const why = def.universe ? explainDetectorOn(ctx, def.universe.benchmark, def.universe.label) : explainDetectorB(ctx);
     const mode = why.attack ? "ataque" : "defensa";
-    const strategy = CHIP.find((s) => s.key === def.strategy);
+    const strategy = def.universe ? breakoutOn(def.universe.benchmark, def.universe.exclude) : CHIP.find((s) => s.key === def.strategy);
     if (!strategy) throw new Error(`Estrategia ${def.strategy} no encontrada`);
     const target = strategy.decide(ctx);
     const equityBefore = state.summary.equity;
@@ -125,7 +140,7 @@ async function runChip(def: ChipDef, force: boolean): Promise<ChipRunSummary> {
           agent: def.key,
           symbol: p.symbol,
           name: p.name,
-          market: "crypto",
+          market: stocks ? "bolsa" : "crypto",
           action: "vender",
           conviction: 4,
           horizon_days: 1,
@@ -171,7 +186,9 @@ async function runChip(def: ChipDef, force: boolean): Promise<ChipRunSummary> {
                 stop,
                 target: price * 10, // sin objetivo: sale por el stop que sube o por el cambio de chip
                 // Crypto cotiza siempre: el cierre de ayer es la apertura de hoy. Se compra ya (como en la simulación).
-                execution: "now",
+                // Bolsa: si está abierta, ya; si no, en la apertura de la próxima sesión.
+                execution: !stocks || marketOpenNow("us") ? "now" : "next_open",
+                fractional: stocks,
                 signalKey: `chip:${def.key}:${s}:${dayKey(new Date(lastDay))}`,
                 maxHoldDays: null,
                 notes: `${def.name}: ruptura de máximos de 20 días en modo ataque`,
@@ -185,7 +202,7 @@ async function runChip(def: ChipDef, force: boolean): Promise<ChipRunSummary> {
               agent: def.key,
               symbol: s,
               name,
-              market: "crypto",
+              market: stocks ? "bolsa" : "crypto",
               action: "comprar",
               conviction: 4,
               horizon_days: 20,
@@ -193,7 +210,7 @@ async function runChip(def: ChipDef, force: boolean): Promise<ChipRunSummary> {
               stop,
               target: null,
               quantity,
-              rationale: `**Compra ${name}** en **modo ataque**: ha superado su máximo de los últimos 20 días${high ? ` (${high.toFixed(4)} €)` : ""} y Bitcoin acompaña. Se queda mientras no pierda su mínimo de 10 días (stop a ${stop.toFixed(4)} €, que irá subiendo).`,
+              rationale: `**Compra ${name}** en **modo ataque**: ha superado su máximo de los últimos 20 días${high ? ` (${high.toFixed(4)} €)` : ""} y ${def.universe ? def.universe.label.toLowerCase() : "Bitcoin"} acompaña. Se queda mientras no pierda su mínimo de 10 días (stop a ${stop.toFixed(4)} €, que irá subiendo).`,
               evidence: [],
               risks: "Las rupturas a veces fallan y el precio vuelve atrás: entonces salta el stop.",
               status: "ejecutada",

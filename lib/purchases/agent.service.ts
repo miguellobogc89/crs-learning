@@ -61,7 +61,7 @@ async function apply(tx: Tx, input: { workspaceId: string; userId: string }, pro
       values.quantity = action.quantity;
       for (const k of ["unit_price", "unit_price_with_tax"]) {
         const v = typeof values[k] === "number" ? values[k] as number : typeof values[k] === "string" && /^-?\d+(\.\d+)?$/.test((values[k] as string).trim()) ? Number(values[k]) : null;
-        if (v !== null) { values[k] = Math.round((v / action.factor) * 10000) / 10000; changed.push(k); }
+        if (v !== null) { values[k] = Math.round((v / action.factor) * 1e5) / 1e5; changed.push(k); }
       }
       const valid = validateEngineRecordValues(values, type.engine_field_definitions);
       if (!valid.ok) throw new AgentError("La cantidad no se puede guardar en esta compra.");

@@ -4,15 +4,17 @@ import assert from "node:assert/strict";
 import { load } from "./helpers.mjs";
 
 const L = load("lib/trading/kamikaze/logic.ts");
-const { KAMIKAZES } = load("lib/trading/kamikaze/roster.ts");
+const { ALL_KAMIKAZES: KAMIKAZES, KAMIKAZES: ACTIVE, ARCHIVED_KAMIKAZES, kamikazeByKey } = load("lib/trading/kamikaze/roster.ts");
 const DAY = 86_400_000;
 
-test("kamikazes: tres estilos con metas distintas y 20 € por ronda", () => {
-  const originals = KAMIKAZES.filter((k) => !k.base);
+test("agentes de FARO: estilos, variantes y reglas de dinero", () => {
+  // Los originales con rondas (hoy archivados) y VÉRTIGO selectivo; los de riesgo, aparte.
+  const originals = KAMIKAZES.filter((k) => !k.base && !k.riskPct && !k.sizeOfEquityPct);
   assert.deepEqual(originals.map((k) => [k.key, k.style, k.multiple, k.days]), [
     ["cohete", "impulso", 10, 7],
     ["mecha", "rupturas", 10, 5],
     ["fenix", "rebotes", 8, 10],
+    ["vertigo-faro", "selectivo", 3, 10],
   ]);
   // Cada variante copia a su original y cambia un solo parámetro.
   const params = ["sizePct", "maxChasePct", "stopMode", "exitMode"];
@@ -22,7 +24,10 @@ test("kamikazes: tres estilos con metas distintas y 20 € por ronda", () => {
     assert.equal(params.filter((p) => v[p] !== b[p]).length, 1, `${v.key} cambia una sola cosa`);
   }
   assert.equal(new Set(KAMIKAZES.map((k) => k.key)).size, KAMIKAZES.length);
-  assert.ok(KAMIKAZES.every((k) => k.capital === 20 && k.settings.max_open_positions === 1));
+  // Los que siguen en activo: 1.000 € y tantas posiciones como operaciones a la vez; los archivados, como eran.
+  for (const k of KAMIKAZES) {
+    if (ACTIVE.includes(k)) assert.ok(k.capital === 1000 && k.settings.max_open_positions === (k.slots ?? 1), k.key);
+  }
 });
 
 test("kamikazes: ritmo diario necesario", () => {
@@ -95,4 +100,9 @@ test("kamikazes: la decisión de la IA se valida antes de ejecutarla", () => {
   assert.deepEqual(L.checkDecision({ ...buy(), action: "mantener", stop: 70, target: 160 }, holding), { action: "mantener", stop: null, target: 160 }, "el stop nunca baja");
   assert.equal(L.checkDecision({ ...buy(), action: "vender" }, ctx).action, "rechazada");
   assert.equal(L.allInQuantity(20, 100, { commissionPct: 0.1, slippageBps: 15 }), 0.198503, "todo el efectivo con margen para comisión y deslizamiento");
+});
+
+test("kamikazes: los archivados no están en activo, pero se siguen encontrando por su clave", () => {
+  assert.deepEqual(ACTIVE.map((k) => k.key), ["roca", "brujula", "vertigo-10", "enjambre", "enjambre-grandes", "enjambre-rapido", "enjambre-corto", "enjambre-x2", "enjambre-x3", "rebote"]);
+  for (const key of ARCHIVED_KAMIKAZES) assert.ok(kamikazeByKey(key), `${key} se encuentra para su historial`);
 });

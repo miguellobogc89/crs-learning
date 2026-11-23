@@ -121,14 +121,16 @@ export function CarteraPanel() {
 
   const real = wallets.items.filter((w) => w.environment === "real" && w.total !== null && w.currency === "EUR");
   const total = real.reduce((s, w) => s + (w.total ?? 0), 0);
+  const funded = real.filter((w) => (w.total ?? 0) >= 0.01);
   const realRows = rows.filter((r) => r.mirror && r.mirror.mode === "real");
   const inTrades = manual?.working ?? 0;
   const working = Math.min(total, realRows.reduce((s, r) => s + (money(r.mirror)?.now ?? 0), 0) + inTrades);
   const earnedAgents = realRows.reduce((s, r) => s + (money(r.mirror)?.result ?? 0), 0);
   const earned = earnedAgents + (manual?.result ?? 0);
-  const free = Math.max(0, total - working);
+  // Disponible: el efectivo que dice cada exchange (si todos lo dan); si no, el total menos lo que trabaja.
+  const knownCash = real.length > 0 && real.every((w) => w.cash !== null && Number.isFinite(w.cash));
+  const free = knownCash ? Math.min(total, real.reduce((s, w) => s + (w.cash ?? 0), 0)) : Math.max(0, total - working);
   const earnedBase = realRows.reduce((s, r) => s + (r.mirror?.budget ?? 0), 0) + (manual?.trades.filter((t) => t.status === "abierta" || t.status === "cerrada").reduce((s, t) => s + t.invested, 0) ?? 0);
-  const operating = wallets.items.find((w) => w.operating) ?? wallets.items[0] ?? null;
   const cutoff = Date.now() - (chartPeriod === "24h" ? 1 : 7) * 86_400_000;
   const recent = wallets.history.filter((p) => new Date(p.day).getTime() >= cutoff);
   const hasIntraday = recent.length >= 2;
@@ -147,10 +149,10 @@ export function CarteraPanel() {
       )}
 
       <PortfolioBalance
-        title={`Tu dinero real${operating ? ` · ${operating.name}` : ""}`}
+        title={funded.length > 1 ? `Saldo total · ${funded.length} exchanges` : "Saldo total"}
         total={total}
         available={free}
-        working={working}
+        working={knownCash ? Math.max(0, total - free) : working}
         opportunities={inTrades}
         earned={earned}
         returnPct={earnedBase > 0 ? (earned / earnedBase) * 100 : null}
@@ -166,6 +168,7 @@ export function CarteraPanel() {
           ? "Saldo valorado en EUR cada 5 min; las aportaciones y retiradas también cambian la curva."
           : "De momento se muestra el histórico diario. Las lecturas de cinco minutos se irán añadiendo mientras Trading esté abierto."}
         empty="La gráfica se completará tras la segunda lectura de saldo (aprox. 5 minutos)."
+        venues={wallets.items.length ? <VenuesBreakdown items={wallets.items} total={total} /> : undefined}
         setup={wallets.items.length === 0 ? (
           <div className="py-6">
             <p className="text-sm text-slate-600">Conecta tu exchange para ejecutar oportunidades y copiar agentes con tu dinero.</p>
@@ -177,7 +180,7 @@ export function CarteraPanel() {
       />
 
       <PortfolioColumns
-        opportunities={<MyOpportunities data={manual} canManage={mirrors.canManage} onChange={load} />}
+        opportunities={<MyOpportunities data={manual} mirrors={mirrors.mirrors} canManage={mirrors.canManage} onChange={load} />}
         agents={(
           <PortfolioAgents count={`${mine.owned.length} de ${mine.max}`}>
             <ul className="space-y-1">
@@ -232,6 +235,74 @@ export function CarteraPanel() {
   );
 }
 
+/**
+ * Dónde está tu dinero: un renglón por exchange conectado con su saldo, cuánto tiene libre y qué parte
+ * del total es. El que ejecuta las copias y oportunidades lleva «Opera». Clic → Conexiones.
+ */
+function VenuesBreakdown({ items: all, total }: { items: Wallets["items"]; total: number }) {
+  // Solo los que aportan a la cartera; los que no se pueden leer, en un aviso (pueden tener dinero).
+  const items = all.filter((w) => !w.error && (w.total ?? 0) >= 0.01);
+  const failing = all.filter((w) => w.error);
+  if (!items.length && !failing.length) return null;
+  return (
+    <div>
+      <div className="flex items-center justify-between px-1 pb-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Por exchange</span>
+        <Link href="/trading/integraciones" className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-800">
+          <Plus className="h-3.5 w-3.5" /> Conectar
+        </Link>
+      </div>
+      <ul className="divide-y divide-slate-100">
+        {items.map((w) => {
+          const share = w.environment === "real" && w.currency === "EUR" && total > 0 && w.total !== null ? (w.total / total) * 100 : null;
+          return (
+            <li key={w.id}>
+              <Link href="/trading/integraciones" className="flex items-center gap-3 rounded-lg px-1 py-2.5 hover:bg-slate-50">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-50">
+                  {w.logo ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- logotipos externos pequeños
+                    <img src={w.logo} alt="" className="h-5 w-5 object-contain" />
+                  ) : (
+                    <Link2 className="h-4 w-4 text-slate-400" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    <b className="truncate text-sm font-semibold text-slate-900">{w.name}</b>
+                    {w.operating && <span className="rounded-full bg-blue-50 px-1.5 py-px text-[10px] font-semibold text-blue-700">Opera</span>}
+                    {w.environment !== "real" && <span className="rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-semibold text-slate-500">Demo</span>}
+                  </span>
+                  <span className="block truncate text-xs text-slate-400">
+                    {w.error ? <span className="text-orange-600">No se pudo leer el saldo</span> : w.cash !== null ? `${eur(w.cash, 2)} libres` : ""}
+                  </span>
+                  {share !== null && items.length > 1 && (
+                    <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-slate-100">
+                      <span className="block h-full rounded-full bg-blue-500" style={{ width: `${Math.max(2, share)}%` }} />
+                    </span>
+                  )}
+                </span>
+                <span className="text-right">
+                  <b className="block text-sm font-semibold tabular-nums text-slate-900">{w.total !== null ? eur(w.total, 2) : "—"}</b>
+                  {share !== null && items.length > 1 && <span className="text-xs tabular-nums text-slate-400">{share.toFixed(0)} %</span>}
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      {failing.length > 0 && (
+        <Link href="/trading/integraciones" className="mt-1 flex items-center gap-2 rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-800 hover:bg-orange-100">
+          <span className="min-w-0 flex-1">
+            No se pudo leer el saldo de <b className="font-semibold">{failing.map((w) => w.name).join(" y ")}</b>: puede que tengan dinero que no se cuenta.
+          </span>
+          <span className="shrink-0 font-semibold">Revisar</span>
+        </Link>
+      )}
+    </div>
+  );
+}
+
 /** Un agente en pequeño: nombre, qué hace y su resultado con tu dinero. Clic → Gestionar. */
 function AgentRow({ r, onClick, onRemove, removing }: { r: Row; onClick?: () => void; onRemove?: () => void; removing?: boolean }) {
   const m = money(r.mirror);
@@ -256,6 +327,16 @@ function AgentRow({ r, onClick, onRemove, removing }: { r: Row; onClick?: () => 
           </span>
         )}
       </button>
+      {onClick && (
+        <button
+          type="button"
+          onClick={onClick}
+          className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+          title={r.mirror ? "Dinero, apalancamiento, pausar o despedir" : "Darle dinero"}
+        >
+          {r.mirror ? "Gestionar" : "Dar dinero"}
+        </button>
+      )}
       <Link href={`/trading/agentes/${r.key}?from=cartera`} className="shrink-0 text-xs font-semibold text-blue-700 hover:underline" title="Ver el agente">
         <ArrowRight className="h-3.5 w-3.5" />
       </Link>
@@ -372,6 +453,34 @@ function ManageModal({ r, free, maxBudget, onClose }: { r: Row; free: number; ma
             {r.mirror?.mode !== "real" && r.mirror && " Al guardar, pasa a dinero real."}
           </p>
 
+          {r.mirror && r.mirror.leverage !== null && (
+            <div className="space-y-2 border-t border-slate-100 pt-3">
+              <div className="flex items-baseline justify-between">
+                <span className="font-semibold text-slate-800">Apalancamiento de tu copia</span>
+                <span className="text-xs text-slate-400">el agente usa x{r.mirror.agentLeverage}</span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {[1, 2, 3, 4, 5].map((x) => (
+                  <button
+                    key={x}
+                    type="button"
+                    disabled={!!busy}
+                    onClick={() =>
+                      x !== r.mirror?.leverage &&
+                      void call("apalancamiento", "mirror/leverage", { agent: r.key, leverage: x }, `Tus próximos cortos de ${name} irán a x${x}. Lo que ya está abierto no cambia.`)
+                    }
+                    className={`rounded-xl border py-2 font-semibold tabular-nums ${r.mirror?.leverage === x ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}
+                  >
+                    x{x}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500">
+                Cada corto usa la misma garantía; el apalancamiento multiplica su tamaño, y con él lo que ganas y lo que pierdes. Se aplica a los próximos cortos.
+              </p>
+            </div>
+          )}
+
           {r.mirror && (
             <div className="space-y-1 border-t border-slate-100 pt-3 text-[15px]">
               <button
@@ -482,11 +591,24 @@ type Filter = "todas" | "activas" | "historial";
  * Tus oportunidades ejecutadas con dinero real: abiertas e historial en una sola lista. En las abiertas,
  * «Seguir si sube» (al llegar al objetivo, el stop sube y acompaña al precio) y «Cerrar» (vende ya).
  */
-function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; canManage: boolean; onChange: () => Promise<void> }) {
+function MyOpportunities({ data, mirrors, canManage, onChange }: { data: Manual | null; mirrors: Mirror[]; canManage: boolean; onChange: () => Promise<void> }) {
   const [filter, setFilter] = useState<Filter>("todas");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const trades = data?.trades ?? [];
+  // Mi cartera real: operaciones manuales y ejecuciones de copias reales, sin mezclar ensayos.
+  const copied: Trade[] = mirrors.flatMap((m) => m.legs
+    .filter((l) => l.mode === "real" && ["abriendo", "abierta", "vendiendo", "cerrada"].includes(l.status))
+    .map((l) => ({
+      id: "copia:" + l.id, ideaId: "", symbol: l.symbol, pair: l.pair,
+      status: l.status, amount: l.amount ?? 0,
+      invested: l.quantity != null && l.entryPrice != null ? l.quantity * l.entryPrice : (l.amount ?? 0),
+      entry: l.entryPrice, stop: l.stop ?? 0, initialStop: l.initialStop ?? l.stop ?? 0, exitPrice: l.exitPrice ?? null, target: 0, trail: false, trailing: false,
+      price: l.price ?? null, result: l.status === "cerrada" ? l.result : (l.unrealized ?? null),
+      note: (l.short ? "Corto copiado de " : "Copia automática de ") + m.name, openedAt: l.openedAt, closedAt: l.closedAt,
+      origin: m.name, short: !!l.short, leverage: l.leverage ?? null, margin: l.amount ?? null, feePct: l.feePct,
+    })));
+  const trades: Trade[] = [...(data?.trades ?? []).map((t) => ({ ...t, origin: null })), ...copied]
+    .sort((a, b) => (b.closedAt ?? b.openedAt ?? "").localeCompare(a.closedAt ?? a.openedAt ?? ""));
   const active = trades.filter((t) => ACTIVE.includes(t.status));
   const history = trades.filter((t) => !ACTIVE.includes(t.status));
   const list = filter === "activas" ? active : filter === "historial" ? history : [...active, ...history];
@@ -515,8 +637,8 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
     <PortfolioOpportunities>
       <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-3">
         <h2 className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-lg font-semibold text-slate-900">
-          <Flame className="h-5 w-5 text-orange-500" /> Mis oportunidades
-          {data && <span className={`text-sm font-semibold tabular-nums ${tone(data.result)}`}>{signed(data.result)}</span>}
+          <Flame className="h-5 w-5 text-orange-500" /> Actividad de mi cartera
+
           {closed.length > 0 && <span className="text-xs font-normal text-slate-400">· acierto {Math.round((wins / closed.length) * 100)} % ({wins}/{closed.length})</span>}
         </h2>
         <div className="flex w-full gap-1 rounded-lg bg-slate-100 p-1 sm:w-auto" role="group" aria-label="Filtrar oportunidades">
@@ -542,11 +664,11 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
       {error && <ErrorNote>{error}</ErrorNote>}
       {data?.problem && <p className="mb-2 px-1 text-xs text-amber-700">{data.problem}.</p>}
 
-      {!data ? (
-        <p className="px-1 py-6 text-sm text-slate-500">No se pudieron cargar tus oportunidades.</p>
+      {!data && copied.length === 0 ? (
+        <p className="px-1 py-6 text-sm text-slate-500">No se pudieron cargar las operaciones de tu cartera.</p>
       ) : list.length === 0 ? (
         <div className="px-1 py-8 text-center text-sm text-slate-500">
-          {filter === "historial" ? "Todavía no has cerrado ninguna oportunidad." : "No tienes oportunidades abiertas."}{" "}
+          {filter === "historial" ? "Todavía no hay operaciones cerradas." : "No hay posiciones abiertas registradas."}{" "}
           <Link href="/trading/oportunidades" className="font-semibold text-blue-700 hover:underline">
             Ver oportunidades
           </Link>
@@ -576,18 +698,18 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
                 const open = t.status === "abierta";
                 const st = TRADE_STATUS[t.status] ?? { label: t.status, cls: "bg-slate-100 text-slate-600" };
                 const resultPct = t.result !== null && t.invested > 0 ? (t.result / t.invested) * 100 : null;
-                const exit = t.status === "cerrada" && t.result !== null && t.entry && t.invested > 0 ? t.entry * (1 + t.result / t.invested) : null;
+                const exit = t.status === "cerrada" && t.result !== null && t.entry && t.invested > 0 ? t.entry * (1 + ((t.short ? -1 : 1) * t.result) / t.invested) : null;
                 return (
                   <tr key={t.id} className="border-b border-slate-100/80 align-middle" title={t.note ?? undefined}>
                     <td className="px-2 py-2.5">
                       <b className="font-semibold text-slate-900">{name}</b>
                       <span className="block text-[11px] text-slate-400">
-                        {t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : t.openedAt ? `desde ${dateTime(t.openedAt)}` : dateTime(t.closedAt)}
+                        {t.origin ? `Agente: ${t.origin}${t.short ? ` · corto${t.leverage ? ` x${t.leverage}` : ""}` : ""} · ` : "Manual · "}{t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : t.openedAt ? `desde ${dateTime(t.openedAt)}` : dateTime(t.closedAt)}
                       </span>
                     </td>
                     <td className="px-2 py-2.5">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${st.cls}`}>{st.label}</span>
-                      {open && t.trailing && <span className="ml-1 text-[11px] text-emerald-700">stop subiendo</span>}
+                      {open && !t.origin && t.trailing && <span className="ml-1 text-[11px] text-emerald-700">stop subiendo</span>}
                     </td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-slate-700">{eur(t.invested, 2)}</td>
                     <td className="px-2 py-2.5 text-right tabular-nums text-slate-600">
@@ -605,7 +727,7 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
                       )}
                     </td>
                     <td className="px-2 py-2.5">
-                      {t.entry && t.status !== "omitida" ? (
+                      {!t.origin && t.entry && t.status !== "omitida" ? (
                         <>
                           {open && <StopTargetBar stop={t.stop} target={t.target} price={t.price} entry={t.entry} />}
                           <span className="mt-1 flex justify-between text-[11px] tabular-nums text-slate-500">
@@ -622,7 +744,7 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
                       {resultPct !== null && <span className="block text-[11px] font-normal">{pctText(resultPct)}</span>}
                     </td>
                     <td className="px-2 py-2.5 text-center">
-                      {open ? (
+                      {open && !t.origin ? (
                         <label className="inline-flex cursor-pointer items-center justify-center" title={t.trail ? "Quitar: venderá al llegar al objetivo" : "Al llegar al objetivo, seguir mientras suba"}>
                           {busy === `seguir:${t.id}` ? (
                             <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
@@ -635,7 +757,7 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
                       ) : null}
                     </td>
                     <td className="px-2 py-2.5 text-right">
-                      {open && canManage && (
+                      {open && !t.origin && canManage && (
                         <button
                           type="button"
                           disabled={busy !== null}
@@ -654,12 +776,134 @@ function MyOpportunities({ data, canManage, onChange }: { data: Manual | null; c
         </div>
         </>
       )}
-      <p className="mt-2 px-1 text-[11px] text-slate-400">La app revisa cada ~5 min: vende al tocar el stop o el objetivo (o sube el stop si marcaste «Seguir si sube»). Resultados con comisiones.</p>
+      <p className="mt-2 px-1 text-[11px] text-slate-400">Operaciones registradas en tu cartera: compras manuales y copias ejecutadas en real. Las operaciones del agente que no llegaron a ejecutarse en tu exchange no aparecen.</p>
     </PortfolioOpportunities>
   );
 }
 
-type Trade = Manual["trades"][number];
+/** Precio de salida: el real si está guardado; si no, el que sale del resultado (aprox., sin comisiones). */
+function exitOf(t: Trade): { price: number | null; approx: boolean } {
+  if (t.exitPrice) return { price: t.exitPrice, approx: false };
+  if (t.status === "cerrada" && t.entry && t.result !== null && t.invested > 0) return { price: t.entry * (1 + ((t.short ? -1 : 1) * t.result) / t.invested), approx: true };
+  return { price: null, approx: false };
+}
+
+/** Cifras del detalle de una operación (panel que sube desde abajo). */
+function detailRows(t: Trade): [string, string, string][] {
+  const open = t.status === "abierta";
+  const exit = exitOf(t);
+  const rows: [string, string, string][] = t.short
+    ? [
+        ["Garantía", t.margin != null ? eur(t.margin, 2) : "—", "text-slate-900"],
+        ["Apalancamiento", t.leverage ? `x${t.leverage}` : "—", "text-slate-900"],
+        ["Tamaño del corto", eur(t.invested, 2), "text-slate-900"],
+      ]
+    : [["Invertido", eur(t.invested, 2), "text-slate-900"]];
+  rows.push(["Resultado", t.result === null ? "—" : `${signed(t.result)}${t.invested > 0 ? ` · ${pctText((t.result / t.invested) * 100)}` : ""}`, tone(t.result ?? 0)]);
+  rows.push(["Entrada", t.entry ? eur(t.entry) : "—", "text-slate-900"]);
+  rows.push(open ? ["Precio ahora", t.price !== null ? eur(t.price) : "—", "text-slate-900"] : [exit.approx ? "Salida aprox." : "Salida", eur(exit.price), "text-slate-900"]);
+  // Comisiones (estimadas con la tarifa del exchange): entrada sobre lo comprado; salida sobre lo vendido
+  // o, si sigue abierta, sobre lo que valdría al precio de ahora.
+  if (t.feePct > 0 && t.entry && t.invested > 0) {
+    const rate = t.feePct / 100;
+    const entryFee = t.invested * rate;
+    const out = open ? t.price : exit.price;
+    const exitFee = out ? t.invested * (out / t.entry) * rate : null;
+    const feeText = (v: number | null) => (v === null ? "—" : v > 0 && v < 0.01 ? "< 0,01 €" : eur(v, 2));
+    const rateText = `${String(t.feePct).replace(".", ",")} %`;
+    rows.push([`Comisión entrada · ${rateText}`, feeText(entryFee), "text-slate-700"]);
+    rows.push([`Comisión salida${open ? " (si vendes ya)" : ""}`, feeText(exitFee), "text-slate-700"]);
+  }
+  if (t.stop > 0) rows.push([open ? "Stop ahora" : "Último stop", eur(t.stop), "text-rose-700"]);
+  if (t.target > 0) rows.push(["Objetivo", eur(t.target), "text-emerald-700"]);
+  return rows;
+}
+
+/** ¿Se ha movido el stop desde que entró? (stop de persecución: sube en las compras, baja en los cortos). */
+function stopMove(t: Trade) {
+  if (!(t.stop > 0) || !(t.initialStop > 0)) return null;
+  const pct = ((t.stop - t.initialStop) / t.initialStop) * 100;
+  if (Math.abs(pct) < 0.05) return { moved: false, pct: 0, favor: false };
+  return { moved: true, pct, favor: t.short ? pct < 0 : pct > 0 };
+}
+
+function StopMove({ t }: { t: Trade }) {
+  const m = stopMove(t);
+  if (!m) return null;
+  return (
+    <div className={`rounded-xl px-3 py-2.5 text-xs ${m.moved && m.favor ? "bg-emerald-50 text-emerald-800" : "bg-slate-50 text-slate-600"}`}>
+      {m.moved ? (
+        <>
+          <b className="font-semibold">Stop de persecución {m.favor ? "activo" : "movido"}:</b> de {eur(t.initialStop)} a {eur(t.stop)} ({m.pct > 0 ? "+" : ""}
+          {m.pct.toFixed(1).replace(".", ",")} %){m.favor ? (t.short ? ", ha bajado detrás del precio." : ", ha subido detrás del precio.") : "."}
+        </>
+      ) : (
+        <>
+          <b className="font-semibold">Stop sin mover:</b> sigue en el inicial, {eur(t.initialStop)}.
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Gráfico simple del precio durante la operación: entrada, salida (o ahora), stop inicial y stop actual. */
+function TradeChart({ t }: { t: Trade }) {
+  const [points, setPoints] = useState<{ t: number; c: number }[] | null>(null);
+  const opened = t.openedAt ? new Date(t.openedAt).getTime() : null;
+  const closed = t.closedAt ? new Date(t.closedAt).getTime() : null;
+  useEffect(() => {
+    if (!opened) return;
+    const end = closed ?? Date.now();
+    const pad = Math.max(30 * 60_000, (end - opened) * 0.1);
+    let alive = true;
+    api<{ points: { t: number; c: number }[] }>(`trade-chart?symbol=${encodeURIComponent(t.symbol)}&from=${Math.floor(opened - pad)}&to=${Math.floor(end + (closed ? pad : 0))}`)
+      .then((r) => alive && setPoints(r.points), () => alive && setPoints([]));
+    return () => {
+      alive = false;
+    };
+  }, [t.symbol, opened, closed]);
+  if (!opened) return null;
+  if (points === null) return <div className="h-36 animate-pulse rounded-xl bg-slate-50" />;
+  if (points.length < 2) return <p className="text-xs text-slate-400">Sin gráfico para {coin(t.symbol)}.</p>;
+
+  const W = 320, H = 140, P = 6;
+  const exit = exitOf(t).price;
+  const levels = [t.entry ?? null, t.stop > 0 ? t.stop : null, t.initialStop > 0 ? t.initialStop : null, t.target > 0 ? t.target : null, exit].filter((v): v is number => v !== null && v > 0);
+  const ys = [...points.map((p) => p.c), ...levels];
+  const lo = Math.min(...ys), hi = Math.max(...ys);
+  const span = hi - lo || hi * 0.01 || 1;
+  const t0 = points[0].t, t1 = points[points.length - 1].t;
+  const x = (v: number) => P + ((v - t0) / Math.max(1, t1 - t0)) * (W - 2 * P);
+  const y = (v: number) => P + (1 - (v - lo) / span) * (H - 2 * P);
+  const path = points.map((p, i) => `${i ? "L" : "M"}${x(p.t).toFixed(1)},${y(p.c).toFixed(1)}`).join(" ");
+  const hline = (v: number, cls: string, dash?: string) => <line x1={P} x2={W - P} y1={y(v)} y2={y(v)} className={cls} strokeWidth={1} strokeDasharray={dash} />;
+  const stopMoved = stopMove(t)?.moved;
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-36 w-full" role="img" aria-label={`Precio de ${coin(t.symbol)} durante la operación`}>
+        {opened >= t0 && <line x1={x(opened)} x2={x(opened)} y1={P} y2={H - P} className="stroke-slate-200" strokeWidth={1} />}
+        {closed && closed <= t1 && <line x1={x(closed)} x2={x(closed)} y1={P} y2={H - P} className="stroke-slate-200" strokeWidth={1} />}
+        {t.target > 0 && hline(t.target, "stroke-emerald-500", "4 3")}
+        {stopMoved && t.initialStop > 0 && hline(t.initialStop, "stroke-rose-300", "2 3")}
+        {t.stop > 0 && hline(t.stop, "stroke-rose-500", "4 3")}
+        {t.entry && hline(t.entry, "stroke-slate-400", "4 3")}
+        <path d={path} fill="none" className="stroke-blue-600" strokeWidth={1.75} strokeLinejoin="round" />
+        {t.entry && opened >= t0 && <circle cx={x(opened)} cy={y(t.entry)} r={3.5} className="fill-slate-700" />}
+        {exit && closed && closed <= t1 && <circle cx={x(closed)} cy={y(exit)} r={3.5} className={(t.result ?? 0) >= 0 ? "fill-emerald-600" : "fill-rose-600"} />}
+      </svg>
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+        <span className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-blue-600" /> Precio</span>
+        {t.entry && <span className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-slate-400" /> Entrada</span>}
+        {t.stop > 0 && <span className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-rose-500" /> Stop{stopMoved ? " ahora" : ""}</span>}
+        {stopMoved && <span className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-rose-300" /> Stop inicial</span>}
+        {t.target > 0 && <span className="inline-flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-emerald-500" /> Objetivo</span>}
+        {closed && <span className="inline-flex items-center gap-1"><i className={`inline-block h-2 w-2 rounded-full ${(t.result ?? 0) >= 0 ? "bg-emerald-600" : "bg-rose-600"}`} /> Salida</span>}
+      </div>
+    </div>
+  );
+}
+
+type Trade = Manual["trades"][number] & { origin?: string | null; short?: boolean; leverage?: number | null; margin?: number | null };
 
 /**
  * Móvil: tus oportunidades como lista (dos líneas por operación). Al tocar una, sube desde abajo su
@@ -682,7 +926,7 @@ function MobileTrades({
   const sel = list.find((t) => t.id === selId) ?? null;
   return (
     <>
-      <ul className="-mx-1 divide-y divide-slate-100 md:hidden">
+      <ul className="-mx-1 max-h-[26rem] divide-y divide-slate-100 overflow-auto md:hidden">
         {list.map((t) => {
           const name = coin(t.symbol);
           const open = t.status === "abierta";
@@ -696,10 +940,10 @@ function MobileTrades({
                   <span className="flex items-center gap-2">
                     <b className="truncate text-[15px] font-semibold text-slate-900">{name}</b>
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${st.cls}`}>{st.label}</span>
-                    {open && t.trail && <span className="shrink-0 text-[11px] font-medium text-emerald-700">sigue si sube</span>}
+                    {open && !t.origin && t.trail && <span className="shrink-0 text-[11px] font-medium text-emerald-700">sigue si sube</span>}
                   </span>
                   <span className="block truncate text-xs text-slate-500">
-                    {eur(t.invested, 2)} ·{" "}
+                    {t.origin ? `Agente: ${t.origin}${t.short && t.leverage ? ` · x${t.leverage}` : ""} · ` : "Manual · "}{eur(t.invested, 2)} ·{" "}
                     {open && t.entry && t.price !== null ? `${eur(t.entry)} → ${eur(t.price)}` : t.status === "cerrada" && t.closedAt ? `cerrada ${dateTime(t.closedAt)}` : dateTime(t.openedAt)}
                   </span>
                 </span>
@@ -724,9 +968,9 @@ function MobileTrades({
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${(TRADE_STATUS[sel.status] ?? { cls: "bg-slate-100 text-slate-600" }).cls}`}>{TRADE_STATUS[sel.status]?.label ?? sel.status}</span>
             </span>
           }
-          subtitle={sel.status === "cerrada" && sel.closedAt ? `Cerrada el ${dateTime(sel.closedAt)}` : sel.openedAt ? `Desde el ${dateTime(sel.openedAt)}` : undefined}
+          subtitle={sel.origin ? `Agente: ${sel.origin}${sel.short ? ` · corto${sel.leverage ? ` x${sel.leverage}` : ""}` : ""} · ${dateTime(sel.openedAt)}` : sel.status === "cerrada" && sel.closedAt ? `Cerrada el ${dateTime(sel.closedAt)}` : sel.openedAt ? `Desde el ${dateTime(sel.openedAt)}` : undefined}
           footer={
-            sel.status === "abierta" && canManage ? (
+            sel.status === "abierta" && !sel.origin && canManage ? (
               <button
                 type="button"
                 disabled={busy !== null}
@@ -740,24 +984,17 @@ function MobileTrades({
         >
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-              {(
-                [
-                  ["Invertido", eur(sel.invested, 2), "text-slate-900"],
-                  ["Resultado", sel.result === null ? "—" : `${signed(sel.result)}${sel.invested > 0 ? ` · ${pctText((sel.result / sel.invested) * 100)}` : ""}`, tone(sel.result ?? 0)],
-                  ["Entrada", sel.entry ? eur(sel.entry) : "—", "text-slate-900"],
-                  [sel.status === "abierta" ? "Precio ahora" : "Salida aprox.", sel.status === "abierta" ? (sel.price !== null ? eur(sel.price) : "—") : sel.entry && sel.result !== null && sel.invested > 0 ? eur(sel.entry * (1 + sel.result / sel.invested)) : "—", "text-slate-900"],
-                  ["Stop", eur(sel.stop), "text-rose-700"],
-                  ["Objetivo", eur(sel.target), "text-emerald-700"],
-                ] as const
-              ).map(([label, value, cls]) => (
+              {detailRows(sel).map(([label, value, cls]) => (
                 <div key={label}>
                   <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
                   <div className={`mt-0.5 text-base font-semibold tabular-nums ${cls}`}>{value}</div>
                 </div>
               ))}
             </div>
-            {sel.status === "abierta" && sel.entry && <StopTargetBar stop={sel.stop} target={sel.target} price={sel.price} entry={sel.entry} />}
-            {sel.status === "abierta" && (
+            <StopMove t={sel} />
+            <TradeChart t={sel} />
+            {sel.status === "abierta" && !sel.origin && sel.entry && <StopTargetBar stop={sel.stop} target={sel.target} price={sel.price} entry={sel.entry} />}
+            {sel.status === "abierta" && !sel.origin && (
               <label className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 px-4 py-3">
                 <span>
                   <b className="block text-[15px] font-semibold text-slate-900">Seguir si sube</b>

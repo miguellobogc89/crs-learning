@@ -20,7 +20,7 @@ export function cellText(value: CellValue, kind?: Column["kind"]): string {
   if (value === null || value === "") return "";
   if (typeof value === "boolean") return value ? "sí" : "no";
   if (typeof value === "number") {
-    const opts = { minimumFractionDigits: kind === "money" ? 2 : 0, maximumFractionDigits: 2 };
+    const opts = { minimumFractionDigits: kind === "money" ? 2 : 0, maximumFractionDigits: 5 };
     // As shown (es-ES: "1234,50") and as often typed ("1.234,50"), plus the raw number.
     return `${value.toLocaleString("es-ES", opts)} ${value.toLocaleString("de-DE", opts)} ${value}`;
   }

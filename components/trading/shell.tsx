@@ -1,35 +1,39 @@
 "use client";
 // Estructura propia de Trading, separada de la app general (sin su barra superior, su menú ni el chat):
-// - móvil (< 768 px): barra fina arriba con el menú (hamburguesa) y el título; todo a pantalla completa.
-//   El menú se abre a pantalla completa con las secciones, tu dinero y el mercado.
+// - móvil (< 768 px): barra fina arriba con el menú (hamburguesa) y el título, y abajo las cuatro secciones
+//   principales solo con iconos. El menú es el de la cuenta (Conexiones y lo que vendrá). Arrastrar hacia
+//   abajo desde arriba actualiza la pantalla.
 // - tablet en vertical (768-1023 px): barra lateral estrecha solo con iconos; el menú completo se abre
 //   con la hamburguesa de la barra.
 // - tablet en horizontal y ordenador (≥ 1024 px): barra lateral completa, como antes.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Menu, X } from "lucide-react";
+import { AgentAvatar } from "./ui";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { TradingNavigation, TradingNavigationHeader, type TradingProfile } from "./navigation";
 import { prefetchTrading } from "./format";
+import { BottomTabs, MobileMenu, PullToRefresh } from "./mobile-nav";
+import { BellButton, NotificationsScreen, useNotifications } from "./notifications";
 
 // Lo que leen Inicio (Operadores y Actividad), Oportunidades, Mi cartera y Agentes.
-const PREFETCH = ["portfolio", "agents", "faro", "mine", "mirror", "wallets?history=1", "manual"];
+const PREFETCH = ["summary", "notifications", "pulse", "portfolio", "agents", "faro", "mine", "mirror", "wallets?history=1", "manual"];
 import { isFittedTab, isTradingTab, TRADING_TABS } from "./tabs";
 
 /** Lo que una pantalla «hija» (la página de un agente) le dice a la estructura: su título y a dónde volver. */
-type Meta = { title?: string; back?: { href: string; label: string } };
+type Meta = { title?: string; back?: { href: string; label: string }; color?: string };
 const MetaContext = createContext<(m: Meta | null) => void>(() => undefined);
 
 /** Desde una página: fija el título y el «volver» de la barra mientras esté abierta. */
-export function ShellMeta({ title, back }: Meta) {
+export function ShellMeta({ title, back, color }: Meta) {
   const set = useContext(MetaContext);
   const backHref = back?.href;
   const backLabel = back?.label;
   useEffect(() => {
-    set({ title, back: backHref && backLabel ? { href: backHref, label: backLabel } : undefined });
+    set({ title, color, back: backHref && backLabel ? { href: backHref, label: backLabel } : undefined });
     return () => set(null);
-  }, [set, title, backHref, backLabel]);
+  }, [set, title, color, backHref, backLabel]);
   return null;
 }
 
@@ -51,6 +55,17 @@ export function TradingShell({ children, user }: { children: ReactNode; user: Tr
   const fitted = child || isFittedTab(section);
   const Icon = tabDef.icon;
   const [open, setOpen] = useState(false);
+  const scroller = useRef<HTMLElement>(null);
+  // Notificaciones: la campana (y el aviso de «Todo funciona» del Resumen) abren la pantalla de avisos.
+  const notes = useNotifications();
+  const [notesOpen, setNotesOpen] = useState(false);
+  useEffect(() => {
+    const h = () => setNotesOpen(true);
+    window.addEventListener("trading:notifications", h);
+    return () => window.removeEventListener("trading:notifications", h);
+  }, []);
+  useEffect(() => setNotesOpen(false), [pathname]);
+  const unread = notes.data?.unread ?? 0;
   // Tras la primera carga, el resto de pantallas se va leyendo en segundo plano.
   useEffect(() => prefetchTrading(PREFETCH), []);
   // Al navegar, el menú se cierra solo.
@@ -85,27 +100,39 @@ export function TradingShell({ children, user }: { children: ReactNode; user: Tr
         })}
       </aside>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col transition-transform duration-300 ease-out ${notesOpen ? "-translate-x-1/4 md:translate-x-0" : ""}`}
+      >
         {/* Móvil: barra fina con el menú y el título. */}
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-slate-200/70 bg-white/95 px-2 pt-[env(safe-area-inset-top)] backdrop-blur md:hidden">
           <button type="button" onClick={() => setOpen(true)} aria-label="Abrir el menú" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
             <Menu className="h-5 w-5" />
           </button>
           {back ? (
-            <Link href={back.href} className="flex min-w-0 items-center gap-1.5 text-[17px] font-semibold text-slate-900">
-              <ArrowLeft className="h-4 w-4 shrink-0 text-slate-400" />
-              <span className="truncate">{title}</span>
-            </Link>
+            // Pantalla de detalle: menú a la izquierda, su nombre en el centro y cerrar a la derecha.
+            <>
+              <h1 className="flex min-w-0 flex-1 items-center justify-center gap-2 text-[17px] font-semibold text-slate-900">
+                {meta?.color && <AgentAvatar color={meta.color} size="sm" />}
+                <span className="truncate">{title}</span>
+              </h1>
+              <Link href={back.href} aria-label={`Cerrar y volver a ${back.label}`} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
+                <X className="h-5 w-5" />
+              </Link>
+            </>
           ) : (
-            <h1 className="flex min-w-0 items-center gap-2 text-[17px] font-semibold text-slate-900">
-              <Icon className="h-4 w-4 shrink-0 text-blue-600" />
-              <span className="truncate">{title}</span>
-            </h1>
+            <>
+              <h1 className="flex min-w-0 flex-1 items-center gap-2 text-[17px] font-semibold text-slate-900">
+                <Icon className="h-4 w-4 shrink-0 text-blue-600" />
+                <span className="truncate">{title}</span>
+              </h1>
+              <BellButton unread={unread} onClick={() => setNotesOpen(true)} />
+            </>
           )}
         </header>
 
         {/* Tablet y ordenador: cabecera grande. */}
-        <div className="hidden shrink-0 px-6 pb-3 pt-5 md:block lg:px-8">
+        <div className="hidden shrink-0 items-start gap-3 px-6 pb-3 pt-5 md:flex lg:px-8">
+          <div className="min-w-0 flex-1">
           {back ? (
             <nav aria-label="Ruta" className="flex min-w-0 items-center gap-2 text-[26px] font-semibold leading-[1.2] tracking-tight">
               <Link href={back.href} className="flex shrink-0 items-center gap-2 text-slate-400 hover:text-slate-700">
@@ -123,16 +150,26 @@ export function TradingShell({ children, user }: { children: ReactNode; user: Tr
               <span className="truncate">{title}</span>
             </h1>
           )}
+          </div>
+          <BellButton unread={unread} onClick={() => setNotesOpen(true)} className="-mr-2 -mt-0.5" />
         </div>
 
         <main
-          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-3 md:px-6 md:pt-0 lg:px-8 ${
+          ref={scroller}
+          className={`min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-3 md:px-6 md:pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pt-0 lg:px-8 ${
             fitted ? "lg:flex lg:flex-col lg:overflow-hidden lg:pb-6" : ""
           }`}
         >
-          <MetaContext.Provider value={setMeta}>{children}</MetaContext.Provider>
+          <MetaContext.Provider value={setMeta}>
+            <PullToRefresh scroller={scroller}>{children}</PullToRefresh>
+          </MetaContext.Provider>
         </main>
       </div>
+
+      {/* Móvil: las cuatro secciones principales abajo, solo con iconos. */}
+      <BottomTabs />
+
+      <NotificationsScreen open={notesOpen} onClose={() => setNotesOpen(false)} data={notes.data} markRead={notes.markRead} />
 
       {/* Menú completo (móvil y tablet en vertical). */}
       <Sheet open={open} onOpenChange={setOpen}>
@@ -144,7 +181,12 @@ export function TradingShell({ children, user }: { children: ReactNode; user: Tr
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <SheetTitle className="sr-only">Menú de Trading</SheetTitle>
-          <div className="flex h-full min-h-0 flex-col pt-[env(safe-area-inset-top)]">
+          {/* Móvil: menú de cuenta (las secciones están abajo). */}
+          <div className="h-full md:hidden">
+            <MobileMenu user={user} onClose={() => setOpen(false)} />
+          </div>
+          {/* Tablet en vertical: el menú completo de siempre. */}
+          <div className="hidden h-full min-h-0 flex-col pt-[env(safe-area-inset-top)] md:flex">
             <div className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200/70 px-2 pr-4">
               <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar el menú" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
                 <X className="h-5 w-5" />

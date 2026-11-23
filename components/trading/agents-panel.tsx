@@ -3,17 +3,19 @@
 // y su propia cartera virtual. Cada tarjeta lleva a la página del agente (/trading/agentes/<clave>).
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Copy, CopyPlus, LayoutGrid, List, Loader2, MoreHorizontal, Pause, Play, Plus, RotateCcw, Search, Trash2, Wallet } from "lucide-react";
+import { ArrowRight, ChevronDown, Copy, LayoutGrid, List, Loader2, MoreHorizontal, Plus, Search, SlidersHorizontal, X, Trash2, Wallet } from "lucide-react";
 import type { getAgents } from "@/lib/trading/agents/service";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
-import { api, dayFmt, errorText, eur, eur0, field, flat, ghost, int, pct, primary, th, tone } from "./format";
+import { api, errorText, eur, eur0, field, flat, ghost, int, pct, primary, tone } from "./format";
 import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
 import { EquityCurve, withLivePoint } from "./equity-chart";
-import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, Pill, ReturnPill, Rich } from "./ui";
+import { AgentAvatar, cap, card, ErrorNote, LoadingCard, Modal, ReturnPill, Rich } from "./ui";
 import { AssetIcon } from "./asset-icon";
 import { DataTable, Money, useIsMobile } from "./table";
 import { MirrorModal } from "./mirror-modal";
-import { AgentVenuePills } from "./agent-venues";
+import { SpecPills } from "./agent-spec";
+import { AgentSheet } from "./agent-sheet";
+import { TableToolbar } from "@/components/ui/table-toolbar";
 
 export type Data = Awaited<ReturnType<typeof getAgents>> & { canManage: boolean; canCopy: boolean };
 type Portfolio = Awaited<ReturnType<typeof getPortfolio>>;
@@ -32,9 +34,9 @@ export const when = (iso: string | null | undefined) =>
     ? new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }).format(new Date(iso))
     : "Nunca";
 
-const PROFILES = ["todos", "precavido", "equilibrado", "arriesgado", "kamikaze"] as const;
-type SortKey = "rentabilidad" | "patrimonio" | "antiguedad" | "nombre";
+type SortKey = "actividad" | "rentabilidad" | "patrimonio" | "antiguedad" | "nombre";
 const SORTS: Record<SortKey, { label: string; fn: (a: Agent, b: Agent) => number }> = {
+  actividad: { label: "Última operación", fn: (a, b) => (b.lastMovementAt ?? "").localeCompare(a.lastMovementAt ?? "") || a.name.localeCompare(b.name, "es") },
   rentabilidad: { label: "Rentabilidad", fn: (a, b) => b.summary.returnPct - a.summary.returnPct },
   patrimonio: { label: "Patrimonio", fn: (a, b) => b.summary.equity - a.summary.equity },
   antiguedad: { label: "Más veteranos", fn: (a, b) => a.startedAt.localeCompare(b.startedAt) },
@@ -50,6 +52,8 @@ export function AgentsPanel() {
   const router = useRouter();
   const [copyFor, setCopyFor] = useState<Agent | null>(null);
   const [mirrorFor, setMirrorFor] = useState<Agent | null>(null);
+  // Panel lateral (paso intermedio antes de la ficha completa).
+  const [peekKey, setPeekKey] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   // Enlaces antiguos (?agent=…): ahora cada agente tiene su página.
@@ -58,8 +62,9 @@ export function AgentsPanel() {
     if (legacy) router.replace(`/trading/agentes/${legacy}`);
   }, [legacy, router]);
   const [query, setQuery] = useState("");
-  const [profile, setProfile] = useState<(typeof PROFILES)[number]>("todos");
-  const [sort, setSort] = useState<SortKey>("rentabilidad");
+  const [kindFilter, setKindFilter] = useState<"todos" | "agente" | "chip" | "kamikaze">("todos");
+  const [activityFilter, setActivityFilter] = useState<"todos" | "operaron" | "copiados">("todos");
+  const [sort, setSort] = useState<SortKey>("actividad");
   const [layoutPick, setLayout] = useState<"cards" | "list">("cards");
   // En móvil, siempre tarjetas (la lista es una tabla ancha pensada para el ordenador).
   const isMobile = useIsMobile();
@@ -81,10 +86,11 @@ export function AgentsPanel() {
     if (!data) return [];
     const q = query.trim().toLowerCase();
     return data.agents
-      .filter((a) => profile === "todos" || a.profile === profile)
-      .filter((a) => !q || [a.name, a.profile, a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
+      .filter((a) => (!q || [a.name, a.spec?.style ?? "", a.tagline, CREATOR.name].some((t) => t.toLowerCase().includes(q)))
+        && (kindFilter === "todos" || a.kind === kindFilter)
+        && (activityFilter === "todos" || (activityFilter === "operaron" ? !!a.lastMovementAt : !!a.mirror || a.copyWeightPct !== null)))
       .sort(SORTS[sort].fn);
-  }, [data, profile, query, sort]);
+  }, [data, query, sort, kindFilter, activityFilter]);
 
   // Animación FLIP: las tarjetas que permanecen se deslizan hacia su nueva posición.
   // Sin dependencias adicionales y respetando la preferencia de movimiento reducido.
@@ -152,7 +158,6 @@ export function AgentsPanel() {
 
   if (!data) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard />;
 
-  const rank = new Map([...data.agents].sort((x, y) => y.summary.returnPct - x.summary.returnPct).map((a, k) => [a.key, k + 1]));
   const openDetail = (key: string) => router.push(`/trading/agentes/${key}`);
 
   return (
@@ -160,62 +165,34 @@ export function AgentsPanel() {
 
       {error && <ErrorNote>{error}</ErrorNote>}
 
-      {/* Barra del catálogo: buscar, filtrar, ordenar y cambiar de vista */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 md:gap-3">
-        <div className="relative w-full min-w-0 sm:w-auto sm:min-w-[220px] sm:max-w-xs sm:flex-1">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-          <input className={`${field} w-full pl-9`} placeholder="Buscar agente, perfil o creador" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Buscar agentes" />
-        </div>
-        <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 [scrollbar-width:none] max-md:w-full">
-          {PROFILES.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setProfile(p)}
-              className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium ${profile === p ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
-            >
-              {p === "todos" ? "Todos" : cap(p)}
-            </button>
-          ))}
-        </div>
-        {layout === "cards" && (
-        <label className="flex items-center gap-2 text-sm text-slate-500 max-md:w-full">
-          Ordenar por
-          <select className={`${field} py-1.5 max-md:flex-1`} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-            {(Object.keys(SORTS) as SortKey[]).map((k) => (
-              <option key={k} value={k}>
-                {SORTS[k].label}
-              </option>
-            ))}
-          </select>
-        </label>
-        )}
-        {/* En móvil, solo tarjetas y sin «Crear agente» (aparcado; se crea desde el ordenador). */}
-        <div className="ml-auto hidden items-center gap-2 md:flex">
-          <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label="Vista">
-            {(
-              [
-                ["cards", LayoutGrid, "Tarjetas"],
-                ["list", List, "Lista"],
-              ] as const
-            ).map(([k, Icon, label]) => (
-              <button
-                key={k}
-                type="button"
-                title={label}
-                aria-pressed={layout === k}
-                onClick={() => setLayout(k)}
-                className={`rounded-lg p-1.5 ${layout === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"}`}
-              >
-                <Icon className="h-4 w-4" />
-              </button>
-            ))}
-          </div>
-          <button type="button" onClick={() => setCreating(true)} className={`${primary} whitespace-nowrap`}>
-            <Plus className="h-4 w-4" /> Crear agente
-          </button>
-        </div>
-      </div>
+      <TableToolbar
+        search={query}
+        onSearchChange={setQuery}
+        searchPlaceholder="Buscar en Agentes..."
+        filters={{
+          groups: [
+            { key: "kind", label: "Tipo de agente", value: kindFilter === "todos" ? "all" : kindFilter, allLabel: "Todos los tipos", options: [
+              { value: "agente", label: "Agentes" }, { value: "chip", label: "Chip" }, { value: "kamikaze", label: "Kamikaze" },
+            ] },
+            { key: "activity", label: "Actividad", value: activityFilter === "todos" ? "all" : activityFilter, allLabel: "Toda la actividad", options: [
+              { value: "operaron", label: "Con operaciones" }, { value: "copiados", label: "Mis copias" },
+            ] },
+          ],
+          onChange: (key, value) => {
+            if (key === "kind") setKindFilter(value === "all" ? "todos" : value as typeof kindFilter);
+            else setActivityFilter(value === "all" ? "todos" : value as typeof activityFilter);
+          },
+          onClear: () => { setKindFilter("todos"); setActivityFilter("todos"); },
+        }}
+        sort={{
+          value: { key: sort, dir: 1 },
+          options: (Object.keys(SORTS) as SortKey[]).map((key) => ({ label: SORTS[key].label, value: { key, dir: 1 as const } })),
+          onChange: (value) => { if (value?.key) setSort(value.key as SortKey); },
+          textKeys: ["nombre"],
+        }}
+        view={{ value: layoutPick === "cards" ? "grid" : "list", onChange: (value) => setLayout(value === "grid" ? "cards" : "list") }}
+        extra={!isMobile ? <button type="button" onClick={() => setCreating(true)} className={`${primary} hidden whitespace-nowrap md:inline-flex`}><Plus className="h-4 w-4" /> Crear agente</button> : undefined}
+      />
 
       <p className="shrink-0 text-xs text-slate-500">
         {list.length === data.agents.length ? `${list.length} agentes` : `${list.length} de ${data.agents.length} agentes`}
@@ -233,15 +210,12 @@ export function AgentsPanel() {
                 else cardNodes.current.delete(a.key);
               }}
               a={a}
-              rank={rank.get(a.key) ?? 0}
-              canManage={data.canManage}
               canCopy={data.canCopy}
               busy={busy === a.key}
-              onDetail={() => openDetail(a.key)}
-              onCopy={() => setCopyFor(a)}
+              // En el móvil, directo a la ficha (el panel lateral es para el ordenador).
+              onDetail={() => (isMobile ? openDetail(a.key) : setPeekKey(a.key))}
+              onFicha={() => openDetail(a.key)}
               onMirror={() => setMirrorFor(a)}
-              onMeet={() => void meet(a)}
-              onReset={() => void reset(a)}
             />
           ))}
         </div>
@@ -253,7 +227,7 @@ export function AgentsPanel() {
           label="agentes"
           rows={list}
           rowKey={(a) => a.key}
-          onRowClick={(a) => openDetail(a.key)}
+          onRowClick={(a) => setPeekKey(a.key)}
           columns={[
             {
               key: "name",
@@ -267,10 +241,9 @@ export function AgentsPanel() {
                   <span className="min-w-0">
                     <span className="flex items-center gap-2">
                       <b className="truncate font-semibold text-slate-900">{a.name}</b>
-                      <Pill color={a.color}>{cap(a.profile)}</Pill>
+                      <SpecPills spec={a.spec} />
                     </span>
                     <span className="block truncate text-xs text-slate-500">{a.tagline}</span>
-                    <AgentVenuePills v={a.venues} className="mt-1" />
                   </span>
                 </span>
               ),
@@ -295,7 +268,7 @@ export function AgentsPanel() {
                     openDetail(a.key);
                   }}
                 >
-                  Detalles
+                  Ficha
                 </button>
               ),
             },
@@ -303,8 +276,17 @@ export function AgentsPanel() {
         />
       )}
 
+      <AgentSheet
+        a={data.agents.find((x) => x.key === peekKey) ?? null}
+        canCopy={data.canCopy}
+        onMirror={(a) => {
+          setPeekKey(null);
+          setMirrorFor(a);
+        }}
+        onClose={() => setPeekKey(null)}
+      />
       {copyFor && <CopyModal agent={copyFor} onClose={() => setCopyFor(null)} />}
-      {mirrorFor && <MirrorModal agent={mirrorFor.key} name={mirrorFor.name} onClose={() => setMirrorFor(null)} />}
+      {mirrorFor && <MirrorModal agent={mirrorFor.key} name={mirrorFor.name} venues={mirrorFor.venues} onClose={() => setMirrorFor(null)} />}
       {creating && <CreateAgentModal onClose={() => setCreating(false)} />}
     </div>
   );
@@ -357,26 +339,16 @@ export function ChipMode({ a, big = false }: { a: Agent; big?: boolean }) {
 }
 
 /** Lo que tienes con este agente: copia virtual y/o copia en tu exchange. */
+/** Si le copias en tu exchange: con cuánto, si es con dinero real o en ensayo, y cómo te va. */
 export function CopyBadges({ a }: { a: Agent }) {
-  if (a.copyWeightPct === null && !a.mirror) return null;
+  if (!a.mirror) return null;
   return (
     <div className="space-y-1">
-      {a.copyWeightPct !== null && (
-        <div className="flex items-center justify-between gap-2 rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-800">
-          <span className="flex items-center gap-1.5 font-medium">
-            <Copy className="h-3.5 w-3.5" /> Lo copias al {a.copyWeightPct} %
-          </span>
-          {a.copyReturnPct !== null && (
-            <span className={`font-semibold tabular-nums ${tone(a.copyReturnPct)}`} title="Rentabilidad de tu copia desde que la empezaste">
-              {pct(a.copyReturnPct)} desde que lo copias
-            </span>
-          )}
-        </div>
-      )}
       {a.mirror && (
         <div className="flex items-center justify-between gap-2 rounded-xl bg-violet-50 px-3 py-2 text-xs text-violet-800">
-          <span className="flex items-center gap-1.5 font-medium">
-            <Wallet className="h-3.5 w-3.5" /> {a.mirror.mode === "real" ? "Copia real" : "Copia en ensayo"} · {eur(a.mirror.budget, 2)}
+          <span className="flex items-center gap-1.5 font-medium" title={a.mirror.mode === "real" ? "Sus compras y ventas se repiten en tu exchange con tu dinero" : "Se calculan las órdenes en tu exchange, pero no se envían"}>
+            <Wallet className="h-3.5 w-3.5" />
+            {a.mirror.mode === "real" ? `Le copias con ${eur(a.mirror.budget, 0)} de tu exchange` : `Copia de prueba con ${eur(a.mirror.budget, 0)} (no se envía nada)`}
           </span>
           <span className={`font-semibold tabular-nums ${tone(a.mirror.result)}`}>
             {a.mirror.result >= 0 ? "+" : ""}
@@ -454,48 +426,32 @@ export function agentMenu(
   o: { canManage: boolean; canCopy: boolean; onDetail?: () => void; onCopy: () => void; onMirror: () => void; onMeet: () => void; onReset: () => void },
 ): MenuItem[] {
   const items: MenuItem[] = [];
-  if (o.onDetail) items.push({ label: "Ver su página", icon: ArrowRight, onClick: o.onDetail });
-  if (!a.kamikaze)
-    items.push({ label: a.copyWeightPct !== null ? "Cambiar la copia" : "Copiar", icon: Copy, onClick: o.canCopy ? o.onCopy : undefined, disabledReason: o.canCopy ? undefined : "Solo el propietario o un administrador" });
+  if (o.onDetail) items.push({ label: "Ver su ficha", icon: ArrowRight, onClick: o.onDetail });
   items.push({ label: a.mirror ? "Copia con dinero real…" : "Copiar con dinero real", icon: Wallet, onClick: o.canCopy ? o.onMirror : undefined, disabledReason: o.canCopy ? undefined : "Solo el propietario o un administrador" });
-  items.push({ label: "Pausar", icon: Pause, soon: true });
-  items.push({ label: "Duplicar", icon: CopyPlus, soon: true });
-  if (o.canManage) {
-    items.push({ label: "Reunir ahora", icon: Play, onClick: o.onMeet });
-    items.push({ label: "Reiniciar", icon: RotateCcw, onClick: o.onReset, danger: true });
-  }
   items.push({ label: "Eliminar", icon: Trash2, danger: true, disabledReason: "Los agentes de Crussader no se pueden eliminar; los tuyos sí" });
   return items;
 }
 
 function AgentCard({
   a,
-  rank,
   cardRef,
-  canManage,
   canCopy,
   busy,
   onDetail,
-  onCopy,
+  onFicha,
   onMirror,
-  onMeet,
-  onReset,
 }: {
   a: Agent;
-  rank: number;
   cardRef: (node: HTMLElement | null) => void;
-  canManage: boolean;
   canCopy: boolean;
   busy: boolean;
   onDetail: () => void;
-  onCopy: () => void;
+  onFicha: () => void;
   onMirror: () => void;
-  onMeet: () => void;
-  onReset: () => void;
 }) {
   const open = a.positions.filter((p) => p.status === "abierta").length;
   const pending = a.positions.filter((p) => p.status === "pendiente").length;
-  const k = a.kamikaze;
+  const note = a.kamikaze?.note ?? null;
   const chartPoints = withLivePoint(a.equity, a.summary.equity);
   return (
     <article
@@ -512,22 +468,12 @@ function AgentCard({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[15px] font-semibold text-slate-900 group-hover:underline">{a.name}</span>
-              <Pill color={a.color}>{cap(a.profile)}</Pill>
-              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500" title="Puesto por rentabilidad">
-                #{rank}
-              </span>
+              <SpecPills spec={a.spec} />
             </div>
             <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-500">{a.tagline}</p>
-            <AgentVenuePills v={a.venues} className="mt-2" />
           </div>
         </div>
-        <div className="-mr-2 -mt-1 shrink-0">
-          {busy ? (
-            <Loader2 className="m-2 h-4 w-4 animate-spin text-slate-400" />
-          ) : (
-            <DotsMenu label={`Acciones de ${a.name}`} items={agentMenu(a, { canManage, canCopy, onDetail, onCopy, onMirror, onMeet, onReset })} />
-          )}
-        </div>
+        {busy && <Loader2 className="m-1 h-4 w-4 shrink-0 animate-spin text-slate-400" />}
       </div>
       <div className="mt-4 flex min-w-0 items-center gap-3 px-5 pb-3">
         <div className="min-w-0 flex-1">
@@ -547,9 +493,9 @@ function AgentCard({
           </div>
         )}
       </div>
-      {(k || a.copyWeightPct !== null || a.mirror) && (
+      {(note || a.mirror) && (
         <div className="mx-5 mb-3 space-y-2">
-          {k && <RoundProgress k={k} equity={a.summary.equity} />}
+          {note && <NoteToggle text={note} />}
           <CopyBadges a={a} />
         </div>
       )}
@@ -558,11 +504,53 @@ function AgentCard({
           <Creator mine={a.mine} />
           <span className="text-[11px] text-slate-400">· {runningFor(a.startedAt)}</span>
         </span>
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700">
-          Ver <ArrowRight className="h-3.5 w-3.5" />
+        <span className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onFicha();
+            }}
+            className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            Ver
+          </button>
+          <button
+            type="button"
+            disabled={!canCopy}
+            title={canCopy ? `Copiar a ${a.name} con dinero real` : "Solo el propietario o un administrador"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMirror();
+            }}
+            className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            <Wallet className="h-3.5 w-3.5" /> {a.mirror ? "Tu copia" : "Copiar"}
+          </button>
         </span>
       </footer>
     </article>
+  );
+}
+
+/** Lo que está haciendo el agente: una línea en gris; el chevron la despliega (y la recoge) con animación. */
+function NoteToggle({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      onClick={(e) => {
+        e.stopPropagation();
+        setOpen(!open);
+      }}
+      className="flex w-full items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-left text-xs text-slate-500 hover:bg-slate-100"
+    >
+      <span className="grid min-w-0 flex-1 transition-[grid-template-rows] duration-300 ease-out" style={{ gridTemplateRows: open ? "1fr" : "0fr" }}>
+        <span className={`min-h-[1.25rem] overflow-hidden leading-5 ${open ? "" : "line-clamp-1"}`}>{text}</span>
+      </span>
+      <ChevronDown className={`mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
+    </button>
   );
 }
 
@@ -578,7 +566,7 @@ function CreateAgentModal({ onClose }: { onClose: () => void }) {
       open
       onClose={onClose}
       title="Crear agente"
-      subtitle="Tu propio gestor de IA, con tu carácter y tus reglas"
+      subtitle="Combina la carta (ideas y contexto del mercado) con tus propias reglas"
       footer={
         <>
           <span className="mr-auto text-xs text-slate-500">Muy pronto: estamos preparando los agentes de usuarios.</span>
@@ -723,7 +711,7 @@ export function CopyModal({ agent: a, onClose }: { agent: Agent; onClose: () => 
       open
       onClose={onClose}
       title={active ? `Copia de ${a.name}` : `Copiar a ${a.name}`}
-      subtitle={`Perfil ${a.profile}`}
+      subtitle={a.spec ? `Estilo ${a.spec.style.toLowerCase()}` : undefined}
       footer={
         done ? (
           <button type="button" className={primary} onClick={onClose}>
@@ -797,95 +785,3 @@ export function CopyModal({ agent: a, onClose }: { agent: Agent; onClose: () => 
   );
 }
 
-type Kamikaze = NonNullable<Agent["kamikaze"]>;
-const ROUND_END: Record<string, { label: string; color: string }> = {
-  en_curso: { label: "En curso", color: "blue" },
-  meta: { label: "Meta", color: "emerald" },
-  plazo: { label: "Fin de plazo", color: "slate" },
-  arruinado: { label: "Sin capital", color: "rose" },
-};
-
-/** Avance hacia el objetivo de la ronda, sin fecha límite. */
-function RoundProgress({ k, equity }: { k: Kamikaze; equity: number }) {
-  const r = k.current;
-  if (!r) return <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">La primera ronda empieza en la próxima revisión.</p>;
-  const progress = equity > 0 ? Math.max(0, Math.min(1, Math.log(equity / r.startCapital) / Math.log(r.goal / r.startCapital))) : 0;
-  return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
-      <div className="flex items-baseline justify-between gap-2">
-        <span><b className="font-semibold text-slate-900">Ronda {r.number}</b> · {eur0(equity)} de {eur0(r.goal)}</span>
-        <span>Sin plazo</span>
-      </div>
-      <div className="relative mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-200" title="Camino a la meta (escala de multiplicador)">
-        <span className="absolute inset-y-0 left-0 rounded-full bg-rose-500" style={{ width: `${progress * 100}%` }} />
-      </div>
-      <div className="mt-1.5 flex justify-between gap-2">
-        <span>{equity >= r.goal ? "¡Meta alcanzada!" : "Objetivo sin fecha límite"}</span>
-        <span>{k.stats.rounds} rondas · {k.stats.goals} metas</span>
-      </div>
-      {r.note && (
-        <p className="mt-1.5 border-t border-slate-200/70 pt-1.5 text-slate-500" title={r.noteAt ? `Revisado ${new Date(r.noteAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}` : undefined}>
-          {r.note}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/** Ficha de un kamikaze: la ronda en curso y el historial de rondas. */
-export function Rounds({ k, equity }: { k: Kamikaze; equity: number }) {
-  return (
-    <div className="border-b border-slate-100 px-5 py-4">
-      <h3 className="text-[15px] font-semibold text-slate-900">Rondas</h3>
-      <div className="mt-2 max-w-md">
-        <RoundProgress k={k} equity={equity} />
-      </div>
-      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-        <span>
-          <b className="font-semibold text-slate-900">{k.stats.rounds}</b> <span className="text-slate-500">terminadas</span>
-        </span>
-        <span>
-          <b className="font-semibold text-emerald-700">{k.stats.goals}</b> <span className="text-slate-500">metas</span>
-        </span>
-        <span>
-          <b className="font-semibold text-rose-700">{k.stats.busted}</b> <span className="text-slate-500">sin capital</span>
-        </span>
-        <span>
-          <b className={`font-semibold ${tone(k.stats.net)}`}>{eur0(k.stats.net)}</b> <span className="text-slate-500">neto acumulado</span>
-        </span>
-      </div>
-      {k.history.length > 0 && (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
-            <thead>
-              <tr>
-                <th className={th}>Ronda</th>
-                <th className={th}>Resultado</th>
-                <th className={`${th} text-right`}>Empezó con</th>
-                <th className={`${th} text-right`}>Acabó con</th>
-                <th className={`${th} text-right`}>Máximo</th>
-                <th className={`${th} text-right`}>Operaciones</th>
-                <th className={th}>Fin</th>
-              </tr>
-            </thead>
-            <tbody>
-              {k.history.map((r) => (
-                <tr key={r.number} className="border-t border-slate-100">
-                  <td className="px-3 py-2 font-medium text-slate-900">{r.number}</td>
-                  <td className="px-3 py-2">
-                    <Pill color={ROUND_END[r.status]?.color}>{ROUND_END[r.status]?.label ?? r.status}</Pill>
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{eur0(r.startCapital)}</td>
-                  <td className={`px-3 py-2 text-right font-medium tabular-nums ${tone((r.endEquity ?? 0) - r.startCapital)}`}>{eur(r.endEquity, 2)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">{eur(r.bestEquity, 2)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">{r.trades}</td>
-                  <td className="px-3 py-2 text-slate-600">{r.endedAt ? dayFmt(r.endedAt) : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}

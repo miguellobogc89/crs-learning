@@ -185,6 +185,18 @@ model users {
   last_login_at                                                                                DateTime?                          @db.Timestamptz(6)
   system_role                                                                                  String                             @default("user")
   auth_tokens                                                                                  auth_tokens[]
+  personal_bank_connections                                                                    personal_bank_connections[]
+  finance_settings                                                                             finance_settings?
+  finance_accounts                                                                             finance_accounts[]
+  finance_transactions                                                                         finance_transactions[]
+  finance_rules                                                                                finance_rules[]
+  finance_budgets                                                                              finance_budgets[]
+  finance_wishlist_items                                                                       finance_wishlist_items[]
+  finance_packages                                                                             finance_packages[]
+  finance_plan_groups                                                                          finance_plan_groups[]
+  finance_memory                                                                               finance_memory[]
+  finance_chat_messages                                                                        finance_chat_messages[]
+  finance_alert_dismissals                                                                     finance_alert_dismissals[]
   chat_conversations_chat_conversations_created_by_user_idTousers                              chat_conversations[]               @relation("chat_conversations_created_by_user_idTousers")
   chat_conversations_chat_conversations_owner_user_idTousers                                   chat_conversations[]               @relation("chat_conversations_owner_user_idTousers")
   chat_conversations_chat_conversations_updated_by_user_idTousers                              chat_conversations[]               @relation("chat_conversations_updated_by_user_idTousers")
@@ -2545,6 +2557,10 @@ model trading_faro_runs {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   created_at  DateTime @default(now()) @db.Timestamptz(6)
   status      String   @default("en_curso")
+  /// 'crypto' o 'us' (bolsa de EE. UU.): cada ámbito tiene sus propios análisis.
+  scope       String   @default("crypto")
+  /// Versión de FARO (reglas y prompt) que hizo este análisis: para comparar versiones.
+  version     String?
   market_view String?
   ideas       Int      @default(0)
   error       String?
@@ -2590,6 +2606,8 @@ model trading_mirrors {
   active       Boolean               @default(true)
   /// En pausa: no compra nada nuevo; lo que tiene se sigue vendiendo cuando el agente sale.
   paused       Boolean               @default(false)
+  /// Apalancamiento propio de la copia (solo agentes de cortos en Kraken). NULL = el del agente.
+  leverage     Float?
   started_at   DateTime              @default(now()) @db.Timestamptz(6)
   created_at   DateTime              @default(now()) @db.Timestamptz(6)
   updated_at   DateTime              @default(now()) @db.Timestamptz(6)
@@ -2616,6 +2634,8 @@ model trading_mirror_legs {
   sell_order_id      String?
   sell_attempts      Int             @default(0)
   note               String?
+  /// Apalancamiento con el que se abrió (solo cortos en Kraken).
+  leverage           Float?
   opened_at          DateTime?       @db.Timestamptz(6)
   closed_at          DateTime?       @db.Timestamptz(6)
   created_at         DateTime        @default(now()) @db.Timestamptz(6)
@@ -2688,4 +2708,228 @@ model trading_wallet_intraday {
 
   @@id([user_id, workspace_id, sampled_at])
   @@index([workspace_id, sampled_at(sort: Desc)], map: "trading_wallet_intraday_workspace_time_idx")
+}
+
+/// Consentimientos bancarios personales: pertenecen a una persona, nunca a un workspace.
+/// Los identificadores de sesión y de cuenta se almacenan cifrados; no se guardan movimientos.
+model personal_bank_connections {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id             String   @db.Uuid
+  bank                String
+  institution_name    String
+  session_id_enc      String
+  account_ids_enc     String
+  consent_expires_at  DateTime @db.Timestamptz(6)
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @db.Timestamptz(6)
+  users               users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, bank])
+  @@index([user_id])
+}
+
+/// CRS Finance (personal): ajustes del usuario (ciclo económico y objetivo de ahorro).
+model finance_settings {
+  user_id         String    @id @db.Uuid
+  cycle_start_day Int       @default(25)
+  savings_goal    Decimal?  @db.Decimal(14, 2)
+  savings_frequency String  @default("mensual")
+  /// Planificación: ingreso esperado del ciclo (null = el detectado) y cuentas de cobro y de ahorro.
+  expected_income    Decimal? @db.Decimal(14, 2)
+  income_account_id  String?  @db.Uuid
+  savings_account_id String?  @db.Uuid
+  last_sync_at    DateTime? @db.Timestamptz(6)
+  /// Periodo (ciclo/mes y rango) y cuentas ocultas elegidos en pantalla.
+  view            Json?
+  updated_at      DateTime  @default(now()) @db.Timestamptz(6)
+  users           users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// Previsiones creadas/confirmadas por el usuario: nunca se convierten en movimientos reales.
+model finance_forecast_items {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String   @db.Uuid
+  title       String
+  kind        String
+  amount      Decimal  @db.Decimal(14, 2)
+  start_date  DateTime @db.Date
+  end_date    DateTime? @db.Date
+  source      String   @default("manual")
+  source_key  String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([user_id, source_key])
+  @@index([user_id, start_date])
+}
+
+/// CRS Finance: cuentas propias (bancarias por Enable Banking o importadas de extractos).
+model finance_accounts {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id              String                 @db.Uuid
+  source               String                 @default("bank")
+  bank                 String?
+  external_uid         String?
+  name                 String
+  /// Titular según el banco (para reconocer traspasos a uno mismo aunque se renombre la cuenta).
+  holder_name          String?
+  iban_last4           String?
+  iban_hash            String?
+  currency             String                 @default("EUR")
+  balance              Decimal?               @db.Decimal(14, 2)
+  balance_at           DateTime?              @db.Timestamptz(6)
+  included             Boolean                @default(true)
+  last_synced_at       DateTime?              @db.Timestamptz(6)
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  users                users                  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  finance_transactions finance_transactions[]
+
+  @@unique([user_id, external_uid])
+  @@index([user_id])
+}
+
+/// CRS Finance: movimientos guardados y su significado económico (kind) y categoría.
+model finance_transactions {
+  id                     String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                String           @db.Uuid
+  account_id             String           @db.Uuid
+  external_id            String
+  source                 String           @default("bank")
+  booking_date           DateTime         @db.Date
+  amount                 Decimal          @db.Decimal(14, 2)
+  currency               String           @default("EUR")
+  description            String
+  counterparty           String?
+  counterparty_iban_hash String?
+  alias                  String?
+  category               String           @default("sin_clasificar")
+  subcategory            String?
+  kind                   String           @default("gasto")
+  category_source        String           @default("pendiente")
+  extraordinary          Boolean          @default(false)
+  transfer_pair_id       String?          @db.Uuid
+  note                   String?
+  created_at             DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime         @default(now()) @db.Timestamptz(6)
+  users                  users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  finance_accounts       finance_accounts @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([account_id, external_id])
+  @@index([user_id, booking_date(sort: Desc)], map: "finance_transactions_user_date_idx")
+  @@index([user_id, category_source], map: "finance_transactions_user_source_idx")
+}
+
+/// CRS Finance: reglas aprendidas de las correcciones del usuario.
+model finance_rules {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String   @db.Uuid
+  pattern       String
+  category      String
+  alias         String?
+  subcategory   String?
+  kind          String
+  extraordinary Boolean  @default(false)
+  label         String?
+  hits          Int      @default(0)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  users         users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, pattern])
+}
+
+/// CRS Finance: límites de gasto por grupo de categorías y ciclo.
+model finance_budgets {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  name       String
+  categories String[] @default([])
+  amount     Decimal  @db.Decimal(14, 2)
+  /// fijo | variable (Planificación).
+  kind       String   @default("variable")
+  /// Cuenta que paga la partida (para las transferencias del día de cobro).
+  account_id String?  @db.Uuid
+  /// Recibos detectados (clave de comercio) que forman una partida fija.
+  recurring_keys String[] @default([])
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id])
+}
+
+/// CRS Finance · Plan: grupos de gasto del usuario; cada uno es un conjunto de categorías con objetivo opcional.
+model finance_plan_groups {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  name       String
+  categories String[] @default([])
+  goal       Decimal? @db.Decimal(14, 2)
+  position   Int      @default(0)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id])
+}
+
+/// CRS Finance · Mi plan: paquetes de gasto del usuario (Fijos, Tabaco…) con los cargos marcados.
+model finance_packages {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  name       String
+  tx_ids     String[] @default([]) @db.Uuid
+  /// Conceptos marcados enteros (conceptKey de lib/finance/plan.ts): sus cargos pasados y futuros entran solos.
+  concept_keys String[] @default([])
+  /// Objetivo de gasto por ciclo (opcional).
+  goal       Decimal? @db.Decimal(14, 2)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id])
+}
+
+/// CRS Finance · Planificación: cosas que el usuario quiere comprarse.
+model finance_wishlist_items {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String    @db.Uuid
+  title        String
+  price        Decimal   @db.Decimal(14, 2)
+  saved        Decimal   @default(0) @db.Decimal(14, 2)
+  url          String?
+  priority     Int       @default(2)
+  purchased_at DateTime? @db.Timestamptz(6)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  users        users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id])
+}
+
+/// CRS Finance: contexto personal que recuerda el copiloto (suscripciones canceladas, gastos excepcionales…).
+model finance_memory {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  content    String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id])
+}
+
+/// CRS Finance: conversación con el copiloto.
+model finance_chat_messages {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  role       String
+  content    String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id, created_at], map: "finance_chat_messages_user_created_idx")
+}
+
+/// CRS Finance: avisos descartados por el usuario.
+model finance_alert_dismissals {
+  user_id    String   @db.Uuid
+  key        String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([user_id, key])
 }

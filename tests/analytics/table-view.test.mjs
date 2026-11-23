@@ -11,14 +11,22 @@ const cols=[{key:'fecha',label:'Fecha',kind:'date'},{key:'receptor',label:'Recep
 test('saved view: validated against the current columns; unknown or invalid parts forgotten',()=>{
  assert.deepEqual(v.normalizeView(null,cols),v.DEFAULT_VIEW);
  assert.deepEqual(v.normalizeView({hidden:['doc','borrada','doc'],groupBy:'receptor',sort:{key:'total',dir:'desc'},pageSize:50},cols),
-  {hidden:['doc'],groupBy:'receptor',sort:{key:'total',dir:'desc'},pageSize:50});
+  {hidden:['doc'],groupBy:'receptor',sort:{key:'total',dir:'desc'},pageSize:50,widths:{}});
  assert.equal(v.normalizeView({groupBy:'total'},cols).groupBy,null,'amounts are not grouped by');
  assert.equal(v.normalizeView({groupBy:'doc'},cols).groupBy,null);
  assert.equal(v.normalizeView({pageSize:7},cols).pageSize,25);
  assert.equal(v.normalizeView({sort:{key:'total',dir:'up'}},cols).sort,null);
  assert.deepEqual(v.normalizeView({hidden:cols.map(c=>c.key)},cols).hidden,[],'never every column hidden');
  // When saving, only the shape is checked.
- assert.deepEqual(v.normalizeView({hidden:['x',3],groupBy:'y',extra:1}),{hidden:['x'],groupBy:'y',sort:null,pageSize:25});
+ assert.deepEqual(v.normalizeView({hidden:['x',3],groupBy:'y',extra:1}),{hidden:['x'],groupBy:'y',sort:null,pageSize:25,widths:{}});
+})
+
+test('saved view: column widths kept per column, within limits, only for existing columns',()=>{
+ assert.deepEqual(v.normalizeView({widths:{fecha:150.6,total:5,receptor:5000,borrada:200,doc:'ancho'}},cols).widths,{fecha:151,total:v.MIN_WIDTH,receptor:v.MAX_WIDTH});
+ assert.deepEqual(v.normalizeView({widths:[1,2]},cols).widths,{});
+ assert.equal(v.columnWidth(cols[0],{fecha:222}),222,'the dragged width wins');
+ assert.equal(v.columnWidth({key:'p',label:'P',width:300}),300,'then the column own width');
+ assert.equal(v.columnWidth(cols[2]),130,'then one by kind');
 });
 
 test('grouping: rows of each value in their order, totals per group, biggest first, empty last',()=>{

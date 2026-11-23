@@ -1,6 +1,11 @@
 import { after, NextResponse } from "next/server";
+import { chartBars } from "@/lib/trading/kamikaze/market";
+import { applyAiSettings } from "@/lib/ai/usage";
 import { addMyAgent, getWallets, myAgents, removeMyAgent } from "@/lib/trading/wallets";
 import { getMarketPhase } from "@/lib/trading/chip/phase-service";
+import { getPulse } from "@/lib/trading/pulse/service";
+import { getSummary } from "@/lib/trading/summary";
+import { listNotifications, markAllRead } from "@/lib/trading/notifications";
 import { buyManual, manualView, sellManual, setManualTrail } from "@/lib/trading/manual/service";
 import { connectorContext } from "@/lib/connectors/context";
 import {
@@ -33,7 +38,7 @@ import { isBrokerError, type BrokerActor } from "@/lib/brokers/types";
 import { refreshLive } from "@/lib/trading/live";
 import { kamikazeTick } from "@/lib/trading/kamikaze/engine";
 import { faroAnalysis, faroView } from "@/lib/trading/faro/engine";
-import { closeMirrorPositions, mirrorView, pauseMirror, setMirror, stopMirror } from "@/lib/trading/mirror/service";
+import { closeMirrorPositions, mirrorView, pauseMirror, setMirror, setMirrorLeverage, stopMirror } from "@/lib/trading/mirror/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,6 +58,7 @@ const MIGRATION_HINT =
 const message = (e: unknown) => (e instanceof Error ? e.message.slice(0, 400) : "No se pudo completar la operación");
 
 export async function GET(req: Request, route: RouteContext) {
+  await applyAiSettings();
   const ctx = await connectorContext();
   if (!ctx) return fail("No autenticado", 401);
   const action = (await route.params).action.join("/");
@@ -65,7 +71,18 @@ export async function GET(req: Request, route: RouteContext) {
       return NextResponse.json(await getInstrument(ctx.workspaceId, symbol));
     }
     if (action === "manual") return NextResponse.json(await manualView(ctx.workspaceId));
+    if (action === "trade-chart") {
+      // Precio de una operación de Mi cartera (desde un poco antes de entrar hasta su salida o ahora).
+      const symbol = (url.searchParams.get("symbol") || "").trim().toUpperCase();
+      const from = Number(url.searchParams.get("from"));
+      const to = Number(url.searchParams.get("to")) || Date.now();
+      if (!symbol || !Number.isFinite(from) || from <= 0 || to <= from) return fail("Faltan el valor o las fechas");
+      return NextResponse.json({ points: await chartBars(symbol, from, Math.min(to, Date.now())).catch(() => []) });
+    }
     if (action === "phase") return NextResponse.json(await getMarketPhase());
+    if (action === "pulse") return NextResponse.json(await getPulse());
+    if (action === "summary") return NextResponse.json(await getSummary({ userId: ctx.userId, workspaceId: ctx.workspaceId }));
+    if (action === "notifications") return NextResponse.json(await listNotifications());
     if (action === "mine") return NextResponse.json(await myAgents(ctx.workspaceId));
     if (action === "wallets") {
       return NextResponse.json(await getWallets({ kind: "user", userId: ctx.userId, workspaceId: ctx.workspaceId, canManage: ctx.canManage }, url.searchParams.get("history") === "1"));
@@ -129,6 +146,7 @@ export async function GET(req: Request, route: RouteContext) {
 }
 
 export async function POST(req: Request, route: RouteContext) {
+  await applyAiSettings();
   const ctx = await connectorContext();
   if (!ctx) return fail("No autenticado", 401);
   if (req.headers.get("origin") !== new URL(req.url).origin) return fail("Origen no permitido", 403);
@@ -138,6 +156,10 @@ export async function POST(req: Request, route: RouteContext) {
     if (raw.length > 16_384) return fail("Petición demasiado grande", 413);
     const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>;
 
+    if (action === "notifications/read") {
+      await markAllRead();
+      return NextResponse.json({ ok: true });
+    }
     if (action === "sync") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede actualizar las cotizaciones", 403);
       return NextResponse.json(await runDaily(45_000, ctx.workspaceId));
@@ -179,10 +201,11 @@ export async function POST(req: Request, route: RouteContext) {
       await stopCopy(ctx.workspaceId, body.agent);
       return NextResponse.json({ ok: true });
     }
-    if (action === "mirror/set" || action === "mirror/stop" || action === "mirror/close" || action === "mirror/pause") {
+    if (action === "mirror/set" || action === "mirror/stop" || action === "mirror/close" || action === "mirror/pause" || action === "mirror/leverage") {
       if (!ctx.canManage) return fail("Solo el propietario o un administrador puede copiar agentes en el bróker", 403);
       if (action === "mirror/set") return NextResponse.json(await setMirror(ctx.workspaceId, body));
       if (action === "mirror/close") return NextResponse.json(await closeMirrorPositions(ctx.workspaceId, body.agent));
+      if (action === "mirror/leverage") return NextResponse.json(await setMirrorLeverage(ctx.workspaceId, body.agent, body.leverage));
       if (action === "mirror/pause") return NextResponse.json(await pauseMirror(ctx.workspaceId, body.agent, body.paused === true));
       return NextResponse.json(await stopMirror(ctx.workspaceId, body.agent));
     }

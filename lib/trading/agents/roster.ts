@@ -44,7 +44,8 @@ const COSTS = { commission_pct: 0, commission_min: 0, slippage_bps: 8 };
 
 export const AGENT_CAPITAL = 5000;
 
-export const AGENTS: AgentDef[] = [
+/** Todos los agentes del comité, también los archivados (para su historial y sus enlaces). */
+export const ALL_AGENTS: AgentDef[] = [
   {
     key: "argo",
     name: "ARGO-1",
@@ -93,9 +94,18 @@ export const AGENTS: AgentDef[] = [
   },
 ];
 
+/**
+ * Archivados el 16/11/2026: dejan de reunirse y de verse en la app, pero su historial se conserva. La IA
+ * ya no invierte, solo informa (FARO): todo el comité queda archivado y VÉRTIGO vuelve como agente de
+ * reglas sobre las ideas de FARO (lib/trading/kamikaze/roster.ts, clave «vertigo-faro»).
+ */
+export const ARCHIVED_AGENTS: ReadonlySet<string> = new Set(["argo", "nova", "vertigo"]);
+/** Los que están en activo. */
+export const AGENTS = ALL_AGENTS.filter((a) => !ARCHIVED_AGENTS.has(a.key));
+
 export type AgentKey = AgentDef["key"];
-export const agentByKey = (key: string) => AGENTS.find((a) => a.key === key) ?? null;
-export const isAgentKey = (key: unknown): key is AgentKey => typeof key === "string" && AGENTS.some((a) => a.key === key);
+export const agentByKey = (key: string) => ALL_AGENTS.find((a) => a.key === key) ?? null;
+export const isAgentKey = (key: unknown): key is AgentKey => typeof key === "string" && ALL_AGENTS.some((a) => a.key === key);
 
 /** Bloque de instrucciones que se añade a las del comité. */
 export function agentInstructions(a: AgentDef) {

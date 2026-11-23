@@ -6,16 +6,16 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { brokerRegistry } from "@/lib/brokers/providers";
 import { parseProducts } from "@/lib/brokers/adapters/coinbase/mapping";
-import { CRYPTO_MARKET } from "../market-data";
+import { CRYPTO_MARKET, US_MARKET } from "../market-data";
 import { eurPairs } from "../kamikaze/market";
 import { isKamikaze } from "../kamikaze/roster";
-import { isChip } from "../chip/roster";
+import { chipByKey, isChip } from "../chip/roster";
 import { marketsOf, venuesFor, type AgentMarket, type AgentUniverse, type Venue, type VenueFit } from "./venues-logic";
 
 const TTL = 6 * 60 * 60_000;
 let cache: { at: number; value: Promise<Snapshot> } | null = null;
 
-type Snapshot = { venues: Venue[]; crypto: string[]; bolsa: string[]; kamikaze: string[] };
+type Snapshot = { venues: Venue[]; crypto: string[]; bolsa: string[]; us: string[]; kamikaze: string[] };
 
 const baseOf = (symbol: string) => symbol.toUpperCase().replace(/-EUR$/, "");
 
@@ -33,6 +33,13 @@ async function bitvavoCoins(): Promise<Set<string>> {
 async function coinbaseCoins(): Promise<Set<string>> {
   const products = parseProducts(await getJson("https://api.coinbase.com/api/v3/brokerage/market/products?product_type=SPOT"));
   return new Set([...products.values()].filter((p) => p.trading && (p.quote === "EUR" || p.quote === "USDC") && p.base !== "USDC").map((p) => p.base.toUpperCase()));
+}
+
+/** Revolut X: pares activos contra euros (configuración pública). */
+async function revolutxCoins(): Promise<Set<string>> {
+  const raw = (await getJson("https://revx.revolut.com/api/1.0/public/configuration/pairs?region=EEA")) as Record<string, unknown> & { data?: Record<string, unknown> };
+  const data = (raw?.data ?? raw) as Record<string, { base?: string; quote?: string; status?: string }>;
+  return new Set(Object.values(data).filter((p) => p && p.quote === "EUR" && p.status === "active" && p.base).map((p) => String(p.base).toUpperCase()));
 }
 
 async function binanceCoins(): Promise<Set<string>> {
@@ -53,16 +60,18 @@ async function load(): Promise<Snapshot> {
       return null;
     }
   }
-  const [bitvavo, coinbase, binance, instruments] = await Promise.all([
+  const [bitvavo, coinbase, binance, revolutx, instruments] = await Promise.all([
     settled(bitvavoCoins()),
     settled(coinbaseCoins()),
     settled(binanceCoins()),
+    settled(revolutxCoins()),
     prisma.market_instruments.findMany({ where: { active: true }, select: { symbol: true, market: true } }),
   ]);
   const venues: Venue[] = [];
   if (bitvavo) venues.push({ id: "bitvavo", name: nameOf("bitvavo", "Bitvavo"), market: "crypto", ready: readyOf("bitvavo"), has: bitvavo });
   if (coinbase) venues.push({ id: "coinbase", name: nameOf("coinbase", "Coinbase"), market: "crypto", ready: readyOf("coinbase"), has: coinbase });
   if (binance) venues.push({ id: "binance", name: nameOf("binance", "Binance"), market: "crypto", ready: readyOf("binance"), has: binance });
+  if (revolutx) venues.push({ id: "revolutx", name: nameOf("revolutx", "Revolut X"), market: "crypto", ready: readyOf("revolutx"), has: revolutx });
   // Trading 212 tiene las acciones del IBEX; su lista de valores pide clave, así que se da por hecho.
   if (brokerRegistry.list().some((p) => p.id === "trading212")) venues.push({ id: "trading212", name: nameOf("trading212", "Trading 212"), market: "bolsa", ready: readyOf("trading212"), has: null });
   // Universo de los kamikazes y FARO: monedas de Binance (euros/USDC) que también están en Bitvavo.
@@ -70,7 +79,8 @@ async function load(): Promise<Snapshot> {
   return {
     venues,
     crypto: instruments.filter((i) => i.market === CRYPTO_MARKET).map((i) => baseOf(i.symbol)),
-    bolsa: instruments.filter((i) => i.market !== CRYPTO_MARKET).map((i) => i.symbol),
+    bolsa: instruments.filter((i) => i.market !== CRYPTO_MARKET && i.market !== US_MARKET).map((i) => i.symbol),
+    us: instruments.filter((i) => i.market === US_MARKET).map((i) => i.symbol),
     kamikaze,
   };
 }
@@ -89,6 +99,8 @@ export type AgentVenues = { markets: AgentMarket[]; venues: VenueFit[] };
 /** Universo de un agente según su tipo: clásicos (bolsa y crypto), CAMALEÓN (crypto fijo) y kamikazes (crypto dinámico). */
 function universeOf(key: string, s: Snapshot): AgentUniverse {
   if (isKamikaze(key)) return { crypto: s.kamikaze, bolsa: [] };
+  const chip = chipByKey(key);
+  if (chip?.universe) return { crypto: [], bolsa: s.us.filter((x) => !chip.universe!.exclude.includes(x)) };
   if (isChip(key)) return { crypto: s.crypto, bolsa: [] };
   return { crypto: s.crypto, bolsa: s.bolsa };
 }
@@ -105,6 +117,16 @@ export async function agentVenues(keys: string[]): Promise<Map<string, AgentVenu
     );
   } catch (e) {
     console.error("[trading] exchanges de los agentes", e);
+    return null;
+  }
+}
+
+/** Exchanges de cripto con las monedas que tiene cada uno (para elegir dónde sale más barata una oportunidad). */
+export async function venueCoverage(): Promise<{ id: string; name: string; has: Set<string> | null }[] | null> {
+  try {
+    const s = await snapshot();
+    return s.venues.filter((v) => v.market === "crypto").map((v) => ({ id: v.id, name: v.name, has: v.has }));
+  } catch {
     return null;
   }
 }

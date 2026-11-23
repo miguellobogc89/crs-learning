@@ -3,13 +3,16 @@
 
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SheetClose } from "@/components/ui/sheet";
+import { ModuleLogo } from "@/components/ui/module-logo";
+import { moduleHref } from "@/lib/app/module-domains";
+import { useModuleHostname } from "@/lib/app/use-module-hostname";
 
 import {
   BarChart3,
+  Wallet,
   Plug,
   MessageCircle,
   GraduationCap,
@@ -47,6 +50,11 @@ const navItems = [
     href: "/analytics",
     icon: BarChart3,
     label: "Analítica",
+  },
+  {
+    href: "/finanzas",
+    icon: Wallet,
+    label: "Mis finanzas",
   },
   {
     href: "/connectors",
@@ -106,6 +114,7 @@ export function AppSidebar({
   isAdmin = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
+  const hostname = useModuleHostname();
 
   return (
     <aside
@@ -133,14 +142,7 @@ export function AppSidebar({
               : "mb-5 w-app-navigation-rail",
           )}
         >
-<Image
-  src="/logo/logo.png"
-  alt="Crusader"
-  width={32}
-  height={32}
-  className="h-8 w-8 object-contain"
-  priority
-/>
+          <ModuleLogo module="business" className="size-8" />
 
           {mobile ? (
             <span className="ml-3 text-body font-semibold tracking-tight text-foreground">
@@ -194,7 +196,7 @@ export function AppSidebar({
 
             const link = (
               <Link
-                href={item.href}
+                href={moduleHref(item.href, hostname)}
                 aria-label={item.label}
                 className={cn(
                   "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",

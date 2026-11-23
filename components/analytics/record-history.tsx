@@ -12,7 +12,7 @@ const STATUS: Record<string, string> = { archived: "Eliminado", active: "Activo"
 function show(v: unknown) {
   if (v === null || v === undefined || v === "") return <span className="italic text-slate-400">vacío</span>;
   if (typeof v === "boolean") return v ? "Sí" : "No";
-  if (typeof v === "number") return v.toLocaleString("es-ES", { maximumFractionDigits: 4 });
+  if (typeof v === "number") return v.toLocaleString("es-ES", { maximumFractionDigits: 5 });
   if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return fmtDate(v);
   return typeof v === "object" ? JSON.stringify(v) : String(v);
 }

@@ -3,7 +3,8 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { analyze, backtestSeries, statsByPattern, summarize } from "./backtest";
-import { CRYPTO, CRYPTO_MARKET, fetchDailyCandles, IBEX35, INDEX_SYMBOL, isCryptoMarket } from "./market-data";
+import { CRYPTO, CRYPTO_MARKET, eurUsd, fetchDailyCandles, IBEX35, INDEX_SYMBOL, isCryptoMarket, isUsMarket, toEur, US_MARKET, US_STOCKS } from "./market-data";
+import { usSessionInProgress } from "./live-logic";
 import { DEFAULT_COSTS } from "./risk";
 import type { Candle, PatternKey, PatternStats, TradeOutcome } from "./types";
 
@@ -52,6 +53,15 @@ export async function ensureUniverse() {
   if (crypto === 0)
     await prisma.market_instruments.createMany({
       data: CRYPTO.map((x) => ({ symbol: x.symbol, name: x.name, sector: x.sector, market: CRYPTO_MARKET, currency: "EUR" })),
+      skipDuplicates: true,
+    });
+  // Bolsa de EE. UU. (16/11/2026): las que falten se añaden (ya convertidas a euros al guardar).
+  const us = await prisma.market_instruments.findMany({ where: { market: US_MARKET }, select: { symbol: true } });
+  const have = new Set(us.map((u) => u.symbol));
+  const missing = US_STOCKS.filter((x) => !have.has(x.symbol));
+  if (missing.length)
+    await prisma.market_instruments.createMany({
+      data: missing.map((x) => ({ symbol: x.symbol, name: x.name, sector: x.sector, market: US_MARKET, currency: "EUR" })),
       skipDuplicates: true,
     });
 }
@@ -106,7 +116,13 @@ export async function syncMarket(budgetMs = 35_000, now = new Date()): Promise<M
           const r = await fetchDailyCandles(inst.symbol, { since, years: HISTORY_YEARS });
           // La sesión en curso no se guarda: su vela aún no es definitiva y la cartera la daría por vista.
           const crypto = isCryptoMarket(inst.market);
-          r.candles = r.candles.filter((c) => !(crypto ? cryptoDayInProgress(c.t, now) : sessionInProgress(c.t, now)));
+          const us = isUsMarket(inst.market);
+          r.candles = r.candles.filter((c) => !(crypto ? cryptoDayInProgress(c.t, now) : us ? usSessionInProgress(c.t, now) : sessionInProgress(c.t, now)));
+          // EE. UU.: de dólares a euros con el cambio de cada día (todo el módulo va en euros).
+          if (us && r.candles.length) {
+            r.candles = toEur(r.candles, await eurUsd());
+            r.currency = "EUR";
+          }
           if (r.candles.length) await saveCandles(inst.id, r.candles);
           const last = r.candles[r.candles.length - 1];
           await prisma.market_instruments.update({

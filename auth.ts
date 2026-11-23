@@ -9,6 +9,13 @@ import { prisma } from "@/lib/prisma";
 import { ensureWorkspaceBootstrap } from "@/lib/services/workspace.service";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  // Auth.js llama a auth() sin request en Server Components. Esta configuración ha de ser estable
+  // para lectura y escritura del token; en previews y localhost se mantiene el comportamiento habitual.
+  cookies: process.env.VERCEL_ENV === "production"
+    ? { sessionToken: { name: "__Secure-crussader.session-token", options: {
+        domain: ".crussader.com", httpOnly: true, sameSite: "lax", path: "/", secure: true,
+      } } }
+    : undefined,
   // Errors with their real cause (Auth.js hides it behind "InvalidCheck"); no tokens or cookie values are printed.
   logger: {
     error(error: Error) {
