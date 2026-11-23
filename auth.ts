@@ -7,8 +7,15 @@ import { normalizeEmail, verifyPassword } from "@/lib/auth/password";
 import { sendWelcomeEmail } from "@/lib/email/email.service";
 import { prisma } from "@/lib/prisma";
 import { ensureWorkspaceBootstrap } from "@/lib/services/workspace.service";
+import { isCrussaderHost } from "@/lib/app/module-domains";
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+export const { handlers, signIn, signOut, auth } = NextAuth((request) => ({
+  // Session compartida solo en los dominios propios; localhost y previews mantienen su cookie normal.
+  cookies: isCrussaderHost(request?.headers.get("host"))
+    ? { sessionToken: { name: "__Secure-authjs.session-token", options: {
+        domain: ".crussader.com", httpOnly: true, sameSite: "lax", path: "/", secure: true,
+      } } }
+    : undefined,
   // Errors with their real cause (Auth.js hides it behind "InvalidCheck"); no tokens or cookie values are printed.
   logger: {
     error(error: Error) {
@@ -195,4 +202,4 @@ if (!existingUser) {
       return session;
     },
   },
-});
+}));
