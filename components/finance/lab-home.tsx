@@ -7,10 +7,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Minus } from "lucide-react";
 import type { overview } from "@/lib/finance/service";
 import { categoryLabel } from "@/lib/finance/categories";
-import { groupSummary, planDeviations, type Deviation, type GroupCycleTotals, type PlanGroupDeviation, type PlanItem } from "@/lib/finance/plan";
+import { deviationOf, groupSummary, planDeviations, type Deviation, type GroupCycleTotals, type PlanGroupDeviation, type PlanItem } from "@/lib/finance/plan";
 import { card, eur, flat } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList, SkeletonStats } from "@/components/trading/skeletons";
@@ -190,88 +190,77 @@ function PlanCheck({ plan }: { plan: Plan }) {
   );
 }
 
-// ── Vista sin desplegar: cómo vas frente a tus objetivos, para todos los públicos ─────────────────
+// ── Vista sin desplegar: a qué ritmo vas en cada grupo, en palabras y sin cifras ─────────────────
 
-type GoalState = "pasado" | "rapido" | "bien" | "sin_objetivo";
-const GOAL_TONE: Record<Exclude<GoalState, "sin_objetivo">, { fill: string; tint: string; text: string }> = {
-  pasado: { fill: "rgba(225,29,72,0.16)", tint: "rgba(225,29,72,0.05)", text: "text-rose-700" },
-  rapido: { fill: "rgba(217,119,6,0.17)", tint: "rgba(217,119,6,0.05)", text: "text-amber-700" },
-  bien: { fill: "rgba(5,150,105,0.15)", tint: "rgba(5,150,105,0.045)", text: "text-emerald-700" },
+type Pace = "bien" | "alto" | "pasado" | "sin_datos";
+const PACE_MARK: Record<Pace, { icon: typeof Check; bg: string; fg: string }> = {
+  bien: { icon: Check, bg: "bg-emerald-100", fg: "text-emerald-700" },
+  alto: { icon: ArrowUp, bg: "bg-amber-100", fg: "text-amber-700" },
+  pasado: { icon: AlertTriangle, bg: "bg-rose-100", fg: "text-rose-700" },
+  sin_datos: { icon: Minus, bg: "bg-slate-100", fg: "text-slate-400" },
 };
-const ORDER: Record<GoalState, number> = { pasado: 0, rapido: 1, bien: 2, sin_objetivo: 3 };
-const whole = (v: number) => eur(Math.round(v), 0);
-/** Objetivo sugerido para quien no tiene: lo del último ciclo cerrado menos un 10 %, redondeado a 5 €. */
-const suggestGoal = (last: number) => (last > 0 ? Math.max(5, Math.round((last * 0.9) / 5) * 5) : null);
+const PACE_ORDER: Record<Pace, number> = { pasado: 0, alto: 1, bien: 2, sin_datos: 3 };
+
+/**
+ * Ritmo de un grupo. Con objetivo: lo gastado frente a lo que sueles llevar a estas alturas de ese objetivo (así el
+ * día 1 con 50 de 60 no sale en verde). Sin objetivo: frente a tu media de los 3 ciclos anteriores al mismo día.
+ */
+function paceOf(s: ReturnType<typeof groupSummary>): { pace: Pace; text: string } {
+  if (s.now <= 0) return { pace: "bien", text: "Sin gastos este ciclo" };
+  if (s.goal !== null) {
+    if (s.status === "superado") return { pace: "pasado", text: "Has superado tu objetivo" };
+    if (s.status === "atento") return { pace: "alto", text: "Ritmo alto para tu objetivo" };
+    return { pace: "bien", text: "Buen ritmo para tu objetivo" };
+  }
+  if (s.avgAtDay === null) return { pace: "sin_datos", text: "Aún sin historial para comparar" };
+  const d = deviationOf(s.now, s.avgAtDay);
+  if (d.state === "peor") return { pace: "pasado", text: "Ritmo muy alto respecto a tu media" };
+  if (d.state === "algo_peor") return { pace: "alto", text: "Ritmo alto respecto a tu media" };
+  return { pace: "bien", text: "Buen ritmo respecto a tu media" };
+}
 
 function GoalsGlance({ plan }: { plan: Plan }) {
-  const [ready, setReady] = useState(false);
-  useEffect(() => { const t = requestAnimationFrame(() => setReady(true)); return () => cancelAnimationFrame(t); }, []);
   const cycles = plan.history ?? [];
   const { day, totalDays } = plan.cycle;
   const daysLeft = totalDays - day;
-  const rows = plan.groups.filter((g) => g.categories.length).map((g) => {
-    const s = groupSummary({ categories: g.categories, cycles, goal: g.goal, day, totalDays });
-    const state: GoalState = s.goal === null ? "sin_objetivo" : s.status === "superado" ? "pasado" : s.status === "atento" ? "rapido" : "bien";
-    const last = cycles[1] ? g.categories.reduce((t, c) => t + (cycles[1].full[c] ?? 0), 0) : 0;
-    return { g, s, state, suggested: suggestGoal(last) };
-  }).sort((a, b) => ORDER[a.state] - ORDER[b.state] || b.s.now - a.s.now);
 
   if (!plan.groups.length) return (
     <div className="py-6 text-center">
-      <p className="text-sm text-slate-600">Agrupa tus gastos (casa, ocio, comida a domicilio…) y ponles un objetivo para ver aquí cómo vas.</p>
+      <p className="text-sm text-slate-600">Agrupa tus gastos (casa, ocio, comida a domicilio…) para ver aquí a qué ritmo vas.</p>
       <Link href="/finanzas/plan" className="mt-3 inline-flex h-10 items-center rounded-full bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700">Definir grupos</Link>
     </div>
   );
 
-  const withGoal = rows.filter((r) => r.state !== "sin_objetivo");
-  const good = withGoal.filter((r) => r.state === "bien").length;
-  const headline = !withGoal.length ? "Ponles un objetivo a tus grupos"
-    : good === withGoal.length ? (withGoal.length === 1 ? "Vas bien en tu objetivo" : `Vas bien en tus ${withGoal.length} objetivos`)
-    : `Vas bien en ${good} de tus ${withGoal.length} objetivos`;
+  const rows = plan.groups.filter((g) => g.categories.length)
+    .map((g) => ({ g, ...paceOf(groupSummary({ categories: g.categories, cycles, goal: g.goal, day, totalDays })) }))
+    .sort((a, b) => PACE_ORDER[a.pace] - PACE_ORDER[b.pace]);
+  const judged = rows.filter((r) => r.pace !== "sin_datos");
+  const good = judged.filter((r) => r.pace === "bien").length;
+  const headline = !judged.length ? "Aún no hay con qué compararte"
+    : good === judged.length ? (judged.length === 1 ? "Vas a buen ritmo" : `Vas a buen ritmo en tus ${judged.length} grupos`)
+    : `Vas a buen ritmo en ${good} de tus ${judged.length} grupos`;
   const goTo = (id: string) => { try { window.sessionStorage.setItem("crs-finance:plan-open", id); } catch { /* ignorar */ } };
 
   return (
     <div className="pb-4">
       <p className="text-[22px] font-semibold leading-tight tracking-tight text-slate-900">{headline}</p>
-      <p className="mt-1 text-sm text-slate-500">{daysLeft > 0 ? `Quedan ${daysLeft} ${daysLeft === 1 ? "día" : "días"} de ciclo` : "Último día del ciclo"}</p>
+      <p className="mt-1 text-sm text-slate-500">{daysLeft > 1 ? `Quedan ${daysLeft} días de ciclo` : daysLeft === 1 ? "Queda 1 día de ciclo" : "Último día del ciclo"}</p>
 
       <ul className="mt-4 space-y-2.5">
-        {rows.map(({ g, s, state, suggested }) => {
-          const icon = g.categories[0];
-          if (state === "sin_objetivo") return (
-            <li key={g.id}>
-              <Link href="/finanzas/plan" onClick={() => goTo(g.id)}
-                className="flex h-16 items-center gap-3 rounded-2xl border border-dashed border-slate-300 px-3.5 outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-                <CategoryIcon category={icon} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
-                  <span className="amount block truncate text-xs text-slate-500">Llevas {whole(s.now)}{suggested ? `. ¿Te pones ${whole(suggested)}?` : ""}</span>
-                </span>
-                <span className="shrink-0 text-sm font-semibold text-blue-700">Ponle objetivo</span>
-              </Link>
-            </li>
-          );
-          const tone = GOAL_TONE[state];
-          const pct = s.goal ? Math.min(100, (s.now / s.goal) * 100) : 0;
-          const phrase = state === "pasado" ? `Te has pasado ${whole(-(s.left ?? 0))}`
-            : state === "rapido" ? `Vas rápido, te quedan ${whole(s.left ?? 0)}`
-            : `Te quedan ${whole(s.left ?? 0)}`;
+        {rows.map(({ g, pace, text }) => {
+          const mark = PACE_MARK[pace];
+          const Mark = mark.icon;
           return (
             <li key={g.id}>
-              <Link href="/finanzas/plan" onClick={() => goTo(g.id)} aria-label={`${g.name}: ${phrase}`}
-                className="relative flex h-16 items-center gap-3 overflow-hidden rounded-2xl px-3.5 outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                style={{ backgroundColor: tone.tint }}>
-                {/* El propio fondo de la fila es la barra: se llena hasta lo gastado del objetivo. */}
-                <span aria-hidden="true" className="absolute inset-y-0 left-0 transition-[width] duration-[900ms] ease-out motion-reduce:transition-none"
-                  style={{ width: ready ? `${pct}%` : "0%", backgroundColor: tone.fill }} />
-                <span className="relative"><CategoryIcon category={icon} /></span>
-                <span className="relative min-w-0 flex-1">
+              <Link href="/finanzas/plan" onClick={() => goTo(g.id)} aria-label={`${g.name}: ${text}`}
+                className="flex h-16 items-center gap-3 rounded-2xl border border-slate-100 bg-white px-3.5 outline-none hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500">
+                <CategoryIcon category={g.categories[0]} />
+                <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
-                  <span className={`amount block truncate text-xs font-medium ${tone.text}`}>{phrase}</span>
+                  <span className="block truncate text-xs text-slate-500">{text}</span>
                 </span>
-                <span className="relative shrink-0 text-right">
-                  <b className="amount block text-[17px] font-semibold tabular-nums tracking-tight text-slate-900">{whole(s.now)}</b>
-                  <span className="amount block text-[11px] tabular-nums text-slate-500">de {whole(s.goal ?? 0)}</span>
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${mark.bg}`} aria-hidden="true">
+                  <Mark className={`h-4 w-4 ${mark.fg}`} strokeWidth={2.5} />
                 </span>
               </Link>
             </li>
@@ -329,7 +318,7 @@ export function LabHome() {
       {/* 2. En qué se va el dinero, por grupos */}
       <section className={`${card} ${flat} px-4 pt-4 sm:px-5 sm:pt-5`}>
         <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-sm font-medium text-slate-500">Tus objetivos</h2>
+          <h2 className="text-sm font-medium text-slate-500">Tus grupos</h2>
           <Link href="/finanzas/plan" className="inline-flex items-center text-sm font-medium text-blue-700 hover:underline">Mi plan<ChevronRight className="h-4 w-4" /></Link>
         </div>
         <div className="mt-1">
