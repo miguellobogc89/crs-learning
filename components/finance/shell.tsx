@@ -178,8 +178,9 @@ function UserMenu({ user, inDrawer = false }: { user: FinanceProfile; inDrawer?:
 }
 
 function NavHeader({ onNavigate }: { onNavigate?: () => void }) {
+  const hostname = useModuleHostname();
   return (
-    <Link href="/finanzas/inicio" onClick={onNavigate} aria-label="Inicio de Finanzas" className="inline-flex min-w-0 items-center gap-2">
+    <Link href={moduleHref("/finanzas/inicio", hostname)} onClick={onNavigate} aria-label="Inicio de Finanzas" className="inline-flex min-w-0 items-center gap-2">
       <ModuleLogo module="finance" />
       <span className="truncate text-sm font-semibold text-slate-900">CRS Finance</span>
     </Link>
@@ -188,17 +189,18 @@ function NavHeader({ onNavigate }: { onNavigate?: () => void }) {
 
 function Navigation({ user, large = false, onNavigate, sync }: { user: FinanceProfile; large?: boolean; onNavigate?: () => void; sync: ReturnType<typeof useAutoSync> }) {
   const pathname = usePathname();
+  const hostname = useModuleHostname();
   const items = (
     <nav aria-label="Finanzas" className={large ? "space-y-4 px-3 pb-3" : "space-y-4 p-3"}>
       {FINANCE_SECTIONS.map((section) => (
         <div key={section.title ?? "main"} className="space-y-1">
           {section.title && <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{section.title}</p>}
           {section.items.map((t) => {
-            const active = pathname === `/finanzas/${t.key}` || pathname.startsWith(`/finanzas/${t.key}/`);
+            const active = (t.key === "inicio" && pathname === "/home") || pathname === `/finanzas/${t.key}` || pathname.startsWith(`/finanzas/${t.key}/`);
             return (
               <Link
                 key={t.key}
-                href={`/finanzas/${t.key}`}
+                href={moduleHref(`/finanzas/${t.key}`, hostname)}
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
                 className={`flex items-center rounded-xl ${large ? "gap-3 px-4 py-3.5 text-base" : "gap-2 px-3 py-2 text-sm"} ${active ? "bg-blue-50 font-semibold text-blue-600" : "text-slate-600 hover:bg-slate-50 active:bg-slate-100"}`}
@@ -233,13 +235,14 @@ function Navigation({ user, large = false, onNavigate, sync }: { user: FinancePr
 
 function BottomTabs() {
   const pathname = usePathname();
+  const hostname = useModuleHostname();
   return (
     <nav aria-label="Secciones" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-slate-200/70 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
       {BOTTOM_TABS.map((key) => {
         const t = FINANCE_TABS.find((x) => x.key === key)!;
-        const on = pathname === `/finanzas/${key}` || pathname.startsWith(`/finanzas/${key}/`);
+        const on = (key === "inicio" && pathname === "/home") || pathname === `/finanzas/${key}` || pathname.startsWith(`/finanzas/${key}/`);
         return (
-          <Link key={key} href={`/finanzas/${key}`} aria-label={t.label} aria-current={on ? "page" : undefined} className={`flex h-14 flex-1 items-center justify-center ${on ? "text-blue-600" : "text-slate-400 active:text-slate-600"}`}>
+          <Link key={key} href={moduleHref(`/finanzas/${key}`, hostname)} aria-label={t.label} aria-current={on ? "page" : undefined} className={`flex h-14 flex-1 items-center justify-center ${on ? "text-blue-600" : "text-slate-400 active:text-slate-600"}`}>
             <t.icon className="h-6 w-6" strokeWidth={on ? 2.4 : 2} />
           </Link>
         );
@@ -310,6 +313,7 @@ function MobileMenu({ user, onClose, sync }: { user: FinanceProfile; onClose: ()
 
 export function FinanceShell({ children, user }: { children: ReactNode; user: FinanceProfile }) {
   const pathname = usePathname();
+  const hostname = useModuleHostname();
   const parts = pathname.split("/").filter(Boolean);
   const section = parts[1] && isFinanceTab(parts[1]) ? parts[1] : "inicio";
   const tabDef = tabDefOf(section);
@@ -335,9 +339,9 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
           <Menu className="h-5 w-5" />
         </button>
         {FINANCE_TABS.map((t) => {
-          const on = pathname === `/finanzas/${t.key}`;
+          const on = pathname === `/finanzas/${t.key}` || (t.key === "inicio" && pathname === "/home");
           return (
-            <Link key={t.key} href={`/finanzas/${t.key}`} title={t.label} aria-label={t.label} aria-current={on ? "page" : undefined} className={`flex h-11 w-11 items-center justify-center rounded-xl ${on ? "bg-blue-50 text-blue-600" : "text-slate-500 hover:bg-white"}`}>
+            <Link key={t.key} href={moduleHref(`/finanzas/${t.key}`, hostname)} title={t.label} aria-label={t.label} aria-current={on ? "page" : undefined} className={`flex h-11 w-11 items-center justify-center rounded-xl ${on ? "bg-blue-50 text-blue-600" : "text-slate-500 hover:bg-white"}`}>
               <t.icon className="h-5 w-5" />
             </Link>
           );
