@@ -318,10 +318,19 @@ async function similarTo(userId: string, id: string) {
   return { row, pattern, ids };
 }
 
-/** Cuántos parecidos tiene un movimiento (para preguntar «¿aplicar a los 13 de …?» antes de hacerlo). */
+/**
+ * Parecidos de un movimiento y cuántos de ellos son distintos de él en lo que se puede replicar: la categoría (con
+ * su tipo) y, si el movimiento los tiene, el nombre y la subcategoría. El detalle solo ofrece «Aplicar» si hay
+ * alguno distinto, así que el botón aparece cuando hay algo que replicar (aunque se cambiara en otra visita).
+ */
 export async function similarCount(userId: string, id: string) {
   const { row, ids } = await similarTo(userId, id);
-  return { count: ids.length, label: row.alias || row.counterparty || row.description };
+  const others = ids.length
+    ? await prisma.finance_transactions.findMany({ where: { user_id: userId, id: { in: ids } }, select: { category: true, kind: true, alias: true, subcategory: true } })
+    : [];
+  const differ = others.filter((o) => o.category !== row.category || o.kind !== row.kind
+    || (!!row.alias && o.alias !== row.alias) || (!!row.subcategory && o.subcategory !== row.subcategory)).length;
+  return { count: ids.length, differ, label: row.alias || row.counterparty || row.description };
 }
 
 /**

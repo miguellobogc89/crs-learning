@@ -142,20 +142,24 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   const [sheet, setSheet] = useState<null | "category" | "subcategory" | "note" | "kind">(null);
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState("");
-  const [similar, setSimilar] = useState<{ count: number; label: string } | null>(null);
+  const [similar, setSimilar] = useState<{ count: number; differ: number; label: string } | null>(null);
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const id = item?.id;
 
-  // Al abrir otro movimiento se empieza de cero y se consulta cuántos parecidos tiene.
+  // Al abrir otro movimiento se empieza de cero y se consulta cuántos parecidos tiene y cuántos son distintos.
+  const [checkedAt, setCheckedAt] = useState(0);
+  const recheck = () => setCheckedAt((n) => n + 1);
   useEffect(() => {
     setOverride({}); setSheet(null); setEditingName(false); setSimilar(null); setToast(null); setErr(null);
+  }, [id]);
+  useEffect(() => {
     if (!id) return;
     let alive = true;
-    fapi<{ count: number; label: string }>(`transaction/similar?id=${encodeURIComponent(id)}`).then((r) => { if (alive) setSimilar(r); }).catch(() => undefined);
+    fapi<{ count: number; differ: number; label: string }>(`transaction/similar?id=${encodeURIComponent(id)}`).then((r) => { if (alive) setSimilar(r); }).catch(() => undefined);
     return () => { alive = false; };
-  }, [id]);
+  }, [id, checkedAt]);
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 5000);
@@ -187,6 +191,7 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
     try {
       await fapi("transaction", { id: item.id, category: next.category, kind: next.kind, extraordinary: next.extraordinary, alias: next.alias ?? "", subcategory: next.subcategory ?? "", note: next.note ?? "", applyToSimilar: false });
       refreshFinance();
+      recheck();
       setToast({ text, undo: () => void undoTo(prev, field) });
     } catch (e) {
       setOverride((o) => ({ ...o, ...prev }));
@@ -199,6 +204,7 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
     try {
       await fapi("transaction", { id: item.id, category: prev.category, kind: prev.kind, extraordinary: prev.extraordinary, alias: prev.alias ?? "", subcategory: prev.subcategory ?? "", note: prev.note ?? "", applyToSimilar: false });
       refreshFinance();
+      recheck();
     } catch (e) {
       setErr(errorText(e));
     }
@@ -209,9 +215,10 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
     try {
       const r = await fapi<{ count: number; undo: Undo }>("transaction/similar/apply", { id: item.id, fields: fieldsToApply });
       refreshFinance();
+      recheck();
       setToast({
         text: `Aplicado a ${r.count} ${r.count === 1 ? "movimiento" : "movimientos"} y a los que lleguen`,
-        undo: r.undo ? () => { setToast(null); void fapi("transaction/similar/undo", { undo: r.undo }).then(refreshFinance).catch((e) => setErr(errorText(e))); } : undefined,
+        undo: r.undo ? () => { setToast(null); void fapi("transaction/similar/undo", { undo: r.undo }).then(() => { refreshFinance(); recheck(); }).catch((e) => setErr(errorText(e))); } : undefined,
       });
     } catch (e) {
       setErr(errorText(e));
@@ -231,7 +238,8 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   // borran los de los demás).
   const fieldsToApply: Field[] = ["category", ...(v.alias ? ["alias" as const] : []), ...(v.subcategory ? ["subcategory" as const] : [])];
   const applyText = fieldsToApply.map((f) => FIELD_LABEL[f]);
-  const showApply = !!similar && similar.count > 0;
+  // Solo si hay algo que replicar: parecidos que todavía no coinciden con este movimiento.
+  const showApply = !!similar && similar.differ > 0;
 
   return (
     <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -316,7 +324,7 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
             <div className="shrink-0 border-t border-slate-100 bg-white px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
               <button type="button" onClick={() => void applySimilar()} disabled={busy} className="flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-blue-600 px-4 text-sm font-semibold text-blue-700 active:bg-blue-50 disabled:opacity-60">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 shrink-0" />}
-                <span className="truncate">Aplicar a {similar.count === 1 ? "el otro" : `los ${similar.count}`} de «{similar.label}»</span>
+                <span className="truncate">Aplicar a {similar.differ === 1 ? "1 movimiento más" : `${similar.differ} movimientos más`} de «{similar.label}»</span>
               </button>
               <p className="mt-1.5 text-center text-xs text-slate-400">Copia {applyText.length > 1 ? `${applyText.slice(0, -1).join(", ")} y ${applyText[applyText.length - 1]}` : applyText[0]}, también a los que lleguen.</p>
             </div>

@@ -4,7 +4,7 @@
 // vez, y al corregir se puede aplicar a los parecidos: la app crea una regla y aprende.
 import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { ArrowDownUp, ArrowLeftRight, CheckSquare2, ChevronDown, Filter, ListFilter, Loader2, Search, Sparkles, Star, X } from "lucide-react";
+import { ArrowDownUp, ArrowLeftRight, CheckSquare2, ChevronDown, Filter, ListFilter, Loader2, Search, Sparkles, X } from "lucide-react";
 import type { listTransactions } from "@/lib/finance/service";
 import { SELECTABLE_CATEGORIES, KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur, panel, th } from "@/components/trading/format";
@@ -159,7 +159,7 @@ function BulkBar({ ids, onClear, onDone }: { ids: string[]; onClear: () => void;
         </DropdownMenuContent>
       </DropdownMenu>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><button type="button" disabled={busy} className={btn}><Star className="h-3.5 w-3.5" /> Extraordinario <ChevronDown className="h-3.5 w-3.5" /></button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><button type="button" disabled={busy} className={btn}>Extraordinario <ChevronDown className="h-3.5 w-3.5" /></button></DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
           <DropdownMenuItem onSelect={() => void run({ extraordinary: true })}>Marcar como extraordinarios</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void run({ extraordinary: false })}>Quitar la marca</DropdownMenuItem>
@@ -308,7 +308,7 @@ export function MovementsPanel() {
       <td className="max-w-[28rem] px-3 py-2.5">
         <span className="flex items-center gap-1.5">
           {t.kind === "interna" && <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
-          {t.extraordinary && <Star className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label="Extraordinario" />}
+          {t.extraordinary && <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Extra</span>}
           <span className="truncate font-medium text-slate-900" title={t.description}>{label(t)}</span>
         </span>
         {t.note ? <span className="block truncate text-xs text-slate-500">{t.note}</span> : (t.alias || t.counterparty) ? <span className="block truncate text-xs text-slate-400">{t.description}</span> : null}

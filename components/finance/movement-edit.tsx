@@ -2,7 +2,6 @@
 // Piezas de un movimiento compartidas por Movimientos y por otras pantallas que listan movimientos (p. ej. el
 // detalle de una categoría en Plan): tipos, la fila del móvil y utilidades. La edición está en movement-detail.tsx.
 // Una sola versión: lo que mejore aquí mejora en todas partes.
-import { Star } from "lucide-react";
 import type { listTransactions } from "@/lib/finance/service";
 import { SELECTABLE_CATEGORIES, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
@@ -54,10 +53,10 @@ export function MovementRowButton({ t, onClick }: { t: Item; onClick: () => void
         <span className="flex items-center gap-1.5">
           {isReview(t) && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-600" aria-label="Por revisar" />}
           <span className="truncate text-[15px] font-medium text-slate-900">{label(t)}</span>
-          {t.extraordinary && <Star className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label="Extraordinario" />}
         </span>
         <span className="mt-0.5 block truncate text-xs text-slate-500">
           {t.kind === "gasto" || t.kind === "devolucion" ? categoryOf(t.category).label : KIND_LABEL[t.kind]}{t.subcategory ? ` · ${t.subcategory}` : ""} · {shortDay(t.date)}
+          {t.extraordinary && <span className="text-amber-700"> · Extraordinario</span>}
         </span>
       </span>
       <Amount t={t} />
