@@ -22,6 +22,8 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { moduleHomeForHost, moduleHref } from "@/lib/app/module-domains";
 
 const features = [
   {
@@ -46,6 +48,13 @@ const features = [
 
 export default async function HomePage() {
   const session = await auth();
+  const host = (await headers()).get("host");
+  const moduleHome = moduleHomeForHost(host);
+
+  if (moduleHome) {
+    if (!session?.user) redirect("https://crussader.com/");
+    redirect(moduleHref(moduleHome, host));
+  }
 
   if (session?.user) {
     redirect("/inicio");
