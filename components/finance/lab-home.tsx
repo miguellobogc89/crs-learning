@@ -10,12 +10,11 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Minus } from "lucide-react";
 import type { overview } from "@/lib/finance/service";
 import { categoryLabel } from "@/lib/finance/categories";
-import { deviationOf, groupSummary, planDeviations, type Deviation, type GroupCycleTotals, type PlanGroupDeviation, type PlanItem } from "@/lib/finance/plan";
+import { cumulative, deviationOf, groupSummary, isGradual, planDeviations, type Deviation, type GroupCycleTotals, type PlanGroupDeviation, type PlanItem } from "@/lib/finance/plan";
 import { card, eur, flat } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList, SkeletonStats } from "@/components/trading/skeletons";
-import { shortDay, useFinance } from "./api";
-import { BalanceLine } from "./charts";
+import { useFinance } from "./api";
 import { CategoryIcon } from "./category-icon";
 import { LabCategoryPicker } from "./lab-category-picker";
 
@@ -26,6 +25,9 @@ type Plan = {
   previous: { start: string; end: string } | null;
   groups: { id: string; name: string; categories: string[]; goal: number | null }[];
   history?: GroupCycleTotals[];
+  daily?: { cur: Record<string, number[]>; prev: Record<string, number[]> };
+  extras?: { date: string; label: string; amount: number; category: string }[];
+  budget?: { income: number | null; savingsGoal: number | null; limit: number | null };
 };
 type Dev = PlanGroupDeviation;
 type Item = PlanItem;
@@ -347,6 +349,105 @@ function GoalsGlance({ plan }: { plan: Plan }) {
   );
 }
 
+// ── Gráfico: gasto acumulado del mes frente al mes pasado (y el objetivo) ────────────────────────
+
+function SpendChart({ plan }: { plan: Plan }) {
+  const [sel, setSel] = useState<string>("all");
+  const daily = plan.daily ?? { cur: {}, prev: {} };
+  const cycles = plan.history ?? [];
+  const { day, totalDays, start, end } = plan.cycle;
+  // Solo los grupos de gasto gradual: los de recibos fijos entran de golpe y no tiene sentido seguirlos día a día.
+  const gradual = plan.groups.filter((g) => g.categories.length && isGradual(g.categories, cycles, daily.prev));
+  const fixed = plan.groups.filter((g) => g.categories.length && !gradual.includes(g));
+  const group = gradual.find((g) => g.id === sel) ?? null;
+  const cats = group ? group.categories : null;
+  const prevLen = Math.max(0, ...Object.values(daily.prev).map((r) => r.length));
+  const cur = cumulative(daily.cur, cats, totalDays).slice(0, day);
+  const prev = prevLen ? cumulative(daily.prev, cats, prevLen) : [];
+  const now = cur[cur.length - 1] ?? 0;
+  const prevAtDay = prev.length ? prev[Math.min(day, prev.length) - 1] : null;
+  // Objetivo: en un grupo, diagonal de 0 a su objetivo; en «Todo», tu límite (lo que entra menos lo que quieres
+  // ahorrar) repartido según cómo gastaste el mes pasado (los recibos fijos de principio de mes suben de golpe).
+  const goal = group ? group.goal : plan.budget?.limit ?? null;
+  const prevTotal = prev[prev.length - 1] ?? 0;
+  const goalLine = goal === null ? null : Array.from({ length: totalDays }, (_, i) => {
+    if (group || !prev.length || prevTotal <= 0) return (goal * (i + 1)) / totalDays;
+    return goal * (prev[Math.min(prev.length - 1, Math.round(((i + 1) / totalDays) * prev.length) - 1)] ?? 0) / prevTotal;
+  });
+  const extras = (plan.extras ?? []).filter((e) => !cats || cats.includes(e.category));
+  const extrasTotal = extras.reduce((t, e) => t + e.amount, 0);
+
+  const W = 340, H = 170, pad = { l: 4, r: 4, t: 10, b: 18 };
+  const top = Math.max(1, now, prevTotal, ...(goalLine ?? [0])) * 1.08;
+  const x = (i: number, n = totalDays) => pad.l + (i / Math.max(1, n - 1)) * (W - pad.l - pad.r);
+  const y = (v: number) => H - pad.b - (v / top) * (H - pad.t - pad.b);
+  const path = (vals: number[], n = totalDays) => vals.map((v, i) => `${i ? "L" : "M"}${x(i, n).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const area = cur.length > 1 ? `${path(cur)} L${x(cur.length - 1).toFixed(1)},${y(0)} L${x(0)},${y(0)} Z` : "";
+
+  const diff = prevAtDay === null ? null : Math.round(now - prevAtDay);
+  const verdict = diff === null ? "Aún no hay mes anterior para comparar"
+    : Math.abs(diff) < 10 ? "Igual que el mes pasado a estas alturas"
+    : diff < 0 ? `${eur(-diff, 0)} menos que el mes pasado a estas alturas`
+    : `${eur(diff, 0)} más que el mes pasado a estas alturas`;
+  const tone = diff === null || Math.abs(diff) < 10 ? "text-slate-500" : diff < 0 ? "text-emerald-700" : "text-amber-700";
+  const fmtDay = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "UTC" });
+
+  return (
+    <div>
+      <p className="text-sm text-slate-500">{group ? `${group.name} este mes` : "Has gastado este mes"}</p>
+      <p className="amount mt-0.5 text-[30px] font-semibold leading-none tracking-tight text-slate-900">
+        {eur(now, 0)}{goal !== null && <span className="text-base font-medium text-slate-400"> de {eur(goal, 0)}</span>}
+      </p>
+      <p className={`amount mt-1.5 text-sm font-medium ${tone}`}>{verdict}</p>
+
+      <svg viewBox={`0 0 ${W} ${H}`} className="mt-3 block h-auto w-full" role="img" aria-label={`Gasto acumulado: ${eur(now, 0)}. ${verdict}.`}>
+        <defs>
+          <linearGradient id="spend-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#3478f6" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#3478f6" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <line x1={pad.l} x2={W - pad.r} y1={y(0)} y2={y(0)} stroke="#e2e8f0" />
+        {goalLine && <path d={path(goalLine)} fill="none" stroke="#10b981" strokeWidth={1.5} strokeDasharray="4 4" />}
+        {prev.length > 1 && <path d={path(prev, prev.length)} fill="none" stroke="#cbd5e1" strokeWidth={2} strokeLinejoin="round" />}
+        {area && <path d={area} fill="url(#spend-fill)" />}
+        {cur.length > 1 && <path d={path(cur)} fill="none" stroke="#3478f6" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />}
+        {cur.length > 0 && <>
+          <circle cx={x(cur.length - 1)} cy={y(now)} r={6} fill="#3478f6" fillOpacity={0.2} />
+          <circle cx={x(cur.length - 1)} cy={y(now)} r={3.5} fill="#3478f6" stroke="#fff" strokeWidth={1.5} />
+        </>}
+        <text x={pad.l} y={H - 3} fontSize="10" fill="#94a3b8">{fmtDay(start)}</text>
+        <text x={W - pad.r} y={H - 3} fontSize="10" fill="#94a3b8" textAnchor="end">{fmtDay(end)}</text>
+      </svg>
+
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-[#3478f6]" />Este mes</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-slate-300" />Mes pasado</span>
+        {goalLine && <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t-[1.5px] border-dashed border-emerald-500" />{group ? "Tu objetivo" : "Tu límite para ahorrar"}</span>}
+      </div>
+      {extrasTotal > 0 && (
+        <p className="amount mt-2 text-xs text-slate-500">Además, {eur(extrasTotal, 0)} en extraordinarios ({extras.slice(0, 2).map((e) => e.label).join(", ")}{extras.length > 2 ? "…" : ""}), aparte de la línea.</p>
+      )}
+      {!group && goal === null && (
+        <Link href="/finanzas/ajustes" className="mt-2 inline-block text-xs font-medium text-blue-700 hover:underline">¿Cuánto quieres ahorrar al mes?</Link>
+      )}
+      {group && group.goal === null && <p className="mt-2 text-xs text-slate-500">Sin objetivo: ponle uno en Mi plan para ver tu línea.</p>}
+
+      {gradual.length > 0 && (
+        <div className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:px-0">
+          {[{ id: "all", name: "Todo" }, ...gradual].map((g) => (
+            <button key={g.id} type="button" onClick={() => setSel(g.id)} aria-pressed={sel === g.id}
+              className={`h-8 shrink-0 rounded-full px-3.5 text-sm font-medium transition-colors ${sel === g.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+              {g.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {fixed.length > 0 && <p className="mt-2 text-[11px] text-slate-400">{fixed.map((g) => g.name).join(" y ")} no salen aquí: son recibos fijos que entran de golpe.</p>}
+    </div>
+  );
+}
+
 export function LabHome() {
   const [view, setView] = useState<"inicio" | "selector">("inicio");
   useEffect(() => {
@@ -370,9 +471,6 @@ function LabHomeBody({ switcher }: { switcher: ReactNode }) {
   const plan = useFinance<Plan>("plan");
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
   if (!data) return <div className="space-y-4"><SkeletonStats /><SkeletonList rows={6} /></div>;
-  const v = data.cycleView;
-  const t = v.totals;
-  const prevExp = v.previous?.expenses ?? null;
   return (
     <div className="space-y-4 pb-6">
       {switcher}
@@ -380,34 +478,7 @@ function LabHomeBody({ switcher }: { switcher: ReactNode }) {
 
       {/* 1. Evolución del ciclo y lo que se viene */}
       <section className={`${card} ${flat} p-4 sm:p-5`}>
-        <div className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold text-slate-900">Tu dinero este ciclo</h2>
-            <p className="mt-0.5 text-xs text-slate-500">{v.cycle.label}, quedan {v.daysLeft} {v.daysLeft === 1 ? "día" : "días"}</p>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="amount text-2xl font-semibold tabular-nums tracking-tight text-slate-900">{eur(v.balance, 0)}</p>
-            <p className="text-xs text-slate-500">hoy en tus cuentas</p>
-          </div>
-        </div>
-        <div className="mt-3">
-          <BalanceLine data={v.series} start={v.cycle.start} end={v.cycle.end} projected={v.projectedEnd} height={200} />
-        </div>
-        <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-100 pt-3 text-center">
-          <div>
-            <dt className="text-[11px] text-slate-500">Gastado</dt>
-            <dd className="amount mt-0.5 text-sm font-semibold tabular-nums text-slate-900">{eur(t.expenses, 0)}</dd>
-            {prevExp !== null && <dd className="text-[11px]"><Delta now={t.expenses} prev={prevExp} /></dd>}
-          </div>
-          <div>
-            <dt className="text-[11px] text-slate-500">Recibos por llegar</dt>
-            <dd className="amount mt-0.5 text-sm font-semibold tabular-nums text-slate-900">{eur(v.pendingFixed, 0)}</dd>
-          </div>
-          <div>
-            <dt className="text-[11px] text-slate-500">Previsto el {shortDay(v.cycle.end)}</dt>
-            <dd className={`amount mt-0.5 text-sm font-semibold tabular-nums ${(v.projectedEnd ?? 0) >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{eur(v.projectedEnd, 0)}</dd>
-          </div>
-        </dl>
+        {plan.data ? <SpendChart plan={plan.data} /> : <SkeletonList rows={3} />}
       </section>
 
       {/* 2. En qué se va el dinero, por grupos */}

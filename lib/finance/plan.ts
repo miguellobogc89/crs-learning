@@ -432,3 +432,32 @@ export function planDeviations(opts: { groups: { id: string; name: string; categ
   }
   return out.sort((a, b) => b.diff - a.diff);
 }
+
+// ── Inicio: gráfico de gasto acumulado ───────────────────────────────────────────────────────────
+
+/** Acumulado de un gasto diario por categorías (suma de las categorías dadas; `null` = todas). */
+export function cumulative(daily: Record<string, number[]>, categories: string[] | null, days: number) {
+  const out = Array(days).fill(0) as number[];
+  for (const [cat, row] of Object.entries(daily)) {
+    if (categories && !categories.includes(cat)) continue;
+    for (let i = 0; i < Math.min(days, row.length); i++) out[i] += row[i];
+  }
+  for (let i = 1; i < days; i++) out[i] += out[i - 1];
+  return out.map(round2);
+}
+
+/**
+ * ¿Es un grupo de gasto gradual (se va gastando a lo largo del mes) o «estanco» (recibos fijos que entran de golpe)?
+ * Estanco si en los ciclos cerrados gasta casi lo mismo cada mes (variación < 15 %) y el mes pasado lo hizo en
+ * pocos días (≤ 6). Sin al menos dos ciclos cerrados, se trata como gradual.
+ */
+export function isGradual(categories: string[], cycles: GroupCycleTotals[], prevDaily: Record<string, number[]>) {
+  const totals = cycles.slice(1, 4).map((c) => categories.reduce((s, cat) => s + (c.full[cat] ?? 0), 0));
+  if (totals.length < 2) return true;
+  const mean = totals.reduce((s, x) => s + x, 0) / totals.length;
+  if (mean <= 0) return true;
+  const sd = Math.sqrt(totals.reduce((s, x) => s + (x - mean) ** 2, 0) / totals.length);
+  const days = new Set<number>();
+  for (const cat of categories) (prevDaily[cat] ?? []).forEach((v, i) => { if (v > 0) days.add(i); });
+  return !(sd / mean < 0.15 && days.size <= 6);
+}

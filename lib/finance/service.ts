@@ -568,11 +568,33 @@ export async function planView(userId: string) {
     }
     history.push({ full, atDay, subAtDay });
   }
+  // Gasto día a día (sin extraordinarios) de este ciclo y del anterior completo, para el gráfico de Inicio; los
+  // extraordinarios de este ciclo van aparte. Y el límite de gasto: lo que entra menos lo que quieres ahorrar.
+  const totalDays = daysBetween(current.start, current.end) + 1;
+  const prevDays = daysBetween(prevCycle.start, prevCycle.end) + 1;
+  const daily: { cur: Record<string, number[]>; prev: Record<string, number[]> } = { cur: {}, prev: {} };
+  const extras: { date: string; label: string; amount: number; category: string }[] = [];
+  for (const t of ctx.txs) {
+    if (!isPackageCharge(t)) continue;
+    if (t.date >= current.start && t.date <= current.end) {
+      if (t.extraordinary) { extras.push({ date: t.date, label: t.alias || t.counterparty || t.description, amount: round2(-t.amount), category: t.category }); continue; }
+      const row = (daily.cur[t.category] ??= Array(totalDays).fill(0));
+      row[daysBetween(current.start, t.date)] = round2(row[daysBetween(current.start, t.date)] - t.amount);
+    } else if (hasPrevious && t.date >= prevCycle.start && t.date <= prevCycle.end && !t.extraordinary) {
+      const row = (daily.prev[t.category] ??= Array(prevDays).fill(0));
+      row[daysBetween(prevCycle.start, t.date)] = round2(row[daysBetween(prevCycle.start, t.date)] - t.amount);
+    }
+  }
+  const income = ctx.settings.expectedIncome ?? detectIncome(ctx.history);
+  const savingsGoal = ctx.projection.savingsGoal;
   return {
     hasAccounts: ctx.accounts.length > 0,
     hasData: ctx.txs.length > 0,
-    cycle: { ...current, day, totalDays: daysBetween(current.start, current.end) + 1 },
+    cycle: { ...current, day, totalDays },
     history,
+    daily,
+    extras: extras.sort((a, b) => b.amount - a.amount),
+    budget: { income, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
     previous: hasPrevious ? { start: prevCycle.start, end: prevTo } : null,
     /** Ciclos del último par de años (el actual primero), para el historial de una categoría. */
     cycles: Array.from({ length: 24 }, (_, i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c, i) => i === 0 || c.end >= oldest),

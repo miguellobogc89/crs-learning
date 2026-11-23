@@ -225,3 +225,14 @@ test("deviationOf: umbrales de estable, algo peor y peor", () => {
   assert.equal(P.deviationOf(30, 0).state, "algo_peor");
   assert.equal(P.deviationOf(60, 0).state, "peor");
 });
+
+test("Gráfico de Inicio: acumulado por categorías y grupos graduales frente a estancos", () => {
+  assert.deepEqual(P.cumulative({ ocio: [10, 0, 5], luz: [50, 0, 0] }, ["ocio"], 3), [10, 10, 15]);
+  assert.deepEqual(P.cumulative({ ocio: [10, 0, 5], luz: [50, 0, 0] }, null, 3), [60, 60, 65]);
+  const c = (v) => ({ full: { vivienda: v, ocio: v / 3 + (v % 7) * 20 }, atDay: {} });
+  const cycles = [c(0), { full: { vivienda: 700, ocio: 120 }, atDay: {} }, { full: { vivienda: 705, ocio: 300 }, atDay: {} }, { full: { vivienda: 698, ocio: 40 }, atDay: {} }];
+  const prev = { vivienda: [700, ...Array(29).fill(0)], ocio: Array.from({ length: 30 }, (_, i) => (i % 3 === 0 ? 12 : 0)) };
+  assert.equal(P.isGradual(["vivienda"], cycles, prev), false);
+  assert.equal(P.isGradual(["ocio"], cycles, prev), true);
+  assert.equal(P.isGradual(["vivienda"], cycles.slice(0, 2), prev), true);
+});
