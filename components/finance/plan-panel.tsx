@@ -15,6 +15,7 @@ import { eur, primary } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { errorText, fapi, refreshFinance, useFinance } from "./api";
+import { aboveKeyboard, useKeyboardInset } from "./use-keyboard-inset";
 
 type View = Awaited<ReturnType<typeof planView>>;
 type Group = View["groups"][number];
@@ -52,6 +53,7 @@ function AddCategoriesSheet({ target, groups, allKeys, cur, onClose, onConfirm }
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const startY = useRef<number | null>(null);
   useEffect(() => { if (target) { setQ(""); setPicked(new Set()); } }, [target]);
+  const inset = useKeyboardInset(target !== null);
   const needle = fold(q.trim()).trim();
   const ownerOf = new Map(groups.flatMap((g) => g.categories.map((k) => [k, g] as const)));
   const candidates = allKeys
@@ -82,7 +84,7 @@ function AddCategoriesSheet({ target, groups, allKeys, cur, onClose, onConfirm }
 
   return (
     <Sheet open={target !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent side="bottom" showCloseButton={false} className="data-[side=bottom]:h-[80dvh] max-h-[80dvh] gap-0 overflow-hidden rounded-t-3xl border-slate-200 bg-white p-0 sm:mx-auto sm:max-w-lg">
+      <SheetContent side="bottom" showCloseButton={false} onOpenAutoFocus={(e) => e.preventDefault()} style={aboveKeyboard(inset, true)} className="data-[side=bottom]:h-[80dvh] max-h-[80dvh] gap-0 overflow-hidden rounded-t-3xl border-slate-200 bg-white p-0 sm:mx-auto sm:max-w-lg">
         <div
           className="shrink-0 touch-none px-5 pb-3 pt-3"
           onTouchStart={(e) => { startY.current = e.touches[0]?.clientY ?? null; }}
@@ -129,6 +131,7 @@ function NewGroupSheet({ open, onClose, onCreate }: { open: boolean; onClose: ()
   const [err, setErr] = useState<string | null>(null);
   const startY = useRef<number | null>(null);
   useEffect(() => { if (open) { setName(""); setGoal(""); setErr(null); } }, [open]);
+  const inset = useKeyboardInset(open);
   const submit = () => {
     if (!name.trim()) { setErr("Ponle un nombre al grupo"); return; }
     const t = goal.trim().replace(/\s|€/g, "");
@@ -138,7 +141,7 @@ function NewGroupSheet({ open, onClose, onCreate }: { open: boolean; onClose: ()
   };
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent side="bottom" showCloseButton={false} className="gap-0 rounded-t-3xl border-slate-200 bg-white p-0 sm:mx-auto sm:max-w-lg">
+      <SheetContent side="bottom" showCloseButton={false} style={aboveKeyboard(inset, false)} className="gap-0 rounded-t-3xl border-slate-200 bg-white p-0 sm:mx-auto sm:max-w-lg">
         <div
           className="touch-none px-5 pt-3"
           onTouchStart={(e) => { startY.current = e.touches[0]?.clientY ?? null; }}

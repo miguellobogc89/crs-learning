@@ -14,6 +14,7 @@ import { errorText, fapi, longDay, refreshFinance } from "./api";
 import { BankLogo } from "./bank-logo";
 import { CategoryIcon } from "./category-icon";
 import { SOURCE_LABEL, categoriesFor, type Item } from "./movement-edit";
+import { aboveKeyboard, useKeyboardInset } from "./use-keyboard-inset";
 
 type Field = "category" | "alias" | "subcategory";
 type Values = { category: string; kind: Kind; extraordinary: boolean; alias: string | null; subcategory: string | null; note: string | null };
@@ -24,11 +25,18 @@ const FIELD_LABEL: Record<Field, string> = { category: "categoría", alias: "nom
 const valuesOf = (t: Item): Values => ({ category: t.category, kind: t.kind, extraordinary: t.extraordinary, alias: t.alias ?? null, subcategory: t.subcategory ?? null, note: t.note ?? null });
 
 /** Hoja que sube desde abajo, con el tirador y el gesto de deslizar para cerrar (como el resto de Finanzas). */
-function BottomSheet({ open, onClose, title, subtitle, children, tall = false }: { open: boolean; onClose: () => void; title: string; subtitle?: string; children: ReactNode; tall?: boolean }) {
+function BottomSheet({ open, onClose, title, subtitle, children, tall = false, autoFocus = false }: { open: boolean; onClose: () => void; title: string; subtitle?: string; children: ReactNode; tall?: boolean; autoFocus?: boolean }) {
   const startY = useRef<number | null>(null);
+  const inset = useKeyboardInset(open);
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent side="bottom" showCloseButton={false} className={`gap-0 overflow-hidden rounded-t-3xl border-slate-200 bg-white p-0 sm:mx-auto sm:max-w-lg ${tall ? "data-[side=bottom]:h-[80dvh] max-h-[80dvh]" : "max-h-[85dvh]"}`}>
+      <SheetContent
+        side="bottom"
+        showCloseButton={false}
+        // En el iPhone, poner el cursor en un campo abre el teclado: solo lo hacemos donde se va a escribir.
+        onOpenAutoFocus={autoFocus ? undefined : (e) => e.preventDefault()}
+        style={aboveKeyboard(inset, tall)}
+        className={`gap-0 overflow-hidden rounded-t-3xl border-slate-200 bg-white p-0 sm:mx-auto sm:max-w-lg ${tall ? "data-[side=bottom]:h-[80dvh] max-h-[80dvh]" : "max-h-[85dvh]"}`}>
         <div
           className="shrink-0 touch-none px-5 pb-3 pt-3"
           onTouchStart={(e) => { startY.current = e.touches[0]?.clientY ?? null; }}
@@ -54,7 +62,7 @@ function TextSheet({ open, onClose, title, initial, placeholder, multiline, sugg
   const submit = () => { onSave(value.trim()); onClose(); };
   const field = "w-full rounded-xl border border-slate-200 px-3 py-3 text-base text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
   return (
-    <BottomSheet open={open} onClose={onClose} title={title}>
+    <BottomSheet open={open} onClose={onClose} title={title} autoFocus>
       <form className="space-y-3 px-5 pb-[max(1rem,env(safe-area-inset-bottom))]" onSubmit={(e) => { e.preventDefault(); submit(); }}>
         {multiline
           ? <textarea value={value} onChange={(e) => setValue(e.target.value)} placeholder={placeholder} rows={4} maxLength={500} className={field} />
