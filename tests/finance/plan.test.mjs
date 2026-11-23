@@ -192,3 +192,36 @@ test("groupSummary: sin historial reparte el objetivo de forma lineal y marca lo
   const n = P.groupSummary({ categories: ["ocio"], cycles: one, goal: null, day: 10, totalDays: 30 });
   assert.equal(n.status, null);
 });
+
+test("planDeviations: grupos de peor a mejor y, en uno de una sola categoría, las subcategorías que se mueven", () => {
+  const c = (atDay, subAtDay = {}) => ({ full: atDay, atDay, subAtDay });
+  const cycles = [
+    c({ vivienda: 712, comida_domicilio: 90, restaurantes: 20, ocio: 30 }, { "vivienda/Hipoteca": 600, "vivienda/Seguro del hogar": 62, "vivienda/Comunidad": 50 }),
+    c({ vivienda: 700, comida_domicilio: 40, restaurantes: 80, ocio: 30 }, { "vivienda/Hipoteca": 600, "vivienda/Seguro del hogar": 50, "vivienda/Comunidad": 50 }),
+    c({ vivienda: 700, comida_domicilio: 40, restaurantes: 80, ocio: 30 }, { "vivienda/Hipoteca": 600, "vivienda/Seguro del hogar": 50, "vivienda/Comunidad": 50 }),
+    c({ vivienda: 700, comida_domicilio: 40, restaurantes: 80, ocio: 30 }, { "vivienda/Hipoteca": 600, "vivienda/Seguro del hogar": 50, "vivienda/Comunidad": 50 }),
+  ];
+  const groups = [
+    { id: "v", name: "Vivienda", categories: ["vivienda"], goal: null },
+    { id: "d", name: "Comida a domicilio", categories: ["comida_domicilio"], goal: null },
+    { id: "o", name: "Ocio", categories: ["restaurantes", "ocio"], goal: null },
+  ];
+  const r = P.planDeviations({ groups, cycles, day: 10, totalDays: 30 });
+  assert.deepEqual(r.map((g) => [g.id, g.state]), [["d", "peor"], ["v", "estable"], ["o", "mejor"]]);
+  const v = r.find((g) => g.id === "v");
+  assert.equal(v.level, "subcategoria");
+  assert.deepEqual(v.moved.map((i) => [i.label, i.diff, i.state]), [["Seguro del hogar", 12, "algo_peor"]]);
+  assert.deepEqual(v.unchanged.map((i) => i.label), ["Hipoteca", "Comunidad"]);
+  const o = r.find((g) => g.id === "o");
+  assert.deepEqual(o.moved.map((i) => i.key), ["restaurantes"]);
+  assert.deepEqual(o.unchanged.map((i) => i.key), ["ocio"]);
+});
+
+test("deviationOf: umbrales de estable, algo peor y peor", () => {
+  assert.equal(P.deviationOf(105, 100).state, "estable");
+  assert.equal(P.deviationOf(115, 100).state, "algo_peor");
+  assert.equal(P.deviationOf(130, 100).state, "peor");
+  assert.equal(P.deviationOf(70, 100).state, "mejor");
+  assert.equal(P.deviationOf(30, 0).state, "algo_peor");
+  assert.equal(P.deviationOf(60, 0).state, "peor");
+});

@@ -9,7 +9,7 @@ import {
   type Alert, type CycleRule, type CycleSummary, type Tx,
 } from "./logic";
 import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, getWishlist, loadTxs } from "./store";
-import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, goalStatus, isPackageCharge, type GroupCycleTotals, planInsights, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
+import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, goalStatus, isPackageCharge, subKey, type GroupCycleTotals, planInsights, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
 import { AUTO_SYNC_HOURS } from "./sync";
 import { zombies } from "./gmail";
 
@@ -557,12 +557,16 @@ export async function planView(userId: string) {
     const cut = addDays(c.start, day - 1) < c.end ? addDays(c.start, day - 1) : c.end;
     const full: Record<string, number> = {};
     const atDay: Record<string, number> = {};
+    const subAtDay: Record<string, number> = {};
     for (const t of ctx.txs) {
       if (!isPackageCharge(t) || t.date < c.start || t.date > c.end) continue;
       full[t.category] = round2((full[t.category] ?? 0) - t.amount);
-      if (t.date <= cut) atDay[t.category] = round2((atDay[t.category] ?? 0) - t.amount);
+      if (t.date > cut) continue;
+      atDay[t.category] = round2((atDay[t.category] ?? 0) - t.amount);
+      const k = subKey(t.category, t.subcategory);
+      subAtDay[k] = round2((subAtDay[k] ?? 0) - t.amount);
     }
-    history.push({ full, atDay });
+    history.push({ full, atDay, subAtDay });
   }
   return {
     hasAccounts: ctx.accounts.length > 0,

@@ -308,7 +308,12 @@ export function planInsights(opts: {
 // ── Inicio: resumen de cada grupo ────────────────────────────────────────────────────────────────
 
 /** Gasto por categoría de un ciclo: entero (`full`) y hasta el mismo día del ciclo que hoy (`atDay`). */
-export type GroupCycleTotals = { full: Record<string, number>; atDay: Record<string, number> };
+export type GroupCycleTotals = {
+  full: Record<string, number>;
+  atDay: Record<string, number>;
+  /** Gasto hasta el mismo día del ciclo por categoría y subcategoría (clave `categoria/subcategoria`, vacía si no tiene). */
+  subAtDay?: Record<string, number>;
+};
 export type GroupStatus = "bien" | "atento" | "superado";
 
 /**
@@ -350,4 +355,80 @@ export function groupSummary(opts: { categories: string[]; cycles: GroupCycleTot
     trend: cycles.slice(0, 7).map((c) => sum(c.full)).reverse(),
     saved3,
   };
+}
+
+// ── Inicio: ¿cumples tu plan? ────────────────────────────────────────────────────────────────────
+
+export type Deviation = "peor" | "algo_peor" | "estable" | "mejor";
+export const subKey = (category: string, sub: string | null | undefined) => `${category}/${(sub ?? "").trim()}`;
+
+/** Estable si la diferencia es menor de 10 € o del 10 % de la referencia; peor desde el 25 % (o +50 € si no hay base). */
+export function deviationOf(now: number, ref: number): { diff: number; pct: number | null; state: Deviation } {
+  const diff = round2(now - ref);
+  const pct = ref > 0 ? round2((diff / ref) * 100) : null;
+  const state: Deviation = Math.abs(diff) < Math.max(10, Math.abs(ref) * 0.1) ? "estable"
+    : diff < 0 ? "mejor"
+    : (pct !== null ? pct >= 25 : diff >= 50) ? "peor" : "algo_peor";
+  return { diff, pct, state };
+}
+
+export type PlanItem = { key: string; label: string; category: string; sub: string | null; now: number; ref: number; diff: number; pct: number | null; state: Deviation };
+export type PlanGroupDeviation = {
+  id: string; name: string; categories: string[];
+  now: number; ref: number; basis: "objetivo" | "media"; diff: number; pct: number | null; state: Deviation;
+  /** Qué explica la desviación: categorías o, si el grupo tiene una sola, sus subcategorías. */
+  level: "categoria" | "subcategoria";
+  moved: PlanItem[];
+  unchanged: PlanItem[];
+};
+
+/**
+ * ¿Cumples tu plan? Por grupo: lo gastado hasta hoy frente a lo esperable hoy (el objetivo repartido según tu
+ * ritmo habitual si tiene objetivo; si no, tu media de los 3 ciclos anteriores hasta el mismo día). Dentro, solo lo
+ * que se ha movido frente a su media (categorías, o subcategorías si el grupo es de una sola categoría).
+ * Grupos sin objetivo ni historial no se pueden juzgar y no salen. Orden: de peor a mejor.
+ */
+export function planDeviations(opts: { groups: { id: string; name: string; categories: string[]; goal: number | null }[]; cycles: GroupCycleTotals[]; day: number; totalDays: number; labels?: (category: string) => string }) {
+  const { groups, cycles, day, totalDays, labels = (c: string) => c } = opts;
+  const cur = cycles[0];
+  const ref3 = cycles.slice(1, 4);
+  const avg = (get: (c: GroupCycleTotals) => number) => (ref3.length ? round2(ref3.reduce((s, c) => s + get(c), 0) / ref3.length) : null);
+  const out: PlanGroupDeviation[] = [];
+  for (const g of groups) {
+    if (!g.categories.length || !cur) continue;
+    const s = groupSummary({ categories: g.categories, cycles, goal: g.goal, day, totalDays });
+    const basis = s.expected !== null ? "objetivo" : "media";
+    const ref = s.expected ?? s.avgAtDay;
+    if (ref === null) continue;
+    let items: PlanItem[] = [];
+    let level: PlanGroupDeviation["level"] = "categoria";
+    if (g.categories.length === 1) {
+      level = "subcategoria";
+      const cat = g.categories[0];
+      const keys = new Set<string>();
+      for (const c of [cur, ...ref3]) for (const k of Object.keys(c.subAtDay ?? {})) if (k.startsWith(`${cat}/`)) keys.add(k);
+      items = [...keys].flatMap((k) => {
+        const a = avg((c) => c.subAtDay?.[k] ?? 0);
+        if (a === null) return [];
+        const sub = k.slice(cat.length + 1) || null;
+        const now = round2(cur.subAtDay?.[k] ?? 0);
+        return [{ key: k, label: sub ?? "Sin subcategoría", category: cat, sub, now, ref: a, ...deviationOf(now, a) }];
+      });
+    } else {
+      items = g.categories.flatMap((cat) => {
+        const a = avg((c) => c.atDay[cat] ?? 0);
+        if (a === null) return [];
+        const now = round2(cur.atDay[cat] ?? 0);
+        return [{ key: cat, label: labels(cat), category: cat, sub: null, now, ref: a, ...deviationOf(now, a) }];
+      });
+    }
+    items = items.filter((i) => i.now > 0 || i.ref > 0);
+    const rank = (i: { diff: number }) => -i.diff;
+    out.push({
+      id: g.id, name: g.name, categories: g.categories, now: s.now, ref, basis, ...deviationOf(s.now, ref), level,
+      moved: items.filter((i) => i.state !== "estable").sort((a, b) => rank(a) - rank(b)),
+      unchanged: items.filter((i) => i.state === "estable").sort((a, b) => b.now - a.now),
+    });
+  }
+  return out.sort((a, b) => b.diff - a.diff);
 }

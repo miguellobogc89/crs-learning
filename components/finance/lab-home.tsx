@@ -1,14 +1,16 @@
 "use client";
 // Laboratorio · propuesta de Inicio (mockup con datos reales; no sustituye a Inicio hasta decidirlo).
 // 1. Evolución del ciclo: saldo día a día con el tramo previsto hasta fin de ciclo y lo que se viene.
-// 2. En qué se va el dinero, por grupos de Mi plan: barras horizontales; al tocar un grupo se despliegan sus
-//    categorías con el mismo gráfico, y al tocar una categoría se abre su detalle (pantalla con «volver»).
+// 2. ¿Cumples tu plan?: por grupo, lo gastado frente a lo esperable hoy, en barras que salen del centro (derecha
+//    rojo = más, izquierda verde = menos), de peor a mejor; los estables, en pills. Al desplegar, solo lo que se ha
+//    movido (categorías, o subcategorías si el grupo es de una sola categoría); al tocarlo, su detalle.
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { overview } from "@/lib/finance/service";
-import { categoryHex, categoryLabel } from "@/lib/finance/categories";
+import { categoryLabel } from "@/lib/finance/categories";
+import { planDeviations, type Deviation, type GroupCycleTotals, type PlanGroupDeviation, type PlanItem } from "@/lib/finance/plan";
 import { card, eur, flat } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList, SkeletonStats } from "@/components/trading/skeletons";
@@ -22,11 +24,23 @@ type Plan = {
   cycle: { start: string; end: string; label: string; day: number; totalDays: number };
   previous: { start: string; end: string } | null;
   groups: { id: string; name: string; categories: string[]; goal: number | null }[];
-  totals: { now: Record<string, number>; before: Record<string, number> };
+  history?: GroupCycleTotals[];
 };
-type Bar = { key: string; label: string; amount: number; prev: number | null; color: string; icon?: string };
+type Dev = PlanGroupDeviation;
+type Item = PlanItem;
 
-const sumOf = (r: Record<string, number>, cats: string[]) => cats.reduce((s, c) => s + (r[c] ?? 0), 0);
+const OPEN_KEY = "crs-finance:lab-open";
+const SCROLL_KEY = "crs-finance:lab-scroll";
+const scroller = () => document.querySelector<HTMLElement>("main");
+
+const TONE: Record<Deviation, { bar: string; text: string }> = {
+  peor: { bar: "#e11d48", text: "text-rose-700" },
+  algo_peor: { bar: "#d97706", text: "text-amber-700" },
+  mejor: { bar: "#059669", text: "text-emerald-700" },
+  estable: { bar: "#94a3b8", text: "text-slate-500" },
+};
+
+const signed = (v: number) => `${v > 0 ? "+" : "−"}${eur(Math.abs(v), Math.abs(v) >= 100 ? 0 : 2)}`;
 
 function Delta({ now, prev }: { now: number; prev: number | null }) {
   if (prev === null || prev <= 0) return null;
@@ -35,88 +49,144 @@ function Delta({ now, prev }: { now: number; prev: number | null }) {
   return <span className={`text-xs tabular-nums ${d > 0 ? "text-rose-700" : "text-emerald-700"}`}>{d > 0 ? "+" : "−"}{Math.abs(d).toFixed(0)} %</span>;
 }
 
-/** Una fila de barra horizontal: nombre, importe, % del total y variación frente al ciclo anterior a la misma altura. */
-function BarRow({ bar, max, total, onClick, open, nested = false }: { bar: Bar; max: number; total: number; onClick?: () => void; open?: boolean; nested?: boolean }) {
+function Figure({ diff, pct, state, small = false }: { diff: number; pct: number | null; state: Deviation; small?: boolean }) {
   return (
-    <button type="button" onClick={onClick} aria-expanded={open}
-      className={`flex w-full items-center gap-3 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500 ${nested ? "py-2.5" : "py-3"}`}>
-      {bar.icon && <CategoryIcon category={bar.icon} />}
-      <span className="min-w-0 flex-1">
-        <span className="flex items-baseline justify-between gap-3">
-          <span className={`truncate ${nested ? "text-sm text-slate-700" : "text-[15px] font-semibold text-slate-900"}`}>{bar.label}</span>
-          <span className="flex shrink-0 items-baseline gap-2">
-            <Delta now={bar.amount} prev={bar.prev} />
-            <b className={`amount tabular-nums text-slate-900 ${nested ? "text-sm font-semibold" : "text-[15px] font-semibold"}`}>{eur(bar.amount, 2)}</b>
-          </span>
-        </span>
-        <span className="mt-1.5 flex items-center gap-2">
-          <span className={`block flex-1 rounded-full bg-slate-100 ${nested ? "h-1" : "h-1.5"}`}>
-            <span className="block h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
-              style={{ width: `${Math.max(2, (bar.amount / max) * 100)}%`, backgroundColor: bar.color }} />
-          </span>
-          <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-slate-400">{total > 0 ? `${Math.round((bar.amount / total) * 100)} %` : ""}</span>
-        </span>
-      </span>
-      {onClick && (nested
-        ? <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
-        : <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />)}
-    </button>
+    <span className={`amount shrink-0 whitespace-nowrap tabular-nums ${TONE[state].text} ${small ? "text-sm font-semibold" : "text-[15px] font-semibold"}`}>
+      {signed(diff)}{pct !== null && Math.abs(pct) >= 1 && <span className="ml-1 text-xs font-normal opacity-80">({pct > 0 ? "+" : "−"}{Math.abs(Math.round(pct))} %)</span>}
+    </span>
   );
 }
 
-function GroupBars({ plan }: { plan: Plan }) {
+/** Barra que sale del centro: a la derecha (rojo/ámbar) gastas más de lo esperable; a la izquierda (verde), menos. */
+function Diverging({ diff, max, state, thin = false }: { diff: number; max: number; state: Deviation; thin?: boolean }) {
+  const half = Math.min(50, (Math.abs(diff) / Math.max(1, max)) * 50);
+  return (
+    <span className={`relative block w-full rounded-full bg-slate-100 ${thin ? "h-1" : "h-1.5"}`} aria-hidden="true">
+      <span className="absolute inset-y-[-3px] left-1/2 w-px -translate-x-1/2 bg-slate-300" />
+      <span className="absolute inset-y-0 rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
+        style={{ width: `${Math.max(1.5, half)}%`, backgroundColor: TONE[state].bar, ...(diff >= 0 ? { left: "50%" } : { right: "50%" }) }} />
+    </span>
+  );
+}
+
+function Breakdown({ g, onOpenItem }: { g: Dev; onOpenItem: (i: Item) => void }) {
+  const max = Math.max(1, ...g.moved.map((i) => Math.abs(i.diff)));
+  return (
+    <div className="mb-3 rounded-2xl bg-slate-50/80 px-3 py-1">
+      {g.moved.length ? (
+        <ul>
+          {g.moved.map((i) => (
+            <li key={i.key}>
+              <button type="button" onClick={() => onOpenItem(i)} className="flex w-full items-center gap-3 py-2.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
+                {g.level === "categoria" && <CategoryIcon category={i.category} />}
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span className="truncate text-sm text-slate-800">{i.label}</span>
+                    <Figure diff={i.diff} pct={i.pct} state={i.state} small />
+                  </span>
+                  <span className="mt-1.5 block"><Diverging diff={i.diff} max={max} state={i.state} thin /></span>
+                  <span className="amount mt-1 block text-[11px] text-slate-400">{eur(i.now, 2)} frente a {eur(i.ref, 2)} de media</span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="py-2.5 text-sm text-slate-500">Nada se ha movido por separado.</p>
+      )}
+      {g.unchanged.length > 0 && (
+        <p className="border-t border-slate-200/70 py-2.5 text-xs text-slate-500">Sin cambios: {g.unchanged.map((i) => i.label.toLowerCase()).join(", ")}</p>
+      )}
+    </div>
+  );
+}
+
+function PlanCheck({ plan }: { plan: Plan }) {
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
-  const { now, before } = plan.totals;
-  const hasPrev = !!plan.previous;
-  const grouped = new Set(plan.groups.flatMap((g) => g.categories));
-  const loose = Object.keys(now).filter((c) => !grouped.has(c) && now[c] > 0);
-  const rows = [
-    ...plan.groups.map((g) => ({ id: g.id, name: g.name, categories: g.categories })),
-    ...(loose.length ? [{ id: "__none", name: "Sin grupo", categories: loose }] : []),
-  ]
-    .map((g) => ({ ...g, amount: sumOf(now, g.categories), prev: hasPrev ? sumOf(before, g.categories) : null }))
-    .filter((g) => g.amount > 0)
-    .sort((a, b) => b.amount - a.amount);
-  const total = rows.reduce((s, r) => s + r.amount, 0);
-  const max = Math.max(1, ...rows.map((r) => r.amount));
+  const [restored, setRestored] = useState(false);
+  // Al volver del detalle, todo queda como se dejó: lo desplegado y el scroll (en esta sesión).
+  useEffect(() => {
+    try { setOpen(window.sessionStorage.getItem(OPEN_KEY) || null); } catch { /* sin almacenamiento */ }
+    setRestored(true);
+  }, []);
+  useEffect(() => {
+    if (!restored) return;
+    try { if (open) window.sessionStorage.setItem(OPEN_KEY, open); else window.sessionStorage.removeItem(OPEN_KEY); } catch { /* ignorar */ }
+  }, [open, restored]);
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      const y = Number(window.sessionStorage.getItem(SCROLL_KEY));
+      if (y > 0) requestAnimationFrame(() => { const el = scroller(); if (el) el.scrollTop = y; });
+      window.sessionStorage.removeItem(SCROLL_KEY);
+    } catch { /* ignorar */ }
+  }, [restored]);
 
   if (!plan.groups.length) return (
     <div className="py-6 text-center">
-      <p className="text-sm text-slate-600">Agrupa tus categorías (gastos fijos, ocio…) para ver aquí en qué se va el dinero.</p>
+      <p className="text-sm text-slate-600">Agrupa tus categorías (gastos fijos, ocio…) para ver aquí si cumples tu plan.</p>
       <Link href="/finanzas/plan" className="mt-3 inline-flex h-10 items-center rounded-full bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700">Definir grupos</Link>
     </div>
   );
-  if (!rows.length) return <p className="py-6 text-center text-sm text-slate-400">Sin gastos en este ciclo todavía.</p>;
+  const devs = planDeviations({ groups: plan.groups, cycles: plan.history ?? [], day: plan.cycle.day, totalDays: plan.cycle.totalDays, labels: categoryLabel });
+  if (!devs.length) return <p className="py-6 text-sm text-slate-500">Cuando tengas un ciclo completo (o un objetivo en tus grupos) verás aquí cómo vas frente a lo habitual.</p>;
+  const moving = devs.filter((g) => g.state !== "estable");
+  const steady = devs.filter((g) => g.state === "estable");
+  const max = Math.max(1, ...moving.map((g) => Math.abs(g.diff)));
+  const openItem = (i: Item) => {
+    try { window.sessionStorage.setItem(SCROLL_KEY, String(scroller()?.scrollTop ?? 0)); } catch { /* ignorar */ }
+    router.push(`/finanzas/plan/categoria/${i.category}`);
+  };
+  const toggle = (id: string) => setOpen((o) => (o === id ? null : id));
+  const openSteady = steady.find((g) => g.id === open);
 
   return (
-    <ul className="divide-y divide-slate-100">
-      {rows.map((g) => {
-        const isOpen = open === g.id;
-        const cats: Bar[] = g.categories
-          .map((c) => ({ key: c, label: categoryLabel(c), amount: now[c] ?? 0, prev: hasPrev ? before[c] ?? 0 : null, color: categoryHex(c), icon: c }))
-          .filter((c) => c.amount > 0)
-          .sort((a, b) => b.amount - a.amount);
-        const catMax = Math.max(1, ...cats.map((c) => c.amount));
-        return (
-          <li key={g.id}>
-            <BarRow bar={{ key: g.id, label: g.name, amount: g.amount, prev: g.prev, color: "#2563eb" }} max={max} total={total} open={isOpen}
-              onClick={() => setOpen(isOpen ? null : g.id)} />
-            <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-              <div className="overflow-hidden">
-                <ul className="mb-3 rounded-2xl bg-slate-50/80 px-3 py-1">
-                  {cats.map((c) => (
-                    <li key={c.key}>
-                      <BarRow bar={c} max={catMax} total={g.amount} nested onClick={() => router.push(`/finanzas/plan/categoria/${c.key}`)} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+    <div>
+      {moving.length > 0 && (
+        <ul className="divide-y divide-slate-100">
+          {moving.map((g) => {
+            const isOpen = open === g.id;
+            return (
+              <li key={g.id}>
+                <button type="button" onClick={() => toggle(g.id)} aria-expanded={isOpen}
+                  className="flex w-full items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span className="truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
+                      <Figure diff={g.diff} pct={g.pct} state={g.state} />
+                    </span>
+                    <span className="mt-2 block"><Diverging diff={g.diff} max={max} state={g.state} /></span>
+                    <span className="amount mt-1.5 block text-xs text-slate-500">
+                      {eur(g.now, 0)} gastado, frente a {eur(g.ref, 0)} {g.basis === "objetivo" ? "según tu objetivo" : "de tu media"} a estas alturas
+                    </span>
+                  </span>
+                  <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                </button>
+                <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                  <div className="overflow-hidden"><Breakdown g={g} onOpenItem={openItem} /></div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {steady.length > 0 && (
+        <div className={`${moving.length ? "border-t border-slate-100" : ""} py-3.5`}>
+          <p className="text-xs text-slate-500">Se mantienen</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {steady.map((g) => (
+              <button key={g.id} type="button" onClick={() => toggle(g.id)} aria-pressed={open === g.id}
+                className={`inline-flex h-8 items-center rounded-full px-3.5 text-sm font-medium transition-colors ${open === g.id ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+                {g.name}
+              </button>
+            ))}
+          </div>
+          {openSteady && <div className="mt-3"><Breakdown g={openSteady} onOpenItem={openItem} /></div>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -167,12 +237,12 @@ export function LabHome() {
       {/* 2. En qué se va el dinero, por grupos */}
       <section className={`${card} ${flat} px-4 pt-4 sm:px-5 sm:pt-5`}>
         <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-base font-semibold text-slate-900">En qué se va el dinero</h2>
+          <h2 className="text-base font-semibold text-slate-900">¿Cumples tu plan?</h2>
           <Link href="/finanzas/plan" className="inline-flex items-center text-sm font-medium text-blue-700 hover:underline">Mi plan<ChevronRight className="h-4 w-4" /></Link>
         </div>
-        {plan.data?.previous && <p className="mt-0.5 text-xs text-slate-500">Variación frente al ciclo anterior a estas alturas.</p>}
+        <p className="mt-0.5 text-xs text-slate-500">Lo gastado hasta hoy frente a lo esperable a estas alturas del ciclo.</p>
         <div className="mt-1">
-          {plan.data ? <GroupBars plan={plan.data} /> : <SkeletonList rows={4} />}
+          {plan.data ? <PlanCheck plan={plan.data} /> : <SkeletonList rows={4} />}
         </div>
       </section>
     </div>
