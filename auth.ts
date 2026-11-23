@@ -7,11 +7,11 @@ import { normalizeEmail, verifyPassword } from "@/lib/auth/password";
 import { sendWelcomeEmail } from "@/lib/email/email.service";
 import { prisma } from "@/lib/prisma";
 import { ensureWorkspaceBootstrap } from "@/lib/services/workspace.service";
-import { isCrussaderHost } from "@/lib/app/module-domains";
 
-export const { handlers, signIn, signOut, auth } = NextAuth((request) => ({
-  // Session compartida solo en los dominios propios; localhost y previews mantienen su cookie normal.
-  cookies: isCrussaderHost(request?.headers.get("host"))
+export const { handlers, signIn, signOut, auth } = NextAuth({
+  // Auth.js llama a auth() sin request en Server Components. Esta configuración ha de ser estable
+  // para lectura y escritura del token; en previews y localhost se mantiene el comportamiento habitual.
+  cookies: process.env.VERCEL_ENV === "production"
     ? { sessionToken: { name: "__Secure-crussader.session-token", options: {
         domain: ".crussader.com", httpOnly: true, sameSite: "lax", path: "/", secure: true,
       } } }
@@ -202,4 +202,4 @@ if (!existingUser) {
       return session;
     },
   },
-}));
+});
