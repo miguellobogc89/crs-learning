@@ -97,9 +97,10 @@ function PortfolioSwitcher({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 export function TradingNavigationHeader({ onNavigate }: { onNavigate?: () => void }) {
+  const hostname = useModuleHostname();
   return (
     <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-      <Link href="/trading/inicio" onClick={onNavigate} aria-label="Inicio de Trading" className="inline-flex shrink-0 items-center">
+      <Link href={moduleHref("/trading/inicio", hostname)} onClick={onNavigate} aria-label="Inicio de Trading" className="inline-flex shrink-0 items-center">
         <ModuleLogo module="trading" />
       </Link>
       <Suspense fallback={<div className="h-8 w-24 shrink-0 rounded-lg bg-slate-100" />}>
@@ -174,6 +175,7 @@ function TradingUserMenu({ user, inDrawer = false }: { user: TradingProfile; inD
 /** Menú de Trading: secciones, tu dinero y el mercado. `large`: dentro del menú de móvil/tablet (todo con scroll, botones grandes). */
 export function TradingNavigation({ user, large = false, onNavigate }: { user: TradingProfile; large?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const hostname = useModuleHostname();
   const [status, setStatus] = useState<TradingStatus | null>(null);
   useWarmStart<TradingStatus>("status", setStatus);
   const [syncing, setSyncing] = useState(false);
@@ -240,11 +242,11 @@ export function TradingNavigation({ user, large = false, onNavigate }: { user: T
             <div key={section.title ?? "main"} className="space-y-1">
               {section.title && <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{section.title}</p>}
               {section.items.map((t) => {
-                const active = pathname === `/trading/${t.key}` || pathname.startsWith(`/trading/${t.key}/`);
+                const active = (t.key === "inicio" && pathname === "/home") || pathname === `/trading/${t.key}` || pathname.startsWith(`/trading/${t.key}/`);
                 return (
                   <Link
                     key={t.key}
-                    href={t.key === "mercados" ? "/trading/mercados?tab=valores" : `/trading/${t.key}`}
+                    href={moduleHref(t.key === "mercados" ? "/trading/mercados?tab=valores" : `/trading/${t.key}`, hostname)}
                     aria-current={active ? "page" : undefined}
                     className={`flex items-center rounded-xl ${large ? "gap-3 px-4 py-3.5 text-base" : "gap-2 px-3 py-2 text-sm"} ${active ? "bg-blue-50 font-semibold text-blue-600" : "text-slate-600 hover:bg-slate-50 active:bg-slate-100"}`}
                   >

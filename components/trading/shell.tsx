@@ -8,6 +8,8 @@
 // - tablet en horizontal y ordenador (≥ 1024 px): barra lateral completa, como antes.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { moduleHref } from "@/lib/app/module-domains";
+import { useModuleHostname } from "@/lib/app/use-module-hostname";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Menu, X } from "lucide-react";
 import { AgentAvatar } from "./ui";
@@ -45,6 +47,7 @@ const hrefOf = (key: string) => (key === "mercados" ? "/trading/mercados?tab=val
  */
 export function TradingShell({ children, user }: { children: ReactNode; user: TradingProfile }) {
   const pathname = usePathname();
+  const hostname = useModuleHostname();
   const parts = pathname.split("/").filter(Boolean);
   const section = parts[1] && isTradingTab(parts[1]) ? parts[1] : "inicio";
   const child = parts.length > 2;
@@ -84,11 +87,11 @@ export function TradingShell({ children, user }: { children: ReactNode; user: Tr
           <Menu className="h-5 w-5" />
         </button>
         {TRADING_TABS.map((t) => {
-          const on = pathname === `/trading/${t.key}` || pathname.startsWith(`/trading/${t.key}/`);
+          const on = (t.key === "inicio" && pathname === "/home") || pathname === `/trading/${t.key}` || pathname.startsWith(`/trading/${t.key}/`);
           return (
             <Link
               key={t.key}
-              href={hrefOf(t.key)}
+              href={moduleHref(hrefOf(t.key), hostname)}
               title={t.label}
               aria-label={t.label}
               aria-current={on ? "page" : undefined}

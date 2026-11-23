@@ -1,18 +1,47 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { moduleHref } from "@/lib/app/module-domains";
+import {
+  internalHomePathForHost,
+  moduleHref,
+  PUBLIC_MODULE_HOME,
+} from "@/lib/app/module-domains";
 
-/** URLs canónicas por módulo, sin afectar APIs, Auth.js, assets ni previews. */
+/**
+ * Cada subdominio muestra su inicio en /home. La reescritura conserva los
+ * layouts y rutas existentes; los enlaces antiguos redirigen a la URL pública.
+ * No se alteran APIs, Auth.js, assets ni previews.
+ */
 export function proxy(request: NextRequest) {
-  const destination = moduleHref(request.nextUrl.pathname, request.headers.get("host"));
-  if (!destination.startsWith("https://")) return NextResponse.next();
+  const { pathname, search } = request.nextUrl;
+  const host = request.headers.get("host");
+  const destination = moduleHref(pathname, host);
 
-  return NextResponse.redirect(new URL(destination + request.nextUrl.search), 307);
+  if (destination.startsWith("https://")) {
+    return NextResponse.redirect(new URL(destination + search), 307);
+  }
+
+  if (destination !== pathname) {
+    const url = request.nextUrl.clone();
+    url.pathname = destination;
+    return NextResponse.redirect(url, 307);
+  }
+
+  if (pathname === PUBLIC_MODULE_HOME) {
+    const internalPath = internalHomePathForHost(host);
+    if (internalPath) {
+      const url = request.nextUrl.clone();
+      url.pathname = internalPath;
+      return NextResponse.rewrite(url);
+    }
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
   matcher: [
+    "/home",
     "/finanzas/:path*", "/mis-finanzas/:path*", "/trading/:path*",
     "/achievements/:path*", "/admin/:path*", "/analytics/:path*",
     "/assistant/:path*", "/connectors/:path*", "/courses/:path*",
