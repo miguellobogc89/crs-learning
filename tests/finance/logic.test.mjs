@@ -414,3 +414,11 @@ test("Categorías nuevas por comercio: comida a domicilio, moda y mascotas antes
   assert.equal(k("Bar Borbolla"), "restaurantes");
   assert.equal(k("AMAZON MKTPLACE"), "compras");
 });
+
+test("Reglas: un comercio con «de» en el nombre también encaja con su regla", () => {
+  const pattern = L.rulePattern({ description: "Asador De Tomares", counterparty: "Asador De Tomares" });
+  assert.equal(pattern, "asador tomares");
+  const rule = { id: "r", pattern, category: "restaurantes", kind: "gasto", extraordinary: false };
+  assert.equal(L.matchRule({ description: "Asador De Tomares", counterparty: "Asador De Tomares" }, [rule])?.id, "r");
+  assert.equal(L.matchRule({ description: "Cervecerias El Tanque", counterparty: null }, [rule]), null);
+});

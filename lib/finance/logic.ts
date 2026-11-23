@@ -314,8 +314,11 @@ export type Rule = { id: string; pattern: string; category: string; kind: Kind; 
 /** Regla del usuario que encaja (la de patrón más largo, la más concreta). */
 export function matchRule(t: { description: string; counterparty: string | null }, rules: Rule[]) {
   const text = searchText(t);
+  // El patrón de una regla es una clave de comercio (sin «de», «la», números…): se busca en el texto y también en la
+  // clave del movimiento, porque «asador tomares» no aparece tal cual en «asador de tomares».
+  const key = merchantKey(t.description, t.counterparty);
   let best: Rule | null = null;
-  for (const r of rules) if (r.pattern && text.includes(r.pattern) && (!best || r.pattern.length > best.pattern.length)) best = r;
+  for (const r of rules) if (r.pattern && (text.includes(r.pattern) || key.includes(r.pattern)) && (!best || r.pattern.length > best.pattern.length)) best = r;
   return best;
 }
 

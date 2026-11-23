@@ -307,6 +307,7 @@ export async function listTransactions(userId: string, opts: { all?: boolean } =
         ...t,
         account: acc?.name ?? "—",
         bank: acc?.bank ?? null,
+        accountLast4: acc?.last4 ?? null,
         excluded: acc?.included === false,
         note: notes.get(t.id) ?? null,
         // Tramo (ciclo o mes) al que pertenece, para agrupar en pantalla.

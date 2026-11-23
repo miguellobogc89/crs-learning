@@ -2,8 +2,8 @@
 // Detalle de un movimiento a pantalla completa (entra desde la derecha, flecha para volver). Todo se edita en su
 // sitio y se guarda solo, en este movimiento, con «Deshacer»: nombre (tocando el título), categoría, subcategoría,
 // extraordinario (interruptor fijo), nota y tipo. Si cambias algo que tiene sentido repetir (categoría, nombre,
-// subcategoría) y hay más movimientos del mismo comercio, aparece una franja discreta «¿Aplicar a los 13 de …?»:
-// si la ignoras, solo cambia este. «Extraordinario» y la nota nunca se copian. Es una capa sobre la lista, así que
+// subcategoría) en todos los movimientos del mismo comercio, abajo hay siempre un botón «Aplicar a los 13 de …»
+// (copia lo que tenga el movimiento en ese momento, también a los que lleguen); si no lo pulsas, solo cambia este. «Extraordinario» y la nota nunca se copian. Es una capa sobre la lista, así que
 // al volver la lista conserva filtros y scroll. Lo usan Movimientos (móvil y escritorio) y Plan.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Check, ChevronRight, Loader2, Pencil, Search, Sparkles } from "lucide-react";
@@ -142,7 +142,6 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   const [sheet, setSheet] = useState<null | "category" | "subcategory" | "note" | "kind">(null);
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState("");
-  const [pending, setPending] = useState<Field[]>([]);
   const [similar, setSimilar] = useState<{ count: number; label: string } | null>(null);
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -151,7 +150,7 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
 
   // Al abrir otro movimiento se empieza de cero y se consulta cuántos parecidos tiene.
   useEffect(() => {
-    setOverride({}); setSheet(null); setEditingName(false); setPending([]); setSimilar(null); setToast(null); setErr(null);
+    setOverride({}); setSheet(null); setEditingName(false); setSimilar(null); setToast(null); setErr(null);
     if (!id) return;
     let alive = true;
     fapi<{ count: number; label: string }>(`transaction/similar?id=${encodeURIComponent(id)}`).then((r) => { if (alive) setSimilar(r); }).catch(() => undefined);
@@ -188,7 +187,6 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
     try {
       await fapi("transaction", { id: item.id, category: next.category, kind: next.kind, extraordinary: next.extraordinary, alias: next.alias ?? "", subcategory: next.subcategory ?? "", note: next.note ?? "", applyToSimilar: false });
       refreshFinance();
-      if (field) setPending((p) => (p.includes(field) ? p : [...p, field]));
       setToast({ text, undo: () => void undoTo(prev, field) });
     } catch (e) {
       setOverride((o) => ({ ...o, ...prev }));
@@ -201,7 +199,6 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
     try {
       await fapi("transaction", { id: item.id, category: prev.category, kind: prev.kind, extraordinary: prev.extraordinary, alias: prev.alias ?? "", subcategory: prev.subcategory ?? "", note: prev.note ?? "", applyToSimilar: false });
       refreshFinance();
-      if (field) setPending((p) => p.filter((f) => f !== field));
     } catch (e) {
       setErr(errorText(e));
     }
@@ -210,9 +207,8 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
     setBusy(true);
     setErr(null);
     try {
-      const r = await fapi<{ count: number; undo: Undo }>("transaction/similar/apply", { id: item.id, fields: pending });
+      const r = await fapi<{ count: number; undo: Undo }>("transaction/similar/apply", { id: item.id, fields: fieldsToApply });
       refreshFinance();
-      setPending([]);
       setToast({
         text: `Aplicado a ${r.count} ${r.count === 1 ? "movimiento" : "movimientos"} y a los que lleguen`,
         undo: r.undo ? () => { setToast(null); void fapi("transaction/similar/undo", { undo: r.undo }).then(refreshFinance).catch((e) => setErr(errorText(e))); } : undefined,
@@ -231,9 +227,11 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
     if (alias !== v.alias) void save({ alias }, "alias", "Nombre guardado");
   };
 
-  const showBanner = pending.length > 0 && !!similar && similar.count > 0;
-  const changes = pending.map((f) => FIELD_LABEL[f]);
-  const changesText = changes.length > 1 ? `${changes.slice(0, -1).join(", ")} y ${changes[changes.length - 1]}` : changes[0];
+  // Qué se lleva a los parecidos: la categoría siempre; el nombre y la subcategoría solo si los tiene (vacíos no
+  // borran los de los demás).
+  const fieldsToApply: Field[] = ["category", ...(v.alias ? ["alias" as const] : []), ...(v.subcategory ? ["subcategory" as const] : [])];
+  const applyText = fieldsToApply.map((f) => FIELD_LABEL[f]);
+  const showApply = !!similar && similar.count > 0;
 
   return (
     <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -245,10 +243,17 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
               <ArrowLeft className="h-5 w-5" />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-28">
-            <p className={`text-4xl font-semibold tabular-nums tracking-tight ${item.amount > 0 ? "text-emerald-700" : v.kind === "interna" ? "text-slate-400" : "text-slate-900"}`}>
-              {item.amount > 0 ? "+" : ""}{eur(item.amount, 2)}
-            </p>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-20">
+            <div className="flex items-center gap-3">
+              <BankLogo bank={item.bank} className="h-11 w-11" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-slate-800">{item.account}</span>
+                {item.accountLast4 && <span className="block text-xs tabular-nums text-slate-400">···· {item.accountLast4}</span>}
+              </span>
+              <span className={`shrink-0 text-3xl font-semibold tabular-nums tracking-tight ${item.amount > 0 ? "text-emerald-700" : v.kind === "interna" ? "text-slate-400" : "text-slate-900"}`}>
+                {item.amount > 0 ? "+" : ""}{eur(item.amount, 2)}
+              </span>
+            </div>
             {editingName ? (
               <input
                 autoFocus
@@ -258,28 +263,16 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
                 onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingName(false); }}
                 maxLength={80}
                 aria-label="Nombre del movimiento"
-                className="mt-3 w-full rounded-xl border border-blue-300 px-2 py-1 text-2xl font-semibold text-slate-900 outline-none ring-2 ring-blue-100"
+                className="mt-5 w-full rounded-xl border border-blue-300 px-2 py-1 text-2xl font-semibold text-slate-900 outline-none ring-2 ring-blue-100"
               />
             ) : (
-              <button type="button" onClick={() => { setName(shownName); setEditingName(true); }} className="group mt-3 flex max-w-full items-center gap-2 text-left" aria-label="Cambiar el nombre">
+              <button type="button" onClick={() => { setName(shownName); setEditingName(true); }} className="group mt-5 flex max-w-full items-center gap-2 text-left" aria-label="Cambiar el nombre">
                 <span className="min-w-0 break-words text-2xl font-semibold text-slate-900">{shownName}</span>
                 <Pencil className="h-4 w-4 shrink-0 text-slate-300 group-active:text-blue-600" />
               </button>
             )}
             <SheetDescription className="mt-1 text-sm text-slate-500">{longDay(item.date)}</SheetDescription>
             {shownName !== item.description && <p className="mt-1 break-words text-xs text-slate-400">{item.description}</p>}
-
-            {showBanner && (
-              <div className="mt-4 flex items-center gap-3 rounded-2xl bg-blue-50 px-3.5 py-3">
-                <Sparkles className="h-4 w-4 shrink-0 text-blue-600" />
-                <p className="min-w-0 flex-1 text-sm text-blue-900">
-                  ¿Aplicar {changesText} a {similar.count === 1 ? "el otro movimiento" : `los ${similar.count}`} de «{similar.label}»?
-                </p>
-                <button type="button" onClick={() => void applySimilar()} disabled={busy} className="shrink-0 rounded-full bg-blue-600 px-3.5 py-1.5 text-sm font-semibold text-white active:bg-blue-700">
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aplicar"}
-                </button>
-              </div>
-            )}
 
             <ul className="mt-5 divide-y divide-slate-100 border-y border-slate-100">
               <Row onClick={() => setSheet("category")}>
@@ -315,16 +308,22 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
                 <span className="w-9 shrink-0 text-center text-xs text-slate-400">Tipo</span>
                 <span className="min-w-0 flex-1 text-[15px] text-slate-800">{KIND_LABEL[v.kind]}</span>
               </Row>
-              <Row chevron={false}>
-                <BankLogo bank={item.bank} />
-                <span className="min-w-0 flex-1 truncate text-[15px] text-slate-600">{item.account}</span>
-              </Row>
             </ul>
             {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
           </div>
 
+          {showApply && (
+            <div className="shrink-0 border-t border-slate-100 bg-white px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+              <button type="button" onClick={() => void applySimilar()} disabled={busy} className="flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-blue-600 px-4 text-sm font-semibold text-blue-700 active:bg-blue-50 disabled:opacity-60">
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 shrink-0" />}
+                <span className="truncate">Aplicar a {similar.count === 1 ? "el otro" : `los ${similar.count}`} de «{similar.label}»</span>
+              </button>
+              <p className="mt-1.5 text-center text-xs text-slate-400">Copia {applyText.length > 1 ? `${applyText.slice(0, -1).join(", ")} y ${applyText[applyText.length - 1]}` : applyText[0]}, también a los que lleguen.</p>
+            </div>
+          )}
+
           {toast && (
-            <div role="status" className="absolute inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] flex items-center gap-3 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-lg">
+            <div role="status" className={`absolute inset-x-4 ${showApply ? "bottom-[calc(7rem+env(safe-area-inset-bottom))]" : "bottom-[max(1rem,env(safe-area-inset-bottom))]"} flex items-center gap-3 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-lg`}>
               <span className="min-w-0 flex-1">{toast.text}</span>
               {toast.undo && <button type="button" onClick={toast.undo} className="shrink-0 font-semibold text-blue-300">Deshacer</button>}
             </div>
