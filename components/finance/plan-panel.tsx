@@ -238,6 +238,7 @@ export function PlanPanel() {
   }
 
   const cur = (k: string) => data.totals.now[k] ?? 0;
+  const extra = (k: string) => data.totals.extrasNow?.[k] ?? 0;
   const prv = (k: string) => (data.previous ? data.totals.before[k] ?? 0 : null);
   const sum = (keys: string[], f: (k: string) => number | null) => {
     const vals = keys.map(f);
@@ -248,7 +249,7 @@ export function PlanPanel() {
   // «Sin grupo»: categorías con gasto que no están en ningún grupo (para que nada se escape).
   const rows = [
     ...groups.map((g) => ({ ...g, editable: true })),
-    { id: "sin", name: "Sin grupo", categories: free.filter((k) => cur(k) > 0 || (prv(k) ?? 0) > 0), goal: null, editable: false },
+    { id: "sin", name: "Sin grupo", categories: free.filter((k) => cur(k) > 0 || (prv(k) ?? 0) > 0 || extra(k) > 0), goal: null, editable: false },
   ];
 
   const save = async (path: string, payload: unknown) => {
@@ -328,6 +329,7 @@ export function PlanPanel() {
                     {eur(now, 2)}{g.goal ? <span className="text-sm font-normal text-slate-400"> / {eur(g.goal, 2)}</span> : null}
                   </span>
                   <Diff current={now} previous={before} />
+                  {(() => { const x = round2(g.categories.reduce((t, k) => t + extra(k), 0)); return x > 0 ? <span className="amount block text-[11px] text-slate-500">+{eur(x, 2)} extraordinarios</span> : null; })()}
                 </span>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
               </button>
@@ -341,6 +343,7 @@ export function PlanPanel() {
                           <span className="shrink-0 text-right">
                             <span className="block text-sm tabular-nums text-slate-900">{eur(cur(k), 2)}</span>
                             <Diff current={cur(k)} previous={prv(k)} />
+                            {extra(k) > 0 && <span className="amount block text-[11px] text-slate-500">+{eur(extra(k), 2)} extraordinarios</span>}
                           </span>
                           <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
                         </Link>

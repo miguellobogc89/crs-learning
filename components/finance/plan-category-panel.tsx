@@ -16,7 +16,7 @@ import { MovementDetailSheet } from "./movement-detail";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Cycle = Plan["cycles"][number];
-type Section = Cycle & { rows: Item[]; total: number };
+type Section = Cycle & { rows: Item[]; total: number; extra: number };
 
 const scroller = () => document.querySelector<HTMLElement>("main");
 
@@ -37,7 +37,9 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
       && t.category === categoryKey);
     return plan.data.cycles.map((c) => {
       const mine = rows.filter((t) => t.date >= c.start && t.date <= c.end).sort((a, b) => b.date.localeCompare(a.date));
-      return { ...c, rows: mine, total: Math.round(mine.reduce((s, t) => s - t.amount, 0) * 100) / 100 };
+      // El total no cuenta los extraordinarios (igual que Mi plan e Inicio); van aparte.
+      const sum = (xs: typeof mine) => Math.round(xs.reduce((s, t) => s - t.amount, 0) * 100) / 100;
+      return { ...c, rows: mine, total: sum(mine.filter((t) => !t.extraordinary)), extra: sum(mine.filter((t) => t.extraordinary)) };
     }).filter((s, i) => i === 0 || s.rows.length > 0);
   }, [list.data, plan.data, categoryKey]);
 
@@ -69,7 +71,7 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
         {active && (
           <div className="shrink-0 text-right">
             <p className="text-lg font-semibold tabular-nums text-slate-900">{eur(active.total, 2)}</p>
-            <p className="text-xs text-slate-500">{active.label}</p>
+            <p className="text-xs text-slate-500">{active.label}{active.extra > 0 ? ` · +${eur(active.extra, 2)} extraordinarios` : ""}</p>
           </div>
         )}
       </div>
@@ -82,7 +84,7 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
             {i > 0 && (
               <p className="flex justify-between bg-slate-50 px-1 py-1.5 text-xs text-slate-500">
                 <span>{s.label}</span>
-                <span className="tabular-nums">{eur(s.total, 2)}</span>
+                <span className="tabular-nums">{eur(s.total, 2)}{s.extra > 0 ? ` (+${eur(s.extra, 2)} extra)` : ""}</span>
               </p>
             )}
             {s.rows.length === 0

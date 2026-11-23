@@ -541,10 +541,17 @@ export async function planView(userId: string) {
   const prevCycle = cycleFor(ctx.today, ctx.startDay, -1);
   const prevTo = addDays(prevCycle.start, day - 1) < prevCycle.end ? addDays(prevCycle.start, day - 1) : prevCycle.end;
   const hasPrevious = prevCycle.start >= oldest;
+  // Los extraordinarios (lo que no depende de ti: el IBI, una avería, una escapada que quieres ver aparte) no cuentan
+  // para el objetivo, la media ni la comparación: se dan aparte (`extrasNow`) en todas las pantallas.
   const now: Record<string, number> = {};
   const before: Record<string, number> = {};
+  const extrasNow: Record<string, number> = {};
   for (const t of ctx.txs) {
     if (!isPackageCharge(t)) continue;
+    if (t.extraordinary) {
+      if (t.date >= current.start && t.date <= current.end) extrasNow[t.category] = round2((extrasNow[t.category] ?? 0) - t.amount);
+      continue;
+    }
     if (t.date >= current.start && t.date <= current.end) now[t.category] = round2((now[t.category] ?? 0) - t.amount);
     if (hasPrevious && t.date >= prevCycle.start && t.date <= prevTo) before[t.category] = round2((before[t.category] ?? 0) - t.amount);
   }
@@ -559,7 +566,7 @@ export async function planView(userId: string) {
     const atDay: Record<string, number> = {};
     const subAtDay: Record<string, number> = {};
     for (const t of ctx.txs) {
-      if (!isPackageCharge(t) || t.date < c.start || t.date > c.end) continue;
+      if (!isPackageCharge(t) || t.extraordinary || t.date < c.start || t.date > c.end) continue;
       full[t.category] = round2((full[t.category] ?? 0) - t.amount);
       if (t.date > cut) continue;
       atDay[t.category] = round2((atDay[t.category] ?? 0) - t.amount);
@@ -599,6 +606,6 @@ export async function planView(userId: string) {
     /** Ciclos del último par de años (el actual primero), para el historial de una categoría. */
     cycles: Array.from({ length: 24 }, (_, i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c, i) => i === 0 || c.end >= oldest),
     groups: rows.map((g) => ({ id: g.id, name: g.name, categories: g.categories, goal: g.goal === null ? null : Number(g.goal) })),
-    totals: { now, before },
+    totals: { now, before, extrasNow },
   };
 }

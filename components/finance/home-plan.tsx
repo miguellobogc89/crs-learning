@@ -24,6 +24,7 @@ type Plan = {
   daily?: { cur: Record<string, number[]>; prev: Record<string, number[]> };
   extras?: { date: string; label: string; amount: number; category: string }[];
   budget?: { income: number | null; savingsGoal: number | null; limit: number | null };
+  totals?: { extrasNow?: Record<string, number> };
 };
 const OPEN_KEY = "crs-finance:home-open";
 const SCROLL_KEY = "crs-finance:home-scroll";
@@ -152,6 +153,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                         <span className="amount block text-lg font-semibold tabular-nums tracking-tight text-slate-900">
                           {eur(s.now, 2)}{s.goal !== null && <span className="text-sm font-normal text-slate-500"> de {eur(s.goal, 0)}</span>}
                         </span>
+                        {(() => { const x = g.categories.reduce((t, c) => t + (plan.totals?.extrasNow?.[c] ?? 0), 0); return x > 0 ? <span className="amount block text-xs text-slate-500">+{eur(x, 2)} extraordinarios aparte</span> : null; })()}
                       </span>
                       <ChevronRight className="h-5 w-5 shrink-0 text-slate-400" />
                     </button>
