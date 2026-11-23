@@ -5,7 +5,9 @@
 // ciclo anterior, cambian. Debajo de la cabecera, la evolución de los últimos 6 meses en una línea suave.
 // Al tocar un movimiento se edita con la misma ventana que en Movimientos
 // (movement-detail.tsx); si cambia de categoría, sale de la lista y, al volver, la cifra del grupo ya está al día.
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { createPortal } from "react-dom";
 import type { planView } from "@/lib/finance/service";
 import { categoryLabel } from "@/lib/finance/categories";
@@ -13,7 +15,7 @@ import { eur } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { useFinance } from "./api";
-import { MovementRowButton, type Item, type List } from "./movement-edit";
+import { MovementRowButton, label, type Item, type List } from "./movement-edit";
 import { MovementDetailSheet } from "./movement-detail";
 import { TrendChart, type TrendPoint } from "./trend-chart";
 
@@ -49,6 +51,11 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
   return <SpendSheet title={categoryLabel(categoryKey)} categories={[categoryKey]} />;
 }
 
+/** Hoja de los extraordinarios: lo que marcaste como extraordinario, de todas las categorías. */
+export function ExtrasPanel() {
+  return <SpendSheet title="Extraordinarios" categories={[]} extrasOnly />;
+}
+
 /** Hoja de un grupo de Mi plan: todos sus movimientos, con pills para ver solo una categoría. */
 export function GroupPanel({ groupId }: { groupId: string }) {
   const plan = useFinance<Plan>("plan");
@@ -56,10 +63,10 @@ export function GroupPanel({ groupId }: { groupId: string }) {
   if (!plan.data) return <SkeletonList rows={6} />;
   const g = plan.data.groups.find((x) => x.id === groupId);
   if (!g) return <p className="py-10 text-center text-sm text-slate-500">Este grupo ya no existe.</p>;
-  return <SpendSheet title={g.name} categories={g.categories} />;
+  return <SpendSheet title={g.name} categories={g.categories} groupId={g.id} />;
 }
 
-function SpendSheet({ title, categories }: { title: string; categories: string[] }) {
+function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title: string; categories: string[]; groupId?: string; extrasOnly?: boolean }) {
   const list = useFinance<List>("transactions?all=1");
   // Pill elegida (una categoría del grupo) o null = todas.
   const [only, setOnly] = useState<string | null>(null);
@@ -69,21 +76,25 @@ function SpendSheet({ title, categories }: { title: string; categories: string[]
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [visible, setVisible] = useState<string | null>(null);
 
+  // Movimientos de la hoja: gastos de cuentas incluidas de sus categorías (o, en la de extraordinarios, todos los
+  // marcados como extraordinarios).
+  const pick = (t: Item) => !t.excluded && t.kind === "gasto" && t.amount < 0 && (extrasOnly ? t.extraordinary : cats.includes(t.category));
+
   // El detalle empieza arriba del todo (el contenedor de scroll es el mismo que el de la lista de grupos).
   useEffect(() => { const el = scroller(); if (el) el.scrollTop = 0; }, []);
 
   // Cargos de esta categoría (gastos de cuentas incluidas), agrupados por ciclo, el más reciente primero.
   const sections = useMemo<Section[]>(() => {
     if (!list.data || !plan.data) return [];
-    const rows = list.data.items.filter((t) => !t.excluded && t.kind === "gasto" && t.amount < 0
-      && cats.includes(t.category));
+    const rows = list.data.items.filter(pick);
     return plan.data.cycles.map((c) => {
       // Cada gasto cuenta en su fecha imputada si se la cambiaste («Cambiar fecha»), no en la del cargo.
       const when = (t: (typeof rows)[number]) => t.imputedDate ?? t.date;
       const mine = rows.filter((t) => when(t) >= c.start && when(t) <= c.end).sort((a, b) => when(b).localeCompare(when(a)));
       // El total no cuenta los extraordinarios (igual que Mi plan e Inicio); van aparte.
       const sum = (xs: typeof mine) => Math.round(xs.reduce((s, t) => s - t.amount, 0) * 100) / 100;
-      return { ...c, rows: mine, total: sum(mine.filter((t) => !t.extraordinary)), extra: sum(mine.filter((t) => t.extraordinary)) };
+      return extrasOnly ? { ...c, rows: mine, total: sum(mine), extra: 0 }
+        : { ...c, rows: mine, total: sum(mine.filter((t) => !t.extraordinary)), extra: sum(mine.filter((t) => t.extraordinary)) };
     }).filter((s, i) => i === 0 || s.rows.length > 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list.data, plan.data, catsKey]);
@@ -91,7 +102,7 @@ function SpendSheet({ title, categories }: { title: string; categories: string[]
   // Evolución de los últimos 6 meses (sin extraordinarios), del más antiguo al actual (en curso).
   const trend = useMemo<TrendPoint[]>(() => {
     if (!list.data || !plan.data) return [];
-    const rows = list.data.items.filter((t) => !t.excluded && t.kind === "gasto" && t.amount < 0 && !t.extraordinary && cats.includes(t.category));
+    const rows = list.data.items.filter((t) => pick(t) && (extrasOnly || !t.extraordinary));
     const when = (t: (typeof rows)[number]) => t.imputedDate ?? t.date;
     const month = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("es-ES", { month: "short", timeZone: "UTC" }).replace(".", "");
     return plan.data.cycles.slice(0, 6).map((c, i) => ({
@@ -130,6 +141,21 @@ function SpendSheet({ title, categories }: { title: string; categories: string[]
     return () => el.removeEventListener("scroll", onScroll);
   }, [sections]);
 
+  // Cabecera de la hoja: la referencia (tu objetivo o lo que sueles gastar), lo que más pesa este mes y el acceso
+  // a Mi plan para cambiarlo.
+  const ownerGroup = extrasOnly || !plan.data ? null
+    : plan.data.groups.find((g) => (groupId ? g.id === groupId : g.categories.includes(categories[0] ?? "")));
+  const goal = !only && ownerGroup && (groupId || ownerGroup.categories.length === 1) ? ownerGroup.goal : null;
+  const closedTrend = trend.filter((p) => !p.current).slice(-3);
+  const usual = closedTrend.length ? Math.round(closedTrend.reduce((t, p) => t + p.value, 0) / closedTrend.length) : null;
+  const top = useMemo(() => {
+    const cur = sections[0]?.rows.filter((t) => extrasOnly || !t.extraordinary) ?? [];
+    const by = new Map<string, { n: number; amount: number }>();
+    for (const t of cur) { const k = label(t); const x = by.get(k) ?? { n: 0, amount: 0 }; by.set(k, { n: x.n + 1, amount: x.amount - t.amount }); }
+    return [...by.entries()].sort((a, b) => b[1].amount - a[1].amount).slice(0, 2);
+  }, [sections, extrasOnly]);
+  const openInPlan = () => { if (ownerGroup) { try { window.sessionStorage.setItem("crs-finance:plan-open", ownerGroup.id); } catch { /* ignorar */ } } };
+
   const error = list.error ?? plan.error;
   const active = sections.find((s) => s.start === visible) ?? sections[0];
 
@@ -147,6 +173,29 @@ function SpendSheet({ title, categories }: { title: string; categories: string[]
             </button>
           ))}
         </div>
+      )}
+
+      {list.data && plan.data && (
+        <section className="space-y-1.5 px-1 pt-3 text-sm" aria-label="Resumen">
+          <p className="amount text-slate-700">
+            {goal !== null ? <>Tu objetivo: <b className="font-semibold text-slate-900">{eur(goal, 0)} al mes</b></>
+              : usual !== null ? <>Sueles gastar <b className="font-semibold text-slate-900">~{eur(usual, 0)} al mes</b></>
+              : "Aún no hay meses completos para comparar."}
+            {goal !== null && usual !== null && <span className="text-slate-500"> · sueles ~{eur(usual, 0)}</span>}
+          </p>
+          {top.length > 0 && (
+            <p className="amount text-slate-700">
+              Lo que más pesa este mes: {top.map(([k, v], i) => (
+                <span key={k}>{i > 0 && ", "}<b className="font-semibold text-slate-900">{k}</b> ({v.n} {v.n === 1 ? "vez" : "veces"}, {eur(v.amount, 0)})</span>
+              ))}
+            </p>
+          )}
+          {!extrasOnly && plan.data && (
+            <Link href="/finanzas/plan" onClick={openInPlan} className="inline-flex items-center gap-0.5 text-sm font-medium text-blue-700 hover:underline">
+              {ownerGroup ? (ownerGroup.goal !== null ? "Cambiar el objetivo en Mi plan" : "Ponerle objetivo en Mi plan") : "Meterla en un grupo en Mi plan"}<ChevronRight className="h-4 w-4" />
+            </Link>
+          )}
+        </section>
       )}
 
       {list.data && plan.data && (

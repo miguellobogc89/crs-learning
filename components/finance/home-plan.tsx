@@ -163,7 +163,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                       ))}
                       {!cats.length && <li className="py-2.5 text-sm text-slate-500">Sin gastos este mes.</li>}
                     </ul>
-                    {(() => { const x = g.categories.reduce((t, c) => t + (plan.totals?.extrasNow?.[c] ?? 0), 0); return x > 0 ? <p className="amount pb-1 text-xs text-slate-500">Además, {eur(x, 2)} en extraordinarios, aparte.</p> : null; })()}
+                    {(() => { const x = g.categories.reduce((t, c) => t + (plan.totals?.extrasNow?.[c] ?? 0), 0); return x > 0 ? <Link href="/finanzas/extraordinarios" className="amount block pb-1 text-xs text-slate-500 hover:text-slate-700">Además, {eur(x, 2)} en extraordinarios, aparte. <span className="font-medium text-blue-700">Verlos ›</span></Link> : null; })()}
                     <button type="button" onClick={() => toSheet(g.id)} className="mt-1 inline-flex items-center gap-0.5 py-1.5 text-sm font-medium text-blue-700 hover:underline">
                       Ver todos los movimientos<ChevronRight className="h-4 w-4" />
                     </button>
@@ -255,7 +255,9 @@ function SpendChart({ plan }: { plan: Plan }) {
         {goalLine && <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t-[1.5px] border-dashed border-emerald-500" />{group ? "Tu objetivo" : "Tu límite para ahorrar"}</span>}
       </div>
       {extrasTotal > 0 && (
-        <p className="amount mt-2 break-words text-xs text-slate-500">Además, {eur(extrasTotal, 0)} en extraordinarios ({extras.slice(0, 2).map((e) => (e.label.length > 22 ? `${e.label.slice(0, 22).trim()}…` : e.label)).join(", ")}{extras.length > 2 ? "…" : ""}), aparte de la línea.</p>
+        <Link href="/finanzas/extraordinarios" className="amount mt-2 block break-words text-xs text-slate-500 hover:text-slate-700">
+          Además, {eur(extrasTotal, 0)} en extraordinarios ({extras.slice(0, 2).map((e) => (e.label.length > 22 ? `${e.label.slice(0, 22).trim()}…` : e.label)).join(", ")}{extras.length > 2 ? "…" : ""}), aparte de la línea. <span className="font-medium text-blue-700">Verlos ›</span>
+        </Link>
       )}
       {!group && goal === null && (
         <Link href="/finanzas/ajustes" className="mt-2 inline-block text-xs font-medium text-blue-700 hover:underline">¿Cuánto quieres ahorrar al mes?</Link>

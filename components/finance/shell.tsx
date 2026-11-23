@@ -319,11 +319,11 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
   const section = parts[1] && isFinanceTab(parts[1]) ? parts[1] : "inicio";
   const tabDef = tabDefOf(section);
   // Pantalla de detalle (p. ej. /finanzas/categoria/<clave>): flecha para volver.
-  const isDetail = parts.length > 2;
+  const isDetail = parts.length > 2 || parts[1] === "extraordinarios";
   // Hoja (una categoría o un grupo): el nombre y, a la derecha, el importe los pone la propia hoja en la cabecera
   // («finance-header-title» / «finance-header-right»). Para una categoría el nombre ya se sabe por la dirección.
-  const isSheet = (parts[1] === "categoria" || parts[1] === "grupo") && !!parts[2];
-  const sheetTitle = isSheet ? (parts[1] === "categoria" ? categoryLabel(decodeURIComponent(parts[2])) : "") : null;
+  const isSheet = ((parts[1] === "categoria" || parts[1] === "grupo") && !!parts[2]) || parts[1] === "extraordinarios";
+  const sheetTitle = isSheet ? (parts[1] === "categoria" && parts[2] ? categoryLabel(decodeURIComponent(parts[2])) : "") : null;
   const router = useRouter();
   const goBack = () => (window.history.length > 1 ? router.back() : router.push(`/finanzas/${section}`));
   const fitted = isFittedTab(section);
