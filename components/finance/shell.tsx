@@ -7,6 +7,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ModuleLogo } from "@/components/ui/module-logo";
+import { moduleHref } from "@/lib/app/module-domains";
+import { useModuleHostname } from "@/lib/app/use-module-hostname";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ChartCandlestick, ChevronRight, Gauge, Landmark, Loader2, LogOut, Menu, Plug, RefreshCw, Settings, UserCircle, X } from "lucide-react";
@@ -145,6 +147,7 @@ function MoneyPanel({ syncing, msg, onSync }: { syncing: boolean; msg: string | 
 
 function UserMenu({ user, inDrawer = false }: { user: FinanceProfile; inDrawer?: boolean }) {
   const name = user.name ?? "Usuario";
+  const hostname = useModuleHostname();
   return (
     <div className="shrink-0 border-t border-slate-200/60 px-3 py-2">
       <DropdownMenu modal={false}>
@@ -164,8 +167,8 @@ function UserMenu({ user, inDrawer = false }: { user: FinanceProfile; inDrawer?:
         <DropdownMenuContent side={inDrawer ? "top" : "right"} align={inDrawer ? "start" : "end"} sideOffset={8} className="pointer-events-auto z-[60] w-52">
           <DropdownMenuItem asChild><Link href="/finanzas/ajustes"><Settings /> Preferencias</Link></DropdownMenuItem>
           <DropdownMenuItem asChild><Link href="/consumo-ia"><Gauge /> Consumo de IA</Link></DropdownMenuItem>
-          <DropdownMenuItem asChild><Link href="/trading/inicio"><ChartCandlestick /> Ir a Trading</Link></DropdownMenuItem>
-          {user.canAccessBusiness && <DropdownMenuItem asChild><Link href="/dashboard"><ArrowLeft /> Ir a Mi negocio</Link></DropdownMenuItem>}
+          <DropdownMenuItem asChild><Link href={moduleHref("/trading/inicio", hostname)}><ChartCandlestick /> Ir a Trading</Link></DropdownMenuItem>
+          {user.canAccessBusiness && <DropdownMenuItem asChild><Link href={moduleHref("/dashboard", hostname)}><ArrowLeft /> Ir a Mi negocio</Link></DropdownMenuItem>}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => void logout()} variant="destructive"><LogOut /> Cerrar sesión</DropdownMenuItem>
         </DropdownMenuContent>
@@ -247,6 +250,7 @@ function BottomTabs() {
 
 /** Menú completo del móvil, como el de Trading: tu nombre arriba y, por grupos, el resto de pantallas. */
 function MobileMenu({ user, onClose, sync }: { user: FinanceProfile; onClose: () => void; sync: ReturnType<typeof useAutoSync> }) {
+  const hostname = useModuleHostname();
   // Como el menú de Trading: por grupos, separando cuentas de integraciones.
   const groups: { title: string; rows: { label: string; href: string; icon: typeof Plug }[] }[] = [
     {
@@ -285,7 +289,7 @@ function MobileMenu({ user, onClose, sync }: { user: FinanceProfile; onClose: ()
             <ul>
               {g.rows.map((r) => (
                 <li key={r.href}>
-                  <Link href={r.href} onClick={onClose} className="flex items-center gap-4 px-5 py-3.5 active:bg-slate-50">
+                  <Link href={moduleHref(r.href, hostname)} onClick={onClose} className="flex items-center gap-4 px-5 py-3.5 active:bg-slate-50">
                     <r.icon className="h-6 w-6 shrink-0 text-blue-600" />
                     <span className="flex-1 text-[17px] text-slate-900">{r.label}</span>
                     <ChevronRight className="h-5 w-5 text-slate-400" />
