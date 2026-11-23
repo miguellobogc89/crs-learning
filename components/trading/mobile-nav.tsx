@@ -25,17 +25,18 @@ const TABS = [
 /** Barra inferior: cuatro iconos, sin texto. Respeta la zona de la rayita del iPhone. */
 export function BottomTabs() {
   const pathname = usePathname();
+  const hostname = useModuleHostname();
   return (
     <nav
       aria-label="Secciones"
       className="fixed inset-x-0 bottom-0 z-40 flex border-t border-slate-200/70 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >
       {TABS.map((t) => {
-        const on = pathname === t.href || pathname.startsWith(`${t.href}/`);
+        const on = (t.href === "/trading/inicio" && pathname === "/home") || pathname === t.href || pathname.startsWith(`${t.href}/`);
         return (
           <Link
             key={t.href}
-            href={t.href}
+            href={moduleHref(t.href, hostname)}
             aria-label={t.label}
             aria-current={on ? "page" : undefined}
             className={`flex h-14 flex-1 items-center justify-center ${on ? "text-blue-600" : "text-slate-400 active:text-slate-600"}`}
