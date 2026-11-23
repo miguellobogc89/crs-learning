@@ -2,6 +2,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ModuleLogo } from "@/components/ui/module-logo";
+import { moduleHref } from "@/lib/app/module-domains";
+import { useModuleHostname } from "@/lib/app/use-module-hostname";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Gauge, Link2, Loader2, LogOut, PiggyBank, Settings, UserCircle } from "lucide-react";
@@ -116,6 +118,7 @@ export type TradingProfile = {
 
 function TradingUserMenu({ user, inDrawer = false }: { user: TradingProfile; inDrawer?: boolean }) {
   const name = user.name ?? "Usuario";
+  const hostname = useModuleHostname();
   return (
     <div className="shrink-0 border-t border-slate-200/60 px-3 py-2">
       <DropdownMenu modal={false}>
@@ -145,17 +148,17 @@ function TradingUserMenu({ user, inDrawer = false }: { user: TradingProfile; inD
         </DropdownMenuTrigger>
         <DropdownMenuContent side={inDrawer ? "top" : "right"} align={inDrawer ? "start" : "end"} sideOffset={8} className="pointer-events-auto z-[60] w-48">
           <DropdownMenuItem asChild>
-            <Link href={user.canAccessBusiness ? "/settings" : "/trading/integraciones"}><Settings /> Configuración</Link>
+            <Link href={moduleHref(user.canAccessBusiness ? "/settings" : "/trading/integraciones", hostname)}><Settings /> Configuración</Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href="/consumo-ia"><Gauge /> Consumo de IA</Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
-            <Link href="/finanzas/inicio"><PiggyBank /> Ir a Mis finanzas</Link>
+            <Link href={moduleHref("/finanzas/inicio", hostname)}><PiggyBank /> Ir a Mis finanzas</Link>
           </DropdownMenuItem>
           {user.canAccessBusiness && (
             <DropdownMenuItem asChild>
-              <Link href="/dashboard"><ArrowLeft /> Ir a Mi negocio</Link>
+              <Link href={moduleHref("/dashboard", hostname)}><ArrowLeft /> Ir a Mi negocio</Link>
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />

@@ -10,6 +10,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ArrowLeft, Bell, Bot, ChevronRight, Flame, Gift, Home, LifeBuoy, LogOut, PiggyBank, Plug, RefreshCw, UserCircle, UserCog, Wallet, X } from "lucide-react";
 import { logout } from "@/app/actions/auth";
+import { moduleHref } from "@/lib/app/module-domains";
+import { useModuleHostname } from "@/lib/app/use-module-hostname";
 import { refreshTrading } from "./navigation";
 import type { TradingProfile } from "./navigation";
 
@@ -49,6 +51,7 @@ export function BottomTabs() {
 type Item = { label: string; icon: typeof Plug; href?: string; soon?: boolean };
 
 function MenuRow({ item, onNavigate }: { item: Item; onNavigate: () => void }) {
+  const hostname = useModuleHostname();
   const body = (
     <>
       <item.icon className={`h-6 w-6 shrink-0 ${item.soon ? "text-slate-300" : "text-blue-600"}`} />
@@ -59,7 +62,7 @@ function MenuRow({ item, onNavigate }: { item: Item; onNavigate: () => void }) {
   if (item.soon || !item.href) return <li className="flex items-center gap-4 px-5 py-3.5" aria-disabled="true">{body}</li>;
   return (
     <li>
-      <Link href={item.href} onClick={onNavigate} className="flex items-center gap-4 px-5 py-3.5 active:bg-slate-50">
+      <Link href={moduleHref(item.href, hostname)} onClick={onNavigate} className="flex items-center gap-4 px-5 py-3.5 active:bg-slate-50">
         {body}
       </Link>
     </li>

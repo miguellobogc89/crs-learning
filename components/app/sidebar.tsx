@@ -7,6 +7,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SheetClose } from "@/components/ui/sheet";
 import { ModuleLogo } from "@/components/ui/module-logo";
+import { moduleHref } from "@/lib/app/module-domains";
+import { useModuleHostname } from "@/lib/app/use-module-hostname";
 
 import {
   BarChart3,
@@ -112,6 +114,7 @@ export function AppSidebar({
   isAdmin = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
+  const hostname = useModuleHostname();
 
   return (
     <aside
@@ -193,7 +196,7 @@ export function AppSidebar({
 
             const link = (
               <Link
-                href={item.href}
+                href={moduleHref(item.href, hostname)}
                 aria-label={item.label}
                 className={cn(
                   "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-surface hover:text-foreground",
