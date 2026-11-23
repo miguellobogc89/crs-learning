@@ -35,19 +35,40 @@ export function moduleOfPath(path: string): AppModule | null {
   return null;
 }
 
-export function moduleHref(path: string, host: string | null | undefined): string {
-  const module = moduleOfPath(path);
-  if (!module || !isCrussaderHost(host)) return path;
-  const targetHost = moduleHosts[module];
-  if (normalizedHostname(host) === targetHost) return path;
-  return `https://${targetHost}${path}`;
-}
+/** Ruta pública de inicio única para los tres subdominios. */
+export const PUBLIC_MODULE_HOME = "/home";
 
-export function moduleHomeForHost(host: string | null | undefined): string | null {
+/** Conservamos las rutas internas existentes y sus layouts con una rewrite. */
+export function internalHomePathForHost(host: string | null | undefined): string | null {
   switch (normalizedHostname(host)) {
     case moduleHosts.business: return "/dashboard";
     case moduleHosts.finance: return "/finanzas/inicio";
     case moduleHosts.trading: return "/trading/inicio";
     default: return null;
   }
+}
+
+function isModuleHomePath(module: AppModule, path: string): boolean {
+  switch (module) {
+    case "business": return path === "/dashboard";
+    case "finance": return path === "/finanzas" || path === "/finanzas/inicio";
+    case "trading": return path === "/trading" || path === "/trading/inicio";
+  }
+}
+
+/** Los enlaces de inicio usan /home en producción; las rutas locales se mantienen. */
+export function moduleHref(path: string, host: string | null | undefined): string {
+  const module = moduleOfPath(path);
+  if (!module || !isCrussaderHost(host)) return path;
+  const pathname = path.split("?")[0];
+  const canonicalPath = isModuleHomePath(module, pathname)
+    ? `${PUBLIC_MODULE_HOME}${path.slice(pathname.length)}`
+    : path;
+  const targetHost = moduleHosts[module];
+  if (normalizedHostname(host) === targetHost) return canonicalPath;
+  return `https://${targetHost}${canonicalPath}`;
+}
+
+export function moduleHomeForHost(host: string | null | undefined): string | null {
+  return internalHomePathForHost(host) ? PUBLIC_MODULE_HOME : null;
 }

@@ -160,7 +160,7 @@ export function AppSidebar({
           {navItems.map((item) => {
             const active =
               !item.disabled &&
-              pathname.startsWith(item.href);
+              (pathname.startsWith(item.href) || (item.href === "/dashboard" && pathname === "/home"));
 
             if (item.disabled) {
               return (
