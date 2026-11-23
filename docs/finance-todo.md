@@ -98,3 +98,9 @@ Sustituye a los paquetes y al laboratorio. Plan = lista de **grupos** (conjuntos
 - Al tocar una categoría: pantalla de detalle que entra desde la derecha (`/finanzas/laboratorio/categoria/<clave>`), con flecha para volver, solo sus movimientos del ciclo; se editan con la misma ventana que Movimientos (`components/finance/movement-edit.tsx`, compartido).
 - Moda, Comida a domicilio y Mascotas simuladas por comercio (`lab-categories.ts`) hasta crearlas como categorías reales.
 - Pendiente: llamar «Grupos» a las partidas y «Añadir grupo», animaciones de desplegar, objetivos por grupo, cuenta obligatoria antes de Plan.
+
+## Pendiente (23/11/2026, revisión de las hojas)
+- Quitar la cabecera de resumen de las hojas de grupo/categoría/extraordinarios (referencia, «lo que más pesa»,
+  enlace a Mi plan): no gusta. Repensar después.
+- Marcar los extraordinarios en el icono de la fila del movimiento (no solo en el subtítulo, que si es largo no
+  se ve).
