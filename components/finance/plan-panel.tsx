@@ -275,9 +275,10 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
   const saving = savingOverride === undefined ? data.budget.savingsGoal : savingOverride;
   const rows = groups.map((g) => {
     const avg = avgOf(g.categories);
-    const base = g.goal ?? avg;
+    // Inamovible (candado): cuenta con lo que sueles gastar; ajustable: con su objetivo (o su media si no tiene).
+    const base = g.fixed ? avg || g.goal || 0 : g.goal ?? avg;
     const spent = sumOf(g.categories, cur);
-    return { g, avg, base, spent, left: round2(base - spent), estimate: g.goal === null, color: categoryHex(g.categories[0] ?? "otros_gastos") };
+    return { g, avg, base, spent, left: round2(base - spent), estimate: g.fixed || g.goal === null, color: categoryHex(g.categories[0] ?? "otros_gastos") };
   });
   const looseAvg = avgOf(looseKeys);
   const planned = rows.reduce((t, r) => t + r.base, 0) + looseAvg + (saving ?? 0);
@@ -308,7 +309,7 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
     setCreating(false);
     const r = await save("plan/group", { name, goal });
     if (!r?.id) return;
-    const g: Group = { id: r.id, name, categories: [], goal };
+    const g: Group = { id: r.id, name, categories: [], goal, fixed: false };
     setGroups((gs) => [...gs, g]);
     setOpen(g.id);
     setAdding(g);
@@ -384,7 +385,9 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
     const looseSpent = sumOf(looseKeys, cur);
     // «Otros gastos» cuenta con su objetivo si se lo has puesto (calibrando o aquí); si no, con su media.
     const othersGoal = othersOverride === undefined ? data.budget.othersGoal : othersOverride;
-    const looseBase = othersGoal ?? looseAvg;
+    // Imprevistos: el colchón que pones tú (sin media ni historial); sin él, cuenta 0.
+    const looseBase = othersGoal ?? 0;
+    const lastLoose = round2(looseKeys.reduce((t, k) => t + (data.history?.[1]?.full[k] ?? 0), 0));
     const looseLeft = round2(looseBase - looseSpent);
     const active = rows.filter((r) => r.spent > 0 || sumOf(r.g.categories, extra) > 0).sort((a, b) => a.left - b.left);
     const idle = rows.filter((r) => !active.includes(r));
@@ -396,7 +399,10 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
     const plannedLab = round2(planned - looseAvg + looseBase);
     const marginLab = incomeLab === null ? null : round2(incomeLab - plannedLab);
     const totalLab = Math.max(incomeLab ?? 0, plannedLab, 1);
-    const segsLab = segs.map((x) => (x.key === "sin" ? { ...x, amount: looseBase, estimate: othersGoal === null, label: "Otros gastos" } : x));
+    const segsLab = [
+      ...segs.filter((x) => x.key !== "sin"),
+      ...(looseBase > 0 ? [{ key: "sin", label: "Imprevistos", amount: looseBase, color: "#94a3b8", estimate: false }] : []),
+    ];
     const pctLab = (v: number) => `${(Math.max(0, v) / totalLab) * 100}%`;
     const planText = incomeLab === null ? verdict.text
       : marginLab !== null && marginLab >= 0 ? `Sobre el papel tu plan cuadra: deja ${eur(marginLab, 0)} de margen.`
@@ -483,7 +489,7 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
             <div className="min-w-0 flex-1">
               <p className="text-[15px] font-semibold text-slate-900">Ahorro</p>
               <p className={`amount mt-1 text-2xl font-semibold tracking-tight ${savingTone}`}>{monthSaving === null ? "—" : `${monthSaving < 0 ? "−" : ""}${eur(Math.abs(monthSaving), 0)}`}</p>
-              <p className="text-xs text-slate-600">podrías ahorrar este mes si de aquí al final te ajustas a tus objetivos{saving ? `; tu objetivo es ${eur(saving, 0)}` : ""}.</p>
+              <p className="text-xs text-slate-600">ahorrarás este mes si de aquí al final te ajustas a lo que te permites{saving ? `; tu meta es ${eur(saving, 0)}` : ""}.</p>
               {extrasTotal > 0 && <p className="amount mt-1 text-xs text-slate-600">Los extraordinarios del mes te restan {eur(extrasTotal, 0)}.</p>}
               <button type="button" onClick={() => toggle("ahorro")} className="mt-2 text-xs font-medium text-emerald-800 underline-offset-2 hover:underline">{open === "ahorro" ? "Cerrar" : saving ? "Cambiar mi objetivo de ahorro" : "Ponerme un objetivo de ahorro"}</button>
               {open === "ahorro" && (
@@ -499,20 +505,20 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
         <ul className="divide-y divide-slate-100">
           {active.map((r) => (
             <Line key={r.g.id} id={r.g.id} icon={<CategoryIcon category={r.g.categories[0] ?? "otros_gastos"} />} name={r.g.name}
-              sub={`Llevas ${eur(r.spent, 0)} de ${r.estimate ? `~${eur(r.base, 0)} (tu media)` : eur(r.base, 0)}`}
+              sub={`Llevas ${eur(r.spent, 0)} de ${r.g.fixed ? `~${eur(r.base, 0)} (inamovible)` : r.estimate ? `~${eur(r.base, 0)} (tu media)` : eur(r.base, 0)}`}
               left={leftCell(r.left)} tone={r.left >= 0 ? "text-emerald-700" : "text-rose-700"}>{groupBody(r)}</Line>
           ))}
-          {(looseSpent > 0 || looseAvg > 0) && (
+          {(looseSpent > 0 || othersGoal !== null) && (
             <Line id="sin" icon={<CategoryIcon category="otros_gastos" />} name="Otros gastos"
-              sub={`Sin grupo: llevas ${eur(looseSpent, 0)} de ${othersGoal === null ? `~${eur(looseAvg, 0)} (tu media)` : eur(othersGoal, 0)}`}
+              sub={othersGoal === null ? `Imprevistos: llevas ${eur(looseSpent, 0)}; sin colchón` : `Imprevistos: llevas ${eur(looseSpent, 0)} de ${eur(othersGoal, 0)}`}
               left={leftCell(looseLeft)} tone={looseLeft >= 0 ? "text-emerald-700" : "text-rose-700"}>
               <CategoryList keys={looseKeys} groupId={null} />
               <div className="mt-3 flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-slate-800">Objetivo al mes</span>
-                  <span className="amount block text-xs text-slate-500">{othersGoal === null ? `Vacío: cuenta con tu media (~${eur(looseAvg, 0)})` : "Lo máximo que quieres gastar fuera de tus grupos"}</span>
+                  <span className="block text-sm font-medium text-slate-800">Colchón al mes</span>
+                  <span className="amount block text-xs text-slate-500">Tu colchón para lo que no puede esperar{lastLoose > 0 ? `; el mes pasado: ${eur(lastLoose, 0)}` : ""}</span>
                 </span>
-                <AmountInput label="Objetivo de otros gastos" value={othersGoal} placeholder={String(looseAvg)} onCommit={(v) => saveSettings({ othersGoal: v })} />
+                <AmountInput label="Colchón de imprevistos" value={othersGoal} placeholder="0" onCommit={(v) => saveSettings({ othersGoal: v })} />
               </div>
               <p className="mt-2 text-xs text-slate-400">Para meter una en un grupo, ábrelo y pulsa «Añadir categorías».</p>
             </Line>
@@ -561,12 +567,16 @@ export function PlanPanel({ lab = false }: { lab?: boolean } = {}) {
           onCreate={(name, goal) => editing && updateGroup(editing, name, goal)} onDelete={() => editing && deleteGroup(editing)} />
         <AddCategoriesSheet target={adding} groups={groups} allKeys={ALL_KEYS} cur={cur} onClose={() => setAdding(null)} onConfirm={(keys) => adding && addCats(adding.id, keys)} />
         {incomeLab !== null && (
-          <CalibrateSheet open={calibrating} onClose={() => setCalibrating(false)} income={incomeLab} saving={saving} groups={groups}
-            history={data.history ?? []} prevDaily={data.daily?.prev ?? {}} others={looseAvg}
-            onApply={(sav, goals, others) => {
+          <CalibrateSheet open={calibrating} onClose={() => setCalibrating(false)} income={incomeLab} groups={groups}
+            history={data.history ?? []} unforeseenGoal={othersGoal} unforeseenLast={lastLoose || null} savingsGoal={saving}
+            onToggleFixed={(id, fixed) => {
+              setGroups((gs) => gs.map((x) => (x.id === id ? { ...x, fixed } : x)));
+              void save("plan/group/fixed", { id, fixed });
+            }}
+            onApply={(goals, unforeseen) => {
               setCalibrating(false);
-              saveSettings({ savingsGoal: sav || null, ...(others !== null ? { othersGoal: others } : {}) });
-              for (const { id, goal } of goals) { const g = groups.find((x) => x.id === id); if (g) setGoal(g, goal); }
+              saveSettings({ othersGoal: unforeseen || null });
+              for (const { id, goal } of goals) { const g = groups.find((x) => x.id === id); if (g) setGoal(g, goal || null); }
             }} />
         )}
       </div>

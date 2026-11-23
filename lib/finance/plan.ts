@@ -504,3 +504,14 @@ export function calibrate(opts: { income: number; saving: number; items: Calibra
     maxSaving: round2(Math.max(0, income - fixedTotal - lockedTotal)),
   };
 }
+
+/**
+ * Modelo «ahorro como consecuencia» (23/11/2026): lo que cobras − lo inamovible (con su media) − lo que te permites
+ * en cada grupo ajustable − tu colchón de imprevistos = lo que ahorras. `saving` puede ser negativo (no llega).
+ */
+export function monthPlan(opts: { income: number; fixed: number[]; adjustable: number[]; unforeseen: number }) {
+  const fixed = round2(opts.fixed.reduce((t, v) => t + Math.max(0, v), 0));
+  const adjustable = round2(opts.adjustable.reduce((t, v) => t + Math.max(0, v), 0));
+  const unforeseen = round2(Math.max(0, opts.unforeseen));
+  return { fixed, adjustable, unforeseen, saving: round2(opts.income - fixed - adjustable - unforeseen) };
+}

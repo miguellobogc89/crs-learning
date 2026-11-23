@@ -174,6 +174,12 @@ export async function POST(req: Request, route: RouteContext) {
       }));
       return ok({ ok: true });
     }
+    if (action === "plan/group/fixed") {
+      // Candado de un grupo: inamovible (cuenta con su media al calibrar) o ajustable.
+      const r = await prisma.finance_plan_groups.updateMany({ where: { id: str("id"), user_id: uid }, data: { fixed: body.fixed === true } });
+      if (!r.count) return fail("Grupo no encontrado", 404);
+      return ok({ ok: true });
+    }
     if (action === "plan/group/delete") {
       await prisma.finance_plan_groups.deleteMany({ where: { id: str("id"), user_id: uid } });
       return ok({ ok: true });

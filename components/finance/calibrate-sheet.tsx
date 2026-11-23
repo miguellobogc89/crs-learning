@@ -1,73 +1,103 @@
 "use client";
-// «Calibrar tu mes» (laboratorio, 23/11/2026): cuánto puedes gastar en cada grupo para ahorrar lo que quieres.
-// Pantalla completa desde la derecha. Arriba lo cobrado este mes y el ahorro (deslizador); la barra ideal con el
-// ahorro dentro; debajo, los grupos flexibles con lo que te tocaría (editable: al escribir un importe queda con
-// candado y el resto se recalcula), incluido «Otros gastos» (lo que no está en ningún grupo), y los fijos. «Aplicar como objetivos» guarda los importes
-// como objetivos de los grupos y el ahorro como tu objetivo de ahorro. El reparto lo hace calibrate() (plan.ts).
-import { useEffect, useMemo, useState } from "react";
+// «Calibrar tu mes» (laboratorio, 23/11/2026). Modelo «el ahorro es la consecuencia»: lo que cobras − lo inamovible
+// (grupos con candado, con su media) − lo que te permites en cada grupo ajustable (Ocio y caprichos…) − tu colchón
+// de imprevistos («Otros gastos»: el veterinario, unos zapatos, una multa) = lo que ahorras. El candado de cada
+// grupo se guarda al momento (inamovible / ajustable); «Guardar este reparto» guarda lo que te permites y el colchón
+// como objetivos. Cálculo en monthPlan() (plan.ts).
+import { useEffect, useState } from "react";
 import { ArrowLeft, Lock, LockOpen } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { categoryHex } from "@/lib/finance/categories";
-import { calibrate, isGradual, type GroupCycleTotals } from "@/lib/finance/plan";
+import { monthPlan, type GroupCycleTotals } from "@/lib/finance/plan";
 import { eur } from "@/components/trading/format";
 import { CategoryIcon } from "./category-icon";
 
-export type CalibrateGroup = { id: string; name: string; categories: string[]; goal: number | null };
+export type CalibrateGroup = { id: string; name: string; categories: string[]; goal: number | null; fixed: boolean };
 
-const round = (v: number) => Math.round(v * 100) / 100;
-const OTHERS = "__otros";
+const parse = (raw: string) => {
+  const t = raw.trim().replace(/\s|€/g, "");
+  if (!t) return 0;
+  const v = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+  return Number.isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : null;
+};
+const sliderMax = (...vals: number[]) => Math.max(100, Math.ceil((Math.max(...vals) * 2) / 50) * 50);
 
-export function CalibrateSheet({ open, onClose, income, saving, groups, history, prevDaily, others, onApply }: {
+/** Importe con deslizador y casilla, para lo ajustable y el colchón. */
+function Amount({ label, value, max, onChange }: { label: string; value: number; max: number; onChange: (v: number) => void }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value).replace(".", ",")), [value]);
+  return (
+    <div className="mt-2 flex items-center gap-3">
+      <input type="range" min={0} max={max} step={5} value={Math.min(value, max)} onChange={(e) => onChange(Number(e.target.value))}
+        aria-label={label} className="min-w-0 flex-1 accent-blue-600" />
+      <span className="flex w-24 shrink-0 items-center gap-1 rounded-xl border border-slate-200 px-2.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
+        <input aria-label={label} inputMode="decimal" value={text} onChange={(e) => setText(e.target.value)}
+          onBlur={() => { const v = parse(text); if (v === null) setText(String(value)); else onChange(v); }}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+          className="min-w-0 flex-1 bg-transparent py-2 text-right text-[16px] tabular-nums text-slate-900 outline-none" />
+        <span className="text-sm text-slate-400">€</span>
+      </span>
+    </div>
+  );
+}
+
+/** Candado discreto: silueta gris oscuro, sin fondo; abierto, en gris claro. */
+function Padlock({ on, name, onToggle }: { on: boolean; name: string; onToggle: () => void }) {
+  return (
+    <button type="button" onClick={onToggle} aria-pressed={on} aria-label={on ? `${name}: inamovible (tocar para ajustarlo)` : `${name}: ajustable (tocar para fijarlo)`}
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl active:bg-slate-100 ${on ? "text-slate-700" : "text-slate-300"}`}>
+      {on ? <Lock className="h-[18px] w-[18px]" strokeWidth={2} /> : <LockOpen className="h-[18px] w-[18px]" strokeWidth={2} />}
+    </button>
+  );
+}
+
+export function CalibrateSheet({ open, onClose, income, groups, history, unforeseenGoal, unforeseenLast, savingsGoal, onToggleFixed, onApply }: {
   open: boolean;
   onClose: () => void;
   /** Lo cobrado este mes. */
   income: number;
-  saving: number | null;
   groups: CalibrateGroup[];
   history: GroupCycleTotals[];
-  prevDaily: Record<string, number[]>;
-  /** Media de lo que no está en ningún grupo («Otros gastos»): se calibra como un grupo flexible más. */
-  others: number;
-  onApply: (saving: number, goals: { id: string; goal: number }[], othersGoal: number | null) => void;
+  /** Tu colchón de imprevistos («Otros gastos»), si ya lo pusiste. */
+  unforeseenGoal: number | null;
+  /** Lo que se fue el mes pasado en lo que no tiene grupo (solo como dato). */
+  unforeseenLast: number | null;
+  /** Tu meta de ahorro (solo como referencia). */
+  savingsGoal: number | null;
+  onToggleFixed: (id: string, fixed: boolean) => void;
+  onApply: (goals: { id: string; goal: number }[], unforeseen: number) => void;
 }) {
-  const [save, setSave] = useState(saving ?? 0);
-  const [locks, setLocks] = useState<Record<string, number>>({});
-  useEffect(() => { if (open) { setSave(saving ?? 0); setLocks({}); } }, [open, saving]);
-
   const closed = history.slice(1, 4);
   const avgOf = (keys: string[]) => (closed.length ? Math.round(closed.reduce((t, c) => t + keys.reduce((u, k) => u + (c.full[k] ?? 0), 0), 0) / closed.length) : 0);
-  const items = useMemo(() => [
-    ...groups.filter((g) => g.categories.length).map((g) => {
-      const avg = avgOf(g.categories);
-      const fixed = !isGradual(g.categories, history, prevDaily);
-      return { g, avg, fixed, base: fixed ? g.goal ?? avg : avg || g.goal || 0, color: categoryHex(g.categories[0]) };
-    }),
-    // «Otros gastos» (lo que no está en ningún grupo): flexible, con su media como base.
-    ...(others > 0 ? [{ g: { id: OTHERS, name: "Otros gastos", categories: ["otros_gastos"], goal: null }, avg: others, fixed: false, base: others, color: "#94a3b8" }] : []),
+  const list = groups.filter((g) => g.categories.length).map((g) => ({ g, avg: avgOf(g.categories), color: categoryHex(g.categories[0]) }));
+  const [amounts, setAmounts] = useState<Record<string, number>>({});
+  const [unforeseen, setUnforeseen] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    setAmounts(Object.fromEntries(list.map(({ g, avg }) => [g.id, g.goal ?? avg])));
+    setUnforeseen(unforeseenGoal ?? 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [groups, history, prevDaily, others]);
-  const r = calibrate({
-    income,
-    saving: save,
-    items: items.map((i) => ({ id: i.g.id, base: i.base, fixed: i.fixed, locked: locks[i.g.id] ?? null })),
-  });
-  const flexible = items.filter((i) => !i.fixed);
-  const fixed = items.filter((i) => i.fixed);
-  const segs = [
-    ...fixed.map((i) => ({ key: i.g.id, amount: r.amounts[i.g.id] ?? 0, color: i.color, soft: true })),
-    ...flexible.map((i) => ({ key: i.g.id, amount: r.amounts[i.g.id] ?? 0, color: i.color, soft: false })),
-    ...(save > 0 ? [{ key: "ahorro", amount: save, color: "#10b981", soft: false }] : []),
-  ];
-  const total = Math.max(income, segs.reduce((t, x) => t + x.amount, 0), 1);
-  const pct = (v: number) => `${(Math.max(0, v) / total) * 100}%`;
-  const max = Math.max(0, Math.floor(income / 10) * 10);
+  }, [open]);
 
-  const setAmount = (id: string, raw: string) => {
-    const t = raw.trim().replace(/\s|€/g, "");
-    if (!t) { setLocks((l) => { const n = { ...l }; delete n[id]; return n; }); return; }
-    const v = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
-    if (Number.isFinite(v) && v >= 0) setLocks((l) => ({ ...l, [id]: round(v) }));
-  };
+  const fixed = list.filter((i) => i.g.fixed);
+  const adjustable = list.filter((i) => !i.g.fixed);
+  const amountOf = (id: string, avg: number) => amounts[id] ?? avg;
+  const fixedAmount = (i: (typeof list)[number]) => i.avg || i.g.goal || 0;
+  const r = monthPlan({
+    income,
+    fixed: fixed.map(fixedAmount),
+    adjustable: adjustable.map((i) => amountOf(i.g.id, i.avg)),
+    unforeseen,
+  });
+  const segs = [
+    ...fixed.map((i) => ({ key: i.g.id, amount: fixedAmount(i), color: i.color, soft: true })),
+    ...adjustable.map((i) => ({ key: i.g.id, amount: amountOf(i.g.id, i.avg), color: i.color, soft: false })),
+    { key: "imprevistos", amount: unforeseen, color: "#94a3b8", soft: false },
+    { key: "ahorro", amount: Math.max(0, r.saving), color: "#10b981", soft: false },
+  ];
+  const total = Math.max(income, r.fixed + r.adjustable + r.unforeseen, 1);
+  const pct = (v: number) => `${(Math.max(0, v) / total) * 100}%`;
+  const tone = r.saving < 0 ? "text-rose-700" : savingsGoal && r.saving < savingsGoal ? "text-amber-700" : "text-emerald-700";
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -78,77 +108,73 @@ export function CalibrateSheet({ open, onClose, income, saving, groups, history,
               <ArrowLeft className="h-5 w-5" />
             </button>
             <SheetTitle className="text-base font-semibold text-slate-900">Calibrar tu mes</SheetTitle>
-            <SheetDescription className="sr-only">Cuánto puedes gastar en cada grupo para ahorrar lo que quieres.</SheetDescription>
+            <SheetDescription className="sr-only">Decide lo que te permites y mira cuánto ahorras.</SheetDescription>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-6">
-            <p className="text-sm text-slate-500">Este mes has cobrado</p>
-            <p className="amount text-[28px] font-semibold leading-tight tracking-tight text-slate-900">{eur(income, 0)}</p>
+            {/* El resultado: lo que ahorras */}
+            <p className="text-sm text-slate-500">Con este reparto ahorras</p>
+            <p className={`amount text-[34px] font-semibold leading-tight tracking-tight ${tone}`}>{r.saving < 0 ? `−${eur(-r.saving, 0)}` : eur(r.saving, 0)}</p>
+            <p className="amount text-xs text-slate-500">
+              De {eur(income, 0)} cobrados este mes{savingsGoal ? (r.saving >= savingsGoal ? `; superas tu meta de ${eur(savingsGoal, 0)}` : `; tu meta es ${eur(savingsGoal, 0)}`) : ""}.
+            </p>
 
-            {/* Ahorro: deslizador y casilla */}
-            <div className="mt-5 rounded-2xl bg-emerald-50/80 px-4 py-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-[15px] font-semibold text-slate-900">Quiero ahorrar</span>
-                <span className="amount text-2xl font-semibold tabular-nums text-emerald-700">{eur(save, 0)}</span>
-              </div>
-              <input type="range" min={0} max={max} step={10} value={Math.min(save, max)} onChange={(e) => setSave(Number(e.target.value))}
-                aria-label="Ahorro al mes" className="mt-3 w-full accent-emerald-600" />
-              <div className="mt-1 flex justify-between text-[11px] text-slate-500"><span>0 €</span><span className="amount">{eur(max, 0)}</span></div>
-            </div>
-
-            {/* La barra ideal, con el ahorro dentro */}
-            <div className="mt-5 flex h-10 w-full overflow-hidden rounded-xl bg-slate-100" role="img" aria-label="Reparto ideal de lo que cobras">
+            <div className="mt-4 flex h-10 w-full overflow-hidden rounded-xl bg-slate-100" role="img" aria-label="Reparto de lo que cobras">
               {segs.filter((x) => x.amount > 0).map((x) => (
-                <span key={x.key} className="h-full border-r-2 border-white transition-[width] duration-300 ease-out last:border-r-0 motion-reduce:transition-none"
+                <span key={x.key} className="h-full border-r-2 border-white transition-[width] duration-200 ease-out last:border-r-0 motion-reduce:transition-none"
                   style={{ width: pct(x.amount), backgroundColor: x.color, opacity: x.soft ? 0.45 : 1 }} />
               ))}
             </div>
-            <p className={`mt-3 text-sm font-medium ${r.shortfall > 0 ? "text-rose-700" : "text-slate-700"}`}>
-              {r.shortfall > 0
-                ? `Con tus gastos fijos no llega: como mucho podrías ahorrar ${eur(r.maxSaving, 0)} este mes.`
-                : `Para ahorrar ${eur(save, 0)}, puedes gastar ${eur(Math.max(0, r.available), 0)} en lo flexible.`}
-            </p>
+            {r.saving < 0 && <p className="mt-2 text-sm font-medium text-rose-700">No llega: te faltan {eur(-r.saving, 0)}. Baja lo que te permites o el colchón.</p>}
 
-            {/* Flexibles: lo que te toca (editable con candado) */}
-            <h3 className="mt-6 text-sm font-semibold text-slate-900">Puedes gastar</h3>
+            {/* Ajustable: lo que te permites */}
+            <h3 className="mt-6 text-sm font-semibold text-slate-900">Lo que te permites</h3>
             <ul className="mt-1 divide-y divide-slate-100">
-              {flexible.map((i) => {
-                const locked = i.g.id in locks;
-                const amount = r.amounts[i.g.id] ?? 0;
+              {adjustable.map((i) => {
+                const v = amountOf(i.g.id, i.avg);
                 return (
-                  <li key={i.g.id} className="flex items-center gap-3 py-3">
-                    <CategoryIcon category={i.g.categories[0]} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-semibold text-slate-900">{i.g.name}</span>
-                      <span className="amount block truncate text-xs text-slate-500">{i.g.id === OTHERS ? `Sin grupo; sueles gastar ~${eur(i.avg, 0)}` : i.avg > 0 ? `Sueles gastar ~${eur(i.avg, 0)}` : "Sin gasto los últimos meses"}</span>
-                    </span>
-                    <button type="button" onClick={() => setLocks((l) => { const n = { ...l }; if (locked) delete n[i.g.id]; else n[i.g.id] = amount; return n; })}
-                      aria-label={locked ? `Soltar ${i.g.name}` : `Fijar ${i.g.name}`} aria-pressed={locked}
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${locked ? "bg-slate-900 text-white" : "text-slate-300 active:bg-slate-100"}`}>
-                      {locked ? <Lock className="h-4 w-4" /> : <LockOpen className="h-4 w-4" />}
-                    </button>
-                    <span className="flex w-24 shrink-0 items-center gap-1 rounded-xl border border-slate-200 px-2.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100">
-                      <input aria-label={`Importe para ${i.g.name}`} inputMode="decimal" key={`${i.g.id}-${locked ? "l" : amount}`} defaultValue={String(amount).replace(".", ",")}
-                        onBlur={(e) => setAmount(i.g.id, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                        className="min-w-0 flex-1 bg-transparent py-2 text-right text-[16px] tabular-nums text-slate-900 outline-none" />
-                      <span className="text-sm text-slate-400">€</span>
-                    </span>
+                  <li key={i.g.id} className="py-3">
+                    <div className="flex items-center gap-3">
+                      <CategoryIcon category={i.g.categories[0]} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[15px] font-semibold text-slate-900">{i.g.name}</span>
+                        <span className="amount block truncate text-xs text-slate-500">{i.avg > 0 ? `Sueles gastar ~${eur(i.avg, 0)}` : "Sin gasto los últimos meses"}</span>
+                      </span>
+                      <Padlock on={false} name={i.g.name} onToggle={() => onToggleFixed(i.g.id, true)} />
+                    </div>
+                    <Amount label={`Lo que te permites en ${i.g.name}`} value={v} max={sliderMax(i.avg, v)} onChange={(x) => setAmounts((a) => ({ ...a, [i.g.id]: x }))} />
                   </li>
                 );
               })}
-              {flexible.length === 0 && <li className="py-3 text-sm text-slate-500">No tienes grupos de gasto flexible.</li>}
+              {adjustable.length === 0 && <li className="py-3 text-sm text-slate-500">Todo está fijado. Abre un candado para ajustar ese grupo.</li>}
+
+              {/* Colchón de imprevistos */}
+              <li className="py-3">
+                <div className="flex items-center gap-3">
+                  <CategoryIcon category="otros_gastos" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-semibold text-slate-900">Imprevistos</span>
+                    <span className="amount block text-xs text-slate-500">
+                      Otros gastos: el veterinario, unos zapatos, una multa…{unforeseenLast ? ` El mes pasado: ${eur(unforeseenLast, 0)}.` : ""}
+                    </span>
+                  </span>
+                </div>
+                <Amount label="Colchón de imprevistos" value={unforeseen} max={sliderMax(unforeseenLast ?? 0, unforeseen, 250)} onChange={setUnforeseen} />
+              </li>
             </ul>
 
-            {/* Fijos: no se recortan */}
+            {/* Inamovible: con su media */}
             {fixed.length > 0 && (
               <>
-                <h3 className="mt-6 text-sm font-semibold text-slate-900">Fijos (no se recortan)</h3>
+                <h3 className="mt-6 text-sm font-semibold text-slate-900">Inamovible</h3>
+                <p className="text-xs text-slate-500">Lo que pagas sí o sí; cuenta con lo que sueles gastar.</p>
                 <ul className="mt-1 divide-y divide-slate-100">
                   {fixed.map((i) => (
                     <li key={i.g.id} className="flex items-center gap-3 py-3">
                       <CategoryIcon category={i.g.categories[0]} />
-                      <span className="min-w-0 flex-1 truncate text-[15px] text-slate-700">{i.g.name}</span>
-                      <span className="amount shrink-0 text-sm tabular-nums text-slate-700">{eur(r.amounts[i.g.id] ?? 0, 0)}</span>
+                      <span className="min-w-0 flex-1 truncate text-[15px] text-slate-800">{i.g.name}</span>
+                      <span className="amount shrink-0 text-sm tabular-nums text-slate-700">~{eur(fixedAmount(i), 0)}</span>
+                      <Padlock on name={i.g.name} onToggle={() => onToggleFixed(i.g.id, false)} />
                     </li>
                   ))}
                 </ul>
@@ -157,12 +183,10 @@ export function CalibrateSheet({ open, onClose, income, saving, groups, history,
           </div>
 
           <div className="shrink-0 border-t border-slate-100 bg-white px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-            <button type="button" disabled={r.shortfall > 0}
-              onClick={() => onApply(save,
-                flexible.filter((i) => i.g.id !== OTHERS).map((i) => ({ id: i.g.id, goal: r.amounts[i.g.id] ?? 0 })).filter((x) => x.goal > 0),
-                flexible.some((i) => i.g.id === OTHERS) ? r.amounts[OTHERS] ?? null : null)}
-              className="h-12 w-full rounded-full bg-blue-600 text-sm font-semibold text-white active:bg-blue-700 disabled:opacity-40">
-              Aplicar como objetivos
+            <button type="button"
+              onClick={() => onApply(adjustable.map((i) => ({ id: i.g.id, goal: amountOf(i.g.id, i.avg) })), unforeseen)}
+              className="h-12 w-full rounded-full bg-blue-600 text-sm font-semibold text-white active:bg-blue-700">
+              Guardar este reparto
             </button>
           </div>
         </div>

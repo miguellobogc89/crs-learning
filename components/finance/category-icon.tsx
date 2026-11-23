@@ -3,7 +3,7 @@
 // iPhone). Lo usan las listas de movimientos, el detalle, el selector de categorías, Mi plan e Inicio.
 import type { ComponentType, CSSProperties } from "react";
 import {
-  Armchair, ArrowDownLeft, ArrowsLeftRight, Baby, Bank, Barbell, BeerStein, Briefcase, Buildings, Bus, Car, Confetti, DeviceMobile,
+  Armchair, ArrowDownLeft, Broom, ArrowsLeftRight, Baby, Bank, Barbell, BeerStein, Briefcase, Buildings, Bus, Car, Confetti, DeviceMobile,
   Drop, Flame, ForkKnife, GameController, GasPump, Gift, GraduationCap, HandHeart, House, Laptop, LetterCircleP, Lightbulb, Money,
   Moped, PaintBrush, PawPrint, Percent, PiggyBank, Pill, Plug, Question, Receipt, Repeat, Scissors, ShieldCheck, ShoppingBag,
   ShoppingCart, Stethoscope, Suitcase, TShirt, Tag, Ticket, Toolbox, TrendUp, Umbrella, Wallet, WifiHigh, Wrench,
@@ -12,7 +12,7 @@ import { categoryHex } from "@/lib/finance/categories";
 
 type Icon = ComponentType<{ size?: number | string; color?: string; weight?: "fill"; className?: string; style?: CSSProperties }>;
 const ICONS: Record<string, Icon> = {
-  vivienda: House, comunidad: Buildings, seguro_hogar: ShieldCheck, mantenimiento_hogar: Toolbox, muebles_decoracion: Armchair,
+  vivienda: House, comunidad: Buildings, seguro_hogar: ShieldCheck, mantenimiento_hogar: Toolbox, limpieza_hogar: Broom, muebles_decoracion: Armchair,
   luz: Lightbulb, gas: Flame, agua: Drop, internet_fijo: WifiHigh, movil: DeviceMobile, suministros: Plug,
   alimentacion: ShoppingCart, comida_domicilio: Moped,
   restaurantes: ForkKnife, bares_copas: BeerStein, conciertos_espectaculos: Ticket, viajes: Suitcase, hobbies: PaintBrush,

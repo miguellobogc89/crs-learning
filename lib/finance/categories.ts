@@ -38,6 +38,7 @@ export const FAMILIES: FamilyDef[] = [
     { key: "comunidad", label: "Comunidad", hint: "Cuota de la comunidad de vecinos." },
     { key: "seguro_hogar", label: "Seguro del hogar", hint: "Multirriesgo, alarma…" },
     { key: "mantenimiento_hogar", label: "Mantenimiento del hogar", hint: "Fontanero, electricista, reformas, jardín…" },
+    { key: "limpieza_hogar", label: "Limpieza del hogar", hint: "Asistenta, productos de limpieza, tintorería…" },
     { key: "muebles_decoracion", label: "Muebles y decoración", hint: "Ikea, menaje, textil del hogar…" },
   ] },
   { key: "suministros", label: "Suministros", color: "teal", tab: "gasto", cats: [

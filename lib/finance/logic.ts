@@ -306,6 +306,7 @@ const KEYWORDS: Keyword[] = [
   { re: /\b(ryanair|vueling|iberia|easyjet|air europa|booking|airbnb|expedia|hotel|edreams|skyscanner)\b/, category: "viajes" },
   { re: /\b(zara|mango|primark|h m|pull ?(and )?bear|bershka|stradivarius|massimo dutti|shein|zalando|springfield|lefties|oysho|uniqlo|levis|nike|adidas|adidases|foot ?locker|jd sports|parfois|pandora|vinted|kiabi|cortefiel|desigual)\b/, category: "moda" },
   { re: /\b(ikea|zara home|maisons du monde|jysk|conforama|kave home|sklum|el corte ingles hogar)\b/, category: "muebles_decoracion" },
+  { re: /\b(limpieza|asistenta|empleada de hogar|tintoreria|lavanderia|webel)\b/, category: "limpieza_hogar" },
   { re: /\b(leroy merlin|bricomart|bauhaus|brico depot|bricodepot|aki bricolaje|ferreteria|fontaneria|cerrajero)\b/, category: "mantenimiento_hogar" },
   { re: /\b(mediamarkt|media markt|pccomponentes|worten|apple store|xiaomi store|backmarket|back market)\b/, category: "electronica" },
   { re: /\b(gimnasio|gym|basic fit|dreamfit|mcfit|altafit|anytime fitness|padel|playtomic|decathlon|crossfit)\b/, category: "deporte" },

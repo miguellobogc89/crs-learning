@@ -259,3 +259,9 @@ test("calibrate: reparte lo que queda entre los flexibles según lo que sueles g
   assert.equal(short.amounts.ocio, 0);
   assert.equal(short.maxSaving, 300);
 });
+
+test("monthPlan: el ahorro es lo que queda tras lo inamovible, lo ajustable y el colchón de imprevistos", () => {
+  const r = P.monthPlan({ income: 3000, fixed: [1200, 300], adjustable: [400, 100], unforeseen: 200 });
+  assert.deepEqual(r, { fixed: 1500, adjustable: 500, unforeseen: 200, saving: 800 });
+  assert.equal(P.monthPlan({ income: 1000, fixed: [900], adjustable: [200], unforeseen: 0 }).saving, -100);
+});

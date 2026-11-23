@@ -517,7 +517,7 @@ export async function packagesView(userId: string) {
 /** Grupos con los que arranca Plan la primera vez (cada uno solo con categorías; el usuario los cambia). */
 const DEFAULT_PLAN_GROUPS: { name: string; categories: string[] }[] = [
   { name: "Gastos fijos", categories: ["luz", "gas", "agua", "internet_fijo", "movil", "suministros", "suscripciones", "prestamos"] },
-  { name: "Ocio", categories: ["restaurantes", "bares_copas", "conciertos_espectaculos", "viajes", "hobbies", "videojuegos", "ocio"] },
+  { name: "Ocio y caprichos", categories: ["restaurantes", "bares_copas", "conciertos_espectaculos", "viajes", "hobbies", "videojuegos", "ocio"] },
   { name: "Moda y complementos", categories: ["moda"] },
   { name: "Comida a domicilio", categories: ["comida_domicilio"] },
 ];
@@ -613,7 +613,7 @@ export async function planView(userId: string) {
     previous: hasPrevious ? { start: prevCycle.start, end: prevTo } : null,
     /** Ciclos del último par de años (el actual primero), para el historial de una categoría. */
     cycles: Array.from({ length: 24 }, (_, i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c, i) => i === 0 || c.end >= oldest),
-    groups: rows.map((g) => ({ id: g.id, name: g.name, categories: g.categories, goal: g.goal === null ? null : Number(g.goal) })),
+    groups: rows.map((g) => ({ id: g.id, name: g.name, categories: g.categories, goal: g.goal === null ? null : Number(g.goal), fixed: g.fixed })),
     totals: { now, before, extrasNow },
   };
 }
