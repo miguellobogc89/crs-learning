@@ -192,11 +192,12 @@ function Check({ checked, partial = false, onChange, label: aria }: { checked: b
 
 export function MovementsPanel() {
   const params = useSearchParams();
-  const { data, error, loading } = useFinance<List>("transactions");
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("all");
   const [category, setCategory] = useState(params.get("categoria") ?? "all");
   const [status, setStatus] = useState<Status>(params.get("revisar") === "1" ? "revisar" : "all");
+  // «Por revisar» mira todo el historial (no solo el periodo elegido): es lo que cuenta el aviso de Inicio.
+  const { data, error, loading } = useFinance<List>(status === "revisar" ? "transactions?all=1" : "transactions");
   const [group, setGroup] = useState<Group>("none");
   const [sort, setSort] = useState<Sort>(SORTS[0].value);
   const [selected, setSelected] = useState<Set<string>>(new Set());

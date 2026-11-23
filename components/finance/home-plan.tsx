@@ -112,7 +112,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
 
   return (
     <div className="pb-2">
-      <p className="text-[22px] font-semibold leading-tight tracking-tight text-slate-900">{headline}</p>
+      <p className="break-words text-[22px] font-semibold leading-tight tracking-tight text-slate-900">{headline}</p>
       <p className="mt-1 text-sm text-slate-500">{daysLeft > 1 ? `Quedan ${daysLeft} días de ciclo` : daysLeft === 1 ? "Queda 1 día de ciclo" : "Último día del ciclo"}</p>
 
       <ul className="mt-3 divide-y divide-slate-100">
@@ -262,7 +262,7 @@ function SpendChart({ plan }: { plan: Plan }) {
         {goalLine && <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t-[1.5px] border-dashed border-emerald-500" />{group ? "Tu objetivo" : "Tu límite para ahorrar"}</span>}
       </div>
       {extrasTotal > 0 && (
-        <p className="amount mt-2 text-xs text-slate-500">Además, {eur(extrasTotal, 0)} en extraordinarios ({extras.slice(0, 2).map((e) => e.label).join(", ")}{extras.length > 2 ? "…" : ""}), aparte de la línea.</p>
+        <p className="amount mt-2 break-words text-xs text-slate-500">Además, {eur(extrasTotal, 0)} en extraordinarios ({extras.slice(0, 2).map((e) => (e.label.length > 22 ? `${e.label.slice(0, 22).trim()}…` : e.label)).join(", ")}{extras.length > 2 ? "…" : ""}), aparte de la línea.</p>
       )}
       {!group && goal === null && (
         <Link href="/finanzas/ajustes" className="mt-2 inline-block text-xs font-medium text-blue-700 hover:underline">¿Cuánto quieres ahorrar al mes?</Link>
@@ -282,7 +282,7 @@ function SpendChart({ plan }: { plan: Plan }) {
           ))}
         </div>
       )}
-      {fixed.length > 0 && <p className="mt-2 text-[11px] text-slate-400">{fixed.map((g) => g.name).join(" y ")} no salen aquí: son recibos fijos que entran de golpe.</p>}
+      {fixed.length > 0 && <p className="mt-2 break-words text-[11px] text-slate-400">{fixed.map((g) => g.name).join(" y ")} no salen aquí: son recibos fijos que entran de golpe.</p>}
     </div>
   );
 }
@@ -292,11 +292,11 @@ export function HomePlan() {
   const { data, error } = useFinance<Plan>("plan");
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
   return (
-    <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-      <section className={`${card} ${flat} p-4 sm:p-5`}>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+      <section className={`${card} ${flat} min-w-0 overflow-hidden p-4 sm:p-5`}>
         {data ? <SpendChart plan={data} /> : <SkeletonList rows={3} />}
       </section>
-      <section className={`${card} ${flat} px-4 pt-4 sm:px-5 sm:pt-5`}>
+      <section className={`${card} ${flat} min-w-0 overflow-hidden px-4 pt-4 sm:px-5 sm:pt-5`}>
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-sm font-medium text-slate-500">Tus grupos</h2>
           <Link href="/finanzas/plan" className="inline-flex items-center text-sm font-medium text-blue-700 hover:underline">Mi plan<ChevronRight className="h-4 w-4" /></Link>
