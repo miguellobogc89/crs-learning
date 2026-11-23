@@ -1,7 +1,7 @@
 "use client";
 // Laboratorio · selector de categorías con el árbol nuevo (borrador aprobado el 23/11/2026). Mockup: no toca la
 // clasificación real. Familias = solo ayuda para orientarse; cada categoría lleva una pista de lo que entra.
-// «Sugeridas» arriba: lo que encaja con el comercio del movimiento de ejemplo. Iconos Phosphor en duotono.
+// «Sugeridas» arriba: lo que encaja con el comercio del movimiento de ejemplo. Iconos Phosphor rellenos en blanco sobre el color de su familia.
 import { useMemo, useState } from "react";
 import type { CSSProperties, ComponentType, ReactNode } from "react";
 import { Check, MagnifyingGlass } from "@phosphor-icons/react";
@@ -16,25 +16,25 @@ type Tab = "gasto" | "ingreso" | "no_computable";
 
 const TREE: Record<Tab, Family[]> = {
   gasto: [
-    { key: "casa", label: "Casa", color: "#2563eb", cats: [
+    { key: "casa", label: "Casa", color: "#3478f6", cats: [
       { key: "alquiler_hipoteca", label: "Alquiler o hipoteca", hint: "Cuota de tu vivienda, garaje o trastero.", icon: House },
       { key: "comunidad", label: "Comunidad", hint: "Cuota de la comunidad de vecinos.", icon: Buildings },
       { key: "seguro_hogar", label: "Seguro del hogar", hint: "Multirriesgo, alarma…", icon: ShieldCheck, words: ["mapfre", "allianz"] },
       { key: "mantenimiento_hogar", label: "Mantenimiento del hogar", hint: "Fontanero, electricista, reformas, jardín…", icon: Toolbox, words: ["leroy", "bricomart", "bauhaus"] },
       { key: "muebles_decoracion", label: "Muebles y decoración", hint: "Ikea, menaje, textil del hogar…", icon: Armchair, words: ["ikea", "zara home", "maisons"] },
     ] },
-    { key: "suministros", label: "Suministros", color: "#0d9488", cats: [
+    { key: "suministros", label: "Suministros", color: "#14b8a6", cats: [
       { key: "luz", label: "Luz", hint: "Factura de la electricidad.", icon: Lightbulb, words: ["iberdrola", "endesa", "naturgy", "holaluz"] },
       { key: "gas", label: "Gas", hint: "Gas natural, butano…", icon: Flame, words: ["naturgy", "repsol gas"] },
       { key: "agua", label: "Agua", hint: "Factura del agua.", icon: Drop, words: ["canal de isabel", "aguas", "emasesa"] },
       { key: "internet_fijo", label: "Internet y fijo", hint: "Fibra y teléfono fijo.", icon: WifiHigh, words: ["movistar", "vodafone", "orange", "digi", "o2"] },
       { key: "movil", label: "Móvil", hint: "Facturas y recargas.", icon: DeviceMobile, words: ["movistar", "vodafone", "orange", "digi", "simyo", "pepephone", "lowi"] },
     ] },
-    { key: "alimentacion", label: "Alimentación", color: "#16a34a", cats: [
+    { key: "alimentacion", label: "Alimentación", color: "#22c55e", cats: [
       { key: "supermercado", label: "Supermercado", hint: "La compra de casa.", icon: ShoppingCart, words: ["mercadona", "carrefour", "lidl", "aldi", "dia", "alcampo", "eroski"] },
       { key: "comida_domicilio", label: "Comida a domicilio", hint: "Glovo, Just Eat, Uber Eats…", icon: Moped, words: ["glovo", "just eat", "uber eats", "telepizza", "domino"] },
     ] },
-    { key: "ocio", label: "Ocio", color: "#ea580c", cats: [
+    { key: "ocio", label: "Ocio", color: "#ff8a00", cats: [
       { key: "restaurantes", label: "Restaurantes", hint: "Comidas y cenas fuera, cafeterías.", icon: ForkKnife, words: ["restaurante", "burger", "mcdonald", "starbucks", "vips", "foster"] },
       { key: "bares_copas", label: "Bares y copas", hint: "Cañas, copas, discotecas…", icon: BeerStein, words: ["bar ", "pub", "cerveceria", "discoteca"] },
       { key: "conciertos_espectaculos", label: "Conciertos y espectáculos", hint: "Cine, teatro, conciertos, partidos…", icon: Ticket, words: ["ticketmaster", "entradas", "cine", "yelmo", "cinesa", "teatro", "dice.fm", "fever"] },
@@ -43,45 +43,45 @@ const TREE: Record<Tab, Family[]> = {
       { key: "videojuegos", label: "Videojuegos", hint: "Juegos, consolas y suscripciones de juego.", icon: GameController, words: ["steam", "playstation", "nintendo", "xbox", "epic games"] },
       { key: "otros_ocio", label: "Otros de ocio", hint: "Lo que no encaja en lo anterior.", icon: Confetti },
     ] },
-    { key: "transporte", label: "Transporte", color: "#4f46e5", cats: [
+    { key: "transporte", label: "Transporte", color: "#6366f1", cats: [
       { key: "gasolina", label: "Gasolina", hint: "Y diésel, recarga eléctrica…", icon: GasPump, words: ["repsol", "cepsa", "bp ", "galp", "shell", "ballenoil", "plenoil"] },
       { key: "transporte_publico", label: "Transporte público y taxi", hint: "Bus, metro, tren, taxi, VTC…", icon: Bus, words: ["metro", "emt", "renfe cercanias", "cabify", "uber", "bolt", "taxi"] },
       { key: "parking_peaje", label: "Parking y peaje", hint: "Aparcamientos, zona azul, autopistas…", icon: LetterCircleP, words: ["parking", "aparcamiento", "telpark", "peaje", "autopista", "via-t"] },
       { key: "mantenimiento_vehiculo", label: "Mantenimiento del vehículo", hint: "ITV, taller, lavado, neumáticos…", icon: Wrench, words: ["itv", "taller", "norauto", "midas", "feu vert"] },
       { key: "seguro_coche", label: "Seguro del coche", hint: "Seguro de coche o moto.", icon: Car, words: ["linea directa", "mutua", "verti", "genesis"] },
     ] },
-    { key: "compras", label: "Compras", color: "#db2777", cats: [
+    { key: "compras", label: "Compras", color: "#ec4899", cats: [
       { key: "moda", label: "Moda", hint: "Ropa, calzado y complementos.", icon: TShirt, words: ["zara", "mango", "primark", "pull bear", "bershka", "h m", "decathlon"] },
       { key: "electronica", label: "Electrónica", hint: "Móviles, ordenadores, gadgets…", icon: Laptop, words: ["mediamarkt", "pccomponentes", "apple store", "worten"] },
       { key: "regalos", label: "Regalos", hint: "Lo que compras para otras personas.", icon: Gift },
       { key: "otras_compras", label: "Otras compras", hint: "Amazon, bazar y demás.", icon: ShoppingBag, words: ["amazon", "aliexpress", "el corte ingles"] },
     ] },
-    { key: "salud", label: "Salud y cuidado", color: "#dc2626", cats: [
+    { key: "salud", label: "Salud y cuidado", color: "#ef4444", cats: [
       { key: "farmacia", label: "Farmacia", hint: "Y parafarmacia, herbolario…", icon: Pill, words: ["farmacia"] },
       { key: "medico", label: "Médico, dentista u óptica", hint: "Consultas, gafas, ortodoncia…", icon: Stethoscope, words: ["clinica", "dental", "optica", "sanitas", "adeslas"] },
       { key: "deporte", label: "Deporte y gimnasio", hint: "Cuotas, clases, material deportivo…", icon: Barbell, words: ["gym", "gimnasio", "basic fit", "mcfit", "padel"] },
       { key: "cuidado_personal", label: "Cuidado personal", hint: "Peluquería, estética, perfumería…", icon: Scissors, words: ["peluqueria", "druni", "primor", "sephora"] },
     ] },
-    { key: "servicios", label: "Servicios", color: "#7c3aed", cats: [
+    { key: "servicios", label: "Servicios", color: "#a855f7", cats: [
       { key: "suscripciones", label: "Suscripciones", hint: "Netflix, Spotify, apps, la nube…", icon: Repeat, words: ["netflix", "spotify", "hbo", "disney", "prime video", "icloud", "google one", "youtube"] },
       { key: "educacion", label: "Educación", hint: "Colegio, cursos, academias…", icon: GraduationCap, words: ["academia", "udemy", "colegio", "universidad"] },
       { key: "mascotas", label: "Mascotas", hint: "Veterinario, pienso, accesorios…", icon: PawPrint, words: ["veterinari", "tiendanimal", "kiwoko"] },
       { key: "cuidado_hijos", label: "Hijos", hint: "Guardería, canguro, extraescolares…", icon: Baby },
     ] },
-    { key: "finanzas", label: "Finanzas", color: "#475569", cats: [
+    { key: "finanzas", label: "Finanzas", color: "#0ea5e9", cats: [
       { key: "prestamos", label: "Préstamos", hint: "Cuotas de préstamos y tarjetas.", icon: Bank, words: ["prestamo", "cofidis", "cetelem"] },
       { key: "comisiones", label: "Comisiones", hint: "Las que te cobra el banco.", icon: Percent, words: ["comision"] },
       { key: "impuestos", label: "Impuestos", hint: "IBI, IRPF, multas, tasas…", icon: Receipt, words: ["agencia tributaria", "ayuntamiento", "ibi", "dgt"] },
       { key: "otros_seguros", label: "Otros seguros", hint: "Vida, salud, decesos…", icon: Umbrella },
       { key: "efectivo", label: "Efectivo", hint: "Lo que sacas del cajero.", icon: Money, words: ["cajero", "reintegro", "atm"] },
     ] },
-    { key: "otros", label: "Otros", color: "#64748b", cats: [
+    { key: "otros", label: "Otros", color: "#94a3b8", cats: [
       { key: "solidaridad", label: "Solidaridad", hint: "ONG, donaciones…", icon: HandHeart, words: ["unicef", "cruz roja", "medicos sin", "acnur"] },
       { key: "otros_gastos", label: "Otros gastos", hint: "¿Seguro que no encaja en otra?", icon: Wallet },
     ] },
   ],
   ingreso: [
-    { key: "ingresos", label: "Ingresos", color: "#059669", cats: [
+    { key: "ingresos", label: "Ingresos", color: "#10b981", cats: [
       { key: "nomina", label: "Nómina", hint: "Tu sueldo.", icon: Briefcase, words: ["nomina"] },
       { key: "intereses", label: "Intereses y rendimientos", hint: "Intereses, dividendos…", icon: TrendUp, words: ["intereses", "dividendo"] },
       { key: "otros_ingresos", label: "Otros ingresos", hint: "Ventas, alquileres, trabajos extra…", icon: ArrowDownLeft, words: ["wallapop", "vinted"] },
@@ -90,7 +90,7 @@ const TREE: Record<Tab, Family[]> = {
     ] },
   ],
   no_computable: [
-    { key: "no_computable", label: "Ni gasto ni ingreso", color: "#0284c7", cats: [
+    { key: "no_computable", label: "Ni gasto ni ingreso", color: "#64748b", cats: [
       { key: "entre_cuentas", label: "Entre mis cuentas", hint: "Traspasos entre tus cuentas.", icon: ArrowsLeftRight, words: ["traspaso", "transferencia propia", "revolut"] },
       { key: "ahorro_inversion", label: "Ahorro e inversión", hint: "Aportaciones a ahorro, fondos, bróker…", icon: PiggyBank, words: ["indexa", "myinvestor", "trade republic", "degiro"] },
       { key: "bizum_compartido", label: "Gasto compartido", hint: "Lo que adelantas y te devuelven.", icon: HandCoins, words: ["bizum"] },
@@ -109,8 +109,9 @@ const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,
 
 function CatIcon({ icon: I, color }: { icon: Icon; color: string }) {
   return (
-    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl" style={{ backgroundColor: `${color}14` }} aria-hidden="true">
-      <I size={24} color={color} weight="duotone" />
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
+      style={{ background: `linear-gradient(160deg, ${color}e6, ${color})` }} aria-hidden="true">
+      <I size={22} color="#ffffff" weight="fill" />
     </span>
   );
 }
@@ -160,7 +161,7 @@ export function LabCategoryPicker() {
       </div>
 
       {/* Lo que sería la pantalla del selector */}
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <div className="-mx-3 overflow-hidden bg-white sm:mx-0 sm:rounded-3xl sm:border sm:border-slate-200 sm:shadow-sm">
         <div className="px-4 pb-2 pt-4">
           <p className="text-center text-base font-semibold text-slate-900">Selecciona una categoría</p>
           <label className="mt-3 flex h-11 items-center gap-2 rounded-full bg-slate-100 px-4">
