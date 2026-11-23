@@ -2738,6 +2738,8 @@ model finance_settings {
   expected_income    Decimal? @db.Decimal(14, 2)
   income_account_id  String?  @db.Uuid
   savings_account_id String?  @db.Uuid
+  /// Mi plan: objetivo al mes para lo que no está en ningún grupo («Otros gastos»; null = su media).
+  others_goal        Decimal? @db.Decimal(14, 2)
   last_sync_at    DateTime? @db.Timestamptz(6)
   /// Periodo (ciclo/mes y rango) y cuentas ocultas elegidos en pantalla.
   view            Json?

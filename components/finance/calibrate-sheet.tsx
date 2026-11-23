@@ -2,7 +2,7 @@
 // «Calibrar tu mes» (laboratorio, 23/11/2026): cuánto puedes gastar en cada grupo para ahorrar lo que quieres.
 // Pantalla completa desde la derecha. Arriba lo cobrado este mes y el ahorro (deslizador); la barra ideal con el
 // ahorro dentro; debajo, los grupos flexibles con lo que te tocaría (editable: al escribir un importe queda con
-// candado y el resto se recalcula) y los fijos, que no se recortan. «Aplicar como objetivos» guarda los importes
+// candado y el resto se recalcula), incluido «Otros gastos» (lo que no está en ningún grupo), y los fijos. «Aplicar como objetivos» guarda los importes
 // como objetivos de los grupos y el ahorro como tu objetivo de ahorro. El reparto lo hace calibrate() (plan.ts).
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Lock, LockOpen } from "lucide-react";
@@ -15,6 +15,7 @@ import { CategoryIcon } from "./category-icon";
 export type CalibrateGroup = { id: string; name: string; categories: string[]; goal: number | null };
 
 const round = (v: number) => Math.round(v * 100) / 100;
+const OTHERS = "__otros";
 
 export function CalibrateSheet({ open, onClose, income, saving, groups, history, prevDaily, others, onApply }: {
   open: boolean;
@@ -25,9 +26,9 @@ export function CalibrateSheet({ open, onClose, income, saving, groups, history,
   groups: CalibrateGroup[];
   history: GroupCycleTotals[];
   prevDaily: Record<string, number[]>;
-  /** Media de lo que no está en ningún grupo (cuenta como fijo: no tiene objetivo que guardar). */
+  /** Media de lo que no está en ningún grupo («Otros gastos»): se calibra como un grupo flexible más. */
   others: number;
-  onApply: (saving: number, goals: { id: string; goal: number }[]) => void;
+  onApply: (saving: number, goals: { id: string; goal: number }[], othersGoal: number | null) => void;
 }) {
   const [save, setSave] = useState(saving ?? 0);
   const [locks, setLocks] = useState<Record<string, number>>({});
@@ -35,25 +36,25 @@ export function CalibrateSheet({ open, onClose, income, saving, groups, history,
 
   const closed = history.slice(1, 4);
   const avgOf = (keys: string[]) => (closed.length ? Math.round(closed.reduce((t, c) => t + keys.reduce((u, k) => u + (c.full[k] ?? 0), 0), 0) / closed.length) : 0);
-  const items = useMemo(() => groups.filter((g) => g.categories.length).map((g) => {
-    const avg = avgOf(g.categories);
-    const fixed = !isGradual(g.categories, history, prevDaily);
-    return { g, avg, fixed, base: fixed ? g.goal ?? avg : avg || g.goal || 0, color: categoryHex(g.categories[0]) };
+  const items = useMemo(() => [
+    ...groups.filter((g) => g.categories.length).map((g) => {
+      const avg = avgOf(g.categories);
+      const fixed = !isGradual(g.categories, history, prevDaily);
+      return { g, avg, fixed, base: fixed ? g.goal ?? avg : avg || g.goal || 0, color: categoryHex(g.categories[0]) };
+    }),
+    // «Otros gastos» (lo que no está en ningún grupo): flexible, con su media como base.
+    ...(others > 0 ? [{ g: { id: OTHERS, name: "Otros gastos", categories: ["otros_gastos"], goal: null }, avg: others, fixed: false, base: others, color: "#94a3b8" }] : []),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [groups, history, prevDaily]);
+  ], [groups, history, prevDaily, others]);
   const r = calibrate({
     income,
     saving: save,
-    items: [
-      ...items.map((i) => ({ id: i.g.id, base: i.base, fixed: i.fixed, locked: locks[i.g.id] ?? null })),
-      { id: "__otros", base: others, fixed: true, locked: null },
-    ],
+    items: items.map((i) => ({ id: i.g.id, base: i.base, fixed: i.fixed, locked: locks[i.g.id] ?? null })),
   });
   const flexible = items.filter((i) => !i.fixed);
   const fixed = items.filter((i) => i.fixed);
   const segs = [
     ...fixed.map((i) => ({ key: i.g.id, amount: r.amounts[i.g.id] ?? 0, color: i.color, soft: true })),
-    ...(others > 0 ? [{ key: "otros", amount: others, color: "#94a3b8", soft: true }] : []),
     ...flexible.map((i) => ({ key: i.g.id, amount: r.amounts[i.g.id] ?? 0, color: i.color, soft: false })),
     ...(save > 0 ? [{ key: "ahorro", amount: save, color: "#10b981", soft: false }] : []),
   ];
@@ -119,7 +120,7 @@ export function CalibrateSheet({ open, onClose, income, saving, groups, history,
                     <CategoryIcon category={i.g.categories[0]} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[15px] font-semibold text-slate-900">{i.g.name}</span>
-                      <span className="amount block truncate text-xs text-slate-500">{i.avg > 0 ? `Sueles gastar ~${eur(i.avg, 0)}` : "Sin gasto los últimos meses"}</span>
+                      <span className="amount block truncate text-xs text-slate-500">{i.g.id === OTHERS ? `Sin grupo; sueles gastar ~${eur(i.avg, 0)}` : i.avg > 0 ? `Sueles gastar ~${eur(i.avg, 0)}` : "Sin gasto los últimos meses"}</span>
                     </span>
                     <button type="button" onClick={() => setLocks((l) => { const n = { ...l }; if (locked) delete n[i.g.id]; else n[i.g.id] = amount; return n; })}
                       aria-label={locked ? `Soltar ${i.g.name}` : `Fijar ${i.g.name}`} aria-pressed={locked}
@@ -139,7 +140,7 @@ export function CalibrateSheet({ open, onClose, income, saving, groups, history,
             </ul>
 
             {/* Fijos: no se recortan */}
-            {(fixed.length > 0 || others > 0) && (
+            {fixed.length > 0 && (
               <>
                 <h3 className="mt-6 text-sm font-semibold text-slate-900">Fijos (no se recortan)</h3>
                 <ul className="mt-1 divide-y divide-slate-100">
@@ -150,16 +151,6 @@ export function CalibrateSheet({ open, onClose, income, saving, groups, history,
                       <span className="amount shrink-0 text-sm tabular-nums text-slate-700">{eur(r.amounts[i.g.id] ?? 0, 0)}</span>
                     </li>
                   ))}
-                  {others > 0 && (
-                    <li className="flex items-center gap-3 py-3">
-                      <CategoryIcon category="otros_gastos" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[15px] text-slate-700">Otros gastos</span>
-                        <span className="block truncate text-xs text-slate-400">Sin grupo: se cuenta tu media. Mételos en grupos para calibrarlos.</span>
-                      </span>
-                      <span className="amount shrink-0 text-sm tabular-nums text-slate-700">~{eur(others, 0)}</span>
-                    </li>
-                  )}
                 </ul>
               </>
             )}
@@ -167,7 +158,9 @@ export function CalibrateSheet({ open, onClose, income, saving, groups, history,
 
           <div className="shrink-0 border-t border-slate-100 bg-white px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
             <button type="button" disabled={r.shortfall > 0}
-              onClick={() => onApply(save, flexible.map((i) => ({ id: i.g.id, goal: r.amounts[i.g.id] ?? 0 })).filter((x) => x.goal > 0))}
+              onClick={() => onApply(save,
+                flexible.filter((i) => i.g.id !== OTHERS).map((i) => ({ id: i.g.id, goal: r.amounts[i.g.id] ?? 0 })).filter((x) => x.goal > 0),
+                flexible.some((i) => i.g.id === OTHERS) ? r.amounts[OTHERS] ?? null : null)}
               className="h-12 w-full rounded-full bg-blue-600 text-sm font-semibold text-white active:bg-blue-700 disabled:opacity-40">
               Aplicar como objetivos
             </button>
