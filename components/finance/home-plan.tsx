@@ -2,7 +2,8 @@
 // Inicio · el gasto del mes y tus grupos (nació en el laboratorio el 23/11/2026).
 // 1. Gasto acumulado del mes (sin extraordinarios) frente al mes pasado y al objetivo; pills con los grupos de gasto
 //    gradual (los de recibos fijos no se siguen día a día).
-// 2. Tus grupos: el ritmo de cada uno en palabras, con una marca; al tocarlo se despliegan sus categorías.
+// 2. Tus grupos: lo gastado (el color dice si vas bien) y el ritmo en palabras. Un grupo de una sola categoría
+//    abre su hoja al tocarlo; uno de varias despliega el reparto por categorías y «Ver todos los movimientos».
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -111,7 +112,8 @@ function GoalsGlance({ plan }: { plan: Plan }) {
 
       <ul className="mt-3 divide-y divide-slate-100">
         {rows.map(({ g, s, pace, text }) => {
-          const isOpen = open === g.id;
+          const single = g.categories.length <= 1;
+          const isOpen = !single && open === g.id;
           // Lo que sueles gastar en el grupo en un mes entero (media de los 3 ciclos cerrados), como referencia.
           const closed = cycles.slice(1, 4);
           const avgMonth = closed.length ? Math.round(closed.reduce((t, c) => t + g.categories.reduce((u, k) => u + (c.full[k] ?? 0), 0), 0) / closed.length) : 0;
@@ -125,7 +127,8 @@ function GoalsGlance({ plan }: { plan: Plan }) {
             .sort((a, b) => b.now - a.now);
           return (
             <li key={g.id}>
-              <button type="button" onClick={() => setOpen(isOpen ? null : g.id)} aria-expanded={isOpen}
+              {/* Una sola categoría: no hay nada que desplegar, va directo a su hoja. Varias: se despliega el reparto. */}
+              <button type="button" onClick={() => (single ? toSheet(g.id) : setOpen(isOpen ? null : g.id))} aria-expanded={single ? undefined : isOpen}
                 className="flex w-full items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
                 <CategoryIcon category={g.categories[0]} />
                 <span className="min-w-0 flex-1">
@@ -142,18 +145,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
               <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
                 <div className="overflow-hidden">
                   <div className="mb-3 ml-12">
-                    <button type="button" onClick={() => toSheet(g.id)} aria-label={`Ver todos los movimientos de ${g.name}`}
-                      className="flex w-full items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5 text-left hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs text-slate-500">Gastado este mes</span>
-                        <span className="amount block text-lg font-semibold tabular-nums tracking-tight text-slate-900">
-                          {eur(s.now, 2)}{s.goal !== null && <span className="text-sm font-normal text-slate-500"> de {eur(s.goal, 0)}</span>}
-                        </span>
-                        {(() => { const x = g.categories.reduce((t, c) => t + (plan.totals?.extrasNow?.[c] ?? 0), 0); return x > 0 ? <span className="amount block text-xs text-slate-500">+{eur(x, 2)} extraordinarios aparte</span> : null; })()}
-                      </span>
-                      <ChevronRight className="h-5 w-5 shrink-0 text-slate-400" />
-                    </button>
-                    <ul className="mt-1">
+                    <ul>
                       {cats.map(({ c, now, d }) => (
                         <li key={c}>
                           <div className="flex w-full items-center gap-3 py-2.5">
@@ -171,6 +163,10 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                       ))}
                       {!cats.length && <li className="py-2.5 text-sm text-slate-500">Sin gastos este mes.</li>}
                     </ul>
+                    {(() => { const x = g.categories.reduce((t, c) => t + (plan.totals?.extrasNow?.[c] ?? 0), 0); return x > 0 ? <p className="amount pb-1 text-xs text-slate-500">Además, {eur(x, 2)} en extraordinarios, aparte.</p> : null; })()}
+                    <button type="button" onClick={() => toSheet(g.id)} className="mt-1 inline-flex items-center gap-0.5 py-1.5 text-sm font-medium text-blue-700 hover:underline">
+                      Ver todos los movimientos<ChevronRight className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               </div>
