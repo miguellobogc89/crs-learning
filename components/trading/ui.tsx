@@ -45,6 +45,13 @@ export const PILL: Record<string, string> = {
   teal: "bg-teal-50 text-teal-700",
   lime: "bg-lime-50 text-lime-800",
   slate: "bg-slate-100 text-slate-600",
+  green: "bg-green-50 text-green-700",
+  indigo: "bg-indigo-50 text-indigo-700",
+  pink: "bg-pink-50 text-pink-700",
+  red: "bg-red-50 text-red-700",
+  purple: "bg-purple-50 text-purple-700",
+  sky: "bg-sky-50 text-sky-700",
+  gray: "bg-slate-100 text-slate-600",
 };
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 

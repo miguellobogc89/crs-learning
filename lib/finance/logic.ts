@@ -284,25 +284,42 @@ const KEYWORDS: Keyword[] = [
   // Bizum recibido en Revolut: lo mandan amigos (su parte de una cena, un regalo…); no es una recarga propia.
   { re: /\bdinero anadido a traves de bizum\b/, category: "otros_gastos", kind: "devolucion", sign: "in" },
   { re: /\b(traspaso|transferencia entre cuentas|recarga revolut|top ?up|topup|money added|added via|investment account|savings account|vault|pocket|hucha)\b/, category: "transferencia_interna", kind: "interna" },
-  { re: /\b(hipoteca|prestamo hipotecario|alquiler|comunidad de propietarios|comunidad prop)\b/, category: "vivienda" },
-  { re: /\b(iberdrola|endesa|naturgy|holaluz|totalenergies|repsol luz|canal de isabel|aguas|emasesa|aqualia|movistar|vodafone|orange|digi|jazztel|pepephone|masmovil|yoigo|lowi|simyo|o2|finetwork)\b/, category: "suministros" },
+  { re: /\b(comunidad de propietarios|comunidad prop|cdad prop|comunidad de vecinos)\b/, category: "comunidad" },
+  { re: /\b(hipoteca|prestamo hipotecario|alquiler)\b/, category: "vivienda" },
+  { re: /\b(iberdrola|endesa|holaluz|totalenergies|repsol luz|octopus|lucera|som energia|curenergia|energia xxi|factor energia)\b/, category: "luz" },
+  { re: /\b(naturgy|gas natural|butano|nedgia|redexis)\b/, category: "gas" },
+  { re: /\b(canal de isabel|aguas|emasesa|aqualia|emasagra|emaya|agbar)\b/, category: "agua" },
+  { re: /\b(simyo|lowi|yoigo|pepephone|lebara|lycamobile|llamaya|amena)\b/, category: "movil" },
+  { re: /\b(movistar|vodafone|orange|digi|jazztel|masmovil|o2|finetwork|euskaltel|telecable|r cable)\b/, category: "internet_fijo" },
   { re: /\b(mercadona|carrefour|lidl|dia|alcampo|eroski|consum|aldi|hipercor|supercor|caprabo|bonpreu|ahorramas|gadis|froiz|el arbol|supermercado|fruteria|carniceria|panaderia|bm supermercados|masymas|spar|coviran)\b/, category: "alimentacion" },
   { re: /\b(glovo|just ?eat|uber[ *]*eats|deliveroo|telepizza|domino s?|dominos)\b/, category: "comida_domicilio" },
-  { re: /\b(restaurante|rest\.?|bar|cafeteria|cafe|mcdonald|burger king|starbucks|kfc|vips|goiko|100 montaditos|tgb|taberna|cerveceria|pizzeria|sushi)\b/, category: "restaurantes" },
+  { re: /\b(cerveceria|taberna|pub|discoteca|cocteleria|coctel|copas)\b/, category: "bares_copas" },
+  { re: /\b(restaurante|rest\.?|bar|cafeteria|cafe|mcdonald|burger king|starbucks|kfc|vips|goiko|100 montaditos|tgb|pizzeria|sushi)\b/, category: "restaurantes" },
   { re: /\b(steam|steamgames(?:\.com)?|steampowered|epic games|gog\.com|humble bundle|playstation store|nintendo eshop|xbox store)\b/, category: "videojuegos" },
   { re: /\b(netflix|spotify|hbo|max\.com|disney|prime video|amazon prime|apple\.com|itunes|icloud|youtube|google one|google storage|chatgpt|openai|anthropic|claude|dazn|filmin|movistar plus|audible|patreon|github|notion|adobe|microsoft 365|xbox|playstation|nintendo)\b/, category: "suscripciones" },
-  { re: /\b(renfe|cabify|uber|bolt|freenow|metro|emt|tmb|alsa|blablacar|repsol|cepsa|bp|galp|shell|ballenoil|petroprix|plenoil|gasolinera|parking|aparcamiento|autopista|peaje|via t|itv|taller)\b/, category: "transporte" },
+  { re: /\b(repsol|cepsa|bp|galp|shell|ballenoil|petroprix|plenoil|gasolinera|estacion de servicio|carburante|iberdrola recarga|tesla supercharger)\b/, category: "gasolina" },
+  { re: /\b(parking|aparcamiento|telpark|empark|saba|indigo|zona azul|ora|autopista|peaje|via t)\b/, category: "parking_peaje" },
+  { re: /\b(itv|taller|norauto|midas|feu vert|euromaster|confortauto|neumaticos|lavado)\b/, category: "mantenimiento_vehiculo" },
+  { re: /\b(renfe|cabify|uber|bolt|freenow|metro|emt|tmb|alsa|blablacar|taxi|bus|tranvia)\b/, category: "transporte" },
   { re: /\b(ryanair|vueling|iberia|easyjet|air europa|booking|airbnb|expedia|hotel|edreams|skyscanner)\b/, category: "viajes" },
   { re: /\b(zara|mango|primark|h m|pull ?(and )?bear|bershka|stradivarius|massimo dutti|shein|zalando|springfield|lefties|oysho|uniqlo|levis|nike|adidas|adidases|foot ?locker|jd sports|parfois|pandora|vinted|kiabi|cortefiel|desigual)\b/, category: "moda" },
-  { re: /\b(amazon|amzn|aliexpress|el corte ingles|decathlon|ikea|mediamarkt|media markt|pccomponentes|leroy merlin|fnac|temu|wallapop)\b/, category: "compras" },
-  { re: /\b(cine|cinesa|yelmo|teatro|ticketmaster|entradas|concierto|gimnasio|basic fit|dreamfit|mcfit|padel)\b/, category: "ocio" },
+  { re: /\b(ikea|zara home|maisons du monde|jysk|conforama|kave home|sklum|el corte ingles hogar)\b/, category: "muebles_decoracion" },
+  { re: /\b(leroy merlin|bricomart|bauhaus|brico depot|bricodepot|aki bricolaje|ferreteria|fontaneria|cerrajero)\b/, category: "mantenimiento_hogar" },
+  { re: /\b(mediamarkt|media markt|pccomponentes|worten|apple store|xiaomi store|backmarket|back market)\b/, category: "electronica" },
+  { re: /\b(gimnasio|gym|basic fit|dreamfit|mcfit|altafit|anytime fitness|padel|playtomic|decathlon|crossfit)\b/, category: "deporte" },
+  { re: /\b(amazon|amzn|aliexpress|el corte ingles|fnac|temu|wallapop)\b/, category: "compras" },
+  { re: /\b(cine|cinesa|yelmo|kinepolis|teatro|ticketmaster|entradas|concierto|dice\.fm|fever|eventbrite|taquilla)\b/, category: "conciertos_espectaculos" },
   { re: /\b(veterinari[ao]s?|clinica veterinaria|kiwoko|tiendanimal|zooplus|miscota|mascotas?)\b/, category: "mascotas" },
-  { re: /\b(farmacia|clinica|dentista|hospital|sanitas|adeslas|asisa|dkv|optica|fisioterapia|medico)\b/, category: "salud" },
+  { re: /\b(farmacia|parafarmacia|herbolario|farma)\b/, category: "farmacia" },
+  { re: /\b(clinica|dentista|dental|hospital|sanitas|adeslas|asisa|dkv|optica|fisioterapia|medico)\b/, category: "salud" },
+  { re: /\b(unicef|cruz roja|acnur|caritas|medicos sin fronteras|save the children|intermon|oxfam|greenpeace|donacion|ong)\b/, category: "solidaridad" },
+  { re: /\b(guarderia|escuela infantil|extraescolar|canguro|ludoteca)\b/, category: "hijos" },
   { re: /\b(seguro|mapfre|mutua madrilena|axa|allianz|linea directa|generali|reale|zurich|verti)\b/, category: "seguros" },
   { re: /\b(prestamo|cuota prestamo|financiacion|cofidis|cetelem|klarna|aplazame|sequra)\b/, category: "prestamos" },
   { re: /\b(aeat|agencia tributaria|hacienda|ibi|ayuntamiento|dgt|tasa|impuesto|seguridad social|tgss)\b/, category: "impuestos" },
   { re: /\b(peluqueria|barberia|estetica|perfumeria|druni|primor|sephora)\b/, category: "cuidado_personal" },
-  { re: /\b(academia|universidad|colegio|udemy|coursera|libreria|matricula)\b/, category: "educacion" },
+  { re: /\b(casa del libro|libreria|papeleria|tienda de musica|fotografia)\b/, category: "hobbies" },
+  { re: /\b(academia|universidad|colegio|udemy|coursera|matricula)\b/, category: "educacion" },
   { re: /\b(cajero|retirada efectivo|reintegro|disposicion efectivo|atm)\b/, category: "efectivo" },
   { re: /\b(comision|comisiones|cuota mantenimiento|cuota tarjeta)\b/, category: "comisiones" },
 ];
@@ -448,7 +465,7 @@ const median = (xs: number[]) => {
 export { median };
 
 /** Categorías de compra suelta: solo cuentan como recurrentes si el importe es prácticamente fijo. */
-const VARIABLE_CATEGORIES = new Set(["alimentacion", "restaurantes", "transporte", "compras", "efectivo", "ocio", "videojuegos", "otros_gastos"]);
+const VARIABLE_CATEGORIES = new Set(["alimentacion", "restaurantes", "bares_copas", "transporte", "gasolina", "parking_peaje", "compras", "efectivo", "ocio", "videojuegos", "otros_gastos", "farmacia"]);
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 export { round2 };
@@ -489,7 +506,7 @@ export function detectRecurring(txs: Tx[], today: string, cancelled: Set<string>
     // Muchas compras sueltas en el mismo comercio (súper, gasolina…) no son un recibo.
     if (sorted.length > dedup.length * 1.3) continue;
     const cat = dedup[dedup.length - 1].category;
-    const tolerance = cat === "suministros" ? 0.6 : VARIABLE_CATEGORIES.has(cat) || frequency === "semanal" ? 0.03 : 0.3;
+    const tolerance = ["suministros", "luz", "gas", "agua"].includes(cat) ? 0.6 : VARIABLE_CATEGORIES.has(cat) || frequency === "semanal" ? 0.03 : 0.3;
     const stable = amounts.filter((a) => Math.abs(a - med) <= med * tolerance).length / amounts.length;
     if (stable < 0.7) continue;
     const last = dedup[dedup.length - 1];

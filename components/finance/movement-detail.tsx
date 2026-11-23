@@ -13,6 +13,7 @@ import { eur } from "@/components/trading/format";
 import { errorText, fapi, longDay, refreshFinance } from "./api";
 import { BankLogo } from "./bank-logo";
 import { CategoryIcon } from "./category-icon";
+import { CategoryPicker } from "./category-picker";
 import { SOURCE_LABEL, categoriesFor, type Item } from "./movement-edit";
 import { aboveKeyboard, useKeyboardInset } from "./use-keyboard-inset";
 
@@ -345,17 +346,19 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
             </div>
           )}
 
-          <PickSheet
-            open={sheet === "category"}
-            onClose={() => setSheet(null)}
-            title="Categoría"
-            subtitle={shownName}
-            searchable
-            icons
-            current={v.category}
-            options={categoriesFor(v.kind === "interna" || v.kind === "ahorro" ? "gasto" : v.kind).map((c) => ({ key: c.key, label: c.label }))}
-            onPick={(category) => { if (category !== v.category) void save(v.kind === "interna" || v.kind === "ahorro" ? { category, kind: "gasto" } : { category }, "category", `Ahora es ${categoryOf(category).label}`); }}
-          />
+          <BottomSheet open={sheet === "category"} onClose={() => setSheet(null)} title="Selecciona una categoría" subtitle={shownName} tall>
+            <CategoryPicker
+              current={v.category}
+              kind={v.kind}
+              movement={{ description: item.description, counterparty: item.counterparty, amount: item.amount }}
+              onPick={(c) => {
+                setSheet(null);
+                // El tipo sale de la categoría: una de gasto sigue siendo devolución si ya lo era.
+                const kind: Kind = c.kind === "gasto" ? (v.kind === "devolucion" ? "devolucion" : "gasto") : c.kind;
+                if (c.key !== v.category || kind !== v.kind) void save({ category: c.key, kind }, "category", `Ahora es ${c.label}`);
+              }}
+            />
+          </BottomSheet>
           <PickSheet
             open={sheet === "kind"}
             onClose={() => setSheet(null)}

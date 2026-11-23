@@ -153,7 +153,7 @@ async function aiClassify(batch: Tx[], bankOf: Map<string, string>, memory: stri
       "kind: gasto (sale dinero de verdad), ingreso (ingreso ordinario: nómina, intereses), regalo (dinero recibido que no es ingreso ordinario, p. ej. Bizum de un familiar por un cumpleaños), devolucion (reembolso de un gasto; categoría = la del gasto que devuelve), interna (entre cuentas propias de la persona, recargas de Revolut, traspasos), ahorro (aportación a inversión, bróker, exchange cripto o fondo).",
       "Importe negativo = sale de la cuenta; positivo = entra. Un Bizum o transferencia saliente a otra persona suele ser gasto (categoría según el concepto, o regalos si lo indica). Uno entrante de otra persona: devolucion si parece pagar su parte de algo, regalo si lo indica el concepto, si no otros_ingresos.",
       "extraordinary=true solo si es claramente puntual y no debe proyectarse (una compra grande excepcional, una multa, un viaje concreto).",
-      `Categorías válidas: ${categories.map((c) => `${c.key} (${c.label}, ${c.kind})`).join(", ")}.`,
+      `Categorías válidas (clave: nombre, qué entra, kind): ${categories.map((c) => `${c.key} (${c.label}${c.hint ? `: ${c.hint}` : ""}, ${c.kind})`).join("; ")}. Usa la más concreta; las «otros…» solo si ninguna encaja.`,
       `Cuentas propias de la persona (el nombre es el del titular): ${ownAccounts.join("; ") || "—"}. Una transferencia a o desde el propio titular es interna; a o desde familiares con apellidos parecidos, no.`,
       `Gastos sueltos muy grandes (más de ${EXTRAORDINARY_FROM} €: una obra, una compra de vivienda, una donación) son extraordinary=true.`,
       memory ? `Contexto que la persona ha contado:\n${memory}` : "",

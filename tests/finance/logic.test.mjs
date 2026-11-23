@@ -410,7 +410,7 @@ test("Categorías nuevas por comercio: comida a domicilio, moda y mascotas antes
   assert.equal(k("Zalando Payments"), "moda");
   assert.equal(k("COMPRA H&M MADRID"), "moda");
   assert.equal(k("Clinica Veterinaria Aljarafe"), "mascotas");
-  assert.equal(k("Farmacia Lda. Garcia"), "salud");
+  assert.equal(k("Farmacia Lda. Garcia"), "farmacia");
   assert.equal(k("Bar Borbolla"), "restaurantes");
   assert.equal(k("AMAZON MKTPLACE"), "compras");
 });
@@ -421,4 +421,20 @@ test("Reglas: un comercio con «de» en el nombre también encaja con su regla",
   const rule = { id: "r", pattern, category: "restaurantes", kind: "gasto", extraordinary: false };
   assert.equal(L.matchRule({ description: "Asador De Tomares", counterparty: "Asador De Tomares" }, [rule])?.id, "r");
   assert.equal(L.matchRule({ description: "Cervecerias El Tanque", counterparty: null }, [rule]), null);
+});
+
+test("Árbol de categorías: ocio, suministros, transporte y casa se reparten por comercio", () => {
+  const k = (d, amount = -10) => L.keywordClass({ description: d, counterparty: null, amount })?.category;
+  assert.equal(k("TICKETMASTER ESPANA"), "conciertos_espectaculos");
+  assert.equal(k("BOOKING.COM HOTEL"), "viajes");
+  assert.equal(k("CERVECERIA LA MAJA"), "bares_copas");
+  assert.equal(k("IBERDROLA CLIENTES"), "luz");
+  assert.equal(k("VODAFONE ESPANA"), "internet_fijo");
+  assert.equal(k("SIMYO"), "movil");
+  assert.equal(k("REPSOL ESTACION"), "gasolina");
+  assert.equal(k("TELPARK"), "parking_peaje");
+  assert.equal(k("BASIC FIT"), "deporte");
+  assert.equal(k("IKEA SEVILLA"), "muebles_decoracion");
+  assert.equal(k("COMUNIDAD DE PROPIETARIOS C/ SOL"), "comunidad");
+  assert.equal(k("RECIBO HIPOTECA"), "vivienda");
 });

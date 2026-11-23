@@ -516,8 +516,8 @@ export async function packagesView(userId: string) {
 
 /** Grupos con los que arranca Plan la primera vez (cada uno solo con categorías; el usuario los cambia). */
 const DEFAULT_PLAN_GROUPS: { name: string; categories: string[] }[] = [
-  { name: "Gastos fijos", categories: ["suministros", "suscripciones", "prestamos"] },
-  { name: "Ocio", categories: ["restaurantes", "ocio", "videojuegos"] },
+  { name: "Gastos fijos", categories: ["luz", "gas", "agua", "internet_fijo", "movil", "suministros", "suscripciones", "prestamos"] },
+  { name: "Ocio", categories: ["restaurantes", "bares_copas", "conciertos_espectaculos", "viajes", "hobbies", "videojuegos", "ocio"] },
   { name: "Moda y complementos", categories: ["moda"] },
   { name: "Comida a domicilio", categories: ["comida_domicilio"] },
 ];
