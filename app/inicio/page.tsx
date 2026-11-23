@@ -6,7 +6,7 @@ import { BUSINESS_HOME, TRADING_HOME, hasBusinessAccess } from "@/lib/auth/busin
 
 export default async function AppEntryPage() {
   const userId = (await auth())?.user?.id;
-  if (!userId) redirect("/");
+  if (!userId) redirect("/login");
 
   const home = await hasBusinessAccess(userId) ? BUSINESS_HOME : TRADING_HOME;
   redirect(moduleHref(home, (await headers()).get("host")));
