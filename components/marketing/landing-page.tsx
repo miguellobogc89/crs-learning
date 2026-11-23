@@ -67,8 +67,8 @@ function SiteHeader({ isAuthenticated }: Props) {
 
         <nav className="hidden items-center gap-8 text-[13px] font-medium text-slate-600 md:flex" aria-label="Navegación principal">
           <a href="#business" className="transition hover:text-slate-950">Business</a>
-          <a href="#ecosistema" className="transition hover:text-slate-950">Finance</a>
-          <a href="#ecosistema" className="transition hover:text-slate-950">Trading</a>
+          <a href="#finance" className="transition hover:text-slate-950">Finance</a>
+          <a href="#trading" className="transition hover:text-slate-950">Trading</a>
         </nav>
 
         <div className="flex shrink-0 items-center gap-3">
@@ -279,7 +279,7 @@ export function MarketingLanding({ isAuthenticated }: Props) {
             </div>
 
             <div className="mt-12 grid gap-5 lg:grid-cols-2">
-              <article className="relative overflow-hidden rounded-[26px] border border-emerald-100 bg-white p-7 shadow-sm sm:p-9">
+              <article id="finance" className="relative scroll-mt-28 overflow-hidden rounded-[26px] border border-emerald-100 bg-white p-7 shadow-sm sm:p-9">
                 <div className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-emerald-100/50 blur-3xl" aria-hidden="true" />
                 <div className="relative">
                   <div className="flex items-center gap-3">
@@ -305,7 +305,7 @@ export function MarketingLanding({ isAuthenticated }: Props) {
                 </div>
               </article>
 
-              <article className="relative overflow-hidden rounded-[26px] border border-rose-100 bg-white p-7 shadow-sm sm:p-9">
+              <article id="trading" className="relative scroll-mt-28 overflow-hidden rounded-[26px] border border-rose-100 bg-white p-7 shadow-sm sm:p-9">
                 <div className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-rose-100/50 blur-3xl" aria-hidden="true" />
                 <div className="relative">
                   <div className="flex items-center gap-3">
