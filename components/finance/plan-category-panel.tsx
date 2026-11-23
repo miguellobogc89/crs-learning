@@ -36,7 +36,9 @@ export function PlanCategoryPanel({ categoryKey }: { categoryKey: string }) {
     const rows = list.data.items.filter((t) => !t.excluded && t.kind === "gasto" && t.amount < 0
       && t.category === categoryKey);
     return plan.data.cycles.map((c) => {
-      const mine = rows.filter((t) => t.date >= c.start && t.date <= c.end).sort((a, b) => b.date.localeCompare(a.date));
+      // Cada gasto cuenta en su fecha imputada si se la cambiaste («Cambiar fecha»), no en la del cargo.
+      const when = (t: (typeof rows)[number]) => t.imputedDate ?? t.date;
+      const mine = rows.filter((t) => when(t) >= c.start && when(t) <= c.end).sort((a, b) => when(b).localeCompare(when(a)));
       // El total no cuenta los extraordinarios (igual que Mi plan e Inicio); van aparte.
       const sum = (xs: typeof mine) => Math.round(xs.reduce((s, t) => s - t.amount, 0) * 100) / 100;
       return { ...c, rows: mine, total: sum(mine.filter((t) => !t.extraordinary)), extra: sum(mine.filter((t) => t.extraordinary)) };

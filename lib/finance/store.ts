@@ -33,6 +33,7 @@ export const toTx = (r: TxRow): Tx => ({
   source: r.category_source,
   extraordinary: r.extraordinary,
   transferPairId: r.transfer_pair_id,
+  imputedDate: r.imputed_date ? r.imputed_date.toISOString().slice(0, 10) : null,
 });
 
 /** Movimientos de las cuentas incluidas (en EUR), del más reciente al más antiguo. */

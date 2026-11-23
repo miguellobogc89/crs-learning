@@ -129,6 +129,18 @@ export async function POST(req: Request, route: RouteContext) {
       if (!undo || !Array.isArray(undo.rows)) return fail("Nada que deshacer");
       return ok(await undoSimilar(uid, undo));
     }
+    if (action === "transaction/imputed") {
+      // «Cambiar fecha»: mes al que se imputa el gasto (null = el del cargo). No toca la fecha real del cargo.
+      const raw = body.date;
+      const date = raw === null || raw === undefined || raw === "" ? null : String(raw);
+      if (date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("Fecha no válida");
+      const r = await prisma.finance_transactions.updateMany({
+        where: { id: str("id"), user_id: uid },
+        data: { imputed_date: date ? new Date(`${date}T00:00:00Z`) : null, updated_at: new Date() },
+      });
+      if (!r.count) return fail("Movimiento no encontrado", 404);
+      return ok({ ok: true });
+    }
     if (action === "plan/group") {
       // Crear o cambiar nombre/objetivo de un grupo de Plan.
       const name = str("name").trim().slice(0, 40);

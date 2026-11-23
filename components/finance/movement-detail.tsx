@@ -140,7 +140,9 @@ function Row({ onClick, children, chevron = true }: { onClick?: () => void; chil
 
 export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item | null; onClose: () => void; items?: Item[] }) {
   const [override, setOverride] = useState<Partial<Values>>({});
-  const [sheet, setSheet] = useState<null | "category" | "subcategory" | "note" | "kind">(null);
+  const [sheet, setSheet] = useState<null | "category" | "subcategory" | "note" | "kind" | "month">(null);
+  // «Cambiar fecha»: mes en que cuenta el gasto (lo guardado o lo que acabas de elegir).
+  const [imputed, setImputed] = useState<string | null | undefined>(undefined);
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState("");
   const [similar, setSimilar] = useState<{ count: number; differ: number; label: string } | null>(null);
@@ -155,7 +157,7 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   // Cómo estaba al abrirlo: el botón de parecidos solo sale si lo has cambiado respecto a esto.
   const [opened, setOpened] = useState<Values | null>(null);
   useEffect(() => {
-    setOverride({}); setSheet(null); setEditingName(false); setSimilar(null); setToast(null); setErr(null);
+    setOverride({}); setSheet(null); setEditingName(false); setSimilar(null); setToast(null); setErr(null); setImputed(undefined);
     setOpened(item ? valuesOf(item) : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -250,6 +252,35 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   const edited = v.category !== base.category || v.kind !== base.kind || (v.alias ?? null) !== base.alias || (v.subcategory ?? null) !== base.subcategory;
   const showApply = edited && !!similar && similar.differ > 0;
 
+  // Meses para «Cambiar fecha»: de 3 antes a 24 después del mes del cargo. Se guarda el día 15 de ese mes (cae en
+  // el ciclo que lleva su nombre, también si el ciclo empieza el 25).
+  const chargeMonth = item.date.slice(0, 7);
+  const currentImputed = imputed === undefined ? item.imputedDate ?? null : imputed;
+  const shownMonth = currentImputed ? currentImputed.slice(0, 7) : chargeMonth;
+  const monthName = (ym: string) => new Date(`${ym}-15T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
+  const monthOptions = Array.from({ length: 28 }, (_, i) => {
+    const d = new Date(`${chargeMonth}-15T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + i - 3);
+    const ym = d.toISOString().slice(0, 7);
+    return { key: ym, label: monthName(ym).replace(/^./, (c) => c.toUpperCase()), hint: ym === chargeMonth ? "Mes del cargo" : undefined };
+  });
+  const changeMonth = async (ym: string) => {
+    const prev = currentImputed;
+    const next = ym === chargeMonth ? null : `${ym}-15`;
+    setImputed(next);
+    try {
+      await fapi("transaction/imputed", { id: item.id, date: next });
+      refreshFinance();
+      setToast({ text: next ? `Ahora cuenta en ${monthName(ym)}` : "Vuelve a contar en el mes del cargo", undo: () => {
+        setImputed(prev);
+        void fapi("transaction/imputed", { id: item.id, date: prev }).then(refreshFinance).catch((e) => setErr(errorText(e)));
+      } });
+    } catch (e) {
+      setImputed(prev);
+      setErr(errorText(e));
+    }
+  };
+
   return (
     <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
       <SheetContent side="right" showCloseButton={false} className="gap-0 bg-white p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md">
@@ -325,6 +356,17 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
                   </label>
                 </li>
               )}
+              {spend && (
+                <Row onClick={() => setSheet("month")}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] text-slate-800">Cambiar fecha</span>
+                    <span className="block text-xs text-slate-400">
+                      {currentImputed ? `Cuenta en tu plan de ${monthName(shownMonth)} (pagado el ${longDay(item.date)})` : "Para que cuente en otro mes: entradas que compras antes, una cena que pagas después…"}
+                    </span>
+                  </span>
+                  <span className={`shrink-0 text-sm ${currentImputed ? "font-medium text-blue-700" : "text-slate-400"}`}>{monthName(shownMonth).replace(/ de /, " ")}</span>
+                </Row>
+              )}
             </ul>
             {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
           </div>
@@ -359,6 +401,15 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
               }}
             />
           </BottomSheet>
+          <PickSheet
+            open={sheet === "month"}
+            onClose={() => setSheet(null)}
+            title="¿En qué mes cuenta este gasto?"
+            subtitle="El cargo no cambia de fecha: solo el mes en que cuenta en tu plan."
+            current={shownMonth}
+            options={monthOptions}
+            onPick={(ym) => { if (ym !== shownMonth) void changeMonth(ym); }}
+          />
           <PickSheet
             open={sheet === "kind"}
             onClose={() => setSheet(null)}

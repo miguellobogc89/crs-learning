@@ -18,6 +18,8 @@ export type Tx = {
   source: string;
   extraordinary: boolean;
   transferPairId: string | null;
+  /** Fecha a la que se imputa el gasto (si no es la del cargo): la usa el plan; el saldo usa `date`. */
+  imputedDate?: string | null;
 };
 
 // ---------------------------------------------------------------------------------------------------------

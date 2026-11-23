@@ -527,6 +527,9 @@ const DEFAULT_PLAN_GROUPS: { name: string; categories: string[] }[] = [
  * ciclo y del ciclo anterior hasta el mismo día del ciclo. Solo gastos reales de cuentas incluidas (sin traspasos
  * ni aportaciones a ahorro). Si aún no tiene grupos y ya hay movimientos, se crean los de inicio.
  */
+/** Para medir el gasto, un movimiento cuenta en su fecha imputada (si la tiene), no en la del cargo. */
+const spendDated = <T extends { date: string; imputedDate?: string | null }>(t: T): T => (t.imputedDate ? { ...t, date: t.imputedDate } : t);
+
 export async function planView(userId: string) {
   const ctx = await financeContext(userId);
   const load = () => prisma.finance_plan_groups.findMany({ where: { user_id: userId }, orderBy: [{ position: "asc" }, { created_at: "asc" }] });
@@ -546,7 +549,8 @@ export async function planView(userId: string) {
   const now: Record<string, number> = {};
   const before: Record<string, number> = {};
   const extrasNow: Record<string, number> = {};
-  for (const t of ctx.txs) {
+  for (const t0 of ctx.txs) {
+    const t = spendDated(t0);
     if (!isPackageCharge(t)) continue;
     if (t.extraordinary) {
       if (t.date >= current.start && t.date <= current.end) extrasNow[t.category] = round2((extrasNow[t.category] ?? 0) - t.amount);
@@ -565,7 +569,8 @@ export async function planView(userId: string) {
     const full: Record<string, number> = {};
     const atDay: Record<string, number> = {};
     const subAtDay: Record<string, number> = {};
-    for (const t of ctx.txs) {
+    for (const t0 of ctx.txs) {
+      const t = spendDated(t0);
       if (!isPackageCharge(t) || t.extraordinary || t.date < c.start || t.date > c.end) continue;
       full[t.category] = round2((full[t.category] ?? 0) - t.amount);
       if (t.date > cut) continue;
@@ -581,7 +586,8 @@ export async function planView(userId: string) {
   const prevDays = daysBetween(prevCycle.start, prevCycle.end) + 1;
   const daily: { cur: Record<string, number[]>; prev: Record<string, number[]> } = { cur: {}, prev: {} };
   const extras: { date: string; label: string; amount: number; category: string }[] = [];
-  for (const t of ctx.txs) {
+  for (const t0 of ctx.txs) {
+    const t = spendDated(t0);
     if (!isPackageCharge(t)) continue;
     if (t.date >= current.start && t.date <= current.end) {
       if (t.extraordinary) { extras.push({ date: t.date, label: t.alias || t.counterparty || t.description, amount: round2(-t.amount), category: t.category }); continue; }
