@@ -70,7 +70,7 @@ function fingerprint(value: string): string {
 
 export async function syncYaxiConnections(opts: { userId?: string; bank?: string } = {}) {
   if (!isYaxiConfigured() || process.env.YAXI_CONNECT_ENABLED !== "true") {
-    return { banks: 0, transactions: 0, errors: 0, disabled: true };
+    return { banks: 0, transactions: 0, errors: 0, skipped: 0, errorMessages: [] as string[], disabled: true };
   }
   const connections = await prisma.personal_bank_connections.findMany({
     where: { bank: opts.bank ? opts.bank : { startsWith: "yaxi:" }, ...(opts.userId ? { user_id: opts.userId } : {}), consent_expires_at: { gt: new Date() } },
