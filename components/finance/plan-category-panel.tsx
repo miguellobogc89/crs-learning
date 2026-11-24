@@ -216,10 +216,7 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
 
       {!extrasOnly && plan.data && (
         <PlannedList className="pt-1" items={(plan.data.planned ?? []).filter((x) => cats.includes(x.category))}
-          repeats={[
-            ...(plan.data.pending ?? []).filter((x) => cats.includes(x.category)).map((x) => ({ ...x, thisMonth: true })),
-            ...(plan.data.next?.items ?? []).filter((x) => x.source === "repite" && cats.includes(x.category)),
-          ]}
+          repeats={(plan.data.pending ?? []).filter((x) => cats.includes(x.category)).map((x) => ({ ...x, thisMonth: true }))}
           onOpenRepeat={(txId) => setViewingId(txId)} />
       )}
 
