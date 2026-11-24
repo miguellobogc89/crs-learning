@@ -13,6 +13,7 @@ import { disconnectGmail, gmailView, syncGmail } from "@/lib/finance/gmail";
 import { ask, chatHistory, clearChat } from "@/lib/finance/copilot";
 import { getMemory, getRules, getSettings } from "@/lib/finance/store";
 import { LAB_PROFILES, labEmail, labProfile } from "@/lib/finance/lab-data";
+import { proposeSavingsPlan, savingsFacts, type SavingsGoal } from "@/lib/finance/savings-plan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -105,6 +106,7 @@ export async function GET(req: Request, route: RouteContext) {
       if (req.headers.get("x-crs-lab") || !(await isLabAdmin(uid))) return fail("Solo para administradores", 403);
       return ok(await labStatus(uid));
     }
+    if (action === "savings/facts") return ok(await savingsFacts(uid));
     if (action === "overview") return ok(await overview(uid, Number(p.get("cycle")) || 0));
     if (action === "transactions") return ok(await listTransactions(uid, { all: p.get("all") === "1" }));
     if (action === "transaction/recurring") return ok(await transactionRecurring(uid, p.get("id") ?? ""));
@@ -150,6 +152,11 @@ export async function POST(req: Request, route: RouteContext) {
     if (action === "lab/reset") {
       if (req.headers.get("x-crs-lab") || !(await isLabAdmin(uid))) return fail("Solo para administradores", 403);
       return ok(await labReset(uid, str("profile")));
+    }
+    if (action === "savings/propose") {
+      const goal = str("goal") as SavingsGoal;
+      if (!["sobra", "cantidad", "maximo", "equilibrar"].includes(goal)) return fail("Objetivo no válido");
+      return ok(await proposeSavingsPlan(uid, goal, Math.max(0, Math.round(Number(body.target) || 0))));
     }
     if (action === "sync") return ok(await syncUser(uid, { force: body.force === true }));
     if (action === "classify") return ok(await classifyPending(uid, { maxBatches: 2 }));
