@@ -412,6 +412,24 @@ export async function POST(req: Request, route: RouteContext) {
       });
       return ok(created);
     }
+    if (action === "planned/update") {
+      // Cambiar un gasto previsto: concepto, importe, fecha y categoría.
+      const title = str("title").trim().slice(0, 80);
+      const amount = Math.abs(Number(body.amount));
+      const date = str("date");
+      const category = str("category");
+      if (!title) return fail("Ponle un nombre");
+      if (!Number.isFinite(amount) || amount <= 0) return fail("El importe debe ser mayor que cero");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("Fecha no válida");
+      if (!isCategory(category)) return fail("Categoría no válida");
+      const at = new Date(`${date}T00:00:00Z`);
+      const r = await prisma.finance_forecast_items.updateMany({
+        where: { id: str("id"), user_id: uid, source: "previsto" },
+        data: { title, amount: Math.round(amount * 100) / 100, start_date: at, end_date: at, category },
+      });
+      if (!r.count) return fail("Previsto no encontrado", 404);
+      return ok({ ok: true });
+    }
     if (action === "planned/delete") {
       await prisma.finance_forecast_items.deleteMany({ where: { id: str("id"), user_id: uid, source: "previsto" } });
       return ok({ ok: true });
