@@ -102,7 +102,7 @@ export function AccountsPanel() {
                 <BankLogo bank={account.bank} className="h-10 w-10" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-slate-900">{account.name}{account.ibanLast4 ? <span className="font-normal text-slate-400"> · •••• {account.ibanLast4}</span> : null}</span>
-                  <span className="block text-xs text-slate-500">{account.source === "import" ? "Importada" : account.bank} · {account.count} movimientos{account.since ? ` desde el ${longDay(account.since)}` : ""}</span>
+                  <span className="block text-xs text-slate-500">{account.source === "import" ? "Importada" : account.bank?.startsWith("yaxi:") ? "Conexión bancaria" : account.bank} · {account.count} movimientos{account.since ? ` desde el ${longDay(account.since)}` : ""}{account.bank?.startsWith("yaxi:") ? account.lastSyncedAt ? ` · Actualizada ${new Date(account.lastSyncedAt).toLocaleString("es-ES", { timeZone: "Europe/Madrid", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : " · Primera actualización pendiente" : ""}</span>
                   <label className="mt-2 inline-flex items-center gap-2 text-xs text-slate-600" title="Si la excluyes, no cuenta en saldos, gastos ni previsiones">
                     <input type="checkbox" checked={account.included} disabled={busy === account.id} onChange={(e) => void toggleInclude(account.id, e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
                     Incluir en mis finanzas
