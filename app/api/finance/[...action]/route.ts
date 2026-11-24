@@ -3,7 +3,7 @@ import { applyAiSettings } from "@/lib/ai/usage";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { categoryLabel, isCategory } from "@/lib/finance/categories";
-import { accountsView, budgetView, packagesView, planView, financeContext, forecast, forecastSource, listTransactions, overview } from "@/lib/finance/service";
+import { accountsView, budgetView, packagesView, planView, financeContext, forecast, forecastSource, listTransactions, overview, transactionRecurring } from "@/lib/finance/service";
 import { payslipsView } from "@/lib/finance/payslips";
 import { syncUser } from "@/lib/finance/sync";
 import { applyToSimilarFields, bulkCorrect, classifyPending, correctTransaction, similarCount, undoSimilar, type SimilarField } from "@/lib/finance/classify";
@@ -47,6 +47,7 @@ export async function GET(req: Request, route: RouteContext) {
   try {
     if (action === "overview") return ok(await overview(uid, Number(p.get("cycle")) || 0));
     if (action === "transactions") return ok(await listTransactions(uid, { all: p.get("all") === "1" }));
+    if (action === "transaction/recurring") return ok(await transactionRecurring(uid, p.get("id") ?? ""));
     if (action === "forecast") {
       const amount = Number(p.get("amount"));
       return ok(await forecast(uid, { amount: Number.isFinite(amount) ? amount : null, until: p.get("until") }));
@@ -477,6 +478,19 @@ export async function POST(req: Request, route: RouteContext) {
       const key = str("key").slice(0, 200);
       if (!key) return fail("Falta el aviso");
       await prisma.finance_alert_dismissals.upsert({ where: { user_id_key: { user_id: uid, key } }, create: { user_id: uid, key }, update: {} });
+      return ok({ ok: true });
+    }
+    if (action === "recurring/mark") {
+      // «Se repite» a mano: on = true (se repite), false (no se repite), null (lo que detecte la app).
+      const k = str("key").slice(0, 150);
+      if (!k) return fail("Falta el comercio");
+      const onKey = `rec-on:${k}`;
+      const offKey = `rec-off:${k}`;
+      await prisma.finance_alert_dismissals.deleteMany({ where: { user_id: uid, key: { in: [onKey, offKey] } } });
+      if (body.on === true || body.on === false) {
+        const key = body.on ? onKey : offKey;
+        await prisma.finance_alert_dismissals.create({ data: { user_id: uid, key } });
+      }
       return ok({ ok: true });
     }
     if (action === "recurring") {

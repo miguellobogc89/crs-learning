@@ -438,3 +438,15 @@ test("Árbol de categorías: ocio, suministros, transporte y casa se reparten po
   assert.equal(k("COMUNIDAD DE PROPIETARIOS C/ SOL"), "comunidad");
   assert.equal(k("RECIBO HIPOTECA"), "vivienda");
 });
+
+test("recurrentes: «Se repite» marcado a mano enciende o apaga lo detectado", () => {
+  const rows = [...history(), tx("gym1", "S", "2026-11-03", -35, "GIMNASIO CENTRAL", "gasto", "deporte")];
+  const off = L.detectRecurring(rows, "2026-11-17", new Set(), { off: new Set(["netflix.com"]) });
+  assert.equal(off.some((x) => x.key === "netflix.com"), false, "apagado a mano");
+  const on = L.detectRecurring(rows, "2026-11-17", new Set(), { on: new Set(["gimnasio central"]) });
+  const gym = on.find((x) => x.key === "gimnasio central");
+  assert.equal(gym.frequency, "mensual");
+  assert.equal(gym.amount, -35);
+  assert.equal(gym.manual, true);
+  assert.equal(gym.nextDate, "2026-12-03");
+});

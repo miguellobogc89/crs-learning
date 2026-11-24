@@ -17,7 +17,7 @@ const HISTORY_CYCLES = 12;
 
 /** Contexto común: datos y cálculos base de una persona (una sola lectura de la base de datos). */
 export async function financeContext(userId: string) {
-  const [settings, accounts, txs, budgets, { dismissed, cancelled, skippedOccurrences }, forecastItems] = await Promise.all([
+  const [settings, accounts, txs, budgets, { dismissed, cancelled, skippedOccurrences, recurringOn, recurringOff }, forecastItems] = await Promise.all([
     getSettings(userId),
     getAccounts(userId),
     loadTxs(userId),
@@ -28,7 +28,7 @@ export async function financeContext(userId: string) {
   const today = todayIso();
   // El ciclo empieza el día real en que entra la nómina (o el día fijado, adelantado si es festivo).
   const startDay: CycleRule = { day: settings.cycleStartDay, adjust: true, paydays: paydaysFrom(txs, settings.cycleStartDay) };
-  const recurring = detectRecurring(txs, today, cancelled);
+  const recurring = detectRecurring(txs, today, cancelled, { on: recurringOn, off: recurringOff });
   const recurringKeys = new Set(recurring.filter((r) => r.active).map((r) => r.key));
   const history: CycleSummary[] = [];
   for (let o = 1; o <= HISTORY_CYCLES; o++) history.push(summarize(txs, cycleFor(today, startDay, -o), recurringKeys));
@@ -41,7 +41,7 @@ export async function financeContext(userId: string) {
   const savingsGoalCycle = settings.savingsGoal === null ? null : round2(settings.savingsGoal * (settings.savingsFrequency === "semanal" ? 52 / 12 : 1));
   const projection = projectCycle({ txs, today, startDay, liquidity, recurring, savingsGoal: savingsGoalCycle, history: historyWithData });
   const budgetsNow = planBudgetStatus(budgets, txs, current.cycle, today);
-  return { userId, settings, accounts, txs, budgets, budgetsNow, dismissed, cancelled, skippedOccurrences, forecastItems, today, startDay, recurring, history: historyWithData, current, liquidity, projection };
+  return { userId, settings, accounts, txs, budgets, budgetsNow, dismissed, cancelled, recurringOn, recurringOff, skippedOccurrences, forecastItems, today, startDay, recurring, history: historyWithData, current, liquidity, projection };
 }
 export type FinanceContext = Awaited<ReturnType<typeof financeContext>>;
 
@@ -625,5 +625,25 @@ export async function planView(userId: string) {
     cycles: Array.from({ length: 24 }, (_, i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c, i) => i === 0 || c.end >= oldest),
     groups: rows.map((g) => ({ id: g.id, name: g.name, categories: g.categories, goal: g.goal === null ? null : Number(g.goal), fixed: g.fixed })),
     totals: { now, before, extrasNow },
+  };
+}
+
+/**
+ * «Se repite» de un movimiento: si su comercio se repite (detectado por la app o marcado a mano), cada cuánto y si
+ * lo has cancelado. Lo usa el detalle del movimiento.
+ */
+export async function transactionRecurring(userId: string, id: string) {
+  const row = await prisma.finance_transactions.findFirst({ where: { id, user_id: userId }, select: { description: true, counterparty: true, amount: true } });
+  if (!row) return null;
+  const ctx = await financeContext(userId);
+  const key = merchantKey(row.description, row.counterparty);
+  const r = ctx.recurring.find((x) => x.key === key && x.amount < 0);
+  return {
+    key,
+    on: !!r,
+    manual: ctx.recurringOn.has(key),
+    frequency: r?.frequency ?? null,
+    nextDate: r?.nextDate ?? null,
+    cancelled: ctx.cancelled.has(key),
   };
 }

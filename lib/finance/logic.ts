@@ -452,6 +452,8 @@ export type Recurring = {
   previousAmount: number | null;
   frequency: "semanal" | "mensual" | "trimestral" | "anual";
   intervalDays: number;
+  /** Marcado a mano como «Se repite» (no detectado). */
+  manual?: boolean;
   lastDate: string;
   nextDate: string;
   firstDate: string;
@@ -474,7 +476,9 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
 export { round2 };
 
 /** Detecta pagos y cobros que se repiten con un intervalo estable. `cancelled`: claves que el usuario dio por canceladas. */
-export function detectRecurring(txs: Tx[], today: string, cancelled: Set<string> = new Set()): Recurring[] {
+export function detectRecurring(txs: Tx[], today: string, cancelled: Set<string> = new Set(), marks: { on?: Set<string>; off?: Set<string> } = {}): Recurring[] {
+  const on = marks.on ?? new Set<string>();
+  const off = marks.off ?? new Set<string>();
   const groups = new Map<string, Tx[]>();
   for (const t of txs) {
     if (t.kind !== "gasto" && t.kind !== "ingreso") continue;
@@ -486,6 +490,22 @@ export function detectRecurring(txs: Tx[], today: string, cancelled: Set<string>
   }
   const out: Recurring[] = [];
   for (const [key, list] of groups) {
+    const merchantOf = key.split("|")[0];
+    // Apagado a mano: no se repite aunque lo parezca.
+    if (off.has(merchantOf)) continue;
+    // Encendido a mano: se repite cada mes con el último importe, aunque haya una sola aparición o no sea regular.
+    if (on.has(merchantOf) && key.endsWith("|-")) {
+      const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
+      const last = sorted[sorted.length - 1];
+      out.push({
+        key: merchantOf, label: last.alias?.trim() || cleanLabel(last.counterparty || last.description), category: last.category,
+        subcategory: last.subcategory, kind: last.kind, amount: last.amount, lastAmount: last.amount,
+        previousAmount: sorted.length > 1 ? sorted[sorted.length - 2].amount : null, frequency: "mensual", intervalDays: 30,
+        lastDate: last.date, nextDate: addDays(last.date, 30), firstDate: sorted[0].date, count: sorted.length,
+        active: !cancelled.has(merchantOf), manual: true,
+      });
+      continue;
+    }
     if (list.length < 2) continue;
     const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
     // Varios cargos el mismo día (o casi) cuentan como uno: no son frecuencia.

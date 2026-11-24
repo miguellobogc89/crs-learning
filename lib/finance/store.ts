@@ -113,12 +113,17 @@ export async function getDismissed(userId: string) {
   const dismissed = new Set<string>();
   const cancelled = new Set<string>();
   const skippedOccurrences = new Set<string>();
+  // «Se repite» marcado a mano: encendido (aunque la app no lo detecte) o apagado (aunque lo detecte).
+  const recurringOn = new Set<string>();
+  const recurringOff = new Set<string>();
   for (const r of rows) {
     if (r.key.startsWith("rec-cancel:")) cancelled.add(r.key.slice("rec-cancel:".length));
+    else if (r.key.startsWith("rec-on:")) recurringOn.add(r.key.slice("rec-on:".length));
+    else if (r.key.startsWith("rec-off:")) recurringOff.add(r.key.slice("rec-off:".length));
     else if (r.key.startsWith("forecast-skip:")) skippedOccurrences.add(r.key.slice("forecast-skip:".length));
     else dismissed.add(r.key);
   }
-  return { dismissed, cancelled, skippedOccurrences };
+  return { dismissed, cancelled, skippedOccurrences, recurringOn, recurringOff };
 }
 
 export async function getMemory(userId: string) {

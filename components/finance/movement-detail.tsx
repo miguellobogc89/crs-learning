@@ -18,6 +18,8 @@ import { SOURCE_LABEL, categoriesFor, type Item } from "./movement-edit";
 import { aboveKeyboard, useKeyboardInset } from "./use-keyboard-inset";
 
 type Field = "category" | "alias" | "subcategory";
+type Recurrence = { key: string; on: boolean; manual: boolean; frequency: "semanal" | "mensual" | "trimestral" | "anual" | null; nextDate: string | null; cancelled: boolean };
+const FREQ_LABEL: Record<NonNullable<Recurrence["frequency"]>, string> = { semanal: "Cada semana", mensual: "Cada mes", trimestral: "Cada tres meses", anual: "Cada año" };
 type Values = { category: string; kind: Kind; extraordinary: boolean; alias: string | null; subcategory: string | null; note: string | null };
 type Undo = { rows: unknown[]; pattern: string; rule: unknown } | null;
 
@@ -143,6 +145,9 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   const [sheet, setSheet] = useState<null | "category" | "subcategory" | "note" | "kind" | "month">(null);
   // «Cambiar fecha»: mes en que cuenta el gasto (lo guardado o lo que acabas de elegir).
   const [imputed, setImputed] = useState<string | null | undefined>(undefined);
+  // «Se repite» de su comercio (y si lo has cancelado).
+  const [rec, setRec] = useState<Recurrence | null>(null);
+  const [recAt, setRecAt] = useState(0);
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState("");
   const [similar, setSimilar] = useState<{ count: number; differ: number; label: string } | null>(null);
@@ -157,10 +162,16 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   // Cómo estaba al abrirlo: el botón de parecidos solo sale si lo has cambiado respecto a esto.
   const [opened, setOpened] = useState<Values | null>(null);
   useEffect(() => {
-    setOverride({}); setSheet(null); setEditingName(false); setSimilar(null); setToast(null); setErr(null); setImputed(undefined);
+    setOverride({}); setSheet(null); setEditingName(false); setSimilar(null); setToast(null); setErr(null); setImputed(undefined); setRec(null);
     setOpened(item ? valuesOf(item) : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    fapi<Recurrence | null>(`transaction/recurring?id=${encodeURIComponent(id)}`).then((r) => { if (alive) setRec(r); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [id, recAt]);
   useEffect(() => {
     if (!id) return;
     let alive = true;
@@ -246,6 +257,34 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   // borran los de los demás).
   const fieldsToApply: Field[] = ["category", ...(v.alias ? ["alias" as const] : []), ...(v.subcategory ? ["subcategory" as const] : [])];
   const applyText = fieldsToApply.map((f) => FIELD_LABEL[f]);
+  const markRecurring = async (on: boolean) => {
+    if (!rec) return;
+    const prev = rec;
+    setRec({ ...rec, on, manual: on, frequency: rec.frequency ?? "mensual" });
+    try {
+      await fapi("recurring/mark", { key: rec.key, on });
+      refreshFinance();
+      setRecAt((n) => n + 1);
+      setToast({ text: on ? "Se apuntará solo el mes que viene" : "Ya no se apuntará solo", undo: () => {
+        setToast(null);
+        void fapi("recurring/mark", { key: prev.key, on: prev.manual ? true : null }).then(() => { refreshFinance(); setRecAt((n) => n + 1); });
+      } });
+    } catch (e) { setRec(prev); setErr(errorText(e)); }
+  };
+  const cancelRecurring = async (cancelled: boolean) => {
+    if (!rec) return;
+    const prev = rec;
+    setRec({ ...rec, cancelled });
+    try {
+      await fapi("recurring", { key: rec.key, cancelled });
+      refreshFinance();
+      setToast({ text: cancelled ? "Cancelado: no se apuntará el mes que viene" : "Vuelve a estar activo", undo: () => {
+        setToast(null); setRec(prev);
+        void fapi("recurring", { key: prev.key, cancelled: prev.cancelled }).then(refreshFinance);
+      } });
+    } catch (e) { setRec(prev); setErr(errorText(e)); }
+  };
+
   // Solo si hay algo que replicar: parecidos que todavía no coinciden con este movimiento.
   // y solo cuando tú has cambiado algo replicable en este movimiento.
   const base = opened ?? valuesOf(item);
@@ -366,6 +405,36 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
                   </span>
                   <span className={`shrink-0 text-sm ${currentImputed ? "font-medium text-blue-700" : "text-slate-400"}`}>{monthName(shownMonth).replace(/ de /, " ")}</span>
                 </Row>
+              )}
+              {/* Se repite: el mes que viene se apuntará solo como previsto (salvo que lo hayas cancelado). */}
+              {spend && item.amount < 0 && rec && (
+                <li>
+                  <label className="flex cursor-pointer items-center gap-3 py-3.5">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15px] text-slate-800">Se repite</span>
+                      <span className="block text-xs text-slate-400">
+                        {rec.on
+                          ? `${FREQ_LABEL[rec.frequency ?? "mensual"]}${rec.manual ? ", lo marcaste tú" : ", lo ha detectado la app"}. Se apuntará solo en tu próximo mes.`
+                          : "Si es una cuota o una suscripción, márcalo para que se apunte solo el mes que viene."}
+                      </span>
+                    </span>
+                    <input type="checkbox" role="switch" checked={rec.on} onChange={(e) => void markRecurring(e.target.checked)} className="peer sr-only" />
+                    <span aria-hidden="true" className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${rec.on ? "bg-blue-600" : "bg-slate-200"}`}>
+                      <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${rec.on ? "left-[22px]" : "left-0.5"}`} />
+                    </span>
+                  </label>
+                  {rec.on && (
+                    <div className="flex items-center gap-3 pb-3.5">
+                      <span className="min-w-0 flex-1 text-xs text-slate-500">
+                        {rec.cancelled ? "Cancelado: ya no se apuntará. En tu próximo mes se verá como ahorro." : "¿Lo has dado de baja?"}
+                      </span>
+                      <button type="button" onClick={() => void cancelRecurring(!rec.cancelled)}
+                        className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium ${rec.cancelled ? "bg-slate-100 text-slate-700" : "bg-emerald-50 text-emerald-700"}`}>
+                        {rec.cancelled ? "No, sigue activo" : "Ya lo he cancelado"}
+                      </button>
+                    </div>
+                  )}
+                </li>
               )}
             </ul>
             {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
