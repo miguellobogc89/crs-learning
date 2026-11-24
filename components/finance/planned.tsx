@@ -2,7 +2,8 @@
 // Gastos previstos (23/11/2026). «Añadir gasto»: concepto, importe, fecha (de hoy o futura) y categoría; se guarda
 // como previsto y, cuando llega el cargo del banco parecido, se enlaza con él (fase 4). Los previstos se ven en azul
 // arriba de las listas (hojas de grupo y categoría, Movimientos) y se cuentan en «Tus grupos» de Inicio. Al tocar
-// uno se abre su detalle (la misma hoja, para cambiarlo o borrarlo); deslizando a la izquierda aparece la papelera.
+// uno se abre su detalle (la misma pantalla que un movimiento, marcada «Previsto, sin pagar»); deslizando a la
+// izquierda aparece la papelera.
 import { useEffect, useRef, useState } from "react";
 import { CalendarClock, ChevronRight, Trash2 } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
@@ -11,6 +12,7 @@ import { eur } from "@/components/trading/format";
 import { errorText, fapi, longDay, refreshFinance } from "./api";
 import { CategoryIcon } from "./category-icon";
 import { CategoryPicker } from "./category-picker";
+import { PlannedDetailSheet } from "./movement-detail";
 import { aboveKeyboard, useKeyboardInset } from "./use-keyboard-inset";
 
 export type Planned = { id: string; title: string; amount: number; date: string; category: string };
@@ -29,7 +31,8 @@ function PlannedRow({ p, onOpen, onDelete }: { p: Planned; onOpen: () => void; o
   return (
     <li className="relative -mx-2 overflow-hidden rounded-xl">
       {/* Detrás: la papelera (se ve al deslizar) */}
-      <button type="button" onClick={onDelete} aria-label={`Borrar ${p.title}`} tabIndex={dx ? 0 : -1}
+      <button type="button" onClick={onDelete} aria-label={`Borrar ${p.title}`} tabIndex={dx ? 0 : -1} aria-hidden={!dx}
+        style={{ visibility: dx ? "visible" : "hidden" }}
         className="absolute inset-y-0 right-0 flex w-[76px] items-center justify-center bg-red-600 text-white">
         <Trash2 className="h-5 w-5" />
       </button>
@@ -97,7 +100,7 @@ export function PlannedList({ items, className = "" }: { items: Planned[]; class
           </ul>
         </section>
       )}
-      <AddExpenseSheet open={!!editing} editing={editing} onClose={() => setEditing(null)} onDelete={() => editing && void remove(editing)} />
+      <PlannedDetailSheet item={editing} onClose={() => setEditing(null)} onDelete={(p) => void remove(p)} />
       {toast && (
         <div role="status" className="fixed inset-x-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-md items-center gap-3 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-lg md:bottom-6">
           <span className="min-w-0 flex-1">{toast.text}</span>

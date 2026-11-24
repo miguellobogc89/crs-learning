@@ -6,7 +6,7 @@
 // (copia lo que tenga el movimiento en ese momento, también a los que lleguen); si no lo pulsas, solo cambia este. «Extraordinario» y la nota nunca se copian. Es una capa sobre la lista, así que
 // al volver la lista conserva filtros y scroll. Lo usan Movimientos (móvil y escritorio) y Plan.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Check, ChevronRight, Loader2, Pencil, Search } from "lucide-react";
+import { ArrowLeft, CalendarClock, Check, ChevronRight, Loader2, Pencil, Search } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
@@ -436,6 +436,136 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
             multiline
             onSave={(s) => { if ((s || null) !== v.note) void save({ note: s || null }, null, s ? "Nota guardada" : "Nota quitada"); }}
           />
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ── Gasto previsto: la misma pantalla de detalle, marcada como previsto ─────────────────────────
+
+export type PlannedItem = { id: string; title: string; amount: number; date: string; category: string };
+
+/**
+ * Detalle de un gasto previsto (aún sin pagar): la misma pantalla que un movimiento, con la marca «Previsto, sin
+ * pagar» en azul. Se cambian el nombre, el importe, la fecha y la categoría (se guarda al momento, con «Deshacer»)
+ * y se puede borrar. Al llegar el cargo del banco se enlazará con él (fase 4).
+ */
+export function PlannedDetailSheet({ item, onClose, onDelete }: { item: PlannedItem | null; onClose: () => void; onDelete: (p: PlannedItem) => void }) {
+  const [v, setV] = useState<PlannedItem | null>(item);
+  const [sheet, setSheet] = useState<null | "category" | "amount" | "date">(null);
+  const [editingName, setEditingName] = useState(false);
+  const [name, setName] = useState("");
+  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [dateDraft, setDateDraft] = useState("");
+  useEffect(() => { setV(item); setSheet(null); setEditingName(false); setToast(null); setErr(null); setConfirmDelete(false); }, [item?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!toast) return; const t = window.setTimeout(() => setToast(null), 5000); return () => window.clearTimeout(t); }, [toast]);
+  if (!item || !v) return null;
+
+  const save = async (patch: Partial<PlannedItem>, text: string) => {
+    const prev = v;
+    const next = { ...v, ...patch };
+    setV(next); setErr(null);
+    try {
+      await fapi("planned/update", next);
+      refreshFinance();
+      setToast({ text, undo: () => { setToast(null); setV(prev); void fapi("planned/update", prev).then(refreshFinance); } });
+    } catch (e) {
+      setV(prev);
+      setErr(errorText(e));
+    }
+  };
+  const saveName = () => {
+    setEditingName(false);
+    const t = name.trim().slice(0, 80);
+    if (t && t !== v.title) void save({ title: t }, "Nombre cambiado");
+  };
+
+  return (
+    <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" showCloseButton={false} className="gap-0 bg-white p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md">
+        <div className="relative flex h-full min-h-0 flex-col pt-[env(safe-area-inset-top)]">
+          <SheetTitle className="sr-only">{v.title}</SheetTitle>
+          <div className="flex h-14 shrink-0 items-center gap-2 px-2">
+            <button type="button" onClick={onClose} aria-label="Volver" className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-700 active:bg-slate-100">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <span className="ml-auto mr-3 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+              <CalendarClock className="h-3.5 w-3.5" /> Previsto, sin pagar
+            </span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-20">
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-blue-50 text-blue-600" aria-hidden="true"><CalendarClock className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-slate-800">Gasto previsto</span>
+                <span className="block text-xs text-slate-400">Se enlazará con el cargo cuando llegue</span>
+              </span>
+              <button type="button" onClick={() => setSheet("amount")} aria-label="Cambiar el importe" className="shrink-0 text-3xl font-semibold tabular-nums tracking-tight text-blue-700 active:opacity-70">
+                {eur(-v.amount, 2)}
+              </button>
+            </div>
+            {editingName ? (
+              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName}
+                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingName(false); }}
+                maxLength={80} aria-label="Nombre del previsto"
+                className="mt-5 w-full rounded-xl border border-blue-300 px-2 py-1 text-2xl font-semibold text-slate-900 outline-none ring-2 ring-blue-100" />
+            ) : (
+              <button type="button" onClick={() => { setName(v.title); setEditingName(true); }} className="group mt-5 flex max-w-full items-center gap-2 text-left" aria-label="Cambiar el nombre">
+                <span className="min-w-0 break-words text-2xl font-semibold text-slate-900">{v.title}</span>
+                <Pencil className="h-4 w-4 shrink-0 text-slate-300 group-active:text-blue-600" />
+              </button>
+            )}
+            <SheetDescription className="mt-1 text-sm text-blue-700">Previsto para el {longDay(v.date)}</SheetDescription>
+
+            <ul className="mt-5 divide-y divide-slate-100 border-y border-slate-100">
+              <Row onClick={() => setSheet("category")}>
+                <CategoryIcon category={v.category} />
+                <span className="min-w-0 flex-1 text-[15px] text-slate-800">{categoryOf(v.category).label}</span>
+              </Row>
+              <Row onClick={() => { setDateDraft(v.date); setSheet("date"); }}>
+                <span className="w-9 shrink-0 text-center text-xs text-slate-400">Fecha</span>
+                <span className="min-w-0 flex-1 text-[15px] text-slate-800">{longDay(v.date)}</span>
+              </Row>
+              <Row onClick={() => setSheet("amount")}>
+                <span className="w-9 shrink-0 text-center text-xs text-slate-400">Importe</span>
+                <span className="amount min-w-0 flex-1 text-[15px] tabular-nums text-slate-800">{eur(v.amount, 2)}</span>
+              </Row>
+            </ul>
+            {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
+            <button type="button" onClick={() => (confirmDelete ? onDelete(v) : setConfirmDelete(true))}
+              className={`mt-6 w-full rounded-xl py-3 text-sm font-semibold ${confirmDelete ? "bg-red-600 text-white" : "text-red-600 active:bg-red-50"}`}>
+              {confirmDelete ? "Sí, borrar este previsto" : "Borrar previsto"}
+            </button>
+          </div>
+
+          {toast && (
+            <div role="status" className="absolute inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] flex items-center gap-3 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-lg">
+              <span className="min-w-0 flex-1">{toast.text}</span>
+              {toast.undo && <button type="button" onClick={toast.undo} className="shrink-0 font-semibold text-blue-300">Deshacer</button>}
+            </div>
+          )}
+
+          <BottomSheet open={sheet === "category"} onClose={() => setSheet(null)} title="Selecciona una categoría" subtitle={v.title} tall>
+            <CategoryPicker current={v.category} kind="gasto" movement={{ description: v.title, counterparty: null, amount: -v.amount }}
+              onPick={(c) => { setSheet(null); if (c.key !== v.category) void save({ category: c.key }, `Ahora es ${c.label}`); }} />
+          </BottomSheet>
+          <TextSheet open={sheet === "amount"} onClose={() => setSheet(null)} title="Importe" initial={String(v.amount).replace(".", ",")} placeholder="0,00"
+            onSave={(raw) => {
+              const t = raw.trim().replace(/\s|€/g, "");
+              const n = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+              if (Number.isFinite(n) && n > 0 && n !== v.amount) void save({ amount: Math.round(n * 100) / 100 }, "Importe cambiado");
+            }} />
+          <BottomSheet open={sheet === "date"} onClose={() => setSheet(null)} title="Fecha" subtitle={v.title}>
+            <div className="space-y-3 px-5 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <input type="date" value={dateDraft} onChange={(e) => setDateDraft(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+              <button type="button" onClick={() => { setSheet(null); if (dateDraft && dateDraft !== v.date) void save({ date: dateDraft }, `Ahora es el ${longDay(dateDraft)}`); }}
+                className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white active:bg-blue-700">Guardar</button>
+            </div>
+          </BottomSheet>
         </div>
       </SheetContent>
     </Sheet>
