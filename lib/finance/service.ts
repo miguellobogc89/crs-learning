@@ -714,6 +714,14 @@ export async function planView(userId: string) {
     next: nextMonthCommitted(ctx),
     budget: { income, incomeNow, othersGoal: ctx.settings.othersGoal, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
     unknown: { perMonth: unknownSpend, count: unknownCount },
+    // Dinero real en tus cuentas (las incluidas, en euros): ahora y al empezar el ciclo (lo que traías del anterior).
+    cash: (() => {
+      const acc = ctx.accounts.filter((a) => a.included && a.currency === "EUR" && a.balance !== null);
+      const ids = new Set(acc.map((a) => a.id));
+      const now = round2(acc.reduce((t, a) => t + (a.balance ?? 0), 0));
+      const since = ctx.txs.filter((t) => ids.has(t.accountId) && t.date >= current.start).reduce((t, x) => t + x.amount, 0);
+      return { now, atStart: round2(now - since) };
+    })(),
     previous: hasPrevious ? { start: prevCycle.start, end: prevTo } : null,
     /** Ciclos del último par de años (el actual primero), para el historial de una categoría. */
     cycles: Array.from({ length: 24 }, (_, i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c, i) => i === 0 || c.end >= oldest),

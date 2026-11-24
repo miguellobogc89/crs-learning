@@ -1,7 +1,8 @@
 "use client";
 // Laboratorio · «Te quedan» (24/11/2026). Mi plan como un solo número, al estilo de Monarch (flex number) y Emma
-// (left to spend): lo que cobras − lo que se repite (fijos) − lo que quieres ahorrar = para gastar este mes; menos lo
-// ya gastado = te quedan X € (y cuánto al día). Los fijos se ajustan con casillas; debajo, como mucho 3 avisos de
+// (left to spend), en tu ciclo de cobro (de nómina a nómina): lo que traías del ciclo anterior + lo cobrado en este −
+// lo que se repite (fijos) − lo que quieres ahorrar = para gastar; menos lo ya gastado (y los extraordinarios) = te
+// quedan X € (y cuánto al día). Los fijos se ajustan con casillas; debajo, como mucho 3 avisos de
 // dónde se te está yendo (solo lo que se desvía de lo normal). Los extraordinarios van aparte. Prueba: no guarda nada.
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
@@ -39,7 +40,8 @@ export function LabLeftToSpend() {
 
   useEffect(() => {
     if (!data) return;
-    setIncome((v) => v || (data.budget.income !== null ? String(Math.round(data.budget.income)) : ""));
+    // Lo cobrado de verdad en este ciclo; si aún no ha entrado nada, lo que sueles cobrar.
+    setIncome((v) => v || String(Math.round(data.budget.incomeNow > 0 ? data.budget.incomeNow : data.budget.income ?? 0)));
     setSaving((v) => v || (data.budget.savingsGoal !== null ? String(Math.round(data.budget.savingsGoal)) : "0"));
   }, [data]);
 
@@ -56,11 +58,12 @@ export function LabLeftToSpend() {
   const spent = Math.max(0, spentAll - fixedCharged);
   const inc = num(income);
   const save = num(saving);
-  const forMonth = inc - fixedTotal - save;
-  const left = forMonth - spent;
+  const carry = data.cash.atStart;
+  const extras = Object.values(data.totals.extrasNow ?? {}).reduce((t, x) => t + x, 0);
+  const forMonth = carry + inc - fixedTotal - save;
+  const left = forMonth - spent - extras;
   const daysLeft = Math.max(1, data.cycle.totalDays - data.cycle.day + 1);
   const perDay = left / daysLeft;
-  const extras = Object.values(data.totals.extrasNow ?? {}).reduce((t, x) => t + x, 0);
   const fixedKeys = new Set(fixed.map((f) => f.category));
 
   // Dónde se te está yendo: categorías de gasto variable que van por encima de lo normal a estas alturas del mes.
@@ -75,14 +78,14 @@ export function LabLeftToSpend() {
     .sort((a, b) => b.over - a.over)
     .slice(0, 3);
 
-  const pct = forMonth > 0 ? Math.min(100, Math.max(0, (spent / forMonth) * 100)) : 100;
+  const pct = forMonth > 0 ? Math.min(100, Math.max(0, ((spent + extras) / forMonth) * 100)) : 100;
 
   return (
     <div className="pb-4">
-      <p className="text-sm text-slate-500">Te quedan hasta fin de mes</p>
+      <p className="text-sm text-slate-500">Te quedan hasta tu próximo cobro · {data.cycle.label}</p>
       <p className={`amount mt-0.5 text-[40px] font-semibold leading-none tracking-tight ${left < 0 ? "text-rose-700" : "text-slate-900"}`}>{eur(left, 0)}</p>
       <p className={`amount mt-2 text-[15px] font-medium ${left < 0 ? "text-rose-700" : "text-slate-600"}`}>
-        {left < 0 ? `Te has pasado ${eur(-left, 0)} de lo que tenías para gastar` : `Unos ${eur(perDay, 0)} al día durante ${daysLeft} ${daysLeft === 1 ? "día" : "días"}`}
+        {left < 0 ? `Te has pasado ${eur(-left, 0)} de lo que tenías para gastar (contando lo que querías ahorrar)` : `Unos ${eur(perDay, 0)} al día durante ${daysLeft} ${daysLeft === 1 ? "día" : "días"}`}
       </p>
       <div className="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
         <div className={`h-full rounded-full ${left < 0 ? "bg-rose-500" : pct > 85 ? "bg-amber-500" : "bg-blue-600"}`} style={{ width: `${pct}%` }} />
@@ -90,8 +93,9 @@ export function LabLeftToSpend() {
 
       {/* La cuenta, a la vista: de dónde sale la cifra. */}
       <dl className="amount mt-5 space-y-2 text-[15px]">
+        <div className="flex justify-between gap-3"><dt className="text-slate-600">Traías del ciclo anterior</dt><dd className={`font-semibold tabular-nums ${carry < 0 ? "text-rose-700" : "text-slate-900"}`}>{eur(carry, 0)}</dd></div>
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-slate-600">Cobras</dt>
+          <dt className="text-slate-600">+ Cobrado en el ciclo</dt>
           <dd className="flex items-center gap-1"><input inputMode="decimal" value={income} onChange={(e) => setIncome(e.target.value)} aria-label="Lo que cobras al mes"
             className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right font-semibold tabular-nums text-slate-900 outline-none focus:border-blue-400" /><span className="text-slate-500">€</span></dd>
         </div>
@@ -121,10 +125,11 @@ export function LabLeftToSpend() {
           <dd className="flex items-center gap-1"><input inputMode="decimal" value={saving} onChange={(e) => setSaving(e.target.value)} aria-label="Lo que quieres ahorrar al mes"
             className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right font-semibold tabular-nums text-slate-900 outline-none focus:border-blue-400" /><span className="text-slate-500">€</span></dd>
         </div>
-        <div className="flex justify-between gap-3 border-t border-slate-100 pt-2"><dt className="font-medium text-slate-800">= Para gastar este mes</dt><dd className="font-semibold tabular-nums text-slate-900">{eur(forMonth, 0)}</dd></div>
+        <div className="flex justify-between gap-3 border-t border-slate-100 pt-2"><dt className="font-medium text-slate-800">= Para gastar en el ciclo</dt><dd className="font-semibold tabular-nums text-slate-900">{eur(forMonth, 0)}</dd></div>
         <div className="flex justify-between gap-3"><dt className="text-slate-600">− Ya gastado</dt><dd className="font-semibold tabular-nums text-slate-900">{eur(spent, 0)}</dd></div>
+        {extras > 0 && <div className="flex justify-between gap-3"><dt className="text-slate-600">− Extraordinarios</dt><dd className="font-semibold tabular-nums text-slate-900">{eur(extras, 0)}</dd></div>}
       </dl>
-      {extras > 0 && <p className="amount mt-2 text-xs text-slate-400">Aparte, {eur(extras, 0)} en extraordinarios este mes (no cuentan aquí).</p>}
+      <p className="amount mt-2 text-xs text-slate-400">En tus cuentas hay ahora {eur(data.cash.now, 0)}.</p>
 
       {drifts.length > 0 && (
         <>
