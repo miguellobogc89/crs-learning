@@ -111,3 +111,6 @@ Sustituye a los paquetes y al laboratorio. Plan = lista de **grupos** (conjuntos
   aún no ha llegado) y poder separarlos.
 - (Avanzado, más adelante) Gastos compartidos: si pago 60 € en un restaurante y recibo 2 Bizum de 20 € de amigos,
   entender que son su parte e imputar solo 20 € a la cena.
+- (UX) «Se repite» en el detalle del movimiento: cambiar «Ya lo he cancelado» por un botón discreto «He cancelado
+  esta suscripción» que abra una hoja desde abajo: «¿Has cancelado este gasto mensual?» y abajo «Sí, lo he
+  cancelado». Después, en el detalle, en pequeño y gris: «No se repite desde <mes de cancelación>».
