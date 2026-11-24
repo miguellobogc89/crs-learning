@@ -328,6 +328,7 @@ function GroupsList({ plan, mode, open, toggle, toSheet, toCategory }: ListProps
                 <b className="amount shrink-0 text-[15px] font-semibold tabular-nums text-slate-700">{eur(extrasNow, 0)}</b>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
               </Link>
+              <p className="-mt-1.5 pb-3 pl-12 text-xs text-slate-400">No cuentan en el gráfico de arriba. Si quieres que cuenten, quítales la marca de extraordinario en su detalle.</p>
             </li>
           )}
         </ul>
