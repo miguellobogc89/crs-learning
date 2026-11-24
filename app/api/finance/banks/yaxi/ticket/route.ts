@@ -23,6 +23,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Origen no autorizado" }, { status: 403 });
   }
 
+  // Closed until bank selection, result verification and per-user quotas are ready.
+  if (process.env.YAXI_CONNECT_ENABLED !== "true") {
+    return NextResponse.json({ error: "Integración en preparación" }, { status: 503 });
+  }
+
   if (!isYaxiConfigured()) {
     return NextResponse.json({ error: "YAXI no está configurado" }, { status: 503 });
   }
