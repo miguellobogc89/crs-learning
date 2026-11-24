@@ -112,7 +112,8 @@ function linesOf(plan: Plan, cats: string[], mode: Mode): Line[] {
       now, prev, pending: mode === "now" ? sum : 0, committed: mode === "next" ? sum : 0, count: mine.length, gone: gone.filter(m),
     };
   })
-    .filter((l) => (mode === "now" ? l.now > 0 || (l.prev ?? 0) > 0 || l.pending > 0 : l.count > 0) || l.gone.length > 0)
+    // Solo lo que tiene algo este mes (gastado, previsto o cancelado): lo que está a 0 no sale.
+    .filter((l) => (mode === "now" ? l.now > 0 || l.pending > 0 : l.count > 0) || l.gone.length > 0)
     .sort((a, b) => (mode === "now" ? b.now + b.pending - (a.now + a.pending) : b.committed - a.committed));
 }
 
@@ -121,7 +122,7 @@ const goneText = (gone: Cancel[]) => `${gone.length === 1 ? "1 cancelado" : `${g
 
 /** Una línea del desplegable y, debajo, lo cancelado de esa línea (gris, tachado, el ahorro en verde). */
 function LineRow({ l, mode, onOpen }: { l: Line; mode: Mode; onOpen: () => void }) {
-  const active = mode === "now" ? l.now > 0 || l.pending > 0 || (l.prev ?? 0) > 0 : l.count > 0;
+  const active = mode === "now" ? l.now > 0 || l.pending > 0 : l.count > 0;
   const d = mode === "now" && l.prev !== null ? deviationOf(l.now, l.prev) : null;
   const blue = mode === "now" && l.now <= 0 && l.pending > 0;
   return (
