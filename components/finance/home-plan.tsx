@@ -31,9 +31,17 @@ type Plan = {
   pending?: NextItem[];
   next?: { cycle: { start: string; end: string; label: string }; items: NextItem[]; cancelled: { key: string; title: string; amount: number; category: string }[] };
 };
-const OPEN_KEY = "crs-finance:home-open";
+// Lo que Inicio recuerda en esta sesión al ir a una hoja y volver: el mes que se miraba y, de cada mes, qué grupo
+// estaba desplegado y por dónde ibas.
 const PAGE_KEY = "crs-finance:home-page";
-const SCROLL_KEY = "crs-finance:home-scroll";
+const OPEN_KEY = (page: number) => `crs-finance:home-open-${page}`;
+const SCROLL_KEY = (page: number) => `crs-finance:home-scroll-${page}`;
+const store = {
+  get: (k: string) => { try { return window.sessionStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string | null) => { try { if (v === null) window.sessionStorage.removeItem(k); else window.sessionStorage.setItem(k, v); } catch { /* ignorar */ } },
+};
+/** Lo que comparten las dos listas (este mes y el que viene): mismo desplegar, mismo ir a la hoja. */
+type ListProps = { plan: Plan; open: string | null; toggle: (id: string, header: HTMLElement) => void; toSheet: (id: string, cat?: string) => void };
 const scroller = () => document.querySelector<HTMLElement>("main");
 
 // ── Vista sin desplegar: a qué ritmo vas en cada grupo, en palabras y sin cifras ─────────────────
@@ -61,28 +69,8 @@ function paceOf(s: ReturnType<typeof groupSummary>, lastMonth: number | null): {
 
 const sumCats = (r: Record<string, number> | undefined, cats: string[]) => cats.reduce((t, c) => t + (r?.[c] ?? 0), 0);
 
-function GoalsGlance({ plan }: { plan: Plan }) {
-  const router = useRouter();
+function GoalsGlance({ plan, open, toggle, toSheet }: ListProps) {
   const [adding, setAdding] = useState(false);
-  const [open, setOpen] = useState<string | null>(null);
-  const [restored, setRestored] = useState(false);
-  // Al volver del detalle, todo queda como se dejó: lo desplegado y el scroll (en esta sesión).
-  useEffect(() => {
-    try { setOpen(window.sessionStorage.getItem(OPEN_KEY) || null); } catch { /* sin almacenamiento */ }
-    setRestored(true);
-  }, []);
-  useEffect(() => {
-    if (!restored) return;
-    try { if (open) window.sessionStorage.setItem(OPEN_KEY, open); else window.sessionStorage.removeItem(OPEN_KEY); } catch { /* ignorar */ }
-  }, [open, restored]);
-  useEffect(() => {
-    if (!restored) return;
-    try {
-      const y = Number(window.sessionStorage.getItem(SCROLL_KEY));
-      if (y > 0) requestAnimationFrame(() => { const el = scroller(); if (el) el.scrollTop = y; });
-      window.sessionStorage.removeItem(SCROLL_KEY);
-    } catch { /* ignorar */ }
-  }, [restored]);
 
   const cycles = plan.history ?? [];
   const cur = cycles[0];
@@ -108,8 +96,6 @@ function GoalsGlance({ plan }: { plan: Plan }) {
   const headline = !judged.length ? "Aún no hay con qué compararte"
     : good === judged.length ? (judged.length === 1 ? "Vas a buen ritmo" : `Vas a buen ritmo en tus ${judged.length} grupos`)
     : `Vas a buen ritmo en ${good} de tus ${judged.length} grupos`;
-  const remember = () => { try { window.sessionStorage.setItem(SCROLL_KEY, String(scroller()?.scrollTop ?? 0)); } catch { /* ignorar */ } };
-  const toSheet = (id: string, cat?: string) => { remember(); router.push(`/finanzas/grupo/${id}${cat ? `?categoria=${encodeURIComponent(cat)}` : ""}`); };
 
   return (
     <div className="pb-2">
@@ -142,8 +128,8 @@ function GoalsGlance({ plan }: { plan: Plan }) {
           return (
             <li key={g.id}>
               {/* Una sola categoría: no hay nada que desplegar, va directo a su hoja. Varias: se despliega el reparto. */}
-              <button type="button" onClick={() => (single ? toSheet(g.id) : setOpen(isOpen ? null : g.id))} aria-expanded={single ? undefined : isOpen}
-                className="flex w-full items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
+              <button type="button" onClick={(e) => (single ? toSheet(g.id) : toggle(g.id, e.currentTarget))} aria-expanded={single ? undefined : isOpen}
+                className="flex w-full scroll-mt-16 items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
                 <CategoryIcon category={g.categories[0]} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
@@ -389,14 +375,11 @@ function CancelledList({ items, flush = false }: { items: { key: string; title: 
  * categoría abre su hoja (con lo previsto y lo que se repite, en azul, arriba); uno de varias se despliega por
  * categorías y «Ver todos los movimientos».
  */
-function NextGroups({ plan }: { plan: Plan }) {
-  const router = useRouter();
-  const [open, setOpen] = useState<string | null>(null);
+function NextGroups({ plan, open, toggle, toSheet }: ListProps) {
+  const [adding, setAdding] = useState(false);
   const next = plan.next;
   if (!next) return null;
   const monthName = monthOf(next.cycle.end);
-  const [adding, setAdding] = useState(false);
-  const toSheet = (id: string, cat?: string) => router.push(`/finanzas/grupo/${id}${cat ? `?categoria=${encodeURIComponent(cat)}` : ""}`);
   const inGroups = new Set(plan.groups.flatMap((g) => g.categories));
   const loose = next.items.filter((i) => !inGroups.has(i.category));
   const looseGone = next.cancelled.filter((c) => !inGroups.has(c.category));
@@ -416,8 +399,8 @@ function NextGroups({ plan }: { plan: Plan }) {
             .sort((a, b) => b.items.reduce((t, i) => t + i.amount, 0) - a.items.reduce((t, i) => t + i.amount, 0));
           return (
             <li key={g.id}>
-              <button type="button" onClick={() => (single ? toSheet(g.id) : setOpen(isOpen ? null : g.id))} aria-expanded={single ? undefined : isOpen}
-                className="flex w-full items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
+              <button type="button" onClick={(e) => (single ? toSheet(g.id) : toggle(g.id, e.currentTarget))} aria-expanded={single ? undefined : isOpen}
+                className="flex w-full scroll-mt-16 items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
                 <CategoryIcon category={g.categories[0]} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
@@ -463,7 +446,7 @@ function NextGroups({ plan }: { plan: Plan }) {
         })}
         {(loose.length > 0 || looseGone.length > 0) && (
           <li>
-            <button type="button" onClick={() => setOpen(open === "otros" ? null : "otros")} aria-expanded={open === "otros"} className="flex w-full items-center gap-3 py-3.5 text-left">
+            <button type="button" onClick={(e) => toggle("otros", e.currentTarget)} aria-expanded={open === "otros"} className="flex w-full scroll-mt-16 items-center gap-3 py-3.5 text-left">
               <CategoryIcon category="otros_gastos" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15px] font-semibold text-slate-500">Otros gastos</span>
@@ -471,7 +454,8 @@ function NextGroups({ plan }: { plan: Plan }) {
               </span>
               <b className="amount shrink-0 text-[15px] font-semibold tabular-nums text-slate-500">{eur(loose.reduce((t, i) => t + i.amount, 0), 0)}</b>
             </button>
-            {open === "otros" && (
+            <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${open === "otros" ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+              <div className="overflow-hidden">
               <ul className="mb-3 ml-12">
                 {loose.map((i) => (
                   <li key={i.id} className="flex items-center gap-3 py-2">
@@ -483,7 +467,8 @@ function NextGroups({ plan }: { plan: Plan }) {
                   </li>
                 ))}
               </ul>
-            )}
+              </div>
+            </div>
             {looseGone.length > 0 && <CancelledList items={looseGone} />}
           </li>
         )}
@@ -503,17 +488,37 @@ function NextGroups({ plan }: { plan: Plan }) {
  */
 export function HomePlan() {
   const { data, error } = useFinance<Plan>("plan");
+  const router = useRouter();
   const pager = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(0);
-  // Al volver de una hoja, se vuelve al mes que se estaba mirando (en esta sesión).
+  const [open, setOpen] = useState<[string | null, string | null]>([null, null]);
+  const [restored, setRestored] = useState(false);
+  // Al volver de una hoja, en este orden: el mes que se miraba, lo desplegado en él y, con todo pintado, el scroll.
   useEffect(() => {
-    let saved = 0;
-    try { saved = window.sessionStorage.getItem(PAGE_KEY) === "1" ? 1 : 0; } catch { /* ignorar */ }
-    if (!saved || !data) return;
+    if (!data || restored) return;
+    const p = store.get(PAGE_KEY) === "1" ? 1 : 0;
+    setOpen([store.get(OPEN_KEY(0)), store.get(OPEN_KEY(1))]);
+    setPage(p);
     const el = pager.current;
-    if (el) { el.scrollLeft = el.clientWidth; setPage(1); }
-  }, [!!data]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { try { window.sessionStorage.setItem(PAGE_KEY, String(page)); } catch { /* ignorar */ } }, [page]);
+    if (el && p) el.scrollLeft = el.clientWidth;
+    setRestored(true);
+    const y = Number(store.get(SCROLL_KEY(p)));
+    store.set(SCROLL_KEY(0), null); store.set(SCROLL_KEY(1), null);
+    if (y > 0) requestAnimationFrame(() => requestAnimationFrame(() => { const m = scroller(); if (m) m.scrollTop = y; }));
+  }, [data, restored]);
+  // Hasta haber restaurado no se guarda nada (si no, el «este mes» inicial pisaría lo guardado).
+  useEffect(() => { if (restored) store.set(PAGE_KEY, String(page)); }, [page, restored]);
+  useEffect(() => { if (restored) { store.set(OPEN_KEY(0), open[0]); store.set(OPEN_KEY(1), open[1]); } }, [open, restored]);
+  const toggle = (id: string, header: HTMLElement) => {
+    const closing = open[page] === id;
+    setOpen((o) => (page === 0 ? [closing ? null : id, o[1]] : [o[0], closing ? null : id]));
+    // Al cerrar un grupo largo la página encoge: se deja su cabecera a la vista para no perder dónde estabas.
+    if (closing) window.setTimeout(() => header.scrollIntoView({ block: "nearest", behavior: "smooth" }), 320);
+  };
+  const toSheet = (id: string, cat?: string) => {
+    store.set(SCROLL_KEY(page), String(scroller()?.scrollTop ?? 0));
+    router.push(`/finanzas/grupo/${id}${cat ? `?categoria=${encodeURIComponent(cat)}` : ""}`);
+  };
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
   const go = (i: number) => { const el = pager.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); };
   const nextName = data?.next ? monthOf(data.next.cycle.end) : "el mes que viene";
@@ -539,9 +544,9 @@ export function HomePlan() {
               <h2 className="text-sm font-medium text-slate-500">Tus grupos</h2>
               <Link href="/finanzas/plan" className="inline-flex items-center text-sm font-medium text-blue-700 hover:underline">Mi plan<ChevronRight className="h-4 w-4" /></Link>
             </div>
-            <div className="mt-1">{data ? <GoalsGlance plan={data} /> : <SkeletonList rows={4} />}</div>
+            <div className="mt-1">{data ? <GoalsGlance plan={data} open={open[0]} toggle={toggle} toSheet={toSheet} /> : <SkeletonList rows={4} />}</div>
           </>
-        ) : data ? <NextGroups plan={data} /> : <SkeletonList rows={4} />}
+        ) : data ? <NextGroups plan={data} open={open[1]} toggle={toggle} toSheet={toSheet} /> : <SkeletonList rows={4} />}
       </section>
     </div>
   );
