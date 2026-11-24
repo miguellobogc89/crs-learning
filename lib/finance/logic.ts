@@ -303,7 +303,7 @@ const KEYWORDS: Keyword[] = [
   { re: /\b(parking|aparcamiento|telpark|empark|saba|indigo|zona azul|ora|autopista|peaje|via t)\b/, category: "parking_peaje" },
   { re: /\b(itv|taller|norauto|midas|feu vert|euromaster|confortauto|neumaticos|lavado)\b/, category: "mantenimiento_vehiculo" },
   { re: /\b(renfe|cabify|uber|bolt|freenow|metro|emt|tmb|alsa|blablacar|taxi|bus|tranvia)\b/, category: "transporte" },
-  { re: /\b(ryanair|vueling|iberia|easyjet|air europa|booking|airbnb|expedia|hotel|edreams|skyscanner)\b/, category: "viajes" },
+  { re: /\b(ryanair|vueling|iberia|easyjet|air europa|booking|airbnb|expedia|hotel|edreams|skyscanner|viajes [a-z]+|agencia de viajes|halcon viajes|viajes el corte ingles|renfe|ouigo|iryo|alsa)\b/, category: "viajes" },
   { re: /\b(zara|mango|primark|h m|pull ?(and )?bear|bershka|stradivarius|massimo dutti|shein|zalando|springfield|lefties|oysho|uniqlo|levis|nike|adidas|adidases|foot ?locker|jd sports|parfois|pandora|vinted|kiabi|cortefiel|desigual)\b/, category: "moda" },
   { re: /\b(ikea|zara home|maisons du monde|jysk|conforama|kave home|sklum|el corte ingles hogar)\b/, category: "muebles_decoracion" },
   { re: /\b(limpieza|asistenta|empleada de hogar|tintoreria|lavanderia|webel)\b/, category: "limpieza_hogar" },

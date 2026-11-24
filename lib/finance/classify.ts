@@ -16,6 +16,15 @@ const AI_MAX_BATCHES = 2;
 /** Un gasto suelto de este tamaño se marca como extraordinario (no se proyecta); el usuario puede cambiarlo. */
 const EXTRAORDINARY_FROM = 2000;
 const isBig = (amount: number) => amount <= -EXTRAORDINARY_FROM;
+/**
+ * Gastos que suelen ser extraordinarios (no dependen del día a día): impuestos como el IBI, reparaciones, viajes,
+ * seguros anuales, compras grandes de electrónica o muebles. A partir de este importe se marcan solos; el usuario
+ * puede quitarles la marca.
+ */
+const EXTRA_PRONE = new Set(["impuestos", "mantenimiento_vehiculo", "mantenimiento_hogar", "viajes", "seguro_coche", "seguro_hogar", "seguros", "electronica", "muebles_decoracion"]);
+const EXTRA_PRONE_FROM = 150;
+const likelyExtra = (kind: string, category: string, amount: number) =>
+  kind === "gasto" && (isBig(amount) || (EXTRA_PRONE.has(category) && amount <= -EXTRA_PRONE_FROM));
 
 async function setClass(ids: string[], data: { category: string; kind: string; category_source: string; extraordinary?: boolean; transfer_pair_id?: string | null; alias?: string | null; subcategory?: string | null }) {
   if (!ids.length) return;
@@ -64,7 +73,7 @@ export async function classifyPending(userId: string, opts: { useAi?: boolean; m
       continue;
     }
     if (k) {
-      await setClass([t.id], { category: k.category, kind: k.kind, category_source: "palabra", extraordinary: k.kind === "gasto" && isBig(t.amount) });
+      await setClass([t.id], { category: k.category, kind: k.kind, category_source: "palabra", extraordinary: likelyExtra(k.kind, k.category, t.amount) });
       Object.assign(t, { source: "palabra", kind: k.kind, category: k.category });
       stats.palabras++;
       continue;
@@ -108,7 +117,10 @@ export async function classifyPending(userId: string, opts: { useAi?: boolean; m
         for (const r of result) {
           const t = batch[r.i];
           if (!t || done.has(t.id) || !isCategory(r.category) || !isKind(r.kind)) continue;
-          await setClass([t.id], { category: r.category, kind: r.kind, category_source: "ia", extraordinary: r.extraordinary || (r.kind === "gasto" && isBig(t.amount)) });
+          // Si la IA no está segura (un comercio que no se puede identificar, un Bizum sin concepto), no inventa:
+          // queda «sin entender» para que el usuario lo vea y lo decida.
+          if (!r.sure) continue;
+          await setClass([t.id], { category: r.category, kind: r.kind, category_source: "ia", extraordinary: r.extraordinary || likelyExtra(r.kind, r.category, t.amount) });
           done.add(t.id);
           stats.ia++;
         }
@@ -140,7 +152,7 @@ async function applyRuleTo(ids: string[], rule: Rule) {
   await prisma.finance_rules.update({ where: { id: rule.id }, data: { hits: { increment: ids.length } } }).catch(() => undefined);
 }
 
-type AiRow = { i: number; category: string; kind: string; extraordinary: boolean };
+type AiRow = { i: number; category: string; kind: string; extraordinary: boolean; sure: boolean };
 
 async function aiClassify(batch: Tx[], bankOf: Map<string, string>, memory: string, ownAccounts: string[]) {
   const categories = CATEGORIES.filter((c) => c.key !== "sin_clasificar");
@@ -152,7 +164,8 @@ async function aiClassify(batch: Tx[], bankOf: Map<string, string>, memory: stri
       "Clasificas movimientos bancarios de una persona en España. Para cada uno das su categoría y su significado económico real (kind).",
       "kind: gasto (sale dinero de verdad), ingreso (ingreso ordinario: nómina, intereses), regalo (dinero recibido que no es ingreso ordinario, p. ej. Bizum de un familiar por un cumpleaños), devolucion (reembolso de un gasto; categoría = la del gasto que devuelve), interna (entre cuentas propias de la persona, recargas de Revolut, traspasos), ahorro (aportación a inversión, bróker, exchange cripto o fondo).",
       "Importe negativo = sale de la cuenta; positivo = entra. Un Bizum o transferencia saliente a otra persona suele ser gasto (categoría según el concepto, o regalos si lo indica). Uno entrante de otra persona: devolucion si parece pagar su parte de algo, regalo si lo indica el concepto, si no otros_ingresos.",
-      "extraordinary=true solo si es claramente puntual y no debe proyectarse (una compra grande excepcional, una multa, un viaje concreto).",
+      "extraordinary=true si es un gasto que no forma parte del día a día y no debe contar en las medias del mes: impuestos anuales (IBI, circulación), multas, reparaciones y averías (taller, fontanero), viajes concretos (vuelos, hoteles, agencias), seguros que se pagan una vez al año o al semestre, compras grandes y excepcionales. No lo son los recibos mensuales, la compra, los restaurantes ni las suscripciones.",
+      "sure=false si no puedes saber qué es con razonable seguridad: una sociedad con nombre genérico que no identifica el negocio (p. ej. «GRUPO DIMAR SL», «INVERSIONES X SL»), un Bizum o transferencia a una persona sin concepto, un concepto ilegible. No adivines: en ese caso pon sure=false (la categoría da igual). Con un comercio conocido o un concepto claro, sure=true.",
       `Categorías válidas (clave: nombre, qué entra, kind): ${categories.map((c) => `${c.key} (${c.label}${c.hint ? `: ${c.hint}` : ""}, ${c.kind})`).join("; ")}. Usa la más concreta; las «otros…» solo si ninguna encaja.`,
       `Cuentas propias de la persona (el nombre es el del titular): ${ownAccounts.join("; ") || "—"}. Una transferencia a o desde el propio titular es interna; a o desde familiares con apellidos parecidos, no.`,
       `Gastos sueltos muy grandes (más de ${EXTRAORDINARY_FROM} €: una obra, una compra de vivienda, una donación) son extraordinary=true.`,
@@ -170,9 +183,10 @@ async function aiClassify(batch: Tx[], bankOf: Map<string, string>, memory: stri
           items: {
             type: "object",
             additionalProperties: false,
-            required: ["i", "category", "kind", "extraordinary"],
+            required: ["i", "category", "kind", "extraordinary", "sure"],
             properties: {
               i: { type: "integer" },
+              sure: { type: "boolean" },
               category: { type: "string", enum: categories.map((c) => c.key) },
               kind: { type: "string", enum: [...KINDS] },
               extraordinary: { type: "boolean" },
