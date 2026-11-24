@@ -333,6 +333,11 @@ function NextChart({ plan }: { plan: Plan }) {
       <p className="amount mt-1.5 text-sm font-medium text-slate-600">
         {income !== null ? `De ${eur(income, 0)} que sueles cobrar, te quedarían ${eur(income - total, 0)} para todo lo demás` : "Lo que se repite y tus previstos de ese mes"}
       </p>
+      {next.cancelled.length > 0 && (
+        <p className="amount mt-1 text-sm font-medium text-emerald-700">
+          Has cancelado {next.cancelled.length} {next.cancelled.length === 1 ? "gasto" : "gastos"}: {eur(next.cancelled.reduce((t, c) => t + c.amount, 0), 2)} menos al mes
+        </p>
+      )}
       <svg viewBox={`0 0 ${W} ${H}`} className="mt-3 block h-auto w-full" role="img" aria-label={`Comprometido para ${monthOf(next.cycle.end)}: ${eur(total, 0)}`}>
         <line x1={pad.l} x2={W - pad.r} y1={y(0)} y2={y(0)} stroke="#e2e8f0" />
         {prev.length > 1 && <path d={path(prev, prev.length)} fill="none" stroke="#cbd5e1" strokeWidth={2} strokeLinejoin="round" />}
@@ -345,6 +350,23 @@ function NextChart({ plan }: { plan: Plan }) {
         <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-slate-300" />Último mes completo</span>
       </div>
     </div>
+  );
+}
+
+/** Lo que has cancelado: en gris, tachado, «Cancelado», y el importe en verde (lo que ya no gastas). */
+function CancelledList({ items, flush = false }: { items: { key: string; title: string; amount: number }[]; flush?: boolean }) {
+  return (
+    <ul className={flush ? "" : "mb-3 ml-12"}>
+      {items.map((c) => (
+        <li key={c.key} className="flex items-center gap-3 py-2">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm text-slate-400 line-through">{c.title}</span>
+            <span className="block truncate text-xs text-slate-400">Cancelado</span>
+          </span>
+          <span className="amount shrink-0 text-sm font-semibold tabular-nums text-emerald-700">−{eur(c.amount, 2)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -362,6 +384,7 @@ function NextGroups({ plan }: { plan: Plan }) {
   const toSheet = (id: string) => router.push(`/finanzas/grupo/${id}`);
   const inGroups = new Set(plan.groups.flatMap((g) => g.categories));
   const loose = next.items.filter((i) => !inGroups.has(i.category));
+  const looseGone = next.cancelled.filter((c) => !inGroups.has(c.category));
   const count = (n: number) => (n ? `${n} ${n === 1 ? "gasto comprometido" : "gastos comprometidos"}` : "Nada comprometido todavía");
   return (
     <div className="pb-2">
@@ -370,6 +393,7 @@ function NextGroups({ plan }: { plan: Plan }) {
         {plan.groups.filter((g) => g.categories.length).map((g) => {
           const items = next.items.filter((i) => g.categories.includes(i.category));
           const amount = items.reduce((t, i) => t + i.amount, 0);
+          const gone = next.cancelled.filter((c) => g.categories.includes(c.category));
           const single = g.categories.length <= 1;
           const isOpen = !single && open === g.id;
           const cats = g.categories.map((c) => ({ c, items: items.filter((i) => i.category === c) })).filter((x) => x.items.length)
@@ -381,13 +405,18 @@ function NextGroups({ plan }: { plan: Plan }) {
                 <CategoryIcon category={g.categories[0]} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
-                  <span className="block truncate text-xs text-slate-500">{count(items.length)}</span>
+                  <span className="block truncate text-xs text-slate-500">
+                    {count(items.length)}
+                    {gone.length > 0 && <span className="amount text-emerald-700"> · {gone.length === 1 ? "1 cancelado" : `${gone.length} cancelados`}, −{eur(gone.reduce((t, c) => t + c.amount, 0), 2)}</span>}
+                  </span>
                 </span>
                 <span className="shrink-0 text-right">
                   <b className="amount block text-[15px] font-semibold tabular-nums text-slate-900">{eur(amount, 0)}</b>
                   {g.goal !== null && <span className="amount block text-[11px] tabular-nums text-slate-500">de {eur(g.goal, 0)}</span>}
                 </span>
               </button>
+              {/* Lo cancelado, en gris y con lo que ya no gastas en verde (también en grupos de una sola categoría). */}
+              {gone.length > 0 && (single || !isOpen) && <CancelledList items={gone} />}
               <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
                 <div className="overflow-hidden">
                   <div className="mb-3 ml-12">
@@ -403,6 +432,7 @@ function NextGroups({ plan }: { plan: Plan }) {
                       ))}
                       {!cats.length && <li className="py-2.5 text-sm text-slate-500">Nada comprometido todavía.</li>}
                     </ul>
+                    {gone.length > 0 && <CancelledList items={gone} flush />}
                     <button type="button" onClick={() => toSheet(g.id)} className="mt-1 inline-flex items-center gap-0.5 py-1.5 text-sm font-medium text-blue-700 hover:underline">
                       Ver todos los movimientos<ChevronRight className="h-4 w-4" />
                     </button>
@@ -412,7 +442,7 @@ function NextGroups({ plan }: { plan: Plan }) {
             </li>
           );
         })}
-        {loose.length > 0 && (
+        {(loose.length > 0 || looseGone.length > 0) && (
           <li>
             <button type="button" onClick={() => setOpen(open === "otros" ? null : "otros")} aria-expanded={open === "otros"} className="flex w-full items-center gap-3 py-3.5 text-left">
               <CategoryIcon category="otros_gastos" />
@@ -435,6 +465,7 @@ function NextGroups({ plan }: { plan: Plan }) {
                 ))}
               </ul>
             )}
+            {looseGone.length > 0 && <CancelledList items={looseGone} />}
           </li>
         )}
       </ul>
