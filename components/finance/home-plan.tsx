@@ -298,79 +298,113 @@ function SpendChart({ plan }: { plan: Plan }) {
 /** Inicio: el gráfico de gasto del mes y, debajo, cómo vas en cada grupo de Mi plan. */
 type NextItem = { id: string; title: string; amount: number; date: string; category: string; source: "repite" | "previsto" };
 
+const monthOf = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" });
+const shortDayOf = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "UTC" }).replace(".", "");
+
 /**
- * El mes que viene: lo ya comprometido (lo que se repite y tus previstos de ese mes), por grupos y por fecha. Es
- * solo para ver; se decide en Mi plan.
+ * Gráfico del mes que viene: lo ya comprometido (lo que se repite y tus previstos) acumulado día a día, en
+ * discontinuo porque aún no ha pasado, y en gris el último mes completo como referencia de un mes normal.
  */
-function NextMonth({ plan }: { plan: Plan }) {
+function NextChart({ plan }: { plan: Plan }) {
   const next = plan.next;
   if (!next) return null;
-  const monthName = new Date(`${next.cycle.end}T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" });
-  const total = next.items.reduce((t, i) => t + i.amount, 0);
+  const days = Math.max(1, Math.round((Date.parse(`${next.cycle.end}T00:00:00Z`) - Date.parse(`${next.cycle.start}T00:00:00Z`)) / 86_400_000) + 1);
+  const daily = Array(days).fill(0) as number[];
+  for (const i of next.items) {
+    const d = Math.round((Date.parse(`${i.date}T00:00:00Z`) - Date.parse(`${next.cycle.start}T00:00:00Z`)) / 86_400_000);
+    if (d >= 0 && d < days) daily[d] += i.amount;
+  }
+  const cum = daily.map((_, i) => daily.slice(0, i + 1).reduce((t, v) => t + v, 0));
+  const total = cum[cum.length - 1] ?? 0;
+  const prevLen = Math.max(0, ...Object.values(plan.daily?.prev ?? {}).map((r) => r.length));
+  const prev = prevLen ? cumulative(plan.daily?.prev ?? {}, null, prevLen) : [];
   const income = plan.budget?.income ?? null;
-  const groups = plan.groups.filter((g) => g.categories.length).map((g) => {
-    const mine = next.items.filter((i) => g.categories.includes(i.category));
-    return { g, items: mine, amount: mine.reduce((t, i) => t + i.amount, 0) };
-  });
-  const inGroups = new Set(plan.groups.flatMap((g) => g.categories));
-  const loose = next.items.filter((i) => !inGroups.has(i.category));
-  const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "UTC" }).replace(".", "");
+  const W = 340, H = 170, pad = { l: 4, r: 4, t: 10, b: 18 };
+  const top = Math.max(1, total, prev[prev.length - 1] ?? 0) * 1.08;
+  const x = (i: number, n = days) => pad.l + (i / Math.max(1, n - 1)) * (W - pad.l - pad.r);
+  const y = (v: number) => H - pad.b - (v / top) * (H - pad.t - pad.b);
+  const path = (vals: number[], n = days) => vals.map((v, i) => `${i ? "L" : "M"}${x(i, n).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  // Escalones: el gasto comprometido sube de golpe el día que toca.
+  const step = cum.map((v, i) => `${i ? `L${x(i).toFixed(1)},${y(cum[i - 1]).toFixed(1)} ` : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   return (
-    <>
-      <section className={`${card} ${flat} min-w-0 overflow-hidden p-4 sm:p-5`}>
-        <p className="text-sm text-slate-500">Ya comprometido para {monthName}</p>
-        <p className="amount mt-0.5 text-[30px] font-semibold leading-none tracking-tight text-slate-900">{eur(total, 0)}</p>
-        {income !== null && <p className="amount mt-1.5 text-sm text-slate-600">De {eur(income, 0)} que sueles cobrar, te quedarían {eur(income - total, 0)} para todo lo demás.</p>}
-        {next.items.length > 0 ? (
-          <ul className="mt-4 divide-y divide-slate-100">
-            {next.items.map((i) => (
-              <li key={i.id} className="flex items-center gap-3 py-2.5">
-                <CategoryIcon category={i.category} />
+    <div>
+      <p className="text-sm text-slate-500">Ya comprometido para {monthOf(next.cycle.end)}</p>
+      <p className="amount mt-0.5 text-[30px] font-semibold leading-none tracking-tight text-slate-900">{eur(total, 0)}</p>
+      <p className="amount mt-1.5 text-sm font-medium text-slate-600">
+        {income !== null ? `De ${eur(income, 0)} que sueles cobrar, te quedarían ${eur(income - total, 0)} para todo lo demás` : "Lo que se repite y tus previstos de ese mes"}
+      </p>
+      <svg viewBox={`0 0 ${W} ${H}`} className="mt-3 block h-auto w-full" role="img" aria-label={`Comprometido para ${monthOf(next.cycle.end)}: ${eur(total, 0)}`}>
+        <line x1={pad.l} x2={W - pad.r} y1={y(0)} y2={y(0)} stroke="#e2e8f0" />
+        {prev.length > 1 && <path d={path(prev, prev.length)} fill="none" stroke="#cbd5e1" strokeWidth={2} strokeLinejoin="round" />}
+        <path d={step} fill="none" stroke="#3478f6" strokeWidth={3} strokeDasharray="5 5" strokeLinejoin="round" strokeLinecap="round" />
+        <text x={pad.l} y={H - 3} fontSize="10" fill="#94a3b8">{shortDayOf(next.cycle.start)}</text>
+        <text x={W - pad.r} y={H - 3} fontSize="10" fill="#94a3b8" textAnchor="end">{shortDayOf(next.cycle.end)}</text>
+      </svg>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+        <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t-[3px] border-dashed border-[#3478f6]" />Comprometido</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-slate-300" />Último mes completo</span>
+      </div>
+    </div>
+  );
+}
+
+/** Lista del mes que viene: cada grupo con lo comprometido; al tocarlo se despliegan sus gastos con su fecha. */
+function NextGroups({ plan }: { plan: Plan }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const next = plan.next;
+  if (!next) return null;
+  const monthName = monthOf(next.cycle.end);
+  const inGroups = new Set(plan.groups.flatMap((g) => g.categories));
+  const rows = [
+    ...plan.groups.filter((g) => g.categories.length).map((g) => ({ id: g.id, name: g.name, icon: g.categories[0], goal: g.goal, items: next.items.filter((i) => g.categories.includes(i.category)), muted: false })),
+    { id: "otros", name: "Otros gastos", icon: "otros_gastos", goal: null, items: next.items.filter((i) => !inGroups.has(i.category)), muted: true },
+  ].filter((r) => !r.muted || r.items.length);
+  return (
+    <div className="pb-2">
+      <h2 className="text-sm font-medium text-slate-500">Tus grupos en {monthName}</h2>
+      <ul className="mt-1 divide-y divide-slate-100">
+        {rows.map((r) => {
+          const amount = r.items.reduce((t, i) => t + i.amount, 0);
+          const isOpen = open === r.id && r.items.length > 0;
+          return (
+            <li key={r.id}>
+              <button type="button" onClick={() => setOpen(isOpen ? null : r.id)} disabled={!r.items.length} aria-expanded={isOpen}
+                className="flex w-full items-center gap-3 py-3.5 text-left disabled:cursor-default">
+                <CategoryIcon category={r.icon} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] text-slate-900">{i.title}</span>
-                  <span className="block truncate text-xs text-slate-500">{day(i.date)} · {i.source === "repite" ? "se repite" : "previsto"}</span>
+                  <span className={`block truncate text-[15px] font-semibold ${r.muted ? "text-slate-500" : "text-slate-900"}`}>{r.name}</span>
+                  <span className="block truncate text-xs text-slate-500">{r.items.length ? `${r.items.length} ${r.items.length === 1 ? "gasto comprometido" : "gastos comprometidos"}` : "Nada comprometido todavía"}</span>
                 </span>
-                <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(i.amount, 2)}</span>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="mt-4 text-sm text-slate-500">Aún no hay nada apuntado para {monthName}. Marca «Se repite» en tus recibos o añade un gasto con fecha de {monthName}.</p>}
-      </section>
-      <section className={`${card} ${flat} min-w-0 overflow-hidden px-4 pt-4 sm:px-5 sm:pt-5`}>
-        <h2 className="text-sm font-medium text-slate-500">Tus grupos en {monthName}</h2>
-        <ul className="mt-1 divide-y divide-slate-100 pb-2">
-          {groups.map(({ g, items, amount }) => (
-            <li key={g.id} className="flex items-center gap-3 py-3.5">
-              <CategoryIcon category={g.categories[0]} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
-                <span className="block truncate text-xs text-slate-500">{items.length ? `${items.length} ${items.length === 1 ? "gasto comprometido" : "gastos comprometidos"}` : "Nada comprometido todavía"}</span>
-              </span>
-              <span className="shrink-0 text-right">
-                <b className="amount block text-[15px] font-semibold tabular-nums text-slate-900">{eur(amount, 0)}</b>
-                {g.goal !== null && <span className="amount block text-[11px] tabular-nums text-slate-500">de {eur(g.goal, 0)}</span>}
-              </span>
+                <span className="shrink-0 text-right">
+                  <b className="amount block text-[15px] font-semibold tabular-nums text-slate-900">{eur(amount, 0)}</b>
+                  {r.goal !== null && <span className="amount block text-[11px] tabular-nums text-slate-500">de {eur(r.goal, 0)}</span>}
+                </span>
+              </button>
+              {isOpen && (
+                <ul className="mb-3 ml-12">
+                  {r.items.map((i) => (
+                    <li key={i.id} className="flex items-center gap-3 py-2">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-slate-800">{i.title}</span>
+                        <span className="block truncate text-xs text-slate-500">{shortDayOf(i.date)} · {i.source === "repite" ? "se repite" : "previsto"}</span>
+                      </span>
+                      <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(i.amount, 2)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
-          ))}
-          {loose.length > 0 && (
-            <li className="flex items-center gap-3 py-3.5">
-              <CategoryIcon category="otros_gastos" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-semibold text-slate-500">Otros gastos</span>
-                <span className="block truncate text-xs text-slate-400">Sin grupo</span>
-              </span>
-              <b className="amount shrink-0 text-[15px] font-semibold tabular-nums text-slate-500">{eur(loose.reduce((t, i) => t + i.amount, 0), 0)}</b>
-            </li>
-          )}
-        </ul>
-      </section>
-    </>
+          );
+        })}
+      </ul>
+      {!next.items.length && <p className="py-2 text-sm text-slate-500">Aún no hay nada apuntado para {monthName}. Marca «Se repite» en tus recibos o añade un gasto con fecha de {monthName}.</p>}
+    </div>
   );
 }
 
 /**
- * Inicio: este mes y, deslizando a la izquierda, el mes que viene (como las fotos del móvil, con puntos debajo).
- * Cada página lleva su gráfico y su lista de grupos.
+ * Inicio: arriba el gráfico, que se desliza a la izquierda para ver el mes que viene (puntos debajo); la lista de
+ * abajo no se desliza, pero cambia con el mes que se ve.
  */
 export function HomePlan() {
   const { data, error } = useFinance<Plan>("plan");
@@ -378,38 +412,33 @@ export function HomePlan() {
   const [page, setPage] = useState(0);
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
   const go = (i: number) => { const el = pager.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); };
-  const nextName = data?.next ? new Date(`${data.next.cycle.end}T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" }) : "mes que viene";
+  const nextName = data?.next ? monthOf(data.next.cycle.end) : "el mes que viene";
   return (
-    <div>
-      <div ref={pager} onScroll={(e) => { const el = e.currentTarget; setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
-        className="-mx-3 flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] md:mx-0 [&::-webkit-scrollbar]:hidden">
-        <div className="w-full shrink-0 snap-start px-3 md:px-0" aria-hidden={page !== 0}>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
-            <section className={`${card} ${flat} min-w-0 overflow-hidden p-4 sm:p-5`}>
-              {data ? <SpendChart plan={data} /> : <SkeletonList rows={3} />}
-            </section>
-            <section className={`${card} ${flat} min-w-0 overflow-hidden px-4 pt-4 sm:px-5 sm:pt-5`}>
-              <div className="flex items-baseline justify-between gap-3">
-                <h2 className="text-sm font-medium text-slate-500">Tus grupos</h2>
-                <Link href="/finanzas/plan" className="inline-flex items-center text-sm font-medium text-blue-700 hover:underline">Mi plan<ChevronRight className="h-4 w-4" /></Link>
-              </div>
-              <div className="mt-1">{data ? <GoalsGlance plan={data} /> : <SkeletonList rows={4} />}</div>
-            </section>
-          </div>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+      <section className={`${card} ${flat} min-w-0 overflow-hidden py-4 sm:py-5`}>
+        <div ref={pager} onScroll={(e) => { const el = e.currentTarget; setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
+          className="flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="w-full shrink-0 snap-start px-4 sm:px-5">{data ? <SpendChart plan={data} /> : <SkeletonList rows={3} />}</div>
+          <div className="w-full shrink-0 snap-start px-4 sm:px-5">{data ? <NextChart plan={data} /> : <SkeletonList rows={3} />}</div>
         </div>
-        <div className="w-full shrink-0 snap-start px-3 md:px-0" aria-hidden={page !== 1}>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
-            {data ? <NextMonth plan={data} /> : <SkeletonList rows={4} />}
-          </div>
+        <div className="mt-3 flex items-center justify-center gap-2" role="tablist" aria-label="Mes">
+          {[0, 1].map((i) => (
+            <button key={i} type="button" role="tab" aria-selected={page === i} aria-label={i === 0 ? "Este mes" : nextName} onClick={() => go(i)}
+              className={`h-2 rounded-full transition-all ${page === i ? "w-5 bg-slate-700" : "w-2 bg-slate-300"}`} />
+          ))}
         </div>
-      </div>
-      {/* Puntos (y en el ordenador, también se pueden pulsar) */}
-      <div className="mt-3 flex items-center justify-center gap-2" role="tablist" aria-label="Mes">
-        {[0, 1].map((i) => (
-          <button key={i} type="button" role="tab" aria-selected={page === i} aria-label={i === 0 ? "Este mes" : nextName} onClick={() => go(i)}
-            className={`h-2 rounded-full transition-all ${page === i ? "w-5 bg-slate-700" : "w-2 bg-slate-300"}`} />
-        ))}
-      </div>
+      </section>
+      <section className={`${card} ${flat} min-w-0 overflow-hidden px-4 pt-4 sm:px-5 sm:pt-5`}>
+        {page === 0 ? (
+          <>
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-sm font-medium text-slate-500">Tus grupos</h2>
+              <Link href="/finanzas/plan" className="inline-flex items-center text-sm font-medium text-blue-700 hover:underline">Mi plan<ChevronRight className="h-4 w-4" /></Link>
+            </div>
+            <div className="mt-1">{data ? <GoalsGlance plan={data} /> : <SkeletonList rows={4} />}</div>
+          </>
+        ) : data ? <NextGroups plan={data} /> : <SkeletonList rows={4} />}
+      </section>
     </div>
   );
 }

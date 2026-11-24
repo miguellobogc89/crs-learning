@@ -4,13 +4,12 @@
 // los próximos ciclos estimados.
 import Link from "next/link";
 import { useState } from "react";
-import { AlertTriangle, ArrowRight, BellRing, Eye, EyeOff, Info, Landmark, Wallet, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, BellRing, Info, Landmark, Wallet, X } from "lucide-react";
 import type { overview } from "@/lib/finance/service";
 import { card, eur, flat, primary } from "@/components/trading/format";
 import { CardHeader, ErrorNote, SectionTitle } from "@/components/trading/ui";
 import { SkeletonStats, SkeletonList } from "@/components/trading/skeletons";
 import { fapi, refreshFinance, useFinance } from "./api";
-import { useHideAmounts } from "./privacy";
 import { requestSync } from "./shell";
 import { HomePlan } from "./home-plan";
 
@@ -67,7 +66,6 @@ function Alerts({ alerts }: { alerts: Overview["alerts"] }) {
 
 export function HomePanel() {
   const { data, error } = useFinance<Overview>("overview");
-  const { hidden, toggle } = useHideAmounts();
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
   if (!data) return (
     <div className="space-y-4"><SkeletonStats /><SkeletonList rows={6} /></div>
@@ -78,14 +76,6 @@ export function HomePanel() {
 
   return (
     <div className="space-y-4 pb-6">
-      <div className="flex items-center justify-end">
-        <button type="button" onClick={toggle} aria-pressed={hidden} aria-label={hidden ? "Mostrar importes" : "Ocultar importes"}
-          className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
-          {hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-          <span className="hidden sm:inline">{hidden ? "Mostrar importes" : "Ocultar importes"}</span>
-        </button>
-      </div>
-
       <>
       {/* Lo pendiente, arriba y con acción directa */}
       {review > 0 && (
