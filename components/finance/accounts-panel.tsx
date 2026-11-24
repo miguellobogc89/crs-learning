@@ -67,7 +67,9 @@ export function AccountsPanel() {
   };
 
   const disconnectBank = async (bank: string) => {
-    if (!window.confirm("¿Desconectar este banco? Se revoca el permiso de lectura. Los movimientos ya guardados se conservan.")) return;
+    if (!window.confirm(bank.startsWith("yaxi:")
+      ? "¿Dejar de sincronizar este banco? Se elimina el acceso guardado en CRS Finance, pero el consentimiento puede seguir vigente en el banco. Los movimientos guardados se conservan."
+      : "¿Desconectar este banco? Se revoca el permiso de lectura. Los movimientos ya guardados se conservan.")) return;
     setBusy(bank);
     setErr(null);
     try {
