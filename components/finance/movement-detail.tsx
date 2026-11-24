@@ -359,7 +359,16 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
               </button>
             )}
             <SheetDescription className="mt-1 text-sm text-slate-500">{longDay(item.date)}</SheetDescription>
-            {shownName !== item.description && <p className="mt-1 break-words text-xs text-slate-400">{item.description}</p>}
+            {shownName !== item.description && (
+              <p className="mt-1 break-words text-xs text-slate-400">
+                Nombre original: {item.description}
+                {v.alias && (
+                  <button type="button" onClick={() => void save({ alias: null }, "alias", "Nombre original recuperado")} className="ml-2 font-medium text-blue-600 active:text-blue-800">
+                    Recuperar
+                  </button>
+                )}
+              </p>
+            )}
 
             <ul className="mt-5 divide-y divide-slate-100 border-y border-slate-100">
               <Row onClick={() => setSheet("category")}>
