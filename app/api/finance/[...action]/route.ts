@@ -12,6 +12,7 @@ import { conceptKey } from "@/lib/finance/plan";
 import { disconnectGmail, gmailView, syncGmail } from "@/lib/finance/gmail";
 import { ask, chatHistory, clearChat } from "@/lib/finance/copilot";
 import { getMemory, getRules, getSettings } from "@/lib/finance/store";
+import { LAB_PROFILES, labEmail, labProfile } from "@/lib/finance/lab-data";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,18 +34,77 @@ async function ownAccount(uid: string, value: unknown): Promise<string | null | 
   return found ? found.id : false;
 }
 
-async function userId() {
+async function realUserId() {
   return (await auth())?.user?.id ?? null;
+}
+
+/** Solo administradores pueden usar el laboratorio (usuarios ficticios con datos de prueba). */
+async function isLabAdmin(uid: string) {
+  const u = await prisma.users.findUnique({ where: { id: uid }, select: { system_role: true } });
+  return u?.system_role === "system_admin";
+}
+
+/**
+ * Usuario con el que se lee y escribe. Desde el laboratorio (cabecera x-crs-lab con un perfil), el usuario ficticio
+ * de ese perfil: solo si eres administrador y es tuyo (su email lleva tu id). Si no, siempre tú.
+ */
+async function userId(req: Request) {
+  const uid = await realUserId();
+  const profile = req.headers.get("x-crs-lab");
+  if (!uid || !profile || !labProfile(profile)) return uid;
+  if (!(await isLabAdmin(uid))) return null;
+  const fake = await prisma.users.findUnique({ where: { email: labEmail(profile, uid) }, select: { id: true } });
+  return fake?.id ?? null;
+}
+
+/** Estado de los perfiles de prueba: si existen y cómo se han clasificado sus movimientos. */
+async function labStatus(owner: string) {
+  return Promise.all(LAB_PROFILES.map(async (p) => {
+    const u = await prisma.users.findUnique({ where: { email: labEmail(p.key, owner) }, select: { id: true } });
+    if (!u) return { key: p.key, label: p.label, detail: p.detail, exists: false, total: 0, bySource: {} as Record<string, number> };
+    const rows = await prisma.finance_transactions.groupBy({ by: ["category_source"], where: { user_id: u.id }, _count: { _all: true } });
+    const bySource = Object.fromEntries(rows.map((r) => [r.category_source, r._count._all]));
+    return { key: p.key, label: p.label, detail: p.detail, exists: true, total: rows.reduce((t, r) => t + r._count._all, 0), bySource };
+  }));
+}
+
+/** Rehace el usuario ficticio de un perfil desde cero con su dataset, todo sin clasificar («pendiente»). */
+async function labReset(owner: string, key: string) {
+  const p = labProfile(key);
+  if (!p) throw new Error("Perfil desconocido");
+  const email = labEmail(p.key, owner);
+  const old = await prisma.users.findUnique({ where: { email }, select: { id: true } });
+  if (old) {
+    await prisma.finance_forecast_items.deleteMany({ where: { user_id: old.id } });
+    await prisma.users.delete({ where: { id: old.id } }); // en cascada, todo lo de finanzas
+  }
+  const user = await prisma.users.create({ data: { email, name: `Laboratorio · ${p.label}` } });
+  const account = await prisma.finance_accounts.create({
+    data: { user_id: user.id, source: "bank", bank: "laboratorio", name: "Cuenta principal", holder_name: p.holder, iban_last4: "0000", last_synced_at: new Date() },
+  });
+  const today = new Date().toISOString().slice(0, 10);
+  const txs = p.generate(today);
+  await prisma.finance_transactions.createMany({
+    data: txs.map((t, i) => ({
+      user_id: user.id, account_id: account.id, external_id: `lab-${i}`, source: "bank",
+      booking_date: new Date(`${t.date}T00:00:00Z`), amount: t.amount, description: t.description, counterparty: t.counterparty,
+    })),
+  });
+  return { profile: p.key, movements: txs.length };
 }
 
 export async function GET(req: Request, route: RouteContext) {
   await applyAiSettings();
-  const uid = await userId();
+  const uid = await userId(req);
   if (!uid) return fail("No autenticado", 401);
   const action = (await route.params).action.join("/");
   const url = new URL(req.url);
   const p = url.searchParams;
   try {
+    if (action === "lab/status") {
+      if (req.headers.get("x-crs-lab") || !(await isLabAdmin(uid))) return fail("Solo para administradores", 403);
+      return ok(await labStatus(uid));
+    }
     if (action === "overview") return ok(await overview(uid, Number(p.get("cycle")) || 0));
     if (action === "transactions") return ok(await listTransactions(uid, { all: p.get("all") === "1" }));
     if (action === "transaction/recurring") return ok(await transactionRecurring(uid, p.get("id") ?? ""));
@@ -81,12 +141,16 @@ export async function GET(req: Request, route: RouteContext) {
 
 export async function POST(req: Request, route: RouteContext) {
   await applyAiSettings();
-  const uid = await userId();
+  const uid = await userId(req);
   if (!uid) return fail("No autenticado", 401);
   const action = (await route.params).action.join("/");
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const str = (k: string) => (typeof body[k] === "string" ? (body[k] as string) : "");
   try {
+    if (action === "lab/reset") {
+      if (req.headers.get("x-crs-lab") || !(await isLabAdmin(uid))) return fail("Solo para administradores", 403);
+      return ok(await labReset(uid, str("profile")));
+    }
     if (action === "sync") return ok(await syncUser(uid, { force: body.force === true }));
     if (action === "classify") return ok(await classifyPending(uid, { maxBatches: 2 }));
     if (action === "reclassify") {

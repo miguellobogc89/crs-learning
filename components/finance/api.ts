@@ -5,10 +5,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const memory = new Map<string, unknown>();
+// Laboratorio: con un perfil de prueba activo, todas las lecturas y escrituras van a su usuario ficticio (cabecera
+// x-crs-lab) y se guardan en una caché aparte, para no mezclarse nunca con tus datos.
+let labProfile: string | null = null;
+export function setLabProfile(p: string | null) { labProfile = p; }
+const scoped = (path: string) => (labProfile ? `lab:${labProfile}:${path}` : path);
 const storeKey = (path: string) => `crs-finance:${path}`;
 const MAX_STORED = 1_500_000;
 
-export function peek<T>(path: string): T | null {
+export function peek<T>(raw: string): T | null {
+  const path = scoped(raw);
   if (memory.has(path)) return memory.get(path) as T;
   if (typeof window === "undefined") return null;
   try {
@@ -33,15 +39,17 @@ function remember(path: string, value: unknown) {
 }
 
 export async function fapi<T>(path: string, body?: unknown): Promise<T> {
+  const lab: Record<string, string> = labProfile ? { "x-crs-lab": labProfile } : {};
   const res = await fetch(`/api/finance/${path}`, {
     method: body === undefined ? "GET" : "POST",
     cache: "no-store",
-    ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    headers: { ...lab, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { error?: string }).error || "No se pudo completar la operación");
   // Las nóminas contienen datos sensibles: no persistirlas en sessionStorage.
-  if (body === undefined && !path.startsWith("payslips") && !path.startsWith("forecast/source")) remember(path, data);
+  if (body === undefined && !path.startsWith("payslips") && !path.startsWith("forecast/source")) remember(scoped(path), data);
   return data as T;
 }
 
