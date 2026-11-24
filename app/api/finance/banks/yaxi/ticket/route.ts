@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/connectors/crypto";
 import { isYaxiConfigured, issueYaxiTicket } from "@/lib/personal-finance/yaxi";
 
@@ -33,7 +34,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "YAXI no está configurado" }, { status: 503 });
   }
 
-  const { ticketId, ticket } = issueYaxiTicket("Accounts");
+  // Hard quota: two interactive authorizations per user per 24h, 800 tickets
+  // across all beta users per calendar month. Serialized across Vercel instances.
+  const ticketData = issueYaxiTicket("Accounts");
+  const allowed = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(72596821)`;
+    const counts = await tx.$queryRaw<Array<{ daily: bigint; monthly: bigint }>>`
+      SELECT
+        (SELECT count(*) FROM yaxi_ticket_usage
+          WHERE user_id = ${session.user.id}::uuid AND source = 'interactive' AND created_at >= now() - interval '24 hours') AS daily,
+        (SELECT count(*) FROM yaxi_ticket_usage
+          WHERE created_at >= date_trunc('month', now())) AS monthly
+    `;
+    if (Number(counts[0]?.daily ?? 0) >= 2 || Number(counts[0]?.monthly ?? 0) >= 800) return false;
+    await tx.$executeRaw`
+      INSERT INTO yaxi_ticket_usage (ticket_id, user_id)
+      VALUES (${ticketData.ticketId}::uuid, ${session.user.id}::uuid)
+    `;
+    return true;
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "Límite diario de conexiones alcanzado" }, { status: 429 });
+  }
+  const { ticketId, ticket } = ticketData;
   const response = NextResponse.json(
     { ticketId, ticket },
     { headers: { "Cache-Control": "private, no-store" } },
@@ -44,7 +67,7 @@ export async function POST(request: NextRequest) {
   })), {
     httpOnly: true,
     secure: request.nextUrl.protocol === "https:",
-    sameSite: "strict",
+    sameSite: "lax",
     path: "/api/finance/banks/yaxi/result",
     maxAge: 600,
   });

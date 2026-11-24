@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { applyAiSettings } from "@/lib/ai/usage";
 import { syncEveryone } from "@/lib/finance/sync";
+import { syncYaxiEveryone } from "@/lib/finance/yaxi-sync";
 import { gmailUsers, syncGmail } from "@/lib/finance/gmail";
 
 export const runtime = "nodejs";
@@ -14,11 +15,12 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   try {
     const synced = await syncEveryone();
+    const yaxi = await syncYaxiEveryone();
     // Correo de suscripciones de quien tenga Gmail conectado.
     const origin = new URL(req.url).origin;
     const gmail: Record<string, unknown> = {};
     for (const uid of await gmailUsers().catch(() => [])) gmail[uid] = await syncGmail(uid, origin).catch((e) => (e instanceof Error ? e.message : "error"));
-    return NextResponse.json({ synced, gmail });
+    return NextResponse.json({ synced, yaxi, gmail });
   } catch (e) {
     console.error("[finance] cron", e instanceof Error ? e.message.slice(0, 200) : e);
     return NextResponse.json({ error: "Falló la sincronización" }, { status: 500 });

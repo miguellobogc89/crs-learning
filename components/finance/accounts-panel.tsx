@@ -10,6 +10,7 @@ import { SkeletonList } from "@/components/trading/skeletons";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { errorText, fapi, longDay, refreshFinance, useFinance } from "./api";
 import { BankLogo } from "./bank-logo";
+import { YaxiBankConnect } from "./yaxi-bank-connect";
 import { requestSync } from "./shell";
 
 type View = Awaited<ReturnType<typeof accountsView>>;
@@ -20,9 +21,13 @@ export function AccountsPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [yaxiMode, setYaxiMode] = useState(false);
   const connected = params.get("banco") === "conectado";
   const callbackError = params.get("error");
   const synced = useRef(false);
+  useEffect(() => {
+    if (params.has("yaxi_return")) { setPickerOpen(true); setYaxiMode(true); }
+  }, [params]);
 
   useEffect(() => {
     if (connected && !synced.current) {
@@ -62,7 +67,9 @@ export function AccountsPanel() {
   };
 
   const disconnectBank = async (bank: string) => {
-    if (!window.confirm("¿Desconectar este banco? Se revoca el permiso de lectura. Los movimientos ya guardados se conservan.")) return;
+    if (!window.confirm(bank.startsWith("yaxi:")
+      ? "¿Dejar de sincronizar este banco? Se elimina el acceso guardado en CRS Finance, pero el consentimiento puede seguir vigente en el banco. Los movimientos guardados se conservan."
+      : "¿Desconectar este banco? Se revoca el permiso de lectura. Los movimientos ya guardados se conservan.")) return;
     setBusy(bank);
     setErr(null);
     try {
@@ -95,7 +102,7 @@ export function AccountsPanel() {
                 <BankLogo bank={account.bank} className="h-10 w-10" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-slate-900">{account.name}{account.ibanLast4 ? <span className="font-normal text-slate-400"> · •••• {account.ibanLast4}</span> : null}</span>
-                  <span className="block text-xs text-slate-500">{account.source === "import" ? "Importada" : account.bank} · {account.count} movimientos{account.since ? ` desde el ${longDay(account.since)}` : ""}</span>
+                  <span className="block text-xs text-slate-500">{account.source === "import" ? "Importada" : account.bank?.startsWith("yaxi:") ? "Conexión bancaria" : account.bank} · {account.count} movimientos{account.since ? ` desde el ${longDay(account.since)}` : ""}{account.bank?.startsWith("yaxi:") ? account.lastSyncedAt ? ` · Actualizada ${new Date(account.lastSyncedAt).toLocaleString("es-ES", { timeZone: "Europe/Madrid", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : " · Primera actualización pendiente" : ""}</span>
                   <label className="mt-2 inline-flex items-center gap-2 text-xs text-slate-600" title="Si la excluyes, no cuenta en saldos, gastos ni previsiones">
                     <input type="checkbox" checked={account.included} disabled={busy === account.id} onChange={(e) => void toggleInclude(account.id, e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
                     Incluir en mis finanzas
@@ -122,7 +129,20 @@ export function AccountsPanel() {
             <SheetTitle>Conectar cuenta bancaria</SheetTitle>
             <SheetDescription>Selecciona tu banco. El acceso a los movimientos es de solo lectura.</SheetDescription>
           </SheetHeader>
-          {!data.configured && <p className="border-b border-slate-100 px-5 py-3 text-xs text-amber-700">La conexión bancaria no está configurada en el servidor.</p>}
+          {yaxiMode ? (
+            <YaxiBankConnect
+              onCancel={() => setYaxiMode(false)}
+              onDone={() => { setPickerOpen(false); setYaxiMode(false); refreshFinance(); }}
+            />
+          ) : (
+            <>
+          {data.yaxiAvailable && (
+            <button type="button" onClick={() => setYaxiMode(true)}
+              className="m-4 flex w-[calc(100%-2rem)] items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-left text-sm font-semibold text-blue-900 hover:bg-blue-100">
+              <span>Buscar mi banco con YAXI</span><Plus className="h-4 w-4" />
+            </button>
+          )}
+          {!data.configured && <p className="border-b border-slate-100 px-5 py-3 text-xs text-amber-700">La conexión bancaria de Enable Banking no está configurada.</p>}
           <ul className="min-h-0 overflow-y-auto divide-y divide-slate-100">
             {[...data.banks].sort((a, b) => Number(b.connected) - Number(a.connected)).map((bank) => (
               <li key={bank.bank} className="flex flex-wrap items-center gap-3 px-5 py-4">
@@ -133,7 +153,12 @@ export function AccountsPanel() {
                 </span>
                 {bank.connected && <Pill color={bank.expired ? "amber" : "emerald"}>{bank.expired ? "Caducado" : "Conectado"}</Pill>}
                 <span className="flex shrink-0 items-center gap-1">
-                  <a href={`/api/finance/banks/connect?bank=${bank.bank}`} onClick={(event) => { if (!data.configured) event.preventDefault(); }} className={`${bank.connected ? ghost : primary} ${!data.configured ? "pointer-events-none opacity-50" : ""}`}><Link2 className="h-4 w-4" /> {bank.connected ? "Renovar" : "Conectar"}</a>
+                  {bank.bank.startsWith("yaxi:") ? (
+                    <button type="button" onClick={() => setYaxiMode(true)} disabled={!data.yaxiAvailable}
+                      className={ghost}><Link2 className="h-4 w-4" /> Renovar</button>
+                  ) : (
+                    <a href={`/api/finance/banks/connect?bank=${bank.bank}`} onClick={(event) => { if (!data.configured) event.preventDefault(); }} className={`${bank.connected ? ghost : primary} ${!data.configured ? "pointer-events-none opacity-50" : ""}`}><Link2 className="h-4 w-4" /> {bank.connected ? "Renovar" : "Conectar"}</a>
+                  )}
                   {bank.connected && <button type="button" onClick={() => void disconnectBank(bank.bank)} disabled={busy === bank.bank} className={ghost} aria-label={`Desconectar ${bank.label}`}>
                     {busy === bank.bank ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlink className="h-4 w-4" />}
                   </button>}
@@ -142,9 +167,11 @@ export function AccountsPanel() {
             ))}
           </ul>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1.5"><LockKeyhole className="h-3.5 w-3.5" /> Acceso mediante Enable Banking</span>
+            <span className="inline-flex items-center gap-1.5"><LockKeyhole className="h-3.5 w-3.5" /> Acceso seguro mediante entidades bancarias</span>
             <button type="button" onClick={() => requestSync()} className="inline-flex items-center gap-1.5 font-medium text-blue-700"><RefreshCw className="h-3.5 w-3.5" /> Sincronizar</button>
           </div>
+            </>
+          )}
         </SheetContent>
       </Sheet>
     </div>

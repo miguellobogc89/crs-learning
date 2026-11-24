@@ -75,7 +75,7 @@ export async function syncUser(userId: string, opts: { force?: boolean } = {}): 
   // Se marca antes de empezar: dos pestañas abiertas no lanzan dos sincronizaciones a la vez.
   await prisma.finance_settings.update({ where: { user_id: userId }, data: { last_sync_at: new Date() } });
 
-  const connections = await prisma.personal_bank_connections.findMany({ where: { user_id: userId, consent_expires_at: { gt: new Date() } } });
+  const connections = await prisma.personal_bank_connections.findMany({ where: { user_id: userId, consent_expires_at: { gt: new Date() }, NOT: { bank: { startsWith: "yaxi:" } } } });
   for (const conn of connections) {
     let uids: string[] = [];
     try {
@@ -174,7 +174,7 @@ async function syncAccount(userId: string, bank: string, institution: string, ui
 
 /** Para el cron diario: todas las personas con algún banco conectado y en vigor. */
 export async function syncEveryone() {
-  const users = await prisma.personal_bank_connections.findMany({ where: { consent_expires_at: { gt: new Date() } }, select: { user_id: true }, distinct: ["user_id"] });
+  const users = await prisma.personal_bank_connections.findMany({ where: { consent_expires_at: { gt: new Date() }, NOT: { bank: { startsWith: "yaxi:" } } }, select: { user_id: true }, distinct: ["user_id"] });
   const out: { user: string; inserted: number; errors: number }[] = [];
   for (const u of users) {
     try {

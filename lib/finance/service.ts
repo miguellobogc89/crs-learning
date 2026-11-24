@@ -400,8 +400,9 @@ export async function accountsView(userId: string) {
   const byAcc = new Map(counts.map((c) => [c.account_id, { count: c._count._all, since: c._min.booking_date?.toISOString().slice(0, 10) ?? null }]));
   return {
     configured: isBankingConfigured(),
+    yaxiAvailable: process.env.YAXI_CONNECT_ENABLED === "true" && Boolean(process.env.YAXI_API_KEY_ID && process.env.YAXI_API_SECRET),
     lastSyncAt: settings.lastSyncAt,
-    banks: PERSONAL_BANKS.map((bank) => {
+    banks: [...PERSONAL_BANKS.map((bank) => {
       const c = conns.find((x) => x.bank === bank);
       return {
         bank,
@@ -411,7 +412,12 @@ export async function accountsView(userId: string) {
         expiresAt: c?.consent_expires_at.toISOString() ?? null,
         daysLeft: c ? Math.ceil((c.consent_expires_at.getTime() - Date.now()) / 86_400_000) : null,
       };
-    }),
+    }), ...conns.filter(c => c.bank.startsWith("yaxi:")).map(c => ({
+      bank: c.bank, label: c.institution_name, connected: true,
+      expired: c.consent_expires_at.getTime() <= Date.now(),
+      expiresAt: c.consent_expires_at.toISOString(),
+      daysLeft: Math.ceil((c.consent_expires_at.getTime() - Date.now()) / 86_400_000),
+    }))],
     accounts: accounts.map(({ ibanHash: _h, ...a }) => ({ ...a, ...(byAcc.get(a.id) ?? { count: 0, since: null }) })),
   };
 }
