@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     const counts = await tx.$queryRaw<Array<{ daily: bigint; monthly: bigint }>>`
       SELECT
         (SELECT count(*) FROM yaxi_ticket_usage
-          WHERE user_id = ${session.user.id}::uuid AND created_at >= now() - interval '24 hours') AS daily,
+          WHERE user_id = ${session.user.id}::uuid AND source = 'interactive' AND created_at >= now() - interval '24 hours') AS daily,
         (SELECT count(*) FROM yaxi_ticket_usage
           WHERE created_at >= date_trunc('month', now())) AS monthly
     `;

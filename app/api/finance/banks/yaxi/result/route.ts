@@ -56,6 +56,9 @@ export async function POST(request: NextRequest) {
     });
     // The SDK's opaque connection data is kept encrypted and never shown in the API response.
     const connectionData = body.connectionData ?? null;
+    if (connectionData !== null && (!Array.isArray(connectionData) || connectionData.some(x => !Number.isInteger(x) || x < 0 || x > 255))) {
+      return NextResponse.json({ error: "Consentimiento bancario inválido" }, { status: 400 });
+    }
     const serialized = JSON.stringify(connectionData);
     if (!serialized || serialized.length > 150000) return NextResponse.json({ error: "Datos de conexión excesivos" }, { status: 400 });
     const count = await prisma.personal_bank_connections.count({

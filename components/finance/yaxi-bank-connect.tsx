@@ -34,7 +34,7 @@ export function YaxiBankConnect({ onDone, onCancel }: { onDone: () => void; onCa
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jwt: response.jwt, connectionId: bank.id, bankName: bank.displayName,
-          connectionData: response.connectionData ?? null,
+          connectionData: response.connectionData ? Array.from(response.connectionData) : null,
         }),
       });
       const data = await res.json() as { error?: string };
