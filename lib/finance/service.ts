@@ -517,11 +517,13 @@ export async function packagesView(userId: string) {
 }
 
 /** Grupos con los que arranca Plan la primera vez (cada uno solo con categorías; el usuario los cambia). */
+// Grupos de inicio para quien aún no tiene ninguno (24/11/2026). Lo demás queda «Sin grupo» en Inicio, a la vista,
+// como invitación a agruparlo; el usuario los cambia en Mi plan.
 const DEFAULT_PLAN_GROUPS: { name: string; categories: string[] }[] = [
-  { name: "Gastos fijos", categories: ["luz", "gas", "agua", "internet_fijo", "movil", "suministros", "suscripciones", "prestamos"] },
-  { name: "Ocio y caprichos", categories: ["restaurantes", "bares_copas", "conciertos_espectaculos", "viajes", "hobbies", "videojuegos", "ocio"] },
-  { name: "Moda y complementos", categories: ["moda"] },
-  { name: "Comida a domicilio", categories: ["comida_domicilio"] },
+  { name: "Gastos fijos", categories: ["vivienda", "comunidad", "seguro_hogar", "seguro_coche", "luz", "gas", "agua", "internet_fijo", "movil", "suministros", "prestamos", "suscripciones"] },
+  { name: "Alimentación", categories: ["alimentacion", "comida_domicilio"] },
+  { name: "Ocio y caprichos", categories: ["restaurantes", "bares_copas", "conciertos_espectaculos", "hobbies", "videojuegos", "ocio"] },
+  { name: "Viajes", categories: ["viajes"] },
 ];
 
 /**

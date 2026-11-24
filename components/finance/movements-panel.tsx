@@ -229,7 +229,8 @@ export function MovementsPanel() {
     if (!data) return [];
     const needle = fold(q.trim());
     const out = data.items.filter((t) =>
-      (kind === "all" || t.kind === kind) &&
+      // Los traspasos entre tus cuentas no se ven (no aportan); solo si los filtras a propósito, para corregir uno.
+      (kind === "all" ? t.kind !== "interna" : t.kind === kind) &&
       (category === "all" || t.category === category) &&
       (status === "all" || (status === "revisar" ? isReview(t) : status === "usuario" ? t.source === "usuario" : t.extraordinary)) &&
       (!needle || fold(`${t.description} ${t.counterparty ?? ""} ${t.alias ?? ""} ${t.subcategory ?? ""} ${t.note ?? ""} ${t.account} ${Math.abs(t.amount).toFixed(2).replace(".", ",")}`).includes(needle)));

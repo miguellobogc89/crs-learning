@@ -5,10 +5,8 @@
 // ciclo anterior, cambian. Debajo de la cabecera, la evolución de los últimos 6 meses en una línea suave.
 // Al tocar un movimiento se edita con la misma ventana que en Movimientos
 // (movement-detail.tsx); si cambia de categoría, sale de la lista y, al volver, la cifra del grupo ya está al día.
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ChevronRight } from "lucide-react";
 import { createPortal } from "react-dom";
 import type { planView } from "@/lib/finance/service";
 import { categoryLabel } from "@/lib/finance/categories";
@@ -16,7 +14,7 @@ import { eur } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { useFinance } from "./api";
-import { MovementRowButton, label, type Item, type List } from "./movement-edit";
+import { MovementRowButton, type Item, type List } from "./movement-edit";
 import { MovementDetailSheet } from "./movement-detail";
 import { TrendChart, type TrendPoint } from "./trend-chart";
 import { PlannedList } from "./planned";
@@ -166,21 +164,6 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
     return () => el.removeEventListener("scroll", onScroll);
   }, [sections]);
 
-  // Cabecera de la hoja: la referencia (tu objetivo o lo que sueles gastar), lo que más pesa este mes y el acceso
-  // a Mi plan para cambiarlo.
-  const ownerGroup = extrasOnly || !plan.data ? null
-    : plan.data.groups.find((g) => (groupId ? g.id === groupId : g.categories.includes(categories[0] ?? "")));
-  const goal = !only && ownerGroup && (groupId || ownerGroup.categories.length === 1) ? ownerGroup.goal : null;
-  const closedTrend = trend.filter((p) => !p.current).slice(-3);
-  const usual = closedTrend.length ? Math.round(closedTrend.reduce((t, p) => t + p.value, 0) / closedTrend.length) : null;
-  const top = useMemo(() => {
-    const cur = sections[0]?.rows.filter((t) => extrasOnly || !t.extraordinary) ?? [];
-    const by = new Map<string, { n: number; amount: number }>();
-    for (const t of cur) { const k = label(t); const x = by.get(k) ?? { n: 0, amount: 0 }; by.set(k, { n: x.n + 1, amount: x.amount - t.amount }); }
-    return [...by.entries()].sort((a, b) => b[1].amount - a[1].amount).slice(0, 2);
-  }, [sections, extrasOnly]);
-  const openInPlan = () => { if (ownerGroup) { try { window.sessionStorage.setItem("crs-finance:plan-open", ownerGroup.id); } catch { /* ignorar */ } } };
-
   // Arriba, en azul, solo lo que falta por cobrar este mes; abajo, el historial entero (también los cargos que se
   // repiten: son pagos ya hechos y no salen arriba).
 
@@ -228,29 +211,6 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
             </button>
           ))}
         </div>
-      )}
-
-      {list.data && plan.data && (
-        <section className="space-y-1.5 px-1 pt-3 text-sm" aria-label="Resumen">
-          <p className="amount text-slate-700">
-            {goal !== null ? <>Tu objetivo: <b className="font-semibold text-slate-900">{eur(goal, 0)} al mes</b></>
-              : usual !== null ? <>Sueles gastar <b className="font-semibold text-slate-900">~{eur(usual, 0)} al mes</b></>
-              : "Aún no hay meses completos para comparar."}
-            {goal !== null && usual !== null && <span className="text-slate-500"> · sueles ~{eur(usual, 0)}</span>}
-          </p>
-          {top.length > 0 && (
-            <p className="amount text-slate-700">
-              Lo que más pesa este mes: {top.map(([k, v], i) => (
-                <span key={k}>{i > 0 && ", "}<b className="font-semibold text-slate-900">{k}</b> ({v.n} {v.n === 1 ? "vez" : "veces"}, {eur(v.amount, 0)})</span>
-              ))}
-            </p>
-          )}
-          {!extrasOnly && plan.data && (
-            <Link href="/finanzas/plan" onClick={openInPlan} className="inline-flex items-center gap-0.5 text-sm font-medium text-blue-700 hover:underline">
-              {ownerGroup ? (ownerGroup.goal !== null ? "Cambiar el objetivo en Mi plan" : "Ponerle objetivo en Mi plan") : "Meterla en un grupo en Mi plan"}<ChevronRight className="h-4 w-4" />
-            </Link>
-          )}
-        </section>
       )}
 
       {list.data && plan.data && (

@@ -42,7 +42,7 @@ const store = {
   set: (k: string, v: string | null) => { try { if (v === null) window.sessionStorage.removeItem(k); else window.sessionStorage.setItem(k, v); } catch { /* ignorar */ } },
 };
 /** Lo que comparten las dos listas (este mes y el que viene): mismo desplegar, mismo ir a la hoja. */
-type ListProps = { plan: Plan; open: string | null; toggle: (id: string, header: HTMLElement) => void; toSheet: (id: string, target?: { cat?: string; sub?: string }) => void };
+type ListProps = { plan: Plan; open: string | null; toggle: (id: string, header: HTMLElement) => void; toSheet: (id: string, target?: { cat?: string; sub?: string }) => void; toCategory: (key: string) => void };
 const scroller = () => document.querySelector<HTMLElement>("main");
 
 // ── Vista sin desplegar: a qué ritmo vas en cada grupo, en palabras y sin cifras ─────────────────
@@ -80,7 +80,7 @@ export const OTROS_SUB = "__otros";
 const norm = (s?: string | null) => (s ?? "").trim();
 type Mode = "now" | "next";
 
-function linesOf(plan: Plan, cats: string[], mode: Mode): Line[] {
+function linesOf(plan: Plan, cats: string[], mode: Mode, split = true): Line[] {
   const cycles = plan.history ?? [];
   const cur = cycles[0];
   const last = cycles[1] ?? null;
@@ -92,7 +92,7 @@ function linesOf(plan: Plan, cats: string[], mode: Mode): Line[] {
   const gone: Cancel[] = mode === "now" ? plan.cancelledNow ?? [] : plan.next?.cancelled ?? [];
   // Una sola categoría: se reparte por subcategorías si hay alguna; si no, una línea con la categoría.
   let units: { cat: string; sub?: string }[] = cats.map((c) => ({ cat: c }));
-  if (cats.length === 1) {
+  if (cats.length === 1 && split) {
     const c = cats[0];
     const subs = new Set<string>();
     if (mode === "now") for (const r of [cur?.subAtDay, last?.subAtDay]) for (const k of Object.keys(r ?? {})) if (k.startsWith(`${c}/`) && (r?.[k] ?? 0) > 0) subs.add(k.slice(c.length + 1));
@@ -163,12 +163,41 @@ function LineRow({ l, mode, onOpen }: { l: Line; mode: Mode; onOpen: () => void 
   );
 }
 
+/** Categorías que son el «cajón» (lo no entendido o sin sitio): van al final, en gris. */
+const OTHER_CATS = ["otros_gastos", "sin_clasificar"];
+
+/** Una categoría fuera de tus grupos: su gasto (o lo comprometido) y, al tocarla, su hoja en ese mes. */
+function LooseRow({ l, mode, onOpen, muted = false }: { l: Line; mode: Mode; onOpen: () => void; muted?: boolean }) {
+  const blue = mode === "now" && l.now <= 0 && l.pending > 0;
+  const amount = mode === "next" ? l.committed : blue ? l.pending : l.now;
+  const sub = mode === "next" ? countText(l.count)
+    : blue ? "Previsto, sin cobrar"
+    : l.pending > 0 ? `${eur(l.pending, 0)} previsto`
+    : l.prev !== null ? (() => { const d = deviationOf(l.now, l.prev ?? 0); return d.state === "estable" ? "Igual que el mes pasado" : d.state === "mejor" ? "Menos que el mes pasado" : "Más que el mes pasado"; })()
+    : "";
+  return (
+    <li>
+      <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
+        <span className={muted ? "opacity-60 grayscale" : ""}><CategoryIcon category={l.cat} /></span>
+        <span className="min-w-0 flex-1">
+          <span className={`block truncate text-[15px] font-semibold ${muted ? "text-slate-500" : "text-slate-900"}`}>{l.label}</span>
+          <span className={`block truncate text-xs ${l.pending > 0 && mode === "now" ? "text-blue-700" : "text-slate-500"}`}>
+            {sub}{l.gone.length > 0 && <span className="amount text-emerald-700">{sub ? " · " : ""}{goneText(l.gone)}</span>}
+          </span>
+        </span>
+        <b className={`amount shrink-0 text-[15px] font-semibold tabular-nums ${blue ? "text-blue-700" : muted ? "text-slate-500" : "text-slate-900"}`}>{eur(amount, 0)}</b>
+        <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+      </button>
+    </li>
+  );
+}
+
 /**
  * Tus grupos, este mes o el que viene: los dos funcionan igual. Cada grupo se despliega (los de varias categorías
  * por categoría; los de una, por subcategoría) con lo cancelado dentro de su línea, y «Ver todos los movimientos».
  * Cada línea abre la hoja ya filtrada y en el mes del que vienes.
  */
-function GroupsList({ plan, mode, open, toggle, toSheet }: ListProps & { mode: Mode }) {
+function GroupsList({ plan, mode, open, toggle, toSheet, toCategory }: ListProps & { mode: Mode }) {
   const [adding, setAdding] = useState(false);
   const cycles = plan.history ?? [];
   const last = cycles[1] ?? null;
@@ -198,9 +227,21 @@ function GroupsList({ plan, mode, open, toggle, toSheet }: ListProps & { mode: M
     : good === judged.length ? (judged.length === 1 ? "Vas a buen ritmo" : `Vas a buen ritmo en tus ${judged.length} grupos`)
     : `Vas a buen ritmo en ${good} de tus ${judged.length} grupos`;
   const monthName = next ? monthOf(next.cycle.end) : "";
+  // Debajo de tus grupos: cada categoría suelta (sin grupo) con algo ese mes, y al final «Otros gastos» (lo que la
+  // app no entiende y lo que no sabes dónde meter), en gris. Una invitación a ordenar, sin avisos.
   const inGroups = new Set(plan.groups.flatMap((g) => g.categories));
-  const loose = mode === "next" && next ? next.items.filter((i) => !inGroups.has(i.category)) : [];
-  const looseGone = mode === "next" && next ? next.cancelled.filter((c) => !inGroups.has(c.category)) : [];
+  const candidates = new Set<string>([
+    ...Object.keys(cycles[0]?.atDay ?? {}),
+    ...(plan.pending ?? []).map((x) => x.category), ...(plan.planned ?? []).map((x) => x.category),
+    ...(plan.cancelledNow ?? []).map((x) => x.category),
+    ...(next?.items ?? []).map((x) => x.category), ...(next?.cancelled ?? []).map((x) => x.category),
+  ]);
+  const looseLines = [...candidates].filter((c) => !inGroups.has(c))
+    .flatMap((c) => linesOf(plan, [c], mode, false));
+  const loose = looseLines.filter((l) => !OTHER_CATS.includes(l.cat))
+    .sort((a, b) => (mode === "now" ? b.now + b.pending - (a.now + a.pending) : b.committed - a.committed));
+  const others = looseLines.filter((l) => OTHER_CATS.includes(l.cat));
+  const extrasNow = mode === "now" ? Object.values(plan.totals?.extrasNow ?? {}).reduce((t, x) => t + x, 0) : 0;
 
   return (
     <div className="pb-2">
@@ -263,43 +304,34 @@ function GroupsList({ plan, mode, open, toggle, toSheet }: ListProps & { mode: M
             </li>
           );
         })}
-        {(loose.length > 0 || looseGone.length > 0) && (
-          <li>
-            <button type="button" onClick={(e) => toggle("otros", e.currentTarget)} aria-expanded={open === "otros"} className="flex w-full scroll-mt-16 items-center gap-3 py-3.5 text-left">
-              <CategoryIcon category="otros_gastos" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-semibold text-slate-500">Otros gastos</span>
-                <span className="block truncate text-xs text-slate-400">Sin grupo · {countText(loose.length)}{looseGone.length > 0 && <span className="amount text-emerald-700"> · {goneText(looseGone)}</span>}</span>
-              </span>
-              <b className="amount shrink-0 text-[15px] font-semibold tabular-nums text-slate-500">{eur(loose.reduce((t, i) => t + i.amount, 0), 0)}</b>
-            </button>
-            <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${open === "otros" ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-              <div className="overflow-hidden" inert={open !== "otros"}>
-                <ul className="mb-3 ml-12">
-                  {loose.map((i) => (
-                    <li key={i.id} className="flex items-center gap-3 py-2">
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-slate-800">{i.title}</span>
-                        <span className="block truncate text-xs text-slate-500">{shortDayOf(i.date)} · {i.source === "repite" ? "se repite" : "previsto"}</span>
-                      </span>
-                      <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(i.amount, 2)}</span>
-                    </li>
-                  ))}
-                  {looseGone.map((c) => (
-                    <li key={c.key} className="flex items-center gap-3 py-2">
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-slate-400 line-through">{c.title}</span>
-                        <span className="block truncate text-xs text-slate-400">Cancelado</span>
-                      </span>
-                      <span className="amount shrink-0 text-sm font-semibold tabular-nums text-emerald-700">−{eur(c.amount, 2)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </li>
-        )}
       </ul>
+
+      {loose.length > 0 && (
+        <>
+          <h3 className="mt-4 text-sm font-medium text-slate-500">Sin grupo</h3>
+          <ul className="mt-1 divide-y divide-slate-100">
+            {loose.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} />)}
+          </ul>
+        </>
+      )}
+      {(others.length > 0 || extrasNow > 0) && (
+        <ul className="mt-2 divide-y divide-slate-100 border-t border-slate-100">
+          {others.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} muted />)}
+          {extrasNow > 0 && (
+            <li>
+              <Link href="/finanzas/extraordinarios" className="flex w-full items-center gap-3 py-3.5 text-left">
+                <CategoryIcon category="otros_gastos" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold text-slate-700">Extraordinarios</span>
+                  <span className="block truncate text-xs text-slate-500">Aparte: no cuentan en tus grupos</span>
+                </span>
+                <b className="amount shrink-0 text-[15px] font-semibold tabular-nums text-slate-700">{eur(extrasNow, 0)}</b>
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+              </Link>
+            </li>
+          )}
+        </ul>
+      )}
       {mode === "next" && next && !next.items.length && <p className="py-2 text-sm text-slate-500">Aún no hay nada apuntado para {monthName}. Marca «Se repite» en tus recibos o añade un gasto con fecha de {monthName}.</p>}
       <button type="button" onClick={() => setAdding(true)} className="mt-1 inline-flex items-center gap-1.5 py-3 text-[15px] font-medium text-blue-600">
         <Plus className="h-5 w-5" /> Añadir gasto
@@ -505,6 +537,10 @@ export function HomePlan() {
     // Al cerrar un grupo largo la página encoge: se deja su cabecera a la vista para no perder dónde estabas.
     if (closing) window.setTimeout(() => header.scrollIntoView({ block: "nearest", behavior: "smooth" }), 320);
   };
+  const toCategory = (key: string) => {
+    store.set(SCROLL_KEY(page), String(scroller()?.scrollTop ?? 0));
+    router.push(`/finanzas/categoria/${encodeURIComponent(key)}${page === 1 ? "?mes=siguiente" : ""}`);
+  };
   // La hoja se abre ya filtrada (categoría o subcategoría) y en el mes del que vienes.
   const toSheet = (id: string, target: { cat?: string; sub?: string } = {}) => {
     store.set(SCROLL_KEY(page), String(scroller()?.scrollTop ?? 0));
@@ -540,9 +576,9 @@ export function HomePlan() {
               <h2 className="text-sm font-medium text-slate-500">Tus grupos</h2>
               <Link href="/finanzas/plan" className="inline-flex items-center text-sm font-medium text-blue-700 hover:underline">Mi plan<ChevronRight className="h-4 w-4" /></Link>
             </div>
-            <div className="mt-1">{data ? <GroupsList plan={data} mode="now" open={open[0]} toggle={toggle} toSheet={toSheet} /> : <SkeletonList rows={4} />}</div>
+            <div className="mt-1">{data ? <GroupsList plan={data} mode="now" open={open[0]} toggle={toggle} toSheet={toSheet} toCategory={toCategory} /> : <SkeletonList rows={4} />}</div>
           </>
-        ) : data ? <GroupsList plan={data} mode="next" open={open[1]} toggle={toggle} toSheet={toSheet} /> : <SkeletonList rows={4} />}
+        ) : data ? <GroupsList plan={data} mode="next" open={open[1]} toggle={toggle} toSheet={toSheet} toCategory={toCategory} /> : <SkeletonList rows={4} />}
       </section>
     </div>
   );

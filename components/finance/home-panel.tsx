@@ -4,13 +4,12 @@
 // los próximos ciclos estimados.
 import Link from "next/link";
 import { useState } from "react";
-import { AlertTriangle, ArrowRight, BellRing, Info, Landmark, Wallet, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, BellRing, Info, Wallet, X } from "lucide-react";
 import type { overview } from "@/lib/finance/service";
-import { card, eur, flat, primary } from "@/components/trading/format";
+import { card, flat, primary } from "@/components/trading/format";
 import { CardHeader, ErrorNote, SectionTitle } from "@/components/trading/ui";
 import { SkeletonStats, SkeletonList } from "@/components/trading/skeletons";
-import { fapi, refreshFinance, useFinance } from "./api";
-import { requestSync } from "./shell";
+import { fapi, useFinance } from "./api";
 import { HomePlan } from "./home-plan";
 
 type Overview = Awaited<ReturnType<typeof overview>>;
@@ -21,7 +20,7 @@ export function Empty() {
       <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><Wallet className="h-6 w-6" /></span>
       <h2 className="mt-4 text-lg font-semibold text-slate-900">Conecta tus bancos para empezar</h2>
       <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-        Con acceso de solo lectura a Santander, BBVA y Revolut, CRS Finance guarda tus movimientos, entiende cada uno y te dice cómo vas. También puedes importar extractos en CSV, Excel o PDF.
+        Con acceso de solo lectura a tu banco, CRS Finance guarda tus movimientos, entiende cada uno y te dice cómo vas. También puedes importar extractos en CSV, Excel o PDF.
       </p>
       <Link href="/finanzas/cuentas" className={`${primary} mt-5`}>Conectar un banco <ArrowRight className="h-4 w-4" /></Link>
     </div>
@@ -71,38 +70,16 @@ export function HomePanel() {
     <div className="space-y-4"><SkeletonStats /><SkeletonList rows={6} /></div>
   );
   if (!data.hasData) return <Empty />;
-  const v = data.cycleView;
-  const review = data.pendingReview;
 
   return (
     <div className="space-y-4 pb-6">
       <>
-      {/* Lo pendiente, arriba y con acción directa */}
-      {review > 0 && (
-        <Link href="/finanzas/movimientos?revisar=1" className="flex items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-900 hover:bg-blue-50">
-          <Info className="h-4 w-4 shrink-0 text-blue-600" />
-          <span className="flex-1"><b>{review}</b> {review === 1 ? "movimiento" : "movimientos"} sin entender del todo: revísalos y la app aprende.</span>
-          <ArrowRight className="h-4 w-4 shrink-0" />
-        </Link>
-      )}
-
       {/* El gasto del mes y cómo vas en cada grupo */}
       <HomePlan />
 
-      <Alerts alerts={data.alerts} />
+      {/* Solo los avisos que piden actuar: renovar el acceso al banco y cobros después de cancelar. */}
+      <Alerts alerts={data.alerts.filter((a) => a.key.startsWith("consent:") || a.key.startsWith("zombi:"))} />
 
-      <Link href="/finanzas/cuentas" className={`${card} ${flat} flex items-center gap-3 p-4`}>
-        <Landmark className="h-5 w-5 shrink-0 text-slate-500" />
-        <span className="min-w-0 flex-1 text-sm font-semibold text-slate-900">Tus cuentas <span className="font-normal text-slate-500">({v.accounts.length})</span></span>
-        <span className="amount text-sm font-semibold tabular-nums text-slate-900">{v.balance === null ? "—" : eur(v.balance, 2)}</span>
-        <ArrowRight className="h-4 w-4 shrink-0 text-slate-400" />
-      </Link>
-
-      {data.syncDue && (
-        <p className="text-center text-xs text-slate-400">
-          <button type="button" className="hover:underline" onClick={() => { requestSync(); refreshFinance(); }}>Actualizar con los bancos</button>
-        </p>
-      )}
       </>
     </div>
   );
