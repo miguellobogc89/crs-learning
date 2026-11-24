@@ -206,7 +206,11 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
         </section>
       )}
 
-      {!extrasOnly && plan.data && <PlannedList className="pt-1" items={(plan.data.planned ?? []).filter((x) => cats.includes(x.category))} />}
+      {!extrasOnly && plan.data && (
+        <PlannedList className="pt-1" items={(plan.data.planned ?? []).filter((x) => cats.includes(x.category))}
+          repeats={(plan.data.next?.items ?? []).filter((x) => x.source === "repite" && cats.includes(x.category))}
+          onOpenRepeat={(txId) => setViewingId(txId)} />
+      )}
 
       {error && !list.data ? <ErrorNote>{error}</ErrorNote>
         : !list.data || !plan.data ? <SkeletonList rows={6} />

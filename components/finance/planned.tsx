@@ -5,7 +5,7 @@
 // uno se abre su detalle (la misma pantalla que un movimiento, marcada «Previsto, sin pagar»); deslizando a la
 // izquierda aparece la papelera.
 import { useEffect, useRef, useState } from "react";
-import { CalendarClock, ChevronRight, Trash2 } from "lucide-react";
+import { CalendarClock, ChevronRight, Repeat2, Trash2 } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { categoryOf } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
@@ -69,7 +69,31 @@ function PlannedRow({ p, onOpen, onDelete }: { p: Planned; onOpen: () => void; o
 
 /** Previstos en azul, del más lejano al más cercano (van arriba de la lista). Se tocan para editarlos y se borran
  *  deslizando a la izquierda o desde su detalle, siempre con «Deshacer». */
-export function PlannedList({ items, className = "" }: { items: Planned[]; className?: string }) {
+export type Repeat = { id: string; title: string; amount: number; date: string; category: string; txId?: string };
+
+/** Lo que se repite el mes que viene: en azul como los previstos; al tocarlo se abre el detalle de su último cargo. */
+function RepeatRow({ r, onOpen }: { r: Repeat; onOpen?: () => void }) {
+  return (
+    <li className="-mx-2 overflow-hidden rounded-xl">
+      <button type="button" onClick={onOpen} disabled={!onOpen}
+        className="flex w-full items-center gap-3 bg-blue-50 px-3 py-3 text-left active:bg-blue-100/70 disabled:cursor-default">
+        <span className="relative">
+          <CategoryIcon category={r.category} />
+          <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 ring-2 ring-white" aria-hidden="true">
+            <Repeat2 className="h-2.5 w-2.5 text-white" />
+          </span>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-medium text-slate-900">{r.title}</span>
+          <span className="block truncate text-xs text-blue-700">Se repite · {longDay(r.date)} · {categoryOf(r.category).label}</span>
+        </span>
+        <span className="amount shrink-0 text-[15px] font-semibold tabular-nums text-blue-700">{eur(-r.amount, 2)}</span>
+      </button>
+    </li>
+  );
+}
+
+export function PlannedList({ items, repeats = [], onOpenRepeat, className = "" }: { items: Planned[]; repeats?: Repeat[]; onOpenRepeat?: (txId: string) => void; className?: string }) {
   const [editing, setEditing] = useState<Planned | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
@@ -92,11 +116,14 @@ export function PlannedList({ items, className = "" }: { items: Planned[]; class
   const shown = items.filter((p) => !hidden.has(p.id));
   return (
     <>
-      {shown.length > 0 && (
+      {(shown.length > 0 || repeats.length > 0) && (
         <section className={className} aria-label="Gastos previstos">
           <p className="px-1 pb-1 pt-2 text-xs font-medium text-blue-700">Previstos</p>
           <ul className="space-y-1.5">
-            {shown.map((p) => <PlannedRow key={p.id} p={p} onOpen={() => setEditing(p)} onDelete={() => void remove(p)} />)}
+            {/* Del más lejano al más cercano: previstos y lo que se repite, juntos por fecha. */}
+            {[...shown.map((p) => ({ date: p.date, el: <PlannedRow key={p.id} p={p} onOpen={() => setEditing(p)} onDelete={() => void remove(p)} /> })),
+              ...repeats.map((r) => ({ date: r.date, el: <RepeatRow key={r.id} r={r} onOpen={r.txId && onOpenRepeat ? () => onOpenRepeat(r.txId as string) : undefined} /> }))]
+              .sort((a, b) => b.date.localeCompare(a.date)).map((x) => x.el)}
           </ul>
         </section>
       )}

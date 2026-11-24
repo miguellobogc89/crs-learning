@@ -542,12 +542,15 @@ const plannedOf = (items: ForecastItem[]): Planned[] => items
  */
 function nextMonthCommitted(ctx: Awaited<ReturnType<typeof financeContext>>) {
   const cycle = cycleFor(ctx.today, ctx.startDay, 1);
-  const items: { id: string; title: string; amount: number; date: string; category: string; source: "repite" | "previsto" }[] = [];
+  const items: { id: string; title: string; amount: number; date: string; category: string; source: "repite" | "previsto"; txId?: string }[] = [];
+  // Último cargo real de cada comercio que se repite: al tocarlo se abre su detalle (donde se cancela).
+  const lastTx = new Map<string, string>();
+  for (const t of ctx.txs) if (t.amount < 0) { const k = merchantKey(t.description, t.counterparty); if (!lastTx.has(k)) lastTx.set(k, t.id); }
   for (const r of ctx.recurring) {
     if (r.amount >= 0 || !r.active || ctx.cancelled.has(r.key) || r.intervalDays <= 0) continue;
     let d = r.nextDate;
     while (d < cycle.start) d = addDays(d, r.intervalDays);
-    for (; d <= cycle.end; d = addDays(d, r.intervalDays)) items.push({ id: `rec:${r.key}:${d}`, title: r.label, amount: round2(-r.amount), date: d, category: r.category, source: "repite" });
+    for (; d <= cycle.end; d = addDays(d, r.intervalDays)) items.push({ id: `rec:${r.key}:${d}`, title: r.label, amount: round2(-r.amount), date: d, category: r.category, source: "repite", txId: lastTx.get(r.key) });
   }
   for (const p of plannedOf(ctx.forecastItems)) {
     if (p.date >= cycle.start && p.date <= cycle.end) items.push({ ...p, source: "previsto" });
