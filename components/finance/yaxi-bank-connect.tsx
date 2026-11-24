@@ -144,6 +144,7 @@ export function YaxiBankConnect({ onDone, onCancel }: { onDone: () => void; onCa
       };
       const response = await client.accounts({
         ticket, credentials,
+        recurringConsents: true,
         fields: [AccountField.Iban, AccountField.Name, AccountField.DisplayName,
           AccountField.OwnerName, AccountField.Currency],
       });
