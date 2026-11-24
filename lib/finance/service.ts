@@ -537,6 +537,22 @@ const plannedOf = (items: ForecastItem[]): Planned[] => items
   .sort((a, b) => b.date.localeCompare(a.date));
 
 /**
+ * Un gasto mensual cae una vez en cada ciclo, el mismo día del mes que su último cargo (el 31 pasa a ser el 30 en
+ * noviembre). Así un cargo que un mes se retrasa al día 1 no empuja la previsión al mes siguiente.
+ */
+function monthlyDateIn(cycle: { start: string; end: string }, lastDate: string) {
+  const dom = Number(lastDate.slice(8, 10));
+  let [y, m] = cycle.start.slice(0, 7).split("-").map(Number);
+  for (let i = 0; i < 2; i++) {
+    const len = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const d = `${y}-${String(m).padStart(2, "0")}-${String(Math.min(dom, len)).padStart(2, "0")}`;
+    if (d >= cycle.start) return d > cycle.end ? cycle.end : d;
+    m += 1; if (m > 12) { m = 1; y += 1; }
+  }
+  return cycle.end;
+}
+
+/**
  * El mes que viene, lo ya comprometido: los gastos que se repiten (sin los cancelados), en las fechas en que tocan,
  * y tus previstos de ese mes. Y los cancelados, aparte (lo que ya no pagarás).
  */
@@ -548,6 +564,11 @@ function nextMonthCommitted(ctx: Awaited<ReturnType<typeof financeContext>>) {
   for (const t of ctx.txs) if (t.amount < 0) { const k = merchantKey(t.description, t.counterparty); if (!lastTx.has(k)) lastTx.set(k, t.id); }
   for (const r of ctx.recurring) {
     if (r.amount >= 0 || !r.active || ctx.cancelled.has(r.key) || r.intervalDays <= 0) continue;
+    if (r.frequency === "mensual") {
+      const d = monthlyDateIn(cycle, r.lastDate);
+      items.push({ id: `rec:${r.key}:${d}`, title: r.label, amount: round2(-r.amount), date: d, category: r.category, source: "repite", txId: lastTx.get(r.key), key: r.key });
+      continue;
+    }
     let d = r.nextDate;
     while (d < cycle.start) d = addDays(d, r.intervalDays);
     for (; d <= cycle.end; d = addDays(d, r.intervalDays)) items.push({ id: `rec:${r.key}:${d}`, title: r.label, amount: round2(-r.amount), date: d, category: r.category, source: "repite", txId: lastTx.get(r.key), key: r.key });
@@ -581,7 +602,8 @@ function currentMonthPending(ctx: Awaited<ReturnType<typeof financeContext>>) {
     if (r.amount >= 0 || !r.active || ctx.cancelled.has(r.key) || r.intervalDays <= 0 || r.frequency === "semanal") continue;
     if (charged.has(r.key)) continue;
     if (r.frequency !== "mensual" && r.nextDate > cycle.end) continue;
-    const date = r.nextDate >= ctx.today && r.nextDate <= cycle.end ? r.nextDate : ctx.today;
+    const due = r.frequency === "mensual" ? monthlyDateIn(cycle, r.lastDate) : r.nextDate;
+    const date = due >= ctx.today && due <= cycle.end ? due : ctx.today;
     items.push({ id: `pend:${r.key}`, title: r.label, amount: round2(-r.amount), date, category: r.category, source: "repite", txId: lastTx.get(r.key), key: r.key });
   }
   return items.sort((a, b) => a.date.localeCompare(b.date));
