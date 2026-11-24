@@ -5,7 +5,7 @@
 // 2. Tus grupos: lo gastado (el color dice si vas bien) y el ritmo en palabras. Un grupo de una sola categoría
 //    abre su hoja al tocarlo; uno de varias despliega el reparto por categorías y «Ver todos los movimientos».
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Plus } from "lucide-react";
 import { categoryLabel } from "@/lib/finance/categories";
@@ -28,6 +28,7 @@ type Plan = {
   budget?: { income: number | null; savingsGoal: number | null; limit: number | null };
   totals?: { extrasNow?: Record<string, number> };
   planned?: Planned[];
+  next?: { cycle: { start: string; end: string; label: string }; items: NextItem[]; cancelled: { key: string; title: string; amount: number; category: string }[] };
 };
 const OPEN_KEY = "crs-finance:home-open";
 const SCROLL_KEY = "crs-finance:home-scroll";
@@ -295,21 +296,120 @@ function SpendChart({ plan }: { plan: Plan }) {
 }
 
 /** Inicio: el gráfico de gasto del mes y, debajo, cómo vas en cada grupo de Mi plan. */
-export function HomePlan() {
-  const { data, error } = useFinance<Plan>("plan");
-  if (error && !data) return <ErrorNote>{error}</ErrorNote>;
+type NextItem = { id: string; title: string; amount: number; date: string; category: string; source: "repite" | "previsto" };
+
+/**
+ * El mes que viene: lo ya comprometido (lo que se repite y tus previstos de ese mes), por grupos y por fecha. Es
+ * solo para ver; se decide en Mi plan.
+ */
+function NextMonth({ plan }: { plan: Plan }) {
+  const next = plan.next;
+  if (!next) return null;
+  const monthName = new Date(`${next.cycle.end}T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" });
+  const total = next.items.reduce((t, i) => t + i.amount, 0);
+  const income = plan.budget?.income ?? null;
+  const groups = plan.groups.filter((g) => g.categories.length).map((g) => {
+    const mine = next.items.filter((i) => g.categories.includes(i.category));
+    return { g, items: mine, amount: mine.reduce((t, i) => t + i.amount, 0) };
+  });
+  const inGroups = new Set(plan.groups.flatMap((g) => g.categories));
+  const loose = next.items.filter((i) => !inGroups.has(i.category));
+  const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "UTC" }).replace(".", "");
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+    <>
       <section className={`${card} ${flat} min-w-0 overflow-hidden p-4 sm:p-5`}>
-        {data ? <SpendChart plan={data} /> : <SkeletonList rows={3} />}
+        <p className="text-sm text-slate-500">Ya comprometido para {monthName}</p>
+        <p className="amount mt-0.5 text-[30px] font-semibold leading-none tracking-tight text-slate-900">{eur(total, 0)}</p>
+        {income !== null && <p className="amount mt-1.5 text-sm text-slate-600">De {eur(income, 0)} que sueles cobrar, te quedarían {eur(income - total, 0)} para todo lo demás.</p>}
+        {next.items.length > 0 ? (
+          <ul className="mt-4 divide-y divide-slate-100">
+            {next.items.map((i) => (
+              <li key={i.id} className="flex items-center gap-3 py-2.5">
+                <CategoryIcon category={i.category} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] text-slate-900">{i.title}</span>
+                  <span className="block truncate text-xs text-slate-500">{day(i.date)} · {i.source === "repite" ? "se repite" : "previsto"}</span>
+                </span>
+                <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(i.amount, 2)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="mt-4 text-sm text-slate-500">Aún no hay nada apuntado para {monthName}. Marca «Se repite» en tus recibos o añade un gasto con fecha de {monthName}.</p>}
       </section>
       <section className={`${card} ${flat} min-w-0 overflow-hidden px-4 pt-4 sm:px-5 sm:pt-5`}>
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-sm font-medium text-slate-500">Tus grupos</h2>
-          <Link href="/finanzas/plan" className="inline-flex items-center text-sm font-medium text-blue-700 hover:underline">Mi plan<ChevronRight className="h-4 w-4" /></Link>
-        </div>
-        <div className="mt-1">{data ? <GoalsGlance plan={data} /> : <SkeletonList rows={4} />}</div>
+        <h2 className="text-sm font-medium text-slate-500">Tus grupos en {monthName}</h2>
+        <ul className="mt-1 divide-y divide-slate-100 pb-2">
+          {groups.map(({ g, items, amount }) => (
+            <li key={g.id} className="flex items-center gap-3 py-3.5">
+              <CategoryIcon category={g.categories[0]} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
+                <span className="block truncate text-xs text-slate-500">{items.length ? `${items.length} ${items.length === 1 ? "gasto comprometido" : "gastos comprometidos"}` : "Nada comprometido todavía"}</span>
+              </span>
+              <span className="shrink-0 text-right">
+                <b className="amount block text-[15px] font-semibold tabular-nums text-slate-900">{eur(amount, 0)}</b>
+                {g.goal !== null && <span className="amount block text-[11px] tabular-nums text-slate-500">de {eur(g.goal, 0)}</span>}
+              </span>
+            </li>
+          ))}
+          {loose.length > 0 && (
+            <li className="flex items-center gap-3 py-3.5">
+              <CategoryIcon category="otros_gastos" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold text-slate-500">Otros gastos</span>
+                <span className="block truncate text-xs text-slate-400">Sin grupo</span>
+              </span>
+              <b className="amount shrink-0 text-[15px] font-semibold tabular-nums text-slate-500">{eur(loose.reduce((t, i) => t + i.amount, 0), 0)}</b>
+            </li>
+          )}
+        </ul>
       </section>
+    </>
+  );
+}
+
+/**
+ * Inicio: este mes y, deslizando a la izquierda, el mes que viene (como las fotos del móvil, con puntos debajo).
+ * Cada página lleva su gráfico y su lista de grupos.
+ */
+export function HomePlan() {
+  const { data, error } = useFinance<Plan>("plan");
+  const pager = useRef<HTMLDivElement>(null);
+  const [page, setPage] = useState(0);
+  if (error && !data) return <ErrorNote>{error}</ErrorNote>;
+  const go = (i: number) => { const el = pager.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); };
+  const nextName = data?.next ? new Date(`${data.next.cycle.end}T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" }) : "mes que viene";
+  return (
+    <div>
+      <div ref={pager} onScroll={(e) => { const el = e.currentTarget; setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
+        className="-mx-3 flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] md:mx-0 [&::-webkit-scrollbar]:hidden">
+        <div className="w-full shrink-0 snap-start px-3 md:px-0" aria-hidden={page !== 0}>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+            <section className={`${card} ${flat} min-w-0 overflow-hidden p-4 sm:p-5`}>
+              {data ? <SpendChart plan={data} /> : <SkeletonList rows={3} />}
+            </section>
+            <section className={`${card} ${flat} min-w-0 overflow-hidden px-4 pt-4 sm:px-5 sm:pt-5`}>
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 className="text-sm font-medium text-slate-500">Tus grupos</h2>
+                <Link href="/finanzas/plan" className="inline-flex items-center text-sm font-medium text-blue-700 hover:underline">Mi plan<ChevronRight className="h-4 w-4" /></Link>
+              </div>
+              <div className="mt-1">{data ? <GoalsGlance plan={data} /> : <SkeletonList rows={4} />}</div>
+            </section>
+          </div>
+        </div>
+        <div className="w-full shrink-0 snap-start px-3 md:px-0" aria-hidden={page !== 1}>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+            {data ? <NextMonth plan={data} /> : <SkeletonList rows={4} />}
+          </div>
+        </div>
+      </div>
+      {/* Puntos (y en el ordenador, también se pueden pulsar) */}
+      <div className="mt-3 flex items-center justify-center gap-2" role="tablist" aria-label="Mes">
+        {[0, 1].map((i) => (
+          <button key={i} type="button" role="tab" aria-selected={page === i} aria-label={i === 0 ? "Este mes" : nextName} onClick={() => go(i)}
+            className={`h-2 rounded-full transition-all ${page === i ? "w-5 bg-slate-700" : "w-2 bg-slate-300"}`} />
+        ))}
+      </div>
     </div>
   );
 }

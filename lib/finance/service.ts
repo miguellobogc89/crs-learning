@@ -536,6 +536,27 @@ const plannedOf = (items: ForecastItem[]): Planned[] => items
   .map((i) => ({ id: i.id, title: i.title, amount: i.amount, date: i.startDate, category: i.category as string }))
   .sort((a, b) => b.date.localeCompare(a.date));
 
+/**
+ * El mes que viene, lo ya comprometido: los gastos que se repiten (sin los cancelados), en las fechas en que tocan,
+ * y tus previstos de ese mes. Y los cancelados, aparte (lo que ya no pagarás).
+ */
+function nextMonthCommitted(ctx: Awaited<ReturnType<typeof financeContext>>) {
+  const cycle = cycleFor(ctx.today, ctx.startDay, 1);
+  const items: { id: string; title: string; amount: number; date: string; category: string; source: "repite" | "previsto" }[] = [];
+  for (const r of ctx.recurring) {
+    if (r.amount >= 0 || !r.active || ctx.cancelled.has(r.key) || r.intervalDays <= 0) continue;
+    let d = r.nextDate;
+    while (d < cycle.start) d = addDays(d, r.intervalDays);
+    for (; d <= cycle.end; d = addDays(d, r.intervalDays)) items.push({ id: `rec:${r.key}:${d}`, title: r.label, amount: round2(-r.amount), date: d, category: r.category, source: "repite" });
+  }
+  for (const p of plannedOf(ctx.forecastItems)) {
+    if (p.date >= cycle.start && p.date <= cycle.end) items.push({ ...p, source: "previsto" });
+  }
+  const cancelled = ctx.recurring.filter((r) => r.amount < 0 && ctx.cancelled.has(r.key))
+    .map((r) => ({ key: r.key, title: r.label, amount: round2(-r.amount), category: r.category }));
+  return { cycle, items: items.sort((a, b) => a.date.localeCompare(b.date)), cancelled };
+}
+
 /** Para medir el gasto, un movimiento cuenta en su fecha imputada (si la tiene), no en la del cargo. */
 const spendDated = <T extends { date: string; imputedDate?: string | null }>(t: T): T => (t.imputedDate ? { ...t, date: t.imputedDate } : t);
 
@@ -619,6 +640,7 @@ export async function planView(userId: string) {
     daily,
     extras: extras.sort((a, b) => b.amount - a.amount),
     planned: plannedOf(ctx.forecastItems),
+    next: nextMonthCommitted(ctx),
     budget: { income, incomeNow, othersGoal: ctx.settings.othersGoal, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
     previous: hasPrevious ? { start: prevCycle.start, end: prevTo } : null,
     /** Ciclos del último par de años (el actual primero), para el historial de una categoría. */

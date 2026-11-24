@@ -12,7 +12,6 @@ import { SkeletonStats, SkeletonList } from "@/components/trading/skeletons";
 import { fapi, refreshFinance, useFinance } from "./api";
 import { useHideAmounts } from "./privacy";
 import { requestSync } from "./shell";
-import { ForecastPanel } from "./forecast-panel";
 import { HomePlan } from "./home-plan";
 
 type Overview = Awaited<ReturnType<typeof overview>>;
@@ -67,7 +66,6 @@ function Alerts({ alerts }: { alerts: Overview["alerts"] }) {
 }
 
 export function HomePanel() {
-  const [homeView, setHomeView] = useState<"evolution" | "forecast">("evolution");
   const { data, error } = useFinance<Overview>("overview");
   const { hidden, toggle } = useHideAmounts();
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
@@ -80,25 +78,14 @@ export function HomePanel() {
 
   return (
     <div className="space-y-4 pb-6">
-      <div className="flex items-center gap-2">
-        <div className="grid flex-1 grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 sm:max-w-sm sm:flex-none" role="group" aria-label="Vista de inicio">
-          {([ ["evolution", "Este mes"], ["forecast", "Previsión"] ] as const).map(([view, label]) => (
-            <button key={view} type="button" onClick={() => setHomeView(view)} aria-pressed={homeView === view}
-              className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${homeView === view ? "bg-white text-blue-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>
-              {label}
-            </button>
-          ))}
-        </div>
+      <div className="flex items-center justify-end">
         <button type="button" onClick={toggle} aria-pressed={hidden} aria-label={hidden ? "Mostrar importes" : "Ocultar importes"}
-          className="ml-auto inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
           {hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           <span className="hidden sm:inline">{hidden ? "Mostrar importes" : "Ocultar importes"}</span>
         </button>
       </div>
 
-      {homeView === "forecast" ? (
-        <ForecastPanel view={data} />
-      ) : (
       <>
       {/* Lo pendiente, arriba y con acción directa */}
       {review > 0 && (
@@ -127,7 +114,6 @@ export function HomePanel() {
         </p>
       )}
       </>
-      )}
     </div>
   );
 }
