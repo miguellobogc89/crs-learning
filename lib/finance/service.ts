@@ -560,6 +560,33 @@ function nextMonthCommitted(ctx: Awaited<ReturnType<typeof financeContext>>) {
   return { cycle, items: items.sort((a, b) => a.date.localeCompare(b.date)), cancelled };
 }
 
+/**
+ * Este mes, lo que se repite y aún no se ha cobrado (24/11/2026): un gasto mensual sin ningún cargo imputado a este
+ * ciclo (p. ej. la hipoteca de noviembre si el cargo del día 3 era de octubre), o uno trimestral/anual que toca
+ * este ciclo y no ha llegado. Sale como previsto en azul hasta que llega el cargo real, que lo sustituye solo.
+ */
+function currentMonthPending(ctx: Awaited<ReturnType<typeof financeContext>>) {
+  const cycle = cycleFor(ctx.today, ctx.startDay);
+  const charged = new Set<string>();
+  const lastTx = new Map<string, string>();
+  for (const t0 of ctx.txs) {
+    if (t0.amount >= 0) continue;
+    const k = merchantKey(t0.description, t0.counterparty);
+    if (!lastTx.has(k)) lastTx.set(k, t0.id);
+    const t = spendDated(t0);
+    if (t.date >= cycle.start && t.date <= cycle.end) charged.add(k);
+  }
+  const items: { id: string; title: string; amount: number; date: string; category: string; source: "repite"; txId?: string; key: string }[] = [];
+  for (const r of ctx.recurring) {
+    if (r.amount >= 0 || !r.active || ctx.cancelled.has(r.key) || r.intervalDays <= 0 || r.frequency === "semanal") continue;
+    if (charged.has(r.key)) continue;
+    if (r.frequency !== "mensual" && r.nextDate > cycle.end) continue;
+    const date = r.nextDate >= ctx.today && r.nextDate <= cycle.end ? r.nextDate : ctx.today;
+    items.push({ id: `pend:${r.key}`, title: r.label, amount: round2(-r.amount), date, category: r.category, source: "repite", txId: lastTx.get(r.key), key: r.key });
+  }
+  return items.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 /** Para medir el gasto, un movimiento cuenta en su fecha imputada (si la tiene), no en la del cargo. */
 const spendDated = <T extends { date: string; imputedDate?: string | null }>(t: T): T => (t.imputedDate ? { ...t, date: t.imputedDate } : t);
 
@@ -643,6 +670,7 @@ export async function planView(userId: string) {
     daily,
     extras: extras.sort((a, b) => b.amount - a.amount),
     planned: plannedOf(ctx.forecastItems),
+    pending: currentMonthPending(ctx),
     next: nextMonthCommitted(ctx),
     budget: { income, incomeNow, othersGoal: ctx.settings.othersGoal, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
     previous: hasPrevious ? { start: prevCycle.start, end: prevTo } : null,

@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Plus } from "lucide-react";
+import { CalendarClock, ChevronRight, Plus } from "lucide-react";
 import { categoryLabel } from "@/lib/finance/categories";
 import { cumulative, deviationOf, groupSummary, isGradual, type GroupCycleTotals } from "@/lib/finance/plan";
 import { card, eur, flat } from "@/components/trading/format";
@@ -28,6 +28,7 @@ type Plan = {
   budget?: { income: number | null; savingsGoal: number | null; limit: number | null };
   totals?: { extrasNow?: Record<string, number> };
   planned?: Planned[];
+  pending?: NextItem[];
   next?: { cycle: { start: string; end: string; label: string }; items: NextItem[]; cancelled: { key: string; title: string; amount: number; category: string }[] };
 };
 const OPEN_KEY = "crs-finance:home-open";
@@ -117,8 +118,14 @@ function GoalsGlance({ plan }: { plan: Plan }) {
 
       <ul className="mt-3 divide-y divide-slate-100">
         {rows.map(({ g, s, pace, text }) => {
-          const plannedHere = (plan.planned ?? []).filter((x) => g.categories.includes(x.category));
-          const nPlanned = plannedHere.length;
+          // Lo previsto de este mes: tus previstos con fecha en este ciclo y lo que se repite y aún no se ha cobrado.
+          const plannedHere = [
+            ...(plan.planned ?? []).filter((x) => x.date >= plan.cycle.start && x.date <= plan.cycle.end),
+            ...(plan.pending ?? []),
+          ].filter((x) => g.categories.includes(x.category));
+          const pendingSum = plannedHere.reduce((t, x) => t + x.amount, 0);
+          const pendingOf = (c: string) => plannedHere.filter((x) => x.category === c).reduce((t, x) => t + x.amount, 0);
+          const onlyPending = s.now <= 0 && pendingSum > 0;
           const single = g.categories.length <= 1;
           const isOpen = !single && open === g.id;
           // Lo que sueles gastar en el grupo en un mes entero (media de los 3 ciclos cerrados), como referencia.
@@ -130,7 +137,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
               const prev = last ? last.atDay[c] ?? 0 : null;
               return { c, now, prev, d: prev === null ? null : deviationOf(now, prev) };
             })
-            .filter((x) => x.now > 0 || (x.prev ?? 0) > 0)
+            .filter((x) => x.now > 0 || (x.prev ?? 0) > 0 || pendingOf(x.c) > 0)
             .sort((a, b) => b.now - a.now);
           return (
             <li key={g.id}>
@@ -140,11 +147,14 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                 <CategoryIcon category={g.categories[0]} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
-                  <span className="block truncate text-xs text-slate-500">{text}{nPlanned > 0 && <span className="text-blue-700"> · {nPlanned} {nPlanned === 1 ? "previsto" : "previstos"}</span>}</span>
+                  <span className="block truncate text-xs text-slate-500">
+                    {onlyPending ? <span className="text-blue-700">Pendiente de cobrar</span>
+                      : <>{text}{pendingSum > 0 && <span className="text-blue-700"> · {eur(pendingSum, 0)} previsto</span>}</>}
+                  </span>
                 </span>
                 {/* La cifra hace de semáforo: rojo si te has pasado, ámbar si vas rápido, neutro si vas bien. */}
                 <span className="shrink-0 text-right">
-                  <b className={`amount block text-[15px] font-semibold tabular-nums ${pace === "pasado" ? "text-rose-700" : pace === "alto" ? "text-amber-700" : "text-slate-900"}`}>{eur(s.now, 0)}</b>
+                  <b className={`amount block text-[15px] font-semibold tabular-nums ${onlyPending ? "text-blue-700" : pace === "pasado" ? "text-rose-700" : pace === "alto" ? "text-amber-700" : "text-slate-900"}`}>{eur(onlyPending ? pendingSum : s.now, 0)}</b>
                   <span className="amount block text-[11px] tabular-nums text-slate-500">{s.goal !== null ? `de ${eur(s.goal, 0)}` : avgMonth > 0 ? `~${eur(avgMonth, 0)} al mes` : ""}</span>
                 </span>
               </button>
@@ -157,17 +167,19 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                         <li key={c}>
                           <button type="button" onClick={() => toSheet(g.id, c)} className="flex w-full items-center gap-3 py-2.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm text-slate-800">
-                                {categoryLabel(c)}
-                                {(() => { const n = plannedHere.filter((x) => x.category === c).length; return n > 0 ? <span className="text-xs text-blue-700"> · {n} {n === 1 ? "previsto" : "previstos"}</span> : null; })()}
-                              </span>
-                              {d && (
+                              <span className="block truncate text-sm text-slate-800">{categoryLabel(c)}</span>
+                              {pendingOf(c) > 0 ? (
+                                <span className="flex items-center gap-1 truncate text-xs text-blue-700">
+                                  <CalendarClock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                  {now > 0 ? `${eur(pendingOf(c), 2)} previsto` : "Previsto, sin cobrar"}
+                                </span>
+                              ) : d && (
                                 <span className={`block truncate text-xs ${d.state === "estable" ? "text-slate-500" : d.state === "mejor" ? "text-emerald-700" : "text-amber-700"}`}>
                                   {d.state === "estable" ? "Igual que el mes pasado" : d.state === "mejor" ? "Menos que el mes pasado" : "Más que el mes pasado"}
                                 </span>
                               )}
                             </span>
-                            <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(now, 2)}</span>
+                            <span className={`amount shrink-0 text-sm font-semibold tabular-nums ${now <= 0 && pendingOf(c) > 0 ? "text-blue-700" : "text-slate-900"}`}>{eur(now <= 0 && pendingOf(c) > 0 ? pendingOf(c) : now, 2)}</span>
                             <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
                           </button>
                         </li>

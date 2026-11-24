@@ -69,7 +69,7 @@ function PlannedRow({ p, onOpen, onDelete }: { p: Planned; onOpen: () => void; o
 
 /** Previstos en azul, del más lejano al más cercano (van arriba de la lista). Se tocan para editarlos y se borran
  *  deslizando a la izquierda o desde su detalle, siempre con «Deshacer». */
-export type Repeat = { id: string; title: string; amount: number; date: string; category: string; txId?: string };
+export type Repeat = { id: string; title: string; amount: number; date: string; category: string; txId?: string; thisMonth?: boolean };
 
 /** Lo que se repite el mes que viene: en azul como los previstos; al tocarlo se abre el detalle de su último cargo. */
 function RepeatRow({ r, onOpen }: { r: Repeat; onOpen?: () => void }) {
@@ -85,7 +85,7 @@ function RepeatRow({ r, onOpen }: { r: Repeat; onOpen?: () => void }) {
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-medium text-slate-900">{r.title}</span>
-          <span className="block truncate text-xs text-blue-700">Se repite · {longDay(r.date)} · {categoryOf(r.category).label}</span>
+          <span className="block truncate text-xs text-blue-700">{r.thisMonth ? "Previsto este mes, sin cobrar" : `Se repite · ${longDay(r.date)}`} · {categoryOf(r.category).label}</span>
         </span>
         <span className="amount shrink-0 text-[15px] font-semibold tabular-nums text-blue-700">{eur(-r.amount, 2)}</span>
       </button>
