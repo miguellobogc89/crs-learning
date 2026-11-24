@@ -85,14 +85,28 @@ export async function POST(request: NextRequest) {
         },
       });
       for (const account of accounts) {
+        // Never count the same IBAN twice when it was previously imported
+        // from Enable Banking or another bank connection.
+        const matching = await tx.finance_accounts.findFirst({
+          where: {
+            user_id: session.user.id,
+            iban_hash: ibanHash(account.iban),
+            bank: { not: bank },
+          },
+          select: { id: true },
+        });
         await tx.finance_accounts.upsert({
           where: { user_id_external_uid: { user_id: session.user.id, external_uid: account.externalUid } },
           create: {
             user_id: session.user.id, source: "bank", bank, external_uid: account.externalUid,
             name: account.name, holder_name: account.holder, iban_last4: account.iban.slice(-4),
             iban_hash: ibanHash(account.iban), currency: account.currency,
+            included: !matching,
           },
-          update: { name: account.name, holder_name: account.holder, currency: account.currency },
+          update: {
+            name: account.name, holder_name: account.holder, currency: account.currency,
+            ...(matching ? { included: false } : {}),
+          },
         });
       }
     });
