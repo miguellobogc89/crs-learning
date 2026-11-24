@@ -106,3 +106,8 @@ Sustituye a los paquetes y al laboratorio. Plan = lista de **grupos** (conjuntos
   se ve).
 - En «Tus grupos» de Inicio, al tocar una categoría del desplegable, abrir la hoja del grupo ya filtrada por esa
   categoría (pill marcada).
+- (Avanzado, más adelante) Previstos fase 4: enlazar solo el previsto con el cargo del banco (categoría/grupo,
+  importe ±30 %, fecha ±5 días), sugerir si hay dudas, «¿Se hizo?» pasada la fecha (efectivo / no se hizo /
+  aún no ha llegado) y poder separarlos.
+- (Avanzado, más adelante) Gastos compartidos: si pago 60 € en un restaurante y recibo 2 Bizum de 20 € de amigos,
+  entender que son su parte e imputar solo 20 € a la cena.
