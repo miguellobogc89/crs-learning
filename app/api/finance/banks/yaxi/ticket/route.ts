@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { encrypt } from "@/lib/connectors/crypto";
 import { isYaxiConfigured, issueYaxiTicket } from "@/lib/personal-finance/yaxi";
 
 export const runtime = "nodejs";
@@ -33,8 +34,19 @@ export async function POST(request: NextRequest) {
   }
 
   const { ticketId, ticket } = issueYaxiTicket("Accounts");
-  return NextResponse.json(
+  const response = NextResponse.json(
     { ticketId, ticket },
     { headers: { "Cache-Control": "private, no-store" } },
   );
+  // Bind the result to the authenticated requester. Never trust client-provided ticket IDs.
+  response.cookies.set("crs_yaxi_accounts", encrypt(JSON.stringify({
+    ticketId, userId: session.user.id, issuedAt: Date.now(),
+  })), {
+    httpOnly: true,
+    secure: request.nextUrl.protocol === "https:",
+    sameSite: "strict",
+    path: "/api/finance/banks/yaxi/result",
+    maxAge: 600,
+  });
+  return response;
 }
