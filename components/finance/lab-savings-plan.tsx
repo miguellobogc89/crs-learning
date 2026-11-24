@@ -32,7 +32,8 @@ function analyze(data: Plan) {
   const avg: Record<string, number> = {};
   for (const c of closed) for (const [k, v] of Object.entries(c.full)) avg[k] = (avg[k] ?? 0) + v / n;
   const total = Object.values(avg).reduce((t, v) => t + v, 0);
-  const unknown = UNKNOWN_CATS.reduce((t, k) => t + (avg[k] ?? 0), 0);
+  // Solo lo que la app no ha sabido entender (no lo que el usuario metió a propósito en «Otros gastos»).
+  const unknown = data.unknown.perMonth;
 
   // Lo que se repite cada mes, por categoría (va aparte: no se le pone límite).
   const repeats = (data.next?.items ?? []).filter((i) => i.source === "repite");
@@ -76,7 +77,7 @@ function analyze(data: Plan) {
   const subs = repeats.filter((i) => i.category === "suscripciones");
   if (subs.length >= 2) notes.push(`Pagas ${eur(subs.reduce((t, i) => t + i.amount, 0), 0)} al mes en ${subs.length} suscripciones. ¿Las sigues usando todas?`);
 
-  return { total, unknown, unknownShare: total > 0 ? unknown / total : 0, fixedTotal, repeats, groups, saving, notes, months: closed.length };
+  return { total, unknown, unknownCount: data.unknown.count, unknownShare: total > 0 ? unknown / total : 0, fixedTotal, repeats, groups, saving, notes, months: closed.length };
 }
 
 export function LabSavingsPlan() {
@@ -105,20 +106,20 @@ export function LabSavingsPlan() {
         <div className="mx-auto mt-6 max-w-sm rounded-2xl bg-amber-50 px-4 py-4 text-left">
           <p className="text-sm font-semibold text-amber-900">Antes, ayúdanos a entender tus gastos</p>
           <p className="amount mt-1 text-sm text-amber-800">
-            Unos {eur(a.unknown, 0)} al mes ({Math.round(a.unknownShare * 100)} % de lo que gastas) están en «Otros gastos» y no sabemos qué son. Si los clasificas, el plan saldrá mucho mejor.
+            Hay {a.unknownCount} {a.unknownCount === 1 ? "movimiento" : "movimientos"} (unos {eur(a.unknown, 0)} al mes) que no sabemos qué son. Si los clasificas, el plan saldrá mucho mejor.
           </p>
-          <Link href="/finanzas/categoria/otros_gastos" className="mt-3 inline-flex items-center gap-0.5 text-sm font-semibold text-blue-700">Revisarlos<ChevronRight className="h-4 w-4" /></Link>
+          <Link href="/finanzas/movimientos?revisar=1" className="mt-3 inline-flex items-center gap-0.5 text-sm font-semibold text-blue-700">Revisarlos<ChevronRight className="h-4 w-4" /></Link>
           <button type="button" onClick={() => setIgnoreUnknown(true)} className="mt-1 block text-xs text-amber-700 underline">Crear el plan igualmente</button>
         </div>
       ) : (
         <>
-          {a.unknownShare > UNKNOWN_LIMIT ? null : a.unknown > 0 && <p className="mx-auto mt-4 max-w-xs text-sm font-medium text-emerald-700">Tus gastos están listos para crear tu plan.</p>}
+          {ignoreUnknown ? null : a.unknownCount > 0 && <p className="mx-auto mt-4 max-w-xs text-sm font-medium text-emerald-700">Tus gastos están listos para crear tu plan.</p>}
           <button type="button" onClick={() => setStep("analizando")} className="mt-6 inline-flex h-11 items-center rounded-full bg-blue-600 px-6 text-[15px] font-semibold text-white active:bg-blue-700">
             Crear mi plan de ahorro
           </button>
         </>
       )}
-      <p className="mt-6 text-[11px] text-slate-400">Prueba: «Otros gastos» pesa ahora un {Math.round(a.unknownShare * 100)} % (aviso a partir del {UNKNOWN_LIMIT * 100} %).</p>
+      <p className="mt-6 text-[11px] text-slate-400">Prueba: sin entender ahora, {a.unknownCount} movimientos ({Math.round(a.unknownShare * 100)} % del gasto; aviso a partir del {UNKNOWN_LIMIT * 100} %).</p>
     </div>
   );
 

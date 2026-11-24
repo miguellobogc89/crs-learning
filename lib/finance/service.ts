@@ -690,6 +690,14 @@ export async function planView(userId: string) {
       row[daysBetween(prevCycle.start, t.date)] = round2(row[daysBetween(prevCycle.start, t.date)] - t.amount);
     }
   }
+  // Lo que la app no ha sabido entender (ni reglas, ni palabras, ni IA; no lo que tú pusiste en «Otros gastos»):
+  // media al mes de los 3 ciclos cerrados, para avisar antes de crear el plan de ahorro.
+  const closed3 = [1, 2, 3].map((i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c) => c.start >= oldest);
+  const unknownSpend = closed3.length ? round2(ctx.txs.filter((t0) => {
+    const t = spendDated(t0);
+    return isPackageCharge(t) && !t.extraordinary && (t.source === "auto" || t.source === "pendiente") && closed3.some((c) => t.date >= c.start && t.date <= c.end);
+  }).reduce((x, t) => x - t.amount, 0) / closed3.length) : 0;
+  const unknownCount = ctx.txs.filter((t) => isPackageCharge(t) && (t.source === "auto" || t.source === "pendiente")).length;
   const income = ctx.settings.expectedIncome ?? detectIncome(ctx.history);
   // Lo que has cobrado de verdad este mes (ingresos ordinarios: nómina, intereses…; no regalos ni devoluciones).
   const incomeNow = round2(ctx.txs.filter((t) => t.kind === "ingreso" && t.amount > 0 && t.date >= current.start && t.date <= current.end).reduce((x, t) => x + t.amount, 0));
@@ -705,6 +713,7 @@ export async function planView(userId: string) {
     ...(() => { const p = currentMonthPending(ctx); return { pending: p.items, cancelledNow: p.cancelled }; })(),
     next: nextMonthCommitted(ctx),
     budget: { income, incomeNow, othersGoal: ctx.settings.othersGoal, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
+    unknown: { perMonth: unknownSpend, count: unknownCount },
     previous: hasPrevious ? { start: prevCycle.start, end: prevTo } : null,
     /** Ciclos del último par de años (el actual primero), para el historial de una categoría. */
     cycles: Array.from({ length: 24 }, (_, i) => cycleFor(ctx.today, ctx.startDay, -i)).filter((c, i) => i === 0 || c.end >= oldest),
