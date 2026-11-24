@@ -189,10 +189,10 @@ function GroupsList({ plan, mode, open, toggle, toSheet }: ListProps & { mode: M
     const s = groupSummary({ categories: g.categories, cycles, goal: g.goal, day, totalDays });
     return { g, s, lines, ...paceOf(s, last ? sumCats(last.atDay, g.categories) : null) };
   });
-  const rows = mode === "now"
-    ? groups.sort((a, b) => PACE_ORDER[a.pace] - PACE_ORDER[b.pace])
-    : groups.filter((r) => r.lines.length); // el mes que viene, solo los grupos con algo comprometido o cancelado
-  const judged = groups.filter((r) => r.pace !== "sin_datos");
+  // Solo los grupos con algo en ese mes (gastado, previsto, comprometido o cancelado): los que están a 0 no salen.
+  const rows = groups.filter((r) => r.lines.length);
+  if (mode === "now") rows.sort((a, b) => PACE_ORDER[a.pace] - PACE_ORDER[b.pace]);
+  const judged = rows.filter((r) => r.pace !== "sin_datos");
   const good = judged.filter((r) => r.pace === "bien").length;
   const headline = !judged.length ? "Aún no hay con qué compararte"
     : good === judged.length ? (judged.length === 1 ? "Vas a buen ritmo" : `Vas a buen ritmo en tus ${judged.length} grupos`)
