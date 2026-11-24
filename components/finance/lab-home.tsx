@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { LabCategoryPicker } from "./lab-category-picker";
 import { PlanPanel } from "./plan-panel";
-import { LabPlanMvp } from "./lab-plan-mvp";
+import { LabSavingsPlan } from "./lab-savings-plan";
 
-const VIEWS = [["minimo", "Mi plan mínimo"], ["plan", "Mi plan v2"], ["selector", "Selector"]] as const;
+const VIEWS = [["minimo", "Plan de ahorro"], ["plan", "Mi plan v2"], ["selector", "Selector"]] as const;
 type View = (typeof VIEWS)[number][0];
 
 export function LabHome() {
@@ -23,9 +23,9 @@ export function LabHome() {
         ))}
       </div>
       <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        {view === "minimo" ? "Laboratorio: Mi plan mínimo con tus datos. Es una prueba: no guarda nada." : view === "plan" ? "Laboratorio: nueva versión de Mi plan con tus datos (lo que cambies se guarda de verdad). Mi plan no cambia hasta que lo decidamos." : "Laboratorio: el selector de categorías (ya está también en el detalle de cada movimiento)."}
+        {view === "minimo" ? "Laboratorio: «Crear mi plan de ahorro» con tus datos. Textos por reglas (aún sin IA). No guarda nada." : view === "plan" ? "Laboratorio: nueva versión de Mi plan con tus datos (lo que cambies se guarda de verdad). Mi plan no cambia hasta que lo decidamos." : "Laboratorio: el selector de categorías (ya está también en el detalle de cada movimiento)."}
       </p>
-      {view === "minimo" ? <LabPlanMvp /> : view === "plan" ? <PlanPanel lab /> : <LabCategoryPicker />}
+      {view === "minimo" ? <LabSavingsPlan /> : view === "plan" ? <PlanPanel lab /> : <LabCategoryPicker />}
     </div>
   );
 }
