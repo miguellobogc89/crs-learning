@@ -119,3 +119,5 @@ Sustituye a los paquetes y al laboratorio. Plan = lista de **grupos** (conjuntos
 
 - Movimientos entre tus cuentas (transferencias internas): no deben verse en ningún sitio (listas, hojas, Movimientos). No aportan valor.
 - Movimientos sin clasificar: banner en Movimientos («hay N movimientos que no llegamos a entender») con botón a la derecha que filtra la lista (y cambia a «Ocultar»); cada uno con un punto en el icono; en el detalle, la categoría destacada. Quitar el aviso de arriba de Inicio.
+
+- Inicio: rediseñar el gráfico de arriba (al usuario no le gusta cómo se ve). Sin prisa.
