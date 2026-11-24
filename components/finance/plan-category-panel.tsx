@@ -8,7 +8,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { merchantKey } from "@/lib/finance/logic";
 import { ChevronRight } from "lucide-react";
 import { createPortal } from "react-dom";
 import type { planView } from "@/lib/finance/service";
@@ -161,9 +160,8 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
   }, [sections, extrasOnly]);
   const openInPlan = () => { if (ownerGroup) { try { window.sessionStorage.setItem("crs-finance:plan-open", ownerGroup.id); } catch { /* ignorar */ } } };
 
-  // Lo que se repite va arriba (en azul); abajo, en el historial, solo lo puntual: así se ve qué no es periódico.
-  const repeatKeys = new Set((plan.data?.next?.items ?? []).filter((x) => x.source === "repite" && x.key).map((x) => x.key as string));
-  const puntual = (t: Item) => extrasOnly || !repeatKeys.has(merchantKey(t.description, t.counterparty));
+  // Arriba, en azul, solo lo que falta por cobrar este mes; abajo, el historial entero (también los cargos que se
+  // repiten: son pagos ya hechos y no salen arriba).
 
   const error = list.error ?? plan.error;
   const active = sections.find((s) => s.start === visible) ?? sections[0];
@@ -223,7 +221,7 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
       {error && !list.data ? <ErrorNote>{error}</ErrorNote>
         : !list.data || !plan.data ? <SkeletonList rows={6} />
         : sections.every((s) => s.rows.length === 0) ? <p className="py-10 text-center text-sm text-slate-400">No hay movimientos.</p>
-        : sections.map((s, i) => ({ s, i, shown: s.rows.filter(puntual) })).filter(({ i, shown }) => i === 0 || shown.length > 0).map(({ s, i, shown }) => (
+        : sections.map((s, i) => ({ s, i, shown: s.rows })).filter(({ i, shown }) => i === 0 || shown.length > 0).map(({ s, i, shown }) => (
           <section key={s.start} data-cycle={s.start}>
             {i > 0 && (
               <p className="flex justify-between bg-slate-50 px-1 py-1.5 text-xs text-slate-500">
@@ -232,7 +230,7 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
               </p>
             )}
             {shown.length === 0
-              ? <p className="py-6 text-center text-sm text-slate-400">{s.rows.length ? "Este mes solo hay gastos que se repiten (arriba)." : "Nada en este ciclo todavía."}</p>
+              ? <p className="py-6 text-center text-sm text-slate-400">{s.rows.length ? "Nada en este ciclo todavía." : "Nada en este ciclo todavía."}</p>
               : (
                 <ul className="divide-y divide-slate-100">
                   {shown.map((t) => (
