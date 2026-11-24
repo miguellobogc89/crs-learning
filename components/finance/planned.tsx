@@ -139,7 +139,7 @@ export function PlannedList({ items, repeats = [], onOpenRepeat, className = "" 
 }
 
 /** «Añadir gasto»: hoja que sube desde abajo; la categoría se elige con el selector de categorías. */
-export function AddExpenseSheet({ open, onClose, editing = null, onDelete }: { open: boolean; onClose: () => void; editing?: Planned | null; onDelete?: () => void }) {
+export function AddExpenseSheet({ open, onClose, editing = null, onDelete, defaultDate }: { open: boolean; onClose: () => void; editing?: Planned | null; onDelete?: () => void; defaultDate?: string }) {
   const [step, setStep] = useState<"form" | "category">("form");
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
@@ -154,8 +154,8 @@ export function AddExpenseSheet({ open, onClose, editing = null, onDelete }: { o
     if (!open) return;
     setStep("form"); setErr(null); setBusy(false); setConfirmDelete(false);
     setTitle(editing?.title ?? ""); setAmount(editing ? String(editing.amount).replace(".", ",") : "");
-    setDate(editing?.date ?? todayIso()); setCategory(editing?.category ?? null);
-  }, [open, editing]);
+    setDate(editing?.date ?? defaultDate ?? todayIso()); setCategory(editing?.category ?? null);
+  }, [open, editing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
     const t = amount.trim().replace(/\s|€/g, "");

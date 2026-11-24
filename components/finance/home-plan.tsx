@@ -31,6 +31,7 @@ type Plan = {
   next?: { cycle: { start: string; end: string; label: string }; items: NextItem[]; cancelled: { key: string; title: string; amount: number; category: string }[] };
 };
 const OPEN_KEY = "crs-finance:home-open";
+const PAGE_KEY = "crs-finance:home-page";
 const SCROLL_KEY = "crs-finance:home-scroll";
 const scroller = () => document.querySelector<HTMLElement>("main");
 
@@ -107,7 +108,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
     : good === judged.length ? (judged.length === 1 ? "Vas a buen ritmo" : `Vas a buen ritmo en tus ${judged.length} grupos`)
     : `Vas a buen ritmo en ${good} de tus ${judged.length} grupos`;
   const remember = () => { try { window.sessionStorage.setItem(SCROLL_KEY, String(scroller()?.scrollTop ?? 0)); } catch { /* ignorar */ } };
-  const toSheet = (id: string) => { remember(); router.push(`/finanzas/grupo/${id}`); };
+  const toSheet = (id: string, cat?: string) => { remember(); router.push(`/finanzas/grupo/${id}${cat ? `?categoria=${encodeURIComponent(cat)}` : ""}`); };
 
   return (
     <div className="pb-2">
@@ -154,7 +155,7 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                     <ul>
                       {cats.map(({ c, now, d }) => (
                         <li key={c}>
-                          <div className="flex w-full items-center gap-3 py-2.5">
+                          <button type="button" onClick={() => toSheet(g.id, c)} className="flex w-full items-center gap-3 py-2.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm text-slate-800">
                                 {categoryLabel(c)}
@@ -167,7 +168,8 @@ function GoalsGlance({ plan }: { plan: Plan }) {
                               )}
                             </span>
                             <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(now, 2)}</span>
-                          </div>
+                            <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+                          </button>
                         </li>
                       ))}
                       {!cats.length && <li className="py-2.5 text-sm text-slate-500">Sin gastos este mes.</li>}
@@ -381,7 +383,8 @@ function NextGroups({ plan }: { plan: Plan }) {
   const next = plan.next;
   if (!next) return null;
   const monthName = monthOf(next.cycle.end);
-  const toSheet = (id: string) => router.push(`/finanzas/grupo/${id}`);
+  const [adding, setAdding] = useState(false);
+  const toSheet = (id: string, cat?: string) => router.push(`/finanzas/grupo/${id}${cat ? `?categoria=${encodeURIComponent(cat)}` : ""}`);
   const inGroups = new Set(plan.groups.flatMap((g) => g.categories));
   const loose = next.items.filter((i) => !inGroups.has(i.category));
   const looseGone = next.cancelled.filter((c) => !inGroups.has(c.category));
@@ -390,7 +393,8 @@ function NextGroups({ plan }: { plan: Plan }) {
     <div className="pb-2">
       <h2 className="text-sm font-medium text-slate-500">Tus grupos en {monthName}</h2>
       <ul className="mt-1 divide-y divide-slate-100">
-        {plan.groups.filter((g) => g.categories.length).map((g) => {
+        {/* Solo los grupos con algo comprometido (o cancelado): los que están a 0 no aportan. */}
+        {plan.groups.filter((g) => g.categories.length && (next.items.some((i) => g.categories.includes(i.category)) || next.cancelled.some((c) => g.categories.includes(c.category)))).map((g) => {
           const items = next.items.filter((i) => g.categories.includes(i.category));
           const amount = items.reduce((t, i) => t + i.amount, 0);
           const gone = next.cancelled.filter((c) => g.categories.includes(c.category));
@@ -422,12 +426,15 @@ function NextGroups({ plan }: { plan: Plan }) {
                   <div className="mb-3 ml-12">
                     <ul>
                       {cats.map(({ c, items: ci }) => (
-                        <li key={c} className="flex items-center gap-3 py-2.5">
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm text-slate-800">{categoryLabel(c)}</span>
-                            <span className="block truncate text-xs text-slate-500">{count(ci.length)}</span>
-                          </span>
-                          <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(ci.reduce((t, i) => t + i.amount, 0), 2)}</span>
+                        <li key={c}>
+                          <button type="button" onClick={() => toSheet(g.id, c)} className="flex w-full items-center gap-3 py-2.5 text-left">
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm text-slate-800">{categoryLabel(c)}</span>
+                              <span className="block truncate text-xs text-slate-500">{count(ci.length)}</span>
+                            </span>
+                            <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(ci.reduce((t, i) => t + i.amount, 0), 2)}</span>
+                            <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+                          </button>
                         </li>
                       ))}
                       {!cats.length && <li className="py-2.5 text-sm text-slate-500">Nada comprometido todavía.</li>}
@@ -470,6 +477,10 @@ function NextGroups({ plan }: { plan: Plan }) {
         )}
       </ul>
       {!next.items.length && <p className="py-2 text-sm text-slate-500">Aún no hay nada apuntado para {monthName}. Marca «Se repite» en tus recibos o añade un gasto con fecha de {monthName}.</p>}
+      <button type="button" onClick={() => setAdding(true)} className="mt-1 inline-flex items-center gap-1.5 py-3 text-[15px] font-medium text-blue-600">
+        <Plus className="h-5 w-5" /> Añadir gasto
+      </button>
+      <AddExpenseSheet open={adding} onClose={() => setAdding(false)} defaultDate={next.cycle.start} />
     </div>
   );
 }
@@ -482,6 +493,15 @@ export function HomePlan() {
   const { data, error } = useFinance<Plan>("plan");
   const pager = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(0);
+  // Al volver de una hoja, se vuelve al mes que se estaba mirando (en esta sesión).
+  useEffect(() => {
+    let saved = 0;
+    try { saved = window.sessionStorage.getItem(PAGE_KEY) === "1" ? 1 : 0; } catch { /* ignorar */ }
+    if (!saved || !data) return;
+    const el = pager.current;
+    if (el) { el.scrollLeft = el.clientWidth; setPage(1); }
+  }, [!!data]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { try { window.sessionStorage.setItem(PAGE_KEY, String(page)); } catch { /* ignorar */ } }, [page]);
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
   const go = (i: number) => { const el = pager.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); };
   const nextName = data?.next ? monthOf(data.next.cycle.end) : "el mes que viene";

@@ -7,6 +7,8 @@
 // (movement-detail.tsx); si cambia de categoría, sale de la lista y, al volver, la cifra del grupo ya está al día.
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { merchantKey } from "@/lib/finance/logic";
 import { ChevronRight } from "lucide-react";
 import { createPortal } from "react-dom";
 import type { planView } from "@/lib/finance/service";
@@ -70,7 +72,9 @@ export function GroupPanel({ groupId }: { groupId: string }) {
 function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title: string; categories: string[]; groupId?: string; extrasOnly?: boolean }) {
   const list = useFinance<List>("transactions?all=1");
   // Pill elegida (una categoría del grupo) o null = todas.
-  const [only, setOnly] = useState<string | null>(null);
+  // Se puede llegar ya filtrado por una categoría (?categoria=…), p. ej. tocándola en «Tus grupos» de Inicio.
+  const params = useSearchParams();
+  const [only, setOnly] = useState<string | null>(() => { const c = params.get("categoria"); return c && categories.includes(c) ? c : null; });
   const cats = only ? [only] : categories;
   const catsKey = cats.join(",");
   const plan = useFinance<Plan>("plan");
@@ -157,6 +161,10 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
   }, [sections, extrasOnly]);
   const openInPlan = () => { if (ownerGroup) { try { window.sessionStorage.setItem("crs-finance:plan-open", ownerGroup.id); } catch { /* ignorar */ } } };
 
+  // Lo que se repite va arriba (en azul); abajo, en el historial, solo lo puntual: así se ve qué no es periódico.
+  const repeatKeys = new Set((plan.data?.next?.items ?? []).filter((x) => x.source === "repite" && x.key).map((x) => x.key as string));
+  const puntual = (t: Item) => extrasOnly || !repeatKeys.has(merchantKey(t.description, t.counterparty));
+
   const error = list.error ?? plan.error;
   const active = sections.find((s) => s.start === visible) ?? sections[0];
 
@@ -215,7 +223,7 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
       {error && !list.data ? <ErrorNote>{error}</ErrorNote>
         : !list.data || !plan.data ? <SkeletonList rows={6} />
         : sections.every((s) => s.rows.length === 0) ? <p className="py-10 text-center text-sm text-slate-400">No hay movimientos.</p>
-        : sections.map((s, i) => (
+        : sections.map((s, i) => ({ s, i, shown: s.rows.filter(puntual) })).filter(({ i, shown }) => i === 0 || shown.length > 0).map(({ s, i, shown }) => (
           <section key={s.start} data-cycle={s.start}>
             {i > 0 && (
               <p className="flex justify-between bg-slate-50 px-1 py-1.5 text-xs text-slate-500">
@@ -223,11 +231,11 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
                 <span className="tabular-nums">{eur(s.total, 2)}{s.extra > 0 ? ` (+${eur(s.extra, 2)} extra)` : ""}</span>
               </p>
             )}
-            {s.rows.length === 0
-              ? <p className="py-6 text-center text-sm text-slate-400">Nada en este ciclo todavía.</p>
+            {shown.length === 0
+              ? <p className="py-6 text-center text-sm text-slate-400">{s.rows.length ? "Este mes solo hay gastos que se repiten (arriba)." : "Nada en este ciclo todavía."}</p>
               : (
                 <ul className="divide-y divide-slate-100">
-                  {s.rows.map((t) => (
+                  {shown.map((t) => (
                     <li key={t.id} className="flex items-center gap-3 px-1 py-3">
                       <MovementRowButton t={t} onClick={() => setViewingId(t.id)} />
                     </li>
