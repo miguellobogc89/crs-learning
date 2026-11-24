@@ -2,14 +2,14 @@
 // Inicio · el gasto del mes y tus grupos (nació en el laboratorio el 23/11/2026).
 // 1. Gasto acumulado del mes (sin extraordinarios) frente al mes pasado y al objetivo; pills con los grupos de gasto
 //    gradual (los de recibos fijos no se siguen día a día).
-// 2. Tus grupos: lo gastado (el color dice si vas bien) y el ritmo en palabras. Un grupo de una sola categoría
-//    abre su hoja al tocarlo; uno de varias despliega el reparto por categorías y «Ver todos los movimientos».
+// 2. Tus grupos (este mes o el que viene, igual): cada grupo se despliega por categorías o, si es de una sola, por
+//    subcategorías; lo cancelado, dentro de su línea. Cada línea abre la hoja filtrada y en ese mes.
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, ChevronRight, Plus } from "lucide-react";
 import { categoryLabel } from "@/lib/finance/categories";
-import { cumulative, deviationOf, groupSummary, isGradual, type GroupCycleTotals } from "@/lib/finance/plan";
+import { cumulative, deviationOf, groupSummary, isGradual, subKey, type GroupCycleTotals } from "@/lib/finance/plan";
 import { card, eur, flat } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
@@ -29,7 +29,8 @@ type Plan = {
   totals?: { extrasNow?: Record<string, number> };
   planned?: Planned[];
   pending?: NextItem[];
-  next?: { cycle: { start: string; end: string; label: string }; items: NextItem[]; cancelled: { key: string; title: string; amount: number; category: string }[] };
+  cancelledNow?: Cancel[];
+  next?: { cycle: { start: string; end: string; label: string }; items: NextItem[]; cancelled: Cancel[] };
 };
 // Lo que Inicio recuerda en esta sesión al ir a una hoja y volver: el mes que se miraba y, de cada mes, qué grupo
 // estaba desplegado y por dónde ibas.
@@ -41,7 +42,7 @@ const store = {
   set: (k: string, v: string | null) => { try { if (v === null) window.sessionStorage.removeItem(k); else window.sessionStorage.setItem(k, v); } catch { /* ignorar */ } },
 };
 /** Lo que comparten las dos listas (este mes y el que viene): mismo desplegar, mismo ir a la hoja. */
-type ListProps = { plan: Plan; open: string | null; toggle: (id: string, header: HTMLElement) => void; toSheet: (id: string, cat?: string) => void };
+type ListProps = { plan: Plan; open: string | null; toggle: (id: string, header: HTMLElement) => void; toSheet: (id: string, target?: { cat?: string; sub?: string }) => void };
 const scroller = () => document.querySelector<HTMLElement>("main");
 
 // ── Vista sin desplegar: a qué ritmo vas en cada grupo, en palabras y sin cifras ─────────────────
@@ -69,14 +70,110 @@ function paceOf(s: ReturnType<typeof groupSummary>, lastMonth: number | null): {
 
 const sumCats = (r: Record<string, number> | undefined, cats: string[]) => cats.reduce((t, c) => t + (r?.[c] ?? 0), 0);
 
-function GoalsGlance({ plan, open, toggle, toSheet }: ListProps) {
-  const [adding, setAdding] = useState(false);
+// ── Tus grupos: la misma lista para este mes y el que viene ────────────────────────────────────
 
+type Cancel = { key: string; title: string; amount: number; category: string; subcategory?: string | null };
+/** Una línea del desplegable: una categoría (grupos de varias) o una subcategoría (grupos de una; «Otros» lo que no tiene). */
+type Line = { key: string; cat: string; sub?: string; label: string; now: number; prev: number | null; pending: number; committed: number; count: number; gone: Cancel[] };
+/** En la URL de la hoja, «Otros» (sin subcategoría). */
+export const OTROS_SUB = "__otros";
+const norm = (s?: string | null) => (s ?? "").trim();
+type Mode = "now" | "next";
+
+function linesOf(plan: Plan, cats: string[], mode: Mode): Line[] {
   const cycles = plan.history ?? [];
   const cur = cycles[0];
   const last = cycles[1] ?? null;
+  const plannedNow = [
+    ...(plan.planned ?? []).filter((x) => x.date >= plan.cycle.start && x.date <= plan.cycle.end).map((x) => ({ ...x, subcategory: null as string | null })),
+    ...(plan.pending ?? []),
+  ];
+  const items = mode === "now" ? plannedNow : plan.next?.items ?? [];
+  const gone: Cancel[] = mode === "now" ? plan.cancelledNow ?? [] : plan.next?.cancelled ?? [];
+  // Una sola categoría: se reparte por subcategorías si hay alguna; si no, una línea con la categoría.
+  let units: { cat: string; sub?: string }[] = cats.map((c) => ({ cat: c }));
+  if (cats.length === 1) {
+    const c = cats[0];
+    const subs = new Set<string>();
+    if (mode === "now") for (const r of [cur?.subAtDay, last?.subAtDay]) for (const k of Object.keys(r ?? {})) if (k.startsWith(`${c}/`) && (r?.[k] ?? 0) > 0) subs.add(k.slice(c.length + 1));
+    for (const x of [...items, ...gone]) if (x.category === c) subs.add(norm(x.subcategory));
+    if ([...subs].some(Boolean)) units = [...subs].map((sub) => ({ cat: c, sub }));
+  }
+  const match = (u: { cat: string; sub?: string }) => (x: { category: string; subcategory?: string | null }) => x.category === u.cat && (u.sub === undefined || norm(x.subcategory) === u.sub);
+  return units.map((u) => {
+    const m = match(u);
+    const mine = items.filter(m);
+    const sum = mine.reduce((t, x) => t + x.amount, 0);
+    const now = u.sub === undefined ? cur?.atDay[u.cat] ?? 0 : cur?.subAtDay?.[subKey(u.cat, u.sub)] ?? 0;
+    const prev = !last ? null : u.sub === undefined ? last.atDay[u.cat] ?? 0 : last.subAtDay?.[subKey(u.cat, u.sub)] ?? 0;
+    return {
+      key: `${u.cat}/${u.sub ?? "*"}`, cat: u.cat, sub: u.sub,
+      label: u.sub === undefined ? categoryLabel(u.cat) : u.sub || "Otros",
+      now, prev, pending: mode === "now" ? sum : 0, committed: mode === "next" ? sum : 0, count: mine.length, gone: gone.filter(m),
+    };
+  })
+    .filter((l) => (mode === "now" ? l.now > 0 || (l.prev ?? 0) > 0 || l.pending > 0 : l.count > 0) || l.gone.length > 0)
+    .sort((a, b) => (mode === "now" ? b.now + b.pending - (a.now + a.pending) : b.committed - a.committed));
+}
+
+const countText = (n: number) => (n ? `${n} ${n === 1 ? "gasto comprometido" : "gastos comprometidos"}` : "Nada comprometido todavía");
+const goneText = (gone: Cancel[]) => `${gone.length === 1 ? "1 cancelado" : `${gone.length} cancelados`}, −${eur(gone.reduce((t, c) => t + c.amount, 0), 2)}`;
+
+/** Una línea del desplegable y, debajo, lo cancelado de esa línea (gris, tachado, el ahorro en verde). */
+function LineRow({ l, mode, onOpen }: { l: Line; mode: Mode; onOpen: () => void }) {
+  const active = mode === "now" ? l.now > 0 || l.pending > 0 || (l.prev ?? 0) > 0 : l.count > 0;
+  const d = mode === "now" && l.prev !== null ? deviationOf(l.now, l.prev) : null;
+  const blue = mode === "now" && l.now <= 0 && l.pending > 0;
+  return (
+    <li>
+      {active && (
+        <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 py-2.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm text-slate-800">{l.label}</span>
+            {mode === "next" ? <span className="block truncate text-xs text-slate-500">{countText(l.count)}</span>
+              : l.pending > 0 ? (
+                <span className="flex items-center gap-1 truncate text-xs text-blue-700">
+                  <CalendarClock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  {l.now > 0 ? `${eur(l.pending, 2)} previsto` : "Previsto, sin cobrar"}
+                </span>
+              ) : d && (
+                <span className={`block truncate text-xs ${d.state === "estable" ? "text-slate-500" : d.state === "mejor" ? "text-emerald-700" : "text-amber-700"}`}>
+                  {d.state === "estable" ? "Igual que el mes pasado" : d.state === "mejor" ? "Menos que el mes pasado" : "Más que el mes pasado"}
+                </span>
+              )}
+          </span>
+          <span className={`amount shrink-0 text-sm font-semibold tabular-nums ${blue ? "text-blue-700" : "text-slate-900"}`}>
+            {eur(mode === "next" ? l.committed : blue ? l.pending : l.now, 2)}
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+        </button>
+      )}
+      {l.gone.map((c) => (
+        <button key={c.key} type="button" onClick={onOpen} className="flex w-full items-center gap-3 py-2 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm text-slate-400 line-through">{c.title}</span>
+            <span className="block truncate text-xs text-slate-400">Cancelado</span>
+          </span>
+          <span className="amount shrink-0 text-sm font-semibold tabular-nums text-emerald-700">−{eur(c.amount, 2)}</span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+        </button>
+      ))}
+    </li>
+  );
+}
+
+/**
+ * Tus grupos, este mes o el que viene: los dos funcionan igual. Cada grupo se despliega (los de varias categorías
+ * por categoría; los de una, por subcategoría) con lo cancelado dentro de su línea, y «Ver todos los movimientos».
+ * Cada línea abre la hoja ya filtrada y en el mes del que vienes.
+ */
+function GroupsList({ plan, mode, open, toggle, toSheet }: ListProps & { mode: Mode }) {
+  const [adding, setAdding] = useState(false);
+  const cycles = plan.history ?? [];
+  const last = cycles[1] ?? null;
   const { day, totalDays } = plan.cycle;
   const daysLeft = totalDays - day;
+  const next = plan.next;
 
   if (!plan.groups.length) return (
     <div className="py-6 text-center">
@@ -84,95 +181,78 @@ function GoalsGlance({ plan, open, toggle, toSheet }: ListProps) {
       <Link href="/finanzas/plan" className="mt-3 inline-flex h-10 items-center rounded-full bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700">Definir grupos</Link>
     </div>
   );
+  if (mode === "next" && !next) return null;
 
-  const rows = plan.groups.filter((g) => g.categories.length)
-    .map((g) => {
-      const s = groupSummary({ categories: g.categories, cycles, goal: g.goal, day, totalDays });
-      return { g, s, ...paceOf(s, last ? sumCats(last.atDay, g.categories) : null) };
-    })
-    .sort((a, b) => PACE_ORDER[a.pace] - PACE_ORDER[b.pace]);
-  const judged = rows.filter((r) => r.pace !== "sin_datos");
+  const groups = plan.groups.filter((g) => g.categories.length).map((g) => {
+    const lines = linesOf(plan, g.categories, mode);
+    const s = groupSummary({ categories: g.categories, cycles, goal: g.goal, day, totalDays });
+    return { g, s, lines, ...paceOf(s, last ? sumCats(last.atDay, g.categories) : null) };
+  });
+  const rows = mode === "now"
+    ? groups.sort((a, b) => PACE_ORDER[a.pace] - PACE_ORDER[b.pace])
+    : groups.filter((r) => r.lines.length); // el mes que viene, solo los grupos con algo comprometido o cancelado
+  const judged = groups.filter((r) => r.pace !== "sin_datos");
   const good = judged.filter((r) => r.pace === "bien").length;
   const headline = !judged.length ? "Aún no hay con qué compararte"
     : good === judged.length ? (judged.length === 1 ? "Vas a buen ritmo" : `Vas a buen ritmo en tus ${judged.length} grupos`)
     : `Vas a buen ritmo en ${good} de tus ${judged.length} grupos`;
+  const monthName = next ? monthOf(next.cycle.end) : "";
+  const inGroups = new Set(plan.groups.flatMap((g) => g.categories));
+  const loose = mode === "next" && next ? next.items.filter((i) => !inGroups.has(i.category)) : [];
+  const looseGone = mode === "next" && next ? next.cancelled.filter((c) => !inGroups.has(c.category)) : [];
 
   return (
     <div className="pb-2">
-      <p className="break-words text-[22px] font-semibold leading-tight tracking-tight text-slate-900">{headline}</p>
-      <p className="mt-1 text-sm text-slate-500">{daysLeft > 1 ? `Quedan ${daysLeft} días de ciclo` : daysLeft === 1 ? "Queda 1 día de ciclo" : "Último día del ciclo"}</p>
+      {mode === "now" ? (
+        <>
+          <p className="break-words text-[22px] font-semibold leading-tight tracking-tight text-slate-900">{headline}</p>
+          <p className="mt-1 text-sm text-slate-500">{daysLeft > 1 ? `Quedan ${daysLeft} días de ciclo` : daysLeft === 1 ? "Queda 1 día de ciclo" : "Último día del ciclo"}</p>
+        </>
+      ) : <h2 className="text-sm font-medium text-slate-500">Tus grupos en {monthName}</h2>}
 
-      <ul className="mt-3 divide-y divide-slate-100">
-        {rows.map(({ g, s, pace, text }) => {
-          // Lo previsto de este mes: tus previstos con fecha en este ciclo y lo que se repite y aún no se ha cobrado.
-          const plannedHere = [
-            ...(plan.planned ?? []).filter((x) => x.date >= plan.cycle.start && x.date <= plan.cycle.end),
-            ...(plan.pending ?? []),
-          ].filter((x) => g.categories.includes(x.category));
-          const pendingSum = plannedHere.reduce((t, x) => t + x.amount, 0);
-          const pendingOf = (c: string) => plannedHere.filter((x) => x.category === c).reduce((t, x) => t + x.amount, 0);
-          const onlyPending = s.now <= 0 && pendingSum > 0;
-          const single = g.categories.length <= 1;
-          const isOpen = !single && open === g.id;
-          // Lo que sueles gastar en el grupo en un mes entero (media de los 3 ciclos cerrados), como referencia.
+      <ul className={`${mode === "now" ? "mt-3" : "mt-1"} divide-y divide-slate-100`}>
+        {rows.map(({ g, s, lines, pace, text }) => {
+          const isOpen = open === g.id;
+          const gone = lines.flatMap((l) => l.gone);
+          const pendingSum = lines.reduce((t, l) => t + l.pending, 0);
+          const committed = lines.reduce((t, l) => t + l.committed, 0);
+          const count = lines.reduce((t, l) => t + l.count, 0);
+          const onlyPending = mode === "now" && s.now <= 0 && pendingSum > 0;
           const closed = cycles.slice(1, 4);
           const avgMonth = closed.length ? Math.round(closed.reduce((t, c) => t + g.categories.reduce((u, k) => u + (c.full[k] ?? 0), 0), 0) / closed.length) : 0;
-          const cats = g.categories
-            .map((c) => {
-              const now = cur?.atDay[c] ?? 0;
-              const prev = last ? last.atDay[c] ?? 0 : null;
-              return { c, now, prev, d: prev === null ? null : deviationOf(now, prev) };
-            })
-            .filter((x) => x.now > 0 || (x.prev ?? 0) > 0 || pendingOf(x.c) > 0)
-            .sort((a, b) => b.now - a.now);
+          const extras = mode === "now" ? g.categories.reduce((t, c) => t + (plan.totals?.extrasNow?.[c] ?? 0), 0) : 0;
+          const lineTarget = (l: Line) => (l.sub === undefined ? (g.categories.length > 1 ? { cat: l.cat } : {}) : { sub: l.sub || OTROS_SUB });
           return (
             <li key={g.id}>
-              {/* Una sola categoría: no hay nada que desplegar, va directo a su hoja. Varias: se despliega el reparto. */}
-              <button type="button" onClick={(e) => (single ? toSheet(g.id) : toggle(g.id, e.currentTarget))} aria-expanded={single ? undefined : isOpen}
+              <button type="button" onClick={(e) => toggle(g.id, e.currentTarget)} aria-expanded={isOpen}
                 className="flex w-full scroll-mt-16 items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
                 <CategoryIcon category={g.categories[0]} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
                   <span className="block truncate text-xs text-slate-500">
-                    {onlyPending ? <span className="text-blue-700">Pendiente de cobrar</span>
+                    {mode === "next" ? countText(count)
+                      : onlyPending ? <span className="text-blue-700">Pendiente de cobrar</span>
                       : <>{text}{pendingSum > 0 && <span className="text-blue-700"> · {eur(pendingSum, 0)} previsto</span>}</>}
+                    {gone.length > 0 && <span className="amount text-emerald-700"> · {goneText(gone)}</span>}
                   </span>
                 </span>
-                {/* La cifra hace de semáforo: rojo si te has pasado, ámbar si vas rápido, neutro si vas bien. */}
+                {/* Este mes la cifra hace de semáforo: rojo si te has pasado, ámbar si vas rápido, neutro si vas bien. */}
                 <span className="shrink-0 text-right">
-                  <b className={`amount block text-[15px] font-semibold tabular-nums ${onlyPending ? "text-blue-700" : pace === "pasado" ? "text-rose-700" : pace === "alto" ? "text-amber-700" : "text-slate-900"}`}>{eur(onlyPending ? pendingSum : s.now, 0)}</b>
-                  <span className="amount block text-[11px] tabular-nums text-slate-500">{s.goal !== null ? `de ${eur(s.goal, 0)}` : avgMonth > 0 ? `~${eur(avgMonth, 0)} al mes` : ""}</span>
+                  <b className={`amount block text-[15px] font-semibold tabular-nums ${mode === "next" ? "text-slate-900" : onlyPending ? "text-blue-700" : pace === "pasado" ? "text-rose-700" : pace === "alto" ? "text-amber-700" : "text-slate-900"}`}>
+                    {eur(mode === "next" ? committed : onlyPending ? pendingSum : s.now, 0)}
+                  </b>
+                  <span className="amount block text-[11px] tabular-nums text-slate-500">{g.goal !== null ? `de ${eur(g.goal, 0)}` : mode === "now" && avgMonth > 0 ? `~${eur(avgMonth, 0)} al mes` : ""}</span>
                 </span>
               </button>
 
               <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-                <div className="overflow-hidden">
+                <div className="overflow-hidden" inert={!isOpen}>
                   <div className="mb-3 ml-12">
                     <ul>
-                      {cats.map(({ c, now, d }) => (
-                        <li key={c}>
-                          <button type="button" onClick={() => toSheet(g.id, c)} className="flex w-full items-center gap-3 py-2.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm text-slate-800">{categoryLabel(c)}</span>
-                              {pendingOf(c) > 0 ? (
-                                <span className="flex items-center gap-1 truncate text-xs text-blue-700">
-                                  <CalendarClock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                  {now > 0 ? `${eur(pendingOf(c), 2)} previsto` : "Previsto, sin cobrar"}
-                                </span>
-                              ) : d && (
-                                <span className={`block truncate text-xs ${d.state === "estable" ? "text-slate-500" : d.state === "mejor" ? "text-emerald-700" : "text-amber-700"}`}>
-                                  {d.state === "estable" ? "Igual que el mes pasado" : d.state === "mejor" ? "Menos que el mes pasado" : "Más que el mes pasado"}
-                                </span>
-                              )}
-                            </span>
-                            <span className={`amount shrink-0 text-sm font-semibold tabular-nums ${now <= 0 && pendingOf(c) > 0 ? "text-blue-700" : "text-slate-900"}`}>{eur(now <= 0 && pendingOf(c) > 0 ? pendingOf(c) : now, 2)}</span>
-                            <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
-                          </button>
-                        </li>
-                      ))}
-                      {!cats.length && <li className="py-2.5 text-sm text-slate-500">Sin gastos este mes.</li>}
+                      {lines.map((l) => <LineRow key={l.key} l={l} mode={mode} onOpen={() => toSheet(g.id, lineTarget(l))} />)}
+                      {!lines.length && <li className="py-2.5 text-sm text-slate-500">{mode === "now" ? "Sin gastos este mes." : "Nada comprometido todavía."}</li>}
                     </ul>
-                    {(() => { const x = g.categories.reduce((t, c) => t + (plan.totals?.extrasNow?.[c] ?? 0), 0); return x > 0 ? <Link href="/finanzas/extraordinarios" className="amount block pb-1 text-xs text-slate-500 hover:text-slate-700">Además, {eur(x, 2)} en extraordinarios, aparte. <span className="font-medium text-blue-700">Verlos ›</span></Link> : null; })()}
+                    {extras > 0 && <Link href="/finanzas/extraordinarios" className="amount block pb-1 text-xs text-slate-500 hover:text-slate-700">Además, {eur(extras, 2)} en extraordinarios, aparte. <span className="font-medium text-blue-700">Verlos ›</span></Link>}
                     <button type="button" onClick={() => toSheet(g.id)} className="mt-1 inline-flex items-center gap-0.5 py-1.5 text-sm font-medium text-blue-700 hover:underline">
                       Ver todos los movimientos<ChevronRight className="h-4 w-4" />
                     </button>
@@ -182,11 +262,48 @@ function GoalsGlance({ plan, open, toggle, toSheet }: ListProps) {
             </li>
           );
         })}
+        {(loose.length > 0 || looseGone.length > 0) && (
+          <li>
+            <button type="button" onClick={(e) => toggle("otros", e.currentTarget)} aria-expanded={open === "otros"} className="flex w-full scroll-mt-16 items-center gap-3 py-3.5 text-left">
+              <CategoryIcon category="otros_gastos" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold text-slate-500">Otros gastos</span>
+                <span className="block truncate text-xs text-slate-400">Sin grupo · {countText(loose.length)}{looseGone.length > 0 && <span className="amount text-emerald-700"> · {goneText(looseGone)}</span>}</span>
+              </span>
+              <b className="amount shrink-0 text-[15px] font-semibold tabular-nums text-slate-500">{eur(loose.reduce((t, i) => t + i.amount, 0), 0)}</b>
+            </button>
+            <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${open === "otros" ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+              <div className="overflow-hidden" inert={open !== "otros"}>
+                <ul className="mb-3 ml-12">
+                  {loose.map((i) => (
+                    <li key={i.id} className="flex items-center gap-3 py-2">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-slate-800">{i.title}</span>
+                        <span className="block truncate text-xs text-slate-500">{shortDayOf(i.date)} · {i.source === "repite" ? "se repite" : "previsto"}</span>
+                      </span>
+                      <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(i.amount, 2)}</span>
+                    </li>
+                  ))}
+                  {looseGone.map((c) => (
+                    <li key={c.key} className="flex items-center gap-3 py-2">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-slate-400 line-through">{c.title}</span>
+                        <span className="block truncate text-xs text-slate-400">Cancelado</span>
+                      </span>
+                      <span className="amount shrink-0 text-sm font-semibold tabular-nums text-emerald-700">−{eur(c.amount, 2)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </li>
+        )}
       </ul>
+      {mode === "next" && next && !next.items.length && <p className="py-2 text-sm text-slate-500">Aún no hay nada apuntado para {monthName}. Marca «Se repite» en tus recibos o añade un gasto con fecha de {monthName}.</p>}
       <button type="button" onClick={() => setAdding(true)} className="mt-1 inline-flex items-center gap-1.5 py-3 text-[15px] font-medium text-blue-600">
         <Plus className="h-5 w-5" /> Añadir gasto
       </button>
-      <AddExpenseSheet open={adding} onClose={() => setAdding(false)} />
+      <AddExpenseSheet open={adding} onClose={() => setAdding(false)} defaultDate={mode === "next" && next ? next.cycle.start : undefined} />
     </div>
   );
 }
@@ -296,7 +413,7 @@ function SpendChart({ plan }: { plan: Plan }) {
 }
 
 /** Inicio: el gráfico de gasto del mes y, debajo, cómo vas en cada grupo de Mi plan. */
-type NextItem = { id: string; title: string; amount: number; date: string; category: string; source: "repite" | "previsto"; txId?: string };
+type NextItem = { id: string; title: string; amount: number; date: string; category: string; subcategory?: string | null; source: "repite" | "previsto"; txId?: string };
 
 const monthOf = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" });
 const shortDayOf = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "UTC" }).replace(".", "");
@@ -353,134 +470,6 @@ function NextChart({ plan }: { plan: Plan }) {
   );
 }
 
-/** Lo que has cancelado: en gris, tachado, «Cancelado», y el importe en verde (lo que ya no gastas). */
-function CancelledList({ items, flush = false }: { items: { key: string; title: string; amount: number }[]; flush?: boolean }) {
-  return (
-    <ul className={flush ? "" : "mb-3 ml-12"}>
-      {items.map((c) => (
-        <li key={c.key} className="flex items-center gap-3 py-2">
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm text-slate-400 line-through">{c.title}</span>
-            <span className="block truncate text-xs text-slate-400">Cancelado</span>
-          </span>
-          <span className="amount shrink-0 text-sm font-semibold tabular-nums text-emerald-700">−{eur(c.amount, 2)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/**
- * Lista del mes que viene: funciona igual que la de este mes. Cada grupo con lo comprometido; uno de una sola
- * categoría abre su hoja (con lo previsto y lo que se repite, en azul, arriba); uno de varias se despliega por
- * categorías y «Ver todos los movimientos».
- */
-function NextGroups({ plan, open, toggle, toSheet }: ListProps) {
-  const [adding, setAdding] = useState(false);
-  const next = plan.next;
-  if (!next) return null;
-  const monthName = monthOf(next.cycle.end);
-  const inGroups = new Set(plan.groups.flatMap((g) => g.categories));
-  const loose = next.items.filter((i) => !inGroups.has(i.category));
-  const looseGone = next.cancelled.filter((c) => !inGroups.has(c.category));
-  const count = (n: number) => (n ? `${n} ${n === 1 ? "gasto comprometido" : "gastos comprometidos"}` : "Nada comprometido todavía");
-  return (
-    <div className="pb-2">
-      <h2 className="text-sm font-medium text-slate-500">Tus grupos en {monthName}</h2>
-      <ul className="mt-1 divide-y divide-slate-100">
-        {/* Solo los grupos con algo comprometido (o cancelado): los que están a 0 no aportan. */}
-        {plan.groups.filter((g) => g.categories.length && (next.items.some((i) => g.categories.includes(i.category)) || next.cancelled.some((c) => g.categories.includes(c.category)))).map((g) => {
-          const items = next.items.filter((i) => g.categories.includes(i.category));
-          const amount = items.reduce((t, i) => t + i.amount, 0);
-          const gone = next.cancelled.filter((c) => g.categories.includes(c.category));
-          const single = g.categories.length <= 1;
-          const isOpen = !single && open === g.id;
-          const cats = g.categories.map((c) => ({ c, items: items.filter((i) => i.category === c) })).filter((x) => x.items.length)
-            .sort((a, b) => b.items.reduce((t, i) => t + i.amount, 0) - a.items.reduce((t, i) => t + i.amount, 0));
-          return (
-            <li key={g.id}>
-              <button type="button" onClick={(e) => (single ? toSheet(g.id) : toggle(g.id, e.currentTarget))} aria-expanded={single ? undefined : isOpen}
-                className="flex w-full scroll-mt-16 items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
-                <CategoryIcon category={g.categories[0]} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
-                  <span className="block truncate text-xs text-slate-500">
-                    {count(items.length)}
-                    {gone.length > 0 && <span className="amount text-emerald-700"> · {gone.length === 1 ? "1 cancelado" : `${gone.length} cancelados`}, −{eur(gone.reduce((t, c) => t + c.amount, 0), 2)}</span>}
-                  </span>
-                </span>
-                <span className="shrink-0 text-right">
-                  <b className="amount block text-[15px] font-semibold tabular-nums text-slate-900">{eur(amount, 0)}</b>
-                  {g.goal !== null && <span className="amount block text-[11px] tabular-nums text-slate-500">de {eur(g.goal, 0)}</span>}
-                </span>
-              </button>
-              {/* Lo cancelado, en gris y con lo que ya no gastas en verde (también en grupos de una sola categoría). */}
-              {gone.length > 0 && (single || !isOpen) && <CancelledList items={gone} />}
-              <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-                <div className="overflow-hidden">
-                  <div className="mb-3 ml-12">
-                    <ul>
-                      {cats.map(({ c, items: ci }) => (
-                        <li key={c}>
-                          <button type="button" onClick={() => toSheet(g.id, c)} className="flex w-full items-center gap-3 py-2.5 text-left">
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm text-slate-800">{categoryLabel(c)}</span>
-                              <span className="block truncate text-xs text-slate-500">{count(ci.length)}</span>
-                            </span>
-                            <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(ci.reduce((t, i) => t + i.amount, 0), 2)}</span>
-                            <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
-                          </button>
-                        </li>
-                      ))}
-                      {!cats.length && <li className="py-2.5 text-sm text-slate-500">Nada comprometido todavía.</li>}
-                    </ul>
-                    {gone.length > 0 && <CancelledList items={gone} flush />}
-                    <button type="button" onClick={() => toSheet(g.id)} className="mt-1 inline-flex items-center gap-0.5 py-1.5 text-sm font-medium text-blue-700 hover:underline">
-                      Ver todos los movimientos<ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </li>
-          );
-        })}
-        {(loose.length > 0 || looseGone.length > 0) && (
-          <li>
-            <button type="button" onClick={(e) => toggle("otros", e.currentTarget)} aria-expanded={open === "otros"} className="flex w-full scroll-mt-16 items-center gap-3 py-3.5 text-left">
-              <CategoryIcon category="otros_gastos" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-semibold text-slate-500">Otros gastos</span>
-                <span className="block truncate text-xs text-slate-400">Sin grupo · {count(loose.length)}</span>
-              </span>
-              <b className="amount shrink-0 text-[15px] font-semibold tabular-nums text-slate-500">{eur(loose.reduce((t, i) => t + i.amount, 0), 0)}</b>
-            </button>
-            <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${open === "otros" ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-              <div className="overflow-hidden">
-              <ul className="mb-3 ml-12">
-                {loose.map((i) => (
-                  <li key={i.id} className="flex items-center gap-3 py-2">
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm text-slate-800">{i.title}</span>
-                      <span className="block truncate text-xs text-slate-500">{shortDayOf(i.date)} · {i.source === "repite" ? "se repite" : "previsto"}</span>
-                    </span>
-                    <span className="amount shrink-0 text-sm font-semibold tabular-nums text-slate-900">{eur(i.amount, 2)}</span>
-                  </li>
-                ))}
-              </ul>
-              </div>
-            </div>
-            {looseGone.length > 0 && <CancelledList items={looseGone} />}
-          </li>
-        )}
-      </ul>
-      {!next.items.length && <p className="py-2 text-sm text-slate-500">Aún no hay nada apuntado para {monthName}. Marca «Se repite» en tus recibos o añade un gasto con fecha de {monthName}.</p>}
-      <button type="button" onClick={() => setAdding(true)} className="mt-1 inline-flex items-center gap-1.5 py-3 text-[15px] font-medium text-blue-600">
-        <Plus className="h-5 w-5" /> Añadir gasto
-      </button>
-      <AddExpenseSheet open={adding} onClose={() => setAdding(false)} defaultDate={next.cycle.start} />
-    </div>
-  );
-}
 
 /**
  * Inicio: arriba el gráfico, que se desliza a la izquierda para ver el mes que viene (puntos debajo); la lista de
@@ -515,9 +504,15 @@ export function HomePlan() {
     // Al cerrar un grupo largo la página encoge: se deja su cabecera a la vista para no perder dónde estabas.
     if (closing) window.setTimeout(() => header.scrollIntoView({ block: "nearest", behavior: "smooth" }), 320);
   };
-  const toSheet = (id: string, cat?: string) => {
+  // La hoja se abre ya filtrada (categoría o subcategoría) y en el mes del que vienes.
+  const toSheet = (id: string, target: { cat?: string; sub?: string } = {}) => {
     store.set(SCROLL_KEY(page), String(scroller()?.scrollTop ?? 0));
-    router.push(`/finanzas/grupo/${id}${cat ? `?categoria=${encodeURIComponent(cat)}` : ""}`);
+    const q = new URLSearchParams();
+    if (target.cat) q.set("categoria", target.cat);
+    if (target.sub) q.set("sub", target.sub);
+    if (page === 1) q.set("mes", "siguiente");
+    const qs = q.toString();
+    router.push(`/finanzas/grupo/${id}${qs ? `?${qs}` : ""}`);
   };
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
   const go = (i: number) => { const el = pager.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); };
@@ -544,9 +539,9 @@ export function HomePlan() {
               <h2 className="text-sm font-medium text-slate-500">Tus grupos</h2>
               <Link href="/finanzas/plan" className="inline-flex items-center text-sm font-medium text-blue-700 hover:underline">Mi plan<ChevronRight className="h-4 w-4" /></Link>
             </div>
-            <div className="mt-1">{data ? <GoalsGlance plan={data} open={open[0]} toggle={toggle} toSheet={toSheet} /> : <SkeletonList rows={4} />}</div>
+            <div className="mt-1">{data ? <GroupsList plan={data} mode="now" open={open[0]} toggle={toggle} toSheet={toSheet} /> : <SkeletonList rows={4} />}</div>
           </>
-        ) : data ? <NextGroups plan={data} open={open[1]} toggle={toggle} toSheet={toSheet} /> : <SkeletonList rows={4} />}
+        ) : data ? <GroupsList plan={data} mode="next" open={open[1]} toggle={toggle} toSheet={toSheet} /> : <SkeletonList rows={4} />}
       </section>
     </div>
   );

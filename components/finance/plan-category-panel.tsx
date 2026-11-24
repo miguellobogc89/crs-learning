@@ -20,6 +20,7 @@ import { MovementRowButton, label, type Item, type List } from "./movement-edit"
 import { MovementDetailSheet } from "./movement-detail";
 import { TrendChart, type TrendPoint } from "./trend-chart";
 import { PlannedList } from "./planned";
+import { OTROS_SUB } from "./home-plan";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Cycle = Plan["cycles"][number];
@@ -74,15 +75,20 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
   // Se puede llegar ya filtrado por una categoría (?categoria=…), p. ej. tocándola en «Tus grupos» de Inicio.
   const params = useSearchParams();
   const [only, setOnly] = useState<string | null>(() => { const c = params.get("categoria"); return c && categories.includes(c) ? c : null; });
+  // En un grupo de una sola categoría, las pills son sus subcategorías (OTROS_SUB = lo que no tiene).
+  const [onlySub, setOnlySub] = useState<string | null>(() => (categories.length === 1 ? params.get("sub") : null));
+  // El mes del que vienes en Inicio: este o el siguiente (lo previsto de arriba es de ese mes).
+  const nextMode = params.get("mes") === "siguiente";
   const cats = only ? [only] : categories;
-  const catsKey = cats.join(",");
+  const subOk = (sub?: string | null) => onlySub === null || (sub ?? "").trim() === (onlySub === OTROS_SUB ? "" : onlySub);
+  const catsKey = `${cats.join(",")}|${onlySub ?? ""}`;
   const plan = useFinance<Plan>("plan");
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [visible, setVisible] = useState<string | null>(null);
 
   // Movimientos de la hoja: gastos de cuentas incluidas de sus categorías (o, en la de extraordinarios, todos los
   // marcados como extraordinarios).
-  const pick = (t: Item) => !t.excluded && t.kind === "gasto" && t.amount < 0 && (extrasOnly ? t.extraordinary : cats.includes(t.category));
+  const pick = (t: Item) => !t.excluded && t.kind === "gasto" && t.amount < 0 && (extrasOnly ? t.extraordinary : cats.includes(t.category) && subOk(t.subcategory));
 
   // El detalle empieza arriba del todo (el contenedor de scroll es el mismo que el de la lista de grupos).
   useEffect(() => { const el = scroller(); if (el) el.scrollTop = 0; }, []);
@@ -117,6 +123,21 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list.data, plan.data, catsKey]);
 
+  // Subcategorías (grupos de una categoría) con gasto en los últimos meses, para las pills; «Otros» al final.
+  const subPills = useMemo(() => {
+    if (categories.length !== 1 || extrasOnly || !list.data || !plan.data) return [];
+    const from = plan.data.cycles[Math.min(5, plan.data.cycles.length - 1)]?.start ?? "";
+    const totals = new Map<string, number>();
+    for (const t of list.data.items) if (!t.excluded && t.kind === "gasto" && t.amount < 0 && t.category === categories[0] && (t.imputedDate ?? t.date) >= from) {
+      const k = (t.subcategory ?? "").trim() || OTROS_SUB;
+      totals.set(k, (totals.get(k) ?? 0) - t.amount);
+    }
+    const named = [...totals.entries()].filter(([k]) => k !== OTROS_SUB).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    return named.length ? [...named, ...(totals.has(OTROS_SUB) ? [OTROS_SUB] : [])] : [];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.data, plan.data, categories.join(",")]);
+  const subLabel = (k: string) => (k === OTROS_SUB ? "Otros" : k);
+
   // Categorías del grupo con gasto en los últimos meses, para las pills (de más a menos gasto).
   const pills = useMemo(() => {
     if (categories.length < 2 || !list.data || !plan.data) return [];
@@ -133,7 +154,7 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
     if (!el || !sections.length) return;
     const onScroll = () => {
       const limit = el.getBoundingClientRect().top + 4;
-      let current = sections[0].start;
+      let current = nextMode ? "siguiente" : sections[0].start;
       for (const node of el.querySelectorAll<HTMLElement>("[data-cycle]")) {
         if (node.getBoundingClientRect().top > limit) break;
         current = node.dataset.cycle ?? current;
@@ -165,11 +186,27 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
 
   const error = list.error ?? plan.error;
   const active = sections.find((s) => s.start === visible) ?? sections[0];
+  // Lo de arriba (en azul y los cancelados) es del mes del que vienes: este (lo que falta por cobrar) o el siguiente.
+  const inScope = (x: { category: string; subcategory?: string | null }) => cats.includes(x.category) && subOk(x.subcategory);
+  const nextCycle = plan.data?.next?.cycle ?? null;
+  const inNext = (d: string) => !!nextCycle && d >= nextCycle.start && d <= nextCycle.end;
+  const scope = !plan.data || extrasOnly ? null : nextMode ? {
+    items: (plan.data.planned ?? []).filter((x) => inNext(x.date) && inScope({ ...x, subcategory: null })),
+    repeats: (plan.data.next?.items ?? []).filter((x) => x.source === "repite" && inScope(x)),
+    cancelled: (plan.data.next?.cancelled ?? []).filter(inScope),
+  } : {
+    items: (plan.data.planned ?? []).filter((x) => !inNext(x.date) && inScope({ ...x, subcategory: null })),
+    repeats: (plan.data.pending ?? []).filter(inScope).map((x) => ({ ...x, thisMonth: true })),
+    cancelled: (plan.data.cancelledNow ?? []).filter(inScope),
+  };
+  const atNext = nextMode && (visible === null || visible === "siguiente");
+  const nextTotal = scope ? Math.round([...scope.items, ...scope.repeats].reduce((t, x) => t + x.amount, 0) * 100) / 100 : 0;
 
   return (
     <div className="mx-auto max-w-xl animate-in fade-in-0 slide-in-from-right-10 pb-6 duration-200">
       {/* El nombre va en la cabecera de la app; a su derecha, el importe y el ciclo que se está viendo (cambian con el scroll). */}
-      <HeaderSlots title={only ? `${title} · ${categoryLabel(only)}` : title} total={active ? active.total : null} label={active?.label ?? ""} extra={active?.extra ?? 0} />
+      <HeaderSlots title={only ? `${title} · ${categoryLabel(only)}` : onlySub ? `${title} · ${subLabel(onlySub)}` : title}
+        total={atNext ? nextTotal : active ? active.total : null} label={atNext ? nextCycle?.label ?? "" : active?.label ?? ""} extra={atNext ? 0 : active?.extra ?? 0} />
 
       {pills.length > 1 && (
         <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 pt-1 [scrollbar-width:none] md:mx-0 md:flex-wrap md:px-0">
@@ -177,6 +214,17 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
             <button key={k ?? "todo"} type="button" onClick={() => setOnly(k)} aria-pressed={only === k}
               className={`h-8 shrink-0 rounded-full px-3.5 text-sm font-medium transition-colors ${only === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
               {k ? categoryLabel(k) : "Todo"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {subPills.length > 0 && (
+        <div className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 pt-1 [scrollbar-width:none] md:mx-0 md:flex-wrap md:px-0">
+          {[null, ...subPills].map((k) => (
+            <button key={k ?? "todo"} type="button" onClick={() => setOnlySub(k)} aria-pressed={onlySub === k}
+              className={`h-8 shrink-0 rounded-full px-3.5 text-sm font-medium transition-colors ${onlySub === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+              {k ? subLabel(k) : "Todo"}
             </button>
           ))}
         </div>
@@ -212,10 +260,12 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
         </section>
       )}
 
-      {!extrasOnly && plan.data && (
-        <PlannedList className="pt-1" items={(plan.data.planned ?? []).filter((x) => cats.includes(x.category))}
-          repeats={(plan.data.pending ?? []).filter((x) => cats.includes(x.category)).map((x) => ({ ...x, thisMonth: true }))}
-          onOpenRepeat={(txId) => setViewingId(txId)} />
+      {scope && (
+        <section>
+          {nextMode && nextCycle && <p className="px-1 pt-3 text-xs font-medium text-slate-500">{nextCycle.label}</p>}
+          <PlannedList className="pt-1" items={scope.items} repeats={scope.repeats} cancelled={scope.cancelled} onOpenRepeat={(txId) => setViewingId(txId)} />
+          {nextMode && !scope.items.length && !scope.repeats.length && !scope.cancelled.length && <p className="py-4 text-center text-sm text-slate-400">Nada comprometido para {nextCycle?.label ?? "el mes que viene"}.</p>}
+        </section>
       )}
 
       {error && !list.data ? <ErrorNote>{error}</ErrorNote>
@@ -223,7 +273,7 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
         : sections.every((s) => s.rows.length === 0) ? <p className="py-10 text-center text-sm text-slate-400">No hay movimientos.</p>
         : sections.map((s, i) => ({ s, i, shown: s.rows })).filter(({ i, shown }) => i === 0 || shown.length > 0).map(({ s, i, shown }) => (
           <section key={s.start} data-cycle={s.start}>
-            {i > 0 && (
+            {(i > 0 || nextMode) && (
               <p className="flex justify-between bg-slate-50 px-1 py-1.5 text-xs text-slate-500">
                 <span>{s.label}</span>
                 <span className="tabular-nums">{eur(s.total, 2)}{s.extra > 0 ? ` (+${eur(s.extra, 2)} extra)` : ""}</span>

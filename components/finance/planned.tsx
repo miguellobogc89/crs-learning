@@ -93,7 +93,10 @@ function RepeatRow({ r, onOpen }: { r: Repeat; onOpen?: () => void }) {
   );
 }
 
-export function PlannedList({ items, repeats = [], onOpenRepeat, className = "" }: { items: Planned[]; repeats?: Repeat[]; onOpenRepeat?: (txId: string) => void; className?: string }) {
+/** Lo cancelado del periodo: gris, tachado, «Cancelado» y el ahorro en verde. */
+export type CancelledItem = { key: string; title: string; amount: number; category: string };
+
+export function PlannedList({ items, repeats = [], cancelled = [], onOpenRepeat, className = "" }: { items: Planned[]; repeats?: Repeat[]; cancelled?: CancelledItem[]; onOpenRepeat?: (txId: string) => void; className?: string }) {
   const [editing, setEditing] = useState<Planned | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
@@ -116,7 +119,7 @@ export function PlannedList({ items, repeats = [], onOpenRepeat, className = "" 
   const shown = items.filter((p) => !hidden.has(p.id));
   return (
     <>
-      {(shown.length > 0 || repeats.length > 0) && (
+      {(shown.length > 0 || repeats.length > 0 || cancelled.length > 0) && (
         <section className={className} aria-label="Gastos previstos">
           <p className="px-1 pb-1 pt-2 text-xs font-medium text-blue-700">Previstos</p>
           <ul className="space-y-1.5">
@@ -124,6 +127,16 @@ export function PlannedList({ items, repeats = [], onOpenRepeat, className = "" 
             {[...shown.map((p) => ({ date: p.date, el: <PlannedRow key={p.id} p={p} onOpen={() => setEditing(p)} onDelete={() => void remove(p)} /> })),
               ...repeats.map((r) => ({ date: r.date, el: <RepeatRow key={r.id} r={r} onOpen={r.txId && onOpenRepeat ? () => onOpenRepeat(r.txId as string) : undefined} /> }))]
               .sort((a, b) => b.date.localeCompare(a.date)).map((x) => x.el)}
+            {cancelled.map((c) => (
+              <li key={c.key} className="flex items-center gap-3 px-1 py-2.5">
+                <span className="opacity-50 grayscale"><CategoryIcon category={c.category} /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] text-slate-400 line-through">{c.title}</span>
+                  <span className="block truncate text-xs text-slate-400">Cancelado · {categoryOf(c.category).label}</span>
+                </span>
+                <span className="amount shrink-0 text-[15px] font-semibold tabular-nums text-emerald-700">−{eur(c.amount, 2)}</span>
+              </li>
+            ))}
           </ul>
         </section>
       )}
