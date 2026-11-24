@@ -54,7 +54,7 @@ export async function GET() {
   if (!isBankingConfigured()) return NextResponse.json({ configured: false, connections: [] }, { headers: { "Cache-Control": "private, no-store" } });
 
   try {
-    const records = await prisma.personal_bank_connections.findMany({ where: { user_id: session.user.id }, orderBy: { created_at: "asc" } });
+    const records = await prisma.personal_bank_connections.findMany({ where: { user_id: session.user.id, NOT: { bank: { startsWith: "yaxi:" } } }, orderBy: { created_at: "asc" } });
     const connections = await Promise.all(records.map(async (connection) => {
       const expired = connection.consent_expires_at.getTime() <= Date.now();
       try {
@@ -81,10 +81,14 @@ export async function DELETE(request: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   const payload = await request.json().catch(() => null) as { bank?: unknown } | null;
   const bank = typeof payload?.bank === "string" ? payload.bank : null;
-  if (!isPersonalBank(bank)) return NextResponse.json({ error: "Banco no válido" }, { status: 400 });
+  if (!(isPersonalBank(bank) || (bank && /^yaxi:connection-[a-f0-9-]{36}$/i.test(bank)))) return NextResponse.json({ error: "Banco no válido" }, { status: 400 });
 
   const record = await prisma.personal_bank_connections.findUnique({ where: { user_id_bank: { user_id: session.user.id, bank } } });
   if (!record) return NextResponse.json({ ok: true });
+  if (bank?.startsWith("yaxi:")) {
+    await prisma.personal_bank_connections.delete({ where: { id: record.id } });
+    return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
+  }
   try {
     const sessionId = decrypt(record.session_id_enc);
     await bankingRequest(`/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
