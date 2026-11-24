@@ -25,6 +25,8 @@ export function YaxiBankConnect({ onDone, onCancel }: { onDone: () => void; onCa
   const [challenge, setChallenge] = useState<Dialog | null>(null);
   const [answer, setAnswer] = useState("");
   const [working, setWorking] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function processResponse(response: OBResponse, activeTicket: string, bank: ConnectionInfo | { id: string; displayName: string }) {
@@ -43,7 +45,31 @@ export function YaxiBankConnect({ onDone, onCancel }: { onDone: () => void; onCa
       setPassword("");
       setUserId("");
       setStage("success");
+      setSyncing(true);
+      setSyncResult(null);
       refreshFinance();
+      try {
+        const synced = await fetch("/api/finance/banks/yaxi/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bank: `yaxi:${bank.id}` }),
+        });
+        const details = await synced.json() as {
+          error?: string; transactions?: number; alreadySynced?: boolean;
+        };
+        if (!synced.ok) {
+          setSyncResult(details.error || "La primera sincronización no pudo completarse.");
+        } else {
+          setSyncResult(details.alreadySynced
+            ? "Esta cuenta ya se ha actualizado hoy."
+            : `Datos actualizados: ${details.transactions ?? 0} movimientos nuevos.`);
+        }
+      } catch {
+        setSyncResult("La cuenta está vinculada, pero la sincronización inicial no pudo completarse.");
+      } finally {
+        setSyncing(false);
+        refreshFinance();
+      }
       return;
     }
     if (response instanceof Dialog) {
@@ -243,8 +269,12 @@ export function YaxiBankConnect({ onDone, onCancel }: { onDone: () => void; onCa
       {stage === "success" && (
         <div className="space-y-3 text-sm">
           <p className="flex items-center gap-2 text-emerald-700"><Check className="h-4 w-4" /> Cuentas vinculadas correctamente.</p>
-          <p className="text-xs text-slate-500">El saldo y los movimientos se incorporarán al configurar la sincronización de YAXI.</p>
-          <button onClick={onDone} className="rounded-xl bg-blue-700 px-4 py-2 text-white">Ver mis cuentas</button>
+          {syncing ? (
+            <p className="flex items-center gap-2 text-xs text-slate-600"><Loader2 className="h-4 w-4 animate-spin" /> Actualizando saldo y movimientos por primera vez…</p>
+          ) : (
+            <p className="text-xs text-slate-600" role="status">{syncResult || "La primera sincronización está pendiente."}</p>
+          )}
+          <button onClick={onDone} disabled={syncing} className="rounded-xl bg-blue-700 px-4 py-2 text-white disabled:opacity-50">Ver mis cuentas</button>
         </div>
       )}
     </div>

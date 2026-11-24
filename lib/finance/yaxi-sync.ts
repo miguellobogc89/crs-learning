@@ -68,17 +68,17 @@ function fingerprint(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 48);
 }
 
-export async function syncYaxiEveryone() {
+export async function syncYaxiConnections(opts: { userId?: string; bank?: string } = {}) {
   if (!isYaxiConfigured() || process.env.YAXI_CONNECT_ENABLED !== "true") {
-    return { banks: 0, transactions: 0, errors: 0, disabled: true };
+    return { banks: 0, transactions: 0, errors: 0, skipped: 0, errorMessages: [] as string[], disabled: true };
   }
   const connections = await prisma.personal_bank_connections.findMany({
-    where: { bank: { startsWith: "yaxi:" }, consent_expires_at: { gt: new Date() } },
+    where: { bank: opts.bank ? opts.bank : { startsWith: "yaxi:" }, ...(opts.userId ? { user_id: opts.userId } : {}), consent_expires_at: { gt: new Date() } },
     orderBy: { created_at: "asc" },
   });
   const client = new RoutexRefreshClient();
   const users = new Set<string>();
-  const result = { banks: 0, transactions: 0, errors: 0 };
+  const result = { banks: 0, transactions: 0, errors: 0, skipped: 0, errorMessages: [] as string[] };
   for (const connection of connections) {
     const userId = connection.user_id;
     try {
@@ -92,7 +92,21 @@ export async function syncYaxiEveryone() {
       const localDay = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Madrid" });
       if (existing.length && existing.every(a => a.last_synced_at &&
         a.last_synced_at.toLocaleDateString("en-CA", { timeZone: "Europe/Madrid" }) === localDay)) {
+        result.skipped++;
         continue;
+      }
+
+      // The same IBAN can already exist through Enable Banking: keep the
+      // YAXI import excluded so overlapping transactions never double-count.
+      for (const account of existing) {
+        if (!account.iban_hash) continue;
+        const duplicate = await prisma.finance_accounts.findFirst({
+          where: { user_id: userId, id: { not: account.id }, bank: { not: connection.bank }, iban_hash: account.iban_hash },
+          select: { id: true },
+        });
+        if (duplicate && account.included) {
+          await prisma.finance_accounts.update({ where: { id: account.id }, data: { included: false } });
+        }
       }
 
       let opaque = decodeConnectionData(connection.session_id_enc);
@@ -180,6 +194,12 @@ export async function syncYaxiEveryone() {
       users.add(userId);
     } catch (error) {
       result.errors++;
+      // Show only a safe class of error to the user, never bank identifiers or payloads.
+      const errorName = error instanceof Error ? error.name : "Error";
+      result.errorMessages.push(
+        /Ticket|AccessExceeded|Interrupt|NotFound|Provider|Connection|Unauthorized/.test(errorName)
+          ? errorName : "No se pudo consultar el banco",
+      );
       // Never log encrypted consent, bank account identifiers or raw provider responses.
       console.error("[finance] YAXI sync", {
         code: error instanceof Error ? error.name : "unknown",
@@ -191,4 +211,14 @@ export async function syncYaxiEveryone() {
     await classifyPending(userId, { useAi: false }).catch(() => undefined);
   }
   return result;
+}
+
+/** Initial sync for a newly authorized bank, or a bounded user retry. */
+export async function syncYaxiConnection(userId: string, bank: string) {
+  if (!/^yaxi:connection-[a-f0-9-]{36}$/i.test(bank)) throw new Error("Banco no válido");
+  return syncYaxiConnections({ userId, bank });
+}
+
+export async function syncYaxiEveryone() {
+  return syncYaxiConnections();
 }

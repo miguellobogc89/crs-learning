@@ -66,6 +66,25 @@ export function AccountsPanel() {
     }
   };
 
+  const syncYaxi = async (bank: string) => {
+    setBusy(bank);
+    setErr(null);
+    try {
+      const response = await fetch("/api/finance/banks/yaxi/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bank }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "No se pudo actualizar el banco");
+      refreshFinance();
+    } catch (e) {
+      setErr(errorText(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const disconnectBank = async (bank: string) => {
     if (!window.confirm(bank.startsWith("yaxi:")
       ? "¿Dejar de sincronizar este banco? Se elimina el acceso guardado en CRS Finance, pero el consentimiento puede seguir vigente en el banco. Los movimientos guardados se conservan."
@@ -103,6 +122,13 @@ export function AccountsPanel() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-slate-900">{account.name}{account.ibanLast4 ? <span className="font-normal text-slate-400"> · •••• {account.ibanLast4}</span> : null}</span>
                   <span className="block text-xs text-slate-500">{account.source === "import" ? "Importada" : account.bank?.startsWith("yaxi:") ? "Conexión bancaria" : account.bank} · {account.count} movimientos{account.since ? ` desde el ${longDay(account.since)}` : ""}{account.bank?.startsWith("yaxi:") ? account.lastSyncedAt ? ` · Actualizada ${new Date(account.lastSyncedAt).toLocaleString("es-ES", { timeZone: "Europe/Madrid", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : " · Primera actualización pendiente" : ""}</span>
+                  {account.bank?.startsWith("yaxi:") && !account.lastSyncedAt && (
+                    <button type="button" onClick={() => void syncYaxi(account.bank!)} disabled={busy === account.bank}
+                      className="mt-2 flex items-center gap-1.5 text-xs font-medium text-blue-700 disabled:opacity-50">
+                      {busy === account.bank ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      Obtener saldo y movimientos
+                    </button>
+                  )}
                   <label className="mt-2 inline-flex items-center gap-2 text-xs text-slate-600" title="Si la excluyes, no cuenta en saldos, gastos ni previsiones">
                     <input type="checkbox" checked={account.included} disabled={busy === account.id} onChange={(e) => void toggleInclude(account.id, e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
                     Incluir en mis finanzas
