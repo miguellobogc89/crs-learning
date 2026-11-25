@@ -125,3 +125,19 @@ Sustituye a los paquetes y al laboratorio. Plan = lista de **grupos** (conjuntos
 - «Te quedan» (Mi plan): la cuenta debe salir del dinero real de las cuentas (saldos), no de una cuenta teórica. Caso real: en noviembre gastó más de lo que cobró, tiró de ahorros y casi los gastó.
 - «Cambiar fecha» de un movimiento: poder elegir el día exacto, no solo el mes.
 - Préstamos entre personas (p. ej. dinero que te presta un familiar y le devuelves): el dinero recibido no es ingreso ni la devolución es gasto; tratarlo aparte. El gasto real es lo que se compra con él.
+
+## Bizums, cuentas compartidas y repartos (25/11/2026, diseño, sin construir)
+- Resolver bien los Bizums es clave. En cada Bizum o transferencia con otra persona (no en compras), una pregunta de un toque «¿Qué es?»:
+  - Entrando: Mi parte de una cuenta · Me lo prestan · Me devuelven un préstamo · Un regalo · Otro.
+  - Saliendo: Pago mi parte o un gasto · Le presto · Le devuelvo un préstamo · Un regalo.
+- Si hay que enlazarlo, una lista con lo que encaja, lo más probable arriba y ya marcado, y siempre «Ninguno de estos»:
+  - «Mi parte de una cuenta»: pagos recientes que se suelen compartir (restaurantes, súper, viajes, entradas) y mayores que el Bizum.
+  - «Me devuelven un préstamo»: lo que te deben y el efectivo que sacaste.
+  - Objetivo: dos toques en el caso normal. Si las sugerencias fallan es más lento que Fintonic, así que acertar la primera es lo que más importa.
+- Resultado del emparejamiento: «Cena 100 € · tu parte 25 €»; en tus gastos cuenta tu parte; los Bizums enlazados no son ingreso.
+- Además, como Fintonic (para lo que el emparejamiento no resuelve: efectivo en mano, «ya me lo dará»…):
+  - «Tu parte»: el importe del banco sigue visible y aparte se pone cuánto era tuyo.
+  - Dividir un cargo: en varias categorías (60 € ropa + 40 € comida) y/o dejar una parte sin imputar (cena de 50 € a medias, me dan 25 € en mano: 25 € no cuentan).
+- Las dos vías (emparejar y editar a mano) acaban en lo mismo: lo que cuenta es tu parte. Dejar el modelo abierto a estos casos.
+- Antes de construir: maqueta en el laboratorio con Bizums reales.
+- Ya hecho (25/11): préstamo temporal en el detalle (interruptor + «¿Quién te lo presta?», «Le debes X a…», «¿Es la devolución?»). Se sustituirá por el «¿Qué es?» de arriba.
