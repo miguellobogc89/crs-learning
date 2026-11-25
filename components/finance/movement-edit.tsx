@@ -7,6 +7,7 @@ import { SELECTABLE_CATEGORIES, KIND_LABEL, categoryOf, type Kind } from "@/lib/
 import { eur } from "@/components/trading/format";
 import { Pill } from "@/components/trading/ui";
 import { shortDay } from "./api";
+import { MerchantLogo } from "./merchant-logo";
 import { CategoryIcon } from "./category-icon";
 
 export type List = Awaited<ReturnType<typeof listTransactions>>;
@@ -48,7 +49,7 @@ export const categoriesFor = (kind: Kind) =>
 export function MovementRowButton({ t, onClick }: { t: Item; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-70">
-      <CategoryIcon category={t.kind === "interna" ? "transferencia_interna" : t.category} />
+      {t.kind === "interna" ? <CategoryIcon category="transferencia_interna" /> : <MerchantLogo domain={t.logo} category={t.category} />}
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           {isReview(t) && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-600" aria-label="Por revisar" />}

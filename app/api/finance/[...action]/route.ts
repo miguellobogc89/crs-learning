@@ -12,6 +12,7 @@ import { conceptKey } from "@/lib/finance/plan";
 import { disconnectGmail, gmailView, syncGmail } from "@/lib/finance/gmail";
 import { ask, chatHistory, clearChat } from "@/lib/finance/copilot";
 import { getMemory, getRules, getSettings } from "@/lib/finance/store";
+import { resolveLogos } from "@/lib/finance/logos";
 import { LAB_PROFILES, labEmail, labProfile } from "@/lib/finance/lab-data";
 import { proposeSavingsPlan, savingsFacts, type SavingsGoal } from "@/lib/finance/savings-plan";
 
@@ -200,6 +201,10 @@ export async function POST(req: Request, route: RouteContext) {
       const undo = body.undo as Parameters<typeof undoSimilar>[1] | undefined;
       if (!undo || !Array.isArray(undo.rows)) return fail("Nada que deshacer");
       return ok(await undoSimilar(uid, undo));
+    }
+    if (action === "logos/resolve") {
+      // Logos de comercios: la IA traduce los comercios aún no mirados a la web de su marca (se guarda para todos).
+      return ok(await resolveLogos(uid));
     }
     if (action === "transaction/imputed") {
       // «Cambiar fecha»: mes al que se imputa el gasto (null = el del cargo). No toca la fecha real del cargo.

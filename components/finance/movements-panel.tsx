@@ -9,6 +9,7 @@ import type { listTransactions } from "@/lib/finance/service";
 import { SELECTABLE_CATEGORIES, KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur, panel, th } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
+import { useResolveLogos } from "./merchant-logo";
 import { MovementDetailSheet } from "./movement-detail";
 import { PlannedList } from "./planned";
 import { Amount, CategoryPill, MovementRowButton, categoriesFor, isReview, label, type Item, type List } from "./movement-edit";
@@ -192,6 +193,7 @@ function Check({ checked, partial = false, onChange, label: aria }: { checked: b
 }
 
 export function MovementsPanel() {
+  useResolveLogos();
   const params = useSearchParams();
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("all");

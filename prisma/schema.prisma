@@ -2968,3 +2968,11 @@ model finance_alert_dismissals {
 
   @@id([user_id, key])
 }
+
+/// CRS Finance: web de cada comercio conocido (Netflix → netflix.com) para su logo. Común a todos los usuarios.
+/// domain null = no es una marca reconocible (25/11/2026).
+model finance_merchant_logos {
+  merchant_key String   @id
+  domain       String?
+  checked_at   DateTime @default(now()) @db.Timestamptz(6)
+}

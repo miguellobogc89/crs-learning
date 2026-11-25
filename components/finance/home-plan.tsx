@@ -14,6 +14,7 @@ import { card, eur, flat } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
 import { useFinance } from "./api";
+import { MerchantLogo } from "./merchant-logo";
 import { CategoryIcon } from "./category-icon";
 import { AddExpenseSheet, type Planned } from "./planned";
 
@@ -31,6 +32,7 @@ type Plan = {
   pending?: NextItem[];
   cancelledNow?: Cancel[];
   loans?: { key: string; name: string; owed: number }[];
+  lineLogo?: Record<string, string>;
   next?: { cycle: { start: string; end: string; label: string }; items: NextItem[]; cancelled: Cancel[] };
 };
 // Lo que Inicio recuerda en esta sesión al ir a una hoja y volver: el mes que se miraba y, de cada mes, qué grupo
@@ -124,7 +126,7 @@ const countText = (n: number) => (n ? `${n} ${n === 1 ? "gasto comprometido" : "
 const goneText = (gone: Cancel[]) => `${gone.length === 1 ? "1 cancelado" : `${gone.length} cancelados`}, −${eur(gone.reduce((t, c) => t + c.amount, 0), 2)}`;
 
 /** Una línea del desplegable y, debajo, lo cancelado de esa línea (gris, tachado, el ahorro en verde). */
-function LineRow({ l, mode, onOpen }: { l: Line; mode: Mode; onOpen: () => void }) {
+function LineRow({ l, mode, onOpen, logo }: { l: Line; mode: Mode; onOpen: () => void; logo?: string }) {
   const active = mode === "next" ? l.count > 0 : l.now > 0 || l.pending > 0;
   const d = mode !== "next" && l.prev !== null ? deviationOf(l.now, l.prev) : null;
   const blue = mode === "now" && l.now <= 0 && l.pending > 0;
@@ -132,6 +134,7 @@ function LineRow({ l, mode, onOpen }: { l: Line; mode: Mode; onOpen: () => void 
     <li>
       {active && (
         <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 py-2.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
+          <MerchantLogo domain={logo} category={l.cat} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm text-slate-800">{l.label}</span>
             {mode === "next" ? <span className="block truncate text-xs text-slate-500">{countText(l.count)}</span>
@@ -170,7 +173,7 @@ function LineRow({ l, mode, onOpen }: { l: Line; mode: Mode; onOpen: () => void 
 const OTHER_CATS = ["otros_gastos", "sin_clasificar"];
 
 /** Una categoría fuera de tus grupos: su gasto (o lo comprometido) y, al tocarla, su hoja en ese mes. */
-function LooseRow({ l, mode, onOpen, muted = false, dot }: { l: Line; mode: Mode; onOpen: () => void; muted?: boolean; dot?: string }) {
+function LooseRow({ l, mode, onOpen, muted = false, dot, logo }: { l: Line; mode: Mode; onOpen: () => void; muted?: boolean; dot?: string; logo?: string }) {
   const blue = mode === "now" && l.now <= 0 && l.pending > 0;
   const amount = mode === "next" ? l.committed : blue ? l.pending : l.now;
   const sub = mode === "next" ? countText(l.count)
@@ -181,7 +184,7 @@ function LooseRow({ l, mode, onOpen, muted = false, dot }: { l: Line; mode: Mode
   return (
     <li>
       <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
-        <span className={muted ? "opacity-60 grayscale" : ""}><CategoryIcon category={l.cat} /></span>
+        <span className={muted ? "opacity-60 grayscale" : ""}><MerchantLogo domain={muted ? null : logo} category={l.cat} /></span>
         <span className="min-w-0 flex-1">
           <span className={`flex items-center gap-2 truncate text-[15px] font-semibold ${muted ? "text-slate-500" : "text-slate-900"}`}>{dot && <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: dot }} aria-hidden="true" />}{l.label}</span>
           <span className={`block truncate text-xs ${l.pending > 0 && mode === "now" ? "text-blue-700" : "text-slate-500"}`}>
@@ -305,7 +308,7 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
                 <div className="overflow-hidden" inert={!isOpen}>
                   <div className={`mb-3 ${ind}`}>
                     <ul>
-                      {lines.map((l) => <LineRow key={l.key} l={l} mode={mode} onOpen={() => toSheet(g.id, lineTarget(l))} />)}
+                      {lines.map((l) => <LineRow key={l.key} l={l} mode={mode} onOpen={() => toSheet(g.id, lineTarget(l))} logo={plan.lineLogo?.[l.key]} />)}
                       {!lines.length && <li className="py-2.5 text-sm text-slate-500">{mode === "now" ? "Sin gastos este mes." : "Nada comprometido todavía."}</li>}
                     </ul>
                     {extras > 0 && <Link href="/finanzas/extraordinarios" className="amount block pb-1 text-xs text-slate-500 hover:text-slate-700">Además, {eur(extras, 2)} en extraordinarios, aparte. <span className="font-medium text-blue-700">Verlos ›</span></Link>}
@@ -319,7 +322,7 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
           );
         })}
         {/* En Inicio, las categorías sin grupo van en la misma lista que los grupos, sin título aparte. */}
-        {section && loose.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} />)}
+        {section && loose.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} logo={plan.lineLogo?.[l.key]} />)}
       </ul>
 
       {!section && loose.length > 0 && (

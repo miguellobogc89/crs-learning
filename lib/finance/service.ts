@@ -11,6 +11,7 @@ import {
 import { getAccounts, getBudgets, getDismissed, getForecastItems, getSettings, getWishlist, loadTxs } from "./store";
 import { budgetMovements, budgetWeeks, conceptKey, detectIncome, detectIncomeAccount, detectedFixedMonthly, planBalance, planBudgetStatus, goalStatus, isPackageCharge, subKey, type GroupCycleTotals, planInsights, packageOwners, packageSpend, transferPlan, unclassifiedFor, wishStatus } from "./plan";
 import { AUTO_SYNC_HOURS } from "./sync";
+import { domainsFor } from "./logos";
 import { zombies } from "./gmail";
 
 const HISTORY_CYCLES = 12;
@@ -283,6 +284,8 @@ export async function listTransactions(userId: string, opts: { all?: boolean } =
   const period = resolvePeriod(view, ctx.today, ctx.startDay, oldest);
   const rule: CycleRule = view.unit === "mes" ? 1 : ctx.startDay;
   const rows = all.filter((t) => !accById.get(t.accountId)?.hidden && (opts.all || (t.date >= period.from && t.date <= period.to)));
+  // Logo de cada comercio conocido (su web), si ya se ha resuelto.
+  const logos = await domainsFor(rows.map((t) => merchantKey(t.description, t.counterparty)));
   // Tramo (ciclo o mes) de cada fecha, calculado una vez por fecha distinta.
   const bucketOf = new Map<string, string>();
   const bucketLabels: Record<string, string> = {};
@@ -316,6 +319,7 @@ export async function listTransactions(userId: string, opts: { all?: boolean } =
         bucket: bucketOf.get(t.date) ?? t.date,
         // Mes (de nómina) del cargo y, si se cambió la fecha, el mes en que cuenta: lo que enseña «Cambiar fecha».
         cycleStart: cycleFor(t.date, ctx.startDay).start,
+        logo: t.kind === "interna" ? null : logos.get(merchantKey(t.description, t.counterparty)) ?? null,
         imputedCycle: t.imputedDate ? cycleFor(t.imputedDate, ctx.startDay).start : null,
       };
     }),
@@ -712,7 +716,22 @@ export async function planView(userId: string) {
   // Lo que has cobrado de verdad este mes (ingresos ordinarios: nómina, intereses…; no regalos ni devoluciones).
   const incomeNow = round2(ctx.txs.filter((t) => t.kind === "ingreso" && t.amount > 0 && t.date >= current.start && t.date <= current.end).reduce((x, t) => x + t.amount, 0));
   const savingsGoal = ctx.projection.savingsGoal;
+  // Logo de cada línea de Inicio (categoría, o categoría y subcategoría) cuando en los últimos meses todo viene de un
+  // solo comercio conocido (la luz de Endesa, el móvil de Movistar): clave «categoría/subcategoría» o «categoría/*».
+  const lineMerchants = new Map<string, Set<string>>();
+  const addLine = (k: string, m: string) => { const s = lineMerchants.get(k) ?? new Set<string>(); s.add(m); lineMerchants.set(k, s); };
+  const since = addDays(ctx.today, -120);
+  for (const t of ctx.txs) {
+    if (t.date < since || !isPackageCharge(t)) continue;
+    const m = merchantKey(t.description, t.counterparty);
+    addLine(`${t.category}/*`, m); addLine(`${t.category}/${t.subcategory ?? ""}`, m);
+  }
+  for (const r of ctx.recurring) if (r.amount < 0 && r.active) { addLine(`${r.category}/*`, r.key); addLine(`${r.category}/${r.subcategory ?? ""}`, r.key); }
+  const lineDomains = await domainsFor([...lineMerchants.values()].flatMap((s) => [...s]));
+  const lineLogo: Record<string, string> = {};
+  for (const [k, s] of lineMerchants) if (s.size === 1) { const d = lineDomains.get([...s][0]); if (d) lineLogo[k] = d; }
   return {
+    lineLogo,
     hasAccounts: ctx.accounts.length > 0,
     hasData: ctx.txs.length > 0,
     cycle: { ...current, day, totalDays },

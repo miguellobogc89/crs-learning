@@ -20,6 +20,7 @@ import { SavingsGoalSheet, type MonthSaving } from "./savings-goal-sheet";
 import Link from "next/link";
 import { CategoryIcon } from "./category-icon";
 import { useMonthSwipe } from "./use-month-swipe";
+import { useResolveLogos } from "./merchant-logo";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Kind = "prev" | "cur" | "next";
@@ -347,6 +348,7 @@ function keepInPlace(el: HTMLElement | null | undefined) {
 export function LeftToSpend() {
   const { data, error } = useFinance<Plan>("plan");
   const router = useRouter();
+  useResolveLogos();
   const [page, setPage] = useState(1);
   // Pestaña de debajo del aro (Ingreso, Gastado o Ahorro): cambia el contenido con un fundido; el aro no cambia.
   const [tab, setTab] = useState<Tab>("g");
