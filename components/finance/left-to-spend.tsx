@@ -117,7 +117,8 @@ function CommittedPicker({ x }: { x: Ctx }) {
   );
 }
 
-function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: number; kind: Kind; day: number; days: number; waiting: boolean; x: Ctx }) {
+/** Un mes: «arc» es el aro (lo que se desliza); «detail», el desglose de debajo (cambia con un fundido). */
+function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; saving: number; kind: Kind; day: number; days: number; waiting: boolean; x: Ctx; part: "arc" | "detail" }) {
   const [editing, setEditing] = useState(false);
   const s = stateOf(m, saving, kind, day, days);
   const isCur = kind === "cur";
@@ -175,7 +176,8 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
   const name = monthOf(m.start);
   const monthLow = (name || m.label).toLowerCase();
   return (
-    <div className={`rounded-2xl p-3 ${isCur ? "border-2 border-[#3478f6] bg-white" : "bg-slate-50"}`}>
+    part === "arc" ? (
+    <div>
       <p className={`flex px-1 ${kind === "prev" ? "justify-start" : isCur ? "justify-center" : "justify-end"}`}>
         {isCur ? <span className="rounded-full bg-[#3478f6] px-3 py-1 text-xs font-semibold text-white">{name || m.label}</span>
           : <span className="py-1 text-sm font-semibold text-slate-500">{name || m.label}</span>}
@@ -198,12 +200,9 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
           </>}
         </g>
       </svg>
-      <div className="my-4 flex items-center justify-center gap-2">
-        {(["prev", "cur", "next"] as Kind[]).map((k, i) => (
-          <button key={k} type="button" aria-label={k === "prev" ? "Mes anterior" : k === "cur" ? "Este mes" : "Próximo mes"} aria-current={k === kind}
-            onClick={() => x.goTo(i)} className={`h-2 rounded-full transition-all ${k === kind ? "w-5 bg-slate-700" : "w-2 bg-slate-300"}`} />
-        ))}
-      </div>
+    </div>
+    ) : (
+    <div>
       {waiting && <p className="amount mb-2 text-center text-sm text-slate-600">Tu nómina de este mes aún no ha entrado: cuento con lo que sueles cobrar ({eur(s.income, 0)}).</p>}
 
       <ul className="divide-y divide-slate-100 border-t border-slate-100">
@@ -242,6 +241,7 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
         </Block>
       </ul>
     </div>
+    )
   );
 }
 
@@ -271,6 +271,9 @@ export function LeftToSpend() {
   const pager = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [page, setPage] = useState(1);
+  // El desglose de debajo va con un pequeño retraso: se desvanece el del mes que dejas y aparece el nuevo.
+  const [shown, setShown] = useState(1);
+  useEffect(() => { if (shown === page) return; const t = window.setTimeout(() => setShown(page), 150); return () => window.clearTimeout(t); }, [page, shown]);
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<Record<string, boolean>>({});
@@ -288,6 +291,7 @@ export function LeftToSpend() {
     if (!data || restored) return;
     const p = Math.min(2, Math.max(0, Number(store.get(KEY.page) ?? 1)));
     setPage(p);
+    setShown(p);
     setOpenId(store.get(KEY.open));
     try { setBlocks(JSON.parse(store.get(KEY.blocks) ?? "{}")); } catch { /* ignorar */ }
     const el = pager.current;
@@ -383,10 +387,24 @@ export function LeftToSpend() {
         className="flex snap-x snap-mandatory items-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {pages.map(([k, m]) => (
           <div key={k} className="w-full shrink-0 snap-start snap-always px-1">
-            <Gauge m={m} saving={savingOf(m)} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={x} />
+            <Gauge part="arc" m={m} saving={savingOf(m)} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={x} />
           </div>
         ))}
       </div>
+      <div className="my-4 flex items-center justify-center gap-2">
+        {pages.map(([k], i) => (
+          <button key={k} type="button" aria-label={k === "prev" ? "Mes anterior" : k === "cur" ? "Este mes" : "Próximo mes"} aria-current={page === i}
+            onClick={() => x.goTo(i)} className={`h-2 rounded-full transition-all duration-300 ${page === i ? "w-5 bg-slate-700" : "w-2 bg-slate-300"}`} />
+        ))}
+      </div>
+      {(() => {
+        const [k, m] = pages[shown];
+        return (
+          <div className="px-1 transition-opacity duration-150 ease-out motion-reduce:transition-none" style={{ opacity: shown === page ? 1 : 0 }}>
+            <Gauge part="detail" m={m} saving={savingOf(m)} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={x} />
+          </div>
+        );
+      })()}
 
     </div>
   );
