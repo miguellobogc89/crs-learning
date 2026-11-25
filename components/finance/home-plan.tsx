@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, ChevronRight, Plus } from "lucide-react";
+import { CalendarClock, ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { categoryLabel } from "@/lib/finance/categories";
 import { cumulative, deviationOf, groupSummary, isGradual, subKey, type GroupCycleTotals } from "@/lib/finance/plan";
 import { card, eur, flat } from "@/components/trading/format";
@@ -245,7 +245,9 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
   ]);
   const looseLines = [...candidates].filter((c) => !inGroups.has(c))
     .flatMap((c) => linesOf(plan, [c], mode, false));
+  const shownAmount = (l: Line) => (mode === "next" ? l.committed : l.now > 0 ? l.now : l.pending);
   const loose = looseLines.filter((l) => !OTHER_CATS.includes(l.cat))
+    .filter((l) => !section || shownAmount(l) > 0)
     .filter((l) => !section || (section.kind === "committed") === section.cats.has(l.cat))
     .sort((a, b) => (mode === "now" ? b.now + b.pending - (a.now + a.pending) : b.committed - a.committed));
   const others = section?.kind === "committed" ? [] : looseLines.filter((l) => OTHER_CATS.includes(l.cat));
@@ -296,6 +298,7 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
                   </b>
                   <span className="amount block text-[11px] tabular-nums text-slate-500">{g.goal !== null ? `de ${eur(g.goal, 0)}` : mode === "now" && avgMonth > 0 ? `~${eur(avgMonth, 0)} al mes` : ""}</span>
                 </span>
+                {section && <ChevronDown className={`h-4 w-4 shrink-0 text-slate-300 transition-transform ${isOpen ? "rotate-180" : ""}`} aria-hidden="true" />}
               </button>
 
               <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
@@ -315,13 +318,15 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
             </li>
           );
         })}
+        {/* En Inicio, las categorías sin grupo van en la misma lista que los grupos, sin título aparte. */}
+        {section && loose.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} />)}
       </ul>
 
-      {loose.length > 0 && (
+      {!section && loose.length > 0 && (
         <>
-          {section?.kind !== "committed" && <h3 className="mt-4 text-sm font-medium text-slate-500">Sin grupo</h3>}
+          <h3 className="mt-4 text-sm font-medium text-slate-500">Sin grupo</h3>
           <ul className="mt-1 divide-y divide-slate-100">
-            {loose.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} dot={section ? colorOf?.(`cat:${l.cat}`) : undefined} />)}
+            {loose.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} />)}
           </ul>
         </>
       )}
