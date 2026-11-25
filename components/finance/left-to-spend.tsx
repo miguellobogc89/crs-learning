@@ -20,7 +20,7 @@ import { CategoryIcon } from "./category-icon";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Kind = "prev" | "cur" | "next";
-type Cycle = { label: string; income: number; fixed: number; spent: number; carry: number | null; byCat: Record<string, number>; pending: Record<string, number> };
+type Cycle = { label: string; start?: string; income: number; fixed: number; spent: number; carry: number | null; byCat: Record<string, number>; pending: Record<string, number> };
 
 // Paleta armónica con el azul de la app (#3478f6).
 const C = { fixed: "#9aaccb", spent: "#f59f8b", free: "#4cc38a", saving: "#3478f6", over: "#dc2626", track: "#b9d2fd" };
@@ -34,6 +34,20 @@ const arc = (r: number, f0: number, f1: number) => {
 const GROUP_COLORS = ["#f59f8b", "#f6c177", "#f4a7c0", "#b8a4f4", "#7fd1c7", "#e3c9a8", "#9ccff5", "#c7d98b", "#f2b5a0", "#d6a8e0", "#a8d8b0", "#f7d48a"];
 const OTHER_CATS = ["otros_gastos", "sin_clasificar"];
 const REST_COLOR = "#e8c3b9";
+/** Comprometido: tonos del gris azulado de su bloque. */
+const COMMITTED_COLORS = ["#9aaccb", "#7489b3", "#b9c6de", "#5f78a6", "#cdd6e8", "#8798bf"];
+const monthOf = (d?: string) => { if (!d) return ""; const t = new Date(`${d}T12:00:00`).toLocaleDateString("es-ES", { month: "long" }); return t.charAt(0).toUpperCase() + t.slice(1); };
+type Seg = [number, string];
+/** Dibuja tramos seguidos sobre el arco grande, cada uno en proporción a «total». */
+const drawArc = (segs: Seg[], total: number) => {
+  let f = 0;
+  return segs.filter(([v]) => v > 0).map(([v, c], i) => {
+    const f1 = Math.min(1, f + v / total);
+    const d = arc(R, f + 0.003, Math.max(f + 0.004, f1 - 0.003));
+    f = f1;
+    return <path key={i} d={d} fill="none" stroke={c} strokeWidth={W} />;
+  });
+};
 const SPEND_CATS = SELECTABLE_CATEGORIES.filter((c) => c.kind === "gasto");
 const sum = (o: Record<string, number>, keys: Iterable<string>) => { let t = 0; for (const k of keys) t += o[k] ?? 0; return t; };
 
@@ -111,29 +125,38 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
   const s = stateOf(m, saving, kind, day, days);
   const isCur = kind === "cur";
   const total = Math.max(1, s.income);
-  // Lo gastado, repartido por grupo con su color (lo que va sin grupo, extraordinarios y previstos, en uno neutro).
-  // Solo con «Gastado» abierto; cerrado, lo gastado va en un único color.
-  const spentOpen = x.blocks[`${kind}:g`] ?? kind !== "prev";
+  // Bloque abierto (uno a la vez): el aro pasa a mostrar solo ese bloque, repartido por sus grupos.
+  const focus = (["c", "g", "a"] as const).find((b) => x.blocks[`${kind}:${b}`]) ?? null;
+  const groupsOn = x.plan.groups.filter((g) => x.groupsOn.has(g.id));
+  const loneCats = [...x.catsOn].filter((c) => !groupsOn.some((g) => g.categories.includes(c)));
+  const pendingOf = (cats: string[]) => sum(m.pending, cats);
   const spendGroups = x.plan.groups.filter((g) => !x.groupsOn.has(g.id) && g.categories.length);
   const grouped = new Set(x.plan.groups.flatMap((g) => g.categories));
-  const groupsSpent = !spentOpen ? [] : [
-    ...spendGroups.map((g) => ({ v: sum(m.byCat, g.categories.filter((c) => !x.committed.has(c))), c: x.colorOf(g.id) ?? C.spent })),
-    ...Object.keys(m.byCat).filter((c) => !grouped.has(c) && !x.committed.has(c) && !OTHER_CATS.includes(c)).map((c) => ({ v: m.byCat[c] ?? 0, c: x.colorOf(`cat:${c}`) ?? C.spent })),
-  ].filter((g) => g.v > 0);
-  const restSpent = Math.max(0, m.spent - groupsSpent.reduce((t, g) => t + g.v, 0));
+  const spentSegs: Seg[] = [
+    ...spendGroups.map((g) => [sum(m.byCat, g.categories.filter((c) => !x.committed.has(c))), x.colorOf(g.id) ?? C.spent] as Seg),
+    ...Object.keys(m.byCat).filter((c) => !grouped.has(c) && !x.committed.has(c) && !OTHER_CATS.includes(c)).map((c) => [m.byCat[c] ?? 0, x.colorOf(`cat:${c}`) ?? C.spent] as Seg),
+  ].filter(([v]) => v > 0);
+  spentSegs.push([Math.max(0, m.spent - spentSegs.reduce((t, [v]) => t + v, 0)), REST_COLOR]);
+  const fixedSegs: Seg[] = [
+    ...groupsOn.map((g) => [sum(m.byCat, g.categories) + pendingOf(g.categories), x.colorOf(g.id) ?? C.fixed] as Seg),
+    ...loneCats.map((c) => [(m.byCat[c] ?? 0) + (m.pending[c] ?? 0), x.colorOf(`cat:${c}`) ?? C.fixed] as Seg),
+  ].filter(([v]) => v > 0);
+  fixedSegs.push([Math.max(0, m.fixed - fixedSegs.reduce((t, [v]) => t + v, 0)), C.fixed]);
+  const savedLeft = saving - s.ateSaving - s.fromCarry;
+  const savingSegs: Seg[] = [[saving - s.ateSaving, C.saving], [s.ateSaving, C.over], [s.fromCarry, "#991b1b"]];
+
   const room = s.left >= 0 ? m.spent : Math.max(0, total - m.fixed - (saving - s.ateSaving));
-  const k = m.spent > 0 ? room / m.spent : 0;
-  const spentSegs: [number, string][] = [...groupsSpent.map((g) => [g.v * k, g.c] as [number, string]), [restSpent * k, spentOpen ? REST_COLOR : C.spent]];
-  const segs: [number, string][] = s.left >= 0
-    ? [[m.fixed, C.fixed], ...spentSegs, [s.left, C.free], [saving, C.saving]]
-    : [[Math.min(m.fixed, total), C.fixed], ...spentSegs, [saving - s.ateSaving, C.saving]];
-  let f = 0;
-  const paths = segs.filter(([v]) => v > 0).map(([v, c], i) => {
-    const f1 = Math.min(1, f + v / total);
-    const d = arc(R, f + 0.003, Math.max(f + 0.004, f1 - 0.003));
-    f = f1;
-    return <path key={i} d={d} fill="none" stroke={c} strokeWidth={W} />;
-  });
+  const segs: Seg[] = s.left >= 0
+    ? [[m.fixed, C.fixed], [m.spent, C.spent], [s.left, C.free], [saving, C.saving]]
+    : [[Math.min(m.fixed, total), C.fixed], [room, C.spent], [saving - s.ateSaving, C.saving]];
+  const paths = drawArc(segs, total);
+  const focusArc = focus === "c" ? drawArc(fixedSegs, Math.max(1, m.fixed)) : focus === "g" ? drawArc(spentSegs, Math.max(1, m.spent))
+    : focus === "a" ? drawArc(savingSegs, Math.max(1, saving + s.fromCarry)) : null;
+  const pct = (v: number) => (s.income > 0 ? `${Math.round((v / s.income) * 100)} % de lo que cobras` : "");
+  const focusText = focus === "c" ? { t: "Comprometido", v: m.fixed, sub: pct(m.fixed), col: "#0f172a" }
+    : focus === "g" ? { t: kind === "cur" ? "Gastado y previsto" : "Gastado", v: m.spent, sub: pct(m.spent), col: "#0f172a" }
+    : focus === "a" ? { t: "Ahorro", v: savedLeft, sub: s.fromCarry > 0 ? `te has comido ${eur(s.fromCarry, 0)} de lo que tenías` : s.ateSaving > 0 ? `te has comido ${eur(s.ateSaving, 0)}` : "intacto", col: savedLeft < 0 ? "#b91c1c" : "#3478f6" }
+    : null;
   const carry = m.carry ?? 0;
   const carryFrac = carry > 0 && s.fromCarry > 0 ? Math.min(1, s.fromCarry / carry) : 0;
   const daysLeft = Math.max(1, days - day + 1);
@@ -141,65 +164,66 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
   const tone = s.pace === "mal" ? "#b91c1c" : s.pace === "atento" ? "#b45309" : "#15803d";
   const title = kind === "next" ? "Tendrías para gastar" : kind === "prev" ? (s.left >= 0 ? "Te sobró" : "Te pasaste") : s.left >= 0 ? "Te quedan" : "Te has pasado";
   const sub = isCur && s.left > 0 ? `unos ${eur(s.left / daysLeft, 0)} al día` : kind === "next" ? `ahorrando ${eur(saving, 0)}` : s.left < 0 ? (s.fromCarry > 0 ? "tirando de lo que tenías" : "sin ahorro este ciclo") : `y ahorraste ${eur(saving, 0)}`;
-  const say = (() => {
-    if (waiting) return `Tu nómina de este ciclo aún no ha entrado: cuento con lo que sueles cobrar (${eur(s.income, 0)}).`;
-    if (kind === "next") return m.fixed > 0 ? `Ya tienes comprometidos ${eur(m.fixed, 0)} de lo que sueles cobrar.` : "Aún no hay nada comprometido.";
-    if (kind === "prev") return s.left >= 0 ? `Cerraste el ciclo con ${eur(s.left, 0)} sin gastar, además de tu ahorro.` : s.fromCarry > 0 ? `Gastaste ${eur(s.over, 0)} más de lo que podías: tu ahorro y ${eur(s.fromCarry, 0)} de lo que tenías.` : `Te comiste ${eur(s.ateSaving, 0)} de tu ahorro.`;
-    if (s.left < 0) return s.fromCarry > 0 ? `Has gastado todo lo que cobraste y ${eur(s.fromCarry, 0)} de lo que tenías.` : `Te estás comiendo tu ahorro: ${eur(s.ateSaving, 0)} de ${eur(saving, 0)}.`;
-    const perDay = day > 0 ? m.spent / day : 0;
-    const projected = Math.round(s.budget - perDay * days);
-    if (s.pace === "bien") return `Vas ${eur(Math.max(0, Math.round(s.expected - m.spent)), 0)} por debajo de lo que te toca a estas alturas.`;
-    return projected < 0 ? `Vas rápido: a este ritmo te pasarías unos ${eur(-projected, 0)} al final del ciclo.` : `Vas un poco rápido: a este ritmo te quedarían solo ${eur(projected, 0)}.`;
-  })();
 
   // Desglose: comprometido por sus grupos y categorías; gastado por el resto de grupos y lo que va sin grupo.
-  const groupsOn = x.plan.groups.filter((g) => x.groupsOn.has(g.id));
-  const loneCats = [...x.catsOn].filter((c) => !groupsOn.some((g) => g.categories.includes(c)));
   const otherGroups = x.plan.groups.filter((g) => !x.groupsOn.has(g.id) && g.categories.length);
   const inOther = new Set(otherGroups.flatMap((g) => g.categories));
   const looseSpent = Math.max(0, m.spent - sum(m.byCat, [...inOther].filter((c) => !x.committed.has(c))));
-  const pendingOf = (cats: string[]) => sum(m.pending, cats);
 
+  const fade = (on: boolean) => ({ opacity: on ? 1 : 0, transition: "opacity 250ms ease-out" });
+  const name = monthOf(m.start);
   return (
     <div className={`rounded-2xl p-3 ${isCur ? "border-2 border-[#3478f6] bg-white" : "bg-slate-50"}`}>
-      {isCur
-        ? <p className="flex justify-center"><span className="rounded-full bg-[#3478f6] px-3 py-1 text-xs font-semibold text-white">Este ciclo · {m.label}</span></p>
-        : <p className="py-1 text-center text-xs text-slate-500">{kind === "prev" ? "Ciclo anterior" : "Próximo ciclo"} · {m.label}</p>}
-      <svg viewBox="0 0 320 180" className="block h-auto w-full" role="img" aria-label={`${title} ${eur(big, 0)}`}>
-        {paths}
-        {kind !== "next" && carry > 0 && <path d={arc(RO, 0, 1)} fill="none" stroke={C.track} strokeWidth={6} strokeLinecap="round" />}
-        {carryFrac > 0 && <path d={arc(RO, 1 - carryFrac, 1)} fill="none" stroke={C.over} strokeWidth={7} strokeLinecap="round" />}
-        <text x={cx} y={cy - 46} textAnchor="middle" fontSize="13" fill="#64748b">{title}</text>
-        <text x={cx} y={cy - 14} textAnchor="middle" fontSize="32" fontWeight="600" fill={kind === "next" ? "#0f172a" : tone}>{eur(big, 0)}</text>
-        <text x={cx} y={cy + 8} textAnchor="middle" fontSize="13" fill="#64748b">{sub}</text>
+      <p className={`flex px-1 ${kind === "prev" ? "justify-start" : isCur ? "justify-center" : "justify-end"}`}>
+        {isCur ? <span className="rounded-full bg-[#3478f6] px-3 py-1 text-xs font-semibold text-white">{name || m.label}</span>
+          : <span className="py-1 text-sm font-semibold text-slate-500">{name || m.label}</span>}
+      </p>
+      <svg viewBox="0 0 320 180" className="block h-auto w-full" role="img" aria-label={focusText ? `${focusText.t} ${eur(focusText.v, 0)}` : `${title} ${eur(big, 0)}`}>
+        <g style={fade(!focus)}>
+          {paths}
+          {kind !== "next" && carry > 0 && <path d={arc(RO, 0, 1)} fill="none" stroke={C.track} strokeWidth={6} />}
+          {carryFrac > 0 && <path d={arc(RO, 1 - carryFrac, 1)} fill="none" stroke={C.over} strokeWidth={6} />}
+          <text x={cx} y={cy - 46} textAnchor="middle" fontSize="13" fill="#64748b">{title}</text>
+          <text x={cx} y={cy - 14} textAnchor="middle" fontSize="32" fontWeight="600" fill={kind === "next" ? "#0f172a" : tone}>{eur(big, 0)}</text>
+          <text x={cx} y={cy + 8} textAnchor="middle" fontSize="13" fill="#64748b">{sub}</text>
+        </g>
+        <g style={fade(!!focus)}>
+          {focusArc}
+          {focusText && <>
+            <text x={cx} y={cy - 46} textAnchor="middle" fontSize="13" fill="#64748b">{focusText.t}</text>
+            <text x={cx} y={cy - 14} textAnchor="middle" fontSize="32" fontWeight="600" fill={focusText.col}>{eur(focusText.v, 0)}</text>
+            <text x={cx} y={cy + 8} textAnchor="middle" fontSize="13" fill="#64748b">{focusText.sub}</text>
+          </>}
+        </g>
       </svg>
-      <div className="mb-1 flex items-center justify-center gap-2">
+      <div className="my-4 flex items-center justify-center gap-2">
         {(["prev", "cur", "next"] as Kind[]).map((k, i) => (
           <button key={k} type="button" aria-label={k === "prev" ? "Ciclo anterior" : k === "cur" ? "Este ciclo" : "Próximo ciclo"} aria-current={k === kind}
             onClick={() => x.goTo(i)} className={`h-2 rounded-full transition-all ${k === kind ? "w-5 bg-slate-700" : "w-2 bg-slate-300"}`} />
         ))}
       </div>
-      <p className="amount mt-2 text-center text-sm text-slate-600">{say}</p>
+      {waiting && <p className="amount mb-2 text-center text-sm text-slate-600">Tu nómina de este ciclo aún no ha entrado: cuento con lo que sueles cobrar ({eur(s.income, 0)}).</p>}
 
-      <ul className="mt-3 divide-y divide-slate-100 border-t border-slate-100">
-        <Block color={C.fixed} title="Comprometido" amount={m.fixed} open={x.blocks[`${kind}:c`] ?? false} onToggle={() => x.toggleBlock(`${kind}:c`)}>
+      <ul className="divide-y divide-slate-100 border-t border-slate-100">
+        <Block color={C.fixed} title="Comprometido" amount={m.fixed} open={focus === "c"} onToggle={() => x.toggleBlock(`${kind}:c`)}>
           {!groupsOn.length && !loneCats.length && <p className="py-1 text-sm text-slate-500">Todavía no hay gastos asignados. Añade los que se pagan cada mes: hipoteca, recibos, préstamos, suscripciones…</p>}
           {(groupsOn.length > 0 || loneCats.length > 0) && (
-            <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : kind === "prev" ? "prev" : "now"} {...x.list} section={{ kind: "committed", groupIds: x.groupsOn, cats: x.catsOn }} />
+            <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : kind === "prev" ? "prev" : "now"} {...x.list} section={{ kind: "committed", groupIds: x.groupsOn, cats: x.catsOn }} colorOf={x.colorOf} />
           )}
           <button type="button" onClick={() => setEditing((e) => !e)} className="mt-1 inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-blue-700">
             {x.busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{editing ? "Listo" : groupsOn.length || loneCats.length ? "Añadir o quitar" : "Añadir"}
           </button>
           {editing && <CommittedPicker x={x} />}
         </Block>
-        <Block color={C.spent} title={kind === "cur" ? "Gastado y previsto" : "Gastado"} amount={m.spent} open={x.blocks[`${kind}:g`] ?? kind !== "prev"} onToggle={() => x.toggleBlock(`${kind}:g`)}>
+        <Block color={C.spent} title={kind === "cur" ? "Gastado y previsto" : "Gastado"} amount={m.spent} open={focus === "g"} onToggle={() => x.toggleBlock(`${kind}:g`)}>
           <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : kind === "prev" ? "prev" : "now"} {...x.list} section={{ kind: "spent", groupIds: x.groupsOn, cats: x.committed }} colorOf={x.colorOf} />
           {m.spent <= 0 && kind !== "next" && <p className="py-1 text-sm text-slate-500">Nada todavía.</p>}
         </Block>
-        <Block color={C.saving} title="Ahorro" amount={saving - s.ateSaving} danger={s.ateSaving > 0} open={x.blocks[`${kind}:a`] ?? false} onToggle={() => x.toggleBlock(`${kind}:a`)}>
+        <Block color={C.saving} title="Ahorro" amount={savedLeft} danger={s.ateSaving > 0} open={focus === "a"} onToggle={() => x.toggleBlock(`${kind}:a`)}>
           <p className="py-1 text-sm text-slate-600">
-            Tu objetivo es {eur(saving, 0)} por ciclo. {s.ateSaving > 0 ? `Te has comido ${eur(s.ateSaving, 0)}.` : "Intacto."}
-            {kind !== "next" && carry > 0 && ` Al empezar tenías ${eur(carry, 0)}${s.fromCarry > 0 ? `, y has tirado de ${eur(s.fromCarry, 0)} (${Math.round(carryFrac * 100)} %)` : ""}.`}
+            Tu objetivo es {eur(saving, 0)} por ciclo. {s.ateSaving > 0 ? `Te has comido ${eur(s.ateSaving, 0)} del ahorro de este ciclo.` : "Intacto."}
+            {s.fromCarry > 0 && ` Y te has comido ${eur(s.fromCarry, 0)} de lo que tenías ahorrado de antes${carry > 0 ? ` (${Math.round(carryFrac * 100)} % de ${eur(carry, 0)})` : ""}.`}
+            {kind !== "next" && carry > 0 && s.fromCarry <= 0 && ` Al empezar tenías ${eur(carry, 0)}.`}
           </p>
           <button type="button" onClick={x.editSaving} className="mt-1 inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-blue-700">
             <Pencil className="h-3.5 w-3.5" />Cambiar objetivo
@@ -286,10 +310,15 @@ export function LeftToSpend() {
   const looseKeys = [...new Set([...(data.history ?? []).flatMap((h) => Object.keys(h.full ?? {})), ...(data.next?.items ?? []).map((i) => i.category)])]
     .filter((c) => !grouped.has(c) && !committed.has(c) && !OTHER_CATS.includes(c)).sort();
   const colorKeys = [...spendGroups.map((g) => g.id), ...looseKeys.map((c) => `cat:${c}`)];
-  const colorOf = (id: string) => { const i = colorKeys.indexOf(id); return i < 0 ? undefined : GROUP_COLORS[i % GROUP_COLORS.length]; };
+  const fixedKeys = [...data.groups.filter((g) => groupsOn.has(g.id)).map((g) => g.id), ...[...catsOn].filter((c) => !data.groups.some((g) => groupsOn.has(g.id) && g.categories.includes(c))).sort().map((c) => `cat:${c}`)];
+  const colorOf = (id: string) => {
+    const f = fixedKeys.indexOf(id); if (f >= 0) return COMMITTED_COLORS[f % COMMITTED_COLORS.length];
+    const i = colorKeys.indexOf(id); return i < 0 ? undefined : GROUP_COLORS[i % GROUP_COLORS.length];
+  };
   const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks, colorOf, editSaving: () => setEditSaving(true),
     goTo: (i: number) => { const el = pager.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); },
-    toggleBlock: (k) => setBlocks((b) => ({ ...b, [k]: !(b[k] ?? (k.endsWith(":g") && !k.startsWith("prev"))) })) };
+    // Un bloque abierto a la vez por ciclo: es el que muestra el aro.
+    toggleBlock: (k) => setBlocks((b) => { const kd = k.split(":")[0]; const was = !!b[k]; return { ...b, [`${kd}:c`]: false, [`${kd}:g`]: false, [`${kd}:a`]: false, [k]: !was }; }) };
 
   // Cada ciclo: lo comprometido son sus grupos y categorías (lo cobrado y, en el actual, lo que falta por cobrar);
   // lo gastado, todo lo demás (con los extraordinarios).
@@ -300,7 +329,7 @@ export function LeftToSpend() {
   const cycleOf = (k: Kind): Cycle => {
     if (k === "next") {
       const fixed = sum(nextByCat, committed);
-      return { label: data.money.next.label, income: data.money.next.income, fixed, spent: 0, carry: null, byCat: nextByCat, pending: {} };
+      return { label: data.money.next.label, start: data.money.next.start, income: data.money.next.income, fixed, spent: 0, carry: null, byCat: nextByCat, pending: {} };
     }
     const mo = k === "prev" ? data.money.prev : data.money.cur;
     const byCat = (k === "prev" ? data.history[1]?.full : data.history[0]?.full) ?? {};
@@ -313,7 +342,7 @@ export function LeftToSpend() {
     // Este ciclo, en «gastado» entra también lo previsto: tus previstos y lo que se repite y no es comprometido.
     const planned = k === "cur" ? (data.planned ?? []).filter((p) => p.date >= data.cycle.start && p.date <= data.cycle.end).reduce((t, p) => t + p.amount, 0)
       + (data.pending ?? []).filter((p) => !committed.has(p.category)).reduce((t, p) => t + p.amount, 0) : 0;
-    return { label: mo.label, income: mo.income, fixed: comp + sum(pending, Object.keys(pending)), spent: Math.max(0, totalSpent - comp) + planned, carry: mo.carry, byCat, pending };
+    return { label: mo.label, start: mo.start, income: mo.income, fixed: comp + sum(pending, Object.keys(pending)), spent: Math.max(0, totalSpent - comp) + planned, carry: mo.carry, byCat, pending };
   };
   const waiting = data.money.cur.income <= 0 && (data.budget.income ?? 0) > 0;
   const cur = cycleOf("cur");

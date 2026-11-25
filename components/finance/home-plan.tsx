@@ -321,7 +321,7 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
         <>
           {section?.kind !== "committed" && <h3 className="mt-4 text-sm font-medium text-slate-500">Sin grupo</h3>}
           <ul className="mt-1 divide-y divide-slate-100">
-            {loose.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} dot={section?.kind === "spent" ? colorOf?.(`cat:${l.cat}`) : undefined} />)}
+            {loose.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} dot={section ? colorOf?.(`cat:${l.cat}`) : undefined} />)}
           </ul>
         </>
       )}
