@@ -141,3 +141,17 @@ Sustituye a los paquetes y al laboratorio. Plan = lista de **grupos** (conjuntos
 - Las dos vías (emparejar y editar a mano) acaban en lo mismo: lo que cuenta es tu parte. Dejar el modelo abierto a estos casos.
 - Antes de construir: maqueta en el laboratorio con Bizums reales.
 - Ya hecho (25/11): préstamo temporal en el detalle (interruptor + «¿Quién te lo presta?», «Le debes X a…», «¿Es la devolución?»). Se sustituirá por el «¿Qué es?» de arriba.
+
+## Ideas de otras apps (25/11/2026, capturas de Emma, Wallet y una app de gastos manuales)
+MVP:
+- «Te quedan» (Mi plan): confirmado por Emma («left to spend», gastado vs comprometido, disponible por día). En vez de barra,
+  un indicador visual: aro (Emma) o medio aro tipo velocímetro, con una marca de dónde deberías ir a estas alturas.
+- Pantalla de suscripciones: todas juntas con logo, importe, próximo cobro y «Cancelar» (ya detectamos lo que se repite
+  y lo cancelado; falta juntarlo).
+- Títulos de bloque como preguntas (Wallet): «¿Estoy gastando menos de lo que gano?», «¿Dónde va mi dinero?».
+Después del MVP:
+- Avisos en el móvil (Emma): «Mañana Netflix te cobrará 15,99 €», «Vas bien con la compra». Al ser web, requiere instalarla.
+- Patrimonio en el tiempo (Emma): cuentas + inversiones + deudas en una cifra con gráfico; enganchar la app de trading
+  (que ya junta los brókers). Diferenciador frente a Fintonic y los bancos.
+- Selector de periodo en gráficos (7 días, 30 días, 12 semanas, 6 meses, 1 año).
+Descartado: índice de crédito (no aplica en España), redondeos (requiere mover dinero), aros de categorías con %.
