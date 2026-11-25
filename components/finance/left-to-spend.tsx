@@ -5,7 +5,7 @@
 // y una línea; debajo, una frase con tu situación y tres bloques desplegables: Comprometido, Gastado y Ahorro.
 // «Comprometido» ya no se adivina: son los grupos y categorías que tú metes en él (lo que se paga cada mes); se
 // guarda de verdad (la marca de los grupos y las categorías de ajustes). Se desliza entre ciclos con imán.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ChevronDown, Loader2, Pencil } from "lucide-react";
 import type { planView } from "@/lib/finance/service";
 import { SELECTABLE_CATEGORIES, categoryHex, categoryLabel } from "@/lib/finance/categories";
@@ -18,6 +18,7 @@ import { GroupsList, type ListProps } from "./home-plan";
 import { SavingsGoalSheet, type MonthSaving } from "./savings-goal-sheet";
 import Link from "next/link";
 import { CategoryIcon } from "./category-icon";
+import { useMonthSwipe } from "./use-month-swipe";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Kind = "prev" | "cur" | "next";
@@ -178,7 +179,8 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
   return (
     part === "arc" ? (
     <div>
-      <p className={`flex px-1 ${kind === "prev" ? "justify-start" : isCur ? "justify-center" : "justify-end"}`}>
+      <p className={`flex items-center gap-3 px-1 ${kind === "prev" ? "justify-start" : isCur ? "justify-center" : "justify-between"}`}>
+        {kind === "next" && <span className="amount text-xs text-slate-500">Ingreso estimado <b className="font-semibold text-slate-700">{eur(s.income, 0)}</b></span>}
         {isCur ? <span className="rounded-full bg-[#3478f6] px-3 py-1 text-xs font-semibold text-white">{name || m.label}</span>
           : <span className="py-1 text-sm font-semibold text-slate-500">{name || m.label}</span>}
       </p>
@@ -268,12 +270,10 @@ function keepInPlace(el: HTMLElement | null | undefined) {
 
 export function LeftToSpend() {
   const { data, error } = useFinance<Plan>("plan");
-  const pager = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [page, setPage] = useState(1);
-  // El desglose de debajo va con un pequeño retraso: se desvanece el del mes que dejas y aparece el nuevo.
-  const [shown, setShown] = useState(1);
-  useEffect(() => { if (shown === page) return; const t = window.setTimeout(() => setShown(page), 150); return () => window.clearTimeout(t); }, [page, shown]);
+  const swipe = useMonthSwipe(page, setPage, 3, !!data);
+  const shown = swipe.shown;
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<Record<string, boolean>>({});
@@ -290,12 +290,9 @@ export function LeftToSpend() {
   useEffect(() => {
     if (!data || restored) return;
     const p = Math.min(2, Math.max(0, Number(store.get(KEY.page) ?? 1)));
-    setPage(p);
-    setShown(p);
+    swipe.jumpTo(p);
     setOpenId(store.get(KEY.open));
     try { setBlocks(JSON.parse(store.get(KEY.blocks) ?? "{}")); } catch { /* ignorar */ }
-    const el = pager.current;
-    if (el) el.scrollLeft = p * el.clientWidth;
     setRestored(true);
     const y = Number(store.get(KEY.scroll));
     store.set(KEY.scroll, null);
@@ -339,7 +336,7 @@ export function LeftToSpend() {
     const g = data.groups.find((x) => x.id === id); return g?.categories[0] ? categoryHex(g.categories[0]) : undefined;
   };
   const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks, colorOf, editSaving: (ms: MonthSaving) => setEditSaving(ms), fixedSaving: data.budget.savingsGoal, savingsByMonth: data.savingsByMonth ?? {},
-    goTo: (i: number) => { const el = pager.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); },
+    goTo: swipe.goTo,
     // Un bloque abierto a la vez por ciclo: es el que muestra el aro.
     toggleBlock: (k, el) => (keepInPlace(el), setBlocks((b) => { const kd = k.split(":")[0]; const was = !!b[k]; return { ...b, [`${kd}:c`]: false, [`${kd}:g`]: false, [`${kd}:a`]: false, [k]: !was }; })) };
 
@@ -380,16 +377,19 @@ export function LeftToSpend() {
   const { day, totalDays } = data.cycle;
 
   return (
-    <div className="pb-4 [overflow-anchor:none]">
+    <div ref={swipe.root} className="pb-4 [overflow-anchor:none]">
       <SavingsGoalSheet open={!!editSaving} onClose={() => setEditSaving(null)} month={editSaving}
         current={editSaving ? data.savingsByMonth?.[editSaving.start] ?? data.budget.savingsGoal : data.budget.savingsGoal} income={data.budget.income} />
-      <div ref={pager} onScroll={(e) => { const el = e.currentTarget; setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
-        className="flex snap-x snap-mandatory items-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {pages.map(([k, m]) => (
-          <div key={k} className="w-full shrink-0 snap-start snap-always px-1">
-            <Gauge part="arc" m={m} saving={savingOf(m)} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={x} />
+      <div data-swipe="arc" className="touch-pan-y overflow-hidden">
+        <div ref={swipe.arcFade}>
+          <div ref={swipe.arcTrack} className="flex items-start will-change-transform">
+            {pages.map(([k, m]) => (
+              <div key={k} className="w-full shrink-0 px-1">
+                <Gauge part="arc" m={m} saving={savingOf(m)} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={x} />
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </div>
       <div className="my-4 flex items-center justify-center gap-2">
         {pages.map(([k], i) => (
@@ -400,8 +400,12 @@ export function LeftToSpend() {
       {(() => {
         const [k, m] = pages[shown];
         return (
-          <div className="px-1 transition-opacity duration-150 ease-out motion-reduce:transition-none" style={{ opacity: shown === page ? 1 : 0 }}>
-            <Gauge part="detail" m={m} saving={savingOf(m)} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={x} />
+          <div data-swipe="list" className="touch-pan-y overflow-x-clip">
+            <div className="transition-opacity duration-150 ease-out motion-reduce:transition-none" style={{ opacity: shown === page ? 1 : 0 }}>
+              <div ref={swipe.list} className="px-1">
+                <Gauge part="detail" m={m} saving={savingOf(m)} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={x} />
+              </div>
+            </div>
           </div>
         );
       })()}
