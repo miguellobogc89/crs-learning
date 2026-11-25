@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Loader2, Pencil } from "lucide-react";
 import type { planView } from "@/lib/finance/service";
-import { SELECTABLE_CATEGORIES, categoryLabel } from "@/lib/finance/categories";
+import { SELECTABLE_CATEGORIES, categoryHex, categoryLabel } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
@@ -20,7 +20,7 @@ import { CategoryIcon } from "./category-icon";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Kind = "prev" | "cur" | "next";
-type Cycle = { label: string; start?: string; income: number; fixed: number; spent: number; carry: number | null; byCat: Record<string, number>; pending: Record<string, number> };
+type Cycle = { label: string; start?: string; planned?: Record<string, number>; income: number; fixed: number; spent: number; carry: number | null; byCat: Record<string, number>; pending: Record<string, number> };
 
 // Paleta armónica con el azul de la app (#3478f6).
 const C = { fixed: "#9aaccb", spent: "#f59f8b", free: "#4cc38a", saving: "#3478f6", over: "#dc2626", track: "#b9d2fd" };
@@ -30,12 +30,8 @@ const arc = (r: number, f0: number, f1: number) => {
   const [x0, y0] = pt(r, f0), [x1, y1] = pt(r, f1);
   return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
 };
-/** Colores de los grupos de gasto (en el aro y junto a su nombre): armónicos con el azul, estables por grupo. */
-const GROUP_COLORS = ["#f59f8b", "#f6c177", "#f4a7c0", "#b8a4f4", "#7fd1c7", "#e3c9a8", "#9ccff5", "#c7d98b", "#f2b5a0", "#d6a8e0", "#a8d8b0", "#f7d48a"];
 const OTHER_CATS = ["otros_gastos", "sin_clasificar"];
 const REST_COLOR = "#e8c3b9";
-/** Comprometido: tonos del gris azulado de su bloque. */
-const COMMITTED_COLORS = ["#9aaccb", "#7489b3", "#b9c6de", "#5f78a6", "#cdd6e8", "#8798bf"];
 const monthOf = (d?: string) => { if (!d) return ""; const t = new Date(`${d}T12:00:00`).toLocaleDateString("es-ES", { month: "long" }); return t.charAt(0).toUpperCase() + t.slice(1); };
 type Seg = [number, string];
 /** Dibuja tramos seguidos sobre el arco grande, cada uno en proporción a «total». */
@@ -64,12 +60,12 @@ function stateOf(m: Cycle, saving: number, kind: Kind, day: number, days: number
 }
 
 type Ctx = { plan: Plan; committed: Set<string>; groupsOn: Set<string>; catsOn: Set<string>; toggleGroup: (id: string) => void; toggleCat: (c: string) => void; busy: boolean; list: Omit<ListProps, "plan">;
-  blocks: Record<string, boolean>; toggleBlock: (key: string) => void; colorOf: (groupId: string) => string | undefined; editSaving: () => void; goTo: (i: number) => void };
+  blocks: Record<string, boolean>; toggleBlock: (key: string, el?: HTMLElement) => void; colorOf: (groupId: string) => string | undefined; editSaving: () => void; goTo: (i: number) => void };
 
-function Block({ color, title, amount, children, danger = false, open, onToggle }: { color: string; title: string; amount: number; children: ReactNode; danger?: boolean; open: boolean; onToggle: () => void }) {
+function Block({ color, title, amount, children, danger = false, open, onToggle }: { color: string; title: string; amount: number; children: ReactNode; danger?: boolean; open: boolean; onToggle: (el: HTMLElement) => void }) {
   return (
     <li>
-      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-3 py-3 text-left">
+      <button type="button" onClick={(e) => onToggle(e.currentTarget)} aria-expanded={open} className="flex w-full items-center gap-3 py-3 text-left">
         <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: color }} />
         <span className="min-w-0 flex-1 text-[15px] font-semibold text-slate-900">{title}</span>
         <b className={`amount shrink-0 text-[15px] font-semibold tabular-nums ${danger ? "text-rose-700" : "text-slate-900"}`}>{eur(amount, 0)}</b>
@@ -132,9 +128,12 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
   const pendingOf = (cats: string[]) => sum(m.pending, cats);
   const spendGroups = x.plan.groups.filter((g) => !x.groupsOn.has(g.id) && g.categories.length);
   const grouped = new Set(x.plan.groups.flatMap((g) => g.categories));
+  // Lo gastado de cada categoría, con lo previsto de este ciclo.
+  const spentByCat: Record<string, number> = { ...m.byCat };
+  for (const [c, v] of Object.entries(m.planned ?? {})) spentByCat[c] = (spentByCat[c] ?? 0) + v;
   const spentSegs: Seg[] = [
-    ...spendGroups.map((g) => [sum(m.byCat, g.categories.filter((c) => !x.committed.has(c))), x.colorOf(g.id) ?? C.spent] as Seg),
-    ...Object.keys(m.byCat).filter((c) => !grouped.has(c) && !x.committed.has(c) && !OTHER_CATS.includes(c)).map((c) => [m.byCat[c] ?? 0, x.colorOf(`cat:${c}`) ?? C.spent] as Seg),
+    ...spendGroups.map((g) => [sum(spentByCat, g.categories.filter((c) => !x.committed.has(c))), x.colorOf(g.id) ?? C.spent] as Seg),
+    ...Object.keys(spentByCat).filter((c) => !grouped.has(c) && !x.committed.has(c) && !OTHER_CATS.includes(c)).map((c) => [spentByCat[c] ?? 0, x.colorOf(`cat:${c}`) ?? C.spent] as Seg),
   ].filter(([v]) => v > 0);
   spentSegs.push([Math.max(0, m.spent - spentSegs.reduce((t, [v]) => t + v, 0)), REST_COLOR]);
   const fixedSegs: Seg[] = [
@@ -205,21 +204,21 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
       {waiting && <p className="amount mb-2 text-center text-sm text-slate-600">Tu nómina de este ciclo aún no ha entrado: cuento con lo que sueles cobrar ({eur(s.income, 0)}).</p>}
 
       <ul className="divide-y divide-slate-100 border-t border-slate-100">
-        <Block color={C.fixed} title="Comprometido" amount={m.fixed} open={focus === "c"} onToggle={() => x.toggleBlock(`${kind}:c`)}>
+        <Block color={C.fixed} title="Comprometido" amount={m.fixed} open={focus === "c"} onToggle={(el) => x.toggleBlock(`${kind}:c`, el)}>
           {!groupsOn.length && !loneCats.length && <p className="py-1 text-sm text-slate-500">Todavía no hay gastos asignados. Añade los que se pagan cada mes: hipoteca, recibos, préstamos, suscripciones…</p>}
           {(groupsOn.length > 0 || loneCats.length > 0) && (
-            <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : kind === "prev" ? "prev" : "now"} {...x.list} section={{ kind: "committed", groupIds: x.groupsOn, cats: x.catsOn }} colorOf={x.colorOf} />
+            <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : kind === "prev" ? "prev" : "now"} {...x.list} section={{ kind: "committed", groupIds: x.groupsOn, cats: x.catsOn }} />
           )}
           <button type="button" onClick={() => setEditing((e) => !e)} className="mt-1 inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-blue-700">
             {x.busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{editing ? "Listo" : groupsOn.length || loneCats.length ? "Añadir o quitar" : "Añadir"}
           </button>
           {editing && <CommittedPicker x={x} />}
         </Block>
-        <Block color={C.spent} title={kind === "cur" ? "Gastado y previsto" : "Gastado"} amount={m.spent} open={focus === "g"} onToggle={() => x.toggleBlock(`${kind}:g`)}>
-          <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : kind === "prev" ? "prev" : "now"} {...x.list} section={{ kind: "spent", groupIds: x.groupsOn, cats: x.committed }} colorOf={x.colorOf} />
+        <Block color={C.spent} title={kind === "cur" ? "Gastado y previsto" : "Gastado"} amount={m.spent} open={focus === "g"} onToggle={(el) => x.toggleBlock(`${kind}:g`, el)}>
+          <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : kind === "prev" ? "prev" : "now"} {...x.list} section={{ kind: "spent", groupIds: x.groupsOn, cats: x.committed }} />
           {m.spent <= 0 && kind !== "next" && <p className="py-1 text-sm text-slate-500">Nada todavía.</p>}
         </Block>
-        <Block color={C.saving} title="Ahorro" amount={savedLeft} danger={s.ateSaving > 0} open={focus === "a"} onToggle={() => x.toggleBlock(`${kind}:a`)}>
+        <Block color={C.saving} title="Ahorro" amount={savedLeft} danger={s.ateSaving > 0} open={focus === "a"} onToggle={(el) => x.toggleBlock(`${kind}:a`, el)}>
           <p className="py-1 text-sm text-slate-600">
             Tu objetivo es {eur(saving, 0)} por ciclo. {s.ateSaving > 0 ? `Te has comido ${eur(s.ateSaving, 0)} del ahorro de este ciclo.` : "Intacto."}
             {s.fromCarry > 0 && ` Y te has comido ${eur(s.fromCarry, 0)} de lo que tenías ahorrado de antes${carry > 0 ? ` (${Math.round(carryFrac * 100)} % de ${eur(carry, 0)})` : ""}.`}
@@ -241,6 +240,19 @@ const store = {
   set: (k: string, v: string | null) => { try { if (v === null) window.sessionStorage.removeItem(k); else window.sessionStorage.setItem(k, v); } catch { /* ignorar */ } },
 };
 const scroller = () => document.querySelector<HTMLElement>("main");
+/** Mientras algo se abre o se cierra, deja quieto lo que has tocado: solo se mueve lo de debajo. */
+function keepInPlace(el: HTMLElement | null | undefined) {
+  const m = scroller();
+  if (!el || !m) return;
+  const top = el.getBoundingClientRect().top;
+  const end = performance.now() + 380;
+  const step = () => {
+    const d = el.getBoundingClientRect().top - top;
+    if (Math.abs(d) > 0.5) m.scrollTop += d;
+    if (performance.now() < end) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
 
 export function LeftToSpend() {
   const { data, error } = useFinance<Plan>("plan");
@@ -294,7 +306,7 @@ export function LeftToSpend() {
   const nextQ = page === 2 ? "mes=siguiente" : "";
   const list: Omit<ListProps, "plan"> = {
     open: openId,
-    toggle: (id) => setOpenId((o) => (o === id ? null : id)),
+    toggle: (id, header) => (keepInPlace(header), setOpenId((o) => (o === id ? null : id))),
     toSheet: (id, t = {}) => {
       store.set(KEY.scroll, String(scroller()?.scrollTop ?? 0));
       const q = new URLSearchParams(nextQ);
@@ -305,20 +317,15 @@ export function LeftToSpend() {
     toCategory: (key) => (store.set(KEY.scroll, String(scroller()?.scrollTop ?? 0)), router.push(`/finanzas/categoria/${encodeURIComponent(key)}${nextQ ? `?${nextQ}` : ""}`)),
   };
   const spendGroups = data.groups.filter((g) => !groupsOn.has(g.id) && g.categories.length);
-  // Colores estables: primero tus grupos de gasto, luego las categorías sin grupo (en orden fijo).
-  const grouped = new Set(data.groups.flatMap((g) => g.categories));
-  const looseKeys = [...new Set([...(data.history ?? []).flatMap((h) => Object.keys(h.full ?? {})), ...(data.next?.items ?? []).map((i) => i.category)])]
-    .filter((c) => !grouped.has(c) && !committed.has(c) && !OTHER_CATS.includes(c)).sort();
-  const colorKeys = [...spendGroups.map((g) => g.id), ...looseKeys.map((c) => `cat:${c}`)];
-  const fixedKeys = [...data.groups.filter((g) => groupsOn.has(g.id)).map((g) => g.id), ...[...catsOn].filter((c) => !data.groups.some((g) => groupsOn.has(g.id) && g.categories.includes(c))).sort().map((c) => `cat:${c}`)];
+  // El color de cada grupo o categoría en el aro es el de su icono.
   const colorOf = (id: string) => {
-    const f = fixedKeys.indexOf(id); if (f >= 0) return COMMITTED_COLORS[f % COMMITTED_COLORS.length];
-    const i = colorKeys.indexOf(id); return i < 0 ? undefined : GROUP_COLORS[i % GROUP_COLORS.length];
+    if (id.startsWith("cat:")) return categoryHex(id.slice(4));
+    const g = data.groups.find((x) => x.id === id); return g?.categories[0] ? categoryHex(g.categories[0]) : undefined;
   };
   const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks, colorOf, editSaving: () => setEditSaving(true),
     goTo: (i: number) => { const el = pager.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); },
     // Un bloque abierto a la vez por ciclo: es el que muestra el aro.
-    toggleBlock: (k) => setBlocks((b) => { const kd = k.split(":")[0]; const was = !!b[k]; return { ...b, [`${kd}:c`]: false, [`${kd}:g`]: false, [`${kd}:a`]: false, [k]: !was }; }) };
+    toggleBlock: (k, el) => (keepInPlace(el), setBlocks((b) => { const kd = k.split(":")[0]; const was = !!b[k]; return { ...b, [`${kd}:c`]: false, [`${kd}:g`]: false, [`${kd}:a`]: false, [k]: !was }; })) };
 
   // Cada ciclo: lo comprometido son sus grupos y categorías (lo cobrado y, en el actual, lo que falta por cobrar);
   // lo gastado, todo lo demás (con los extraordinarios).
@@ -342,7 +349,12 @@ export function LeftToSpend() {
     // Este ciclo, en «gastado» entra también lo previsto: tus previstos y lo que se repite y no es comprometido.
     const planned = k === "cur" ? (data.planned ?? []).filter((p) => p.date >= data.cycle.start && p.date <= data.cycle.end).reduce((t, p) => t + p.amount, 0)
       + (data.pending ?? []).filter((p) => !committed.has(p.category)).reduce((t, p) => t + p.amount, 0) : 0;
-    return { label: mo.label, start: mo.start, income: mo.income, fixed: comp + sum(pending, Object.keys(pending)), spent: Math.max(0, totalSpent - comp) + planned, carry: mo.carry, byCat, pending };
+    const plannedByCat: Record<string, number> = {};
+    if (k === "cur") {
+      for (const p of (data.planned ?? []).filter((p) => p.date >= data.cycle.start && p.date <= data.cycle.end)) plannedByCat[p.category] = (plannedByCat[p.category] ?? 0) + p.amount;
+      for (const p of (data.pending ?? []).filter((p) => !committed.has(p.category))) plannedByCat[p.category] = (plannedByCat[p.category] ?? 0) + p.amount;
+    }
+    return { planned: plannedByCat, label: mo.label, start: mo.start, income: mo.income, fixed: comp + sum(pending, Object.keys(pending)), spent: Math.max(0, totalSpent - comp) + planned, carry: mo.carry, byCat, pending };
   };
   const waiting = data.money.cur.income <= 0 && (data.budget.income ?? 0) > 0;
   const cur = cycleOf("cur");
@@ -352,7 +364,7 @@ export function LeftToSpend() {
   const { day, totalDays } = data.cycle;
 
   return (
-    <div className="pb-4">
+    <div className="pb-4 [overflow-anchor:none]">
       <SavingsGoalSheet open={editSaving} onClose={() => setEditSaving(false)} current={data.budget.savingsGoal} income={data.budget.income} />
       <div ref={pager} onScroll={(e) => { const el = e.currentTarget; setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
         className="flex snap-x snap-mandatory items-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
