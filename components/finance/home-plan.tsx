@@ -79,21 +79,23 @@ type Line = { key: string; cat: string; sub?: string; label: string; now: number
 /** En la URL de la hoja, «Otros» (sin subcategoría). */
 export const OTROS_SUB = "__otros";
 const norm = (s?: string | null) => (s ?? "").trim();
-type Mode = "now" | "next";
+type Mode = "now" | "next" | "prev";
 
 function linesOf(plan: Plan, cats: string[], mode: Mode, split = true): Line[] {
   const cycles = plan.history ?? [];
-  const cur = cycles[0];
-  const last = cycles[1] ?? null;
+  // «prev»: el ciclo anterior, cerrado (lo gastado entero, comparado con el de antes).
+  const cur = mode === "prev" ? cycles[1] : cycles[0];
+  const last = (mode === "prev" ? cycles[2] : cycles[1]) ?? null;
+  const val = (c: GroupCycleTotals | null | undefined, k: string) => (mode === "prev" ? c?.full[k] : c?.atDay[k]) ?? 0;
   const plannedNow = [
     ...(plan.planned ?? []).filter((x) => x.date >= plan.cycle.start && x.date <= plan.cycle.end).map((x) => ({ ...x, subcategory: null as string | null })),
     ...(plan.pending ?? []),
   ];
-  const items = mode === "now" ? plannedNow : plan.next?.items ?? [];
-  const gone: Cancel[] = mode === "now" ? plan.cancelledNow ?? [] : plan.next?.cancelled ?? [];
+  const items = mode === "now" ? plannedNow : mode === "next" ? plan.next?.items ?? [] : [];
+  const gone: Cancel[] = mode === "now" ? plan.cancelledNow ?? [] : mode === "next" ? plan.next?.cancelled ?? [] : [];
   // Una sola categoría: se reparte por subcategorías si hay alguna; si no, una línea con la categoría.
   let units: { cat: string; sub?: string }[] = cats.map((c) => ({ cat: c }));
-  if (cats.length === 1 && split) {
+  if (cats.length === 1 && split && mode !== "prev") {
     const c = cats[0];
     const subs = new Set<string>();
     if (mode === "now") for (const r of [cur?.subAtDay, last?.subAtDay]) for (const k of Object.keys(r ?? {})) if (k.startsWith(`${c}/`) && (r?.[k] ?? 0) > 0) subs.add(k.slice(c.length + 1));
@@ -105,8 +107,8 @@ function linesOf(plan: Plan, cats: string[], mode: Mode, split = true): Line[] {
     const m = match(u);
     const mine = items.filter(m);
     const sum = mine.reduce((t, x) => t + x.amount, 0);
-    const now = u.sub === undefined ? cur?.atDay[u.cat] ?? 0 : cur?.subAtDay?.[subKey(u.cat, u.sub)] ?? 0;
-    const prev = !last ? null : u.sub === undefined ? last.atDay[u.cat] ?? 0 : last.subAtDay?.[subKey(u.cat, u.sub)] ?? 0;
+    const now = u.sub === undefined ? val(cur, u.cat) : cur?.subAtDay?.[subKey(u.cat, u.sub)] ?? 0;
+    const prev = !last ? null : u.sub === undefined ? val(last, u.cat) : last.subAtDay?.[subKey(u.cat, u.sub)] ?? 0;
     return {
       key: `${u.cat}/${u.sub ?? "*"}`, cat: u.cat, sub: u.sub,
       label: u.sub === undefined ? categoryLabel(u.cat) : u.sub || "Otros",
@@ -114,8 +116,8 @@ function linesOf(plan: Plan, cats: string[], mode: Mode, split = true): Line[] {
     };
   })
     // Solo lo que tiene algo este mes (gastado, previsto o cancelado): lo que está a 0 no sale.
-    .filter((l) => (mode === "now" ? l.now > 0 || l.pending > 0 : l.count > 0) || l.gone.length > 0)
-    .sort((a, b) => (mode === "now" ? b.now + b.pending - (a.now + a.pending) : b.committed - a.committed));
+    .filter((l) => (mode === "next" ? l.count > 0 : l.now > 0 || l.pending > 0) || l.gone.length > 0)
+    .sort((a, b) => (mode === "next" ? b.committed - a.committed : b.now + b.pending - (a.now + a.pending)));
 }
 
 const countText = (n: number) => (n ? `${n} ${n === 1 ? "gasto comprometido" : "gastos comprometidos"}` : "Nada comprometido todavía");
@@ -123,8 +125,8 @@ const goneText = (gone: Cancel[]) => `${gone.length === 1 ? "1 cancelado" : `${g
 
 /** Una línea del desplegable y, debajo, lo cancelado de esa línea (gris, tachado, el ahorro en verde). */
 function LineRow({ l, mode, onOpen }: { l: Line; mode: Mode; onOpen: () => void }) {
-  const active = mode === "now" ? l.now > 0 || l.pending > 0 : l.count > 0;
-  const d = mode === "now" && l.prev !== null ? deviationOf(l.now, l.prev) : null;
+  const active = mode === "next" ? l.count > 0 : l.now > 0 || l.pending > 0;
+  const d = mode !== "next" && l.prev !== null ? deviationOf(l.now, l.prev) : null;
   const blue = mode === "now" && l.now <= 0 && l.pending > 0;
   return (
     <li>
@@ -201,7 +203,7 @@ function LooseRow({ l, mode, onOpen, muted = false }: { l: Line; mode: Mode; onO
 /** Para repartir la lista en bloques (laboratorio «Te quedan»): solo lo comprometido o solo lo gastado. */
 export type ListSection = { kind: "committed" | "spent"; groupIds: Set<string>; cats: Set<string> };
 
-export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, section }: ListProps & { mode: Mode; section?: ListSection }) {
+export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, section, colorOf }: ListProps & { mode: Mode; section?: ListSection; colorOf?: (groupId: string) => string | undefined }) {
   const [adding, setAdding] = useState(false);
   const cycles = plan.history ?? [];
   const last = cycles[1] ?? null;
@@ -236,7 +238,7 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
   // app no entiende y lo que no sabes dónde meter), en gris. Una invitación a ordenar, sin avisos.
   const inGroups = new Set(plan.groups.flatMap((g) => g.categories));
   const candidates = new Set<string>([
-    ...Object.keys(cycles[0]?.atDay ?? {}),
+    ...Object.keys((mode === "prev" ? cycles[1]?.full : cycles[0]?.atDay) ?? {}),
     ...(plan.pending ?? []).map((x) => x.category), ...(plan.planned ?? []).map((x) => x.category),
     ...(plan.cancelledNow ?? []).map((x) => x.category),
     ...(next?.items ?? []).map((x) => x.category), ...(next?.cancelled ?? []).map((x) => x.category),
@@ -248,7 +250,7 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
     .sort((a, b) => (mode === "now" ? b.now + b.pending - (a.now + a.pending) : b.committed - a.committed));
   const others = section?.kind === "committed" ? [] : looseLines.filter((l) => OTHER_CATS.includes(l.cat));
   const extrasNow = mode === "now" && section?.kind !== "committed" ? Object.values(plan.totals?.extrasNow ?? {}).reduce((t, x) => t + x, 0) : 0;
-  const ind = section ? "ml-4" : "ml-12";
+  const ind = section ? "ml-1" : "ml-12";
 
   return (
     <div className="pb-2">
@@ -267,6 +269,8 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
           const committed = lines.reduce((t, l) => t + l.committed, 0);
           const count = lines.reduce((t, l) => t + l.count, 0);
           const onlyPending = mode === "now" && s.now <= 0 && pendingSum > 0;
+          const spentPrev = lines.reduce((t, l) => t + l.now, 0);
+          const dot = colorOf?.(g.id);
           const closed = cycles.slice(1, 4);
           const avgMonth = closed.length ? Math.round(closed.reduce((t, c) => t + g.categories.reduce((u, k) => u + (c.full[k] ?? 0), 0), 0) / closed.length) : 0;
           const extras = mode === "now" ? g.categories.reduce((t, c) => t + (plan.totals?.extrasNow?.[c] ?? 0), 0) : 0;
@@ -277,9 +281,9 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
                 className="flex w-full scroll-mt-16 items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
                 <CategoryIcon category={g.categories[0]} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-slate-900">{g.name}</span>
+                  <span className="flex items-center gap-2 truncate text-[15px] font-semibold text-slate-900">{dot && <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: dot }} aria-hidden="true" />}{g.name}</span>
                   <span className="block truncate text-xs text-slate-500">
-                    {mode === "next" ? countText(count)
+                    {mode === "prev" ? "Ciclo cerrado" : mode === "next" ? countText(count)
                       : onlyPending ? <span className="text-blue-700">Pendiente de cobrar</span>
                       : <>{text}{pendingSum > 0 && <span className="text-blue-700"> · {eur(pendingSum, 0)} previsto</span>}</>}
                     {gone.length > 0 && <span className="amount text-emerald-700"> · {goneText(gone)}</span>}
@@ -287,8 +291,8 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
                 </span>
                 {/* Este mes la cifra hace de semáforo: rojo si te has pasado, ámbar si vas rápido, neutro si vas bien. */}
                 <span className="shrink-0 text-right">
-                  <b className={`amount block text-[15px] font-semibold tabular-nums ${mode === "next" ? "text-slate-900" : onlyPending ? "text-blue-700" : pace === "pasado" ? "text-rose-700" : pace === "alto" ? "text-amber-700" : "text-slate-900"}`}>
-                    {eur(mode === "next" ? committed : onlyPending ? pendingSum : s.now, 0)}
+                  <b className={`amount block text-[15px] font-semibold tabular-nums ${mode !== "now" || dot ? "text-slate-900" : onlyPending ? "text-blue-700" : pace === "pasado" ? "text-rose-700" : pace === "alto" ? "text-amber-700" : "text-slate-900"}`}>
+                    {eur(mode === "next" ? committed : mode === "prev" ? spentPrev : onlyPending ? pendingSum : s.now, 0)}
                   </b>
                   <span className="amount block text-[11px] tabular-nums text-slate-500">{g.goal !== null ? `de ${eur(g.goal, 0)}` : mode === "now" && avgMonth > 0 ? `~${eur(avgMonth, 0)} al mes` : ""}</span>
                 </span>
@@ -347,7 +351,7 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
         </p>
       ))}
       {mode === "next" && !section && next && !next.items.length && <p className="py-2 text-sm text-slate-500">Aún no hay nada apuntado para {monthName}. Marca «Se repite» en tus recibos o añade un gasto con fecha de {monthName}.</p>}
-      {section?.kind !== "committed" && (
+      {section?.kind !== "committed" && mode !== "prev" && (
         <button type="button" onClick={() => setAdding(true)} className="mt-1 inline-flex items-center gap-1.5 py-3 text-[15px] font-medium text-blue-600">
           <Plus className="h-5 w-5" /> Añadir gasto
         </button>

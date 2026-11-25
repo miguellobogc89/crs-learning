@@ -30,6 +30,9 @@ const arc = (r: number, f0: number, f1: number) => {
   const [x0, y0] = pt(r, f0), [x1, y1] = pt(r, f1);
   return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
 };
+/** Colores de los grupos de gasto (en el aro y junto a su nombre): armónicos con el azul, estables por grupo. */
+const GROUP_COLORS = ["#f59f8b", "#f6c177", "#f4a7c0", "#b8a4f4", "#7fd1c7", "#e3c9a8", "#9ccff5", "#c7d98b"];
+const REST_COLOR = "#e8c3b9";
 const SPEND_CATS = SELECTABLE_CATEGORIES.filter((c) => c.kind === "gasto");
 const sum = (o: Record<string, number>, keys: Iterable<string>) => { let t = 0; for (const k of keys) t += o[k] ?? 0; return t; };
 
@@ -46,7 +49,7 @@ function stateOf(m: Cycle, saving: number, kind: Kind, day: number, days: number
 }
 
 type Ctx = { plan: Plan; committed: Set<string>; groupsOn: Set<string>; catsOn: Set<string>; toggleGroup: (id: string) => void; toggleCat: (c: string) => void; busy: boolean; list: Omit<ListProps, "plan">;
-  blocks: Record<string, boolean>; toggleBlock: (key: string) => void };
+  blocks: Record<string, boolean>; toggleBlock: (key: string) => void; colorOf: (groupId: string) => string | undefined; editSaving: () => void };
 
 function Block({ color, title, amount, children, danger = false, open, onToggle }: { color: string; title: string; amount: number; children: ReactNode; danger?: boolean; open: boolean; onToggle: () => void }) {
   return (
@@ -57,7 +60,7 @@ function Block({ color, title, amount, children, danger = false, open, onToggle 
         <b className={`amount shrink-0 text-[15px] font-semibold tabular-nums ${danger ? "text-rose-700" : "text-slate-900"}`}>{eur(amount, 0)}</b>
         <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && <div className="pb-3 pl-6">{children}</div>}
+      {open && <div className="pb-3 pl-1">{children}</div>}
     </li>
   );
 }
@@ -105,9 +108,16 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
   const s = stateOf(m, saving, kind, day, days);
   const isCur = kind === "cur";
   const total = Math.max(1, s.income);
+  // Lo gastado, repartido por grupo con su color (lo que va sin grupo, extraordinarios y previstos, en uno neutro).
+  const groupsSpent = x.plan.groups.filter((g) => !x.groupsOn.has(g.id) && g.categories.length)
+    .map((g) => ({ v: sum(m.byCat, g.categories.filter((c) => !x.committed.has(c))), c: x.colorOf(g.id) ?? C.spent })).filter((g) => g.v > 0);
+  const restSpent = Math.max(0, m.spent - groupsSpent.reduce((t, g) => t + g.v, 0));
+  const room = s.left >= 0 ? m.spent : Math.max(0, total - m.fixed - (saving - s.ateSaving));
+  const k = m.spent > 0 ? room / m.spent : 0;
+  const spentSegs: [number, string][] = [...groupsSpent.map((g) => [g.v * k, g.c] as [number, string]), [restSpent * k, REST_COLOR]];
   const segs: [number, string][] = s.left >= 0
-    ? [[m.fixed, C.fixed], [m.spent, C.spent], [s.left, C.free], [saving, C.saving]]
-    : [[Math.min(m.fixed, total), C.fixed], [Math.max(0, total - m.fixed - (saving - s.ateSaving)), C.spent], [saving - s.ateSaving, C.saving]];
+    ? [[m.fixed, C.fixed], ...spentSegs, [s.left, C.free], [saving, C.saving]]
+    : [[Math.min(m.fixed, total), C.fixed], ...spentSegs, [saving - s.ateSaving, C.saving]];
   let f = 0;
   const paths = segs.filter(([v]) => v > 0).map(([v, c], i) => {
     const f1 = Math.min(1, f + v / total);
@@ -159,13 +169,8 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
       <ul className="mt-3 divide-y divide-slate-100 border-t border-slate-100">
         <Block color={C.fixed} title="Comprometido" amount={m.fixed} open={x.blocks[`${kind}:c`] ?? false} onToggle={() => x.toggleBlock(`${kind}:c`)}>
           {!groupsOn.length && !loneCats.length && <p className="py-1 text-sm text-slate-500">Todavía no hay gastos asignados. Añade los que se pagan cada mes: hipoteca, recibos, préstamos, suscripciones…</p>}
-          {kind === "prev" ? (
-            <>
-              {groupsOn.map((g) => <Line key={g.id} icon={g.categories[0]} label={g.name} amount={sum(m.byCat, g.categories)} />)}
-              {loneCats.map((c) => <Line key={c} icon={c} label={categoryLabel(c)} amount={m.byCat[c] ?? 0} />)}
-            </>
-          ) : (groupsOn.length > 0 || loneCats.length > 0) && (
-            <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : "now"} {...x.list} section={{ kind: "committed", groupIds: x.groupsOn, cats: x.catsOn }} />
+          {(groupsOn.length > 0 || loneCats.length > 0) && (
+            <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : kind === "prev" ? "prev" : "now"} {...x.list} section={{ kind: "committed", groupIds: x.groupsOn, cats: x.catsOn }} />
           )}
           <button type="button" onClick={() => setEditing((e) => !e)} className="mt-1 inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-blue-700">
             {x.busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{editing ? "Listo" : groupsOn.length || loneCats.length ? "Añadir o quitar" : "Añadir"}
@@ -173,18 +178,17 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
           {editing && <CommittedPicker x={x} />}
         </Block>
         <Block color={C.spent} title={kind === "cur" ? "Gastado y previsto" : "Gastado"} amount={m.spent} open={x.blocks[`${kind}:g`] ?? kind !== "prev"} onToggle={() => x.toggleBlock(`${kind}:g`)}>
-          {kind !== "prev" ? <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : "now"} {...x.list} section={{ kind: "spent", groupIds: x.groupsOn, cats: x.committed }} /> : <>
-          {otherGroups.map((g) => ({ g, v: sum(m.byCat, g.categories.filter((c) => !x.committed.has(c))) })).filter(({ v }) => v > 0).sort((a, b) => b.v - a.v)
-            .map(({ g, v }) => <Line key={g.id} icon={g.categories[0]} label={g.name} amount={v} />)}
-          {looseSpent > 0 && <Line icon="otros_gastos" label="Sin grupo y extraordinarios" amount={looseSpent} />}
-          {m.spent <= 0 && <p className="py-1 text-sm text-slate-500">Nada todavía.</p>}
-          </>}
+          <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : kind === "prev" ? "prev" : "now"} {...x.list} section={{ kind: "spent", groupIds: x.groupsOn, cats: x.committed }} colorOf={x.colorOf} />
+          {m.spent <= 0 && kind !== "next" && <p className="py-1 text-sm text-slate-500">Nada todavía.</p>}
         </Block>
         <Block color={C.saving} title="Ahorro" amount={saving - s.ateSaving} danger={s.ateSaving > 0} open={x.blocks[`${kind}:a`] ?? false} onToggle={() => x.toggleBlock(`${kind}:a`)}>
           <p className="py-1 text-sm text-slate-600">
             Tu objetivo es {eur(saving, 0)} por ciclo. {s.ateSaving > 0 ? `Te has comido ${eur(s.ateSaving, 0)}.` : "Intacto."}
             {kind !== "next" && carry > 0 && ` Al empezar tenías ${eur(carry, 0)}${s.fromCarry > 0 ? `, y has tirado de ${eur(s.fromCarry, 0)} (${Math.round(carryFrac * 100)} %)` : ""}.`}
           </p>
+          <button type="button" onClick={x.editSaving} className="mt-1 inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-blue-700">
+            <Pencil className="h-3.5 w-3.5" />Cambiar objetivo
+          </button>
         </Block>
       </ul>
     </div>
@@ -261,7 +265,9 @@ export function LeftToSpend() {
     },
     toCategory: (key) => (store.set(KEY.scroll, String(scroller()?.scrollTop ?? 0)), router.push(`/finanzas/categoria/${encodeURIComponent(key)}${nextQ ? `?${nextQ}` : ""}`)),
   };
-  const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks,
+  const spendGroups = data.groups.filter((g) => !groupsOn.has(g.id) && g.categories.length);
+  const colorOf = (id: string) => { const i = spendGroups.findIndex((g) => g.id === id); return i < 0 ? undefined : GROUP_COLORS[i % GROUP_COLORS.length]; };
+  const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks, colorOf, editSaving: () => setEditSaving(true),
     toggleBlock: (k) => setBlocks((b) => ({ ...b, [k]: !(b[k] ?? (k.endsWith(":g") && !k.startsWith("prev"))) })) };
 
   // Cada ciclo: lo comprometido son sus grupos y categorías (lo cobrado y, en el actual, lo que falta por cobrar);
@@ -297,13 +303,10 @@ export function LeftToSpend() {
 
   return (
     <div className="pb-4">
-      <button type="button" onClick={() => setEditSaving(true)} className="mb-3 flex w-full items-center justify-between gap-3 px-1 text-left" aria-label="Cambiar el objetivo de ahorro">
+      <p className="mb-3 flex items-baseline justify-between gap-3 px-1">
         <span className="text-sm text-slate-500">Tu objetivo de ahorro</span>
-        <span className="flex items-center gap-2">
-          <b className="amount text-[15px] font-semibold tabular-nums text-[#3478f6]">{eur(saving, 0)} por ciclo</b>
-          <Pencil className="h-3.5 w-3.5 text-slate-400" />
-        </span>
-      </button>
+        <b className="amount text-[15px] font-semibold tabular-nums text-[#3478f6]">{eur(saving, 0)} por ciclo</b>
+      </p>
       <SavingsGoalSheet open={editSaving} onClose={() => setEditSaving(false)} current={data.budget.savingsGoal} income={data.budget.income} />
       <div ref={pager} onScroll={(e) => { const el = e.currentTarget; setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
         className="flex snap-x snap-mandatory items-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
