@@ -121,3 +121,7 @@ Sustituye a los paquetes y al laboratorio. Plan = lista de **grupos** (conjuntos
 - Movimientos sin clasificar: banner en Movimientos («hay N movimientos que no llegamos a entender») con botón a la derecha que filtra la lista (y cambia a «Ocultar»); cada uno con un punto en el icono; en el detalle, la categoría destacada. Quitar el aviso de arriba de Inicio.
 
 - Inicio: rediseñar el gráfico de arriba (al usuario no le gusta cómo se ve). Sin prisa.
+
+- «Te quedan» (Mi plan): la cuenta debe salir del dinero real de las cuentas (saldos), no de una cuenta teórica. Caso real: en noviembre gastó más de lo que cobró, tiró de ahorros y casi los gastó.
+- «Cambiar fecha» de un movimiento: poder elegir el día exacto, no solo el mes.
+- Préstamos entre personas (p. ej. dinero que te presta un familiar y le devuelves): el dinero recibido no es ingreso ni la devolución es gasto; tratarlo aparte. El gasto real es lo que se compra con él.
