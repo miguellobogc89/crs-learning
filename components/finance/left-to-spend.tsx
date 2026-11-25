@@ -37,7 +37,15 @@ const arc = (r: number, f0: number, f1: number) => {
 };
 const OTHER_CATS = ["otros_gastos", "sin_clasificar"];
 const REST_COLOR = "#e8c3b9";
-const monthOf = (d?: string) => { if (!d) return ""; const t = new Date(`${d}T12:00:00`).toLocaleDateString("es-ES", { month: "long" }); return t.charAt(0).toUpperCase() + t.slice(1); };
+/** Nombre del mes (de nómina) que empieza en «start»: el mes en que se vive, el de su final (del 25 de noviembre
+ * al 24 de diciembre es «diciembre»). Si el ciclo empieza a principios de mes, es ese mismo mes. */
+const monthOf = (start?: string) => {
+  if (!start) return "";
+  const d = new Date(`${start.slice(0, 7)}-15T12:00:00Z`);
+  if (Number(start.slice(8, 10)) > 15) d.setUTCMonth(d.getUTCMonth() + 1);
+  const t = d.toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" });
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
 type Seg = [number, string];
 /** Dibuja tramos seguidos sobre el arco grande, cada uno en proporción a «total». */
 const drawArc = (segs: Seg[], total: number) => {
@@ -449,7 +457,7 @@ export function LeftToSpend() {
       for (const p of (data.planned ?? []).filter((p) => p.date >= data.cycle.start && p.date <= data.cycle.end)) plannedByCat[p.category] = (plannedByCat[p.category] ?? 0) + p.amount;
       for (const p of (data.pending ?? []).filter((p) => !committed.has(p.category))) plannedByCat[p.category] = (plannedByCat[p.category] ?? 0) + p.amount;
     }
-    return { planned: plannedByCat, debts, consumed, label: mo.label, start: mo.start, income: mo.income, fixed: comp + sum(pending, Object.keys(pending)) + debtSum, spent: Math.max(0, totalSpent - comp - debtSum) + planned, carry: mo.carry, byCat, pending };
+    return { incomeByCat: mo.incomeByCat, planned: plannedByCat, debts, consumed, label: mo.label, start: mo.start, income: mo.income, fixed: comp + sum(pending, Object.keys(pending)) + debtSum, spent: Math.max(0, totalSpent - comp - debtSum) + planned, carry: mo.carry, byCat, pending };
   };
   const waiting = data.money.cur.income <= 0 && (data.budget.income ?? 0) > 0;
   const cur = cycleOf("cur");

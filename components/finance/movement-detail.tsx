@@ -301,14 +301,18 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   const edited = v.category !== base.category || v.kind !== base.kind || (v.alias ?? null) !== base.alias || (v.subcategory ?? null) !== base.subcategory;
   const showApply = edited && !!similar && similar.differ > 0;
 
-  // Meses para «Cambiar fecha»: meses de nómina, como en Inicio (el que empieza el 25 de octubre es «octubre»), de 3
+  // Meses para «Cambiar fecha»: meses de nómina, como en Inicio (el que empieza el 25 de octubre es «noviembre»), de 3
   // antes a 24 después del mes del cargo. Se guarda el día 28 de ese mes, que cae siempre en el que lleva su nombre.
   const chargeMonth = (item.cycleStart ?? item.date).slice(0, 7);
   const currentImputed = imputed === undefined ? item.imputedDate ?? null : imputed;
   const currentDebt = !!currentImputed && (debt ?? item.imputedDebt ?? false);
   const shownMonth = imputed === undefined ? (item.imputedCycle ?? item.imputedDate ?? chargeMonth).slice(0, 7) : imputed ? imputed.slice(0, 7) : chargeMonth;
-  const monthName = (ym: string) => new Date(`${ym}-15T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
-  const monthOnly = (ym: string) => new Date(`${ym}-15T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" });
+  // Cada mes de nómina se llama por el mes en que se vive (el de su final): si empieza pasado el día 15 (p. ej. el
+  // 25 de noviembre), es «diciembre». Las claves son el mes en que empieza; solo cambia el nombre.
+  const lateStart = Number((item.cycleStart ?? item.date).slice(8, 10)) > 15;
+  const named = (ym: string) => { const d = new Date(`${ym}-15T00:00:00Z`); if (lateStart) d.setUTCMonth(d.getUTCMonth() + 1); return d; };
+  const monthName = (ym: string) => named(ym).toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
+  const monthOnly = (ym: string) => named(ym).toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" });
   const monthOptions = Array.from({ length: 28 }, (_, i) => {
     const d = new Date(`${chargeMonth}-15T00:00:00Z`);
     d.setUTCMonth(d.getUTCMonth() + i - 3);
