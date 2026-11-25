@@ -24,7 +24,8 @@ import { useMonthSwipe } from "./use-month-swipe";
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Kind = "prev" | "cur" | "next";
 type Debt = { id: string; title: string; amount: number; category: string; paidOn: string; consumedOn: string; paidCycle: string; consumedCycle: string };
-type Cycle = { label: string; start?: string; planned?: Record<string, number>; debts?: Debt[]; consumed?: Debt[]; income: number; fixed: number; spent: number; carry: number | null; byCat: Record<string, number>; pending: Record<string, number> };
+type Tab = "i" | "g" | "a";
+type Cycle = { incomeByCat?: Record<string, number>; label: string; start?: string; planned?: Record<string, number>; debts?: Debt[]; consumed?: Debt[]; income: number; fixed: number; spent: number; carry: number | null; byCat: Record<string, number>; pending: Record<string, number> };
 
 // Paleta armónica con el azul de la app (#3478f6).
 const C = { fixed: "#9aaccb", spent: "#f59f8b", free: "#4cc38a", saving: "#3478f6", over: "#dc2626", track: "#b9d2fd" };
@@ -64,7 +65,7 @@ function stateOf(m: Cycle, saving: number, kind: Kind, day: number, days: number
 }
 
 type Ctx = { plan: Plan; committed: Set<string>; groupsOn: Set<string>; catsOn: Set<string>; toggleGroup: (id: string) => void; toggleCat: (c: string) => void; busy: boolean; list: Omit<ListProps, "plan">;
-  blocks: Record<string, boolean>; toggleBlock: (key: string, el?: HTMLElement) => void; colorOf: (groupId: string) => string | undefined; editSaving: (m: MonthSaving) => void; fixedSaving: number | null; savingsByMonth: Record<string, number>; goTo: (i: number) => void };
+  blocks: Record<string, boolean>; toggleBlock: (key: string, el?: HTMLElement) => void; colorOf: (groupId: string) => string | undefined; editSaving: (m: MonthSaving) => void; fixedSaving: number | null; savingsByMonth: Record<string, number>; goTo: (i: number) => void; tab: Tab; setTab: (t: Tab) => void };
 
 function Block({ color, title, amount, children, danger = false, open, onToggle }: { color: string; title: string; amount: number; children: ReactNode; danger?: boolean; open: boolean; onToggle: (el: HTMLElement) => void }) {
   return (
@@ -141,7 +142,8 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
   const isCur = kind === "cur";
   const total = Math.max(1, s.income);
   // Bloque abierto (uno a la vez): el aro pasa a mostrar solo ese bloque, repartido por sus grupos.
-  const focus = (["c", "g", "a"] as const).find((b) => x.blocks[`${kind}:${b}`]) ?? null;
+  // Con la pestaña Gastado, el bloque abierto (uno a la vez) muestra solo lo suyo en el aro; las otras no lo tocan.
+  const focus = x.tab !== "g" ? null : (["c", "g"] as const).find((b) => x.blocks[`${kind}:${b}`]) ?? null;
   const groupsOn = x.plan.groups.filter((g) => x.groupsOn.has(g.id));
   const loneCats = [...x.catsOn].filter((c) => !groupsOn.some((g) => g.categories.includes(c)));
   const pendingOf = (cats: string[]) => sum(m.pending, cats);
@@ -170,11 +172,10 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
     : [[Math.min(m.fixed, total), C.fixed], [room, C.spent], [saving - s.ateSaving, C.saving]];
   const paths = drawArc(segs, total);
   const focusArc = focus === "c" ? drawArc(fixedSegs, Math.max(1, m.fixed)) : focus === "g" ? drawArc(spentSegs, Math.max(1, m.spent))
-    : focus === "a" ? drawArc(savingSegs, Math.max(1, saving + s.fromCarry)) : null;
+    : null;
   const pct = (v: number) => (s.income > 0 ? `${Math.round((v / s.income) * 100)} % de lo que cobras` : "");
   const focusText = focus === "c" ? { t: "Comprometido", v: m.fixed, sub: pct(m.fixed), col: "#0f172a" }
     : focus === "g" ? { t: kind === "cur" ? "Gastado y previsto" : "Gastado", v: m.spent, sub: pct(m.spent), col: "#0f172a" }
-    : focus === "a" ? { t: "Ahorro", v: savedLeft, sub: s.fromCarry > 0 ? `te has comido ${eur(s.fromCarry, 0)} de lo que tenías` : s.ateSaving > 0 ? `te has comido ${eur(s.ateSaving, 0)}` : "intacto", col: savedLeft < 0 ? "#b91c1c" : "#3478f6" }
     : null;
   const carry = m.carry ?? 0;
   const carryFrac = carry > 0 && s.fromCarry > 0 ? Math.min(1, s.fromCarry / carry) : 0;
@@ -218,24 +219,66 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
       </svg>
       {/* Resumen del mes: lo que entra, lo que sale y lo que queda (+) o lo que has sacado de lo que tenías (−). */}
       <div className="mt-3 grid grid-cols-3 gap-2">
-        {[
-          { icon: Euro, label: kind === "next" ? "Ingreso estimado" : "Ingreso", v: eur(s.income, 0), bg: "#e7f6ee", fg: "#15803d", col: "text-slate-900" },
-          { icon: CreditCard, label: kind === "next" ? "Comprometido" : "Gastado", v: eur(m.fixed + m.spent, 0), bg: "#fdece8", fg: "#c2410c", col: "text-slate-900" },
-          { icon: PiggyBank, label: net >= 0 ? "Ahorro" : "De reservas", v: `${net >= 0 ? "+" : "−"}${eur(Math.abs(net), 0)}`, bg: net >= 0 ? "#e8f0fe" : "#fde8e8", fg: net >= 0 ? "#3478f6" : "#b91c1c", col: net >= 0 ? "text-[#3478f6]" : "text-rose-700" },
-        ].map(({ icon: Icon, label, v, bg, fg, col }) => (
-          <div key={label} className="flex flex-col items-center gap-1 text-center">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full" style={{ background: bg }} aria-hidden="true"><Icon className="h-4 w-4" style={{ color: fg }} /></span>
-            <span className="text-xs text-slate-500">{label}</span>
-            <b className={`amount text-[15px] font-semibold tabular-nums ${col}`}>{v}</b>
-          </div>
-        ))}
+        {([
+          { tab: "i", icon: Euro, label: kind === "next" ? "Ingreso estimado" : "Ingreso", v: eur(s.income, 0), bg: "#e7f6ee", fg: "#15803d", col: "text-slate-900" },
+          { tab: "g", icon: CreditCard, label: kind === "next" ? "Comprometido" : "Gastado", v: eur(m.fixed + m.spent, 0), bg: "#fdece8", fg: "#c2410c", col: "text-slate-900" },
+          { tab: "a", icon: PiggyBank, label: net >= 0 ? "Ahorro" : "De reservas", v: `${net >= 0 ? "+" : "−"}${eur(Math.abs(net), 0)}`, bg: net >= 0 ? "#e8f0fe" : "#fde8e8", fg: net >= 0 ? "#3478f6" : "#b91c1c", col: net >= 0 ? "text-[#3478f6]" : "text-rose-700" },
+        ] as const).map(({ tab, icon: Icon, label, v, bg, fg, col }) => {
+          const on = x.tab === tab;
+          return (
+            <button key={tab} type="button" onClick={() => x.setTab(tab)} aria-pressed={on}
+              className={`flex flex-col items-center gap-1 rounded-2xl py-2 text-center transition-colors outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${on ? "bg-slate-100" : "active:bg-slate-50"}`}>
+              <span className={`flex h-8 w-8 items-center justify-center rounded-full transition-shadow ${on ? "ring-2 ring-offset-1" : ""}`} style={{ background: bg, ["--tw-ring-color" as string]: fg }} aria-hidden="true"><Icon className="h-4 w-4" style={{ color: fg }} /></span>
+              <span className={`text-xs ${on ? "font-semibold text-slate-700" : "text-slate-500"}`}>{label}</span>
+              <b className={`amount text-[15px] font-semibold tabular-nums ${col}`}>{v}</b>
+            </button>
+          );
+        })}
       </div>
     </div>
     ) : (
     <div>
       {waiting && <p className="amount mb-2 text-center text-sm text-slate-600">Tu nómina de este mes aún no ha entrado: cuento con lo que sueles cobrar ({eur(s.income, 0)}).</p>}
 
-      <ul className="divide-y divide-slate-100 border-t border-slate-100">
+      {x.tab === "i" && (
+        <div className="border-t border-slate-100 pt-1">
+          {kind === "next" ? (
+            <p className="py-3 text-sm text-slate-600">Cuento con lo que sueles cobrar: {eur(s.income, 0)}. Cuando entre, verás aquí de dónde viene.</p>
+          ) : Object.keys(m.incomeByCat ?? {}).length ? (
+            <ul className="divide-y divide-slate-100">
+              {Object.entries(m.incomeByCat ?? {}).sort((a, b) => b[1] - a[1]).map(([c, v]) => (
+                <li key={c} className="flex items-center gap-3 py-3">
+                  <CategoryIcon category={c} />
+                  <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-slate-900">{categoryLabel(c)}</span>
+                  <b className="amount shrink-0 text-[15px] font-semibold tabular-nums text-slate-900">{eur(v, 0)}</b>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="py-3 text-sm text-slate-500">Aún no ha entrado nada este mes.</p>}
+        </div>
+      )}
+      {x.tab === "a" && (
+        <div className="border-t border-slate-100 pt-2">
+          <p className="py-1 text-sm text-slate-600">
+            {x.fixedSaving === null && !custom ? "Aún no tienes un ahorro fijo al mes." : <>
+              {kind === "prev" ? "Querías" : "Quieres"} ahorrar {eur(saving, 0)} en {monthLow}.
+              {custom && x.fixedSaving !== null && saving !== x.fixedSaving && ` Son ${eur(Math.abs(saving - x.fixedSaving), 0)} ${saving > x.fixedSaving ? "más" : "menos"} que tu ahorro fijo (${eur(x.fixedSaving, 0)}).`}
+              {" "}{s.ateSaving > 0 ? `Te has comido ${eur(s.ateSaving, 0)}.` : kind === "next" ? "" : "Intacto."}
+            </>}
+            {s.fromCarry > 0 && ` Y te has comido ${eur(s.fromCarry, 0)} de lo que tenías ahorrado de antes${carry > 0 ? ` (${Math.round(carryFrac * 100)} % de ${eur(carry, 0)})` : ""}.`}
+            {kind !== "next" && carry > 0 && s.fromCarry <= 0 && ` Al empezar tenías ${eur(carry, 0)}.`}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-5">
+            {x.fixedSaving === null && <Link href="/finanzas/plan" className="py-1 text-sm font-semibold text-blue-700">Fija un ahorro mensual</Link>}
+            {m.start && (
+              <button type="button" onClick={() => x.editSaving({ start: m.start!, name: name || m.label, fixed: x.fixedSaving, custom })} className="inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-blue-700">
+                <Pencil className="h-3.5 w-3.5" />Cambiar solo {kind === "cur" ? "este mes" : monthLow}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {x.tab === "g" && <ul className="divide-y divide-slate-100 border-t border-slate-100">
         <Block color={C.fixed} title="Comprometido" amount={m.fixed} open={focus === "c"} onToggle={(el) => x.toggleBlock(`${kind}:c`, el)}>
           {!groupsOn.length && !loneCats.length && !m.debts?.length && <p className="py-1 text-sm text-slate-500">Todavía no hay gastos asignados. Añade los que se pagan cada mes: hipoteca, recibos, préstamos, suscripciones…</p>}
           {(groupsOn.length > 0 || loneCats.length > 0) && (
@@ -266,33 +309,14 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
             </>
           )}
         </Block>
-        <Block color={C.saving} title="Ahorro" amount={savedLeft} danger={s.ateSaving > 0} open={focus === "a"} onToggle={(el) => x.toggleBlock(`${kind}:a`, el)}>
-          <p className="py-1 text-sm text-slate-600">
-            {x.fixedSaving === null && !custom ? "Aún no tienes un ahorro fijo al mes." : <>
-              {kind === "prev" ? "Querías" : "Quieres"} ahorrar {eur(saving, 0)} en {monthLow}.
-              {custom && x.fixedSaving !== null && saving !== x.fixedSaving && ` Son ${eur(Math.abs(saving - x.fixedSaving), 0)} ${saving > x.fixedSaving ? "más" : "menos"} que tu ahorro fijo (${eur(x.fixedSaving, 0)}).`}
-              {" "}{s.ateSaving > 0 ? `Te has comido ${eur(s.ateSaving, 0)}.` : kind === "next" ? "" : "Intacto."}
-            </>}
-            {s.fromCarry > 0 && ` Y te has comido ${eur(s.fromCarry, 0)} de lo que tenías ahorrado de antes${carry > 0 ? ` (${Math.round(carryFrac * 100)} % de ${eur(carry, 0)})` : ""}.`}
-            {kind !== "next" && carry > 0 && s.fromCarry <= 0 && ` Al empezar tenías ${eur(carry, 0)}.`}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-5">
-            {x.fixedSaving === null && <Link href="/finanzas/plan" className="py-1 text-sm font-semibold text-blue-700">Fija un ahorro mensual</Link>}
-            {m.start && (
-              <button type="button" onClick={() => x.editSaving({ start: m.start!, name: name || m.label, fixed: x.fixedSaving, custom })} className="inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-blue-700">
-                <Pencil className="h-3.5 w-3.5" />Cambiar solo {kind === "cur" ? "este mes" : monthLow}
-              </button>
-            )}
-          </div>
-        </Block>
-      </ul>
+      </ul>}
     </div>
     )
   );
 }
 
 // Lo que Inicio recuerda en esta sesión al ir a una hoja y volver: el ciclo que se miraba, lo desplegado y el scroll.
-const KEY = { page: "crs-finance:quedan-page", open: "crs-finance:quedan-open", blocks: "crs-finance:quedan-blocks", scroll: "crs-finance:quedan-scroll" };
+const KEY = { tab: "crs-finance:quedan-tab", page: "crs-finance:quedan-page", open: "crs-finance:quedan-open", blocks: "crs-finance:quedan-blocks", scroll: "crs-finance:quedan-scroll" };
 const store = {
   get: (k: string) => { try { return window.sessionStorage.getItem(k); } catch { return null; } },
   set: (k: string, v: string | null) => { try { if (v === null) window.sessionStorage.removeItem(k); else window.sessionStorage.setItem(k, v); } catch { /* ignorar */ } },
@@ -316,6 +340,10 @@ export function LeftToSpend() {
   const { data, error } = useFinance<Plan>("plan");
   const router = useRouter();
   const [page, setPage] = useState(1);
+  // Pestaña de debajo del aro (Ingreso, Gastado o Ahorro): cambia el contenido con un fundido; el aro no cambia.
+  const [tab, setTab] = useState<Tab>("g");
+  const [tabShown, setTabShown] = useState<Tab>("g");
+  useEffect(() => { if (tab === tabShown) return; const t = window.setTimeout(() => setTabShown(tab), 140); return () => window.clearTimeout(t); }, [tab, tabShown]);
   // El nombre del mes que miras va en la cabecera de la app, en lugar de «Inicio».
   const [headerMonth, setHeaderMonth] = useState<HTMLElement | null>(null);
   useEffect(() => { setHeaderMonth(document.getElementById("finance-header-month")); }, []);
@@ -338,6 +366,8 @@ export function LeftToSpend() {
     if (!data || restored) return;
     const p = Math.min(2, Math.max(0, Number(store.get(KEY.page) ?? 1)));
     swipe.jumpTo(p);
+    const tb = store.get(KEY.tab);
+    if (tb === "i" || tb === "g" || tb === "a") { setTab(tb); setTabShown(tb); }
     setOpenId(store.get(KEY.open));
     try { setBlocks(JSON.parse(store.get(KEY.blocks) ?? "{}")); } catch { /* ignorar */ }
     setRestored(true);
@@ -348,6 +378,7 @@ export function LeftToSpend() {
   useEffect(() => { if (restored) store.set(KEY.page, String(page)); }, [page, restored]);
   useEffect(() => { if (restored) store.set(KEY.open, openId); }, [openId, restored]);
   useEffect(() => { if (restored) store.set(KEY.blocks, JSON.stringify(blocks)); }, [blocks, restored]);
+  useEffect(() => { if (restored) store.set(KEY.tab, tab); }, [tab, restored]);
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
   if (!data) return <SkeletonList rows={5} />;
 
@@ -383,7 +414,7 @@ export function LeftToSpend() {
     const g = data.groups.find((x) => x.id === id); return g?.categories[0] ? categoryHex(g.categories[0]) : undefined;
   };
   const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks, colorOf, editSaving: (ms: MonthSaving) => setEditSaving(ms), fixedSaving: data.budget.savingsGoal, savingsByMonth: data.savingsByMonth ?? {},
-    goTo: swipe.goTo,
+    goTo: swipe.goTo, tab, setTab,
     // Un bloque abierto a la vez por ciclo: es el que muestra el aro.
     toggleBlock: (k, el) => (keepInPlace(el), setBlocks((b) => { const kd = k.split(":")[0]; const was = !!b[k]; return { ...b, [`${kd}:c`]: false, [`${kd}:g`]: false, [`${kd}:a`]: false, [k]: !was }; })) };
 
@@ -453,9 +484,9 @@ export function LeftToSpend() {
         const [k, m] = pages[shown];
         return (
           <div data-swipe="list" className="touch-pan-y overflow-x-clip">
-            <div className="transition-opacity duration-150 ease-out motion-reduce:transition-none" style={{ opacity: shown === page ? 1 : 0 }}>
+            <div className="transition-opacity duration-150 ease-out motion-reduce:transition-none" style={{ opacity: shown === page && tab === tabShown ? 1 : 0 }}>
               <div ref={swipe.list} className="px-1">
-                <Gauge part="detail" m={m} saving={savingOf(m)} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={x} />
+                <Gauge part="detail" m={m} saving={savingOf(m)} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={{ ...x, tab: tabShown }} />
               </div>
             </div>
           </div>

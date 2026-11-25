@@ -757,10 +757,11 @@ export async function planView(userId: string) {
       const pend = currentMonthPending(ctx).items.reduce((t, i) => t + i.amount, 0);
       const one = (c: { start: string; end: string; label: string }, isCurrent: boolean) => {
         let inc = 0, fixed = 0, spent = 0;
+        const incomeByCat: Record<string, number> = {};
         for (const t0 of ctx.txs) {
           const t = moneyDated(t0);
           if (t.date < c.start || t.date > c.end) continue;
-          if (t.kind === "ingreso" && t.amount > 0) inc += t.amount;
+          if (t.kind === "ingreso" && t.amount > 0) { inc += t.amount; incomeByCat[t.category] = round2((incomeByCat[t.category] ?? 0) + t.amount); }
           if (isPackageCharge(t)) { if (fixedKeys.has(merchantKey(t.description, t.counterparty))) fixed -= t.amount; else spent -= t.amount; }
         }
         // Lo que tenías al empezar: la foto del saldo del día anterior al ciclo si la hay (de cada cuenta); si no,
@@ -771,7 +772,7 @@ export async function planView(userId: string) {
           const snap = snaps.get(`${a.id}|${dayBefore}`);
           carry += snap ?? (a.balance ?? 0) - ctx.txs.filter((t) => t.accountId === a.id && t.date >= c.start).reduce((t, x) => t + x.amount, 0);
         }
-        return { start: c.start, end: c.end, label: c.label, income: round2(inc), fixed: round2(fixed + (isCurrent ? pend : 0)), spent: round2(spent), carry: round2(carry) };
+        return { start: c.start, end: c.end, label: c.label, income: round2(inc), incomeByCat, fixed: round2(fixed + (isCurrent ? pend : 0)), spent: round2(spent), carry: round2(carry) };
       };
       const nextItems = nextMonthCommitted(ctx);
       return {
