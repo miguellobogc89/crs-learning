@@ -6,7 +6,7 @@
 // «Comprometido» ya no se adivina: son los grupos y categorías que tú metes en él (lo que se paga cada mes); se
 // guarda de verdad (la marca de los grupos y las categorías de ajustes). Se desliza entre ciclos con imán.
 import { useEffect, useState, type ReactNode } from "react";
-import { ChevronDown, Loader2, Pencil } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, Loader2, Pencil, PiggyBank } from "lucide-react";
 import type { planView } from "@/lib/finance/service";
 import { SELECTABLE_CATEGORIES, categoryHex, categoryLabel } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
@@ -175,12 +175,13 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
   const custom = !!m.start && x.savingsByMonth[m.start] !== undefined;
   const fade = (on: boolean) => ({ opacity: on ? 1 : 0, transition: "opacity 250ms ease-out" });
   const name = monthOf(m.start);
+  // Lo que queda del mes tras todo lo gastado (con tu ahorro dentro); si es negativo, lo sacaste de lo que tenías.
+  const net = Math.round(s.income - m.fixed - m.spent);
   const monthLow = (name || m.label).toLowerCase();
   return (
     part === "arc" ? (
     <div>
-      <p className={`flex items-center gap-3 px-1 ${kind === "prev" ? "justify-start" : isCur ? "justify-center" : "justify-between"}`}>
-        {kind === "next" && <span className="amount text-xs text-slate-500">Ingreso estimado <b className="font-semibold text-slate-700">{eur(s.income, 0)}</b></span>}
+      <p className={`flex items-center gap-3 px-1 ${kind === "prev" ? "justify-start" : isCur ? "justify-center" : "justify-end"}`}>
         {isCur ? <span className="rounded-full bg-[#3478f6] px-3 py-1 text-xs font-semibold text-white">{name || m.label}</span>
           : <span className="py-1 text-sm font-semibold text-slate-500">{name || m.label}</span>}
       </p>
@@ -202,6 +203,20 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
           </>}
         </g>
       </svg>
+      {/* Resumen del mes: lo que entra, lo que sale y lo que queda (+) o lo que has sacado de lo que tenías (−). */}
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {[
+          { icon: ArrowDownLeft, label: kind === "next" ? "Ingreso estimado" : "Ingreso", v: eur(s.income, 0), bg: "#e7f6ee", fg: "#15803d", col: "text-slate-900" },
+          { icon: ArrowUpRight, label: kind === "next" ? "Comprometido" : "Gastado", v: eur(m.fixed + m.spent, 0), bg: "#fdece8", fg: "#c2410c", col: "text-slate-900" },
+          { icon: PiggyBank, label: net >= 0 ? "Ahorro" : "De reservas", v: `${net >= 0 ? "+" : "−"}${eur(Math.abs(net), 0)}`, bg: net >= 0 ? "#e8f0fe" : "#fde8e8", fg: net >= 0 ? "#3478f6" : "#b91c1c", col: net >= 0 ? "text-[#3478f6]" : "text-rose-700" },
+        ].map(({ icon: Icon, label, v, bg, fg, col }) => (
+          <div key={label} className="flex flex-col items-center gap-1 text-center">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full" style={{ background: bg }} aria-hidden="true"><Icon className="h-4 w-4" style={{ color: fg }} /></span>
+            <span className="text-xs text-slate-500">{label}</span>
+            <b className={`amount text-[15px] font-semibold tabular-nums ${col}`}>{v}</b>
+          </div>
+        ))}
+      </div>
     </div>
     ) : (
     <div>
