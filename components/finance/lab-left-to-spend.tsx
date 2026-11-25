@@ -12,7 +12,9 @@ import { SELECTABLE_CATEGORIES, categoryLabel } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
 import { ErrorNote } from "@/components/trading/ui";
 import { SkeletonList } from "@/components/trading/skeletons";
+import { useRouter } from "next/navigation";
 import { fapi, refreshFinance, useFinance } from "./api";
+import { GroupsList, type ListProps } from "./home-plan";
 import { CategoryIcon } from "./category-icon";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
@@ -42,7 +44,7 @@ function stateOf(m: Cycle, saving: number, kind: Kind, day: number, days: number
   return { income, left, over, ateSaving, fromCarry, budget, expected, pace };
 }
 
-type Ctx = { plan: Plan; committed: Set<string>; groupsOn: Set<string>; catsOn: Set<string>; toggleGroup: (id: string) => void; toggleCat: (c: string) => void; busy: boolean };
+type Ctx = { plan: Plan; committed: Set<string>; groupsOn: Set<string>; catsOn: Set<string>; toggleGroup: (id: string) => void; toggleCat: (c: string) => void; busy: boolean; list: Omit<ListProps, "plan"> };
 
 function Block({ color, title, amount, children, danger = false }: { color: string; title: string; amount: number; children: ReactNode; danger?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -156,18 +158,26 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
       <ul className="mt-3 divide-y divide-slate-100 border-t border-slate-100">
         <Block color={C.fixed} title="Comprometido" amount={m.fixed}>
           {!groupsOn.length && !loneCats.length && <p className="py-1 text-sm text-slate-500">Todavía no hay gastos asignados. Añade los que se pagan cada mes: hipoteca, recibos, préstamos, suscripciones…</p>}
-          {groupsOn.map((g) => { const p = pendingOf(g.categories); return <Line key={g.id} icon={g.categories[0]} label={g.name} amount={sum(m.byCat, g.categories) + p} sub={p > 0 ? `${eur(p, 0)} por cobrar` : undefined} />; })}
-          {loneCats.map((c) => { const p = pendingOf([c]); return <Line key={c} icon={c} label={categoryLabel(c)} amount={(m.byCat[c] ?? 0) + p} sub={p > 0 ? `${eur(p, 0)} por cobrar` : undefined} />; })}
+          {kind === "prev" ? (
+            <>
+              {groupsOn.map((g) => <Line key={g.id} icon={g.categories[0]} label={g.name} amount={sum(m.byCat, g.categories)} />)}
+              {loneCats.map((c) => <Line key={c} icon={c} label={categoryLabel(c)} amount={m.byCat[c] ?? 0} />)}
+            </>
+          ) : (groupsOn.length > 0 || loneCats.length > 0) && (
+            <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : "now"} {...x.list} section={{ kind: "committed", groupIds: x.groupsOn, cats: x.catsOn }} />
+          )}
           <button type="button" onClick={() => setEditing((e) => !e)} className="mt-1 inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-blue-700">
             {x.busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{editing ? "Listo" : groupsOn.length || loneCats.length ? "Añadir o quitar" : "Añadir"}
           </button>
           {editing && <CommittedPicker x={x} />}
         </Block>
-        <Block color={C.spent} title="Gastado" amount={m.spent}>
+        <Block color={C.spent} title={kind === "cur" ? "Gastado y previsto" : "Gastado"} amount={m.spent}>
+          {kind !== "prev" ? <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : "now"} {...x.list} section={{ kind: "spent", groupIds: x.groupsOn, cats: x.committed }} /> : <>
           {otherGroups.map((g) => ({ g, v: sum(m.byCat, g.categories.filter((c) => !x.committed.has(c))) })).filter(({ v }) => v > 0).sort((a, b) => b.v - a.v)
             .map(({ g, v }) => <Line key={g.id} icon={g.categories[0]} label={g.name} amount={v} />)}
           {looseSpent > 0 && <Line icon="otros_gastos" label="Sin grupo y extraordinarios" amount={looseSpent} />}
           {m.spent <= 0 && <p className="py-1 text-sm text-slate-500">Nada todavía.</p>}
+          </>}
         </Block>
         <Block color={C.saving} title="Ahorro" amount={saving - s.ateSaving} danger={s.ateSaving > 0}>
           <p className="py-1 text-sm text-slate-600">
@@ -183,8 +193,10 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
 export function LabLeftToSpend() {
   const { data, error } = useFinance<Plan>("plan");
   const pager = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [groupsOn, setGroupsOn] = useState<Set<string>>(new Set());
   const [catsOn, setCatsOn] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -208,7 +220,19 @@ export function LabLeftToSpend() {
     void save(() => fapi("settings", { committedCategories: [...n] }));
   };
   const committed = new Set<string>([...data.groups.filter((g) => groupsOn.has(g.id)).flatMap((g) => g.categories), ...catsOn]);
-  const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy };
+  const nextQ = page === 2 ? "mes=siguiente" : "";
+  const list: Omit<ListProps, "plan"> = {
+    open: openId,
+    toggle: (id) => setOpenId((o) => (o === id ? null : id)),
+    toSheet: (id, t = {}) => {
+      const q = new URLSearchParams(nextQ);
+      if (t.cat) q.set("categoria", t.cat);
+      if (t.sub) q.set("sub", t.sub);
+      router.push(`/finanzas/grupo/${id}${q.toString() ? `?${q}` : ""}`);
+    },
+    toCategory: (key) => router.push(`/finanzas/categoria/${encodeURIComponent(key)}${nextQ ? `?${nextQ}` : ""}`),
+  };
+  const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list };
 
   // Cada ciclo: lo comprometido son sus grupos y categorías (lo cobrado y, en el actual, lo que falta por cobrar);
   // lo gastado, todo lo demás (con los extraordinarios).
@@ -229,7 +253,10 @@ export function LabLeftToSpend() {
     // con lo gastado de verdad.
     const pendTotal = k === "cur" ? (data.pending ?? []).reduce((t, p) => t + p.amount, 0) : 0;
     const totalSpent = mo.fixed + mo.spent - pendTotal;
-    return { label: mo.label, income: mo.income, fixed: comp + sum(pending, Object.keys(pending)), spent: Math.max(0, totalSpent - comp), carry: mo.carry, byCat, pending };
+    // Este ciclo, en «gastado» entra también lo previsto: tus previstos y lo que se repite y no es comprometido.
+    const planned = k === "cur" ? (data.planned ?? []).filter((p) => p.date >= data.cycle.start && p.date <= data.cycle.end).reduce((t, p) => t + p.amount, 0)
+      + (data.pending ?? []).filter((p) => !committed.has(p.category)).reduce((t, p) => t + p.amount, 0) : 0;
+    return { label: mo.label, income: mo.income, fixed: comp + sum(pending, Object.keys(pending)), spent: Math.max(0, totalSpent - comp) + planned, carry: mo.carry, byCat, pending };
   };
   const waiting = data.money.cur.income <= 0 && (data.budget.income ?? 0) > 0;
   const cur = cycleOf("cur");
@@ -240,6 +267,10 @@ export function LabLeftToSpend() {
 
   return (
     <div className="pb-4">
+      <p className="mb-3 flex items-baseline justify-between px-1 text-sm text-slate-500">
+        <span>Tu objetivo de ahorro</span>
+        <b className="amount text-[15px] font-semibold tabular-nums text-[#3478f6]">{eur(saving, 0)} por ciclo</b>
+      </p>
       <div ref={pager} onScroll={(e) => { const el = e.currentTarget; setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
         className="flex snap-x snap-mandatory items-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {pages.map(([k, m]) => (

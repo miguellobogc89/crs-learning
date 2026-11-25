@@ -43,7 +43,7 @@ const store = {
   set: (k: string, v: string | null) => { try { if (v === null) window.sessionStorage.removeItem(k); else window.sessionStorage.setItem(k, v); } catch { /* ignorar */ } },
 };
 /** Lo que comparten las dos listas (este mes y el que viene): mismo desplegar, mismo ir a la hoja. */
-type ListProps = { plan: Plan; open: string | null; toggle: (id: string, header: HTMLElement) => void; toSheet: (id: string, target?: { cat?: string; sub?: string }) => void; toCategory: (key: string) => void };
+export type ListProps = { plan: Plan; open: string | null; toggle: (id: string, header: HTMLElement) => void; toSheet: (id: string, target?: { cat?: string; sub?: string }) => void; toCategory: (key: string) => void };
 const scroller = () => document.querySelector<HTMLElement>("main");
 
 // ── Vista sin desplegar: a qué ritmo vas en cada grupo, en palabras y sin cifras ─────────────────
@@ -198,7 +198,10 @@ function LooseRow({ l, mode, onOpen, muted = false }: { l: Line; mode: Mode; onO
  * por categoría; los de una, por subcategoría) con lo cancelado dentro de su línea, y «Ver todos los movimientos».
  * Cada línea abre la hoja ya filtrada y en el mes del que vienes.
  */
-function GroupsList({ plan, mode, open, toggle, toSheet, toCategory }: ListProps & { mode: Mode }) {
+/** Para repartir la lista en bloques (laboratorio «Te quedan»): solo lo comprometido o solo lo gastado. */
+export type ListSection = { kind: "committed" | "spent"; groupIds: Set<string>; cats: Set<string> };
+
+export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, section }: ListProps & { mode: Mode; section?: ListSection }) {
   const [adding, setAdding] = useState(false);
   const cycles = plan.history ?? [];
   const last = cycles[1] ?? null;
@@ -220,7 +223,8 @@ function GroupsList({ plan, mode, open, toggle, toSheet, toCategory }: ListProps
     return { g, s, lines, ...paceOf(s, last ? sumCats(last.atDay, g.categories) : null) };
   });
   // Solo los grupos con algo en ese mes (gastado, previsto, comprometido o cancelado): los que están a 0 no salen.
-  const rows = groups.filter((r) => r.lines.length);
+  const rows = groups.filter((r) => r.lines.length)
+    .filter((r) => !section || (section.kind === "committed") === section.groupIds.has(r.g.id));
   if (mode === "now") rows.sort((a, b) => PACE_ORDER[a.pace] - PACE_ORDER[b.pace]);
   const judged = rows.filter((r) => r.pace !== "sin_datos");
   const good = judged.filter((r) => r.pace === "bien").length;
@@ -240,20 +244,22 @@ function GroupsList({ plan, mode, open, toggle, toSheet, toCategory }: ListProps
   const looseLines = [...candidates].filter((c) => !inGroups.has(c))
     .flatMap((c) => linesOf(plan, [c], mode, false));
   const loose = looseLines.filter((l) => !OTHER_CATS.includes(l.cat))
+    .filter((l) => !section || (section.kind === "committed") === section.cats.has(l.cat))
     .sort((a, b) => (mode === "now" ? b.now + b.pending - (a.now + a.pending) : b.committed - a.committed));
-  const others = looseLines.filter((l) => OTHER_CATS.includes(l.cat));
-  const extrasNow = mode === "now" ? Object.values(plan.totals?.extrasNow ?? {}).reduce((t, x) => t + x, 0) : 0;
+  const others = section?.kind === "committed" ? [] : looseLines.filter((l) => OTHER_CATS.includes(l.cat));
+  const extrasNow = mode === "now" && section?.kind !== "committed" ? Object.values(plan.totals?.extrasNow ?? {}).reduce((t, x) => t + x, 0) : 0;
+  const ind = section ? "ml-4" : "ml-12";
 
   return (
     <div className="pb-2">
-      {mode === "now" ? (
+      {section ? null : mode === "now" ? (
         <>
           <p className="break-words text-[22px] font-semibold leading-tight tracking-tight text-slate-900">{headline}</p>
           <p className="mt-1 text-sm text-slate-500">{daysLeft > 1 ? `Quedan ${daysLeft} días de ciclo` : daysLeft === 1 ? "Queda 1 día de ciclo" : "Último día del ciclo"}</p>
         </>
       ) : <h2 className="text-sm font-medium text-slate-500">Tus grupos en {monthName}</h2>}
 
-      <ul className={`${mode === "now" ? "mt-3" : "mt-1"} divide-y divide-slate-100`}>
+      <ul className={`${section ? "" : mode === "now" ? "mt-3" : "mt-1"} divide-y divide-slate-100`}>
         {rows.map(({ g, s, lines, pace, text }) => {
           const isOpen = open === g.id;
           const gone = lines.flatMap((l) => l.gone);
@@ -290,7 +296,7 @@ function GroupsList({ plan, mode, open, toggle, toSheet, toCategory }: ListProps
 
               <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
                 <div className="overflow-hidden" inert={!isOpen}>
-                  <div className="mb-3 ml-12">
+                  <div className={`mb-3 ${ind}`}>
                     <ul>
                       {lines.map((l) => <LineRow key={l.key} l={l} mode={mode} onOpen={() => toSheet(g.id, lineTarget(l))} />)}
                       {!lines.length && <li className="py-2.5 text-sm text-slate-500">{mode === "now" ? "Sin gastos este mes." : "Nada comprometido todavía."}</li>}
@@ -309,7 +315,7 @@ function GroupsList({ plan, mode, open, toggle, toSheet, toCategory }: ListProps
 
       {loose.length > 0 && (
         <>
-          <h3 className="mt-4 text-sm font-medium text-slate-500">Sin grupo</h3>
+          {section?.kind !== "committed" && <h3 className="mt-4 text-sm font-medium text-slate-500">Sin grupo</h3>}
           <ul className="mt-1 divide-y divide-slate-100">
             {loose.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} />)}
           </ul>
@@ -335,15 +341,17 @@ function GroupsList({ plan, mode, open, toggle, toSheet, toCategory }: ListProps
         </ul>
       )}
       {/* Préstamos temporales: lo que debes a cada persona (no cuenta como gasto ni ingreso). */}
-      {mode === "now" && (plan.loans ?? []).map((l) => (
+      {mode === "now" && section?.kind !== "committed" && (plan.loans ?? []).map((l) => (
         <p key={l.key} className="amount border-t border-slate-100 py-3 text-sm text-slate-600">
           Le debes <b className="font-semibold text-orange-700">{eur(l.owed, 2)}</b> a {l.name} <span className="text-xs text-slate-400">· préstamo temporal</span>
         </p>
       ))}
-      {mode === "next" && next && !next.items.length && <p className="py-2 text-sm text-slate-500">Aún no hay nada apuntado para {monthName}. Marca «Se repite» en tus recibos o añade un gasto con fecha de {monthName}.</p>}
-      <button type="button" onClick={() => setAdding(true)} className="mt-1 inline-flex items-center gap-1.5 py-3 text-[15px] font-medium text-blue-600">
-        <Plus className="h-5 w-5" /> Añadir gasto
-      </button>
+      {mode === "next" && !section && next && !next.items.length && <p className="py-2 text-sm text-slate-500">Aún no hay nada apuntado para {monthName}. Marca «Se repite» en tus recibos o añade un gasto con fecha de {monthName}.</p>}
+      {section?.kind !== "committed" && (
+        <button type="button" onClick={() => setAdding(true)} className="mt-1 inline-flex items-center gap-1.5 py-3 text-[15px] font-medium text-blue-600">
+          <Plus className="h-5 w-5" /> Añadir gasto
+        </button>
+      )}
       <AddExpenseSheet open={adding} onClose={() => setAdding(false)} defaultDate={mode === "next" && next ? next.cycle.start : undefined} />
     </div>
   );
