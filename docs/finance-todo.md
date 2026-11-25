@@ -170,3 +170,5 @@ Descartado: índice de crédito (no aplica en España), redondeos (requiere move
     200 € que recibiste el 24 sin concepto?» (Sí / No).
   - Riesgo: mismo importe con cosas distintas (por eso el «Deshacer»). Devoluciones en varias veces, más adelante.
   - Hoy (25/11) el Bizum a la madre quedó como «entre mis cuentas» y el recibido como ingreso: el caso a resolver.
+
+- Tarjetas por cuenta: detectar los números de tarjeta en los conceptos («Top-Up by *1800», «TARJETA 5489…») y asociarlos a su cuenta (preguntar solo si hay duda: «¿La tarjeta ··1800 es de Santander Nómina?»); mostrarlo en Cuentas. Sirve para reconocer traspasos entre cuentas propias y asignar cargos de tarjeta a su cuenta. (··1800 = Santander Nómina.)
