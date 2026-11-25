@@ -49,6 +49,13 @@ export async function loadTxs(userId: string, opts: { since?: string; includeExc
   return rows.map(toTx);
 }
 
+/** Ahorro por mes guardado: solo fechas y cantidades válidas. */
+function monthSavings(v: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (v && typeof v === "object" && !Array.isArray(v)) for (const [k, n] of Object.entries(v)) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && typeof n === "number" && Number.isFinite(n) && n >= 0) out[k] = n;
+  return out;
+}
+
 export async function getSettings(userId: string) {
   const s = await prisma.finance_settings.upsert({ where: { user_id: userId }, create: { user_id: userId }, update: {} });
   return {
@@ -58,6 +65,7 @@ export async function getSettings(userId: string) {
     expectedIncome: s.expected_income === null ? null : Number(s.expected_income),
     othersGoal: s.others_goal === null ? null : Number(s.others_goal),
     committedCategories: s.committed_categories ?? [],
+    savingsByMonth: monthSavings(s.savings_by_month),
     incomeAccountId: s.income_account_id,
     savingsAccountId: s.savings_account_id,
     lastSyncAt: s.last_sync_at?.toISOString() ?? null,

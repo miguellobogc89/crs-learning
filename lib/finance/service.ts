@@ -715,6 +715,7 @@ export async function planView(userId: string) {
     ...(() => { const p = currentMonthPending(ctx); return { pending: p.items, cancelledNow: p.cancelled }; })(),
     next: nextMonthCommitted(ctx),
     committedCategories: ctx.settings.committedCategories,
+    savingsByMonth: ctx.settings.savingsByMonth,
     budget: { income, incomeNow, othersGoal: ctx.settings.othersGoal, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
     unknown: { perMonth: unknownSpend, count: unknownCount },
     // Préstamos temporales: lo que debes a cada persona (lo que te prestó menos lo que ya le has devuelto).

@@ -363,7 +363,7 @@ export async function POST(req: Request, route: RouteContext) {
     if (action === "settings") {
       const day = Number(body.cycleStartDay);
       const goal = body.savingsGoal === null || body.savingsGoal === "" ? null : Number(body.savingsGoal);
-      const data: { cycle_start_day?: number; savings_goal?: number | null; savings_frequency?: string; expected_income?: number | null; others_goal?: number | null; committed_categories?: string[]; income_account_id?: string | null; savings_account_id?: string | null; updated_at: Date } = { updated_at: new Date() };
+      const data: { cycle_start_day?: number; savings_goal?: number | null; savings_frequency?: string; expected_income?: number | null; others_goal?: number | null; committed_categories?: string[]; savings_by_month?: Record<string, number>; income_account_id?: string | null; savings_account_id?: string | null; updated_at: Date } = { updated_at: new Date() };
       if (body.cycleStartDay !== undefined) {
         if (!Number.isInteger(day) || day < 1 || day > 28) return fail("El ciclo debe empezar entre el día 1 y el 28");
         data.cycle_start_day = day;
@@ -386,6 +386,17 @@ export async function POST(req: Request, route: RouteContext) {
         // «Comprometido»: categorías que se pagan cada mes (además de los grupos marcados).
         if (!Array.isArray(body.committedCategories)) return fail("Categorías no válidas");
         data.committed_categories = [...new Set((body.committedCategories as unknown[]).filter((c): c is string => typeof c === "string" && isCategory(c)))];
+      }
+      if (body.monthSaving !== undefined) {
+        // Ahorro de un mes concreto: { start: "AAAA-MM-DD", amount: número | null } (null vuelve al fijo).
+        const ms = body.monthSaving as { start?: unknown; amount?: unknown } | null;
+        const start = typeof ms?.start === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ms.start) ? ms.start : null;
+        const amount = ms?.amount === null || ms?.amount === undefined || ms?.amount === "" ? null : Number(ms.amount);
+        if (!start || (amount !== null && (!Number.isFinite(amount) || amount < 0))) return fail("Ahorro del mes no válido");
+        const cur = (await getSettings(uid)).savingsByMonth;
+        const next = { ...cur };
+        if (amount === null) delete next[start]; else next[start] = Math.round(amount * 100) / 100;
+        data.savings_by_month = next;
       }
       for (const [key, column] of [["incomeAccountId", "income_account_id"], ["savingsAccountId", "savings_account_id"]] as const) {
         if (body[key] === undefined) continue;

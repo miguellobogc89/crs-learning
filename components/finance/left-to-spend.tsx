@@ -15,7 +15,8 @@ import { SkeletonList } from "@/components/trading/skeletons";
 import { useRouter } from "next/navigation";
 import { fapi, refreshFinance, useFinance } from "./api";
 import { GroupsList, type ListProps } from "./home-plan";
-import { SavingsGoalSheet } from "./savings-goal-sheet";
+import { SavingsGoalSheet, type MonthSaving } from "./savings-goal-sheet";
+import Link from "next/link";
 import { CategoryIcon } from "./category-icon";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
@@ -60,7 +61,7 @@ function stateOf(m: Cycle, saving: number, kind: Kind, day: number, days: number
 }
 
 type Ctx = { plan: Plan; committed: Set<string>; groupsOn: Set<string>; catsOn: Set<string>; toggleGroup: (id: string) => void; toggleCat: (c: string) => void; busy: boolean; list: Omit<ListProps, "plan">;
-  blocks: Record<string, boolean>; toggleBlock: (key: string, el?: HTMLElement) => void; colorOf: (groupId: string) => string | undefined; editSaving: () => void; goTo: (i: number) => void };
+  blocks: Record<string, boolean>; toggleBlock: (key: string, el?: HTMLElement) => void; colorOf: (groupId: string) => string | undefined; editSaving: (m: MonthSaving) => void; fixedSaving: number | null; savingsByMonth: Record<string, number>; goTo: (i: number) => void };
 
 function Block({ color, title, amount, children, danger = false, open, onToggle }: { color: string; title: string; amount: number; children: ReactNode; danger?: boolean; open: boolean; onToggle: (el: HTMLElement) => void }) {
   return (
@@ -162,15 +163,17 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
   const big = kind === "next" ? Math.max(0, s.left) : Math.abs(s.left);
   const tone = s.pace === "mal" ? "#b91c1c" : s.pace === "atento" ? "#b45309" : "#15803d";
   const title = kind === "next" ? "Tendrías para gastar" : kind === "prev" ? (s.left >= 0 ? "Te sobró" : "Te pasaste") : s.left >= 0 ? "Te quedan" : "Te has pasado";
-  const sub = isCur && s.left > 0 ? `unos ${eur(s.left / daysLeft, 0)} al día` : kind === "next" ? `ahorrando ${eur(saving, 0)}` : s.left < 0 ? (s.fromCarry > 0 ? "tirando de lo que tenías" : "sin ahorro este ciclo") : `y ahorraste ${eur(saving, 0)}`;
+  const sub = isCur && s.left > 0 ? `unos ${eur(s.left / daysLeft, 0)} al día` : kind === "next" ? `ahorrando ${eur(saving, 0)}` : s.left < 0 ? (s.fromCarry > 0 ? "tirando de lo que tenías" : "sin ahorro este mes") : `y ahorraste ${eur(saving, 0)}`;
 
   // Desglose: comprometido por sus grupos y categorías; gastado por el resto de grupos y lo que va sin grupo.
   const otherGroups = x.plan.groups.filter((g) => !x.groupsOn.has(g.id) && g.categories.length);
   const inOther = new Set(otherGroups.flatMap((g) => g.categories));
   const looseSpent = Math.max(0, m.spent - sum(m.byCat, [...inOther].filter((c) => !x.committed.has(c))));
 
+  const custom = !!m.start && x.savingsByMonth[m.start] !== undefined;
   const fade = (on: boolean) => ({ opacity: on ? 1 : 0, transition: "opacity 250ms ease-out" });
   const name = monthOf(m.start);
+  const monthLow = (name || m.label).toLowerCase();
   return (
     <div className={`rounded-2xl p-3 ${isCur ? "border-2 border-[#3478f6] bg-white" : "bg-slate-50"}`}>
       <p className={`flex px-1 ${kind === "prev" ? "justify-start" : isCur ? "justify-center" : "justify-end"}`}>
@@ -197,11 +200,11 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
       </svg>
       <div className="my-4 flex items-center justify-center gap-2">
         {(["prev", "cur", "next"] as Kind[]).map((k, i) => (
-          <button key={k} type="button" aria-label={k === "prev" ? "Ciclo anterior" : k === "cur" ? "Este ciclo" : "Próximo ciclo"} aria-current={k === kind}
+          <button key={k} type="button" aria-label={k === "prev" ? "Mes anterior" : k === "cur" ? "Este mes" : "Próximo mes"} aria-current={k === kind}
             onClick={() => x.goTo(i)} className={`h-2 rounded-full transition-all ${k === kind ? "w-5 bg-slate-700" : "w-2 bg-slate-300"}`} />
         ))}
       </div>
-      {waiting && <p className="amount mb-2 text-center text-sm text-slate-600">Tu nómina de este ciclo aún no ha entrado: cuento con lo que sueles cobrar ({eur(s.income, 0)}).</p>}
+      {waiting && <p className="amount mb-2 text-center text-sm text-slate-600">Tu nómina de este mes aún no ha entrado: cuento con lo que sueles cobrar ({eur(s.income, 0)}).</p>}
 
       <ul className="divide-y divide-slate-100 border-t border-slate-100">
         <Block color={C.fixed} title="Comprometido" amount={m.fixed} open={focus === "c"} onToggle={(el) => x.toggleBlock(`${kind}:c`, el)}>
@@ -220,13 +223,22 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
         </Block>
         <Block color={C.saving} title="Ahorro" amount={savedLeft} danger={s.ateSaving > 0} open={focus === "a"} onToggle={(el) => x.toggleBlock(`${kind}:a`, el)}>
           <p className="py-1 text-sm text-slate-600">
-            Tu objetivo es {eur(saving, 0)} por ciclo. {s.ateSaving > 0 ? `Te has comido ${eur(s.ateSaving, 0)} del ahorro de este ciclo.` : "Intacto."}
+            {x.fixedSaving === null && !custom ? "Aún no tienes un ahorro fijo al mes." : <>
+              {kind === "prev" ? "Querías" : "Quieres"} ahorrar {eur(saving, 0)} en {monthLow}.
+              {custom && x.fixedSaving !== null && saving !== x.fixedSaving && ` Son ${eur(Math.abs(saving - x.fixedSaving), 0)} ${saving > x.fixedSaving ? "más" : "menos"} que tu ahorro fijo (${eur(x.fixedSaving, 0)}).`}
+              {" "}{s.ateSaving > 0 ? `Te has comido ${eur(s.ateSaving, 0)}.` : kind === "next" ? "" : "Intacto."}
+            </>}
             {s.fromCarry > 0 && ` Y te has comido ${eur(s.fromCarry, 0)} de lo que tenías ahorrado de antes${carry > 0 ? ` (${Math.round(carryFrac * 100)} % de ${eur(carry, 0)})` : ""}.`}
             {kind !== "next" && carry > 0 && s.fromCarry <= 0 && ` Al empezar tenías ${eur(carry, 0)}.`}
           </p>
-          <button type="button" onClick={x.editSaving} className="mt-1 inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-blue-700">
-            <Pencil className="h-3.5 w-3.5" />Cambiar objetivo
-          </button>
+          <div className="mt-1 flex flex-wrap items-center gap-x-5">
+            {x.fixedSaving === null && <Link href="/finanzas/plan" className="py-1 text-sm font-semibold text-blue-700">Fija un ahorro mensual</Link>}
+            {m.start && (
+              <button type="button" onClick={() => x.editSaving({ start: m.start!, name: name || m.label, fixed: x.fixedSaving, custom })} className="inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-blue-700">
+                <Pencil className="h-3.5 w-3.5" />Cambiar solo {kind === "cur" ? "este mes" : monthLow}
+              </button>
+            )}
+          </div>
         </Block>
       </ul>
     </div>
@@ -263,7 +275,7 @@ export function LeftToSpend() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<Record<string, boolean>>({});
   const [restored, setRestored] = useState(false);
-  const [editSaving, setEditSaving] = useState(false);
+  const [editSaving, setEditSaving] = useState<MonthSaving | null>(null);
   const [groupsOn, setGroupsOn] = useState<Set<string>>(new Set());
   const [catsOn, setCatsOn] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -322,7 +334,7 @@ export function LeftToSpend() {
     if (id.startsWith("cat:")) return categoryHex(id.slice(4));
     const g = data.groups.find((x) => x.id === id); return g?.categories[0] ? categoryHex(g.categories[0]) : undefined;
   };
-  const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks, colorOf, editSaving: () => setEditSaving(true),
+  const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks, colorOf, editSaving: (ms: MonthSaving) => setEditSaving(ms), fixedSaving: data.budget.savingsGoal, savingsByMonth: data.savingsByMonth ?? {},
     goTo: (i: number) => { const el = pager.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); },
     // Un bloque abierto a la vez por ciclo: es el que muestra el aro.
     toggleBlock: (k, el) => (keepInPlace(el), setBlocks((b) => { const kd = k.split(":")[0]; const was = !!b[k]; return { ...b, [`${kd}:c`]: false, [`${kd}:g`]: false, [`${kd}:a`]: false, [k]: !was }; })) };
@@ -360,17 +372,18 @@ export function LeftToSpend() {
   const cur = cycleOf("cur");
   if (waiting) cur.income = data.budget.income ?? 0;
   const pages: [Kind, Cycle][] = [["prev", cycleOf("prev")], ["cur", cur], ["next", cycleOf("next")]];
-  const saving = data.budget.savingsGoal ?? 0;
+  const savingOf = (m: Cycle) => (m.start ? data.savingsByMonth?.[m.start] : undefined) ?? data.budget.savingsGoal ?? 0;
   const { day, totalDays } = data.cycle;
 
   return (
     <div className="pb-4 [overflow-anchor:none]">
-      <SavingsGoalSheet open={editSaving} onClose={() => setEditSaving(false)} current={data.budget.savingsGoal} income={data.budget.income} />
+      <SavingsGoalSheet open={!!editSaving} onClose={() => setEditSaving(null)} month={editSaving}
+        current={editSaving ? data.savingsByMonth?.[editSaving.start] ?? data.budget.savingsGoal : data.budget.savingsGoal} income={data.budget.income} />
       <div ref={pager} onScroll={(e) => { const el = e.currentTarget; setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
         className="flex snap-x snap-mandatory items-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {pages.map(([k, m]) => (
           <div key={k} className="w-full shrink-0 snap-start snap-always px-1">
-            <Gauge m={m} saving={saving} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={x} />
+            <Gauge m={m} saving={savingOf(m)} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={x} />
           </div>
         ))}
       </div>

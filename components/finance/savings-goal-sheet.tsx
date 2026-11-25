@@ -1,6 +1,7 @@
 "use client";
-// Editar el objetivo de ahorro (25/11/2026): lo que quieres apartar en cada ciclo, de nómina a nómina. Hoja inferior
-// con la cifra grande, atajos por porcentaje de lo que sueles cobrar y qué parte es. Se guarda en tus ajustes.
+// Editar el ahorro (25/11/2026). Sin «month», el ahorro fijo al mes (ajustes). Con «month», solo el de ese mes:
+// se guarda aparte y, si coincide con el fijo o se pide volver a él, se borra. Hoja inferior con la cifra grande,
+// atajos por porcentaje de lo que sueles cobrar y qué parte es.
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -8,7 +9,9 @@ import { eur } from "@/components/trading/format";
 import { errorText, fapi, refreshFinance } from "./api";
 import { aboveKeyboard, useKeyboardInset } from "./use-keyboard-inset";
 
-export function SavingsGoalSheet({ open, onClose, current, income }: { open: boolean; onClose: () => void; current: number | null; income: number | null }) {
+export type MonthSaving = { start: string; name: string; fixed: number | null; custom: boolean };
+
+export function SavingsGoalSheet({ open, onClose, current, income, month }: { open: boolean; onClose: () => void; current: number | null; income: number | null; month?: MonthSaving | null }) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -17,8 +20,17 @@ export function SavingsGoalSheet({ open, onClose, current, income }: { open: boo
   const n = Number(value.replace(",", "."));
   const valid = value.trim() !== "" && Number.isFinite(n) && n >= 0;
   const pct = valid && income ? Math.round((n / income) * 100) : null;
+  const send = async (amount: number | null) => {
+    setBusy(true); setErr(null);
+    try {
+      await fapi("settings", month ? { monthSaving: { start: month.start, amount: amount !== null && amount === month.fixed ? null : amount } } : { savingsGoal: amount });
+      refreshFinance();
+      onClose();
+    } catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
+  };
   const save = async () => {
     if (!valid) { setErr("Escribe una cantidad"); return; }
+    if (month) return send(Math.round(n));
     setBusy(true); setErr(null);
     try {
       await fapi("settings", { savingsGoal: Math.round(n) });
@@ -30,8 +42,10 @@ export function SavingsGoalSheet({ open, onClose, current, income }: { open: boo
     <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <SheetContent side="bottom" style={aboveKeyboard(inset, false)} className="mx-auto w-full max-w-xl gap-0 rounded-t-3xl pb-[max(1rem,env(safe-area-inset-bottom))]">
         <SheetHeader className="px-5 pb-2 pt-5">
-          <SheetTitle>Objetivo de ahorro</SheetTitle>
-          <SheetDescription>Lo que quieres apartar en cada ciclo, de nómina a nómina.</SheetDescription>
+          <SheetTitle>{month ? `Ahorro de ${month.name.toLowerCase()}` : "Ahorro al mes"}</SheetTitle>
+          <SheetDescription>{month
+            ? `Solo para ${month.name.toLowerCase()}. ${month.fixed !== null ? `Tu ahorro fijo (${eur(month.fixed, 0)}) se cambia en Mi plan.` : "Tu ahorro fijo se pone en Mi plan."}`
+            : "Lo que quieres apartar cada mes, de nómina a nómina."}</SheetDescription>
         </SheetHeader>
         <div className="px-5">
           <label className="mt-3 flex items-baseline justify-center gap-2">
@@ -49,6 +63,11 @@ export function SavingsGoalSheet({ open, onClose, current, income }: { open: boo
               ))}
             </div>
           ) : null}
+          {month?.custom && month.fixed !== null && (
+            <p className="mt-3 text-center">
+              <button type="button" onClick={() => void send(null)} disabled={busy} className="text-sm font-semibold text-blue-700">Volver a tu ahorro fijo ({eur(month.fixed, 0)})</button>
+            </p>
+          )}
           {err && <p className="mt-3 text-center text-sm text-rose-700">{err}</p>}
           <div className="mt-6 flex items-center gap-3">
             <button type="button" onClick={onClose} className="h-12 flex-1 rounded-full bg-slate-100 text-[15px] font-semibold text-slate-700">Cancelar</button>
