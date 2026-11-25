@@ -155,3 +155,18 @@ Después del MVP:
   (que ya junta los brókers). Diferenciador frente a Fintonic y los bancos.
 - Selector de periodo en gráficos (7 días, 30 días, 12 semanas, 6 meses, 1 año).
 Descartado: índice de crédito (no aplica en España), redondeos (requiere mover dinero), aros de categorías con %.
+
+## Saldos y emparejamiento automático de Bizums (25/11/2026)
+- Guardar una foto del saldo de cada cuenta en cada sincronización. «Lo que tenías al empezar el ciclo» debe salir del
+  saldo guardado ese día, no de reconstruir hacia atrás: el banco a veces descuenta del saldo un movimiento que aún no
+  lista (25/11: traspaso de 650 € de Santander Nómina a Revolut; la reconstrucción daba −468 € en la cuenta nómina el
+  22/10). Mientras no haya fotos, reconstruir solo desde el último día con movimientos completos.
+- Emparejamiento automático de Bizums: uno que entra y otro que sale, con la misma persona y el mismo importe, en menos
+  de 30 días → se marcan como compensados (ni ingreso ni gasto) al momento, y un aviso en Inicio: «He emparejado los
+  200 € que te envió X el 24 con los 200 € que le enviaste hoy» con «Correcto» y «Deshacer».
+  - YAXI (Revolut): los Bizums enviados traen el nombre completo; los recibidos a veces solo el nombre de pila («Bizum
+    de Javier») y a veces nada («Sin concepto»). Con nombre en los dos lados (coincidencia flexible: nombre de pila),
+    se empareja solo; si el recibido no tiene nombre, se pregunta en el envío: «¿Estos 200 € son la devolución de los
+    200 € que recibiste el 24 sin concepto?» (Sí / No).
+  - Riesgo: mismo importe con cosas distintas (por eso el «Deshacer»). Devoluciones en varias veces, más adelante.
+  - Hoy (25/11) el Bizum a la madre quedó como «entre mis cuentas» y el recibido como ingreso: el caso a resolver.
