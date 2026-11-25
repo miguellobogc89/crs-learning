@@ -10,7 +10,7 @@ import { card, flat, primary } from "@/components/trading/format";
 import { CardHeader, ErrorNote, SectionTitle } from "@/components/trading/ui";
 import { SkeletonStats, SkeletonList } from "@/components/trading/skeletons";
 import { fapi, useFinance } from "./api";
-import { HomePlan } from "./home-plan";
+import { LeftToSpend } from "./left-to-spend";
 
 type Overview = Awaited<ReturnType<typeof overview>>;
 
@@ -74,8 +74,8 @@ export function HomePanel() {
   return (
     <div className="space-y-4 pb-6">
       <>
-      {/* El gasto del mes y cómo vas en cada grupo */}
-      <HomePlan />
+      {/* Te quedan: el aro del ciclo (anterior, este y el próximo) y tus grupos en Comprometido y Gastado. */}
+      <LeftToSpend />
 
       {/* Solo los avisos que piden actuar: renovar el acceso al banco y cobros después de cancelar. */}
       <Alerts alerts={data.alerts.filter((a) => a.key.startsWith("consent:") || a.key.startsWith("zombi:"))} />

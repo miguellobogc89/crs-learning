@@ -1,5 +1,5 @@
 "use client";
-// Laboratorio · «Te quedan» (25/11/2026). Medio aro con lo que cobras en el ciclo (de nómina a nómina) repartido en
+// Inicio · «Te quedan» (25/11/2026, nació en el laboratorio). Medio aro con lo que cobras en el ciclo (de nómina a nómina) repartido en
 // comprometido, gastado (con los extraordinarios), libre y ahorro; por fuera, un arco fino con lo que tenías al
 // empezar, que se pinta de rojo si te pasas y tiras de él. En el centro, solo «Te quedan X €» (color según cómo vas)
 // y una línea; debajo, una frase con tu situación y tres bloques desplegables: Comprometido, Gastado y Ahorro.
@@ -45,13 +45,13 @@ function stateOf(m: Cycle, saving: number, kind: Kind, day: number, days: number
   return { income, left, over, ateSaving, fromCarry, budget, expected, pace };
 }
 
-type Ctx = { plan: Plan; committed: Set<string>; groupsOn: Set<string>; catsOn: Set<string>; toggleGroup: (id: string) => void; toggleCat: (c: string) => void; busy: boolean; list: Omit<ListProps, "plan"> };
+type Ctx = { plan: Plan; committed: Set<string>; groupsOn: Set<string>; catsOn: Set<string>; toggleGroup: (id: string) => void; toggleCat: (c: string) => void; busy: boolean; list: Omit<ListProps, "plan">;
+  blocks: Record<string, boolean>; toggleBlock: (key: string) => void };
 
-function Block({ color, title, amount, children, danger = false }: { color: string; title: string; amount: number; children: ReactNode; danger?: boolean }) {
-  const [open, setOpen] = useState(false);
+function Block({ color, title, amount, children, danger = false, open, onToggle }: { color: string; title: string; amount: number; children: ReactNode; danger?: boolean; open: boolean; onToggle: () => void }) {
   return (
     <li>
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 py-3 text-left">
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-3 py-3 text-left">
         <span className="h-3 w-3 shrink-0 rounded-sm" style={{ background: color }} />
         <span className="min-w-0 flex-1 text-[15px] font-semibold text-slate-900">{title}</span>
         <b className={`amount shrink-0 text-[15px] font-semibold tabular-nums ${danger ? "text-rose-700" : "text-slate-900"}`}>{eur(amount, 0)}</b>
@@ -157,7 +157,7 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
       <p className="amount mt-2 text-center text-sm text-slate-600">{say}</p>
 
       <ul className="mt-3 divide-y divide-slate-100 border-t border-slate-100">
-        <Block color={C.fixed} title="Comprometido" amount={m.fixed}>
+        <Block color={C.fixed} title="Comprometido" amount={m.fixed} open={x.blocks[`${kind}:c`] ?? false} onToggle={() => x.toggleBlock(`${kind}:c`)}>
           {!groupsOn.length && !loneCats.length && <p className="py-1 text-sm text-slate-500">Todavía no hay gastos asignados. Añade los que se pagan cada mes: hipoteca, recibos, préstamos, suscripciones…</p>}
           {kind === "prev" ? (
             <>
@@ -172,7 +172,7 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
           </button>
           {editing && <CommittedPicker x={x} />}
         </Block>
-        <Block color={C.spent} title={kind === "cur" ? "Gastado y previsto" : "Gastado"} amount={m.spent}>
+        <Block color={C.spent} title={kind === "cur" ? "Gastado y previsto" : "Gastado"} amount={m.spent} open={x.blocks[`${kind}:g`] ?? kind !== "prev"} onToggle={() => x.toggleBlock(`${kind}:g`)}>
           {kind !== "prev" ? <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : "now"} {...x.list} section={{ kind: "spent", groupIds: x.groupsOn, cats: x.committed }} /> : <>
           {otherGroups.map((g) => ({ g, v: sum(m.byCat, g.categories.filter((c) => !x.committed.has(c))) })).filter(({ v }) => v > 0).sort((a, b) => b.v - a.v)
             .map(({ g, v }) => <Line key={g.id} icon={g.categories[0]} label={g.name} amount={v} />)}
@@ -180,7 +180,7 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
           {m.spent <= 0 && <p className="py-1 text-sm text-slate-500">Nada todavía.</p>}
           </>}
         </Block>
-        <Block color={C.saving} title="Ahorro" amount={saving - s.ateSaving} danger={s.ateSaving > 0}>
+        <Block color={C.saving} title="Ahorro" amount={saving - s.ateSaving} danger={s.ateSaving > 0} open={x.blocks[`${kind}:a`] ?? false} onToggle={() => x.toggleBlock(`${kind}:a`)}>
           <p className="py-1 text-sm text-slate-600">
             Tu objetivo es {eur(saving, 0)} por ciclo. {s.ateSaving > 0 ? `Te has comido ${eur(s.ateSaving, 0)}.` : "Intacto."}
             {kind !== "next" && carry > 0 && ` Al empezar tenías ${eur(carry, 0)}${s.fromCarry > 0 ? `, y has tirado de ${eur(s.fromCarry, 0)} (${Math.round(carryFrac * 100)} %)` : ""}.`}
@@ -191,13 +191,23 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
   );
 }
 
-export function LabLeftToSpend() {
+// Lo que Inicio recuerda en esta sesión al ir a una hoja y volver: el ciclo que se miraba, lo desplegado y el scroll.
+const KEY = { page: "crs-finance:quedan-page", open: "crs-finance:quedan-open", blocks: "crs-finance:quedan-blocks", scroll: "crs-finance:quedan-scroll" };
+const store = {
+  get: (k: string) => { try { return window.sessionStorage.getItem(k); } catch { return null; } },
+  set: (k: string, v: string | null) => { try { if (v === null) window.sessionStorage.removeItem(k); else window.sessionStorage.setItem(k, v); } catch { /* ignorar */ } },
+};
+const scroller = () => document.querySelector<HTMLElement>("main");
+
+export function LeftToSpend() {
   const { data, error } = useFinance<Plan>("plan");
   const pager = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [blocks, setBlocks] = useState<Record<string, boolean>>({});
+  const [restored, setRestored] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [groupsOn, setGroupsOn] = useState<Set<string>>(new Set());
   const [catsOn, setCatsOn] = useState<Set<string>>(new Set());
@@ -206,7 +216,23 @@ export function LabLeftToSpend() {
     setGroupsOn(new Set(data.groups.filter((g) => g.fixed).map((g) => g.id)));
     setCatsOn(new Set(data.committedCategories ?? []));
   }, [data]);
-  useEffect(() => { const el = pager.current; if (el && data) el.scrollLeft = el.clientWidth; }, [!!data]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Al volver de una hoja, en este orden: el ciclo que se miraba, lo desplegado y, con todo pintado, el scroll.
+  useEffect(() => {
+    if (!data || restored) return;
+    const p = Math.min(2, Math.max(0, Number(store.get(KEY.page) ?? 1)));
+    setPage(p);
+    setOpenId(store.get(KEY.open));
+    try { setBlocks(JSON.parse(store.get(KEY.blocks) ?? "{}")); } catch { /* ignorar */ }
+    const el = pager.current;
+    if (el) el.scrollLeft = p * el.clientWidth;
+    setRestored(true);
+    const y = Number(store.get(KEY.scroll));
+    store.set(KEY.scroll, null);
+    if (y > 0) requestAnimationFrame(() => requestAnimationFrame(() => { const m = scroller(); if (m) m.scrollTop = y; }));
+  }, [data, restored]);
+  useEffect(() => { if (restored) store.set(KEY.page, String(page)); }, [page, restored]);
+  useEffect(() => { if (restored) store.set(KEY.open, openId); }, [openId, restored]);
+  useEffect(() => { if (restored) store.set(KEY.blocks, JSON.stringify(blocks)); }, [blocks, restored]);
   if (error && !data) return <ErrorNote>{error}</ErrorNote>;
   if (!data) return <SkeletonList rows={5} />;
 
@@ -227,14 +253,16 @@ export function LabLeftToSpend() {
     open: openId,
     toggle: (id) => setOpenId((o) => (o === id ? null : id)),
     toSheet: (id, t = {}) => {
+      store.set(KEY.scroll, String(scroller()?.scrollTop ?? 0));
       const q = new URLSearchParams(nextQ);
       if (t.cat) q.set("categoria", t.cat);
       if (t.sub) q.set("sub", t.sub);
       router.push(`/finanzas/grupo/${id}${q.toString() ? `?${q}` : ""}`);
     },
-    toCategory: (key) => router.push(`/finanzas/categoria/${encodeURIComponent(key)}${nextQ ? `?${nextQ}` : ""}`),
+    toCategory: (key) => (store.set(KEY.scroll, String(scroller()?.scrollTop ?? 0)), router.push(`/finanzas/categoria/${encodeURIComponent(key)}${nextQ ? `?${nextQ}` : ""}`)),
   };
-  const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list };
+  const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks,
+    toggleBlock: (k) => setBlocks((b) => ({ ...b, [k]: !(b[k] ?? k.endsWith(":g") && !k.startsWith("prev")) })) };
 
   // Cada ciclo: lo comprometido son sus grupos y categorías (lo cobrado y, en el actual, lo que falta por cobrar);
   // lo gastado, todo lo demás (con los extraordinarios).
@@ -292,7 +320,7 @@ export function LabLeftToSpend() {
             className={`h-2 rounded-full transition-all ${page === i ? "w-5 bg-slate-700" : "w-2 bg-slate-300"}`} />
         ))}
       </div>
-      <p className="mt-6 text-[11px] text-slate-400">Lo que marques en Comprometido se guarda de verdad. Ahorro: tu objetivo de ajustes ({eur(saving, 0)}).</p>
+
     </div>
   );
 }
