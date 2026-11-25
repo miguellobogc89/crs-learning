@@ -9,8 +9,12 @@
  * - devolucion: reembolso de un gasto; resta del gasto de su categoría.
  * - interna: entre cuentas propias (recarga de Revolut, traspaso para la hipoteca…). No es gasto ni ingreso.
  * - ahorro: aportación a ahorro o inversión (bróker, exchange, fondo). Es ahorro, no gasto.
+ * - prestamo: préstamo temporal entre personas (25/11/2026): lo que te prestan no es ingreso y lo que devuelves no
+ *   es gasto; la app lleva la cuenta de lo que debes a cada persona. El gasto real es lo que compras con ese dinero.
  */
-export const KINDS = ["gasto", "ingreso", "regalo", "devolucion", "interna", "ahorro"] as const;
+export const KINDS = ["gasto", "ingreso", "regalo", "devolucion", "interna", "ahorro", "prestamo"] as const;
+/** Lo que la IA puede proponer al clasificar (un préstamo temporal solo lo marca el usuario). */
+export const AI_KINDS = KINDS.filter((k) => k !== "prestamo");
 export type Kind = (typeof KINDS)[number];
 
 export const KIND_LABEL: Record<Kind, string> = {
@@ -20,6 +24,7 @@ export const KIND_LABEL: Record<Kind, string> = {
   devolucion: "Devolución",
   interna: "Entre mis cuentas",
   ahorro: "Ahorro / inversión",
+  prestamo: "Préstamo temporal",
 };
 
 export type CategoryDef = { key: string; label: string; kind: Kind; color: string; family: string; hint: string };
@@ -107,6 +112,7 @@ export const FAMILIES: FamilyDef[] = [
   { key: "no_computable", label: "Ni gasto ni ingreso", color: "slate", tab: "no_computable", cats: [
     { key: "transferencia_interna", label: "Entre mis cuentas", hint: "Traspasos entre tus cuentas.", kind: "interna" },
     { key: "ahorro_inversion", label: "Ahorro e inversión", hint: "Aportaciones a ahorro, fondos, bróker…", kind: "ahorro" },
+    { key: "prestamo_personal", label: "Préstamo temporal", hint: "Dinero que te presta alguien (o que le devuelves).", kind: "prestamo" },
   ] },
 ];
 

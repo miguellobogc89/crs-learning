@@ -4,7 +4,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal-finance/enable-banking";
 import {
-  addDays, affordability, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, forecastCycleWeeks, insuranceForecastCandidates, isForecastOverride, liquiditySeries, merchantKey, round2, median,
+  addDays, affordability, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, forecastCycleWeeks, insuranceForecastCandidates, isForecastOverride, liquiditySeries, merchantKey, personKey, personName, round2, median,
   expenseHistoryByCycle, normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
   type Alert, type CycleRule, type CycleSummary, type ForecastItem, type Tx,
 } from "./logic";
@@ -714,6 +714,21 @@ export async function planView(userId: string) {
     next: nextMonthCommitted(ctx),
     budget: { income, incomeNow, othersGoal: ctx.settings.othersGoal, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
     unknown: { perMonth: unknownSpend, count: unknownCount },
+    // Préstamos temporales: lo que debes a cada persona (lo que te prestó menos lo que ya le has devuelto).
+    loans: (() => {
+      const by = new Map<string, { key: string; name: string; owed: number }>();
+      for (const t of [...ctx.txs].sort((a, b) => a.date.localeCompare(b.date))) {
+        if (t.kind !== "prestamo") continue;
+        // Sin nombre en el concepto (algunos bancos ponen «Sin concepto»), la persona es el nombre que le diste.
+        const key = personKey(t.description, t.counterparty) || normalize(t.alias ?? "");
+        if (!key) continue;
+        const x = by.get(key) ?? { key, name: personName(key), owed: 0 };
+        x.owed = round2(x.owed + t.amount);
+        if (t.amount > 0 && t.alias?.trim()) x.name = t.alias.trim();
+        by.set(key, x);
+      }
+      return [...by.values()].filter((x) => x.owed > 0.5).sort((a, b) => b.owed - a.owed);
+    })(),
     // Dinero real en tus cuentas (las incluidas, en euros): ahora y al empezar el ciclo (lo que traías del anterior).
     cash: (() => {
       const acc = ctx.accounts.filter((a) => a.included && a.currency === "EUR" && a.balance !== null);

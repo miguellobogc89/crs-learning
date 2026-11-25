@@ -10,7 +10,8 @@ import { ArrowLeft, CalendarClock, Check, ChevronRight, Loader2, Pencil, Search 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
-import { errorText, fapi, longDay, refreshFinance } from "./api";
+import { errorText, fapi, longDay, refreshFinance, useFinance } from "./api";
+import { normalize, personKey, personName } from "@/lib/finance/logic";
 import { BankLogo } from "./bank-logo";
 import { CategoryIcon } from "./category-icon";
 import { CategoryPicker } from "./category-picker";
@@ -127,6 +128,7 @@ const KIND_HINT: Record<Kind, string> = {
   devolucion: "Resta del gasto de su categoría.",
   interna: "Entre tus cuentas: no es gasto ni ingreso.",
   ahorro: "Aportación a ahorro o inversión: no es gasto.",
+  prestamo: "Dinero que te prestan o que devuelves: no es ingreso ni gasto.",
 };
 
 function Row({ onClick, children, chevron = true }: { onClick?: () => void; children: ReactNode; chevron?: boolean }) {
@@ -154,6 +156,9 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Préstamos temporales abiertos (lo que debes a cada persona), para reconocer una devolución.
+  const loans = useFinance<{ loans?: { key: string; name: string; owed: number }[] }>("plan").data?.loans ?? [];
+  const [lender, setLender] = useState("");
   const id = item?.id;
 
   // Al abrir otro movimiento se empieza de cero y se consulta cuántos parecidos tiene y cuántos son distintos.
@@ -203,6 +208,7 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
     if (patch.kind) {
       const opts = categoriesFor(next.kind);
       if (next.kind === "interna") next.category = "transferencia_interna";
+      else if (next.kind === "prestamo") next.category = "prestamo_personal";
       else if (!opts.some((o) => o.key === next.category)) next.category = opts[0]?.key ?? "otros_gastos";
     }
     setOverride((o) => ({ ...o, ...next }));
@@ -390,6 +396,59 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
                 <span className="w-9 shrink-0 text-center text-xs text-slate-400">Tipo</span>
                 <span className="min-w-0 flex-1 text-[15px] text-slate-800">{KIND_LABEL[v.kind]}</span>
               </Row>
+              {/* Préstamo temporal: lo que te prestan no es ingreso; lo que devuelves, no es gasto. */}
+              {(() => {
+                const pk = personKey(item.description, item.counterparty) || normalize(v.alias ?? "");
+                const loan = loans.find((l) => l.key === pk);
+                if (item.amount > 0 && v.kind !== "interna" && v.kind !== "ahorro") return (
+                  <li>
+                    <label className="flex cursor-pointer items-center gap-3 py-3.5">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[15px] text-slate-800">Es un préstamo temporal</span>
+                        <span className="block text-xs text-slate-400">Dinero que te prestan y vas a devolver: no cuenta como ingreso.</span>
+                      </span>
+                      <input type="checkbox" role="switch" checked={v.kind === "prestamo"} onChange={(e) => { setLender(v.alias || personName(pk)); void save({ kind: e.target.checked ? "prestamo" : "ingreso" }, "category", e.target.checked ? "Marcado como préstamo temporal" : "Ya no es un préstamo"); }} className="peer sr-only" />
+                      <span aria-hidden="true" className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${v.kind === "prestamo" ? "bg-orange-500" : "bg-slate-200"}`}>
+                        <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${v.kind === "prestamo" ? "left-[22px]" : "left-0.5"}`} />
+                      </span>
+                    </label>
+                    {v.kind === "prestamo" && (
+                      <div className="flex items-center gap-2 pb-3.5">
+                        <span className="shrink-0 text-xs text-slate-500">¿Quién te lo presta?</span>
+                        <input value={lender || v.alias || personName(pk)} onChange={(e) => setLender(e.target.value)} maxLength={40} aria-label="Quién te lo presta"
+                          onBlur={() => { const n = lender.trim(); if (n && n !== (v.alias ?? "")) void save({ alias: n }, "alias", "Nombre guardado"); }}
+                          className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 text-sm text-slate-900 outline-none focus:border-blue-400" />
+                      </div>
+                    )}
+                    {v.kind === "prestamo" && loan && <p className="amount pb-3 text-xs font-medium text-orange-700">Le debes {eur(loan.owed, 2)} a {loan.name}.</p>}
+                  </li>
+                );
+                if (item.amount < 0 && v.kind === "prestamo") return (
+                  <li className="flex items-center gap-3 py-3.5">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15px] text-slate-800">Devolución de un préstamo</span>
+                      <span className="amount block text-xs text-slate-400">{loan ? `Aún le debes ${eur(loan.owed, 2)} a ${loan.name}.` : pk ? "Préstamo saldado." : "Escribe a quién se lo devuelves para llevar la cuenta."}</span>
+                      <span className="mt-2 flex items-center gap-2">
+                        <span className="shrink-0 text-xs text-slate-500">¿A quién?</span>
+                        <input value={lender || v.alias || personName(pk)} onChange={(e) => setLender(e.target.value)} maxLength={40} aria-label="A quién se lo devuelves"
+                          onBlur={() => { const n = lender.trim(); if (n && n !== (v.alias ?? "")) void save({ alias: n }, "alias", "Nombre guardado"); }}
+                          className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 text-sm text-slate-900 outline-none focus:border-blue-400" />
+                      </span>
+                    </span>
+                    <button type="button" onClick={() => void save({ kind: "gasto" }, "category", "Ya no es una devolución")} className="shrink-0 self-start rounded-full bg-slate-100 px-3.5 py-1.5 text-sm font-medium text-slate-700">No lo es</button>
+                  </li>
+                );
+                if (item.amount < 0 && loan && v.kind !== "prestamo") return (
+                  <li className="flex items-center gap-3 py-3.5">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15px] text-slate-800">¿Es la devolución a {loan.name}?</span>
+                      <span className="amount block text-xs text-slate-400">Le debes {eur(loan.owed, 2)}. Si lo es, no cuenta como gasto.</span>
+                    </span>
+                    <button type="button" onClick={() => void save({ kind: "prestamo" }, "category", `Devolución a ${loan.name}`)} className="shrink-0 rounded-full bg-orange-50 px-3.5 py-1.5 text-sm font-medium text-orange-700">Sí, lo es</button>
+                  </li>
+                );
+                return null;
+              })()}
               {canExtra && (
                 <li>
                   <label className="flex cursor-pointer items-center gap-3 py-3.5">

@@ -22,7 +22,7 @@ export const SOURCE_LABEL: Record<string, string> = {
   pendiente: "Pendiente",
 };
 
-const KIND_COLOR: Record<Kind, string> = { gasto: "slate", ingreso: "emerald", regalo: "violet", devolucion: "teal", interna: "blue", ahorro: "amber" };
+const KIND_COLOR: Record<Kind, string> = { gasto: "slate", ingreso: "emerald", regalo: "violet", devolucion: "teal", interna: "blue", ahorro: "amber", prestamo: "orange" };
 
 export function CategoryPill({ t }: { t: Pick<Item, "category" | "kind"> }) {
   const c = categoryOf(t.category);

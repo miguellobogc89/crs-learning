@@ -213,6 +213,18 @@ export function merchantKey(description: string, counterparty?: string | null) {
   return words.slice(0, 4).join(" ").slice(0, 60) || normalize(description).slice(0, 40);
 }
 
+/**
+ * Persona de un Bizum o transferencia (25/11/2026): su nombre sin «Bizum de», «Transferencia a», conceptos con números…
+ * Así «BIZUM DE ANA LOPEZ» y «BIZUM A ANA LOPEZ CENA» son la misma persona (para los préstamos temporales).
+ */
+const PERSON_NOISE = new Set(["bizum", "de", "a", "transferencia", "transf", "trf", "concepto", "enviado", "recibido", "inmediata", "ordenante", "beneficiario", "pago", "abono", "cargo", "para", "del", "la", "el", "los", "las", "y", "realizada", "emitida", "favor", "sin", "payment", "from", "to", "by", "transfer", "inmediata"]);
+export function personKey(description: string, counterparty?: string | null) {
+  const base = normalize(counterparty && counterparty.trim().length > 2 ? counterparty : description);
+  const words = base.split(" ").filter((w) => w.length > 1 && !PERSON_NOISE.has(w) && !/\d/.test(w));
+  return words.slice(0, 3).join(" ");
+}
+export const personName = (key: string) => key.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+
 /** Texto donde buscan las reglas y las palabras clave. */
 export const searchText = (t: { description: string; counterparty: string | null }) =>
   normalize(`${t.description} ${t.counterparty ?? ""}`);

@@ -5,7 +5,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { CATEGORIES, KINDS, categoryOf, isCategory, isKind } from "./categories";
+import { AI_KINDS, CATEGORIES, categoryOf, isCategory, isKind } from "./categories";
 import { addDays, fallbackClass, findTransferPairs, holderTokens, isOwnBankTransfer, isOwnName, keywordClass, matchRule, normalize, rulePattern, todayIso, type Rule, type Tx } from "./logic";
 import { aiAvailable, financeJson } from "./ai";
 import { getAccounts, getMemory, getRules, loadTxs } from "./store";
@@ -188,7 +188,7 @@ async function aiClassify(batch: Tx[], bankOf: Map<string, string>, memory: stri
               i: { type: "integer" },
               sure: { type: "boolean" },
               category: { type: "string", enum: categories.map((c) => c.key) },
-              kind: { type: "string", enum: [...KINDS] },
+              kind: { type: "string", enum: [...AI_KINDS] },
               extraordinary: { type: "boolean" },
             },
           },

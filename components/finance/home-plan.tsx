@@ -30,6 +30,7 @@ type Plan = {
   planned?: Planned[];
   pending?: NextItem[];
   cancelledNow?: Cancel[];
+  loans?: { key: string; name: string; owed: number }[];
   next?: { cycle: { start: string; end: string; label: string }; items: NextItem[]; cancelled: Cancel[] };
 };
 // Lo que Inicio recuerda en esta sesión al ir a una hoja y volver: el mes que se miraba y, de cada mes, qué grupo
@@ -333,6 +334,12 @@ function GroupsList({ plan, mode, open, toggle, toSheet, toCategory }: ListProps
           )}
         </ul>
       )}
+      {/* Préstamos temporales: lo que debes a cada persona (no cuenta como gasto ni ingreso). */}
+      {mode === "now" && (plan.loans ?? []).map((l) => (
+        <p key={l.key} className="amount border-t border-slate-100 py-3 text-sm text-slate-600">
+          Le debes <b className="font-semibold text-orange-700">{eur(l.owed, 2)}</b> a {l.name} <span className="text-xs text-slate-400">· préstamo temporal</span>
+        </p>
+      ))}
       {mode === "next" && next && !next.items.length && <p className="py-2 text-sm text-slate-500">Aún no hay nada apuntado para {monthName}. Marca «Se repite» en tus recibos o añade un gasto con fecha de {monthName}.</p>}
       <button type="button" onClick={() => setAdding(true)} className="mt-1 inline-flex items-center gap-1.5 py-3 text-[15px] font-medium text-blue-600">
         <Plus className="h-5 w-5" /> Añadir gasto
