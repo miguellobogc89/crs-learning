@@ -31,7 +31,8 @@ const arc = (r: number, f0: number, f1: number) => {
   return `M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
 };
 /** Colores de los grupos de gasto (en el aro y junto a su nombre): armónicos con el azul, estables por grupo. */
-const GROUP_COLORS = ["#f59f8b", "#f6c177", "#f4a7c0", "#b8a4f4", "#7fd1c7", "#e3c9a8", "#9ccff5", "#c7d98b"];
+const GROUP_COLORS = ["#f59f8b", "#f6c177", "#f4a7c0", "#b8a4f4", "#7fd1c7", "#e3c9a8", "#9ccff5", "#c7d98b", "#f2b5a0", "#d6a8e0", "#a8d8b0", "#f7d48a"];
+const OTHER_CATS = ["otros_gastos", "sin_clasificar"];
 const REST_COLOR = "#e8c3b9";
 const SPEND_CATS = SELECTABLE_CATEGORIES.filter((c) => c.kind === "gasto");
 const sum = (o: Record<string, number>, keys: Iterable<string>) => { let t = 0; for (const k of keys) t += o[k] ?? 0; return t; };
@@ -49,7 +50,7 @@ function stateOf(m: Cycle, saving: number, kind: Kind, day: number, days: number
 }
 
 type Ctx = { plan: Plan; committed: Set<string>; groupsOn: Set<string>; catsOn: Set<string>; toggleGroup: (id: string) => void; toggleCat: (c: string) => void; busy: boolean; list: Omit<ListProps, "plan">;
-  blocks: Record<string, boolean>; toggleBlock: (key: string) => void; colorOf: (groupId: string) => string | undefined; editSaving: () => void };
+  blocks: Record<string, boolean>; toggleBlock: (key: string) => void; colorOf: (groupId: string) => string | undefined; editSaving: () => void; goTo: (i: number) => void };
 
 function Block({ color, title, amount, children, danger = false, open, onToggle }: { color: string; title: string; amount: number; children: ReactNode; danger?: boolean; open: boolean; onToggle: () => void }) {
   return (
@@ -60,7 +61,9 @@ function Block({ color, title, amount, children, danger = false, open, onToggle 
         <b className={`amount shrink-0 text-[15px] font-semibold tabular-nums ${danger ? "text-rose-700" : "text-slate-900"}`}>{eur(amount, 0)}</b>
         <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && <div className="pb-3 pl-1">{children}</div>}
+      <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+        <div className="overflow-hidden" inert={!open}><div className="pb-3">{children}</div></div>
+      </div>
     </li>
   );
 }
@@ -109,12 +112,18 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
   const isCur = kind === "cur";
   const total = Math.max(1, s.income);
   // Lo gastado, repartido por grupo con su color (lo que va sin grupo, extraordinarios y previstos, en uno neutro).
-  const groupsSpent = x.plan.groups.filter((g) => !x.groupsOn.has(g.id) && g.categories.length)
-    .map((g) => ({ v: sum(m.byCat, g.categories.filter((c) => !x.committed.has(c))), c: x.colorOf(g.id) ?? C.spent })).filter((g) => g.v > 0);
+  // Solo con «Gastado» abierto; cerrado, lo gastado va en un único color.
+  const spentOpen = x.blocks[`${kind}:g`] ?? kind !== "prev";
+  const spendGroups = x.plan.groups.filter((g) => !x.groupsOn.has(g.id) && g.categories.length);
+  const grouped = new Set(x.plan.groups.flatMap((g) => g.categories));
+  const groupsSpent = !spentOpen ? [] : [
+    ...spendGroups.map((g) => ({ v: sum(m.byCat, g.categories.filter((c) => !x.committed.has(c))), c: x.colorOf(g.id) ?? C.spent })),
+    ...Object.keys(m.byCat).filter((c) => !grouped.has(c) && !x.committed.has(c) && !OTHER_CATS.includes(c)).map((c) => ({ v: m.byCat[c] ?? 0, c: x.colorOf(`cat:${c}`) ?? C.spent })),
+  ].filter((g) => g.v > 0);
   const restSpent = Math.max(0, m.spent - groupsSpent.reduce((t, g) => t + g.v, 0));
   const room = s.left >= 0 ? m.spent : Math.max(0, total - m.fixed - (saving - s.ateSaving));
   const k = m.spent > 0 ? room / m.spent : 0;
-  const spentSegs: [number, string][] = [...groupsSpent.map((g) => [g.v * k, g.c] as [number, string]), [restSpent * k, REST_COLOR]];
+  const spentSegs: [number, string][] = [...groupsSpent.map((g) => [g.v * k, g.c] as [number, string]), [restSpent * k, spentOpen ? REST_COLOR : C.spent]];
   const segs: [number, string][] = s.left >= 0
     ? [[m.fixed, C.fixed], ...spentSegs, [s.left, C.free], [saving, C.saving]]
     : [[Math.min(m.fixed, total), C.fixed], ...spentSegs, [saving - s.ateSaving, C.saving]];
@@ -164,6 +173,12 @@ function Gauge({ m, saving, kind, day, days, waiting, x }: { m: Cycle; saving: n
         <text x={cx} y={cy - 14} textAnchor="middle" fontSize="32" fontWeight="600" fill={kind === "next" ? "#0f172a" : tone}>{eur(big, 0)}</text>
         <text x={cx} y={cy + 8} textAnchor="middle" fontSize="13" fill="#64748b">{sub}</text>
       </svg>
+      <div className="mb-1 flex items-center justify-center gap-2">
+        {(["prev", "cur", "next"] as Kind[]).map((k, i) => (
+          <button key={k} type="button" aria-label={k === "prev" ? "Ciclo anterior" : k === "cur" ? "Este ciclo" : "Próximo ciclo"} aria-current={k === kind}
+            onClick={() => x.goTo(i)} className={`h-2 rounded-full transition-all ${k === kind ? "w-5 bg-slate-700" : "w-2 bg-slate-300"}`} />
+        ))}
+      </div>
       <p className="amount mt-2 text-center text-sm text-slate-600">{say}</p>
 
       <ul className="mt-3 divide-y divide-slate-100 border-t border-slate-100">
@@ -266,8 +281,14 @@ export function LeftToSpend() {
     toCategory: (key) => (store.set(KEY.scroll, String(scroller()?.scrollTop ?? 0)), router.push(`/finanzas/categoria/${encodeURIComponent(key)}${nextQ ? `?${nextQ}` : ""}`)),
   };
   const spendGroups = data.groups.filter((g) => !groupsOn.has(g.id) && g.categories.length);
-  const colorOf = (id: string) => { const i = spendGroups.findIndex((g) => g.id === id); return i < 0 ? undefined : GROUP_COLORS[i % GROUP_COLORS.length]; };
+  // Colores estables: primero tus grupos de gasto, luego las categorías sin grupo (en orden fijo).
+  const grouped = new Set(data.groups.flatMap((g) => g.categories));
+  const looseKeys = [...new Set([...(data.history ?? []).flatMap((h) => Object.keys(h.full ?? {})), ...(data.next?.items ?? []).map((i) => i.category)])]
+    .filter((c) => !grouped.has(c) && !committed.has(c) && !OTHER_CATS.includes(c)).sort();
+  const colorKeys = [...spendGroups.map((g) => g.id), ...looseKeys.map((c) => `cat:${c}`)];
+  const colorOf = (id: string) => { const i = colorKeys.indexOf(id); return i < 0 ? undefined : GROUP_COLORS[i % GROUP_COLORS.length]; };
   const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks, colorOf, editSaving: () => setEditSaving(true),
+    goTo: (i: number) => { const el = pager.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); },
     toggleBlock: (k) => setBlocks((b) => ({ ...b, [k]: !(b[k] ?? (k.endsWith(":g") && !k.startsWith("prev"))) })) };
 
   // Cada ciclo: lo comprometido son sus grupos y categorías (lo cobrado y, en el actual, lo que falta por cobrar);
@@ -303,10 +324,6 @@ export function LeftToSpend() {
 
   return (
     <div className="pb-4">
-      <p className="mb-3 flex items-baseline justify-between gap-3 px-1">
-        <span className="text-sm text-slate-500">Tu objetivo de ahorro</span>
-        <b className="amount text-[15px] font-semibold tabular-nums text-[#3478f6]">{eur(saving, 0)} por ciclo</b>
-      </p>
       <SavingsGoalSheet open={editSaving} onClose={() => setEditSaving(false)} current={data.budget.savingsGoal} income={data.budget.income} />
       <div ref={pager} onScroll={(e) => { const el = e.currentTarget; setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
         className="flex snap-x snap-mandatory items-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -314,13 +331,6 @@ export function LeftToSpend() {
           <div key={k} className="w-full shrink-0 snap-start snap-always px-1">
             <Gauge m={m} saving={saving} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} x={x} />
           </div>
-        ))}
-      </div>
-      <div className="mt-3 flex items-center justify-center gap-2">
-        {pages.map(([k], i) => (
-          <button key={k} type="button" aria-label={k === "prev" ? "Ciclo anterior" : k === "cur" ? "Este ciclo" : "Próximo ciclo"}
-            onClick={() => { const el = pager.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); }}
-            className={`h-2 rounded-full transition-all ${page === i ? "w-5 bg-slate-700" : "w-2 bg-slate-300"}`} />
         ))}
       </div>
 

@@ -170,7 +170,7 @@ function LineRow({ l, mode, onOpen }: { l: Line; mode: Mode; onOpen: () => void 
 const OTHER_CATS = ["otros_gastos", "sin_clasificar"];
 
 /** Una categoría fuera de tus grupos: su gasto (o lo comprometido) y, al tocarla, su hoja en ese mes. */
-function LooseRow({ l, mode, onOpen, muted = false }: { l: Line; mode: Mode; onOpen: () => void; muted?: boolean }) {
+function LooseRow({ l, mode, onOpen, muted = false, dot }: { l: Line; mode: Mode; onOpen: () => void; muted?: boolean; dot?: string }) {
   const blue = mode === "now" && l.now <= 0 && l.pending > 0;
   const amount = mode === "next" ? l.committed : blue ? l.pending : l.now;
   const sub = mode === "next" ? countText(l.count)
@@ -183,12 +183,12 @@ function LooseRow({ l, mode, onOpen, muted = false }: { l: Line; mode: Mode; onO
       <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 py-3.5 text-left outline-none focus-visible:rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500">
         <span className={muted ? "opacity-60 grayscale" : ""}><CategoryIcon category={l.cat} /></span>
         <span className="min-w-0 flex-1">
-          <span className={`block truncate text-[15px] font-semibold ${muted ? "text-slate-500" : "text-slate-900"}`}>{l.label}</span>
+          <span className={`flex items-center gap-2 truncate text-[15px] font-semibold ${muted ? "text-slate-500" : "text-slate-900"}`}>{dot && <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: dot }} aria-hidden="true" />}{l.label}</span>
           <span className={`block truncate text-xs ${l.pending > 0 && mode === "now" ? "text-blue-700" : "text-slate-500"}`}>
             {sub}{l.gone.length > 0 && <span className="amount text-emerald-700">{sub ? " · " : ""}{goneText(l.gone)}</span>}
           </span>
         </span>
-        <b className={`amount shrink-0 text-[15px] font-semibold tabular-nums ${blue ? "text-blue-700" : muted ? "text-slate-500" : "text-slate-900"}`}>{eur(amount, 0)}</b>
+        <b className={`amount shrink-0 text-[15px] font-semibold tabular-nums ${blue && !dot ? "text-blue-700" : muted ? "text-slate-500" : "text-slate-900"}`}>{eur(amount, 0)}</b>
         <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
       </button>
     </li>
@@ -250,7 +250,7 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
     .sort((a, b) => (mode === "now" ? b.now + b.pending - (a.now + a.pending) : b.committed - a.committed));
   const others = section?.kind === "committed" ? [] : looseLines.filter((l) => OTHER_CATS.includes(l.cat));
   const extrasNow = mode === "now" && section?.kind !== "committed" ? Object.values(plan.totals?.extrasNow ?? {}).reduce((t, x) => t + x, 0) : 0;
-  const ind = section ? "ml-1" : "ml-12";
+  const ind = section ? "" : "ml-12";
 
   return (
     <div className="pb-2">
@@ -321,7 +321,7 @@ export function GroupsList({ plan, mode, open, toggle, toSheet, toCategory, sect
         <>
           {section?.kind !== "committed" && <h3 className="mt-4 text-sm font-medium text-slate-500">Sin grupo</h3>}
           <ul className="mt-1 divide-y divide-slate-100">
-            {loose.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} />)}
+            {loose.map((l) => <LooseRow key={l.key} l={l} mode={mode} onOpen={() => toCategory(l.cat)} dot={section?.kind === "spent" ? colorOf?.(`cat:${l.cat}`) : undefined} />)}
           </ul>
         </>
       )}
