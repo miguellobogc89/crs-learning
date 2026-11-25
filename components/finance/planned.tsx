@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { categoryOf } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
 import { errorText, fapi, longDay, refreshFinance } from "./api";
+import { MerchantLogo } from "./merchant-logo";
 import { CategoryIcon } from "./category-icon";
 import { CategoryPicker } from "./category-picker";
 import { PlannedDetailSheet } from "./movement-detail";
@@ -69,7 +70,7 @@ function PlannedRow({ p, onOpen, onDelete }: { p: Planned; onOpen: () => void; o
 
 /** Previstos en azul, del más lejano al más cercano (van arriba de la lista). Se tocan para editarlos y se borran
  *  deslizando a la izquierda o desde su detalle, siempre con «Deshacer». */
-export type Repeat = { id: string; title: string; amount: number; date: string; category: string; txId?: string; thisMonth?: boolean };
+export type Repeat = { id: string; title: string; amount: number; date: string; category: string; txId?: string; thisMonth?: boolean; logo?: string | null };
 
 /** Lo que se repite el mes que viene: en azul como los previstos; al tocarlo se abre el detalle de su último cargo. */
 function RepeatRow({ r, onOpen }: { r: Repeat; onOpen?: () => void }) {
@@ -78,7 +79,7 @@ function RepeatRow({ r, onOpen }: { r: Repeat; onOpen?: () => void }) {
       <button type="button" onClick={onOpen} disabled={!onOpen}
         className="flex w-full items-center gap-3 bg-blue-50 px-3 py-3 text-left active:bg-blue-100/70 disabled:cursor-default">
         <span className="relative">
-          <CategoryIcon category={r.category} />
+          <MerchantLogo domain={r.logo} category={r.category} />
           <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 ring-2 ring-white" aria-hidden="true">
             <Repeat2 className="h-2.5 w-2.5 text-white" />
           </span>
@@ -94,7 +95,7 @@ function RepeatRow({ r, onOpen }: { r: Repeat; onOpen?: () => void }) {
 }
 
 /** Lo cancelado del periodo: gris, tachado, «Cancelado» y el ahorro en verde. */
-export type CancelledItem = { key: string; title: string; amount: number; category: string };
+export type CancelledItem = { key: string; title: string; amount: number; category: string; logo?: string | null };
 
 export function PlannedList({ items, repeats = [], cancelled = [], onOpenRepeat, className = "" }: { items: Planned[]; repeats?: Repeat[]; cancelled?: CancelledItem[]; onOpenRepeat?: (txId: string) => void; className?: string }) {
   const [editing, setEditing] = useState<Planned | null>(null);
@@ -129,7 +130,7 @@ export function PlannedList({ items, repeats = [], cancelled = [], onOpenRepeat,
               .sort((a, b) => b.date.localeCompare(a.date)).map((x) => x.el)}
             {cancelled.map((c) => (
               <li key={c.key} className="flex items-center gap-3 px-1 py-2.5">
-                <span className="opacity-50 grayscale"><CategoryIcon category={c.category} /></span>
+                <span className="opacity-50 grayscale"><MerchantLogo domain={c.logo} category={c.category} /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] text-slate-400 line-through">{c.title}</span>
                   <span className="block truncate text-xs text-slate-400">Cancelado · {categoryOf(c.category).label}</span>

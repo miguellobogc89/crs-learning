@@ -728,6 +728,12 @@ export async function planView(userId: string) {
   }
   for (const r of ctx.recurring) if (r.amount < 0 && r.active) { addLine(`${r.category}/*`, r.key); addLine(`${r.category}/${r.subcategory ?? ""}`, r.key); }
   const lineDomains = await domainsFor([...lineMerchants.values()].flatMap((s) => [...s]));
+  // Logo de lo que se repite (este mes y el que viene), por su comercio.
+  const pend = currentMonthPending(ctx);
+  const nxt = nextMonthCommitted(ctx);
+  const keyOf = (i: object) => ("key" in i && typeof i.key === "string" ? i.key : "");
+  const repeatDomains = await domainsFor([...pend.items, ...nxt.items, ...pend.cancelled, ...nxt.cancelled].map(keyOf));
+  const withLogo = <T extends object>(i: T) => ({ ...i, logo: repeatDomains.get(keyOf(i)) ?? null });
   const lineLogo: Record<string, string> = {};
   for (const [k, s] of lineMerchants) if (s.size === 1) { const d = lineDomains.get([...s][0]); if (d) lineLogo[k] = d; }
   return {
@@ -739,8 +745,8 @@ export async function planView(userId: string) {
     daily,
     extras: extras.sort((a, b) => b.amount - a.amount),
     planned: plannedOf(ctx.forecastItems),
-    ...(() => { const p = currentMonthPending(ctx); return { pending: p.items, cancelledNow: p.cancelled }; })(),
-    next: nextMonthCommitted(ctx),
+    pending: pend.items.map(withLogo), cancelledNow: pend.cancelled.map(withLogo),
+    next: { ...nxt, items: nxt.items.map(withLogo), cancelled: nxt.cancelled.map(withLogo) },
     committedCategories: ctx.settings.committedCategories,
     savingsByMonth: ctx.settings.savingsByMonth,
     budget: { income, incomeNow, othersGoal: ctx.settings.othersGoal, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
