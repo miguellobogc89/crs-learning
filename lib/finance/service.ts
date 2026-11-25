@@ -314,6 +314,9 @@ export async function listTransactions(userId: string, opts: { all?: boolean } =
         note: notes.get(t.id) ?? null,
         // Tramo (ciclo o mes) al que pertenece, para agrupar en pantalla.
         bucket: bucketOf.get(t.date) ?? t.date,
+        // Mes (de nómina) del cargo y, si se cambió la fecha, el mes en que cuenta: lo que enseña «Cambiar fecha».
+        cycleStart: cycleFor(t.date, ctx.startDay).start,
+        imputedCycle: t.imputedDate ? cycleFor(t.imputedDate, ctx.startDay).start : null,
       };
     }),
   };
@@ -621,6 +624,8 @@ function currentMonthPending(ctx: Awaited<ReturnType<typeof financeContext>>) {
 
 /** Para medir el gasto, un movimiento cuenta en su fecha imputada (si la tiene), no en la del cargo. */
 const spendDated = <T extends { date: string; imputedDate?: string | null }>(t: T): T => (t.imputedDate ? { ...t, date: t.imputedDate } : t);
+/** Para el dinero de cada mes: una deuda cuenta cuando se pagó (su fecha real); lo demás, como el gasto. */
+const moneyDated = <T extends { date: string; imputedDate?: string | null; imputedDebt?: boolean }>(t: T): T => (t.imputedDebt ? t : spendDated(t));
 
 export async function planView(userId: string) {
   const ctx = await financeContext(userId);
@@ -644,6 +649,7 @@ export async function planView(userId: string) {
   const before: Record<string, number> = {};
   const extrasNow: Record<string, number> = {};
   for (const t0 of ctx.txs) {
+    if (t0.imputedDebt) continue;
     const t = spendDated(t0);
     if (!isPackageCharge(t)) continue;
     if (t.extraordinary) {
@@ -664,6 +670,7 @@ export async function planView(userId: string) {
     const atDay: Record<string, number> = {};
     const subAtDay: Record<string, number> = {};
     for (const t0 of ctx.txs) {
+      if (t0.imputedDebt) continue;
       const t = spendDated(t0);
       if (!isPackageCharge(t) || t.extraordinary || t.date < c.start || t.date > c.end) continue;
       full[t.category] = round2((full[t.category] ?? 0) - t.amount);
@@ -681,6 +688,7 @@ export async function planView(userId: string) {
   const daily: { cur: Record<string, number[]>; prev: Record<string, number[]> } = { cur: {}, prev: {} };
   const extras: { date: string; label: string; amount: number; category: string }[] = [];
   for (const t0 of ctx.txs) {
+    if (t0.imputedDebt) continue;
     const t = spendDated(t0);
     if (!isPackageCharge(t)) continue;
     if (t.date >= current.start && t.date <= current.end) {
@@ -718,6 +726,13 @@ export async function planView(userId: string) {
     savingsByMonth: ctx.settings.savingsByMonth,
     budget: { income, incomeNow, othersGoal: ctx.settings.othersGoal, fromSettings: ctx.settings.expectedIncome !== null, savingsGoal, limit: income !== null && savingsGoal !== null ? round2(income - savingsGoal) : null },
     unknown: { perMonth: unknownSpend, count: unknownCount },
+    // Deudas: gastos que pagaste en un mes y consumiste en otro («Es una deuda» al cambiar la fecha). El dinero
+    // cuenta en el mes del pago (en Comprometido); el consumo se enseña en su mes, sin sumar.
+    debts: ctx.txs.filter((t) => t.imputedDebt && t.imputedDate && isPackageCharge(t)).map((t) => ({
+      id: t.id, title: t.alias?.trim() || t.counterparty || t.description, amount: round2(-t.amount), category: t.category, paidOn: t.date, consumedOn: t.imputedDate as string,
+      // Inicio de cada mes (de nómina) para nombrarlos igual que en el aro.
+      paidCycle: cycleFor(t.date, ctx.startDay).start, consumedCycle: cycleFor(t.imputedDate as string, ctx.startDay).start,
+    })),
     // Préstamos temporales: lo que debes a cada persona (lo que te prestó menos lo que ya le has devuelto).
     loans: (() => {
       const by = new Map<string, { key: string; name: string; owed: number }>();
@@ -743,7 +758,7 @@ export async function planView(userId: string) {
       const one = (c: { start: string; end: string; label: string }, isCurrent: boolean) => {
         let inc = 0, fixed = 0, spent = 0;
         for (const t0 of ctx.txs) {
-          const t = spendDated(t0);
+          const t = moneyDated(t0);
           if (t.date < c.start || t.date > c.end) continue;
           if (t.kind === "ingreso" && t.amount > 0) inc += t.amount;
           if (isPackageCharge(t)) { if (fixedKeys.has(merchantKey(t.description, t.counterparty))) fixed -= t.amount; else spent -= t.amount; }

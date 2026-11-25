@@ -23,7 +23,8 @@ import { useMonthSwipe } from "./use-month-swipe";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Kind = "prev" | "cur" | "next";
-type Cycle = { label: string; start?: string; planned?: Record<string, number>; income: number; fixed: number; spent: number; carry: number | null; byCat: Record<string, number>; pending: Record<string, number> };
+type Debt = { id: string; title: string; amount: number; category: string; paidOn: string; consumedOn: string; paidCycle: string; consumedCycle: string };
+type Cycle = { label: string; start?: string; planned?: Record<string, number>; debts?: Debt[]; consumed?: Debt[]; income: number; fixed: number; spent: number; carry: number | null; byCat: Record<string, number>; pending: Record<string, number> };
 
 // Paleta armónica con el azul de la app (#3478f6).
 const C = { fixed: "#9aaccb", spent: "#f59f8b", free: "#4cc38a", saving: "#3478f6", over: "#dc2626", track: "#b9d2fd" };
@@ -77,6 +78,20 @@ function Block({ color, title, amount, children, danger = false, open, onToggle 
       <div className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
         <div className="overflow-hidden" inert={!open}><div className="pb-3">{children}</div></div>
       </div>
+    </li>
+  );
+}
+
+/** Una deuda: en Comprometido del mes en que se pagó, o en gris (sin sumar) en el mes en que se consumió. */
+function DebtRow({ d, sub, muted = false }: { d: Debt; sub: string; muted?: boolean }) {
+  return (
+    <li className="flex items-center gap-3 py-3">
+      <span className={muted ? "opacity-50 grayscale" : ""}><CategoryIcon category={d.category} /></span>
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate text-[15px] font-semibold ${muted ? "text-slate-500" : "text-slate-900"}`}>{d.title}</span>
+        <span className="block truncate text-xs text-slate-500">{sub}</span>
+      </span>
+      <b className={`amount shrink-0 text-[15px] font-semibold tabular-nums ${muted ? "text-slate-400" : "text-slate-900"}`}>{eur(d.amount, 0)}</b>
     </li>
   );
 }
@@ -143,6 +158,7 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
   const fixedSegs: Seg[] = [
     ...groupsOn.map((g) => [sum(m.byCat, g.categories) + pendingOf(g.categories), x.colorOf(g.id) ?? C.fixed] as Seg),
     ...loneCats.map((c) => [(m.byCat[c] ?? 0) + (m.pending[c] ?? 0), x.colorOf(`cat:${c}`) ?? C.fixed] as Seg),
+    ...(m.debts ?? []).map((d) => [d.amount, x.colorOf(`cat:${d.category}`) ?? C.fixed] as Seg),
   ].filter(([v]) => v > 0);
   fixedSegs.push([Math.max(0, m.fixed - fixedSegs.reduce((t, [v]) => t + v, 0)), C.fixed]);
   const savedLeft = saving - s.ateSaving - s.fromCarry;
@@ -221,9 +237,17 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
 
       <ul className="divide-y divide-slate-100 border-t border-slate-100">
         <Block color={C.fixed} title="Comprometido" amount={m.fixed} open={focus === "c"} onToggle={(el) => x.toggleBlock(`${kind}:c`, el)}>
-          {!groupsOn.length && !loneCats.length && <p className="py-1 text-sm text-slate-500">Todavía no hay gastos asignados. Añade los que se pagan cada mes: hipoteca, recibos, préstamos, suscripciones…</p>}
+          {!groupsOn.length && !loneCats.length && !m.debts?.length && <p className="py-1 text-sm text-slate-500">Todavía no hay gastos asignados. Añade los que se pagan cada mes: hipoteca, recibos, préstamos, suscripciones…</p>}
           {(groupsOn.length > 0 || loneCats.length > 0) && (
             <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : kind === "prev" ? "prev" : "now"} {...x.list} section={{ kind: "committed", groupIds: x.groupsOn, cats: x.catsOn }} />
+          )}
+          {!!m.debts?.length && (
+            <>
+              <h3 className="mt-3 text-sm font-medium text-slate-500">Deudas</h3>
+              <ul className="divide-y divide-slate-100">
+                {m.debts.map((d) => <DebtRow key={d.id} d={d} sub={`${categoryLabel(d.category)} de ${monthOf(d.consumedCycle).toLowerCase()}`} />)}
+              </ul>
+            </>
           )}
           <button type="button" onClick={() => setEditing((e) => !e)} className="mt-1 inline-flex items-center gap-1.5 py-1 text-sm font-semibold text-blue-700">
             {x.busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{editing ? "Listo" : groupsOn.length || loneCats.length ? "Añadir o quitar" : "Añadir"}
@@ -233,6 +257,14 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
         <Block color={C.spent} title={kind === "cur" ? "Gastado y previsto" : "Gastado"} amount={m.spent} open={focus === "g"} onToggle={(el) => x.toggleBlock(`${kind}:g`, el)}>
           <GroupsList plan={x.plan as never} mode={kind === "next" ? "next" : kind === "prev" ? "prev" : "now"} {...x.list} section={{ kind: "spent", groupIds: x.groupsOn, cats: x.committed }} />
           {m.spent <= 0 && kind !== "next" && <p className="py-1 text-sm text-slate-500">Nada todavía.</p>}
+          {!!m.consumed?.length && (
+            <>
+              <h3 className="mt-3 text-sm font-medium text-slate-500">Pagado en otro mes</h3>
+              <ul className="divide-y divide-slate-100">
+                {m.consumed.map((d) => <DebtRow key={d.id} d={d} muted sub={`${categoryLabel(d.category)} · pagado en ${monthOf(d.paidCycle).toLowerCase()}, no suma aquí`} />)}
+              </ul>
+            </>
+          )}
         </Block>
         <Block color={C.saving} title="Ahorro" amount={savedLeft} danger={s.ateSaving > 0} open={focus === "a"} onToggle={(el) => x.toggleBlock(`${kind}:a`, el)}>
           <p className="py-1 text-sm text-slate-600">
@@ -367,6 +399,10 @@ export function LeftToSpend() {
       return { label: data.money.next.label, start: data.money.next.start, income: data.money.next.income, fixed, spent: 0, carry: null, byCat: nextByCat, pending: {} };
     }
     const mo = k === "prev" ? data.money.prev : data.money.cur;
+    // Deudas: las pagadas en este mes van a Comprometido; las consumidas en este mes (pagadas en otro) se ven sin sumar.
+    const debts = (data.debts ?? []).filter((d) => d.paidCycle === mo.start);
+    const consumed = (data.debts ?? []).filter((d) => d.consumedCycle === mo.start && d.paidCycle !== mo.start);
+    const debtSum = debts.reduce((t, d) => t + d.amount, 0);
     const byCat = (k === "prev" ? data.history[1]?.full : data.history[0]?.full) ?? {};
     const comp = sum(byCat, committed);
     const pending = k === "cur" ? pendingCur : {};
@@ -382,7 +418,7 @@ export function LeftToSpend() {
       for (const p of (data.planned ?? []).filter((p) => p.date >= data.cycle.start && p.date <= data.cycle.end)) plannedByCat[p.category] = (plannedByCat[p.category] ?? 0) + p.amount;
       for (const p of (data.pending ?? []).filter((p) => !committed.has(p.category))) plannedByCat[p.category] = (plannedByCat[p.category] ?? 0) + p.amount;
     }
-    return { planned: plannedByCat, label: mo.label, start: mo.start, income: mo.income, fixed: comp + sum(pending, Object.keys(pending)), spent: Math.max(0, totalSpent - comp) + planned, carry: mo.carry, byCat, pending };
+    return { planned: plannedByCat, debts, consumed, label: mo.label, start: mo.start, income: mo.income, fixed: comp + sum(pending, Object.keys(pending)) + debtSum, spent: Math.max(0, totalSpent - comp - debtSum) + planned, carry: mo.carry, byCat, pending };
   };
   const waiting = data.money.cur.income <= 0 && (data.budget.income ?? 0) > 0;
   const cur = cycleOf("cur");

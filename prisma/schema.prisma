@@ -2823,6 +2823,8 @@ model finance_transactions {
   /// Mes al que se imputa el gasto si no es el del cargo (entradas compradas meses antes, una cena que se paga
   /// después): cuenta en el plan, las medias y el gráfico en esa fecha; el saldo sigue con booking_date.
   imputed_date           DateTime?        @db.Date
+  /// «Es una deuda»: solo el consumo va a imputed_date; el dinero cuenta en booking_date, en Comprometido.
+  imputed_debt           Boolean          @default(false)
   created_at             DateTime         @default(now()) @db.Timestamptz(6)
   updated_at             DateTime         @default(now()) @db.Timestamptz(6)
   users                  users            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)

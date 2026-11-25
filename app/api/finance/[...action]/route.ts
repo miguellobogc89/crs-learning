@@ -208,7 +208,7 @@ export async function POST(req: Request, route: RouteContext) {
       if (date !== null && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("Fecha no válida");
       const r = await prisma.finance_transactions.updateMany({
         where: { id: str("id"), user_id: uid },
-        data: { imputed_date: date ? new Date(`${date}T00:00:00Z`) : null, updated_at: new Date() },
+        data: { imputed_date: date ? new Date(`${date}T00:00:00Z`) : null, imputed_debt: !!date && body.debt === true, updated_at: new Date() },
       });
       if (!r.count) return fail("Movimiento no encontrado", 404);
       return ok({ ok: true });

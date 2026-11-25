@@ -20,6 +20,8 @@ export type Tx = {
   transferPairId: string | null;
   /** Fecha a la que se imputa el gasto (si no es la del cargo): la usa el plan; el saldo usa `date`. */
   imputedDate?: string | null;
+  /** «Es una deuda»: solo el consumo va a `imputedDate`; el dinero se queda en `date`. */
+  imputedDebt?: boolean;
 };
 
 // ---------------------------------------------------------------------------------------------------------

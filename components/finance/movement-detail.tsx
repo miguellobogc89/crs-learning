@@ -88,14 +88,15 @@ function TextSheet({ open, onClose, title, initial, placeholder, multiline, sugg
 }
 
 /** Lista de opciones con icono (categorías) o sin él (tipo). Tocar una la elige y cierra. */
-function PickSheet({ open, onClose, title, subtitle, options, current, onPick, searchable, icons }: {
-  open: boolean; onClose: () => void; title: string; subtitle?: string; options: { key: string; label: string; hint?: string }[]; current: string; onPick: (k: string) => void; searchable?: boolean; icons?: boolean;
+function PickSheet({ open, onClose, title, subtitle, options, current, onPick, searchable, icons, header }: {
+  open: boolean; onClose: () => void; title: string; subtitle?: string; options: { key: string; label: string; hint?: string }[]; current: string; onPick: (k: string) => void; searchable?: boolean; icons?: boolean; header?: ReactNode;
 }) {
   const [q, setQ] = useState("");
   useEffect(() => { if (open) setQ(""); }, [open]);
   const shown = options.filter((o) => !q.trim() || fold(o.label).includes(fold(q.trim())));
   return (
     <BottomSheet open={open} onClose={onClose} title={title} subtitle={subtitle} tall={searchable}>
+      {header}
       {searchable && (
         <label className="mx-5 mb-2 flex shrink-0 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2.5">
           <Search className="h-4 w-4 shrink-0 text-slate-400" />
@@ -147,6 +148,9 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   const [sheet, setSheet] = useState<null | "category" | "subcategory" | "note" | "kind" | "month">(null);
   // «Cambiar fecha»: mes en que cuenta el gasto (lo guardado o lo que acabas de elegir).
   const [imputed, setImputed] = useState<string | null | undefined>(undefined);
+  // «Es una deuda»: solo el consumo pasa al mes elegido; el cargo sigue contando en el mes en que se pagó.
+  const [debt, setDebt] = useState<boolean | undefined>(undefined);
+  const [debtDraft, setDebtDraft] = useState(false);
   // «Se repite» de su comercio (y si lo has cancelado).
   const [rec, setRec] = useState<Recurrence | null>(null);
   const [recAt, setRecAt] = useState(0);
@@ -167,7 +171,7 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   // Cómo estaba al abrirlo: el botón de parecidos solo sale si lo has cambiado respecto a esto.
   const [opened, setOpened] = useState<Values | null>(null);
   useEffect(() => {
-    setOverride({}); setSheet(null); setEditingName(false); setSimilar(null); setToast(null); setErr(null); setImputed(undefined); setRec(null);
+    setOverride({}); setSheet(null); setEditingName(false); setSimilar(null); setToast(null); setErr(null); setImputed(undefined); setDebt(undefined); setRec(null);
     setOpened(item ? valuesOf(item) : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -297,34 +301,62 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   const edited = v.category !== base.category || v.kind !== base.kind || (v.alias ?? null) !== base.alias || (v.subcategory ?? null) !== base.subcategory;
   const showApply = edited && !!similar && similar.differ > 0;
 
-  // Meses para «Cambiar fecha»: de 3 antes a 24 después del mes del cargo. Se guarda el día 15 de ese mes (cae en
-  // el ciclo que lleva su nombre, también si el ciclo empieza el 25).
-  const chargeMonth = item.date.slice(0, 7);
+  // Meses para «Cambiar fecha»: meses de nómina, como en Inicio (el que empieza el 25 de octubre es «octubre»), de 3
+  // antes a 24 después del mes del cargo. Se guarda el día 28 de ese mes, que cae siempre en el que lleva su nombre.
+  const chargeMonth = (item.cycleStart ?? item.date).slice(0, 7);
   const currentImputed = imputed === undefined ? item.imputedDate ?? null : imputed;
-  const shownMonth = currentImputed ? currentImputed.slice(0, 7) : chargeMonth;
+  const currentDebt = !!currentImputed && (debt ?? item.imputedDebt ?? false);
+  const shownMonth = imputed === undefined ? (item.imputedCycle ?? item.imputedDate ?? chargeMonth).slice(0, 7) : imputed ? imputed.slice(0, 7) : chargeMonth;
   const monthName = (ym: string) => new Date(`${ym}-15T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
+  const monthOnly = (ym: string) => new Date(`${ym}-15T00:00:00Z`).toLocaleDateString("es-ES", { month: "long", timeZone: "UTC" });
   const monthOptions = Array.from({ length: 28 }, (_, i) => {
     const d = new Date(`${chargeMonth}-15T00:00:00Z`);
     d.setUTCMonth(d.getUTCMonth() + i - 3);
     const ym = d.toISOString().slice(0, 7);
     return { key: ym, label: monthName(ym).replace(/^./, (c) => c.toUpperCase()), hint: ym === chargeMonth ? "Mes del cargo" : undefined };
   });
-  const changeMonth = async (ym: string) => {
-    const prev = currentImputed;
-    const next = ym === chargeMonth ? null : `${ym}-15`;
-    setImputed(next);
+  const send = async (next: string | null, nextDebt: boolean, toast: string) => {
+    const prev = currentImputed, prevDebt = currentDebt;
+    setImputed(next); setDebt(nextDebt);
     try {
-      await fapi("transaction/imputed", { id: item.id, date: next });
+      await fapi("transaction/imputed", { id: item.id, date: next, debt: nextDebt });
       refreshFinance();
-      setToast({ text: next ? `Ahora cuenta en ${monthName(ym)}` : "Vuelve a contar en el mes del cargo", undo: () => {
-        setImputed(prev);
-        void fapi("transaction/imputed", { id: item.id, date: prev }).then(refreshFinance).catch((e) => setErr(errorText(e)));
+      setToast({ text: toast, undo: () => {
+        setImputed(prev); setDebt(prevDebt);
+        void fapi("transaction/imputed", { id: item.id, date: prev, debt: prevDebt }).then(refreshFinance).catch((e) => setErr(errorText(e)));
       } });
     } catch (e) {
-      setImputed(prev);
+      setImputed(prev); setDebt(prevDebt);
       setErr(errorText(e));
     }
   };
+  const changeMonth = (ym: string, asDebt: boolean) => {
+    const next = ym === chargeMonth ? null : `${ym}-28`;
+    void send(next, !!next && asDebt, !next ? "Vuelve a contar en el mes del cargo"
+      : asDebt ? `Consumo de ${monthOnly(ym)}; el pago sigue en ${monthOnly(chargeMonth)}` : `Ahora cuenta en ${monthName(ym)}`);
+  };
+  // La casilla con un mes ya elegido se guarda al momento; si no, se aplica al elegir el mes.
+  const toggleDebt = (on: boolean) => {
+    setDebtDraft(on);
+    if (shownMonth !== chargeMonth) changeMonth(shownMonth, on);
+  };
+  const chosen = shownMonth !== chargeMonth ? monthOnly(shownMonth) : "el mes que elijas";
+  const debtHeader = (
+    <label className="mx-5 mb-2 flex shrink-0 cursor-pointer items-start gap-3 rounded-2xl bg-slate-50 p-3.5">
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-semibold text-slate-900">Es una deuda</span>
+        <span className="mt-0.5 block text-xs text-slate-500">
+          {debtDraft
+            ? `Solo el consumo pasa a ${chosen}, en ${categoryOf(v.category).label}, sin sumar a ese mes. El cargo sigue en ${monthOnly(chargeMonth)}, en Comprometido.`
+            : `Todo el cargo pasa a ${chosen}: deja de contar en ${monthOnly(chargeMonth)}.`}
+        </span>
+      </span>
+      <input type="checkbox" role="switch" checked={debtDraft} onChange={(e) => toggleDebt(e.target.checked)} className="peer sr-only" />
+      <span aria-hidden="true" className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500 ${debtDraft ? "bg-blue-600" : "bg-slate-200"}`}>
+        <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${debtDraft ? "left-[22px]" : "left-0.5"}`} />
+      </span>
+    </label>
+  );
 
   return (
     <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -464,11 +496,13 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
                 </li>
               )}
               {spend && (
-                <Row onClick={() => setSheet("month")}>
+                <Row onClick={() => { setDebtDraft(currentDebt); setSheet("month"); }}>
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px] text-slate-800">Cambiar fecha</span>
                     <span className="block text-xs text-slate-400">
-                      {currentImputed ? `Cuenta en tu plan de ${monthName(shownMonth)} (pagado el ${longDay(item.date)})` : "Para que cuente en otro mes: entradas que compras antes, una cena que pagas después…"}
+                      {currentImputed
+                        ? currentDebt ? `Deuda: consumo de ${monthOnly(shownMonth)}; el pago cuenta en ${monthOnly(chargeMonth)} (${longDay(item.date)})` : `Cuenta en ${monthName(shownMonth)} (pagado el ${longDay(item.date)})`
+                        : "Para que cuente en otro mes: entradas que compras antes, una cena que pagas después…"}
                     </span>
                   </span>
                   <span className={`shrink-0 text-sm ${currentImputed ? "font-medium text-blue-700" : "text-slate-400"}`}>{monthName(shownMonth).replace(/ de /, " ")}</span>
@@ -542,10 +576,10 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
             open={sheet === "month"}
             onClose={() => setSheet(null)}
             title="¿En qué mes cuenta este gasto?"
-            subtitle="El cargo no cambia de fecha: solo el mes en que cuenta en tu plan."
             current={shownMonth}
             options={monthOptions}
-            onPick={(ym) => { if (ym !== shownMonth) void changeMonth(ym); }}
+            header={debtHeader}
+            onPick={(ym) => { if (ym !== shownMonth || debtDraft !== currentDebt) changeMonth(ym, debtDraft); }}
           />
           <PickSheet
             open={sheet === "kind"}
