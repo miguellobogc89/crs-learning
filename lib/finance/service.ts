@@ -729,6 +729,33 @@ export async function planView(userId: string) {
       }
       return [...by.values()].filter((x) => x.owed > 0.5).sort((a, b) => b.owed - a.owed);
     })(),
+    // Dinero de cada ciclo (el anterior, este y el siguiente) para el medio aro de «Te quedan»: lo cobrado, lo
+    // comprometido (lo que se repite), lo gastado (también los extraordinarios: es dinero que sale) y con cuánto
+    // empezaste. El siguiente es previsión: lo que sueles cobrar y lo ya comprometido.
+    money: (() => {
+      const acc = ctx.accounts.filter((a) => a.included && a.currency === "EUR" && a.balance !== null);
+      const ids = new Set(acc.map((a) => a.id));
+      const cashNow = acc.reduce((t, a) => t + (a.balance ?? 0), 0);
+      const fixedKeys = new Set(ctx.recurring.filter((r) => r.amount < 0 && (r.active || ctx.cancelled.has(r.key))).map((r) => r.key));
+      const pend = currentMonthPending(ctx).items.reduce((t, i) => t + i.amount, 0);
+      const one = (c: { start: string; end: string; label: string }, isCurrent: boolean) => {
+        let inc = 0, fixed = 0, spent = 0;
+        for (const t0 of ctx.txs) {
+          const t = spendDated(t0);
+          if (t.date < c.start || t.date > c.end) continue;
+          if (t.kind === "ingreso" && t.amount > 0) inc += t.amount;
+          if (isPackageCharge(t)) { if (fixedKeys.has(merchantKey(t.description, t.counterparty))) fixed -= t.amount; else spent -= t.amount; }
+        }
+        const moved = ctx.txs.filter((t) => ids.has(t.accountId) && t.date >= c.start).reduce((t, x) => t + x.amount, 0);
+        return { start: c.start, end: c.end, label: c.label, income: round2(inc), fixed: round2(fixed + (isCurrent ? pend : 0)), spent: round2(spent), carry: round2(cashNow - moved) };
+      };
+      const nextItems = nextMonthCommitted(ctx);
+      return {
+        prev: one(prevCycle, false),
+        cur: one(current, true),
+        next: { start: nextItems.cycle.start, end: nextItems.cycle.end, label: nextItems.cycle.label, income: round2(income ?? 0), fixed: round2(nextItems.items.reduce((t, i) => t + i.amount, 0)), spent: 0, carry: null as number | null },
+      };
+    })(),
     // Dinero real en tus cuentas (las incluidas, en euros): ahora y al empezar el ciclo (lo que traías del anterior).
     cash: (() => {
       const acc = ctx.accounts.filter((a) => a.included && a.currency === "EUR" && a.balance !== null);
