@@ -18,6 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { PullToRefresh } from "@/components/trading/mobile-nav";
 import { eur } from "@/components/trading/format";
 import { categoryLabel } from "@/lib/finance/categories";
+import { NotificationsBell } from "./notifications-bell";
 import { BOTTOM_TABS, FINANCE_SECTIONS, FINANCE_TABS, isFinanceTab, isFittedTab, tabDefOf } from "./tabs";
 import { fapi, peek, refreshFinance, useFinanceRefresh } from "./api";
 import { useHideAmounts } from "./privacy";
@@ -370,12 +371,25 @@ export function FinanceShell({ children, user }: { children: ReactNode; user: Fi
               <div id="finance-header-right" className="shrink-0 pr-2 text-right" />
             </>
           ) : (
+            section === "inicio" ? (
+              // En Inicio, el nombre del mes que miras (lo pone Inicio en «finance-header-month»).
+              <h1 className="absolute left-1/2 flex max-w-[calc(100%-7rem)] -translate-x-1/2 items-center justify-center text-[17px] font-bold text-slate-900 [&:has(>#finance-header-month:not(:empty))>.fb]:hidden">
+                <span className="fb truncate">{tabDef.label}</span>
+                <span id="finance-header-month" className="truncate" />
+              </h1>
+            ) : (
             <h1 className="absolute left-1/2 flex max-w-[calc(100%-7rem)] -translate-x-1/2 items-center justify-center gap-2 text-[17px] font-bold text-slate-900">
               <Icon className="h-4 w-4 shrink-0 text-blue-600" />
               <span className="truncate">{tabDef.label}</span>
             </h1>
+            )
           )}
-          {sync.syncing && sheetTitle === null && <Loader2 className="ml-auto mr-3 h-4 w-4 animate-spin text-slate-400" aria-label="Sincronizando" />}
+          {sheetTitle === null && (
+            <div className="ml-auto flex items-center">
+              {sync.syncing && <Loader2 className="mr-1 h-4 w-4 animate-spin text-slate-400" aria-label="Sincronizando" />}
+              <NotificationsBell />
+            </div>
+          )}
         </header>
 
         <div className="hidden shrink-0 items-start gap-3 px-6 pb-3 pt-5 md:flex lg:px-8">

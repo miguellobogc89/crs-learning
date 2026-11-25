@@ -6,7 +6,8 @@
 // «Comprometido» ya no se adivina: son los grupos y categorías que tú metes en él (lo que se paga cada mes); se
 // guarda de verdad (la marca de los grupos y las categorías de ajustes). Se desliza entre ciclos con imán.
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowDownLeft, ArrowUpRight, ChevronDown, Loader2, Pencil, PiggyBank } from "lucide-react";
+import { ChevronDown, CreditCard, Euro, Loader2, Pencil, PiggyBank } from "lucide-react";
+import { createPortal } from "react-dom";
 import type { planView } from "@/lib/finance/service";
 import { SELECTABLE_CATEGORIES, categoryHex, categoryLabel } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
@@ -181,10 +182,6 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
   return (
     part === "arc" ? (
     <div>
-      <p className={`flex items-center gap-3 px-1 ${kind === "prev" ? "justify-start" : isCur ? "justify-center" : "justify-end"}`}>
-        {isCur ? <span className="rounded-full bg-[#3478f6] px-3 py-1 text-xs font-semibold text-white">{name || m.label}</span>
-          : <span className="py-1 text-sm font-semibold text-slate-500">{name || m.label}</span>}
-      </p>
       <svg viewBox="0 0 320 180" className="block h-auto w-full" role="img" aria-label={focusText ? `${focusText.t} ${eur(focusText.v, 0)}` : `${title} ${eur(big, 0)}`}>
         <g style={fade(!focus)}>
           {paths}
@@ -206,8 +203,8 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
       {/* Resumen del mes: lo que entra, lo que sale y lo que queda (+) o lo que has sacado de lo que tenías (−). */}
       <div className="mt-3 grid grid-cols-3 gap-2">
         {[
-          { icon: ArrowDownLeft, label: kind === "next" ? "Ingreso estimado" : "Ingreso", v: eur(s.income, 0), bg: "#e7f6ee", fg: "#15803d", col: "text-slate-900" },
-          { icon: ArrowUpRight, label: kind === "next" ? "Comprometido" : "Gastado", v: eur(m.fixed + m.spent, 0), bg: "#fdece8", fg: "#c2410c", col: "text-slate-900" },
+          { icon: Euro, label: kind === "next" ? "Ingreso estimado" : "Ingreso", v: eur(s.income, 0), bg: "#e7f6ee", fg: "#15803d", col: "text-slate-900" },
+          { icon: CreditCard, label: kind === "next" ? "Comprometido" : "Gastado", v: eur(m.fixed + m.spent, 0), bg: "#fdece8", fg: "#c2410c", col: "text-slate-900" },
           { icon: PiggyBank, label: net >= 0 ? "Ahorro" : "De reservas", v: `${net >= 0 ? "+" : "−"}${eur(Math.abs(net), 0)}`, bg: net >= 0 ? "#e8f0fe" : "#fde8e8", fg: net >= 0 ? "#3478f6" : "#b91c1c", col: net >= 0 ? "text-[#3478f6]" : "text-rose-700" },
         ].map(({ icon: Icon, label, v, bg, fg, col }) => (
           <div key={label} className="flex flex-col items-center gap-1 text-center">
@@ -287,6 +284,9 @@ export function LeftToSpend() {
   const { data, error } = useFinance<Plan>("plan");
   const router = useRouter();
   const [page, setPage] = useState(1);
+  // El nombre del mes que miras va en la cabecera de la app, en lugar de «Inicio».
+  const [headerMonth, setHeaderMonth] = useState<HTMLElement | null>(null);
+  useEffect(() => { setHeaderMonth(document.getElementById("finance-header-month")); }, []);
   const swipe = useMonthSwipe(page, setPage, 3, !!data);
   const shown = swipe.shown;
   const [busy, setBusy] = useState(false);
@@ -395,6 +395,7 @@ export function LeftToSpend() {
     <div ref={swipe.root} className="pb-4 [overflow-anchor:none]">
       <SavingsGoalSheet open={!!editSaving} onClose={() => setEditSaving(null)} month={editSaving}
         current={editSaving ? data.savingsByMonth?.[editSaving.start] ?? data.budget.savingsGoal : data.budget.savingsGoal} income={data.budget.income} />
+      {headerMonth && createPortal(<>{monthOf(pages[page][1].start) || pages[page][1].label}</>, headerMonth)}
       <div data-swipe="arc" className="touch-pan-y overflow-hidden">
         <div ref={swipe.arcFade}>
           <div ref={swipe.arcTrack} className="flex items-start will-change-transform">

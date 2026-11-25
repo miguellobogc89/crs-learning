@@ -77,8 +77,7 @@ export function HomePanel() {
       {/* Te quedan: el aro del ciclo (anterior, este y el próximo) y tus grupos en Comprometido y Gastado. */}
       <LeftToSpend />
 
-      {/* Solo los avisos que piden actuar: renovar el acceso al banco y cobros después de cancelar. */}
-      <Alerts alerts={data.alerts.filter((a) => a.key.startsWith("consent:") || a.key.startsWith("zombi:"))} />
+      {/* Los avisos que piden actuar están en la campana de la cabecera (notifications-bell.tsx). */}
 
       </>
     </div>
