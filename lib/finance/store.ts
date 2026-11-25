@@ -57,6 +57,7 @@ export async function getSettings(userId: string) {
     savingsFrequency: s.savings_frequency === "semanal" ? "semanal" as const : "mensual" as const,
     expectedIncome: s.expected_income === null ? null : Number(s.expected_income),
     othersGoal: s.others_goal === null ? null : Number(s.others_goal),
+    committedCategories: s.committed_categories ?? [],
     incomeAccountId: s.income_account_id,
     savingsAccountId: s.savings_account_id,
     lastSyncAt: s.last_sync_at?.toISOString() ?? null,

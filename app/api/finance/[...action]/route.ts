@@ -363,7 +363,7 @@ export async function POST(req: Request, route: RouteContext) {
     if (action === "settings") {
       const day = Number(body.cycleStartDay);
       const goal = body.savingsGoal === null || body.savingsGoal === "" ? null : Number(body.savingsGoal);
-      const data: { cycle_start_day?: number; savings_goal?: number | null; savings_frequency?: string; expected_income?: number | null; others_goal?: number | null; income_account_id?: string | null; savings_account_id?: string | null; updated_at: Date } = { updated_at: new Date() };
+      const data: { cycle_start_day?: number; savings_goal?: number | null; savings_frequency?: string; expected_income?: number | null; others_goal?: number | null; committed_categories?: string[]; income_account_id?: string | null; savings_account_id?: string | null; updated_at: Date } = { updated_at: new Date() };
       if (body.cycleStartDay !== undefined) {
         if (!Number.isInteger(day) || day < 1 || day > 28) return fail("El ciclo debe empezar entre el día 1 y el 28");
         data.cycle_start_day = day;
@@ -381,6 +381,11 @@ export async function POST(req: Request, route: RouteContext) {
         const others = body.othersGoal === null || body.othersGoal === "" ? null : Number(body.othersGoal);
         if (others !== null && (!Number.isFinite(others) || others < 0)) return fail("Objetivo no válido");
         data.others_goal = others;
+      }
+      if (body.committedCategories !== undefined) {
+        // «Comprometido»: categorías que se pagan cada mes (además de los grupos marcados).
+        if (!Array.isArray(body.committedCategories)) return fail("Categorías no válidas");
+        data.committed_categories = [...new Set((body.committedCategories as unknown[]).filter((c): c is string => typeof c === "string" && isCategory(c)))];
       }
       for (const [key, column] of [["incomeAccountId", "income_account_id"], ["savingsAccountId", "savings_account_id"]] as const) {
         if (body[key] === undefined) continue;
