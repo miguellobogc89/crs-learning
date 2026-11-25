@@ -519,8 +519,8 @@ export async function packagesView(userId: string) {
 /** Grupos con los que arranca Plan la primera vez (cada uno solo con categorías; el usuario los cambia). */
 // Grupos de inicio para quien aún no tiene ninguno (24/11/2026). Lo demás queda «Sin grupo» en Inicio, a la vista,
 // como invitación a agruparlo; el usuario los cambia en Mi plan.
-const DEFAULT_PLAN_GROUPS: { name: string; categories: string[] }[] = [
-  { name: "Gastos fijos", categories: ["vivienda", "comunidad", "seguro_hogar", "seguro_coche", "luz", "gas", "agua", "internet_fijo", "movil", "suministros", "prestamos", "suscripciones"] },
+const DEFAULT_PLAN_GROUPS: { name: string; categories: string[]; fixed?: boolean }[] = [
+  { name: "Recibos y cuotas", fixed: true, categories: ["vivienda", "comunidad", "seguro_hogar", "seguro_coche", "luz", "gas", "agua", "internet_fijo", "movil", "suministros", "prestamos", "suscripciones"] },
   { name: "Alimentación", categories: ["alimentacion", "comida_domicilio"] },
   { name: "Ocio y caprichos", categories: ["restaurantes", "bares_copas", "conciertos_espectaculos", "hobbies", "videojuegos", "ocio"] },
   { name: "Viajes", categories: ["viajes"] },
@@ -627,7 +627,7 @@ export async function planView(userId: string) {
   const load = () => prisma.finance_plan_groups.findMany({ where: { user_id: userId }, orderBy: [{ position: "asc" }, { created_at: "asc" }] });
   let rows = await load();
   if (!rows.length && ctx.txs.length) {
-    await prisma.finance_plan_groups.createMany({ data: DEFAULT_PLAN_GROUPS.map((g, i) => ({ user_id: userId, name: g.name, categories: g.categories, position: i })) });
+    await prisma.finance_plan_groups.createMany({ data: DEFAULT_PLAN_GROUPS.map((g, i) => ({ user_id: userId, name: g.name, categories: g.categories, position: i, fixed: g.fixed ?? false })) });
     rows = await load();
   }
   const current = cycleFor(ctx.today, ctx.startDay);
