@@ -129,6 +129,16 @@ async function syncAccount(userId: string, bank: string, institution: string, ui
     },
   });
 
+  // Foto del saldo de hoy (la última del día): de aquí sale lo que tenías al empezar cada ciclo.
+  if (balance !== null) {
+    const day = new Date(`${todayIso()}T00:00:00Z`);
+    await prisma.finance_balance_snapshots.upsert({
+      where: { account_id_day: { account_id: account.id, day } },
+      create: { user_id: userId, account_id: account.id, day, balance },
+      update: { balance, taken_at: new Date() },
+    }).catch((e) => console.error("[finance] foto de saldo", e instanceof Error ? e.message.slice(0, 200) : e));
+  }
+
   const from = existing?.last_synced_at
     ? addDays(existing.last_synced_at.toISOString().slice(0, 10), -OVERLAP_DAYS)
     : addDays(todayIso(), -FIRST_SYNC_DAYS);

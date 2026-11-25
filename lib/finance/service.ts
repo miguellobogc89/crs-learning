@@ -632,6 +632,8 @@ export async function planView(userId: string) {
   }
   const current = cycleFor(ctx.today, ctx.startDay);
   const day = daysBetween(current.start, ctx.today) + 1;
+  const snaps = new Map((await prisma.finance_balance_snapshots.findMany({ where: { user_id: userId }, select: { account_id: true, day: true, balance: true } }))
+    .map((s) => [`${s.account_id}|${s.day.toISOString().slice(0, 10)}`, Number(s.balance)]));
   const oldest = ctx.txs.length ? ctx.txs[ctx.txs.length - 1].date : ctx.today;
   const prevCycle = cycleFor(ctx.today, ctx.startDay, -1);
   const prevTo = addDays(prevCycle.start, day - 1) < prevCycle.end ? addDays(prevCycle.start, day - 1) : prevCycle.end;
@@ -734,8 +736,6 @@ export async function planView(userId: string) {
     // empezaste. El siguiente es previsión: lo que sueles cobrar y lo ya comprometido.
     money: (() => {
       const acc = ctx.accounts.filter((a) => a.included && a.currency === "EUR" && a.balance !== null);
-      const ids = new Set(acc.map((a) => a.id));
-      const cashNow = acc.reduce((t, a) => t + (a.balance ?? 0), 0);
       const fixedKeys = new Set(ctx.recurring.filter((r) => r.amount < 0 && (r.active || ctx.cancelled.has(r.key))).map((r) => r.key));
       const pend = currentMonthPending(ctx).items.reduce((t, i) => t + i.amount, 0);
       const one = (c: { start: string; end: string; label: string }, isCurrent: boolean) => {
@@ -746,8 +746,15 @@ export async function planView(userId: string) {
           if (t.kind === "ingreso" && t.amount > 0) inc += t.amount;
           if (isPackageCharge(t)) { if (fixedKeys.has(merchantKey(t.description, t.counterparty))) fixed -= t.amount; else spent -= t.amount; }
         }
-        const moved = ctx.txs.filter((t) => ids.has(t.accountId) && t.date >= c.start).reduce((t, x) => t + x.amount, 0);
-        return { start: c.start, end: c.end, label: c.label, income: round2(inc), fixed: round2(fixed + (isCurrent ? pend : 0)), spent: round2(spent), carry: round2(cashNow - moved) };
+        // Lo que tenías al empezar: la foto del saldo del día anterior al ciclo si la hay (de cada cuenta); si no,
+        // el saldo de hoy menos lo movido desde entonces (frágil: depende de que hoy esté todo listado).
+        const dayBefore = addDays(c.start, -1);
+        let carry = 0;
+        for (const a of acc) {
+          const snap = snaps.get(`${a.id}|${dayBefore}`);
+          carry += snap ?? (a.balance ?? 0) - ctx.txs.filter((t) => t.accountId === a.id && t.date >= c.start).reduce((t, x) => t + x.amount, 0);
+        }
+        return { start: c.start, end: c.end, label: c.label, income: round2(inc), fixed: round2(fixed + (isCurrent ? pend : 0)), spent: round2(spent), carry: round2(carry) };
       };
       const nextItems = nextMonthCommitted(ctx);
       return {
