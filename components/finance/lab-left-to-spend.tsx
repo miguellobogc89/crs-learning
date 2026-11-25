@@ -12,7 +12,7 @@ import { SkeletonList } from "@/components/trading/skeletons";
 import { useFinance } from "./api";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
-type Money = Plan["money"]["cur"];
+type Money = Plan["money"]["cur"] | Plan["money"]["next"];
 type Kind = "prev" | "cur" | "next";
 
 const C = { fixed: "#888780", spent: "#D85A30", free: "#97C459", saving: "#7F77DD", over: "#E24B4A", track: "#D3D1C7" };
