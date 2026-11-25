@@ -163,6 +163,44 @@ async function syncAccount(userId: string, bank: string, institution: string, ui
       counterparty_iban_hash: ibanHash(outgoing ? t.creditor_account?.iban : t.debtor_account?.iban),
     });
   }
+  // El mismo movimiento puede llegar con dos identificadores: un día sin el del banco (huella «h:…») y al siguiente
+  // con él («2026-11-21.0»). Antes de guardar se cruza por cuenta, fecha, importe y concepto con lo que ya hay: si ya
+  // está (con otro identificador), no se duplica y se le pone el identificador del banco. Respeta los repetidos reales
+  // (dos cafés iguales el mismo día): solo se descartan tantos como ya había. (25/11/2026)
+  if (rows.length) {
+    const dates = rows.map((r) => r.booking_date as Date);
+    const minDate = new Date(Math.min(...dates.map((d) => d.getTime())));
+    const prev = await prisma.finance_transactions.findMany({
+      where: { account_id: account.id, booking_date: { gte: minDate } },
+      select: { id: true, external_id: true, booking_date: true, amount: true, description: true },
+    });
+    const keyOf = (d: Date, amount: number, desc: string) => `${d.toISOString().slice(0, 10)}|${amount.toFixed(2)}|${desc}`;
+    const ids = new Set(prev.map((p) => p.external_id));
+    const pool = new Map<string, { id: string; external_id: string }[]>();
+    for (const p of prev) {
+      const k = keyOf(p.booking_date, Number(p.amount), p.description);
+      (pool.get(k) ?? pool.set(k, []).get(k)!).push({ id: p.id, external_id: p.external_id });
+    }
+    // Los que ya están con su mismo identificador no cuentan como hueco libre.
+    for (const r of rows) {
+      if (!ids.has(r.external_id)) continue;
+      const list = pool.get(keyOf(r.booking_date as Date, Number(r.amount), r.description));
+      const i = list?.findIndex((x) => x.external_id === r.external_id) ?? -1;
+      if (list && i >= 0) list.splice(i, 1);
+    }
+    const keep: typeof rows = [];
+    for (const r of rows) {
+      if (ids.has(r.external_id)) { keep.push(r); continue; }
+      const list = pool.get(keyOf(r.booking_date as Date, Number(r.amount), r.description));
+      const twin = list?.shift();
+      if (!twin) { keep.push(r); continue; }
+      // Ya estaba con otra huella: si aquella era nuestra («h:…») y esta es la del banco, se queda la del banco.
+      if (twin.external_id.startsWith("h:") && !r.external_id.startsWith("h:")) {
+        await prisma.finance_transactions.update({ where: { id: twin.id }, data: { external_id: r.external_id } }).catch(() => undefined);
+      }
+    }
+    rows.splice(0, rows.length, ...keep);
+  }
   let inserted = 0;
   for (let i = 0; i < rows.length; i += 500) {
     const r = await prisma.finance_transactions.createMany({ data: rows.slice(i, i + 500), skipDuplicates: true });
