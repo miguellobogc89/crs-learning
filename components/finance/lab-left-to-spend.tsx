@@ -37,7 +37,7 @@ function stateOf(m: Money, saving: number, kind: Kind, day: number, days: number
   return { income, left, over, ateSaving, fromCarry, budget, expected, pace };
 }
 
-function Gauge({ m, saving, kind, day, days }: { m: Money; saving: number; kind: Kind; day: number; days: number }) {
+function Gauge({ m, saving, kind, day, days, waiting = false }: { m: Money; saving: number; kind: Kind; day: number; days: number; waiting?: boolean }) {
   const [open, setOpen] = useState(false);
   const s = stateOf(m, saving, kind, day, days);
   const total = Math.max(1, s.income);
@@ -93,7 +93,7 @@ function Gauge({ m, saving, kind, day, days }: { m: Money; saving: number; kind:
           <text x={cx} y={cy + 8} textAnchor="middle" fontSize="13" fill="#64748b">{sub}</text>
         </svg>
       </button>
-      <p className="amount mt-2 text-center text-sm text-slate-600">{say}</p>
+      <p className="amount mt-2 text-center text-sm text-slate-600">{waiting ? `Tu nómina de este ciclo aún no ha entrado: cuento con lo que sueles cobrar (${eur(s.income, 0)}).` : say}</p>
       {open && (
         <ul className="mt-3 divide-y divide-slate-100 rounded-xl bg-slate-50 px-3 text-sm">
           {rows.map(([t, v, c]) => (
@@ -119,14 +119,17 @@ export function LabLeftToSpend() {
   if (!data) return <SkeletonList rows={5} />;
   const saving = data.budget.savingsGoal ?? 0;
   const { day, totalDays } = data.cycle;
-  const pages: [Kind, Money][] = [["prev", data.money.prev], ["cur", data.money.cur], ["next", data.money.next]];
+  // Si la nómina del ciclo aún no ha entrado (el día de cobro, antes de sincronizar), se cuenta con la habitual.
+  const waiting = data.money.cur.income <= 0 && (data.budget.income ?? 0) > 0;
+  const cur = waiting ? { ...data.money.cur, income: data.budget.income ?? 0 } : data.money.cur;
+  const pages: [Kind, Money][] = [["prev", data.money.prev], ["cur", cur], ["next", data.money.next]];
   return (
     <div className="pb-4">
       <div ref={pager} onScroll={(e) => { const el = e.currentTarget; setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
         className="flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {pages.map(([k, m]) => (
           <div key={k} className="w-full shrink-0 snap-start px-1">
-            <Gauge m={m} saving={saving} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} />
+            <Gauge m={m} saving={saving} kind={k} day={k === "cur" ? day : totalDays} days={totalDays} waiting={k === "cur" && waiting} />
           </div>
         ))}
       </div>
