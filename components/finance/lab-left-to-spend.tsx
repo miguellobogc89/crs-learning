@@ -6,7 +6,7 @@
 // «Comprometido» ya no se adivina: son los grupos y categorías que tú metes en él (lo que se paga cada mes); se
 // guarda de verdad (la marca de los grupos y las categorías de ajustes). Se desliza entre ciclos con imán.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, Loader2, Pencil } from "lucide-react";
 import type { planView } from "@/lib/finance/service";
 import { SELECTABLE_CATEGORIES, categoryLabel } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
@@ -15,6 +15,7 @@ import { SkeletonList } from "@/components/trading/skeletons";
 import { useRouter } from "next/navigation";
 import { fapi, refreshFinance, useFinance } from "./api";
 import { GroupsList, type ListProps } from "./home-plan";
+import { SavingsGoalSheet } from "./savings-goal-sheet";
 import { CategoryIcon } from "./category-icon";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
@@ -197,6 +198,7 @@ export function LabLeftToSpend() {
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
   const [groupsOn, setGroupsOn] = useState<Set<string>>(new Set());
   const [catsOn, setCatsOn] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -267,10 +269,14 @@ export function LabLeftToSpend() {
 
   return (
     <div className="pb-4">
-      <p className="mb-3 flex items-baseline justify-between px-1 text-sm text-slate-500">
-        <span>Tu objetivo de ahorro</span>
-        <b className="amount text-[15px] font-semibold tabular-nums text-[#3478f6]">{eur(saving, 0)} por ciclo</b>
-      </p>
+      <button type="button" onClick={() => setEditSaving(true)} className="mb-3 flex w-full items-center justify-between gap-3 px-1 text-left" aria-label="Cambiar el objetivo de ahorro">
+        <span className="text-sm text-slate-500">Tu objetivo de ahorro</span>
+        <span className="flex items-center gap-2">
+          <b className="amount text-[15px] font-semibold tabular-nums text-[#3478f6]">{eur(saving, 0)} por ciclo</b>
+          <Pencil className="h-3.5 w-3.5 text-slate-400" />
+        </span>
+      </button>
+      <SavingsGoalSheet open={editSaving} onClose={() => setEditSaving(false)} current={data.budget.savingsGoal} income={data.budget.income} />
       <div ref={pager} onScroll={(e) => { const el = e.currentTarget; setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth))); }}
         className="flex snap-x snap-mandatory items-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {pages.map(([k, m]) => (
