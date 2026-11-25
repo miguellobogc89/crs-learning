@@ -262,7 +262,7 @@ export function LeftToSpend() {
     toCategory: (key) => (store.set(KEY.scroll, String(scroller()?.scrollTop ?? 0)), router.push(`/finanzas/categoria/${encodeURIComponent(key)}${nextQ ? `?${nextQ}` : ""}`)),
   };
   const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks,
-    toggleBlock: (k) => setBlocks((b) => ({ ...b, [k]: !(b[k] ?? k.endsWith(":g") && !k.startsWith("prev")) })) };
+    toggleBlock: (k) => setBlocks((b) => ({ ...b, [k]: !(b[k] ?? (k.endsWith(":g") && !k.startsWith("prev"))) })) };
 
   // Cada ciclo: lo comprometido son sus grupos y categorías (lo cobrado y, en el actual, lo que falta por cobrar);
   // lo gastado, todo lo demás (con los extraordinarios).
