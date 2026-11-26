@@ -25,8 +25,9 @@ export async function resolveLogos(userId: string, limit = 60) {
   const txs = await loadTxs(userId);
   const seen = new Map<string, { n: number; sample: string; category: string }>();
   for (const t of txs) {
-    if (t.kind === "interna" || t.kind === "prestamo") continue;
-    const k = txMerchant(t);
+    const declined = Math.abs(t.amount) < 0.005;
+    if (!declined && (t.kind === "interna" || t.kind === "prestamo")) continue;
+    const k = declined ? merchantKey(t.description, null) : txMerchant(t);
     if (!k || k.length < 3) continue;
     const x = seen.get(k) ?? { n: 0, sample: `${t.description}${t.counterparty ? ` | ${t.counterparty}` : ""}`, category: t.category };
     x.n += 1;

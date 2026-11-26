@@ -285,7 +285,9 @@ export async function listTransactions(userId: string, opts: { all?: boolean } =
   const rule: CycleRule = view.unit === "mes" ? 1 : ctx.startDay;
   const rows = all.filter((t) => !accById.get(t.accountId)?.hidden && (opts.all || (t.date >= period.from && t.date <= period.to)));
   // Logo de cada comercio conocido (su web), si ya se ha resuelto.
-  const logos = await domainsFor(rows.map((t) => merchantKey(t.description, t.counterparty)));
+  // Un pago rechazado (0 €) trae como contraparte al propio titular: su comercio sale del concepto.
+  const merchantOf = (t: (typeof rows)[number]) => (Math.abs(t.amount) < 0.005 ? merchantKey(t.description, null) : merchantKey(t.description, t.counterparty));
+  const logos = await domainsFor(rows.map(merchantOf));
   // Tramo (ciclo o mes) de cada fecha, calculado una vez por fecha distinta.
   const bucketOf = new Map<string, string>();
   const bucketLabels: Record<string, string> = {};
@@ -321,7 +323,7 @@ export async function listTransactions(userId: string, opts: { all?: boolean } =
         cycleStart: cycleFor(t.date, ctx.startDay).start,
         // Pago rechazado: el banco lo deja a 0 €. Solo se ve en Movimientos, tachado; no cuenta en ningún sitio.
         declined: Math.abs(t.amount) < 0.005,
-        logo: t.kind === "interna" ? null : logos.get(merchantKey(t.description, t.counterparty)) ?? null,
+        logo: t.kind === "interna" && Math.abs(t.amount) >= 0.005 ? null : logos.get(merchantOf(t)) ?? null,
         imputedCycle: t.imputedDate ? cycleFor(t.imputedDate, ctx.startDay).start : null,
       };
     }),

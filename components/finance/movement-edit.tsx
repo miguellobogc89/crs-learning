@@ -31,7 +31,7 @@ export function CategoryPill({ t }: { t: Pick<Item, "category" | "kind"> }) {
 }
 
 export function Amount({ t }: { t: Item }) {
-  if (t.declined) return null;
+  if (t.declined) return <span className="amount whitespace-nowrap font-semibold tabular-nums text-slate-400">{eur(0, 2)}</span>;
   // Un traspaso entre tus cuentas no suma ni resta: en gris y sin signo.
   if (t.kind === "interna") return <span className="amount whitespace-nowrap font-semibold tabular-nums text-slate-400">{eur(Math.abs(t.amount), 2)}</span>;
   return <span className={`amount whitespace-nowrap font-semibold tabular-nums ${t.amount > 0 ? "text-emerald-700" : "text-slate-900"}`}>{t.amount > 0 ? "+" : ""}{eur(t.amount, 2)}</span>;
@@ -52,11 +52,12 @@ export function MovementRowButton({ t, onClick }: { t: Item; onClick: () => void
   // Pago rechazado: el comercio (nombre original, no la contraparte), tachado y en gris.
   if (t.declined) return (
     <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-3 text-left active:opacity-70">
-      <span className="opacity-50 grayscale"><MerchantLogo domain={t.logo} category={t.kind === "interna" ? "otros_gastos" : t.category} /></span>
+      <MerchantLogo domain={t.logo} category={t.kind === "interna" ? "otros_gastos" : t.category} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-medium text-slate-400 line-through">{t.description}</span>
         <span className="mt-0.5 block truncate text-xs text-slate-500">Rechazado · {shortDay(t.date)}</span>
       </span>
+      <span className="amount whitespace-nowrap font-semibold tabular-nums text-slate-400">{eur(0, 2)}</span>
     </button>
   );
   return (
