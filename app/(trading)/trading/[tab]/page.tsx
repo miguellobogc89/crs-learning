@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { connectorContext } from "@/lib/connectors/context";
+import { tradingContext as connectorContext } from "@/lib/connectors/context";
 import { TradingWorkspace } from "@/components/trading/trading-workspace";
 import { TRADING_TABS, VIRTUAL_PORTFOLIO_TITLE, isTradingTab } from "@/components/trading/tabs";
 

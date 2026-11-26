@@ -7,7 +7,7 @@ import { getPulse } from "@/lib/trading/pulse/service";
 import { getSummary } from "@/lib/trading/summary";
 import { listNotifications, markAllRead } from "@/lib/trading/notifications";
 import { buyManual, manualView, sellManual, setManualTrail } from "@/lib/trading/manual/service";
-import { connectorContext } from "@/lib/connectors/context";
+import { tradingContext as connectorContext } from "@/lib/connectors/context";
 import {
   accountDetail,
   closePosition,

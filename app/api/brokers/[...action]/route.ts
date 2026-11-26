@@ -1,7 +1,7 @@
 // API del módulo de integraciones con brókeres. Solo habla con el gateway (lib/brokers/gateway):
 // aquí no hay lógica de ningún proveedor. Las credenciales entran por POST y nunca salen.
 import { NextResponse } from "next/server";
-import { connectorContext } from "@/lib/connectors/context";
+import { tradingContext as connectorContext } from "@/lib/connectors/context";
 import * as brokers from "@/lib/brokers/gateway";
 import { BrokerError, isBrokerError, type BrokerActor, type BrokerEnvironment, type BrokerPermission, type PlaceOrderInput } from "@/lib/brokers/types";
 

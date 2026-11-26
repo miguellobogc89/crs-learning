@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { connectorContext } from "@/lib/connectors/context";
+import { tradingContext as connectorContext } from "@/lib/connectors/context";
 import { ShellMeta } from "@/components/trading/shell";
 import { AgentPage } from "@/components/trading/agent-page";
 import { TRADING_TABS } from "@/components/trading/tabs";
