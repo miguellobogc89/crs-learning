@@ -247,7 +247,7 @@ export function MovementsPanel() {
       if (m) { used.add(t.id); used.add(m.id); loose.set(t.id, m); loose.set(m.id, t); }
     }
     const transfer = (t: Item): Item | null => {
-      if (t.kind !== "interna") return t;
+      if (t.kind !== "interna" || t.declined) return t;
       const pair = t.transferPairId ? (halves.get(t.transferPairId) ?? []).filter((x) => x.id !== t.id) : [];
       const other = pair[0] ?? (t.transferPairId ? byId.get(t.transferPairId) : undefined) ?? loose.get(t.id);
       if (other && other.kind === "interna") {
@@ -260,7 +260,7 @@ export function MovementsPanel() {
       return { ...t, alias: t.amount < 0 ? `De ${t.account} a otra cuenta tuya` : `A ${t.account} desde otra cuenta tuya` };
     };
     const out = data.items.map((t) => (kind === "all" || kind === "interna" ? transfer(t) : t)).filter((t): t is Item => !!t).filter((t) =>
-      (kind === "all" || t.kind === kind) &&
+      (kind === "all" || (t.kind === kind && !t.declined)) &&
       (category === "all" || t.category === category) &&
       (status === "all" || (status === "revisar" ? isReview(t) : status === "usuario" ? t.source === "usuario" : t.extraordinary)) &&
       (!needle || fold(`${t.description} ${t.counterparty ?? ""} ${t.alias ?? ""} ${t.subcategory ?? ""} ${t.note ?? ""} ${t.account} ${Math.abs(t.amount).toFixed(2).replace(".", ",")}`).includes(needle)));
@@ -340,9 +340,12 @@ export function MovementsPanel() {
       <td className="whitespace-nowrap px-3 py-2.5 text-slate-500">{shortDay(t.date)}</td>
       <td className="max-w-[28rem] px-3 py-2.5">
         <span className="flex items-center gap-1.5">
-          {t.kind === "interna" && <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
+          {t.kind === "interna" && !t.declined && <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
           {t.extraordinary && <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Extra</span>}
-          <span className="truncate font-medium text-slate-900" title={t.description}>{label(t)}</span>
+          {t.declined
+            ? <span className="truncate font-medium text-slate-400 line-through" title={t.description}>{t.description}</span>
+            : <span className="truncate font-medium text-slate-900" title={t.description}>{label(t)}</span>}
+          {t.declined && <span className="shrink-0 text-xs text-slate-500">Rechazado</span>}
         </span>
         {t.note ? <span className="block truncate text-xs text-slate-500">{t.note}</span> : (t.alias || t.counterparty) ? <span className="block truncate text-xs text-slate-400">{t.description}</span> : null}
       </td>

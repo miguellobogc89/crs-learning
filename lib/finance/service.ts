@@ -283,8 +283,7 @@ export async function listTransactions(userId: string, opts: { all?: boolean } =
   const oldest = all.length ? all[all.length - 1].date : null;
   const period = resolvePeriod(view, ctx.today, ctx.startDay, oldest);
   const rule: CycleRule = view.unit === "mes" ? 1 : ctx.startDay;
-  // Los de 0 € (comprobaciones de tarjeta, como las de Anthropic o Google) no se enseñan: no mueven dinero.
-  const rows = all.filter((t) => Math.abs(t.amount) >= 0.005 && !accById.get(t.accountId)?.hidden && (opts.all || (t.date >= period.from && t.date <= period.to)));
+  const rows = all.filter((t) => !accById.get(t.accountId)?.hidden && (opts.all || (t.date >= period.from && t.date <= period.to)));
   // Logo de cada comercio conocido (su web), si ya se ha resuelto.
   const logos = await domainsFor(rows.map((t) => merchantKey(t.description, t.counterparty)));
   // Tramo (ciclo o mes) de cada fecha, calculado una vez por fecha distinta.
@@ -320,6 +319,8 @@ export async function listTransactions(userId: string, opts: { all?: boolean } =
         bucket: bucketOf.get(t.date) ?? t.date,
         // Mes (de nómina) del cargo y, si se cambió la fecha, el mes en que cuenta: lo que enseña «Cambiar fecha».
         cycleStart: cycleFor(t.date, ctx.startDay).start,
+        // Pago rechazado: el banco lo deja a 0 €. Solo se ve en Movimientos, tachado; no cuenta en ningún sitio.
+        declined: Math.abs(t.amount) < 0.005,
         logo: t.kind === "interna" ? null : logos.get(merchantKey(t.description, t.counterparty)) ?? null,
         imputedCycle: t.imputedDate ? cycleFor(t.imputedDate, ctx.startDay).start : null,
       };
