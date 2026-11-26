@@ -258,7 +258,10 @@ async function settlePending(accountId: string, rows: Prisma.finance_transaction
       await prisma.finance_transactions.update({
         where: { id: h.id },
         data: { pending: false, external_id: booked.external_id, amount: booked.amount, booking_date: booked.booking_date, description: booked.description, counterparty: booked.counterparty ?? null, updated_at: new Date() },
-      }).catch((e) => console.error("[finance] retenido", e instanceof Error ? e.message.slice(0, 200) : e));
+      }).catch(async () => {
+        // El definitivo ya estaba guardado (lo trajo otra sincronización): sobra el retenido.
+        await prisma.finance_transactions.delete({ where: { id: h.id } }).catch(() => undefined);
+      });
       continue;
     }
     // Ya no llega: si estaba dentro de lo consultado (o lleva más de dos semanas retenido), se anuló.
