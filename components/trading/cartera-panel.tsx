@@ -449,7 +449,7 @@ function ManageModal({ r, free, maxBudget, onClose }: { r: Row; free: number; ma
             </button>
           </div>
           <p className="text-xs text-slate-500">
-            {value > 0 ? (target <= 0 ? "Retiras todo: deja de trabajar con tu dinero." : `Le quedarán ${eur(target, 2)} para sus próximas compras.`) : `Entre 5 € y ${eur(maxBudget, 0)} por agente. Se aplica a sus próximas compras.`}
+            {value > 0 ? (target <= 0 ? "Retiras todo: deja de trabajar con tu dinero." : `Le quedarán ${eur(target, 2)} para sus próximas compras.`) : "Mínimo 5 €. Se aplica a sus próximas compras."}
             {r.mirror?.mode !== "real" && r.mirror && " Al guardar, pasa a dinero real."}
           </p>
 

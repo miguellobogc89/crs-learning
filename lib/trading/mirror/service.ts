@@ -23,8 +23,8 @@ import { isShortSwarm, KRAKEN_FEE_PCT, krakenProblem } from "../kraken-copy";
 
 const MODES = ["ensayo", "real"] as const;
 export type MirrorMode = (typeof MODES)[number];
-/** Tope por copia mientras esto se valida (se sube con TRADING_MIRROR_MAX_EUR). */
-export const maxBudget = () => Math.max(5, Number(process.env.TRADING_MIRROR_MAX_EUR) || 100);
+/** Sin tope por copia: el límite es el dinero libre que tengas en el exchange. */
+export const maxBudget = () => 1_000_000;
 const STALE_MS = 10 * 60_000;
 const MAX_SELL_ATTEMPTS = 5;
 
