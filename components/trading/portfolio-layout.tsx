@@ -7,7 +7,7 @@ import { EquityChart } from "./equity-chart";
 type Period = { key: string; label: string };
 
 export function PortfolioBalance<T extends string>({
-  title, total, available, working, opportunities, earned, earnedParts, returnPct, points, initial, intraday,
+  title, total, available, working, opportunities, earned, earnedParts, earnedSince, returnPct, points, initial, intraday,
   periods, period, onPeriodChange, refreshing, onRefresh, note, empty, setup, venues,
 }: {
   /** Etiqueta pequeña sobre el saldo («Saldo total», «Dinero virtual»…). El título de la página ya dice dónde estás. */
@@ -19,6 +19,8 @@ export function PortfolioBalance<T extends string>({
   earned: number;
   /** Desglose de la ganancia: agentes y tus operaciones (si se conoce). */
   earnedParts?: { agents: number; own: number };
+  /** Desde cuándo cuenta la ganancia (ISO), si no es desde siempre. */
+  earnedSince?: string | null;
   returnPct: number | null;
   points: { day: string; equity: number }[];
   initial: number;
@@ -44,7 +46,7 @@ export function PortfolioBalance<T extends string>({
   const kpis = [
     { icon: Wallet, label: "Disponible", value: available, tip: "Sin repartir: ni en agentes ni en operaciones tuyas", sub: "Sin repartir", result: false },
     { icon: Layers, label: "Invertido", value: working, tip: "Lo que tienen tus agentes más tus operaciones abiertas", sub: parts(agents, opportunities), result: false },
-    { icon: TrendingUp, label: "Ganancia o pérdida", value: earned, tip: "Resultado de tus agentes y de tus operaciones, cerradas y abiertas", sub: earnedParts ? parts(earnedParts.agents, earnedParts.own, true) : "", result: true },
+    { icon: TrendingUp, label: earnedSince ? `Ganancia · desde ${new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", timeZone: "Europe/Madrid" }).format(new Date(earnedSince))}` : "Ganancia o pérdida", value: earned, tip: "Resultado de tus agentes y de tus operaciones, cerradas y abiertas", sub: earnedParts ? parts(earnedParts.agents, earnedParts.own, true) : "", result: true },
   ];
 
   return (

@@ -14,6 +14,7 @@ import { refreshTrading, useTradingRefresh, useWarmStart } from "./navigation";
 import { AgentAvatar, ErrorNote, LoadingCard, Modal, ReturnPill, StopTargetBar } from "./ui";
 import { PortfolioAgents, PortfolioBalance, PortfolioColumns, PortfolioOpportunities } from "./portfolio-layout";
 import type { Agent, Data as AgentsData } from "./agents-panel";
+import { realFigures, type PnlView } from "./real-figures";
 
 type Wallets = Awaited<ReturnType<typeof getWallets>>;
 type Mine = Awaited<ReturnType<typeof myAgents>>;
@@ -57,6 +58,8 @@ export function CarteraPanel() {
   useWarmStart<Mine>("mine", setMine);
   const [manual, setManual] = useState<Manual | null>(null);
   useWarmStart<Manual>("manual", setManual);
+  const [pnl, setPnl] = useState<PnlView | null>(null);
+  useWarmStart<PnlView>("pnl", setPnl);
   const [error, setError] = useState<string | null>(null);
   const [managing, setManaging] = useState<Row | null>(null);
   const [adding, setAdding] = useState(false);
@@ -74,6 +77,7 @@ export function CarteraPanel() {
       setError(null);
       // Mis oportunidades: si falta la tabla (migración sin pasar), la pantalla sigue funcionando.
       await api<Manual>("manual").then(setManual, () => setManual(null));
+      await api<PnlView>("pnl").then(setPnl, () => setPnl(null));
     } catch (e) {
       setError(errorText(e));
     }
@@ -119,20 +123,9 @@ export function CarteraPanel() {
 
   if (!wallets || !mirrors || !agents || !mine) return error ? <ErrorNote>{error}</ErrorNote> : <LoadingCard height="h-96" />;
 
-  const real = wallets.items.filter((w) => w.environment === "real" && w.total !== null && w.currency === "EUR");
-  const total = real.reduce((s, w) => s + (w.total ?? 0), 0);
-  const funded = real.filter((w) => (w.total ?? 0) >= 0.01);
-  const realRows = rows.filter((r) => r.mirror && r.mirror.mode === "real");
-  // Lo que tienen tus agentes (lo que les diste + lo que llevan) y tus operaciones abiertas: eso está invertido.
-  // Disponible es el resto del saldo. Así Saldo = Disponible + Invertido siempre.
-  const inTrades = manual?.working ?? 0;
-  const agentsNow = realRows.reduce((s, r) => s + (money(r.mirror)?.now ?? 0), 0);
-  const working = Math.min(total, agentsNow + inTrades);
-  const free = Math.max(0, total - working);
-  const earnedAgents = realRows.reduce((s, r) => s + (money(r.mirror)?.result ?? 0), 0);
-  const earnedOwn = manual?.result ?? 0;
-  const earned = earnedAgents + earnedOwn;
-  const earnedBase = realRows.reduce((s, r) => s + (r.mirror?.budget ?? 0), 0) + (manual?.trades.filter((t) => t.status === "abierta" || t.status === "cerrada").reduce((s, t) => s + t.invested, 0) ?? 0);
+  // Las mismas cifras que Inicio (components/trading/real-figures.ts).
+  const fig = realFigures({ wallets, mirrors, manual, pnl });
+  const total = fig.total;
   const cutoff = Date.now() - (chartPeriod === "24h" ? 1 : 7) * 86_400_000;
   const recent = wallets.history.filter((p) => new Date(p.day).getTime() >= cutoff && p.equity > 0);
   const hasIntraday = recent.length >= 2;
@@ -151,14 +144,15 @@ export function CarteraPanel() {
       )}
 
       <PortfolioBalance
-        title={funded.length > 1 ? `Saldo total · ${funded.length} exchanges` : "Saldo total"}
+        title={fig.exchanges > 1 ? `Saldo total · ${fig.exchanges} exchanges` : "Saldo total"}
         total={total}
-        available={free}
-        working={working}
-        opportunities={Math.min(inTrades, working)}
-        earned={earned}
-        earnedParts={{ agents: earnedAgents, own: earnedOwn }}
-        returnPct={earnedBase > 0 ? (earned / earnedBase) * 100 : null}
+        available={fig.available}
+        working={fig.invested}
+        opportunities={fig.own}
+        earned={fig.earned}
+        earnedParts={{ agents: fig.earnedAgents, own: fig.earnedOwn }}
+        earnedSince={fig.since}
+        returnPct={fig.pct}
         points={graphPoints}
         initial={graphPoints[0]?.equity ?? total}
         intraday={hasIntraday}

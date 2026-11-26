@@ -1,9 +1,9 @@
 "use client";
-// Resumen (primera pestaña de Inicio, 17/11/2026): para verlo en un segundo, por ejemplo en el metro.
-// Si todo funciona, tu dinero, el mercado en cuatro datos, cómo va cada familia de agentes y lo que gasta
-// la IA. Los indicadores detallados (lo que antes era Panorama) quedan en un desplegable al final.
+// Resumen (primera pestaña de Inicio): ¿cómo va mi dinero? Con dinero real, las mismas cifras que Mi cartera,
+// la rentabilidad sin contar ingresos (día, semana, mes, todo), lo que hay abierto y las últimas operaciones.
+// Los indicadores detallados del mercado quedan en un desplegable al final.
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { AlertTriangle, Bot, ChevronDown, Cpu, Gauge, Wallet } from "lucide-react";
+import { Activity, AlertTriangle, ChevronDown, Gauge, History, Layers, TrendingUp, Wallet } from "lucide-react";
 import type { getSummary } from "@/lib/trading/summary";
 import type { getPortfolio } from "@/lib/trading/agents/copy";
 import type { manualView } from "@/lib/trading/manual/service";
@@ -11,9 +11,11 @@ import type { mirrorView } from "@/lib/trading/mirror/service";
 import Link from "next/link";
 import { api, card, eur, errorText, flat } from "./format";
 import { useTradingRefresh, useWarmStart } from "./navigation";
-import { AGENT_DOT, ErrorNote, LoadingCard, ReturnPill } from "./ui";
+import { ErrorNote, LoadingCard, ReturnPill } from "./ui";
 import { PulsePanel } from "./pulse-panel";
 import { AssetIcon } from "./asset-icon";
+import { EquityChart } from "./equity-chart";
+import { pnlSeries, realFigures, type PnlView, type Wallets } from "./real-figures";
 
 type Summary = Awaited<ReturnType<typeof getSummary>>;
 type Virtual = Awaited<ReturnType<typeof getPortfolio>>;
@@ -27,8 +29,16 @@ const displayDate = (at: string) => new Intl.DateTimeFormat("es-ES", { day: "2-d
 export const openNotifications = () => window.dispatchEvent(new Event("trading:notifications"));
 
 const nf = (v: number, d = 0) => v.toLocaleString("es-ES", { maximumFractionDigits: d, minimumFractionDigits: d });
-const compact = (v: number) => (v >= 1_000_000 ? `${nf(v / 1_000_000, 1)} M` : v >= 1000 ? `${nf(v / 1000, 0)} k` : nf(v));
-const signedPct = (v: number) => `${v > 0 ? "+" : ""}${nf(v, 1)} %`;
+const signedEur = (v: number) => `${v >= 0 ? "+" : ""}${eur(v, 2)}`;
+const tone = (v: number) => (v > 0.005 ? "text-emerald-600" : v < -0.005 ? "text-red-600" : "text-slate-500");
+const PERIODS = [
+  { key: "dia", label: "Día", ms: 86_400_000 },
+  { key: "semana", label: "Semana", ms: 7 * 86_400_000 },
+  { key: "mes", label: "Mes", ms: 30 * 86_400_000 },
+  { key: "todo", label: "Todo", ms: 0 },
+] as const;
+type PeriodKey = (typeof PERIODS)[number]["key"];
+const STATUS: Record<string, string> = { abierta: "abierta", cerrada: "cerrada", abriendo: "abriendo", vendiendo: "cerrando" };
 
 function Section({ title, icon: Icon, right, children }: { title: string; icon: typeof Gauge; right?: ReactNode; children: ReactNode }) {
   return (
@@ -42,6 +52,39 @@ function Section({ title, icon: Icon, right, children }: { title: string; icon: 
   );
 }
 
+function RecentList({ items, bare = false }: { items: Recent[]; bare?: boolean }) {
+  const list = items.slice(0, bare ? 6 : 3);
+  return (
+    <div className={bare ? "" : "mt-5 border-t border-slate-100 pt-3"}>
+      {!bare && (
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-900">Actividad reciente</h3>
+          <Link href="/trading/cartera" className="text-xs font-semibold text-blue-600 hover:underline">Ver mi cartera</Link>
+        </div>
+      )}
+      {list.length ? (
+        <ul className="divide-y divide-slate-100">
+          {list.map(item => (
+            <li key={item.id} className="flex items-center gap-3 py-2.5 text-sm">
+              <AssetIcon symbol={item.symbol} size="md" />
+              <span className="min-w-0 flex-1">
+                <b className="block truncate font-semibold text-slate-900">{item.symbol.replace(/-EUR$/, "")}</b>
+                <span className="block truncate text-xs text-slate-500">{item.source} · {STATUS[item.status] ?? item.status}</span>
+              </span>
+              <span className="shrink-0 text-right">
+                <span className={`block text-sm font-semibold tabular-nums ${item.result === null ? "text-slate-400" : tone(item.result)}`}>
+                  {item.result === null ? "—" : signedEur(item.result)}
+                </span>
+                <span className="block text-[11px] text-slate-400">{item.at ? displayDate(item.at) : "—"}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="text-xs text-slate-500">No hay operaciones registradas en esta cartera.</p>}
+    </div>
+  );
+}
+
 export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
   const [data, setData] = useState<Summary | null>(null);
   useWarmStart<Summary>("summary", setData);
@@ -51,6 +94,9 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
   const [virtual, setVirtual] = useState<Virtual | null>(null);
   const [manual, setManual] = useState<Manual | null>(null);
   const [mirrors, setMirrors] = useState<Mirrors | null>(null);
+  const [wallets, setWallets] = useState<Wallets | null>(null);
+  const [pnl, setPnl] = useState<PnlView | null>(null);
+  const [period, setPeriod] = useState<PeriodKey>("semana");
   const load = useCallback(async () => {
     try {
       setData(await api<Summary>("summary"));
@@ -70,8 +116,13 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
         const result = await api<Virtual>("portfolio").catch(() => null);
         if (live) setVirtual(result);
       } else {
-        const [m, r] = await Promise.all([api<Manual>("manual").catch(() => null), api<Mirrors>("mirror").catch(() => null)]);
-        if (live) { setManual(m); setMirrors(r); }
+        const [m, r, w, p] = await Promise.all([
+          api<Manual>("manual").catch(() => null),
+          api<Mirrors>("mirror").catch(() => null),
+          api<Wallets>("wallets").catch(() => null),
+          api<PnlView>("pnl").catch(() => null),
+        ]);
+        if (live) { setManual(m); setMirrors(r); setWallets(w); setPnl(p); }
       }
     };
     void fetchMode();
@@ -84,10 +135,28 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
         ...(virtual?.copies ?? []).flatMap(copy => [...copy.positions, ...copy.closed].map(p => ({ id: `copy:${copy.agent}:${p.id}`, symbol: p.symbol, source: copy.name, at: p.createdAt, status: p.status, result: p.status === "cerrada" ? p.pnl : p.unrealized }))),
       ]
     : [
-        ...(manual?.trades ?? []).map(t => ({ id: `manual:${t.id}`, symbol: t.symbol, source: "Manual", at: t.closedAt ?? t.openedAt ?? "", status: t.status, result: t.result })),
-        ...(mirrors?.mirrors ?? []).flatMap(m => m.legs.filter(l => l.mode === "real").map(l => ({ id: `mirror:${l.id}`, symbol: l.symbol, source: m.name, at: l.closedAt ?? l.openedAt ?? "", status: l.status, result: l.result }))),
+        ...(manual?.trades ?? []).filter(t => STATUS[t.status]).map(t => ({ id: `manual:${t.id}`, symbol: t.symbol, source: "Manual", at: t.closedAt ?? t.openedAt ?? "", status: t.status, result: t.result })),
+        ...(mirrors?.mirrors ?? []).flatMap(m => m.legs.filter(l => l.mode === "real" && STATUS[l.status]).map(l => ({ id: `mirror:${l.id}`, symbol: l.symbol, source: m.name, at: l.closedAt ?? l.openedAt ?? "", status: l.status, result: l.result }))),
       ];
   recent.sort((a, b) => b.at.localeCompare(a.at));
+
+  // Dinero real: las mismas cifras que Mi cartera y la rentabilidad sin ingresos del periodo elegido.
+  const fig = realFigures({ wallets, mirrors, manual, pnl });
+  const since = pnl?.since ? new Date(pnl.since).getTime() : 0;
+  const firstEvent = pnl?.events[0] ? new Date(pnl.events[0].at).getTime() : Date.now() - 86_400_000;
+  const per = PERIODS.find((p) => p.key === period)!;
+  const from = per.ms ? Math.max(Date.now() - per.ms, since) : since || firstEvent;
+  const series = pnlSeries(pnl?.events ?? [], fig.open, from);
+  const periodPct = pnl && pnl.base > 0 ? (series.total / pnl.base) * 100 : null;
+  const openItems = [
+    ...(mirrors?.mirrors ?? []).filter(m => m.active && m.mode === "real").flatMap(m => m.legs.filter(l => l.mode === "real" && l.status === "abierta").map(l => ({ id: l.id, symbol: l.symbol, source: `${m.name}${l.short ? " · corto" : ""}${l.leverage && l.leverage > 1 ? ` x${l.leverage}` : ""}`, result: l.unrealized }))),
+    ...(manual?.trades ?? []).filter(t => t.status === "abierta").map(t => ({ id: t.id, symbol: t.symbol, source: "Tuya", result: t.result })),
+  ];
+  const waiting = (mirrors?.mirrors ?? []).filter(m => m.active && m.mode === "real");
+  const changeSince = async (value: string) => {
+    const next = await api<PnlView>("pnl/since", { since: value ? new Date(`${value}T00:00:00`).toISOString() : null }).catch((e) => { setError(errorText(e)); return null; });
+    if (next) setPnl(next);
+  };
 
   return (
     <div className="space-y-4 pb-6 lg:h-full lg:overflow-y-auto lg:pr-1">
@@ -121,119 +190,116 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
                 ))}
               </div>
             </div>
-            {mode === "real" ? data.balance ? (
-              <div className="mt-2 flex flex-wrap items-end gap-3">
-                <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(data.balance.total, 2)}</span>
-                {data.balance.ch24h !== null && <span className="mb-0.5"><ReturnPill value={data.balance.ch24h} big /></span>}
-              </div>
-            ) : <p className="mt-2 text-sm text-slate-500">Conecta un exchange en Conexiones para verlo aquí.</p>
-            : virtual ? (
-              <div className="mt-2 flex flex-wrap items-end gap-3">
-                <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(virtual.total.equity, 2)}</span>
-                {virtual.total.dailyChangePct !== null && (
-                  <span className="mb-0.5"><ReturnPill value={virtual.total.dailyChangePct} big /></span>
-                )}
-              </div>
+            {mode === "real" ? (
+              !wallets ? <p className="mt-2 text-sm text-slate-500">Cargando tu dinero…</p>
+              : fig.total <= 0 && !(wallets.items.length) ? <p className="mt-2 text-sm text-slate-500">Conecta un exchange en Conexiones para verlo aquí.</p>
+              : (
+                <>
+                  <div className="mt-2 flex flex-wrap items-end gap-3">
+                    <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(fig.total, 2)}</span>
+                    {fig.pct !== null && <span className="mb-0.5" title="Ganancia o pérdida sobre el dinero que ha trabajado (sin contar ingresos)"><ReturnPill value={fig.pct} big /></span>}
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    {[
+                      { icon: Wallet, label: "Disponible", value: eur(fig.available, 2), sub: "Sin repartir", cls: "text-slate-900" },
+                      { icon: Layers, label: "Invertido", value: eur(fig.invested, 2), sub: `Agentes ${eur(fig.agents, 2)} · Tus operaciones ${eur(fig.own, 2)}`, cls: "text-slate-900" },
+                      {
+                        icon: TrendingUp,
+                        label: fig.since ? `Ganancia · desde ${new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", timeZone: "Europe/Madrid" }).format(new Date(fig.since))}` : "Ganancia o pérdida",
+                        value: signedEur(fig.earned),
+                        sub: `Agentes ${signedEur(fig.earnedAgents)} · Tus operaciones ${signedEur(fig.earnedOwn)}`,
+                        cls: tone(fig.earned),
+                      },
+                    ].map((k) => (
+                      <div key={k.label} className="rounded-xl bg-slate-50 px-3 py-2.5">
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
+                          <k.icon className="h-3.5 w-3.5 shrink-0 text-blue-600" /> {k.label}
+                        </div>
+                        <div className={`mt-0.5 text-base font-bold tabular-nums sm:text-lg ${k.cls}`}>{k.value}</div>
+                        <div className="mt-0.5 truncate text-[11px] text-slate-500">{k.sub}</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )
+            ) : virtual ? (
+              <>
+                <div className="mt-2 flex flex-wrap items-end gap-3">
+                  <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(virtual.total.equity, 2)}</span>
+                  {virtual.total.dailyChangePct !== null && (
+                    <span className="mb-0.5"><ReturnPill value={virtual.total.dailyChangePct} big /></span>
+                  )}
+                </div>
+                <RecentList items={recent} />
+              </>
             ) : <p className="mt-2 text-sm text-slate-500">Cargando cartera virtual…</p>}
-            <div className="mt-5 border-t border-slate-100 pt-3">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-slate-900">Actividad reciente</h3>
-                <Link href="/trading/cartera" className="text-xs font-semibold text-blue-600 hover:underline">Ver mi cartera</Link>
-              </div>
-              {recent.length ? (
-                <ul className="divide-y divide-slate-100">
-                  {recent.slice(0, 3).map(item => (
-                    <li key={item.id} className="flex items-center gap-3 py-2.5 text-sm">
-                      <AssetIcon symbol={item.symbol} size="md" />
-                      <span className="min-w-0 flex-1">
-                        <b className="block truncate font-semibold text-slate-900">{item.symbol}</b>
-                        <span className="block truncate text-xs text-slate-500">{item.source} · {item.status}</span>
-                      </span>
-                      <span className="shrink-0 text-right">
-                        <span className={`block text-sm font-semibold tabular-nums ${item.result === null ? "text-slate-400" : item.result >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-                          {item.result === null ? "—" : `${item.result > 0 ? "+" : ""}${eur(item.result, 2)}`}
-                        </span>
-                        <span className="block text-[11px] text-slate-400">{item.at ? displayDate(item.at) : "—"}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="text-xs text-slate-500">No hay operaciones registradas en esta cartera.</p>}
-            </div>
           </section>
 
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            {/* Familias de agentes (solo los que han operado) */}
-            <Section title="Agentes" icon={Bot} right="solo los que han operado">
-              {data.groups.length === 0 ? (
-                <p className="text-sm text-slate-500">Ningún agente ha operado todavía.</p>
-              ) : (
-                <ul className="space-y-3">
-                  {data.groups.map((g) => (
-                    <li key={g.key}>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-sm font-semibold text-slate-800">{g.label}</span>
-                        <span className={`text-xl font-bold tabular-nums ${g.returnPct > 0.05 ? "text-emerald-600" : g.returnPct < -0.05 ? "text-red-600" : "text-slate-500"}`}>
-                          {signedPct(g.returnPct)}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {g.agents.map((a) => (
-                          <span key={a.key} className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600">
-                            <span className={`h-2 w-2 rounded-full ${AGENT_DOT[a.color] ?? AGENT_DOT.slate}`} />
-                            {a.name}
-                            <b className={`font-semibold tabular-nums ${a.returnPct >= 0 ? "text-emerald-600" : "text-red-600"}`}>{signedPct(a.returnPct)}</b>
-                          </span>
-                        ))}
-                        {g.idle > 0 && <span className="px-1 py-0.5 text-[11px] text-slate-400">+{g.idle} sin operar</span>}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Section>
-
-            {/* Lo que gasta la IA */}
-            {data.ai && (
-              <Section title="Consumo de IA" icon={Cpu} right={data.ai.month.costEur !== null ? `≈ ${eur(data.ai.month.costEur, 2)} en 30 días` : undefined}>
-                <div className="flex items-end justify-between gap-3">
-                  <div>
-                    <span className="text-3xl font-bold tabular-nums text-slate-900">{data.ai.today.calls}</span>
-                    <span className="ml-1 text-sm text-slate-500">llamadas hoy</span>
-                  </div>
-                  <span className="text-xs tabular-nums text-slate-400">tope {data.ai.limit}</span>
+          {mode === "real" && wallets && (
+            <>
+              <Section
+                title="Rentabilidad"
+                icon={TrendingUp}
+                right={
+                  <span className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold" role="group" aria-label="Periodo">
+                    {PERIODS.map((p) => (
+                      <button key={p.key} type="button" onClick={() => setPeriod(p.key)} aria-pressed={period === p.key}
+                        className={`rounded-md px-2.5 py-1 ${period === p.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </span>
+                }
+              >
+                <div className="flex flex-wrap items-end gap-3">
+                  <span className={`text-3xl font-bold tabular-nums ${tone(series.total)}`}>{signedEur(series.total)}</span>
+                  {periodPct !== null && <span className="mb-1"><ReturnPill value={periodPct} /></span>}
                 </div>
-                <span className="mt-2 block h-2 overflow-hidden rounded-full bg-slate-100">
-                  <span
-                    className={`block h-full rounded-full ${data.ai.today.calls / data.ai.limit > 0.8 ? "bg-red-500" : "bg-blue-500"}`}
-                    style={{ width: `${Math.min(100, (data.ai.today.calls / data.ai.limit) * 100)}%` }}
-                  />
-                </span>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  {[
-                    ["Hoy", data.ai.today.tokens, data.ai.today.costEur],
-                    ["7 días", data.ai.week.tokens, data.ai.week.costEur],
-                    ["30 días", data.ai.month.tokens, data.ai.month.costEur],
-                  ].map(([label, tokens, cost]) => (
-                    <div key={label as string} className="rounded-xl bg-slate-50 px-2 py-2">
-                      <span className="block text-[11px] text-slate-500">{label as string}</span>
-                      <b className="block text-sm font-semibold tabular-nums text-slate-900">{compact(tokens as number)}</b>
-                      <span className="block text-[11px] text-slate-400">{cost !== null ? `≈ ${eur(cost as number, 2)}` : "tokens"}</span>
-                    </div>
-                  ))}
+                <div className="mt-2">
+                  <EquityChart points={series.points} initial={0} height={170} ranges={false} intraday balanceOnly flush
+                    empty="Todavía no hay operaciones cerradas en este periodo." />
                 </div>
-                {data.ai.days.length > 1 && (
-                  <div className="mt-3 flex h-10 items-end gap-1" aria-label="Llamadas por día (últimos 14)">
-                    {data.ai.days.map((d) => {
-                      const max = Math.max(...data.ai!.days.map((x) => x.calls), 1);
-                      return <span key={d.day} title={`${d.day}: ${d.calls} llamadas`} className="flex-1 rounded-t bg-blue-200" style={{ height: `${Math.max(6, (d.calls / max) * 100)}%` }} />;
-                    })}
-                  </div>
-                )}
+                <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                  Solo lo que ganan o pierden las operaciones (cerradas y abiertas): ingresar o retirar dinero no la mueve.
+                  <label className="inline-flex items-center gap-1">
+                    Cuenta desde
+                    <input type="date" className="rounded-md border border-slate-200 px-1.5 py-0.5 text-[11px] text-slate-700"
+                      value={pnl?.since ? new Date(pnl.since).toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" }) : ""}
+                      max={new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Madrid" })}
+                      onChange={(e) => void changeSince(e.target.value)} />
+                  </label>
+                </p>
               </Section>
-            )}
-          </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Section title="Abierto ahora" icon={Activity} right={openItems.length ? `${openItems.length}` : undefined}>
+                  {openItems.length ? (
+                    <ul className="divide-y divide-slate-100">
+                      {openItems.map((item) => (
+                        <li key={item.id} className="flex items-center gap-3 py-2.5 text-sm">
+                          <AssetIcon symbol={item.symbol} size="md" />
+                          <span className="min-w-0 flex-1">
+                            <b className="block truncate font-semibold text-slate-900">{item.symbol.replace(/-EUR$/, "")}</b>
+                            <span className="block truncate text-xs text-slate-500">{item.source}</span>
+                          </span>
+                          <span className={`shrink-0 text-sm font-semibold tabular-nums ${item.result === null ? "text-slate-400" : tone(item.result)}`}>
+                            {item.result === null ? "—" : signedEur(item.result)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      Nada abierto.{waiting.length ? ` ${waiting.map((m) => m.name).join(", ")} ${waiting.length === 1 ? "espera" : "esperan"} ${waiting.some((m) => m.paused) ? "(alguno en pausa)" : "su próxima señal"}.` : ""}
+                    </p>
+                  )}
+                </Section>
+                <Section title="Últimas operaciones" icon={History} right={<Link href="/trading/cartera" className="font-semibold text-blue-600 hover:underline">Ver mi cartera</Link>}>
+                  <RecentList items={recent} bare />
+                </Section>
+              </div>
+            </>
+          )}
 
           {/* Lo que antes era Panorama */}
           <section className={`${card} ${flat}`}>

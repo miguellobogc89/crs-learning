@@ -1,3 +1,4 @@
+import { pnlView, setPnlSince } from "@/lib/trading/pnl";
 import { after, NextResponse } from "next/server";
 import { chartBars } from "@/lib/trading/kamikaze/market";
 import { applyAiSettings } from "@/lib/ai/usage";
@@ -71,6 +72,7 @@ export async function GET(req: Request, route: RouteContext) {
       return NextResponse.json(await getInstrument(ctx.workspaceId, symbol));
     }
     if (action === "manual") return NextResponse.json(await manualView(ctx.workspaceId));
+    if (action === "pnl") return NextResponse.json(await pnlView(ctx.workspaceId));
     if (action === "trade-chart") {
       // Precio de una operación de Mi cartera (desde un poco antes de entrar hasta su salida o ahora).
       const symbol = (url.searchParams.get("symbol") || "").trim().toUpperCase();
@@ -156,6 +158,10 @@ export async function POST(req: Request, route: RouteContext) {
     if (raw.length > 16_384) return fail("Petición demasiado grande", 413);
     const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>;
 
+    if (action === "pnl/since") {
+      if (!ctx.canManage) return fail("Solo el propietario o un administrador puede cambiarlo", 403);
+      return NextResponse.json(await setPnlSince(ctx.workspaceId, body.since ?? null));
+    }
     if (action === "notifications/read") {
       await markAllRead();
       return NextResponse.json({ ok: true });
