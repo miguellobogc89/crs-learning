@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Flame, Layers, RefreshCw, TrendingUp, Users, Wallet } from "lucide-react";
+import { Layers, RefreshCw, TrendingUp, Users, Wallet } from "lucide-react";
 import { eur, flat, tone } from "./format";
 import { card, ReturnPill } from "./ui";
 import { EquityChart } from "./equity-chart";
@@ -7,7 +7,7 @@ import { EquityChart } from "./equity-chart";
 type Period = { key: string; label: string };
 
 export function PortfolioBalance<T extends string>({
-  title, total, available, working, opportunities, earned, returnPct, points, initial, intraday,
+  title, total, available, working, opportunities, earned, earnedParts, returnPct, points, initial, intraday,
   periods, period, onPeriodChange, refreshing, onRefresh, note, empty, setup, venues,
 }: {
   /** Etiqueta pequeña sobre el saldo («Saldo total», «Dinero virtual»…). El título de la página ya dice dónde estás. */
@@ -17,6 +17,8 @@ export function PortfolioBalance<T extends string>({
   working: number;
   opportunities: number;
   earned: number;
+  /** Desglose de la ganancia: agentes y tus operaciones (si se conoce). */
+  earnedParts?: { agents: number; own: number };
   returnPct: number | null;
   points: { day: string; equity: number }[];
   initial: number;
@@ -33,11 +35,16 @@ export function PortfolioBalance<T extends string>({
   /** Desglose por exchange (Mi cartera). */
   venues?: ReactNode;
 }) {
+  // Saldo = Disponible + Invertido; Invertido = agentes + tus operaciones. Tres cifras, cada una con su desglose.
+  const agents = Math.max(0, working - opportunities);
+  const parts = (a: number, o: number, signed = false) => {
+    const f = (v: number) => `${signed && v >= 0 ? "+" : ""}${eur(v, 2)}`;
+    return `Agentes ${f(a)} · Tus operaciones ${f(o)}`;
+  };
   const kpis = [
-    { icon: Wallet, label: "Disponible", value: available, tip: "Capital libre para operar" },
-    { icon: Layers, label: "Trabajando para ti", value: working, tip: "En oportunidades y en copias de agentes" },
-    { icon: Flame, label: "En oportunidades", value: opportunities, tip: "Valor actual de tus oportunidades abiertas" },
-    { icon: TrendingUp, label: "Ganado", value: earned, tip: "Resultado de oportunidades y copias", result: true },
+    { icon: Wallet, label: "Disponible", value: available, tip: "Sin repartir: ni en agentes ni en operaciones tuyas", sub: "Sin repartir", result: false },
+    { icon: Layers, label: "Invertido", value: working, tip: "Lo que tienen tus agentes más tus operaciones abiertas", sub: parts(agents, opportunities), result: false },
+    { icon: TrendingUp, label: "Ganancia o pérdida", value: earned, tip: "Resultado de tus agentes y de tus operaciones, cerradas y abiertas", sub: earnedParts ? parts(earnedParts.agents, earnedParts.own, true) : "", result: true },
   ];
 
   return (
@@ -64,7 +71,7 @@ export function PortfolioBalance<T extends string>({
               <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900 sm:text-5xl">{eur(total, 2)}</span>
               {returnPct !== null && <ReturnPill value={returnPct} big />}
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {kpis.map((kpi) => (
                 <div key={kpi.label} className="rounded-xl bg-slate-50 px-3 py-2.5" title={kpi.tip}>
                   <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
@@ -73,6 +80,7 @@ export function PortfolioBalance<T extends string>({
                   <div className={`mt-0.5 text-base font-bold tabular-nums sm:text-lg ${kpi.result ? tone(kpi.value) : "text-slate-900"}`}>
                     {kpi.result && kpi.value >= 0 ? "+" : ""}{eur(kpi.value, 2)}
                   </div>
+                  {kpi.sub && <div className="mt-0.5 truncate text-[11px] text-slate-500">{kpi.sub}</div>}
                 </div>
               ))}
             </div>

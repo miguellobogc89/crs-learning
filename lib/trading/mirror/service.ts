@@ -66,8 +66,13 @@ export function realProblem(r: Awaited<ReturnType<typeof realConnection>>) {
  */
 export type Funds = { name: string; total: number | null; assigned: number; error: string | null };
 export async function agentFunds(workspaceId: string): Promise<{ kraken: Funds; spot: Funds }> {
-  const mirrors = await prisma.trading_mirrors.findMany({ where: { workspace_id: workspaceId, active: true, mode: "real" } });
-  const assignedTo = (short: boolean) => mirrors.filter((m) => isShortSwarm(m.agent) === short).reduce((s, m) => s + m.budget, 0);
+  // Lo que tiene cada agente = lo que le diste + lo que lleva ganado o perdido en real (ya está en el exchange).
+  const mirrors = await prisma.trading_mirrors.findMany({
+    where: { workspace_id: workspaceId, active: true, mode: "real" },
+    include: { legs: { where: { mode: "real" }, select: { result: true } } },
+  });
+  const assignedTo = (short: boolean) =>
+    mirrors.filter((m) => isShortSwarm(m.agent) === short).reduce((s, m) => s + m.budget + m.legs.reduce((a, l) => a + (l.result ?? 0), 0), 0);
   const real = await realConnection(workspaceId);
   const manual = await prisma.trading_manual_trades
     .findMany({ where: { workspace_id: workspaceId, status: { in: ["abriendo", "abierta", "vendiendo"] } }, select: { quantity: true, entry_price: true, amount: true } })
@@ -192,12 +197,15 @@ export async function setMirror(workspaceId: string, input: { agent?: unknown; b
   }
   const existing = await prisma.trading_mirrors.findUnique({ where: { workspace_id_agent: { workspace_id: workspaceId, agent } } });
   // Dinero real: nunca más de lo que hay en el exchange del agente (bajar siempre se puede).
+  // El tope de lo que le das: el total del exchange menos lo que tienen los demás (y lo que este ya lleva ganado,
+  // que también es suyo y está en el exchange).
   const before = existing?.active && existing.mode === "real" ? existing.budget : 0;
   if (mode === "real" && budget > before + 0.005) {
     const f = (await agentFunds(workspaceId))[isShortSwarm(agent) ? "kraken" : "spot"];
     if (f.total === null) throw new Error(f.error ?? `No se pudo leer tu saldo en ${f.name}: prueba en un minuto`);
-    const max = Math.floor((f.total - (f.assigned - before)) * 100) / 100;
-    if (budget > max + 0.005) throw new Error(`En ${f.name} solo hay para darle ${Math.max(0, max).toFixed(2).replace(".", ",")} € (tienes ${f.total.toFixed(2).replace(".", ",")} € y ${(f.assigned - before).toFixed(2).replace(".", ",")} € ya son de otros agentes o compras)`);
+    const max = Math.floor((f.total - f.assigned + before) * 100) / 100;
+    const fmt = (v: number) => Math.max(0, v).toFixed(2).replace(".", ",");
+    if (budget > max + 0.005) throw new Error(`En ${f.name} solo hay para darle ${fmt(max)} € (tienes ${fmt(f.total)} € y ${fmt(f.assigned - before)} € ya son de otros agentes, de tus operaciones o lo que este ya lleva ganado)`);
   }
   if (existing?.active && existing.mode !== mode) {
     const open = await prisma.trading_mirror_legs.count({ where: { mirror_id: existing.id, status: { in: ["abriendo", "abierta", "vendiendo"] } } });
