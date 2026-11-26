@@ -183,6 +183,12 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
     cancelled: (plan.data.cancelledNow ?? []).filter(inScope),
   };
   const atNext = nextMode && (visible === null || visible === "siguiente");
+  // El mes en curso del gráfico suma también lo previsto (aún sin cobrar), marcado como tal.
+  const plannedNow = !plan.data || extrasOnly ? 0 : Math.round([
+    ...(plan.data.planned ?? []).filter((x) => !inNext(x.date) && inScope({ ...x, subcategory: null })),
+    ...(plan.data.pending ?? []).filter(inScope),
+  ].reduce((t, x) => t + x.amount, 0) * 100) / 100;
+  const trendShown = trend.map((p) => (p.current && plannedNow > 0 ? { ...p, value: Math.round((p.value + plannedNow) * 100) / 100, planned: plannedNow } : p));
   const nextTotal = scope ? Math.round([...scope.items, ...scope.repeats].reduce((t, x) => t + x.amount, 0) * 100) / 100 : 0;
 
   return (
@@ -216,7 +222,7 @@ function SpendSheet({ title, categories, groupId, extrasOnly = false }: { title:
       {list.data && plan.data && (
         <section className="border-b border-slate-100 py-4" aria-label="Evolución de los últimos meses">
           <p className="px-1 text-xs text-slate-500">Últimos meses</p>
-          <div className="mt-1"><TrendChart points={trend} title={`Gasto en ${only ? categoryLabel(only) : title}`} /></div>
+          <div className="mt-1"><TrendChart points={trendShown} title={`Gasto en ${only ? categoryLabel(only) : title}`} /></div>
         </section>
       )}
 

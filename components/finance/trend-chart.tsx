@@ -4,7 +4,8 @@
 // porque aún no ha terminado. Cada punto lleva su importe encima y el mes debajo.
 import { eur } from "@/components/trading/format";
 
-export type TrendPoint = { label: string; value: number; current?: boolean };
+/** «planned»: parte prevista (aún sin cobrar) incluida en «value» del mes en curso. */
+export type TrendPoint = { label: string; value: number; current?: boolean; planned?: number };
 
 /** Curva monótona (Fritsch–Carlson) como path SVG: suave y sin pasarse de los puntos. */
 function smoothPath(pts: { x: number; y: number }[]) {
@@ -55,6 +56,7 @@ export function TrendChart({ points, title }: { points: TrendPoint[]; title: str
         <g key={i}>
           <circle cx={pts[i].x} cy={pts[i].y} r={4.5} fill={p.current ? "#fff" : "#3478f6"} stroke="#3478f6" strokeWidth={2.5} />
           <text x={pts[i].x} y={pts[i].y - 10} textAnchor="middle" fontSize="11" fontWeight={600} fill="#0f172a" className="amount">{eur(p.value, 0)}</text>
+          {!!p.planned && p.planned > 0 && <text x={pts[i].x} y={pts[i].y + 18} textAnchor="middle" fontSize="10" fill="#3478f6">{p.planned >= p.value - 0.5 ? "previsto" : `${eur(p.planned, 0)} previsto`}</text>}
           <text x={pts[i].x} y={H - 6} textAnchor="middle" fontSize="11" fill={p.current ? "#3478f6" : "#94a3b8"} fontWeight={p.current ? 600 : 400}>{p.label}</text>
         </g>
       ))}

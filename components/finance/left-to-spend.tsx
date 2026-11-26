@@ -61,7 +61,12 @@ const drawArc = (segs: Seg[], total: number) => {
 const SPEND_CATS = SELECTABLE_CATEGORIES.filter((c) => c.kind === "gasto");
 const sum = (o: Record<string, number>, keys: Iterable<string>) => { let t = 0; for (const k of keys) t += o[k] ?? 0; return t; };
 
-function stateOf(m: Cycle, saving: number, kind: Kind, day: number, days: number) {
+/**
+ * El color de «Te quedan» no mide el ritmo, sino la holgura: lo que queda (con todo lo previsto ya restado) por día
+ * que falta, frente a lo que sueles gastar al día. Por encima, mes de holgura (verde); por debajo, mes de ajustarse
+ * (ámbar); en negativo, te has pasado (rojo). Así un mes puede empezar en ámbar, y 60 € el último día es verde.
+ */
+function stateOf(m: Cycle, saving: number, kind: Kind, day: number, days: number, usualPerDay: number) {
   const income = Math.max(0, m.income);
   const left = income - m.fixed - m.spent - saving;
   const over = Math.max(0, -left);
@@ -69,12 +74,14 @@ function stateOf(m: Cycle, saving: number, kind: Kind, day: number, days: number
   const fromCarry = Math.max(0, over - saving);
   const budget = Math.max(0, income - m.fixed - saving);
   const expected = kind === "cur" ? (budget * day) / days : budget;
-  const pace = left < 0 ? "mal" : kind !== "cur" ? "bien" : m.spent <= expected ? "bien" : m.spent <= expected * 1.15 ? "atento" : "mal";
+  const daysLeft = kind === "cur" ? Math.max(1, days - day + 1) : days;
+  const perDay = left / daysLeft;
+  const pace = left < 0 ? "mal" : kind === "prev" ? "bien" : usualPerDay > 0 && perDay < usualPerDay ? "atento" : "bien";
   return { income, left, over, ateSaving, fromCarry, budget, expected, pace };
 }
 
 type Ctx = { plan: Plan; committed: Set<string>; groupsOn: Set<string>; catsOn: Set<string>; toggleGroup: (id: string) => void; toggleCat: (c: string) => void; busy: boolean; list: Omit<ListProps, "plan">;
-  blocks: Record<string, boolean>; toggleBlock: (key: string, el?: HTMLElement) => void; colorOf: (groupId: string) => string | undefined; editSaving: (m: MonthSaving) => void; fixedSaving: number | null; savingsByMonth: Record<string, number>; goTo: (i: number) => void; tab: Tab; setTab: (t: Tab) => void };
+  blocks: Record<string, boolean>; toggleBlock: (key: string, el?: HTMLElement) => void; colorOf: (groupId: string) => string | undefined; editSaving: (m: MonthSaving) => void; fixedSaving: number | null; savingsByMonth: Record<string, number>; goTo: (i: number) => void; usualPerDay: number; tab: Tab; setTab: (t: Tab) => void };
 
 function Block({ color, title, amount, children, danger = false, open, onToggle }: { color: string; title: string; amount: number; children: ReactNode; danger?: boolean; open: boolean; onToggle: (el: HTMLElement) => void }) {
   return (
@@ -147,7 +154,7 @@ function CommittedPicker({ x }: { x: Ctx }) {
 /** Un mes: «arc» es el aro (lo que se desliza); «detail», el desglose de debajo (cambia con un fundido). */
 function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; saving: number; kind: Kind; day: number; days: number; waiting: boolean; x: Ctx; part: "arc" | "detail" }) {
   const [editing, setEditing] = useState(false);
-  const s = stateOf(m, saving, kind, day, days);
+  const s = stateOf(m, saving, kind, day, days, x.usualPerDay);
   const isCur = kind === "cur";
   const total = Math.max(1, s.income);
   // Bloque abierto (uno a la vez): el aro pasa a mostrar solo ese bloque, repartido por sus grupos.
@@ -204,6 +211,9 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
   const name = monthOf(m.start);
   // Lo que queda del mes tras todo lo gastado (con tu ahorro dentro); si es negativo, lo sacaste de lo que tenías.
   const net = Math.round(s.income - m.fixed - m.spent);
+  // Ahorro del resumen: en un mes cerrado, el resultado real; en este y el próximo, el ahorro previsto (tu objetivo,
+  // menos lo que te hayas comido), igual que en la pestaña Ahorro.
+  const shownSaving = kind === "prev" ? net : Math.round(saving - s.ateSaving - s.fromCarry);
   const monthLow = (name || m.label).toLowerCase();
   return (
     part === "arc" ? (
@@ -214,7 +224,7 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
           {kind !== "next" && carry > 0 && <path d={arc(RO, 0, 1)} fill="none" stroke={C.track} strokeWidth={6} />}
           {carryFrac > 0 && <path d={arc(RO, 1 - carryFrac, 1)} fill="none" stroke={C.over} strokeWidth={6} />}
           <text x={cx} y={cy - 46} textAnchor="middle" fontSize="13" fill="#64748b">{title}</text>
-          <text x={cx} y={cy - 14} textAnchor="middle" fontSize="32" fontWeight="600" fill={kind === "next" ? "#0f172a" : tone}>{eur(big, 0)}</text>
+          <text x={cx} y={cy - 14} textAnchor="middle" fontSize="32" fontWeight="600" fill={tone}>{eur(big, 0)}</text>
           <text x={cx} y={cy + 8} textAnchor="middle" fontSize="13" fill="#64748b">{sub}</text>
         </g>
         <g style={fade(!!focus)}>
@@ -231,7 +241,7 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
         {([
           { tab: "i", icon: Euro, label: kind === "next" ? "Ingreso estimado" : "Ingreso", v: eur(s.income, 0), bg: "#e7f6ee", fg: "#15803d", col: "text-slate-900" },
           { tab: "g", icon: CreditCard, label: kind === "next" ? "Comprometido" : "Gastado", v: eur(m.fixed + m.spent, 0), bg: "#fdece8", fg: "#c2410c", col: "text-slate-900" },
-          { tab: "a", icon: PiggyBank, label: net >= 0 ? "Ahorro" : "De reservas", v: `${net >= 0 ? "+" : "−"}${eur(Math.abs(net), 0)}`, bg: net >= 0 ? "#e8f0fe" : "#fde8e8", fg: net >= 0 ? "#3478f6" : "#b91c1c", col: net >= 0 ? "text-[#3478f6]" : "text-rose-700" },
+          { tab: "a", icon: PiggyBank, label: shownSaving >= 0 ? "Ahorro" : "De reservas", v: `${shownSaving >= 0 ? "+" : "−"}${eur(Math.abs(shownSaving), 0)}`, bg: shownSaving >= 0 ? "#e8f0fe" : "#fde8e8", fg: shownSaving >= 0 ? "#3478f6" : "#b91c1c", col: shownSaving >= 0 ? "text-[#3478f6]" : "text-rose-700" },
         ] as const).map(({ tab, icon: Icon, label, v, bg, fg, col }) => {
           const on = x.tab === tab;
           return (
@@ -405,6 +415,11 @@ export function LeftToSpend() {
   };
   const committed = new Set<string>([...data.groups.filter((g) => groupsOn.has(g.id)).flatMap((g) => g.categories), ...catsOn]);
   const nextQ = page === 2 ? "mes=siguiente" : "";
+  // Lo que sueles gastar al día (sin lo comprometido), con los meses cerrados disponibles (hasta 3).
+  const closedMonths = (data.history ?? []).slice(1, 4);
+  const usualPerDay = closedMonths.length
+    ? closedMonths.reduce((t, h) => t + Object.entries(h.full ?? {}).filter(([c]) => !committed.has(c)).reduce((u, [, v]) => u + v, 0), 0) / closedMonths.length / Math.max(1, data.cycle.totalDays)
+    : 0;
   const list: Omit<ListProps, "plan"> = {
     open: openId,
     toggle: (id, header) => (keepInPlace(header), setOpenId((o) => (o === id ? null : id))),
@@ -424,7 +439,7 @@ export function LeftToSpend() {
     const g = data.groups.find((x) => x.id === id); return g?.categories[0] ? categoryHex(g.categories[0]) : undefined;
   };
   const x: Ctx = { plan: data, committed, groupsOn, catsOn, toggleGroup, toggleCat, busy, list, blocks, colorOf, editSaving: (ms: MonthSaving) => setEditSaving(ms), fixedSaving: data.budget.savingsGoal, savingsByMonth: data.savingsByMonth ?? {},
-    goTo: swipe.goTo, tab, setTab,
+    goTo: swipe.goTo, tab, setTab, usualPerDay,
     // Un bloque abierto a la vez por ciclo: es el que muestra el aro.
     toggleBlock: (k, el) => (keepInPlace(el), setBlocks((b) => { const kd = k.split(":")[0]; const was = !!b[k]; return { ...b, [`${kd}:c`]: false, [`${kd}:g`]: false, [`${kd}:a`]: false, [k]: !was }; })) };
 
