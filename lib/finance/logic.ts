@@ -22,6 +22,8 @@ export type Tx = {
   imputedDate?: string | null;
   /** «Es una deuda»: solo el consumo va a `imputedDate`; el dinero se queda en `date`. */
   imputedDebt?: boolean;
+  /** Retenido: el banco aún no lo ha contabilizado. Cuenta igual que un cargo. */
+  pending?: boolean;
 };
 
 // ---------------------------------------------------------------------------------------------------------

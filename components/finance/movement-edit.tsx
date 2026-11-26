@@ -70,6 +70,7 @@ export function MovementRowButton({ t, onClick }: { t: Item; onClick: () => void
         </span>
         <span className="mt-0.5 block truncate text-xs text-slate-500">
           {t.kind === "gasto" || t.kind === "devolucion" ? categoryOf(t.category).label : KIND_LABEL[t.kind]}{t.subcategory ? ` · ${t.subcategory}` : ""} · {shortDay(t.date)}
+          {t.pending && <span className="text-amber-700"> · Retenido</span>}
           {t.extraordinary && <span className="text-amber-700"> · Extraordinario</span>}
           {t.imputedDate && t.imputedDate.slice(0, 7) !== t.date.slice(0, 7) && (
             <span className="text-blue-700"> → {new Date(`${t.imputedDate}T00:00:00Z`).toLocaleDateString("es-ES", { month: "short", year: "numeric", timeZone: "UTC" })}</span>

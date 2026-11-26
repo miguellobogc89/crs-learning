@@ -35,6 +35,7 @@ export const toTx = (r: TxRow): Tx => ({
   transferPairId: r.transfer_pair_id,
   imputedDate: r.imputed_date ? r.imputed_date.toISOString().slice(0, 10) : null,
   imputedDebt: r.imputed_date ? r.imputed_debt : false,
+  pending: r.pending,
 });
 
 /** Movimientos de las cuentas incluidas (en EUR), del más reciente al más antiguo. */

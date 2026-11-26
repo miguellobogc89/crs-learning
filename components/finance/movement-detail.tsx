@@ -401,6 +401,7 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
               </button>
             )}
             <SheetDescription className="mt-1 text-sm text-slate-500">{longDay(item.date)}</SheetDescription>
+            {item.pending && <p className="mt-1 text-xs text-amber-700">Retenido: el banco aún no lo ha contabilizado. Ya cuenta como gastado; cuando se contabilice se actualiza solo.</p>}
             {shownName !== item.description && (
               <p className="mt-1 break-words text-xs text-slate-400">
                 Nombre original: {item.description}

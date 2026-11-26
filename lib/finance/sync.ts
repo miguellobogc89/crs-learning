@@ -12,7 +12,7 @@ import {
   bankingRequest, isBankingConfigured,
   type BankAccountDetails, type BankBalance, type BankTransaction, type BankTransactionsPage,
 } from "@/lib/personal-finance/enable-banking";
-import { addDays, todayIso } from "./logic";
+import { addDays, merchantKey, todayIso } from "./logic";
 import { ibanHash } from "./store";
 import { classifyPending } from "./classify";
 
@@ -142,22 +142,24 @@ async function syncAccount(userId: string, bank: string, institution: string, ui
   const from = existing?.last_synced_at
     ? addDays(existing.last_synced_at.toISOString().slice(0, 10), -OVERLAP_DAYS)
     : addDays(todayIso(), -FIRST_SYNC_DAYS);
-  const txs = (await fetchWithFallback(uid, from)).filter((t) => !t.status || t.status === "BOOK");
+  // Contabilizados y retenidos (PDNG): los retenidos cuentan ya como gastado y se sustituyen al contabilizarse.
+  const txs = (await fetchWithFallback(uid, from)).filter((t) => !t.status || t.status === "BOOK" || t.status === "PDNG");
 
   // Identificador estable: el del banco; si no lo da, una huella del contenido (con contador para repetidos).
   const seen = new Map<string, number>();
   const rows: Prisma.finance_transactionsCreateManyInput[] = [];
   for (const t of txs) {
     const amount = signed(t);
-    const date = t.booking_date ?? t.value_date;
+    const date = t.booking_date ?? t.value_date ?? (t as { transaction_date?: string }).transaction_date;
     if (amount === null || !date) continue;
     const description = describe(t);
+    const pending = t.status === "PDNG";
     let externalId = t.transaction_id || t.entry_reference || null;
     if (!externalId) {
       const base = createHash("sha256").update(`${date}|${amount.toFixed(2)}|${description}`).digest("hex").slice(0, 24);
       const n = (seen.get(base) ?? 0) + 1;
       seen.set(base, n);
-      externalId = `h:${base}:${n}`;
+      externalId = `${pending ? "p" : "h"}:${base}:${n}`;
     }
     const outgoing = amount < 0;
     rows.push({
@@ -171,8 +173,10 @@ async function syncAccount(userId: string, bank: string, institution: string, ui
       description,
       counterparty: ((outgoing ? t.creditor?.name : t.debtor?.name) ?? null)?.slice(0, 200) ?? null,
       counterparty_iban_hash: ibanHash(outgoing ? t.creditor_account?.iban : t.debtor_account?.iban),
+      pending,
     });
   }
+  await settlePending(account.id, rows, from);
   // El mismo movimiento puede llegar con dos identificadores: un día sin el del banco (huella «h:…») y al siguiente
   // con él («2026-11-21.0»). Antes de guardar se cruza por cuenta, fecha, importe y concepto con lo que ya hay: si ya
   // está (con otro identificador), no se duplica y se le pone el identificador del banco. Respeta los repetidos reales
@@ -218,6 +222,50 @@ async function syncAccount(userId: string, bank: string, institution: string, ui
   }
   await prisma.finance_accounts.update({ where: { id: account.id }, data: { last_synced_at: new Date() } });
   return inserted;
+}
+
+/**
+ * Retenidos (26/11/2026). Un cargo retenido se guarda como cualquier otro, marcado como pendiente. En cada
+ * sincronización, los retenidos que ya tenemos:
+ * - si vuelven a llegar retenidos, se quedan como están;
+ * - si llegan contabilizados (con el mismo identificador o con otro: mismo signo, importe parecido, a pocos días y
+ *   el mismo comercio), el retenido pasa a ser el movimiento definitivo (con su categoría y lo que hayas editado) y
+ *   el contabilizado no se inserta aparte;
+ * - si ya no llegan y su fecha cae dentro de lo consultado, se anuló: se borra.
+ * Modifica «rows» (quita los que ya se han aplicado sobre un retenido).
+ */
+async function settlePending(accountId: string, rows: Prisma.finance_transactionsCreateManyInput[], from: string) {
+  const held = await prisma.finance_transactions.findMany({
+    where: { account_id: accountId, pending: true },
+    select: { id: true, external_id: true, booking_date: true, amount: true, description: true, counterparty: true },
+  });
+  if (!held.length) return;
+  const day = (d: Date | string) => (typeof d === "string" ? d : d.toISOString()).slice(0, 10);
+  const dayDiff = (a: string, b: string) => Math.abs(new Date(`${a}T00:00:00Z`).getTime() - new Date(`${b}T00:00:00Z`).getTime()) / 86_400_000;
+  const firstWord = (desc: string, cp?: string | null) => merchantKey(desc, cp).split(" ")[0] ?? "";
+  const used = new Set<Prisma.finance_transactionsCreateManyInput>();
+  for (const h of held) {
+    const amount = Number(h.amount);
+    const same = rows.find((r) => r.external_id === h.external_id);
+    if (same?.pending) { used.add(same); continue; } // sigue retenido
+    const booked = same ?? rows.find((r) => !r.pending && !used.has(r)
+      && Math.sign(Number(r.amount)) === Math.sign(amount)
+      && Math.abs(Number(r.amount) - amount) <= Math.max(0.05, Math.abs(amount) * 0.15)
+      && dayDiff(day(r.booking_date as Date), day(h.booking_date)) <= 7
+      && firstWord(r.description, r.counterparty) === firstWord(h.description, h.counterparty));
+    if (booked) {
+      used.add(booked);
+      await prisma.finance_transactions.update({
+        where: { id: h.id },
+        data: { pending: false, external_id: booked.external_id, amount: booked.amount, booking_date: booked.booking_date, description: booked.description, counterparty: booked.counterparty ?? null, updated_at: new Date() },
+      }).catch((e) => console.error("[finance] retenido", e instanceof Error ? e.message.slice(0, 200) : e));
+      continue;
+    }
+    // Ya no llega: si estaba dentro de lo consultado (o lleva más de dos semanas retenido), se anuló.
+    if (day(h.booking_date) >= from || dayDiff(day(h.booking_date), todayIso()) > 14) await prisma.finance_transactions.delete({ where: { id: h.id } }).catch(() => undefined);
+  }
+  const left = rows.filter((r) => !used.has(r));
+  rows.splice(0, rows.length, ...left);
 }
 
 /** Para el cron diario: todas las personas con algún banco conectado y en vigor. */

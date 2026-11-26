@@ -346,6 +346,7 @@ export function MovementsPanel() {
             ? <span className="truncate font-medium text-slate-400 line-through" title={t.description}>{t.description}</span>
             : <span className="truncate font-medium text-slate-900" title={t.description}>{label(t)}</span>}
           {t.declined && <span className="shrink-0 text-xs text-slate-500">Rechazado</span>}
+          {t.pending && <span className="shrink-0 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">Retenido</span>}
         </span>
         {t.note ? <span className="block truncate text-xs text-slate-500">{t.note}</span> : (t.alias || t.counterparty) ? <span className="block truncate text-xs text-slate-400">{t.description}</span> : null}
       </td>
