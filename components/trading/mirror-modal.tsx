@@ -63,7 +63,11 @@ export function MirrorModal({
   const realReady = view ? (short ? view.kraken.ready : view.real.ready) : false;
   const realProblemText = view ? (short ? view.kraken.problem : view.real.problem) : null;
   const b = Number(budget.replace(",", "."));
-  const valid = b >= 5 && b <= (view?.maxBudget ?? 100);
+  // En real, el tope es lo que queda sin repartir en el exchange del agente (el servidor lo vuelve a comprobar).
+  const f = view ? view.funds[view.shortKeys.includes(agent) ? "kraken" : "spot"] : null;
+  const before = m?.active && m.mode === "real" ? m.budget : 0;
+  const realMax = f && f.total !== null ? Math.floor((f.total - f.assigned + before) * 100) / 100 : 0;
+  const valid = b >= 5 && (mode !== "real" || b <= realMax + 0.005);
 
   const save = async () => {
     if (mode === "real" && !window.confirm(`Vas a copiar a ${name} con DINERO REAL en tu exchange (hasta ${b} €). Cada vez que entre o salga, se enviará la orden a mercado. ¿Seguro?`)) return;
@@ -140,7 +144,7 @@ export function MirrorModal({
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="text-xs font-medium text-slate-600">Presupuesto (5 – {view.maxBudget} €)</span>
+              <span className="text-xs font-medium text-slate-600">Presupuesto{mode === "real" && f ? (f.total === null ? ` · ${f.error ?? `sin saldo de ${f.name}`}` : ` · hasta ${realMax.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € en ${f.name}`) : " (mínimo 5 €)"}</span>
               <input className={`${field} mt-1 w-full text-right tabular-nums`} value={budget} onChange={(e) => setBudget(e.target.value)} aria-label="Presupuesto en euros" />
             </label>
             <div>
@@ -164,7 +168,7 @@ export function MirrorModal({
             </div>
           </div>
           {!realReady && <p className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs">Para el modo real: {realProblemText}.</p>}
-          {!valid && <p className="text-xs text-amber-700">Elige entre 5 € y {view.maxBudget} €.</p>}
+          {!valid && <p className="text-xs text-amber-700">{mode === "real" && b >= 5 ? `Con dinero real, como mucho ${realMax.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € (lo que queda sin repartir en ${f?.name ?? "el exchange"}).` : "Como mínimo 5 €."}</p>}
           {done && <p className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-800">{done}</p>}
           {error && <p className="text-red-700">{error}</p>}
           {m && <Legs legs={m.legs} result={m.result} />}

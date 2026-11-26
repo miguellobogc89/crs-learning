@@ -226,8 +226,7 @@ export function CarteraPanel() {
       {managing && (
         <ManageModal
           r={managing}
-          free={free}
-          maxBudget={mirrors.maxBudget}
+          funds={mirrors.funds[mirrors.shortKeys.includes(managing.key) ? "kraken" : "spot"]}
           onClose={() => setManaging(null)}
         />
       )}
@@ -355,7 +354,7 @@ function AgentRow({ r, onClick, onRemove, removing }: { r: Row; onClick?: () => 
   );
 }
 
-function ManageModal({ r, free, maxBudget, onClose }: { r: Row; free: number; maxBudget: number; onClose: () => void }) {
+function ManageModal({ r, funds, onClose }: { r: Row; funds: Mirrors["funds"]["kraken"]; onClose: () => void }) {
   const m = money(r.mirror);
   const name = r.agent?.name ?? r.key;
   const [mode, setMode] = useState<"add" | "remove">("add");
@@ -366,7 +365,11 @@ function ManageModal({ r, free, maxBudget, onClose }: { r: Row; free: number; ma
   const budget = r.mirror?.budget ?? 0;
   const value = Number(amount.replace(",", ".")) || 0;
   const target = Math.round((mode === "add" ? budget + value : budget - value) * 100) / 100;
-  const maxAdd = Math.max(0, Math.min(maxBudget - budget, free));
+  // Libre en el exchange de este agente: su total menos lo que ya das a agentes (este incluido) y a compras
+  // abiertas. Lo que ya tiene el agente no se cuenta otra vez. Si no se puede leer el saldo, no se añade nada.
+  const realBudget = r.mirror?.active && r.mirror.mode === "real" ? budget : 0;
+  const free = funds.total === null ? 0 : Math.max(0, Math.floor((funds.total - funds.assigned) * 100) / 100);
+  const maxAdd = r.mirror?.mode === "real" ? free : Math.max(0, free - budget + realBudget);
   const valid = value > 0 && (mode === "add" ? value <= maxAdd + 1e-9 && target >= 5 : target >= 5 || target <= 0);
 
   const call = async (what: string, path: string, body: unknown, ok: string, confirm?: string) => {
@@ -397,7 +400,13 @@ function ManageModal({ r, free, maxBudget, onClose }: { r: Row; free: number; ma
           <AgentAvatar color={r.agent?.color ?? "slate"} /> {r.mirror ? `Gestionar ${name}` : `Darle dinero a ${name}`}
         </span>
       }
-      subtitle={m ? `Tiene ${eur(m.now, 2)} tuyos · tienes ${eur(free, 2)} libres` : `Tienes ${eur(free, 2)} libres`}
+      subtitle={
+        funds.total === null
+          ? (funds.error ?? `No se pudo leer tu saldo en ${funds.name}`)
+          : m
+            ? `Tiene ${eur(m.now, 2)} tuyos · te quedan ${eur(free, 2)} sin repartir en ${funds.name}`
+            : `Te quedan ${eur(free, 2)} sin repartir en ${funds.name}`
+      }
     >
       {done ? (
         <div className="space-y-3">

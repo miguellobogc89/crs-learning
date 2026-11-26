@@ -15,11 +15,11 @@ import { normalizePermissions, parsePermissions, realEnabledFromEnv } from "@/li
 import { BrokerError } from "@/lib/brokers/types";
 import { accountState } from "../accounts";
 import { AGENTS_WORKSPACE, agentByKey } from "../agents/roster";
-import { kamikazeByKey } from "../kamikaze/roster";
+import { KAMIKAZES, kamikazeByKey } from "../kamikaze/roster";
 import { chipByKey } from "../chip/roster";
 import { referencePrice } from "../kamikaze/market";
 import { FEE_PCT, legResult, MIN_ORDER_EUR, planMirror, stepQuantity } from "./logic";
-import { isShortSwarm, KRAKEN_FEE_PCT, krakenProblem } from "../kraken-copy";
+import { closeKrakenLeg, isShortSwarm, KRAKEN_FEE_PCT, krakenFundsEur, krakenProblem } from "../kraken-copy";
 
 const MODES = ["ensayo", "real"] as const;
 export type MirrorMode = (typeof MODES)[number];
@@ -58,6 +58,41 @@ export function realProblem(r: Awaited<ReturnType<typeof realConnection>>) {
 // ---------------------------------------------------------------------------
 // Pantalla y ajustes
 // ---------------------------------------------------------------------------
+/**
+ * Dinero de verdad para repartir entre agentes, por exchange: los de cortos usan Kraken; los demás, el exchange de
+ * la cartera. assigned = lo que ya les das (copias activas en real) + lo que tienes en compras manuales abiertas.
+ * Libre = total − assigned. El dinero que das a un agente no se aparta en el exchange, así que no se puede usar
+ * el «efectivo» del exchange: contaría dos veces lo que ya tiene el agente.
+ */
+export type Funds = { name: string; total: number | null; assigned: number; error: string | null };
+export async function agentFunds(workspaceId: string): Promise<{ kraken: Funds; spot: Funds }> {
+  const mirrors = await prisma.trading_mirrors.findMany({ where: { workspace_id: workspaceId, active: true, mode: "real" } });
+  const assignedTo = (short: boolean) => mirrors.filter((m) => isShortSwarm(m.agent) === short).reduce((s, m) => s + m.budget, 0);
+  const real = await realConnection(workspaceId);
+  const manual = await prisma.trading_manual_trades
+    .findMany({ where: { workspace_id: workspaceId, status: { in: ["abriendo", "abierta", "vendiendo"] } }, select: { quantity: true, entry_price: true, amount: true } })
+    .catch(() => [] as { quantity: number | null; entry_price: number | null; amount: number | null }[]);
+  const manualWorking = manual.reduce((s, t) => s + (t.quantity && t.entry_price ? t.quantity * t.entry_price : t.amount ?? 0), 0);
+  const kraken: Funds = { name: "Kraken", total: null, assigned: assignedTo(true), error: null };
+  const spot: Funds = { name: real.name, total: null, assigned: assignedTo(false) + manualWorking, error: null };
+  await Promise.all([
+    (async () => {
+      const kp = await krakenProblem();
+      if (kp) return void (kraken.error = kp);
+      const f = await krakenFundsEur().catch(() => null);
+      if (f) kraken.total = f.total;
+      else kraken.error = "No se pudo leer tu saldo en Kraken";
+    })(),
+    (async () => {
+      if (!real.conn) return void (spot.error = realProblem(real));
+      const a = (await brokers.getAccounts(real.conn.actor, real.conn.connectionId).catch(() => []))[0];
+      if (a && a.currency === "EUR" && Number.isFinite(a.totalValue)) spot.total = a.totalValue;
+      else spot.error = `No se pudo leer tu saldo en euros en ${real.name}`;
+    })(),
+  ]);
+  return { kraken, spot };
+}
+
 export async function mirrorView(workspaceId: string) {
   const [mirrors, real] = await Promise.all([
     prisma.trading_mirrors.findMany({
@@ -83,12 +118,17 @@ export async function mirrorView(workspaceId: string) {
     .catch(() => []);
   const stopOf = new Map(sources.map((p) => [p.id, p]));
   const kp = await krakenProblem();
+  const funds = await agentFunds(workspaceId);
   return {
     maxBudget: maxBudget(),
+    /** Dinero para repartir por exchange (libre = total − assigned). */
+    funds,
     real: { ready: real.ready, problem: realProblem(real) },
     /** Agentes de cortos: se copian en Kraken Futures, no en el exchange de la cartera. */
     kraken: { ready: !kp, problem: kp },
     shortAgents: mirrors.map((m) => m.agent).filter(isShortSwarm),
+    /** Todos los agentes de cortos del catálogo (para saber de qué exchange sale su dinero antes de copiarlos). */
+    shortKeys: KAMIKAZES.map((k) => k.key).filter(isShortSwarm),
     mirrors: mirrors.map((m) => ({
       agent: m.agent,
       /** Resultado de lo abierto a precio de ahora (con comisiones de salida estimadas). */
@@ -151,6 +191,14 @@ export async function setMirror(workspaceId: string, input: { agent?: unknown; b
     if (problem) throw new Error(problem);
   }
   const existing = await prisma.trading_mirrors.findUnique({ where: { workspace_id_agent: { workspace_id: workspaceId, agent } } });
+  // Dinero real: nunca más de lo que hay en el exchange del agente (bajar siempre se puede).
+  const before = existing?.active && existing.mode === "real" ? existing.budget : 0;
+  if (mode === "real" && budget > before + 0.005) {
+    const f = (await agentFunds(workspaceId))[isShortSwarm(agent) ? "kraken" : "spot"];
+    if (f.total === null) throw new Error(f.error ?? `No se pudo leer tu saldo en ${f.name}: prueba en un minuto`);
+    const max = Math.floor((f.total - (f.assigned - before)) * 100) / 100;
+    if (budget > max + 0.005) throw new Error(`En ${f.name} solo hay para darle ${Math.max(0, max).toFixed(2).replace(".", ",")} € (tienes ${f.total.toFixed(2).replace(".", ",")} € y ${(f.assigned - before).toFixed(2).replace(".", ",")} € ya son de otros agentes o compras)`);
+  }
   if (existing?.active && existing.mode !== mode) {
     const open = await prisma.trading_mirror_legs.count({ where: { mirror_id: existing.id, status: { in: ["abriendo", "abierta", "vendiendo"] } } });
     if (open) throw new Error("Tiene una posición abierta: espera a que salga (o deja de copiar) antes de cambiar de modo");
@@ -194,7 +242,7 @@ export async function closeMirrorPositions(workspaceId: string, agentInput: unkn
   const open = await prisma.trading_mirror_legs.findMany({ where: { mirror_id: m.id, status: "abierta" } });
   const errors: string[] = [];
   for (const l of open) {
-    const r = await sellLeg(m, l, "lo cierras tú");
+    const r = l.pair?.startsWith("PF_") ? await closeKrakenLeg(l, "lo cierras tú") : await sellLeg(m, l, "lo cierras tú");
     if (r) errors.push(r);
   }
   return { sold: open.length - errors.length, errors };
@@ -209,7 +257,8 @@ export async function stopMirror(workspaceId: string, agentInput: unknown) {
   const open = await prisma.trading_mirror_legs.findMany({ where: { mirror_id: m.id, status: "abierta" } });
   const errors: string[] = [];
   for (const l of open) {
-    const r = await sellLeg(m, l, "dejas de copiar");
+    // Cortos en Kraken: se cierran en Kraken; si falla, la revisión de los agentes lo sigue intentando.
+    const r = l.pair?.startsWith("PF_") ? await closeKrakenLeg(l, "dejas de copiar") : await sellLeg(m, l, "dejas de copiar");
     if (r) errors.push(r);
   }
   return { sold: open.length - errors.length, errors };

@@ -2,6 +2,7 @@
 // Tu dinero real: saldo de cada exchange/bróker conectado y, del que usa la cartera de Trading,
 // el resultado de las copias de agentes en real. Solo lectura.
 import "server-only";
+import { eurUsd } from "./market-data";
 import { prisma } from "@/lib/prisma";
 import * as brokers from "@/lib/brokers/gateway";
 import { brokerRegistry } from "@/lib/brokers/providers";
@@ -28,7 +29,18 @@ async function balance(actor: BrokerActor, connectionId: string, operating: bool
     ? await brokers.getPositions(actor, connectionId)
         .then((positions) => positions.some((position) => position.quantity !== 0), () => null)
     : null;
-  const value = { total: a?.totalValue ?? 0, cash: a?.cashAvailable ?? 0, currency: a?.currency ?? "EUR", hasOpenPositions };
+  // Saldos en dólares (Kraken sin euros en la cartera): se pasan a euros para que cuenten en Mi cartera.
+  let rate = 1;
+  let currency = a?.currency ?? "EUR";
+  if (currency === "USD") {
+    const c = await eurUsd(1).catch(() => []);
+    const last = c[c.length - 1]?.close;
+    if (last && last > 0) {
+      rate = last;
+      currency = "EUR";
+    }
+  }
+  const value = { total: (a?.totalValue ?? 0) / rate, cash: (a?.cashAvailable ?? 0) / rate, currency, hasOpenPositions };
   cache.set(key, { at: Date.now(), value });
   return value;
 }
