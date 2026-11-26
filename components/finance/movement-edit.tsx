@@ -31,8 +31,9 @@ export function CategoryPill({ t }: { t: Pick<Item, "category" | "kind"> }) {
 }
 
 export function Amount({ t }: { t: Item }) {
-  const muted = t.kind === "interna";
-  return <span className={`amount whitespace-nowrap font-semibold tabular-nums ${muted ? "text-slate-400" : t.amount > 0 ? "text-emerald-700" : "text-slate-900"}`}>{t.amount > 0 ? "+" : ""}{eur(t.amount, 2)}</span>;
+  // Un traspaso entre tus cuentas no suma ni resta: en gris y sin signo.
+  if (t.kind === "interna") return <span className="amount whitespace-nowrap font-semibold tabular-nums text-slate-400">{eur(Math.abs(t.amount), 2)}</span>;
+  return <span className={`amount whitespace-nowrap font-semibold tabular-nums ${t.amount > 0 ? "text-emerald-700" : "text-slate-900"}`}>{t.amount > 0 ? "+" : ""}{eur(t.amount, 2)}</span>;
 }
 
 export const isReview = (t: Item) => t.source === "auto" || t.source === "pendiente";
@@ -53,7 +54,7 @@ export function MovementRowButton({ t, onClick }: { t: Item; onClick: () => void
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           {isReview(t) && <span className="h-2 w-2 shrink-0 rounded-full bg-blue-600" aria-label="Por revisar" />}
-          <span className="truncate text-[15px] font-medium text-slate-900">{label(t)}</span>
+          <span className={`truncate text-[15px] font-medium ${t.kind === "interna" ? "text-slate-600" : "text-slate-900"}`}>{label(t)}</span>
         </span>
         <span className="mt-0.5 block truncate text-xs text-slate-500">
           {t.kind === "gasto" || t.kind === "devolucion" ? categoryOf(t.category).label : KIND_LABEL[t.kind]}{t.subcategory ? ` · ${t.subcategory}` : ""} · {shortDay(t.date)}

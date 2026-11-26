@@ -230,9 +230,37 @@ export function MovementsPanel() {
   const rows = useMemo(() => {
     if (!data) return [];
     const needle = fold(q.trim());
-    const out = data.items.filter((t) =>
-      // Los traspasos entre tus cuentas no se ven (no aportan); solo si los filtras a propósito, para corregir uno.
-      (kind === "all" ? t.kind !== "interna" : t.kind === kind) &&
+    // Traspasos entre tus cuentas: se ven una sola vez (la mitad que sale; si no está, la que entra), en gris y con
+    // «De Santander a Revolut». No cuentan como gasto ni como ingreso.
+    const byId = new Map(data.items.map((t) => [t.id, t]));
+    const halves = new Map<string, Item[]>();
+    for (const t of data.items) if (t.kind === "interna" && t.transferPairId) (halves.get(t.transferPairId) ?? halves.set(t.transferPairId, []).get(t.transferPairId)!).push(t);
+    // Las mitades sin pareja guardada se emparejan aquí: misma cantidad con signo contrario, en otra cuenta, a 3 días
+    // como mucho (la recarga de Revolut y su cargo en Santander).
+    const loose = new Map<string, Item>();
+    const single = data.items.filter((t) => t.kind === "interna" && !t.transferPairId);
+    const used = new Set<string>();
+    const dayDiff = (a: string, b: string) => Math.abs(new Date(`${a}T00:00:00Z`).getTime() - new Date(`${b}T00:00:00Z`).getTime()) / 86_400_000;
+    for (const t of single) {
+      if (t.amount >= 0 || used.has(t.id)) continue;
+      const m = single.find((x) => !used.has(x.id) && x.id !== t.id && x.amount > 0 && x.accountId !== t.accountId && Math.abs(x.amount + t.amount) < 0.005 && dayDiff(x.date, t.date) <= 3);
+      if (m) { used.add(t.id); used.add(m.id); loose.set(t.id, m); loose.set(m.id, t); }
+    }
+    const transfer = (t: Item): Item | null => {
+      if (t.kind !== "interna") return t;
+      const pair = t.transferPairId ? (halves.get(t.transferPairId) ?? []).filter((x) => x.id !== t.id) : [];
+      const other = pair[0] ?? (t.transferPairId ? byId.get(t.transferPairId) : undefined) ?? loose.get(t.id);
+      if (other && other.kind === "interna") {
+        // Solo una de las dos mitades: la que sale (o, si las dos entran o salen, la primera por id).
+        const keep = t.amount < 0 && other.amount >= 0 ? true : t.amount >= 0 && other.amount < 0 ? false : t.id < other.id;
+        if (!keep) return null;
+        const from = t.amount < 0 ? t : other, to = t.amount < 0 ? other : t;
+        return { ...t, alias: `De ${from.account} a ${to.account}` };
+      }
+      return { ...t, alias: t.amount < 0 ? `De ${t.account} a otra cuenta tuya` : `A ${t.account} desde otra cuenta tuya` };
+    };
+    const out = data.items.map((t) => (kind === "all" || kind === "interna" ? transfer(t) : t)).filter((t): t is Item => !!t).filter((t) =>
+      (kind === "all" || t.kind === kind) &&
       (category === "all" || t.category === category) &&
       (status === "all" || (status === "revisar" ? isReview(t) : status === "usuario" ? t.source === "usuario" : t.extraordinary)) &&
       (!needle || fold(`${t.description} ${t.counterparty ?? ""} ${t.alias ?? ""} ${t.subcategory ?? ""} ${t.note ?? ""} ${t.account} ${Math.abs(t.amount).toFixed(2).replace(".", ",")}`).includes(needle)));
@@ -512,7 +540,7 @@ export function MovementsPanel() {
                 <Fragment key={g.key}>
                   {group !== "none" && groupHeader(g, true)}
                   {g.visible.map((t) => (
-                    <li key={t.id} className={`flex items-center gap-3 px-4 py-3 ${selected.has(t.id) ? "bg-blue-50/60" : ""}`}>
+                    <li key={t.id} className={`flex items-center gap-3 px-4 py-3 ${selected.has(t.id) ? "bg-blue-50/60" : t.kind === "interna" ? "bg-slate-50" : ""}`}>
                       {selectionMode && <Check checked={selected.has(t.id)} onChange={() => toggle([t.id], !selected.has(t.id))} label="Seleccionar" />}
                       <MovementRowButton t={t} onClick={() => setViewingId(t.id)} />
                     </li>
