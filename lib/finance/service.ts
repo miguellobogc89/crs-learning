@@ -283,7 +283,8 @@ export async function listTransactions(userId: string, opts: { all?: boolean } =
   const oldest = all.length ? all[all.length - 1].date : null;
   const period = resolvePeriod(view, ctx.today, ctx.startDay, oldest);
   const rule: CycleRule = view.unit === "mes" ? 1 : ctx.startDay;
-  const rows = all.filter((t) => !accById.get(t.accountId)?.hidden && (opts.all || (t.date >= period.from && t.date <= period.to)));
+  // Los de 0 € (comprobaciones de tarjeta, como las de Anthropic o Google) no se enseñan: no mueven dinero.
+  const rows = all.filter((t) => Math.abs(t.amount) >= 0.005 && !accById.get(t.accountId)?.hidden && (opts.all || (t.date >= period.from && t.date <= period.to)));
   // Logo de cada comercio conocido (su web), si ya se ha resuelto.
   const logos = await domainsFor(rows.map((t) => merchantKey(t.description, t.counterparty)));
   // Tramo (ciclo o mes) de cada fecha, calculado una vez por fecha distinta.
