@@ -199,7 +199,7 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
                     <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900">{eur(fig.total, 2)}</span>
                     {fig.pct !== null && <span className="mb-0.5" title="Ganancia o pérdida sobre el dinero que ha trabajado (sin contar ingresos)"><ReturnPill value={fig.pct} big /></span>}
                   </div>
-                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="mt-3 grid grid-cols-3 gap-3 sm:gap-2">
                     {[
                       { icon: Wallet, label: "Disponible", value: eur(fig.available, 2), sub: "Sin repartir", cls: "text-slate-900" },
                       { icon: Layers, label: "Invertido", value: eur(fig.invested, 2), sub: `Agentes ${eur(fig.agents, 2)} · Tus operaciones ${eur(fig.own, 2)}`, cls: "text-slate-900" },
@@ -211,12 +211,12 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
                         cls: tone(fig.earned),
                       },
                     ].map((k) => (
-                      <div key={k.label} className="rounded-xl bg-slate-50 px-3 py-2.5">
-                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
-                          <k.icon className="h-3.5 w-3.5 shrink-0 text-blue-600" /> {k.label}
+                      <div key={k.label} className="min-w-0 sm:rounded-xl sm:bg-slate-50 sm:px-3 sm:py-2.5">
+                        <div className="flex items-center gap-1.5 truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
+                          <k.icon className="hidden h-3.5 w-3.5 shrink-0 text-blue-600 sm:block" /> {k.label}
                         </div>
-                        <div className={`mt-0.5 text-base font-bold tabular-nums sm:text-lg ${k.cls}`}>{k.value}</div>
-                        <div className="mt-0.5 truncate text-[11px] text-slate-500">{k.sub}</div>
+                        <div className={`mt-0.5 truncate text-sm font-bold tabular-nums sm:text-lg ${k.cls}`}>{k.value}</div>
+                        <div className="mt-0.5 hidden truncate text-[11px] text-slate-500 sm:block">{k.sub}</div>
                       </div>
                     ))}
                   </div>
@@ -256,8 +256,13 @@ export function SummaryPanel({ tabs }: { tabs: ReactNode }) {
                   {periodPct !== null && <span className="mb-1"><ReturnPill value={periodPct} /></span>}
                 </div>
                 <div className="mt-2">
-                  <EquityChart points={series.points} initial={0} height={170} ranges={false} intraday balanceOnly flush
-                    empty="Todavía no hay operaciones cerradas en este periodo." />
+                  {series.points.length > 2 || Math.abs(series.total) > 0.005 ? (
+                    <EquityChart points={series.points} initial={0} height={170} ranges={false} intraday balanceOnly flush empty="" />
+                  ) : (
+                    <p className="py-8 text-center text-sm text-slate-500">
+                      Sin operaciones {per.ms && from > since ? "en este periodo" : "desde que empieza a contar"}: la gráfica se dibuja con la primera.
+                    </p>
+                  )}
                 </div>
                 <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
                   Solo lo que ganan o pierden las operaciones (cerradas y abiertas): ingresar o retirar dinero no la mueve.

@@ -73,16 +73,16 @@ export function PortfolioBalance<T extends string>({
               <span className="text-4xl font-bold tracking-tight tabular-nums text-slate-900 sm:text-5xl">{eur(total, 2)}</span>
               {returnPct !== null && <ReturnPill value={returnPct} big />}
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-3 sm:gap-2">
               {kpis.map((kpi) => (
-                <div key={kpi.label} className="rounded-xl bg-slate-50 px-3 py-2.5" title={kpi.tip}>
-                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
-                    <kpi.icon className={`h-3.5 w-3.5 shrink-0 ${kpi.result ? "text-emerald-600" : "text-blue-600"}`} /> {kpi.label}
+                <div key={kpi.label} className="min-w-0 sm:rounded-xl sm:bg-slate-50 sm:px-3 sm:py-2.5" title={kpi.tip}>
+                  <div className="flex items-center gap-1.5 truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500 sm:text-[11px]">
+                    <kpi.icon className={`hidden h-3.5 w-3.5 shrink-0 sm:block ${kpi.result ? "text-emerald-600" : "text-blue-600"}`} /> {kpi.label}
                   </div>
-                  <div className={`mt-0.5 text-base font-bold tabular-nums sm:text-lg ${kpi.result ? tone(kpi.value) : "text-slate-900"}`}>
+                  <div className={`mt-0.5 truncate text-sm font-bold tabular-nums sm:text-lg ${kpi.result ? tone(kpi.value) : "text-slate-900"}`}>
                     {kpi.result && kpi.value >= 0 ? "+" : ""}{eur(kpi.value, 2)}
                   </div>
-                  {kpi.sub && <div className="mt-0.5 truncate text-[11px] text-slate-500">{kpi.sub}</div>}
+                  {kpi.sub && <div className="mt-0.5 hidden truncate text-[11px] text-slate-500 sm:block">{kpi.sub}</div>}
                 </div>
               ))}
             </div>
