@@ -34,7 +34,7 @@ async function balance(actor: BrokerActor, connectionId: string, operating: bool
   let currency = a?.currency ?? "EUR";
   if (currency === "USD") {
     const c = await eurUsd(1).catch(() => []);
-    const last = c[c.length - 1]?.close;
+    const last = c[c.length - 1]?.c;
     if (last && last > 0) {
       rate = last;
       currency = "EUR";

@@ -59,7 +59,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function usdPerEur(accRate?: number | null): Promise<number | null> {
   if (accRate && accRate > 0) return accRate;
   const c = await eurUsd(1).catch(() => []);
-  const last = c[c.length - 1]?.close;
+  const last = c[c.length - 1]?.c;
   return last && last > 0 ? last : null;
 }
 
