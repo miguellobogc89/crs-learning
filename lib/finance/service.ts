@@ -571,7 +571,7 @@ function monthlyDateIn(cycle: { start: string; end: string }, lastDate: string) 
  */
 function nextMonthCommitted(ctx: Awaited<ReturnType<typeof financeContext>>) {
   const cycle = cycleFor(ctx.today, ctx.startDay, 1);
-  const items: { id: string; title: string; amount: number; date: string; category: string; subcategory: string | null; source: "repite" | "previsto"; txId?: string; key?: string }[] = [];
+  const items: { id: string; title: string; amount: number; date: string; category: string; subcategory: string | null; source: "repite" | "previsto"; txId?: string; key?: string; frequency?: string }[] = [];
   // Último cargo real de cada comercio que se repite: al tocarlo se abre su detalle (donde se cancela).
   const lastTx = new Map<string, string>();
   for (const t of ctx.txs) if (t.amount < 0) { const k = merchantKey(t.description, t.counterparty); if (!lastTx.has(k)) lastTx.set(k, t.id); }
@@ -579,12 +579,12 @@ function nextMonthCommitted(ctx: Awaited<ReturnType<typeof financeContext>>) {
     if (r.amount >= 0 || !r.active || ctx.cancelled.has(r.key) || r.intervalDays <= 0) continue;
     if (r.frequency === "mensual") {
       const d = monthlyDateIn(cycle, r.lastDate);
-      items.push({ id: `rec:${r.key}:${d}`, title: r.label, amount: round2(-r.amount), date: d, category: r.category, subcategory: r.subcategory ?? null, source: "repite", txId: lastTx.get(r.key), key: r.key });
+      items.push({ id: `rec:${r.key}:${d}`, title: r.label, amount: round2(-r.amount), date: d, category: r.category, subcategory: r.subcategory ?? null, source: "repite", txId: lastTx.get(r.key), key: r.key, frequency: r.frequency });
       continue;
     }
     let d = r.nextDate;
     while (d < cycle.start) d = addDays(d, r.intervalDays);
-    for (; d <= cycle.end; d = addDays(d, r.intervalDays)) items.push({ id: `rec:${r.key}:${d}`, title: r.label, amount: round2(-r.amount), date: d, category: r.category, subcategory: r.subcategory ?? null, source: "repite", txId: lastTx.get(r.key), key: r.key });
+    for (; d <= cycle.end; d = addDays(d, r.intervalDays)) items.push({ id: `rec:${r.key}:${d}`, title: r.label, amount: round2(-r.amount), date: d, category: r.category, subcategory: r.subcategory ?? null, source: "repite", txId: lastTx.get(r.key), key: r.key, frequency: r.frequency });
   }
   for (const p of plannedOf(ctx.forecastItems)) {
     if (p.date >= cycle.start && p.date <= cycle.end) items.push({ ...p, subcategory: null, source: "previsto" });
@@ -610,7 +610,7 @@ function currentMonthPending(ctx: Awaited<ReturnType<typeof financeContext>>) {
     const t = spendDated(t0);
     if (t.date >= cycle.start && t.date <= cycle.end) charged.add(k);
   }
-  const items: { id: string; title: string; amount: number; date: string; category: string; subcategory: string | null; source: "repite"; txId?: string; key: string }[] = [];
+  const items: { id: string; title: string; amount: number; date: string; category: string; subcategory: string | null; source: "repite"; txId?: string; key: string; frequency?: string }[] = [];
   // Cancelados que este mes ya no se cobrarán (y aún no se habían cobrado): eso es ahorro de este mes. Si ya te lo
   // cobraron este mes, el ahorro empieza el que viene.
   const cancelled: { key: string; title: string; amount: number; category: string; subcategory: string | null }[] = [];
@@ -625,7 +625,7 @@ function currentMonthPending(ctx: Awaited<ReturnType<typeof financeContext>>) {
     if (!r.active) continue;
     const due = r.frequency === "mensual" ? monthlyDateIn(cycle, r.lastDate) : r.nextDate;
     const date = due >= ctx.today && due <= cycle.end ? due : ctx.today;
-    items.push({ id: `pend:${r.key}`, title: r.label, amount: round2(-r.amount), date, category: r.category, subcategory: r.subcategory ?? null, source: "repite", txId: lastTx.get(r.key), key: r.key });
+    items.push({ id: `pend:${r.key}`, title: r.label, amount: round2(-r.amount), date, category: r.category, subcategory: r.subcategory ?? null, source: "repite", txId: lastTx.get(r.key), key: r.key, frequency: r.frequency });
   }
   return { items: items.sort((a, b) => a.date.localeCompare(b.date)), cancelled };
 }

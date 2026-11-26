@@ -20,7 +20,7 @@ import { SavingsGoalSheet, type MonthSaving } from "./savings-goal-sheet";
 import Link from "next/link";
 import { CategoryIcon } from "./category-icon";
 import { useMonthSwipe } from "./use-month-swipe";
-import { useResolveLogos } from "./merchant-logo";
+import { MerchantLogo, useResolveLogos } from "./merchant-logo";
 
 type Plan = Awaited<ReturnType<typeof planView>>;
 type Kind = "prev" | "cur" | "next";
@@ -329,8 +329,49 @@ function Gauge({ m, saving, kind, day, days, waiting, x, part }: { m: Cycle; sav
           )}
         </Block>
       </ul>}
+      {kind !== "prev" && <Upcoming kind={kind} plan={x.plan} />}
     </div>
     )
+  );
+}
+
+/**
+ * Próximos cobros, debajo de todo. Este mes: los 3 siguientes que faltan por cobrar (lo que se repite y tus
+ * previstos), aunque queden semanas. El que viene: solo lo que no es de cada mes (el agua cada dos, un seguro anual).
+ */
+function Upcoming({ kind, plan }: { kind: Kind; plan: Plan }) {
+  type U = { id: string; title: string; amount: number; date: string; category: string; logo?: string | null };
+  const today = new Date().toISOString().slice(0, 10);
+  const list: U[] = kind === "cur"
+    ? [...(plan.pending ?? []), ...(plan.planned ?? []).filter((p) => p.date >= today && p.date <= plan.cycle.end)]
+      .sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3)
+    : (plan.next?.items ?? []).filter((i) => i.source === "previsto" || ("frequency" in i && i.frequency && i.frequency !== "mensual"))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  if (!list.length) return null;
+  const when = (d: string) => {
+    if (d <= today) return "Hoy";
+    const days = Math.round((new Date(`${d}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86_400_000);
+    if (days === 1) return "Mañana";
+    const dt = new Date(`${d}T12:00:00Z`);
+    const txt = days < 7 ? dt.toLocaleDateString("es-ES", { weekday: "long", timeZone: "UTC" }) : dt.toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).replace(/\./g, "");
+    return txt.charAt(0).toUpperCase() + txt.slice(1);
+  };
+  return (
+    <section className="mt-5 border-t border-slate-100 pt-3">
+      <h3 className="text-sm font-medium text-slate-500">{kind === "cur" ? "Próximos cobros" : "Cobros que no son de cada mes"}</h3>
+      <ul className="mt-1 divide-y divide-slate-100">
+        {list.map((u) => (
+          <li key={u.id} className="flex items-center gap-3 py-3">
+            <MerchantLogo domain={u.logo} category={u.category} />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-semibold text-slate-900">{u.title}</span>
+              <span className="block truncate text-xs text-slate-500">{when(u.date)}</span>
+            </span>
+            <b className="amount shrink-0 text-[15px] font-semibold tabular-nums text-slate-900">{eur(u.amount, 2)}</b>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
