@@ -227,6 +227,25 @@ export function personKey(description: string, counterparty?: string | null) {
   const words = base.split(" ").filter((w) => w.length > 1 && !PERSON_NOISE.has(w) && !/\d/.test(w));
   return words.slice(0, 3).join(" ");
 }
+/**
+ * Palabras del nombre de la persona, con las iniciales («Palma G.C.» → palma g c). Si el concepto trae «from:» o
+ * «to:» (Revolut), el nombre es lo que va detrás; si no, la contraparte o el concepto.
+ */
+export function personTokens(description: string, counterparty?: string | null) {
+  const after = description.match(/(?:from|to|de|a favor de)\s*:\s*(.+)$/i)?.[1];
+  const base = normalize(after ?? (counterparty && counterparty.trim().length > 2 ? counterparty : description));
+  return base.replace(/[^a-z0-9ñ ]/g, " ").split(" ").filter((w) => w.length > 0 && !PERSON_NOISE.has(w) && !/\d/.test(w)).slice(0, 4);
+}
+/**
+ * Misma persona aunque el nombre venga distinto en cada banco: mismo nombre de pila y, después, las iniciales de
+ * uno caben en las del otro («palma g c» y «palma gomez calero valdez»). Solo el nombre de pila basta si uno de los
+ * dos no trae más.
+ */
+export function samePerson(a: string[], b: string[]) {
+  if (!a.length || !b.length || a[0] !== b[0]) return false;
+  const ia = a.slice(1).map((w) => w[0]).join(""), ib = b.slice(1).map((w) => w[0]).join("");
+  return !ia || !ib || ia.startsWith(ib) || ib.startsWith(ia);
+}
 export const personName = (key: string) => key.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
 /** Texto donde buscan las reglas y las palabras clave. */

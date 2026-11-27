@@ -202,11 +202,33 @@ async function syncAccount(userId: string, bank: string, institution: string, ui
       const i = list?.findIndex((x) => x.external_id === r.external_id) ?? -1;
       if (list && i >= 0) list.splice(i, 1);
     }
+    // Santander, además, cambia a veces el concepto al día siguiente («TRANSFERENCIA A FAVOR DE…» → «TRASPASO:
+    // Transferencia mensual…»). Para lo que llega ya con el identificador del banco, una huella nuestra («h:…») del
+    // mismo día y el mismo importe que no se haya emparejado es ese mismo movimiento. (27/11/2026)
+    const loose = new Map<string, { id: string; external_id: string }[]>();
+    const incoming = new Set(rows.map((r) => r.external_id));
+    for (const p of prev) {
+      // Si esa huella vuelve a llegar tal cual, es otro movimiento distinto (no se toca).
+      if (!p.external_id.startsWith("h:") || incoming.has(p.external_id)) continue;
+      const k = `${p.booking_date.toISOString().slice(0, 10)}|${Number(p.amount).toFixed(2)}`;
+      (loose.get(k) ?? loose.set(k, []).get(k)!).push({ id: p.id, external_id: p.external_id });
+    }
+    const claimed = new Set<string>();
     const keep: typeof rows = [];
     for (const r of rows) {
       if (ids.has(r.external_id)) { keep.push(r); continue; }
       const list = pool.get(keyOf(r.booking_date as Date, Number(r.amount), r.description));
-      const twin = list?.shift();
+      let twin = list?.shift();
+      if (twin) claimed.add(twin.id);
+      if (!twin && !r.external_id.startsWith("h:") && !r.external_id.startsWith("p:")) {
+        const cands = (loose.get(`${(r.booking_date as Date).toISOString().slice(0, 10)}|${Number(r.amount).toFixed(2)}`) ?? []).filter((c) => !claimed.has(c.id));
+        twin = cands[0];
+        if (twin) {
+          claimed.add(twin.id);
+          await prisma.finance_transactions.update({ where: { id: twin.id }, data: { external_id: r.external_id, description: r.description } }).catch(() => undefined);
+          continue;
+        }
+      }
       if (!twin) { keep.push(r); continue; }
       // Ya estaba con otra huella: si aquella era nuestra («h:…») y esta es la del banco, se queda la del banco.
       if (twin.external_id.startsWith("h:") && !r.external_id.startsWith("h:")) {

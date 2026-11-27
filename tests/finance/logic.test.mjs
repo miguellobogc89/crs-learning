@@ -450,3 +450,14 @@ test("recurrentes: «Se repite» marcado a mano enciende o apaga lo detectado", 
   assert.equal(gym.manual, true);
   assert.equal(gym.nextDate, "2026-12-03");
 });
+
+test("misma persona aunque el nombre venga distinto en cada Bizum", () => {
+  const L2 = load("lib/finance/logic.ts");
+  const recibido = L2.personTokens("Sin concepto · Bizum payment from: Palma G.C.", null);
+  const devuelto = L2.personTokens("Muchas gracias!! · Bizum payment to: Palma G.C.", "PALMA GOMEZ CALERO VALDEZ");
+  assert.deepEqual(recibido, ["palma", "g", "c"]);
+  assert.ok(L2.samePerson(recibido, ["palma", "gomez", "calero", "valdez"]));
+  assert.ok(L2.samePerson(recibido, devuelto));
+  assert.ok(!L2.samePerson(["palma", "g", "c"], ["palma", "r", "c"]));
+  assert.ok(!L2.samePerson(["ana", "lopez"], ["palma", "lopez"]));
+});

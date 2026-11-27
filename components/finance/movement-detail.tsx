@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/
 import { KINDS, KIND_LABEL, categoryOf, type Kind } from "@/lib/finance/categories";
 import { eur } from "@/components/trading/format";
 import { errorText, fapi, longDay, refreshFinance, useFinance } from "./api";
-import { normalize, personKey, personName } from "@/lib/finance/logic";
+import { normalize, personKey, personName, personTokens, samePerson } from "@/lib/finance/logic";
 import { BankLogo } from "./bank-logo";
 import { CategoryIcon } from "./category-icon";
 import { CategoryPicker } from "./category-picker";
@@ -161,7 +161,7 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // Préstamos temporales abiertos (lo que debes a cada persona), para reconocer una devolución.
-  const loans = useFinance<{ loans?: { key: string; name: string; owed: number }[] }>("plan").data?.loans ?? [];
+  const loans = useFinance<{ loans?: { key: string; tokens?: string[]; name: string; owed: number }[] }>("plan").data?.loans ?? [];
   const [lender, setLender] = useState("");
   const id = item?.id;
 
@@ -436,7 +436,8 @@ export function MovementDetailSheet({ item, onClose, items = [] }: { item: Item 
               {/* Préstamo temporal: lo que te prestan no es ingreso; lo que devuelves, no es gasto. */}
               {(() => {
                 const pk = personKey(item.description, item.counterparty) || normalize(v.alias ?? "");
-                const loan = loans.find((l) => l.key === pk);
+                const toks = personTokens(item.description, item.counterparty);
+                const loan = loans.find((l) => l.key === pk || (!!l.tokens && samePerson(l.tokens, toks)));
                 if (item.amount > 0 && v.kind !== "interna" && v.kind !== "ahorro") return (
                   <li>
                     <label className="flex cursor-pointer items-center gap-3 py-3.5">

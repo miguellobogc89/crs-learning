@@ -4,7 +4,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { isBankingConfigured, BANK_LABELS, PERSONAL_BANKS } from "@/lib/personal-finance/enable-banking";
 import {
-  addDays, affordability, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, forecastCycleWeeks, insuranceForecastCandidates, isForecastOverride, liquiditySeries, merchantKey, personKey, personName, round2, median,
+  addDays, affordability, cashflowPeriods, cycleFor, daysBetween, detectAlerts, detectRecurring, forecastCashflow, forecastCycleWeeks, insuranceForecastCandidates, isForecastOverride, liquiditySeries, merchantKey, personKey, personName, personTokens, samePerson, round2, median,
   expenseHistoryByCycle, normalize, paydaysFrom, projectCycle, projectSavings, resolvePeriod, summarize, todayIso,
   type Alert, type CycleRule, type CycleSummary, type ForecastItem, type Tx,
 } from "./logic";
@@ -599,24 +599,35 @@ function nextMonthCommitted(ctx: Awaited<ReturnType<typeof financeContext>>) {
  * ciclo (p. ej. la hipoteca de noviembre si el cargo del día 3 era de octubre), o uno trimestral/anual que toca
  * este ciclo y no ha llegado. Sale como previsto en azul hasta que llega el cargo real, que lo sustituye solo.
  */
+/** Palabras que identifican la marca de un comercio (sin «compra», «recibo», ciudades…). */
+const BRAND_NOISE = new Set(["compra", "compras", "recibo", "pago", "cargo", "tarjeta", "transferencia", "bizum", "payment", "purchase", "from", "to", "at", "de", "del", "la", "el", "sa", "sl", "s.a.", "s.l.", "ltd", "limited", "inc", "ireland", "dublin", "europe", "spain", "online", "sub", "com", "www"]);
+const brandWords = (key: string) => new Set(key.split(" ").map((w) => w.replace(/[^a-z0-9ñ]/g, "")).filter((w) => w.length >= 4 && !BRAND_NOISE.has(w)));
+
 function currentMonthPending(ctx: Awaited<ReturnType<typeof financeContext>>) {
   const cycle = cycleFor(ctx.today, ctx.startDay);
   const charged = new Set<string>();
+  const inCycle: { words: Set<string>; amount: number; category: string }[] = [];
   const lastTx = new Map<string, string>();
   for (const t0 of ctx.txs) {
     if (t0.amount >= 0) continue;
     const k = merchantKey(t0.description, t0.counterparty);
     if (!lastTx.has(k)) lastTx.set(k, t0.id);
     const t = spendDated(t0);
-    if (t.date >= cycle.start && t.date <= cycle.end) charged.add(k);
+    if (t.date >= cycle.start && t.date <= cycle.end) { charged.add(k); inCycle.push({ words: brandWords(k), amount: -t0.amount, category: t0.category }); }
   }
+  // Ya cobrado aunque llegue con otro texto o por otra cuenta (la suscripción de Claude pagada con Revolut y no con
+  // Santander): mismo comercio (una palabra de marca en común), misma categoría e importe parecido.
+  const chargedLike = (r: { key: string; amount: number; category: string }) => {
+    const words = brandWords(r.key);
+    return inCycle.some((c) => c.category === r.category && Math.abs(c.amount + r.amount) <= Math.max(1, -r.amount * 0.2) && [...words].some((w) => c.words.has(w)));
+  };
   const items: { id: string; title: string; amount: number; date: string; category: string; subcategory: string | null; source: "repite"; txId?: string; key: string; frequency?: string }[] = [];
   // Cancelados que este mes ya no se cobrarán (y aún no se habían cobrado): eso es ahorro de este mes. Si ya te lo
   // cobraron este mes, el ahorro empieza el que viene.
   const cancelled: { key: string; title: string; amount: number; category: string; subcategory: string | null }[] = [];
   for (const r of ctx.recurring) {
     if (r.amount >= 0 || r.intervalDays <= 0 || r.frequency === "semanal") continue;
-    if (charged.has(r.key)) continue;
+    if (charged.has(r.key) || chargedLike(r)) continue;
     if (r.frequency !== "mensual" && r.nextDate > cycle.end) continue;
     if (ctx.cancelled.has(r.key)) {
       if (daysBetween(r.lastDate, cycle.start) <= r.intervalDays * 1.5 + 3) cancelled.push({ key: r.key, title: r.label, amount: round2(-r.amount), category: r.category, subcategory: r.subcategory ?? null });
@@ -764,18 +775,23 @@ export async function planView(userId: string) {
     })),
     // Préstamos temporales: lo que debes a cada persona (lo que te prestó menos lo que ya le has devuelto).
     loans: (() => {
-      const by = new Map<string, { key: string; name: string; owed: number }>();
+      // La misma persona puede venir escrita distinto en cada Bizum («Palma G.C.» al recibir, «Palma Gomez Calero
+      // Valdez» al devolver): se juntan por nombre de pila e iniciales (samePerson).
+      const people: { key: string; tokens: string[]; name: string; owed: number }[] = [];
       for (const t of [...ctx.txs].sort((a, b) => a.date.localeCompare(b.date))) {
         if (t.kind !== "prestamo") continue;
         // Sin nombre en el concepto (algunos bancos ponen «Sin concepto»), la persona es el nombre que le diste.
+        const tokens = personTokens(t.description, t.counterparty);
         const key = personKey(t.description, t.counterparty) || normalize(t.alias ?? "");
-        if (!key) continue;
-        const x = by.get(key) ?? { key, name: personName(key), owed: 0 };
+        const toks = tokens.length ? tokens : key.split(" ").filter(Boolean);
+        if (!toks.length) continue;
+        let x = people.find((p) => samePerson(p.tokens, toks));
+        if (!x) { x = { key: key || toks.join(" "), tokens: toks, name: personName(toks.filter((w) => w.length > 1).join(" ") || key), owed: 0 }; people.push(x); }
+        else if (toks.length > x.tokens.length) x.tokens = toks;
         x.owed = round2(x.owed + t.amount);
         if (t.amount > 0 && t.alias?.trim()) x.name = t.alias.trim();
-        by.set(key, x);
       }
-      return [...by.values()].filter((x) => x.owed > 0.5).sort((a, b) => b.owed - a.owed);
+      return people.map(({ key, tokens, name, owed }) => ({ key, tokens, name, owed })).filter((x) => x.owed > 0.5).sort((a, b) => b.owed - a.owed);
     })(),
     // Dinero de cada ciclo (el anterior, este y el siguiente) para el medio aro de «Te quedan»: lo cobrado, lo
     // comprometido (lo que se repite), lo gastado (también los extraordinarios: es dinero que sale) y con cuánto
